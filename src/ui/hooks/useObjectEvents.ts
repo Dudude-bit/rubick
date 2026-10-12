@@ -8,6 +8,7 @@ import type { RefreshRate } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import { isRefusal } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { involvedUid } from "@/lib/event-incarnation";
 
 /** Enough of one object's events that a short list shown from them has a true total behind it. */
 export const OBJECT_EVENTS_READ = 200;
@@ -27,9 +28,10 @@ export function ofIncarnation(
   uid: string | undefined
 ): EventInfo[] | undefined {
   if (!uid || !events) return events;
-  const own = events.filter(
-    (event) => !event.involvedObject.uid || event.involvedObject.uid === uid
-  );
+  const own = events.filter((event) => {
+    const of = involvedUid(event);
+    return of === null || of === uid;
+  });
   return own.length === events.length ? events : own;
 }
 
@@ -43,11 +45,21 @@ export function useObjectEvents(
   kind: string,
   name: string | null | undefined,
   namespace: string | null | undefined,
-  { enabled = true, refresh }: { enabled?: boolean; refresh: RefreshRate }
+  {
+    enabled = true,
+    refresh,
+    uid: known,
+  }: {
+    enabled?: boolean;
+    refresh: RefreshRate;
+    /** The object's uid where its reader holds it outside the shared detail entry. */
+    uid?: string | null;
+  }
 ) {
   const everyObject = eventsOfEveryObject(kind);
   const scope = everyObject ? name : namespace;
-  const uid = useReadUid(kind, namespace, name, !everyObject);
+  const read = useReadUid(kind, namespace, name, !everyObject);
+  const uid = everyObject ? undefined : (known ?? read);
   const select = useCallback(
     (events: EventInfo[]) => ofIncarnation(events, uid) ?? events,
     [uid]

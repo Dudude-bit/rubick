@@ -74,6 +74,7 @@ import {
   type StoryWindow,
 } from "@/lib/event-stories";
 import { useNow } from "@/hooks/useNow";
+import { earlierObjects } from "@/lib/event-incarnation";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { STALE_TIMES } from "@/lib/refresh";
 import { listQueryFor, ResourceType, toPlural } from "@/lib/resource-registry";
@@ -435,9 +436,25 @@ export function Events() {
     const parsed = oldest ? Date.parse(oldest) : Number.NaN;
     return Number.isNaN(parsed) ? null : parsed;
   }, [windowFull, pool]);
+  // Over the whole pool, before the search narrows it: whether an object was
+  // replaced is told by its other events, which a search may not match.
+  const earlier = useMemo(
+    () =>
+      earlierObjects(pool, (kind, namespace, name) => {
+        const read = client.getQueryData(
+          queryKeys.detail(kind, namespace, name)
+        );
+        const uid =
+          read && typeof read === "object" && "uid" in read
+            ? read.uid
+            : undefined;
+        return typeof uid === "string" && uid !== "" ? uid : undefined;
+      }),
+    [pool, client]
+  );
   const storyOptions = useMemo(
-    () => ({ now, windowMs: WINDOW_MS[window], narrowed, readFrom }),
-    [now, window, narrowed, readFrom]
+    () => ({ now, windowMs: WINDOW_MS[window], narrowed, readFrom, earlier }),
+    [now, window, narrowed, readFrom, earlier]
   );
   const stories = useMemo(
     () =>
@@ -787,6 +804,7 @@ export function Events() {
           ) : (
             <EventsTable
               events={events}
+              earlier={earlier}
               showNamespace={!currentNamespace}
               question={[cacheKey, eventType, eventLimit, query].join("\n")}
               held={pointed}

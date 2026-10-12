@@ -12,14 +12,17 @@ import {
   type Target,
 } from "./attachment";
 
-/** A cluster where each named object answers as `exists` says. */
+/** A cluster where each named object answers as `exists` says, and has the uid `uids` gives it. */
 function reader(
   exists: Record<string, Exists>,
-  siblings: Array<Record<string, unknown>> | null = []
+  siblings: Array<Record<string, unknown>> | null = [],
+  uids: Record<string, string> = {}
 ): Reader {
   return {
     exists: async (target: Target) =>
       exists[`${target.kind}/${target.name}`] ?? "missing",
+    uidOf: async (target: Target) =>
+      uids[`${target.kind}/${target.name}`] ?? null,
     siblings: async () => siblings,
     refOf: (target: Target) => ({
       kind: target.kind,
@@ -207,6 +210,52 @@ describe("the other attached kinds", () => {
         reader({ "Widget/x": "present" })
       )
     ).toEqual({ state: "free" });
+  });
+
+  /**
+   * wd-demo was deleted and made again: its old FailedMount opened on the new
+   * pod's page as if it were the new pod's own. Fails if the uid is not compared.
+   */
+  it("stay on an event about an earlier object of the name, and open one about the object there now", async () => {
+    const about = (uid: string) => ({
+      metadata: { name: "e", namespace: "lena" },
+      involvedObject: {
+        apiVersion: "v1",
+        kind: "Pod",
+        name: "wd-demo",
+        namespace: "lena",
+        uid,
+      },
+    });
+    const cluster = reader({ "Pod/wd-demo": "present" }, [], {
+      "Pod/wd-demo": "4afe41e6",
+    });
+    expect(await decide("events", about("d10287fd"), cluster)).toEqual({
+      state: "stay",
+      stay: { says: "involvedReplaced", kind: "Pod", name: "wd-demo" },
+    });
+    expect(await decide("events", about("4afe41e6"), cluster)).toMatchObject({
+      state: "parent",
+      tab: "events",
+    });
+  });
+
+  /**
+   * The kubelet writes a Node's name as its uid; read as an incarnation, every
+   * kubelet event about a node would say the node was replaced.
+   */
+  it("open a kubelet event about a node on the node, whose uid it does not know", async () => {
+    const event = {
+      metadata: { name: "e", namespace: "default" },
+      involvedObject: { apiVersion: "v1", kind: "Node", name: "n1", uid: "n1" },
+    };
+    expect(
+      await decide(
+        "events",
+        event,
+        reader({ "Node/n1": "present" }, [], { "Node/n1": "real-uid" })
+      )
+    ).toMatchObject({ state: "parent", tab: "events" });
   });
 
   /**

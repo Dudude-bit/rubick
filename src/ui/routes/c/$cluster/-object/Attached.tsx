@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   CornerDownRight,
   EyeOff,
+  History,
   Info,
   Swords,
   Unlink,
@@ -72,6 +73,7 @@ const STAY: Record<
   noService: { icon: Info, tone: "text-info", rule: "border-info" },
   noOwner: { icon: Info, tone: "text-info", rule: "border-info" },
   involvedGone: { icon: Unlink, tone: "text-warn", rule: "border-warn" },
+  involvedReplaced: { icon: History, tone: "text-warn", rule: "border-warn" },
 };
 
 function StayNote({ stay }: { stay: Stay }) {

@@ -192,6 +192,48 @@ describe("familyOf", () => {
 });
 
 describe("placing events", () => {
+  /**
+   * Lena's wd-demo, made again under its name: Stories merged the old pod's
+   * FailedMount into the new pod's story, "happened 5 times", while the new
+   * pod had four events and no warning. Fails if the earlier object's events
+   * fold into the story of the one there now.
+   */
+  it("keeps the events of an earlier object of a name out of the story of the one there now", () => {
+    const of = (uid: string, reason: string, type = "Normal") =>
+      event({
+        kind: "Pod",
+        name: "wd-demo",
+        reason,
+        type,
+        involvedObject: {
+          kind: "Pod",
+          name: "wd-demo",
+          namespace: "shop",
+          uid,
+        },
+        firstTimestamp: ago(uid === "d10287fd" ? 20 * 60_000 : 9 * 60_000),
+        lastTimestamp: ago(uid === "d10287fd" ? 10 * 60_000 : 9 * 60_000),
+      });
+    const events = [
+      of("d10287fd", "FailedMount", "Warning"),
+      ...["Scheduled", "Pulled", "Created", "Started"].map((reason) =>
+        of("4afe41e6", reason)
+      ),
+    ];
+    const stories = storiesOf(events, {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      earlier: new Set(["d10287fd"]),
+    });
+    expect(stories).toHaveLength(2);
+    const now = stories.find((story) => !story.subject.earlier)!;
+    expect(now.occurrences).toBe(4);
+    expect(now.warnings).toBe(0);
+    const before = stories.find((story) => story.subject.earlier)!;
+    expect(before.reasons.map((r) => r.reason)).toEqual(["FailedMount"]);
+  });
+
   /** Would put the guess back: a pod named like a Deployment's is not that Deployment's until a controller says so. */
   it("marks a story by name when any member was folded without evidence", () => {
     const stories = storiesOf(

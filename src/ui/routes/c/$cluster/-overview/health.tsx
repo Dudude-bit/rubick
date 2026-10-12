@@ -12,6 +12,7 @@ import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Composition } from "@/components/object/detail-blocks";
 import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { PastObjectRef, type Past } from "../-object/PastObjectRef";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
 import {
@@ -61,6 +62,7 @@ import type {
   NodeSummary,
   OverviewUnread,
   PodComposition,
+  Incarnation,
   ResourcePressure,
   SchedulerPressure,
   WarningGroup,
@@ -1022,6 +1024,14 @@ export function WarningsPanel({
   );
 }
 
+/** What a warning's object is drawn as: a link only where it still holds its name or nobody checked. */
+const PAST_OF: Record<Incarnation, Past | null> = {
+  current: null,
+  unchecked: null,
+  earlier: "earlier",
+  gone: "gone",
+};
+
 function WarningRow({ warning }: { warning: WarningGroup }) {
   const t = useT();
   // Every row here is a Warning, so severity owns the colour outright and the
@@ -1036,6 +1046,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
           namespace: warning.namespace,
         }
       : null;
+  const past = PAST_OF[warning.incarnation];
 
   return (
     <div className="grid grid-cols-[260px_minmax(0,1fr)_46px] items-baseline gap-2.5 px-1.5 py-[5px] text-xs">
@@ -1059,14 +1070,21 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
         title={warning.sample ?? undefined}
         data-testid="warning-said"
       >
-        {subject && (
+        {subject && past ? (
+          <PastObjectRef
+            kind={subject.kind}
+            name={subject.name}
+            namespace={subject.namespace}
+            past={past}
+          />
+        ) : subject ? (
           <ResourceRef
             kind={subject.kind}
             name={subject.name}
             namespace={subject.namespace}
             className="max-w-full"
           />
-        )}
+        ) : null}
         {subject && warning.sample && " "}
         {warning.sample && (
           <span className="text-fg-fnt">

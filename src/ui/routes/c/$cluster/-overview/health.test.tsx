@@ -60,6 +60,7 @@ const warning: WarningGroup = {
   objectKind: "Deployment",
   objectName: "meshed-demo",
   namespace: "k8s-gui-test",
+  incarnation: "current",
 };
 
 /** The panel's list, from the reader every surface uses, with every kind read. */
@@ -152,6 +153,45 @@ describe("the overview's two event panels", () => {
     expect(
       screen.getByRole("link", { name: "Deployment meshed-demo" })
     ).toHaveAttribute("href", "/c/prod/deployments/k8s-gui-test/meshed-demo");
+  });
+
+  /**
+   * wd-demo, made again under its name, wore its predecessor's FailedMount
+   * here, linked to the new pod. Fails if a warning about an object that no
+   * longer holds its name links it, or stops saying which it was.
+   */
+  it("names without a link an object a warning is about that no longer holds its name", async () => {
+    await wrap(
+      <WarningsPanel
+        warnings={[
+          { ...warning, reason: "FailedMount", incarnation: "earlier" },
+          {
+            ...warning,
+            reason: "BackOff",
+            objectName: "gone-1",
+            incarnation: "gone",
+          },
+          {
+            ...warning,
+            reason: "Unhealthy",
+            objectName: "unread",
+            incarnation: "unchecked",
+          },
+        ]}
+        known
+      />
+    );
+    expect(
+      screen.queryByRole("link", { name: "Deployment meshed-demo" })
+    ).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Deployment gone-1" })
+    ).toBeNull();
+    expect(screen.getByText("earlier object")).toBeInTheDocument();
+    expect(screen.getByText("deleted")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Deployment unread" })
+    ).toBeInTheDocument();
   });
 
   it("says the warnings are unknown when an events list failed", async () => {

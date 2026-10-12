@@ -12,7 +12,7 @@ import type { EventInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { useWindowActivity } from "@/lib/window-activity";
 import { testQueryClient } from "@/test/render";
-import { useObjectEvents } from "./useObjectEvents";
+import { ofIncarnation, useObjectEvents } from "./useObjectEvents";
 
 const event = (reason: string, uid: string | null): EventInfo => ({
   name: `wd-demo.${reason}`,
@@ -82,4 +82,44 @@ it("keeps every event by name until the object itself is read", async () => {
   const result = mount(null);
   await waitFor(() => expect(result.current.data).toBeDefined());
   expect(result.current.data).toHaveLength(4);
+});
+
+/**
+ * The kubelet writes a Node's name where its uid belongs. Read as a uid, every
+ * kubelet event left a Node's Events tab once the node was read. Fails if the
+ * name is compared with the node's uid.
+ */
+it("keeps an event that names its object by name where the uid belongs", () => {
+  const kubelet: EventInfo = {
+    ...event("NodeReady", "node-1"),
+    involvedObject: {
+      kind: "Node",
+      name: "node-1",
+      namespace: null,
+      uid: "node-1",
+    },
+  };
+  expect(ofIncarnation([kubelet], "a1b2-real-uid")).toEqual([kubelet]);
+});
+
+/** A page that reads its object outside the shared entry passes the uid itself; fails if that uid is ignored. */
+it("filters by a uid its caller read itself", async () => {
+  const client = testQueryClient();
+  const { result } = renderHook(
+    () =>
+      useObjectEvents("Pod", "wd-demo", "lena-sandbox", {
+        refresh: "slow",
+        uid: "current",
+      }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(result.current.data?.map((e) => e.reason)).toEqual([
+    "Started",
+    "Noted",
+  ]);
 });

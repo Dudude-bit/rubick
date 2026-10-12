@@ -9,6 +9,7 @@
 
 import type { EventInfo } from "@/generated/types";
 import type { Saying } from "@/i18n/say";
+import { aboutEarlier, involvedUid } from "./event-incarnation";
 
 export type Activity =
   | "crash"
@@ -45,6 +46,8 @@ export interface Subject {
   namespace: string | null;
   /** Some member was placed here by its name's generated suffix, not by an event. */
   byName: boolean;
+  /** An earlier object of this name, not the one that has it now. */
+  earlier?: boolean;
 }
 
 export interface ReasonCount {
@@ -276,10 +279,20 @@ interface Placement {
   subject: Subject;
 }
 
-function place(event: EventInfo, evidence: Map<string, Owner>): Placement {
+function place(
+  event: EventInfo,
+  evidence: Map<string, Owner>,
+  earlier: ReadonlySet<string>
+): Placement {
   const namespace = event.involvedObject.namespace ?? event.namespace;
   let kind = event.involvedObject.kind;
   let name = event.involvedObject.name;
+  if (aboutEarlier(event, earlier)) {
+    return {
+      key: `${objectKey(namespace, kind, name)}@${involvedUid(event)}`,
+      subject: { kind, name, namespace, byName: false, earlier: true },
+    };
+  }
   if (!FOLDED_KINDS.has(kind)) {
     return {
       key: objectKey(namespace, kind, name),
@@ -632,7 +645,11 @@ export interface StoryOptions {
    * warnings that would say otherwise may simply not have been passed in.
    */
   narrowed: boolean;
+  /** The uids of objects an event names that another object of the same name has replaced. */
+  earlier?: ReadonlySet<string>;
 }
+
+const NONE: ReadonlySet<string> = new Set();
 
 /** How long the events the sentence counts actually cover, never past the window. */
 function spanOf(events: EventInfo[], since: number): number {
@@ -661,7 +678,7 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
   const evidence = evidenceOf(inWindow);
   const groups = new Map<string, { subject: Subject; events: EventInfo[] }>();
   for (const event of inWindow) {
-    const { key, subject } = place(event, evidence);
+    const { key, subject } = place(event, evidence, options.earlier ?? NONE);
     const group = groups.get(key);
     if (!group) {
       groups.set(key, { subject, events: [event] });

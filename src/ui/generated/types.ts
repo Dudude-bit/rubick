@@ -1946,7 +1946,10 @@ export interface WarningGroup {
   objectKind: string | null;
   objectName: string | null;
   namespace: string | null;
+  incarnation: Incarnation;
 }
+
+export type Incarnation = "current" | "earlier" | "gone" | "unchecked";
 
 export interface NodeSummary {
   name: string;

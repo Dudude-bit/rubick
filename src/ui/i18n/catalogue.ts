@@ -3066,6 +3066,12 @@ export const en = {
     storyStillHappening: "still happening",
     storySettled: "settled",
     storyStateUnknown: "cannot say",
+    earlierObject: "earlier object",
+    earlierObjectHint:
+      "About an earlier {kind} named {name}. The {kind} with this name now is another object, and these events are not its own.",
+    goneObject: "deleted",
+    goneObjectHint:
+      "About a {kind} named {name} that no longer exists. Nothing with this name is there now.",
     podStatusNotAsked: {
       one: "1 more pod's exits are not on this clock, because it was not asked.",
       other:
@@ -4888,6 +4894,8 @@ export const en = {
       "There is no Service named {name} here, so nothing keeps these endpoints but whoever wrote them.",
     noOwner: "No controller owns this revision.",
     involvedGone: "{kind} {name}, which this event is about, no longer exists.",
+    involvedReplaced:
+      "Not opened on {kind} {name}: this event is about an earlier {kind} of that name, and the one there now is another object.",
   },
   // Every kind the cluster serves, as kubectl api-resources lists them.
   apiResources: {

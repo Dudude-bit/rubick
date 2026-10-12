@@ -3291,6 +3291,12 @@ export const ru: Catalogue = {
     storyStillHappening: "продолжается",
     storySettled: "прекратилось",
     storyStateUnknown: "неизвестно",
+    earlierObject: "прежний объект",
+    earlierObjectHint:
+      "О прежнем объекте {kind} с именем {name}. Сейчас под этим именем другой объект {kind}, и эти события не о нём.",
+    goneObject: "удалён",
+    goneObjectHint:
+      "Об объекте {kind} с именем {name}, которого больше нет. Сейчас под этим именем ничего нет.",
     podStatusNotAsked: {
       one: "Выходы ещё {n} пода не на этой шкале, потому что его не спрашивали.",
       few: "Выходы ещё {n} подов не на этой шкале, потому что их не спрашивали.",
@@ -5432,6 +5438,8 @@ export const ru: Catalogue = {
       "Service с именем {name} здесь нет, так что эти endpoints держит только тот, кто их записал.",
     noOwner: "Эту ревизию не держит ни один контроллер.",
     involvedGone: "{kind} {name}, о котором это событие, больше не существует.",
+    involvedReplaced:
+      "Не открыто на {kind} {name}: это событие о прежнем объекте {kind} с этим именем, а сейчас под ним другой объект.",
   },
   apiResources: {
     description:
