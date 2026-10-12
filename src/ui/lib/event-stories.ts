@@ -65,7 +65,13 @@ export interface ReasonCount {
  * made — and the loudest one, because it is the green card the reader stops
  * looking at.
  */
-export type StoryState = "stillHappening" | "settled" | "done" | "unknown";
+export type StoryState =
+  | "stillHappening"
+  | "settled"
+  | "done"
+  | "unknown"
+  /** About an object another has replaced: nothing more can happen to it. */
+  | "earlier";
 
 export interface Story {
   key: string;
@@ -786,8 +792,9 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
     const latestWarningAt = latestWarning
       ? at(latestWarning.lastTimestamp)
       : null;
-    const state: StoryState =
-      warnings === 0
+    const state: StoryState = group.subject.earlier
+      ? "earlier"
+      : warnings === 0
         ? // Nothing went wrong *in what was read*. Where a filter narrowed
           // that, the difference between "nothing went wrong" and "the
           // warnings were not in the set" is the whole answer.
@@ -834,7 +841,8 @@ const STATE_RANK: Record<StoryState, number> = {
   stillHappening: 0,
   settled: 1,
   unknown: 2,
-  done: 3,
+  earlier: 3,
+  done: 4,
 };
 
 export function sortStories(stories: Story[], order: StoryOrder): Story[] {

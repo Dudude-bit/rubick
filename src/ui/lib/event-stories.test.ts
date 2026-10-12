@@ -239,6 +239,38 @@ describe("placing events", () => {
     expect(before.reasons.map((r) => r.reason)).toEqual(["FailedMount"]);
   });
 
+  /**
+   * Lena's earlier wd-demo story sat red "still happening" for minutes beside
+   * its "earlier object" chip, about a pod that no longer existed. Fails if a
+   * story about a replaced object takes any state that says it may go on.
+   */
+  it("gives the story of a replaced object its own state, whatever the age of its warnings", () => {
+    const stories = storiesOf(
+      [
+        event({
+          kind: "Pod",
+          name: "wd-demo",
+          reason: "FailedMount",
+          type: "Warning",
+          involvedObject: {
+            kind: "Pod",
+            name: "wd-demo",
+            namespace: "shop",
+            uid: "d10287fd",
+          },
+          lastTimestamp: ago(30_000),
+        }),
+      ],
+      {
+        now: NOW,
+        windowMs: HOUR,
+        narrowed: false,
+        earlier: new Set(["d10287fd"]),
+      }
+    );
+    expect(stories[0].state).toBe("earlier");
+  });
+
   /** Would put the guess back: a pod named like a Deployment's is not that Deployment's until a controller says so. */
   it("marks a story by name when any member was folded without evidence", () => {
     const stories = storiesOf(

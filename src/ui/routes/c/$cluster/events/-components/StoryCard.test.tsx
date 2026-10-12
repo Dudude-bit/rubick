@@ -113,4 +113,37 @@ describe("a story about an earlier object of a name", () => {
       expect.stringContaining("earlier Pod named web-0")
     );
   });
+
+  /**
+   * Lena's earlier wd-demo card was badged red "still happening" beside its
+   * "earlier object" chip. Fails if the card paints a replaced object's story
+   * as still going on, or stops saying why it ended.
+   */
+  it("badges the story as ended with its object, in no alarming colour", async () => {
+    const earlier: EventInfo = {
+      ...backOff,
+      reason: "FailedMount",
+      involvedObject: { ...backOff.involvedObject, uid: "d10287fd" },
+    };
+    const options: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+      earlier: new Set(["d10287fd"]),
+    };
+    const [story] = storiesOf([earlier], options);
+    await renderWithRouter(
+      <StoryCard story={story} options={options} showNamespace={false} />
+    );
+    expect(screen.queryByText("still happening")).toBeNull();
+    const badge = screen.getByText("ended with it");
+    expect(badge).not.toHaveClass("text-err");
+    expect(badge).toHaveAttribute(
+      "title",
+      expect.stringContaining(
+        "The Pod web-0 these events were about has been replaced"
+      )
+    );
+  });
 });
