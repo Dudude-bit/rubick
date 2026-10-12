@@ -24,7 +24,6 @@ import { podReadiness } from "@/lib/container-sequence";
 import { restartsAreNews } from "@/lib/crash-loop";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "../../../-list/ResourceList";
-import { ResourceRef } from "@/components/object/ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
 import { hrefOf, objectLink } from "@/lib/links";
@@ -40,6 +39,7 @@ import { usePodFilter } from "@/hooks/usePodFilter";
 import { PodSelectorBanner } from "./PodSelectorBanner";
 import { PodStatusBadge } from "./PodStatusBadge";
 import { useShellAskStore } from "@/stores/shellAskStore";
+import { NodeRef } from "../../../-object/NodeRef";
 
 /** A pod row that also knows whether its node is still reporting. */
 type PodRow = WithNodeSilence<PodWithMetrics>;
@@ -188,11 +188,7 @@ export const columns: ColumnDef<PodRow>[] = [
     },
     cell: ({ row }) =>
       row.original.nodeName ? (
-        <ResourceRef
-          kind={ResourceType.Node}
-          name={row.original.nodeName}
-          showKind={false}
-        />
+        <NodeRef name={row.original.nodeName} />
       ) : (
         <None />
       ),

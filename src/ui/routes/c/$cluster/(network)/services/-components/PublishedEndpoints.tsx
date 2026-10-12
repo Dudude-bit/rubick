@@ -45,6 +45,7 @@ import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
 import { podsUnreadOf } from "@/lib/service-health";
 import { EyeOff } from "lucide-react";
+import { NodeRef } from "../../../-object/NodeRef";
 
 /** How many rows are worth drawing before the reader has to ask for more.
  *  1240 rows is not an answer; the count and the disagreements are. */
@@ -181,11 +182,7 @@ function Lists({ published }: { published: ServicePublished }) {
                     </TableCell>
                     <TableCell>
                       {endpoint.nodeName ? (
-                        <ResourceRef
-                          kind={ResourceType.Node}
-                          name={endpoint.nodeName}
-                          showKind={false}
-                        />
+                        <NodeRef name={endpoint.nodeName} />
                       ) : (
                         <None />
                       )}

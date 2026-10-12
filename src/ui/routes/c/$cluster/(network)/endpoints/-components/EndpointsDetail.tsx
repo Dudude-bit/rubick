@@ -33,6 +33,7 @@ import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
+import { NodeRef } from "../../../-object/NodeRef";
 
 /** Every address in the object, flattened, carrying its readiness. */
 type Backend = {
@@ -256,11 +257,7 @@ export function EndpointsDetail() {
                       {/* The column heading says Node, and the target cell
                           beside it has been a reference all along. */}
                       {address.nodeName ? (
-                        <ResourceRef
-                          kind={ResourceType.Node}
-                          name={address.nodeName}
-                          showKind={false}
-                        />
+                        <NodeRef name={address.nodeName} />
                       ) : (
                         <None />
                       )}

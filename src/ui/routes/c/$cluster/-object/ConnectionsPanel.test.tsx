@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { act, screen } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
 
 import { renderWithRouter } from "@/test/render";
 import { ConnectionsPanel } from "./ConnectionsPanel";
@@ -295,5 +296,55 @@ describe("a neighbourhood read that does not answer", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("ConnectionsPanel on a pod whose node the reader may not read", () => {
+  /**
+   * Marco's Connections tab drew "Runs on" as a plain link to a node his
+   * access refuses, while the Overview padlocked the same node. Fails if
+   * the Runs on row loses the padlock the node's own read earns it.
+   */
+  it("padlocks the node it runs on", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_node")
+        throw { code: "PERMISSION_DENIED", message: "nodes is forbidden" };
+      return undefined;
+    });
+    const pod: ObjectRef = {
+      kind: "Pod",
+      name: "checkout-api-649f5449-h6x2v",
+      namespace: "team-checkout",
+      existence: "present",
+      facts: null,
+    };
+    await wrap(
+      <ConnectionsPanel
+        query={query({
+          data: {
+            ...answered({}),
+            subject: pod,
+            edges: [
+              {
+                from: pod,
+                to: {
+                  kind: "Node",
+                  name: "k3d-rubick-live-agent-0",
+                  namespace: null,
+                  existence: "present",
+                  facts: null,
+                },
+                relation: { verb: "runsOn" },
+              },
+            ],
+          },
+        })}
+      />
+    );
+    expect(await screen.findByTestId("node-refused")).toHaveAttribute(
+      "aria-label",
+      "Your access does not allow reading Node k3d-rubick-live-agent-0."
+    );
+    vi.mocked(invoke).mockImplementation(async () => undefined);
   });
 });
