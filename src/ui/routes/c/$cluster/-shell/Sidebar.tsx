@@ -112,8 +112,9 @@ type NavItem = NavName & {
 
 // Split by state because the router joins a link's state classes onto it
 // without merging them, so the two text colours must never meet.
-const ROW_BASE_CLASS =
-  "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] transition-colors hover:bg-hover outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info";
+const ROW_FOCUS_CLASS =
+  "transition-colors hover:bg-hover outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info";
+const ROW_BASE_CLASS = `group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] ${ROW_FOCUS_CLASS}`;
 const ROW_SHUT_CLASS = "text-fg-mid";
 const ROW_CLASS = `${ROW_BASE_CLASS} ${ROW_SHUT_CLASS}`;
 const ROW_OPEN_CLASS = "bg-sel font-medium text-fg";
@@ -870,29 +871,32 @@ function ClusterRow() {
     </>
   );
 
+  // Inset and rounded like the rows below it, so its focus ring is theirs
+  // rather than a hairline along the window's edge.
   const row =
-    "flex h-[38px] w-full flex-none items-center gap-2 px-2.5 text-left";
+    "flex h-[30px] w-full items-center gap-2 rounded-[5px] px-1 text-left";
 
   // Nothing to configure about a cluster there is none of, and a menu that
   // renamed `null` would write a mark under an empty key.
-  if (!currentContext) return <div className={row}>{body}</div>;
-
   return (
-    <ClusterMenu context={currentContext} openOnClick>
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-label={t("cluster", "renameOrRecolour", {
-          name: alias ?? currentContext,
-        })}
-        className={cn(
-          row,
-          "transition-colors outline-hidden hover:bg-hover focus-visible:bg-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info"
-        )}
-      >
-        {body}
-      </button>
-    </ClusterMenu>
+    <div className="flex-none px-1.5 py-1">
+      {currentContext ? (
+        <ClusterMenu context={currentContext} openOnClick>
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-label={t("cluster", "renameOrRecolour", {
+              name: alias ?? currentContext,
+            })}
+            className={cn(row, ROW_FOCUS_CLASS)}
+          >
+            {body}
+          </button>
+        </ClusterMenu>
+      ) : (
+        <div className={row}>{body}</div>
+      )}
+    </div>
   );
 }
 

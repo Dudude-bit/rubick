@@ -274,7 +274,7 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
   "src/ui/routes/c/$cluster/-object/ownership-keys.ts":
     "alt+arrows move along ownership on an object's page",
   "src/ui/lib/focus-modality.ts":
-    "not a shortcut: notices the reader is on the keyboard, so focus rings show",
+    "not a shortcut: notices the reader is on the keyboard, so focus rings show, and wraps Tab inside the window",
   "src/ui/lib/window-activity.ts":
     "not a shortcut: notices that the reader is here",
   "src/ui/routes/c/$cluster/-peek/peek-escape.ts":
