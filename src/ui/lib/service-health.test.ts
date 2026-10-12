@@ -258,13 +258,15 @@ describe("one verdict for a Service on every surface", () => {
   });
 
   /**
-   * mixed-port-demo: one pod published, one in a slice with no port. The
-   * Endpoints list drew it green; it is partly down.
+   * mixed-port-demo: one pod published, one in a slice with no port, both
+   * ready in their slices. The list said "1 of 2 ready" and the peek "1 of
+   * its addresses takes no traffic". Fails if the address with no port is
+   * counted not ready, or its readiness is dropped where the slices said it.
    */
-  it("says partly when some addresses take no traffic", () => {
+  it("counts traffic and readiness apart when an address has none of the ports", () => {
     const health = serviceHealthOf(
       SELECTING,
-      published({ ready: 1, unrouted: 1 }),
+      published({ ready: 1, unrouted: 1, unroutedReady: 1 }),
       null
     );
     expect(health).toEqual({
@@ -272,10 +274,32 @@ describe("one verdict for a Service on every surface", () => {
       ready: 1,
       draining: 0,
       total: 2,
+      unrouted: 1,
+      unroutedReady: 1,
     });
     const words = serviceHealthWords(health, t);
     expect(words.role).toBe("warn");
-    expect(words.label).toBe("1 of 2 ready");
+    expect(words.label).toBe("1 of 2 takes traffic");
+    expect(words.reason).toBe(
+      "1 of its addresses is ready but has none of the ports this Service targets, so no traffic is sent to it"
+    );
+  });
+
+  /** The compact answer the sidebar reads carries no readiness for those addresses. Fails if it claims one. */
+  it("leaves readiness unsaid for an address with no port where it was not read", () => {
+    const { unroutedReady: _, ...compact } = published({
+      ready: 1,
+      notReady: 1,
+      unrouted: 1,
+    });
+    const words = serviceHealthWords(
+      serviceHealthOf(SELECTING, compact, null),
+      t
+    );
+    expect(words.label).toBe("1 of 3 takes traffic");
+    expect(words.reason).toBe(
+      "1 of its addresses takes no traffic, 1 of its addresses has none of the ports this Service targets, so no traffic is sent to it"
+    );
   });
 
   /**

@@ -26,7 +26,16 @@ import type { StatusRole } from "@/lib/status-role";
 
 export type ServiceHealth =
   | { state: "ready"; ready: number }
-  | { state: "partly"; ready: number; draining: number; total: number }
+  | {
+      state: "partly";
+      ready: number;
+      draining: number;
+      total: number;
+      /** Listed with none of the ports it targets, so nothing is sent there; ready or not is a separate fact. */
+      unrouted: number;
+      /** Of those, how many the slices call ready; `null` where the compact answer does not carry it. */
+      unroutedReady: number | null;
+    }
   /** Nothing ready: what it serves goes to addresses still finishing their connections. */
   | { state: "draining"; draining: number; total: number }
   | { state: "noneReady"; published: PublishedCounts }
@@ -53,7 +62,10 @@ export interface ServiceShape {
 export type PublishedCounts = Pick<
   ServicePublished,
   "ready" | "draining" | "notReady" | "unrouted"
-> & { stop?: ChainStop | null };
+> &
+  Partial<Pick<ServicePublished, "unroutedReady">> & {
+    stop?: ChainStop | null;
+  };
 
 /** One Service as its verdict reads it, the shape `listServiceHealthInputs` answers in. */
 export type ServiceHealthInput = ServiceShape & PublishedCounts;
@@ -73,7 +85,14 @@ export function serviceHealthOf(
     const { ready, draining } = published;
     if (ready === total) return { state: "ready", ready };
     return ready > 0
-      ? { state: "partly", ready, draining, total }
+      ? {
+          state: "partly",
+          ready,
+          draining,
+          total,
+          unrouted: published.unrouted,
+          unroutedReady: published.unroutedReady ?? null,
+        }
       : { state: "draining", draining, total };
   }
   const waiting = waitingOn(published.stop);
@@ -164,25 +183,41 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         role: "ok",
         reason: null,
       };
-    case "partly":
+    case "partly": {
+      const notReady =
+        health.total - health.ready - health.draining - health.unrouted;
       return {
         code: health.state,
-        label: t("count", "readyOfTotal", {
-          ready: health.ready,
-          total: health.total,
-        }),
+        // Ready and routed are two facts: an address with none of the
+        // ports is not a not-ready one, so the count is of traffic.
+        label:
+          health.unrouted > 0
+            ? t("count", "takeTrafficOfTotal", {
+                n: health.ready + health.draining,
+                total: health.total,
+              })
+            : t("count", "readyOfTotal", {
+                ready: health.ready,
+                total: health.total,
+              }),
         role: "warn",
         reason: [
           health.draining > 0 &&
             t("readings", "drainingCount", { n: health.draining }),
-          health.total > health.ready + health.draining &&
-            t("count", "addressesTakeNoTraffic", {
-              n: health.total - health.ready - health.draining,
-            }),
+          notReady > 0 && t("count", "addressesTakeNoTraffic", { n: notReady }),
+          health.unrouted > 0 &&
+            t(
+              "count",
+              health.unroutedReady === health.unrouted
+                ? "addressesReadyOffPort"
+                : "addressesOffPort",
+              { n: health.unrouted }
+            ),
         ]
           .filter(Boolean)
           .join(", "),
       };
+    }
     case "draining":
       return {
         code: health.state,
@@ -265,6 +300,7 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
 export const serviceVerdictLabels = (t: T) => [
   t("count", "nReady", { n: 99 }),
   t("count", "readyOfTotal", { ready: 99, total: 99 }),
+  t("count", "takeTrafficOfTotal", { n: 99, total: 99 }),
   t("readings", "drainingCount", { n: 99 }),
   t("empty", "stopNoneReady"),
   t("readings", "healthComingUp"),

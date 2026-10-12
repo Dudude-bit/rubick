@@ -7294,6 +7294,20 @@ export const en = {
       other: "One client address may hold {n} connections at a time.",
     },
     readyOfTotal: "{ready} of {total} ready",
+    takeTrafficOfTotal: {
+      one: "{n} of {total} takes traffic",
+      other: "{n} of {total} take traffic",
+    },
+    addressesOffPort: {
+      one: "{n} of its addresses has none of the ports this Service targets, so no traffic is sent to it",
+      other:
+        "{n} of its addresses have none of the ports this Service targets, so no traffic is sent to them",
+    },
+    addressesReadyOffPort: {
+      one: "{n} of its addresses is ready but has none of the ports this Service targets, so no traffic is sent to it",
+      other:
+        "{n} of its addresses are ready but have none of the ports this Service targets, so no traffic is sent to them",
+    },
     addressesTakeNoTraffic: {
       one: "{n} of its addresses takes no traffic",
       other: "{n} of its addresses take no traffic",
