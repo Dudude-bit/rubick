@@ -64,6 +64,7 @@ import { renderWithRouter } from "@/test/render";
 import { ScopeTabs } from "./ScopeTabs";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useClusterRecencyStore } from "@/stores/clusterRecencyStore";
 import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 import { useKeptShellStore } from "@/stores/keptShellStore";
@@ -205,6 +206,63 @@ describe("what a tab's dot says", () => {
     await mount();
 
     expect(dotOf(0).dataset.connected).toBe("true");
+  });
+});
+
+describe("the tab's list of clusters", () => {
+  const context = (name: string) =>
+    ({
+      name,
+      cluster: name,
+      user: name,
+      namespace: null,
+      is_current: false,
+      server: null,
+      exec_command: null,
+      auth: { kind: "unrecognised" },
+    }) as ContextInfo;
+
+  /**
+   * Live round 25: ordered by use, acme-qa and acme-prod-eu swapped places
+   * between openings and Dana picked the wrong one. Fails if the order
+   * follows use rather than the kubeconfig, or the current cluster is moved
+   * to the top instead of marked where it is.
+   */
+  it("keeps the kubeconfig's order and marks the current cluster in place", async () => {
+    useClusterStore.setState({
+      contexts: ["acme-prod-eu", "acme-qa", "acme-staging"].map(context),
+      currentContext: "acme-staging",
+      live: ["acme-staging"],
+    });
+    useClusterRecencyStore.setState({
+      lastUsed: { "acme-staging": 3, "acme-qa": 2, "acme-prod-eu": 1 },
+    });
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", context: "acme-staging", href: "/c/acme-staging" }),
+      ],
+      activeId: "a",
+      pendingHref: null,
+    });
+    await mount("/c/acme-staging");
+
+    const segment = tabs()[0]
+      .querySelector("[data-connected]")
+      ?.closest("button") as HTMLElement;
+    await userEvent.click(segment);
+    const list = await screen.findByRole("listbox", { name: "Cluster" });
+    const options = within(list).getAllByRole("option");
+
+    expect(options.map((option) => option.textContent)).toEqual([
+      expect.stringContaining("acme-prod-eu"),
+      expect.stringContaining("acme-qa"),
+      expect.stringContaining("acme-staging"),
+    ]);
+    expect(
+      options.map((option) => option.getAttribute("aria-selected"))
+    ).toEqual(["false", "false", "true"]);
+    expect(options[2].querySelector("svg.lucide-check")).not.toBeNull();
+    expect(options[0].querySelector("svg.lucide-check")).toBeNull();
   });
 });
 
