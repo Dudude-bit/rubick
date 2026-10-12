@@ -7922,11 +7922,11 @@ export const ru: Catalogue = {
       many: "последние {n} событий, остальные не прочитаны",
       other: "последние {n} события, остальные не прочитаны",
     },
-    stories: {
-      one: "{n} история",
-      few: "{n} истории",
-      many: "{n} историй",
-      other: "{n} истории",
+    storiesInWindow: {
+      one: "{n} история за {span}",
+      few: "{n} истории за {span}",
+      many: "{n} историй за {span}",
+      other: "{n} истории за {span}",
     },
     eventsSeen: {
       one: "произошло {n} раз",
@@ -8339,7 +8339,6 @@ export const ru: Catalogue = {
       other: "ещё {n} события скрыто фильтром по типу",
     },
     typeFilterLeavesRest: "фильтр по типу не показывает остальные события",
-    inStoryWindow: "в окне {span}",
     latestKept: "из последних {n}",
     podsStayedOnTheNode: {
       one: "На узле остался {n} под.",

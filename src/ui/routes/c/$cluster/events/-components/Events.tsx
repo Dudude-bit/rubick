@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -532,8 +533,8 @@ export function Events() {
         countYields
         count={
           showSkeleton || nothingRead ? undefined : (
-            <OneLine
-              text={summarise(
+            <HeaderCount
+              parts={summarise(
                 t,
                 warningCount,
                 normalCount,
@@ -860,14 +861,15 @@ function UnreadFeed({
   );
 }
 
+type CountPart =
+  | { words: string; type?: never }
+  | { words: string; type: EventType; n: number };
+
 /**
- * Worst first. Counts Event objects, as kubectl and the sidebar do, and names
- * the span they cover so a story's occurrences are not read as the same unit.
- */
-/**
- * The header's count. Under a type filter it says how many of that type are
- * shown, none included, and what the filter leaves out: Lena's warnings in net
- * read "none" beside a sidebar counting 96 events.
+ * The header's count, worst first. Counts Event objects, as kubectl and the
+ * sidebar do. Under a type filter it says how many of that type are shown,
+ * none included, and what the filter leaves out: Lena's warnings in net read
+ * "none" beside a sidebar counting 96 events.
  */
 function summarise(
   t: ReturnType<typeof useT>,
@@ -876,33 +878,73 @@ function summarise(
   cappedAt: string | null,
   stories: { n: number; window: StoryWindow } | null,
   filter: { type: EventType; hidden: number | null } | null = null
-): string {
-  const parts: string[] = [];
-  if (stories !== null) parts.push(t("count", "stories", { n: stories.n }));
-  if (warnings > 0 || filter?.type === "Warning")
-    parts.push(t("count", "warningEvents", { n: warnings }));
-  if (normal > 0 || filter?.type === "Normal")
-    parts.push(t("count", "normalEvents", { n: normal }));
-  if (parts.length === 0) parts.push(t("empty", "noneInline"));
-  if (filter && filter.hidden !== 0)
-    parts.push(
-      filter.hidden === null || stories !== null
-        ? t("count", "typeFilterLeavesRest")
-        : t("count", "hiddenByTypeFilter", { n: filter.hidden })
-    );
+): CountPart[] {
+  const parts: CountPart[] = [];
   if (stories !== null)
-    parts.push(
-      t("count", "inStoryWindow", { span: windowWords(stories.window) })
-    );
+    parts.push({
+      words: t("count", "storiesInWindow", {
+        n: stories.n,
+        span: windowWords(stories.window),
+      }),
+    });
+  if (warnings > 0 || filter?.type === "Warning")
+    parts.push({
+      words: t("count", "warningEvents", { n: warnings }),
+      type: "Warning",
+      n: warnings,
+    });
+  if (normal > 0 || filter?.type === "Normal")
+    parts.push({
+      words: t("count", "normalEvents", { n: normal }),
+      type: "Normal",
+      n: normal,
+    });
+  if (parts.length === 0) parts.push({ words: t("empty", "noneInline") });
+  if (filter && filter.hidden !== 0)
+    parts.push({
+      words:
+        filter.hidden === null || stories !== null
+          ? t("count", "typeFilterLeavesRest")
+          : t("count", "hiddenByTypeFilter", { n: filter.hidden }),
+    });
   if (cappedAt)
-    parts.push(t("count", "latestKept", { n: formatCount(Number(cappedAt)) }));
-  return parts.join(" · ");
+    parts.push({
+      words: t("count", "latestKept", { n: formatCount(Number(cappedAt)) }),
+    });
+  return parts;
 }
 
-function OneLine({ text }: { text: string }) {
+/**
+ * One line, the type counts drawn with the table's own markers so the line
+ * fits beside the toolbar at 1024 in Russian. The sentence is its title and
+ * what a screen reader hears.
+ */
+function HeaderCount({ parts }: { parts: CountPart[] }) {
+  const words = parts.map((part) => part.words).join(" · ");
   return (
-    <span className="block truncate" title={text}>
-      {text}
+    <span className="block truncate" title={words}>
+      <span className="sr-only">{words}</span>
+      <span aria-hidden="true" data-testid="events-count-drawn">
+        {parts.map((part, index) => (
+          <Fragment key={part.words}>
+            {index > 0 && " · "}
+            {part.type ? (
+              <span
+                className={
+                  part.type === "Warning" && part.n ? "text-warn" : undefined
+                }
+              >
+                <span className="text-[9px]">
+                  {part.type === "Warning" ? "▲" : "●"}
+                </span>{" "}
+                {formatCount(part.n)}
+              </span>
+            ) : (
+              part.words
+            )}
+          </Fragment>
+        ))}
+      </span>
     </span>
   );
 }

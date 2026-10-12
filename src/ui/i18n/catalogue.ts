@@ -7158,7 +7158,10 @@ export const en = {
       one: "{n} gone, lines kept",
       other: "{n} gone, lines kept",
     },
-    stories: { one: "{n} story", other: "{n} stories" },
+    storiesInWindow: {
+      one: "{n} story in the {span} window",
+      other: "{n} stories in the {span} window",
+    },
     eventsWaiting: { one: "Show {n} update", other: "Show {n} updates" },
     eventObjects: { one: "{n} event", other: "{n} events" },
     eventObjectsLatest: {
@@ -7366,7 +7369,6 @@ export const en = {
       other: "{n} other events hidden by the type filter",
     },
     typeFilterLeavesRest: "the type filter leaves the rest out",
-    inStoryWindow: "in the {span} window",
     latestKept: "of the latest {n}",
     podsStayedOnTheNode: {
       one: "One pod stayed on the node.",
