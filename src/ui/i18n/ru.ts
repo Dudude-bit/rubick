@@ -4994,7 +4994,8 @@ export const ru: Catalogue = {
     toSearchIt: "искать в нём",
     notInKubeconfig: "нет в kubeconfig",
     resultsAsTheyAnswer: "результаты появляются по мере ответов",
-    connectionFailedRetry: "не удалось подключиться, повторить",
+    connectFailed: "не удалось подключиться",
+    connectFailedRetry: "{failed}, повторить",
     chooseCluster: "Выбрать кластер",
     signingIn: "Вход…",
     notConnected: "Кластер не подключён",
@@ -5095,7 +5096,6 @@ export const ru: Catalogue = {
       "color coloring tint kind colour цвет раскраска оттенок вид",
     contextConnected: "подключён",
     contextNotConnected: "не подключён",
-    contextConnectFailed: "подключиться не удалось",
     contextCannotConnect: "подключиться нельзя",
     contextCannotTell: "определить нельзя",
     criticalLabel:

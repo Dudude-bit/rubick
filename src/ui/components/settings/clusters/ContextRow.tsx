@@ -23,7 +23,7 @@ import {
   readContext,
   type ContextStatus,
 } from "./context-reading";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import { failureLine } from "@/components/cluster/connect-failure";
 import { verbatim } from "@/lib/error-utils";
 import type { ConnectFailed } from "@/stores/clusterStore";
@@ -40,13 +40,14 @@ import type { ConnectFailed } from "@/stores/clusterStore";
  * connecting, and a second cluster switcher hidden in Settings is how two
  * of them drift apart.
  */
-const CONTEXT_STATUS = {
-  connected: "contextConnected",
-  "not connected": "contextNotConnected",
-  "connect failed": "contextConnectFailed",
-  "cannot connect": "contextCannotConnect",
-  "cannot tell": "contextCannotTell",
-} as const;
+const CONTEXT_STATUS: Record<ContextStatus, (t: T) => string> = {
+  connected: (t) => t("settings", "contextConnected"),
+  "not connected": (t) => t("settings", "contextNotConnected"),
+  // The picker and the status bar name a failed connect in the same words.
+  "connect failed": (t) => t("cluster", "connectFailed"),
+  "cannot connect": (t) => t("settings", "contextCannotConnect"),
+  "cannot tell": (t) => t("settings", "contextCannotTell"),
+};
 
 /**
  * The status wears its own mark in a role colour. The dot and the name are
@@ -230,7 +231,7 @@ export function ContextRow({
         )}
       >
         <status.icon className="h-3 w-3 flex-none" aria-hidden />
-        {t("settings", CONTEXT_STATUS[reading.status])}
+        {CONTEXT_STATUS[reading.status](t)}
       </span>
     </div>
   );

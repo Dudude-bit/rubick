@@ -133,7 +133,7 @@ function reader() {
         ? "not live"
         : bar.includes("connecting to")
           ? "connecting"
-          : bar.includes("connection failed")
+          : bar.includes("connect failed")
             ? "failed"
             : "live",
       pods: pods?.textContent ?? null,

@@ -154,7 +154,9 @@ export function StatusBar() {
               }
               className="text-err transition-colors hover:text-fg"
             >
-              {t("cluster", "connectionFailedRetry")}
+              {t("cluster", "connectFailedRetry", {
+                failed: t("cluster", "connectFailed"),
+              })}
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" align="end" className="max-w-[420px]">

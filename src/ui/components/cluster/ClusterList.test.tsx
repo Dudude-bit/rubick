@@ -417,7 +417,7 @@ describe("what each row says about its cluster", () => {
     render(<Harness />);
 
     const failed = rowOf("dev-euw1-mki");
-    expect(failed.textContent).toContain(t("cluster", "failedInline"));
+    expect(failed.textContent).toContain(t("cluster", "connectFailed"));
     expect(failed.getAttribute("title")).toBe(
       t("cluster", "failTimeout", {
         host: "dev-euw1-mki.example:6443",

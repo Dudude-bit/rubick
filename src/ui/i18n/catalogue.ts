@@ -4477,7 +4477,8 @@ export const en = {
     toSearchIt: "to search it",
     notInKubeconfig: "not in the kubeconfig",
     resultsAsTheyAnswer: "results appear as each one does",
-    connectionFailedRetry: "connection failed, retry",
+    connectFailed: "connect failed",
+    connectFailedRetry: "{failed}, retry",
     chooseCluster: "Choose a cluster",
     signingIn: "Signing in…",
     notConnected: "No cluster connected",
@@ -4558,7 +4559,6 @@ export const en = {
     searchColourWords: "color coloring tint kind",
     contextConnected: "connected",
     contextNotConnected: "not connected",
-    contextConnectFailed: "connect failed",
     contextCannotConnect: "cannot connect",
     contextCannotTell: "cannot tell",
     criticalLabel:
