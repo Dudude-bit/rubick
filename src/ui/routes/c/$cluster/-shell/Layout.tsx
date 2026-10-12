@@ -22,6 +22,10 @@ import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 import { useWindowCluster } from "./useWindowCluster";
 import { holdTitlesOnResize } from "@/lib/hold-titles";
+import {
+  useFollowedOverview,
+  useScopedOverview,
+} from "@/hooks/useClusterOverview";
 
 // Loaded on first use: it carries the YAML parser and the diff view, which
 // nothing needs until an object is opened for editing.
@@ -61,6 +65,7 @@ export function Layout() {
   usePrefetchCoreLists();
   useRefusedScope();
   useScopeFromAddress();
+  useFollowedOverview(useScopedOverview().data);
   useEffect(holdTitlesOnResize, []);
 
   return (

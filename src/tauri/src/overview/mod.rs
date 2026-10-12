@@ -1014,4 +1014,17 @@ mod tests {
         assert!(!cache.cooling_down("prod"));
         assert!(!cache.cooling_down("dev"));
     }
+
+    /// The sidebar calls a count of these kinds live while the overview is
+    /// served from the stores. Fails if a kind is watched or dropped here alone.
+    #[test]
+    fn the_watched_kinds_match_the_shared_file() {
+        const FILE: &str = include_str!("../../../contracts/overview-watches.json");
+        let file: serde_json::Value = serde_json::from_str(FILE).expect("json");
+        assert_eq!(
+            file["kinds"],
+            serde_json::json!(KINDS),
+            "src/contracts/overview-watches.json"
+        );
+    }
 }

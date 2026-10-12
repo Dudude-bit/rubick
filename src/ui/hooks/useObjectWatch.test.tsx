@@ -140,6 +140,48 @@ it("reads a page's object again the moment the watch sees it deleted", async () 
   await waitFor(() => expect(getService).toHaveBeenCalledTimes(2));
 });
 
+/**
+ * Sam's Deployment page said "no longer exists" at once while the sidebar
+ * kept "Deployments 7" until its next poll, 9 s on. Fails if the page's own
+ * watch seeing its object deleted does not count the shell's numbers again,
+ * or if a change that deletes nothing does.
+ */
+it("counts the sidebar again when the page's watch sees its object deleted", async () => {
+  const client = testQueryClient();
+  const counted = vi.fn(async () => ({}));
+  renderHook(
+    () => {
+      useObjectWatch("Service", SERVICE.namespace, SERVICE.name, false);
+      useQuery({
+        queryKey: [...queryKeys.everyOverview(), "acme-staging"],
+        queryFn: counted,
+        staleTime: Infinity,
+      });
+    },
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalled()
+  );
+  await waitFor(() => expect(counted).toHaveBeenCalledTimes(1));
+  send(
+    { op: "restarted" },
+    { op: "applied", resource: SERVICE },
+    { op: "synced" }
+  );
+  send({ op: "applied", resource: SERVICE });
+  await new Promise((settle) => setTimeout(settle, 700));
+  expect(counted).toHaveBeenCalledTimes(1);
+
+  send({ op: "deleted", resource: SERVICE });
+
+  await waitFor(() => expect(counted).toHaveBeenCalledTimes(2));
+});
+
 /** Fails if a page holding an object the watch lists nothing under, deleted before it began, is not read again. */
 it("reads a page's object again when the watch finds nothing under its name", async () => {
   const getService = mount(false);

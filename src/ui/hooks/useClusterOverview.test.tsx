@@ -9,6 +9,8 @@ import {
 } from "vite-plus/test";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const getClusterOverview = vi.fn();
 const subscribeDeploymentWatch = vi.fn(
@@ -34,6 +36,7 @@ import {
   useClusterOverview,
   useFollowedOverview,
   useScopedOverview,
+  WATCHED_COUNTS,
 } from "./useClusterOverview";
 
 const overview = (pods: number) => ({ counts: { pods } }) as never;
@@ -380,5 +383,22 @@ describe("blindDeployments", () => {
         "team-blind",
       ])
     ).toBeUndefined();
+  });
+});
+
+describe("the counts the overview's stores hold", () => {
+  /**
+   * The sidebar says these counts follow the cluster while the overview is
+   * served from the backend's stores. Fails if a kind is watched or dropped
+   * on one side of `src/contracts/overview-watches.json` alone.
+   */
+  it("are the kinds src/contracts/overview-watches.json names", () => {
+    const shared = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), "src/contracts/overview-watches.json"),
+        "utf8"
+      )
+    ) as { kinds: string[] };
+    expect(Object.keys(WATCHED_COUNTS)).toEqual(shared.kinds);
   });
 });

@@ -4978,6 +4978,10 @@ export const ru: Catalogue = {
     countsUnread: "не посчитано",
     countsHeld: "посчитано до переключения, читаем заново",
     countsHeldAt: "Посчитано {ago}, до переключения. Читаем заново.",
+    countsFollowed:
+      "Обновляется вслед за изменениями в кластере. Посчитано в {at}.",
+    countsEvery: "Посчитано в {at}, пересчитывается каждые {every} с.",
+    countsAt: "Посчитано в {at}.",
     podsNotCounted: "поды не посчитаны {where}",
     notReadWhere: "не прочитано {where}",
     countsIn: "в {scope}",

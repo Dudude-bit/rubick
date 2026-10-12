@@ -22,7 +22,11 @@ vi.mock("@/lib/commands", () => ({
 vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useClusterOverview")>()),
   useClusterOverview: () => ({ data: undefined }),
-  useScopedOverview: () => ({ data: undefined, isPlaceholderData: false }),
+  useScopedOverview: () => ({
+    data: undefined,
+    isPlaceholderData: false,
+    freshness: { everyMs: 10_000, slowRead: false },
+  }),
 }));
 
 interface Row {

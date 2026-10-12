@@ -44,6 +44,7 @@ const scoped = vi.hoisted(() => ({
   data: undefined as unknown,
   isPlaceholderData: false,
   dataUpdatedAt: 0,
+  freshness: { everyMs: 10_000 as number | false, slowRead: false },
 }));
 
 vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({

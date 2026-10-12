@@ -53,6 +53,7 @@ vi.mock("@/lib/commands", () => ({
 
 vi.mock("./PageArea", () => ({ PageArea: () => <p>big-pull</p> }));
 
+const { listen } = await import("@tauri-apps/api/event");
 const { Layout } = await import("./Layout");
 const { ShellVisibility } =
   await import("@/components/settings/ShellVisibility");
@@ -136,5 +137,41 @@ describe("the shell's overview reads", () => {
     });
 
     expect(await aMinute()).toEqual([]);
+  });
+});
+
+describe("the shell's counts behind another page", () => {
+  /**
+   * Sam deleted big-pull: its page said "no longer exists" in 0.3 s while
+   * the sidebar kept "Deployments 7" and "Pods 43" for 9 s, until the shell's
+   * ten-second poll. Fails if a change the overview's stores announce in the
+   * window's scope is not read again within a second behind a Deployment page.
+   */
+  it("reads the counts again within a second of a change the stores announce", async () => {
+    let announce: ((event: { payload: unknown }) => void) | null = null;
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "overview-changed") announce = handler as typeof announce;
+      return () => {};
+    });
+    await shell();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(announce).not.toBeNull();
+    const before = reads.overview.length;
+
+    await act(async () => {
+      announce?.({
+        payload: {
+          channel: "overview-changed",
+          context: "prod",
+          namespaces: ["shop"],
+          cluster: false,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(reads.overview.length).toBe(before + 1);
   });
 });

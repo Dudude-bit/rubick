@@ -64,7 +64,7 @@ import {
 } from "@/lib/links";
 import type { en } from "@/i18n/catalogue";
 import { T } from "@/i18n/T";
-import { cn } from "@/lib/utils";
+import { cn, formatWhen } from "@/lib/utils";
 import { commands } from "@/lib/commands";
 import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
@@ -80,7 +80,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ListQuery, ResourceCounts } from "@/generated/types";
 import { errorWords } from "@/i18n/say";
-import { useT } from "@/i18n/useT";
+import { useT, type T as Translate } from "@/i18n/useT";
 
 type NavKey = keyof typeof en.nav;
 
@@ -1058,27 +1058,26 @@ function NavRow({
  */
 function AttentionCount({
   attention,
-  held,
+  counts,
 }: {
   attention: Attention | null;
-  held: boolean;
+  counts: ShellCounts;
 }) {
   const t = useT();
   if (!attention || (attention.complete && attention.total === 0)) return null;
   const { total: n, complete, worst } = attention;
+  const behind = counts.heldAt !== null;
   return (
     <span
       className={cn(
         "ml-auto flex items-center gap-1 text-[11px]",
         worst ? ATTENTION_TEXT[worst] : "text-fg-fnt",
-        held && HELD_CLASS
+        behind && HELD_CLASS
       )}
       title={
-        held
-          ? t("cluster", "countsHeld")
-          : complete
-            ? undefined
-            : t("cluster", "problemsNotAllChecked")
+        behind || complete
+          ? countAge(counts, false, t)
+          : t("cluster", "problemsNotAllChecked")
       }
       aria-label={attentionWords({ total: n, complete }, t)}
     >
@@ -1105,21 +1104,48 @@ function NavCount({ item, counts }: { item: NavItem; counts: ShellCounts }) {
   const t = useT();
   const { overview, attention, heldAt } = counts;
   if (!overview) return null;
-  const held = heldAt !== null;
 
   if (item.labelKey === "overview")
-    return <AttentionCount attention={attention} held={held} />;
+    return <AttentionCount attention={attention} counts={counts} />;
 
   const count = item.count && overview.counts[item.count];
   if (count == null) return null;
   return (
     <span
-      className={cn("ml-auto text-[11px] text-fg-fnt", held && HELD_CLASS)}
-      title={held ? t("cluster", "countsHeld") : undefined}
+      className={cn(
+        "ml-auto text-[11px] text-fg-fnt",
+        heldAt !== null && HELD_CLASS
+      )}
+      title={countAge(
+        counts,
+        item.count !== undefined && counts.followed.has(item.count),
+        t
+      )}
     >
       {count}
     </span>
   );
+}
+
+/**
+ * How old a count is, or that it follows the cluster: a number polled every
+ * ten seconds beside a page that already says the object is gone read as now.
+ */
+function countAge(
+  counts: ShellCounts,
+  followed: boolean,
+  t: Translate
+): string {
+  if (counts.heldAt !== null) return t("cluster", "countsHeld");
+  if (counts.readAt === null) return "";
+  const at = formatWhen(counts.readAt, "clock");
+  if (followed) return t("cluster", "countsFollowed", { at });
+  return counts.everyMs === false
+    ? t("cluster", "countsAt", { at })
+    : t("cluster", "countsEvery", {
+        at,
+        every: Math.round(counts.everyMs / 1000),
+      });
 }
 
 /** A count from before the window turned to this cluster, standing in until its own answer lands. */

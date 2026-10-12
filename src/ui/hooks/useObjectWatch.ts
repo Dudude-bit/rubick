@@ -59,7 +59,6 @@ export function useObjectWatch(
     detail: queryKeys.rowDetail(kind),
     onError: () => setFailedFor(queryKey),
     onRecovered: () => setFailedFor(null),
-    recount: false,
     behind: true,
   });
   const listed = useQuery<Scoped<unknown>>({ queryKey, queryFn: skipToken })
