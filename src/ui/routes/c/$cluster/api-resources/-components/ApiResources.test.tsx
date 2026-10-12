@@ -1,8 +1,16 @@
 import { fireEvent, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 
 import type { ApiCatalog } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 
 const catalog = vi.hoisted(() => ({
@@ -63,6 +71,7 @@ beforeEach(() => {
   catalog.answer = () => Promise.resolve(SERVED);
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
 });
+afterEach(() => useLocaleStore.setState({ choice: null }));
 
 describe("the API resources page", () => {
   /** Every served kind is a way to its list, its own page where it has one. */
@@ -186,5 +195,38 @@ describe("a kind name longer than its row", () => {
     expect(scope).toHaveClass("truncate");
     expect(scope.parentElement).toHaveAttribute("title", "cluster-wide");
     expect(scope.parentElement?.parentElement).toHaveClass("shrink-[100]");
+  });
+
+  /**
+   * In Russian at 1024 two columns of 380 px cut "Binding" to "Bindi…" and
+   * its scope words to "нельзя получить спис…". Fails if a column may be
+   * narrower than the longest row's words in the reader's language, or if
+   * typing a filter moves the columns.
+   */
+  it("keeps two columns only where each holds the longest row whole", async () => {
+    catalog.answer = () =>
+      Promise.resolve({
+        ...SERVED,
+        entries: [
+          ...SERVED.entries,
+          entry("", "Binding", "bindings", true, ["create"]),
+        ],
+      });
+    useLocaleStore.setState({ choice: "ru" });
+    await draw();
+    await screen.findByText("Binding");
+    const columnFloor = () =>
+      Number(
+        /max\((\d+)px/.exec(
+          screen.getAllByRole("list")[0].style.gridTemplateColumns
+        )?.[1]
+      );
+    const floor = columnFloor();
+    expect(floor).toBeGreaterThan(380);
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Pod" },
+    });
+    expect(columnFloor()).toBe(floor);
   });
 });
