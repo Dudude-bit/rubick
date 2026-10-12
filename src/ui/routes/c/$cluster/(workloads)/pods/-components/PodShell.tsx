@@ -76,6 +76,9 @@ function noShell(pod: PodInfo, t: T): NoShell {
   const all = podContainers(pod);
   const init = all.filter((c) => c.phase === "init");
   const app = all.filter((c) => c.phase !== "init");
+  // A failed pod is terminal: what it did not run, it never will.
+  const failed = pod.status.phase === "Failed";
+  const status = <Mono>{pod.status.reason ?? pod.status.phase}</Mono>;
 
   // The first init container that has not succeeded is what the whole pod is
   // waiting on — every container after it is either queued or has never run.
@@ -108,7 +111,15 @@ function noShell(pod: PodInfo, t: T): NoShell {
             label: t("action", "readLastRunOf", { name: blocker.name }),
           }
         : null,
-      body: (
+      body: failed ? (
+        <>
+          {parts(t("empty", "podFailedInInit", { failure }), {
+            status,
+            container: <Mono>{blocker.name}</Mono>,
+          })}{" "}
+          {t("empty", "shellNeedsLiveProcess")}
+        </>
+      ) : (
         <>
           {parts(t("empty", "podStoppedInInit", { failure }), {
             container: <Mono>{blocker.name}</Mono>,
@@ -186,7 +197,9 @@ function noShell(pod: PodInfo, t: T): NoShell {
       : null,
     body: (
       <>
-        {waiting ? (
+        {failed ? (
+          <>{parts(t("empty", "podFailedNoneRunning"), { status })} </>
+        ) : waiting ? (
           <>
             {reason
               ? parts(t("empty", "containerHeldAt"), {

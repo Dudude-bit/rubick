@@ -26,6 +26,9 @@ export const ru: Catalogue = {
     actsOn: "действует на",
     nothingIsTheTop: "никем: {kind} стоит в самом начале цепочки",
     replicaCountSetHere: "число реплик задаётся здесь",
+    replicaCountSetBy: "число реплик задаёт {kind} {name}",
+    replicaCountSetHereUnlessScaled:
+      "число реплик задаётся здесь, если его не задаёт автомасштабировщик, а их не прочитали",
     noServiceSelectsThese:
       "Ни один Service в этом пространстве имён не выбирает эти поды, поэтому внутри кластера трафик до этого объекта ({kind}) не доходит.",
     serviceResolvesExternal:
@@ -66,6 +69,14 @@ export const ru: Catalogue = {
     notLookedAt: "Не проверялось",
     notLookedAtNote:
       "перечислены по имени, чтобы отсутствующая группа не читалась как пустая",
+    noneRoutesHere:
+      "нет: ни один Ingress или маршрут {where} не направляет трафик на этот адрес",
+    noPodAnswers:
+      "нет: ни один под {where} не подходит под селектор этого Service",
+    noneReachesPods:
+      "нет: ни один Service, Ingress или маршрут {where} не направляет трафик на эти поды",
+    noneGoverns:
+      "нет: ни один автомасштабировщик или бюджет прерываний {where} не действует на этот объект",
     deliveredBy: "Доставлено",
     deliveredFromPath: "из {path}",
     disruptionBudget: "Бюджет прерываний",
@@ -84,7 +95,6 @@ export const ru: Catalogue = {
     overHttpPlain: "по обычному HTTP",
     resourceBackend: "ресурсный бэкенд, по таким приложение не ходит",
     ownerNotController: "владелец, но не контроллер",
-    replicasSetHere: "число реплик задаётся здесь",
     noNamespaceValue: "без пространства имён",
     servicePublishesNoEndpoint: "Этот Service не публикует ни одного эндпоинта",
     stopNoSliceNote:
@@ -3839,6 +3849,8 @@ export const ru: Catalogue = {
       "приложение не читает, кто монтирует заявку этого тома, поэтому не может сказать, пишет ли в него ещё кто-нибудь",
     unreadPoliciesOnTheirTab:
       "вкладка «Связи» не читает политики, которые выбирают этот под; их читает вкладка NetworkPolicies",
+    unreadPoliciesOnPodTabs:
+      "вкладка «Связи» не читает политики, которые выбирают эти поды; их читает вкладка NetworkPolicies каждого пода",
     connNoAddress: "адрес не задан",
     stepAttempt: "попытка {revision}",
     stepChallengeOn: "{kind} для {domain}",
@@ -3982,6 +3994,7 @@ export const ru: Catalogue = {
       many: "{n} минут",
       other: "{n} минуты",
     },
+    spanAnd: "{larger} {smaller}",
     spanMinutesInSentence: {
       one: "{n} минуту",
       few: "{n} минуты",
@@ -4405,12 +4418,18 @@ export const ru: Catalogue = {
     logsNoneNotStarted: "Логов пока нет: он ещё не запускался.",
     logsNeverRanBlocked: "Не запускался: последовательность ещё на {on}.",
     logsNeverRan: "Не запускался.",
+    logsNeverRanPodFailedOn:
+      "Не запускался и уже не запустится: под остановился на {on}.",
+    logsNeverRanPodFailed:
+      "Не запускался и уже не запустится: под завершился с ошибкой.",
     logsSidecarRunning:
       "Запущен во время init и не завершается; последовательность пошла дальше, как только он был готов.",
     groupInitCaption:
       "выполняются по порядку до старта пода, каждый ждёт предыдущего",
     groupSidecarCaption: "запущены во время init и работают до сих пор",
     groupAppBlocked: "не запускались: под ещё в init",
+    groupAppFailedInInit:
+      "не запускались и уже не запустятся: под остановился в init",
     groupAppCaption: "работают вместе всю жизнь пода",
     groupInitCaptionEach:
       "выполняются по порядку до старта каждого пода, каждый ждёт предыдущего",
@@ -5750,6 +5769,10 @@ export const ru: Catalogue = {
     whichHasNotFinished: "он не завершился",
     podStoppedInInit:
       "Под ещё в инициализации и застрял на {container}: {failure}.",
+    podFailedInInit:
+      "Под в состоянии {status}: он остановился в инициализации на {container}, {failure}. Ни один его контейнер не работает и больше не запустится.",
+    podFailedNoneRunning:
+      "Под в состоянии {status}: ни один его контейнер не работает и больше не запустится.",
     haveNotStarted: {
       one: "{names} не запустился.",
       few: "{names} не запустились.",

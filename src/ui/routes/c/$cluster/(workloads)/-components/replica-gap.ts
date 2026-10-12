@@ -22,6 +22,7 @@ const NOT_READY = {
 
 export interface ReplicaSplit {
   ready: number;
+  failing: number;
   /** Starting in blue, failing in red, the rest not ready in amber. */
   gap: CompositionSegment[];
 }
@@ -69,6 +70,7 @@ export function replicaSplit(
   const notReady = made - ready - starting - failing;
   return {
     ready,
+    failing,
     gap: [
       {
         label: t("count", "startingSegment", { n: starting }),

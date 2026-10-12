@@ -311,6 +311,7 @@ export function DaemonSetDetail() {
                 <RelatedResources
                   ownerReferences={daemonSet.ownerReferences}
                   namespace={daemonSet.namespace}
+                  connections={connections.data}
                 />
               )}
             </WorkloadOverview>

@@ -311,6 +311,26 @@ describe("PodShell when there is nothing to attach to", () => {
     );
   });
 
+  /**
+   * Evicted init-demo said "the pod is still in init" while its headline and
+   * kubectl said Evicted. Fails if a failed pod's shell state goes back to
+   * describing a sequence that is still going.
+   */
+  it("says a failed pod's containers will not run again", () => {
+    const evicted = {
+      ...initDemo,
+      status: { ...initDemo.status, phase: "Failed", reason: "Evicted" },
+    };
+    renderWithProviders(
+      <PodShell pod={evicted} container={null} ended={false} {...handlers} />
+    );
+    const hollow = screen.getByTestId("shell-hollow");
+    expect(hollow).toHaveTextContent(
+      "The pod is Evicted: it stopped in init on migrate, which has failed 33 times. None of its containers is running, and none will run again."
+    );
+    expect(hollow).not.toHaveTextContent("still in init");
+  });
+
   it("offers the failed run's log and Debug, which are the two things that work", async () => {
     const onOpenLogs = vi.fn();
     renderWithProviders(

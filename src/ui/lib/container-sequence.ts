@@ -374,6 +374,7 @@ function noteFor(
   mark: StepMark,
   /** The init container the sequence is currently stuck on, if any. */
   blockedBy: string | null,
+  failed: boolean,
   t: T
 ): string | null {
   const phase = container.phase;
@@ -405,6 +406,12 @@ function noteFor(
     });
   }
 
+  if (mark === "queued" && failed) {
+    return blockedBy && blockedBy !== container.name
+      ? t("readings", "logsNeverRanPodFailedOn", { on: blockedBy })
+      : t("readings", "logsNeverRanPodFailed");
+  }
+
   if (mark === "queued") {
     if (phase === "app") {
       return blockedBy
@@ -432,7 +439,9 @@ function noteFor(
  */
 export function containerSequence(
   containers: readonly ContainerInfo[],
-  t: T
+  t: T,
+  /** The pod has failed: nothing still queued in it will ever run. */
+  failed = false
 ): ContainerGroup[] {
   const { init, sidecars, app } = splitByPhase(containers);
 
@@ -442,11 +451,15 @@ export function containerSequence(
 
   const step = (container: ContainerInfo): ContainerStep => {
     const mark = markOf(container);
+    const status = containerStatus(container);
     return {
       container,
       mark,
-      status: containerStatus(container),
-      note: noteFor(container, mark, blockedBy, t),
+      status:
+        failed && status.role === "pending"
+          ? { ...status, role: "neutral" }
+          : status,
+      note: noteFor(container, mark, blockedBy, failed, t),
       exit: noteExit(container, mark),
     };
   };
@@ -477,9 +490,11 @@ export function containerSequence(
       phase: "app",
       title: GROUP_TITLE.app,
       caption:
-        blockedBy !== null
-          ? t("readings", "groupAppBlocked")
-          : t("readings", "groupAppCaption"),
+        blockedBy === null
+          ? t("readings", "groupAppCaption")
+          : failed
+            ? t("readings", "groupAppFailedInInit")
+            : t("readings", "groupAppBlocked"),
       steps: app.map(step),
     });
   }

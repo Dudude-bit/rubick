@@ -436,3 +436,50 @@ describe("the log of an init container that finished", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("the containers of a pod that has failed", () => {
+  /**
+   * Evicted init-demo's Containers tab, on its page and in its peek, said
+   * "the pod is still in init". Fails if the rows stop reading the pod's own
+   * phase.
+   */
+  it("says what never started will not, from the pod's phase", async () => {
+    vi.mocked(invoke).mockResolvedValue(undefined);
+    const app = {
+      name: "app",
+      image: "busybox:1.36",
+      ready: false,
+      started: false,
+      phase: "app",
+      state: { type: "waiting", reason: "PodInitializing" },
+      lastTerminated: null,
+      restartCount: 0,
+      ports: [],
+      resources: { requests: {}, limits: {} },
+      env: [],
+      envFrom: [],
+    } satisfies ContainerInfo;
+    const migrate = {
+      ...app,
+      name: "migrate",
+      phase: "init",
+      state: { type: "waiting", reason: "CrashLoopBackOff" },
+      restartCount: 7,
+    } satisfies ContainerInfo;
+    await renderWithRouter(
+      <ContainerRows
+        pod={{
+          containers: [app],
+          initContainers: [migrate],
+          status: { phase: "Failed" },
+        }}
+        namespace="k8s-gui-test"
+        podName="init-demo"
+      />
+    );
+    expect(
+      screen.getByText(/never started, and will not: the pod failed in init/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/still in init/)).toBeNull();
+  });
+});

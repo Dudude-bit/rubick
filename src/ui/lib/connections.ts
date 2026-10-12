@@ -25,6 +25,7 @@ import { clusterIpText } from "./cluster-ip";
 import {
   autoscalerRange,
   autoscalerReplicas,
+  autoscalers,
   budgetRoom,
   budgetRule,
 } from "./governance";
@@ -49,11 +50,14 @@ import type {
   ServicePublished,
   TlsCertificate,
   Unread,
+  UnexploredKind,
   Usage,
 } from "@/generated/types";
 import { declaredQuantity } from "./metric-format";
 
-function sameObject(a: ObjectRef, b: ObjectRef): boolean {
+type Named = Pick<ObjectRef, "kind" | "name" | "namespace">;
+
+function sameObject(a: Named, b: Named): boolean {
   return (
     a.kind === b.kind &&
     a.name === b.name &&
@@ -1396,12 +1400,45 @@ function needLabel(
   }
 }
 
+/** Who sets a workload's replica count, as this neighbourhood can tell. */
+export type ReplicaSetter =
+  | { by: "autoscaler"; object: ObjectRef }
+  | { by: "itself" }
+  | { by: "unread" };
+
+/** An autoscaler aimed at the workload wins; with autoscalers unread, the workload's own claim is not known. */
+export function replicaSetter(
+  conns: ResourceConnections,
+  workload: Named
+): ReplicaSetter {
+  const scaler = autoscalers(conns).find((auto) =>
+    sameObject(auto.target, workload)
+  );
+  if (scaler) return { by: "autoscaler", object: scaler.object };
+  return conns.notLookedAt.some(
+    (entry) => entry.kind === "HorizontalPodAutoscaler"
+  )
+    ? { by: "unread" }
+    : { by: "itself" };
+}
+
 /**
- * What the top of an ownership chain is worth opening for, as a catalogue
- * key: shared with the overview's own chain so the two callers cannot word it
- * differently.
+ * Where the top of an ownership chain gets its replica count, in words:
+ * shared with the Overview's own chain so the two cannot word it differently.
  */
-export const REPLICAS_SET_HERE = "replicaCountSetHere" as const;
+export function replicaSetterWords(setter: ReplicaSetter, t: T): string {
+  switch (setter.by) {
+    case "autoscaler":
+      return t("nav", "replicaCountSetBy", {
+        kind: setter.object.kind,
+        name: setter.object.name,
+      });
+    case "unread":
+      return t("nav", "replicaCountSetHereUnlessScaled");
+    case "itself":
+      return t("nav", "replicaCountSetHere");
+  }
+}
 
 const OWNABLE = new Set([
   "Pod",
@@ -1447,7 +1484,47 @@ export function unreadWhy(why: Unread, t: T): string {
       return t("readings", "unreadVolumeMounts");
     case "policiesOnTheirTab":
       return t("readings", "unreadPoliciesOnTheirTab");
+    case "policiesOnPodTabs":
+      return t("readings", "unreadPoliciesOnPodTabs");
   }
+}
+
+/** Policies are read on a pod's own tab, and no reference or way in depends on them. */
+export const policiesElsewhere = (entry: UnexploredKind): boolean =>
+  entry.why.says === "policiesOnTheirTab" ||
+  entry.why.says === "policiesOnPodTabs";
+
+const ROUTE_KINDS = [
+  "HTTPRoute",
+  "GRPCRoute",
+  "TLSRoute",
+  "TCPRoute",
+  "UDPRoute",
+];
+
+/** What a group read to say it is empty, by group. */
+const EMPTY_READS = {
+  routed: ["Ingress", ...ROUTE_KINDS],
+  answers: ["Pod"],
+  reached: ["Service", "Ingress", ...ROUTE_KINDS],
+  governs: [
+    "HorizontalPodAutoscaler",
+    "PodDisruptionBudget",
+    "ReplicaSet",
+    "Deployment",
+  ],
+} as const;
+
+/** A group read and found empty says so; one whose reads failed stays absent, named under Not looked at. */
+function orNone(
+  rows: ConnRow[],
+  conns: ResourceConnections,
+  reads: readonly string[],
+  none: () => string
+): ConnRow[] {
+  if (rows.length > 0) return rows;
+  if (conns.notLookedAt.some((entry) => reads.includes(entry.kind))) return [];
+  return [{ key: "none", label: "", object: null, detail: none(), ways: [] }];
 }
 
 /** The same, for the group that names what was never read. */
@@ -1646,7 +1723,10 @@ function madeByAndMakes(conns: ResourceConnections, t: T): ConnRow[] {
   ) {
     rows[top] = {
       ...rows[top],
-      detail: join(t("nav", REPLICAS_SET_HERE), rows[top].detail),
+      detail: join(
+        replicaSetterWords(replicaSetter(conns, child), t),
+        rows[top].detail
+      ),
     };
   }
 
@@ -1841,6 +1921,11 @@ export function connectionGroups(
   delivery: Delivery[] = []
 ): ConnGroup[] {
   const deliveredBy = deliveredRows(delivery, t);
+  const where = t("empty", "inNamespaceWhere", {
+    namespace: conns.subject.namespace ?? "",
+  });
+  const selects =
+    conns.subject.facts?.kind !== "service" || !!conns.subject.facts.selector;
   const groups: (ConnGroup | null)[] = [
     {
       key: "needs",
@@ -1859,7 +1944,9 @@ export function connectionGroups(
           key: "routed",
           title: t("nav", "reachedThrough"),
           caption: t("nav", "routedHereNote"),
-          rows: routedHere(conns, t),
+          rows: orNone(routedHere(conns, t), conns, EMPTY_READS.routed, () =>
+            t("nav", "noneRoutesHere", { where })
+          ),
         }
       : null,
     conns.subject.kind === "Service" || conns.subject.kind === "Ingress"
@@ -1867,7 +1954,12 @@ export function connectionGroups(
           key: "answers",
           title: t("nav", "whatAnswersHere"),
           caption: t("nav", "whatAnswersHereNote"),
-          rows: answersHere(conns, t),
+          rows:
+            conns.subject.kind === "Service" && selects
+              ? orNone(answersHere(conns, t), conns, EMPTY_READS.answers, () =>
+                  t("nav", "noPodAnswers", { where })
+                )
+              : answersHere(conns, t),
         }
       : null,
     OWNABLE.has(conns.subject.kind)
@@ -1875,7 +1967,12 @@ export function connectionGroups(
           key: "reached",
           title: t("nav", "reachedThrough"),
           caption: t("nav", "reachedThroughNote"),
-          rows: reachedThrough(conns, t),
+          rows: orNone(
+            reachedThrough(conns, t),
+            conns,
+            EMPTY_READS.reached,
+            () => t("nav", "noneReachesPods", { where })
+          ),
         }
       : null,
     placement(conns, t),
@@ -1889,7 +1986,11 @@ export function connectionGroups(
       key: "governs",
       title: t("nav", "governedBy"),
       caption: t("nav", "governedByNote"),
-      rows: governedBy(conns, t),
+      rows: OWNABLE.has(conns.subject.kind)
+        ? orNone(governedBy(conns, t), conns, EMPTY_READS.governs, () =>
+            t("nav", "noneGoverns", { where })
+          )
+        : governedBy(conns, t),
     },
     // The kinds that take part in ownership, plus any delivered object
     // whatever its kind: "Controlled by: nothing" is a real answer on a

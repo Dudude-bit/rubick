@@ -18,16 +18,18 @@ import { ChevronRight } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { commands } from "@/lib/commands";
-import { REPLICAS_SET_HERE } from "@/lib/connections";
+import { replicaSetter, replicaSetterWords } from "@/lib/connections";
 import { isScalable, toKind, isResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueRow } from "../../-object/detail-kv";
-import type { OwnerReference } from "@/generated/types";
+import type { OwnerReference, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 
 interface RelatedResourcesProps {
   ownerReferences: OwnerReference[];
   namespace?: string;
+  /** The page's neighbourhood, which names the autoscaler that sets the count, if any. */
+  connections?: ResourceConnections;
 }
 
 /** One hop up: what owns the thing below it. */
@@ -103,6 +105,7 @@ async function walkUp(start: Hop, namespace: string): Promise<Hop[]> {
 export function RelatedResources({
   ownerReferences,
   namespace,
+  connections,
 }: RelatedResourcesProps) {
   const t = useT();
   const controller = controllerOf(ownerReferences?.filter((r) => r.controller));
@@ -123,6 +126,14 @@ export function RelatedResources({
   // known — showing it and growing the chain beats an empty row that fills
   // in a moment later.
   const hops = chain ?? (controller ? [controller] : []);
+  const top = hops[hops.length - 1];
+  const setter =
+    top && connections && isScalable(top.kind)
+      ? replicaSetterWords(
+          replicaSetter(connections, { ...top, namespace: namespace ?? null }),
+          t
+        )
+      : null;
 
   return (
     <Section>
@@ -147,14 +158,10 @@ export function RelatedResources({
                   <OwnerName hop={hop} namespace={namespace} />
                 </span>
               ))}
-              {/* Which of the two names to open. A pod has no replica count
-                  of its own and the revision in between is replaced on the
-                  next rollout; the top of the chain is where the number is,
-                  and it is only said for a kind the app can scale there. */}
-              {isScalable(hops[hops.length - 1].kind) && (
-                <span className="text-[11px] text-fg-fnt">
-                  {t("nav", REPLICAS_SET_HERE)}
-                </span>
+              {/* Unsaid until the neighbourhood answers: only it knows whether
+                  an autoscaler sets the count instead. */}
+              {setter && (
+                <span className="text-[11px] text-fg-fnt">{setter}</span>
               )}
             </span>
           </KeyValueRow>

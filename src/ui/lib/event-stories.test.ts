@@ -92,7 +92,7 @@ describe("the recorded hour", () => {
     expect(rollout.says).toEqual({
       key: "storyChanged",
       values: {
-        when: { key: "whenWithin", values: { spanMs: 5000 } },
+        when: { key: "whenWithin", values: { coverMs: 5000 } },
         scheduled: 1,
         pulled: 2,
         started: 2,
@@ -137,7 +137,10 @@ describe("the recorded hour", () => {
         // a span borrowed from trouble the sentence is not counting.
         count: {
           key: "countWithin",
-          values: { times: { key: "timesSeen", values: { n: 12 } }, spanMs: 0 },
+          values: {
+            times: { key: "timesSeen", values: { n: 12 } },
+            coverMs: 0,
+          },
         },
         detail: 'Failed to pull image "busybox:1.36": pull QPS exceeded',
       },
@@ -168,7 +171,7 @@ describe("the recorded hour", () => {
     expect(one(stories, "cron-demo-29812785").says).toEqual({
       key: "storyJob",
       values: {
-        when: { key: "whenWithin", values: { spanMs: 3000 } },
+        when: { key: "whenWithin", values: { coverMs: 3000 } },
         created: { key: "jobsCreated", values: { n: 1 } },
         completed: 1,
       },
@@ -543,7 +546,7 @@ describe("what a window counts", () => {
           key: "countWithin",
           values: {
             times: { key: "timesSeen", values: { n: 71 } },
-            spanMs: 20 * MINUTE - 1000,
+            coverMs: 20 * MINUTE - 1000,
           },
         },
         earlier: {
@@ -558,11 +561,11 @@ describe("what a window counts", () => {
     });
     const said = sayWords(story.says, en);
     expect(said).toMatch(
-      /^The container could not be started, 71 times within 19 minutes and 696 times since .+, the last at .+: Error: couldn't find key/
+      /^The container could not be started, 71 times within 20 minutes and 696 times since .+, the last at .+: Error: couldn't find key/
     );
     expect(said).not.toContain("767");
     expect(sayWords(story.says, ru)).toMatch(
-      /^Контейнер не запустился 71 раз за 19 минут и 696 раз с .+, последний раз в .+: Error/
+      /^Контейнер не запустился 71 раз за 20 минут и 696 раз с .+, последний раз в .+: Error/
     );
   });
 
@@ -665,7 +668,7 @@ describe("counts a reader's language can say", () => {
           count: 3,
           kind: "Pod",
           name: "web-0",
-          firstTimestamp: ago(90_000),
+          firstTimestamp: ago(50_000),
           lastTimestamp: ago(1000),
         }),
       ],

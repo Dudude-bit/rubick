@@ -328,6 +328,7 @@ export function StatefulSetDetail() {
                 <RelatedResources
                   ownerReferences={statefulSet.ownerReferences}
                   namespace={statefulSet.namespace}
+                  connections={connections.data}
                 />
               )}
             </WorkloadOverview>

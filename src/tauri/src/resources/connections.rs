@@ -587,6 +587,9 @@ pub enum Unread {
     VolumeMountsNotRead,
     /// The policies that select a pod, read on its own `NetworkPolicies` tab.
     PoliciesOnTheirTab,
+    /// The policies that select the pods behind a workload, a Service or an
+    /// Ingress, read on each pod's own `NetworkPolicies` tab.
+    PoliciesOnPodTabs,
 }
 
 impl UnexploredKind {
@@ -668,6 +671,12 @@ impl UnexploredKind {
     #[must_use]
     pub fn on_a_pod() -> Self {
         Self::new("NetworkPolicy", Unread::PoliciesOnTheirTab)
+    }
+
+    /// The same for the pods behind a workload, a Service or an Ingress.
+    #[must_use]
+    pub fn behind_pods() -> Self {
+        Self::new("NetworkPolicy", Unread::PoliciesOnPodTabs)
     }
 }
 

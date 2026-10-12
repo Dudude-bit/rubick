@@ -18,7 +18,11 @@ import type {
   UnexploredKind,
   ServicePublished,
 } from "@/generated/types";
-import type { ChainPath, ChainHop } from "@/lib/connections";
+import {
+  policiesElsewhere,
+  type ChainPath,
+  type ChainHop,
+} from "@/lib/connections";
 import type { JournalEntry } from "@/lib/changes";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { endpointCount, servingCount } from "@/lib/published";
@@ -281,7 +285,9 @@ function publishedEntry(published: ServicePublished): EntryPoint {
 export function openQuestionsOf(
   connections: ResourceConnections | undefined
 ): UnexploredKind[] {
-  return connections?.notLookedAt ?? [];
+  return (connections?.notLookedAt ?? []).filter(
+    (entry) => !policiesElsewhere(entry)
+  );
 }
 
 /** This service's entries, newest first. */

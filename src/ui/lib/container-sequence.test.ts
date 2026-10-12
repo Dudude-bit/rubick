@@ -113,6 +113,31 @@ describe("containerSequence on a pod held in init", () => {
     expect(seed.status.text).toBe("Never started");
   });
 
+  /**
+   * Evicted init-demo's Containers tab said "the sequence is still on migrate"
+   * and "the pod is still in init" in a pending tone. Fails if a failed pod's
+   * queued steps read as waiting for a turn they will never get.
+   */
+  it("says the steps a failed pod never ran will not run, in no pending tone", () => {
+    const groups = containerSequence(stuckInInit, t, true);
+    const seed = groups
+      .find((group) => group.phase === "init")!
+      .steps.find((step) => step.container.name === "seed")!;
+    const app = groups.find((group) => group.phase === "app")!;
+
+    expect(seed.note).toBe(
+      "Never ran, and will not: the pod failed on migrate."
+    );
+    expect(seed.status.role).toBe("neutral");
+    expect(app.caption).toBe(
+      "never started, and will not: the pod failed in init"
+    );
+    expect(app.steps[0].note).toBe(
+      "Never ran, and will not: the pod failed on migrate."
+    );
+    expect(app.steps[0].status.role).toBe("neutral");
+  });
+
   it("does not let an app container claim it is starting while init is stuck", () => {
     const groups = containerSequence(stuckInInit, t);
     const app = groups.find((group) => group.phase === "app")!;

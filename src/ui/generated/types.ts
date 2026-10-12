@@ -2664,7 +2664,8 @@ export type Unread =
   | { says: "unanswered"; version: string; said: string }
   | { says: "nodeClaimsNotRead" }
   | { says: "volumeMountsNotRead" }
-  | { says: "policiesOnTheirTab" };
+  | { says: "policiesOnTheirTab" }
+  | { says: "policiesOnPodTabs" };
 
 export type Relation =
   | { verb: "owns"; controller: boolean }

@@ -47,6 +47,9 @@ export const en = {
     actsOn: "acts on",
     nothingIsTheTop: "nothing: a {kind} sits at the top of the chain",
     replicaCountSetHere: "the replica count is set here",
+    replicaCountSetBy: "the replica count is set by {kind} {name}",
+    replicaCountSetHereUnlessScaled:
+      "the replica count is set here unless an autoscaler sets it, and autoscalers were not read",
     noServiceSelectsThese:
       "No Service in this namespace selects these pods, so nothing in the cluster routes traffic to this {kind}.",
     serviceResolvesExternal:
@@ -89,6 +92,13 @@ export const en = {
     notLookedAt: "Not looked at",
     notLookedAtNote:
       "named, so a group that is absent is never read as a group that is empty",
+    noneRoutesHere:
+      "none: no Ingress or route {where} sends traffic to this address",
+    noPodAnswers: "none: no pod {where} carries this Service's selector",
+    noneReachesPods:
+      "none: no Service, Ingress or route {where} sends traffic to these pods",
+    noneGoverns:
+      "none: no autoscaler or disruption budget {where} acts on this",
     deliveredBy: "Delivered by",
     deliveredFromPath: "from {path}",
     disruptionBudget: "Disruption budget",
@@ -107,7 +117,6 @@ export const en = {
     overHttpPlain: "over plain HTTP",
     resourceBackend: "a resource backend, which the app does not follow",
     ownerNotController: "an owner, not the controller",
-    replicasSetHere: "the replica count is set here",
     noNamespaceValue: "no namespace",
     servicePublishesNoEndpoint: "This Service publishes no endpoint",
     stopNoSliceNote:
@@ -3508,6 +3517,8 @@ export const en = {
       "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
     unreadPoliciesOnTheirTab:
       "Connections does not read the policies that select this pod; its NetworkPolicies tab does",
+    unreadPoliciesOnPodTabs:
+      "Connections does not read the policies that select the pods here; each pod's NetworkPolicies tab does",
     connNoAddress: "no address is configured",
     stepAttempt: "attempt {revision}",
     stepChallengeOn: "{kind} on {domain}",
@@ -3598,6 +3609,7 @@ export const en = {
     spanDays: { one: "{n} day", other: "{n} days" },
     spanHours: { one: "{n} hour", other: "{n} hours" },
     spanMinutes: { one: "{n} minute", other: "{n} minutes" },
+    spanAnd: "{larger} {smaller}",
     spanMinutesInSentence: { one: "{n} minute", other: "{n} minutes" },
     factShowThem: "Show them",
     factUpgrading: {
@@ -3930,12 +3942,15 @@ export const en = {
     logsNoneNotStarted: "No logs yet: it has not started.",
     logsNeverRanBlocked: "Never ran: the sequence is still on {on}.",
     logsNeverRan: "Never ran.",
+    logsNeverRanPodFailedOn: "Never ran, and will not: the pod failed on {on}.",
+    logsNeverRanPodFailed: "Never ran, and will not: the pod has failed.",
     logsSidecarRunning:
       "Started during init and does not finish; the sequence went on once it was ready.",
     groupInitCaption:
       "run in order before the pod starts, each waiting on the last",
     groupSidecarCaption: "started during init and still running",
     groupAppBlocked: "never started: the pod is still in init",
+    groupAppFailedInInit: "never started, and will not: the pod failed in init",
     groupAppCaption: "run together for the life of the pod",
     groupInitCaptionEach:
       "run in order before each pod starts, each waiting on the last",
@@ -5197,6 +5212,10 @@ export const en = {
     whichHasNotFinished: "which has not finished",
     podStoppedInInit:
       "The pod is still in init and stopped on {container}, {failure}.",
+    podFailedInInit:
+      "The pod is {status}: it stopped in init on {container}, {failure}. None of its containers is running, and none will run again.",
+    podFailedNoneRunning:
+      "The pod is {status}: none of its containers is running, and none will run again.",
     haveNotStarted: {
       one: "{names} has not started.",
       other: "{names} have not started.",

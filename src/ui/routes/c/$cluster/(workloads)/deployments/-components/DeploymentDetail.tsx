@@ -35,7 +35,11 @@ import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { useWorkloadPods } from "../../-components/workload-pods";
-import { readyBesideBadge, workloadRole } from "@/lib/workload-status";
+import {
+  readyBesideBadge,
+  rolloutWithPods,
+  workloadRole,
+} from "@/lib/workload-status";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -369,6 +373,9 @@ export function DeploymentDetail() {
     t,
     !!deployment && workloadRole(deployment.rollout) === "pending"
   );
+  const rollout =
+    deployment &&
+    rolloutWithPods(deployment.rollout, splitPods && split, desired);
 
   // Desired, ready, available and up-to-date are one count read four ways, and
   // as four rows the reader had to subtract them to find the gap the bar shows
@@ -459,6 +466,7 @@ export function DeploymentDetail() {
               <RelatedResources
                 ownerReferences={deployment.ownerReferences}
                 namespace={deployment.namespace}
+                connections={connections.data}
               />
             )}
           </WorkloadOverview>
@@ -617,19 +625,12 @@ export function DeploymentDetail() {
         title={deployment?.name || ""}
         namespace={deployment?.namespace}
         createdAt={deployment?.createdAt}
-        statusBadge={
-          deployment && <RolloutBadge rollout={deployment.rollout} />
-        }
+        statusBadge={rollout && <RolloutBadge rollout={rollout} />}
         badges={
-          deployment &&
+          rollout &&
           replicas && (
             <span className="text-[11px] text-fg-mut">
-              {readyBesideBadge(
-                replicas.ready,
-                replicas.desired,
-                deployment.rollout,
-                t
-              )}
+              {readyBesideBadge(split.ready, replicas.desired, rollout, t)}
             </span>
           )
         }
@@ -663,18 +664,18 @@ export function DeploymentDetail() {
           </>
         }
         headerNote={
-          deployment && (
+          rollout && (
             <RolloutSummary
-              rollout={deployment.rollout}
+              rollout={rollout}
               subject={{ kind: ResourceType.Deployment, name, namespace }}
               place="header"
             />
           )
         }
         summary={
-          deployment && (
+          rollout && (
             <RolloutSummary
-              rollout={deployment.rollout}
+              rollout={rollout}
               subject={{ kind: ResourceType.Deployment, name, namespace }}
               place="line"
             />

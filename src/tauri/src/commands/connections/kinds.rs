@@ -342,6 +342,7 @@ pub(super) async fn workload_connections(
 
     out.not_looked_at.extend(unanswered(&snapshot));
     out.not_looked_at.extend(revisions_unread);
+    out.not_looked_at.push(UnexploredKind::behind_pods());
     Ok(())
 }
 
@@ -458,6 +459,7 @@ pub(super) async fn service_connections(
     // "every kind was read", so the "Not looked at" group never renders and
     // the frontend's own guards have nothing to fire on.
     out.not_looked_at.extend(unanswered(&snapshot));
+    out.not_looked_at.push(UnexploredKind::behind_pods());
 
     Ok(())
 }
@@ -587,6 +589,7 @@ pub(super) async fn ingress_connections(
     // As on the pod and workload pages: a refusal here has to be named, or
     // it is a gap the wire contract reads as "every kind was read".
     out.not_looked_at.extend(unanswered(&snapshot));
+    out.not_looked_at.push(UnexploredKind::behind_pods());
 
     Ok(())
 }
@@ -1325,6 +1328,62 @@ mod ingress_tests {
         let unread: Vec<&str> = page.not_looked_at.iter().map(|e| e.kind.as_str()).collect();
         assert!(unread.contains(&"ReplicaSet"), "{unread:?}");
         assert!(unread.contains(&"HorizontalPodAutoscaler"), "{unread:?}");
+    }
+
+    /// Dana's `Deployment`, `StatefulSet` and `Service` pages named no unread
+    /// policies while kubectl showed policies selecting their pods, and only
+    /// the pod's page said its graph does not read them. Fails if an arm with
+    /// pods behind it stops naming the policies it never reads.
+    #[tokio::test]
+    async fn every_arm_with_pods_behind_it_names_the_policies_it_does_not_read() {
+        let ingress = json!({
+            "metadata": { "name": "front", "namespace": "shop" },
+            "spec": { "rules": [] },
+        });
+        let service = json!({
+            "metadata": { "name": "web", "namespace": "shop" },
+            "spec": { "selector": { "app": "web" } },
+        });
+        let deployment = json!({
+            "metadata": { "name": "web", "namespace": "shop", "uid": "web-uid" },
+            "spec": {
+                "selector": { "matchLabels": { "app": "web" } },
+                "template": { "metadata": { "labels": { "app": "web" } } },
+            },
+        });
+        let (client, _) = server(vec![
+            (
+                "/apis/networking.k8s.io/v1/namespaces/shop/ingresses",
+                200,
+                listing(&[ingress]),
+            ),
+            ("/api/v1/namespaces/shop/services", 200, listing(&[service])),
+            (
+                "/apis/apps/v1/namespaces/shop/deployments/web",
+                200,
+                deployment.to_string(),
+            ),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+        for (kind, name) in [
+            ("Deployment", "web"),
+            ("Service", "web"),
+            ("Ingress", "front"),
+        ] {
+            let page = connections_of(&ctx, kind, name, None)
+                .await
+                .expect("a page");
+            assert!(
+                page.not_looked_at
+                    .iter()
+                    .any(|entry| entry.kind == "NetworkPolicy"
+                        && entry.why == crate::resources::Unread::PoliciesOnPodTabs),
+                "{kind}: {:?}",
+                page.not_looked_at
+            );
+        }
     }
 
     fn tls_ingress() -> String {

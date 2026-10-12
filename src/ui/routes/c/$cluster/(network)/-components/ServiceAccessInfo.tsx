@@ -8,11 +8,15 @@ import { parts } from "@/i18n/parts";
 import { None } from "@/components/ui/none";
 import { openExternal } from "@/lib/open-external";
 import { BalancerAddress } from "../../-object/BalancerAddress";
+import { ReasonTip } from "@/components/object/detail-blocks";
+import { cn } from "@/lib/utils";
 
 interface ServiceAccessInfoProps {
   service: ServiceInfo;
   /** Opens the page's port-forward dialog. */
   onForward: () => void;
+  /** Why the page's Port forward cannot run, the same answer its header gives. */
+  forwardReason?: string | null;
 }
 
 /** One way in: an address to copy, or the balancer's reason it has none yet. */
@@ -126,6 +130,7 @@ function AddressActions({ address, open }: { address: string; open: boolean }) {
 export function ServiceAccessInfo({
   service,
   onForward,
+  forwardReason,
 }: ServiceAccessInfoProps) {
   const t = useT();
 
@@ -166,10 +171,18 @@ export function ServiceAccessInfo({
               type: <strong>ClusterIP</strong>,
             })}
           </p>
-          <Button variant="outline" size="sm" onClick={onForward}>
-            <Network className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            {t("action", "portForward")}
-          </Button>
+          <ReasonTip reason={forwardReason}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => !forwardReason && onForward()}
+              aria-disabled={forwardReason ? true : undefined}
+              className={cn(forwardReason && "cursor-default opacity-40")}
+            >
+              <Network className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              {t("action", "portForward")}
+            </Button>
+          </ReasonTip>
         </div>
       )}
     </Section>

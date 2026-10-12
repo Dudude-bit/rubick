@@ -268,6 +268,30 @@ describe("the rollout line", () => {
     expect(line.closest("[data-header-note]")).not.toBeNull();
   });
 
+  /**
+   * Sam's drains: Replicas said "1 not ready" while the header still read
+   * "Ready 1/1" for about a second, until the Deployment's own status caught
+   * up with its pods. Fails if the header stops reading the pods the Replicas
+   * block reads.
+   */
+  it("moves its header with the pods the Replicas block reads", async () => {
+    answering(
+      () => new Promise(() => {}),
+      () => Promise.resolve({ uid: "uid", pods: [CREATING] })
+    );
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    expect(await screen.findByText("1 starting")).toBeInTheDocument();
+    expect(await screen.findByTestId("rollout-summary")).toHaveTextContent(
+      "Pods coming up: 0 of 1 pod is available"
+    );
+    expect(screen.getByText("0/1 ready")).toBeInTheDocument();
+    expect(screen.queryByText("1/1")).toBeNull();
+  });
+
   /** Fails if a fault, and the controller's words with it, is squeezed into the header row too. */
   it("keeps a fault on its own line above the tabs", async () => {
     rolling({

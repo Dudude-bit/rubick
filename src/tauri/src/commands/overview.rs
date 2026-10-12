@@ -28,8 +28,8 @@ use futures::future::join_all;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
-    ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolumeClaim, Pod, Secret, Service,
-    ServiceAccount,
+    ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolumeClaim, Pod, PodStatus, Secret,
+    Service, ServiceAccount,
 };
 use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
 use kube::api::ListParams;
@@ -236,26 +236,42 @@ pub enum Incarnation {
     Unchecked,
 }
 
-/// Who holds each name now, among the kinds this query read.
+/// An object a warning names: kind, namespace where it has one, and name.
+type Named = (String, Option<String>, String);
+
+/// What a read of one named object found holding its name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Held {
+    By(String),
+    Nobody,
+}
+
+/// The holders read one by one for the kinds the lists do not hold.
+type Looked = HashMap<Named, Held>;
+
+/// Who holds each name now: the kinds this query listed, the names read one
+/// by one, and failing both, what the events themselves say.
 struct Holders<'a> {
-    uids: HashMap<(&'a str, &'a str, &'a str), &'a str>,
+    uids: HashMap<(&'a str, Option<&'a str>, &'a str), &'a str>,
     unread: &'a [OverviewUnread],
     scope: Option<&'a [String]>,
+    nodes_known: bool,
+    looked: &'a Looked,
+    /// Uids another object of the same name has had since, by the events alone.
+    replaced: HashSet<&'a str>,
 }
 
 impl<'a> Holders<'a> {
     fn of(input: &'a OverviewInputs<'a>) -> Self {
         fn hold<'a, K: Resource>(
-            uids: &mut HashMap<(&'a str, &'a str, &'a str), &'a str>,
+            uids: &mut HashMap<(&'a str, Option<&'a str>, &'a str), &'a str>,
             kind: &'static str,
             items: &'a [Arc<K>],
         ) {
             for item in items {
                 let meta = item.meta();
-                if let (Some(namespace), Some(name), Some(uid)) =
-                    (&meta.namespace, &meta.name, &meta.uid)
-                {
-                    uids.insert((kind, namespace, name), uid);
+                if let (Some(name), Some(uid)) = (&meta.name, &meta.uid) {
+                    uids.insert((kind, meta.namespace.as_deref(), name), uid);
                 }
             }
         }
@@ -265,42 +281,126 @@ impl<'a> Holders<'a> {
         hold(&mut uids, "StatefulSet", input.stateful_sets);
         hold(&mut uids, "DaemonSet", input.daemon_sets);
         hold(&mut uids, "Job", input.jobs);
+        hold(&mut uids, "Node", input.nodes);
         Self {
             uids,
             unread: input.unread,
             scope: input.scope,
+            nodes_known: input.nodes_known,
+            looked: input.looked,
+            replaced: replaced_uids(refs(input.events)),
         }
+    }
+
+    /// Whether the lists hold `kind` where it lives: `None` for a kind they
+    /// never hold.
+    fn listed(&self, kind: &str, namespace: Option<&str>) -> Option<bool> {
+        if kind == "Node" {
+            return Some(self.nodes_known && namespace.is_none());
+        }
+        if !HELD_KINDS.contains(&kind) {
+            return None;
+        }
+        Some(namespace.is_some_and(|namespace| {
+            self.scope
+                .is_none_or(|scope| scope.iter().any(|n| n == namespace))
+                && !self.unread.iter().any(|entry| {
+                    entry.kind == kind && entry.namespace.as_deref().is_none_or(|n| n == namespace)
+                })
+        }))
     }
 
     fn incarnation(&self, event: &Event) -> Incarnation {
         let object = &event.involved_object;
-        let (Some(kind), Some(namespace), Some(name), Some(uid)) =
-            (&object.kind, &object.namespace, &object.name, &object.uid)
-        else {
+        let (Some(kind), Some(name), Some(uid)) = (&object.kind, &object.name, &object.uid) else {
             return Incarnation::Unchecked;
         };
-        let read = HELD_KINDS.contains(&kind.as_str())
-            && self
-                .scope
-                .is_none_or(|scope| scope.iter().any(|n| n == namespace))
-            && !self.unread.iter().any(|entry| {
-                entry.kind == *kind && entry.namespace.as_deref().is_none_or(|n| n == namespace)
-            });
-        if !read {
+        // The kubelet writes a node's name where its uid goes.
+        if uid == name {
             return Incarnation::Unchecked;
         }
-        match self
-            .uids
-            .get(&(kind.as_str(), namespace.as_str(), name.as_str()))
-        {
-            Some(now) if now == uid => Incarnation::Current,
-            Some(_) => Incarnation::Earlier,
-            None => Incarnation::Gone,
+        let namespace = object.namespace.as_deref();
+        let now = match self.listed(kind, namespace) {
+            Some(true) => Some(
+                self.uids
+                    .get(&(kind.as_str(), namespace, name.as_str()))
+                    .map_or(Held::Nobody, |uid| Held::By((*uid).to_string())),
+            ),
+            Some(false) => None,
+            None => self
+                .looked
+                .get(&(kind.clone(), namespace.map(str::to_string), name.clone()))
+                .cloned(),
+        };
+        match now {
+            Some(Held::By(now)) if now == *uid => Incarnation::Current,
+            Some(Held::By(_)) => Incarnation::Earlier,
+            Some(Held::Nobody) => Incarnation::Gone,
+            None if self.replaced.contains(uid.as_str()) => Incarnation::Earlier,
+            None => Incarnation::Unchecked,
         }
     }
 }
 
 const HELD_KINDS: [&str; 5] = ["Pod", "Deployment", "StatefulSet", "DaemonSet", "Job"];
+
+/// The uids among `events` whose name another object has had since, by the
+/// events alone: two objects never hold one name at once, so of several
+/// whose events all carry a date, the one whose events begin last is the
+/// later, and every other is earlier.
+fn replaced_uids<'a>(events: impl IntoIterator<Item = &'a Event>) -> HashSet<&'a str> {
+    type Began<'e> = HashMap<&'e str, Option<DateTime<Utc>>>;
+    let mut began: HashMap<(&str, Option<&str>, &str), Began> = HashMap::new();
+    for event in events {
+        let object = &event.involved_object;
+        let (Some(kind), Some(name), Some(uid)) = (&object.kind, &object.name, &object.uid) else {
+            continue;
+        };
+        if uid == name {
+            continue;
+        }
+        let at = event
+            .first_timestamp
+            .as_ref()
+            .or(event.last_timestamp.as_ref())
+            .map(Moment::moment)
+            .or_else(|| event.event_time.as_ref().map(Moment::moment));
+        let earliest = began
+            .entry((kind, object.namespace.as_deref(), name))
+            .or_default()
+            .entry(uid)
+            .or_insert(at);
+        *earliest = match (*earliest, at) {
+            (Some(seen), Some(at)) => Some(seen.min(at)),
+            _ => None,
+        };
+    }
+    let mut replaced = HashSet::new();
+    for uids in began.values() {
+        let dated: Vec<(&str, DateTime<Utc>)> = uids
+            .iter()
+            .filter_map(|(uid, at)| at.map(|at| (*uid, at)))
+            .collect();
+        if uids.len() < 2 || dated.len() != uids.len() {
+            continue;
+        }
+        let latest = dated.iter().map(|(_, at)| *at).max();
+        let newest: Vec<&str> = dated
+            .iter()
+            .filter(|(_, at)| Some(*at) == latest)
+            .map(|(uid, _)| *uid)
+            .collect();
+        if let [newest] = newest[..] {
+            replaced.extend(
+                dated
+                    .iter()
+                    .map(|(uid, _)| *uid)
+                    .filter(|uid| *uid != newest),
+            );
+        }
+    }
+    replaced
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -640,7 +740,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 .clone()
                 .unwrap_or_else(|| "Failed".to_string()),
             detail: ProblemDetail::said(status.message.clone()),
-            since: created,
+            since: failed_at(status).map(|t| t.to_rfc3339()),
             restarts: (restarts > 0).then_some(restarts),
             folded_pods: None,
         });
@@ -696,6 +796,31 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     }
 
     None
+}
+
+/// When a pod failed, as the cluster recorded it: the eviction or preemption
+/// it names, else its last exit, else when it stopped being ready. `None`
+/// where it recorded none of them, since the pod's age is not the failure's.
+fn failed_at(status: &PodStatus) -> Option<DateTime<Utc>> {
+    let conditions = status.conditions.as_deref().unwrap_or_default();
+    let changed = |kind: &str, to: &str| {
+        conditions
+            .iter()
+            .find(|c| c.type_ == kind && c.status == to)
+            .and_then(|c| c.last_transition_time.as_ref())
+            .map(Moment::moment)
+    };
+    let exited = status
+        .init_container_statuses
+        .iter()
+        .chain(status.container_statuses.iter())
+        .flatten()
+        .filter_map(|cs| cs.state.as_ref()?.terminated.as_ref()?.finished_at.as_ref())
+        .map(Moment::moment)
+        .max();
+    changed("DisruptionTarget", "True")
+        .or(exited)
+        .or_else(|| changed("Ready", "False"))
 }
 
 /// A Pending pod inside the wait it gets and showing no fault, a restart
@@ -1059,7 +1184,9 @@ fn recent_warnings<'a>(
     incarnation: impl Fn(&Event) -> Incarnation,
 ) -> Vec<WarningGroup> {
     let cutoff = chrono::Utc::now() - chrono::Duration::minutes(RECENT_WARNING_WINDOW_MINUTES);
-    let mut grouped: BTreeMap<String, WarningGroup> = BTreeMap::new();
+    // An earlier or a gone object's repeats are kept off the reason's row for
+    // the objects there now, which they would otherwise be read as part of.
+    let mut grouped: BTreeMap<(String, bool), WarningGroup> = BTreeMap::new();
 
     for event in events {
         if event.type_.as_deref() != Some("Warning") {
@@ -1077,17 +1204,21 @@ fn recent_warnings<'a>(
             .reason
             .clone()
             .unwrap_or_else(|| "Unknown".to_string());
-        let entry = grouped.entry(reason.clone()).or_insert(WarningGroup {
-            reason,
-            count: 0,
-            older: None,
-            last_seen: None,
-            sample: None,
-            object_kind: None,
-            object_name: None,
-            namespace: None,
-            incarnation: Incarnation::Unchecked,
-        });
+        let about = incarnation(event);
+        let past = matches!(about, Incarnation::Earlier | Incarnation::Gone);
+        let entry = grouped
+            .entry((reason.clone(), past))
+            .or_insert(WarningGroup {
+                reason,
+                count: 0,
+                older: None,
+                last_seen: None,
+                sample: None,
+                object_kind: None,
+                object_name: None,
+                namespace: None,
+                incarnation: Incarnation::Unchecked,
+            });
         let repeats = event
             .count
             .or_else(|| event.series.as_ref().and_then(|s| s.count))
@@ -1121,7 +1252,7 @@ fn recent_warnings<'a>(
             // for an event about a Node — inheriting it would file a
             // cluster-scoped object inside a namespace it does not live in.
             entry.namespace.clone_from(&event.involved_object.namespace);
-            entry.incarnation = incarnation(event);
+            entry.incarnation = about;
         }
     }
 
@@ -1652,6 +1783,8 @@ struct OverviewInputs<'a> {
     scope: Option<&'a [String]>,
     now: DateTime<Utc>,
     served_from: OverviewSource,
+    /// Who holds the names recent warnings give, read one by one.
+    looked: &'a Looked,
 }
 
 fn refs<T>(items: &[Arc<T>]) -> impl Iterator<Item = &T> {
@@ -1952,8 +2085,98 @@ pub async fn cluster_overview(
         usage_by_node: usage_index(metrics.ok()),
     };
     match snapshot {
-        Some(snapshot) => Ok(from_snapshot(&snapshot, scope.as_deref(), sides)),
-        None => by_listing(&client, scope.as_deref(), sides).await,
+        Some(snapshot) => {
+            let looked = look_up_holders(state, refs(&snapshot.events), scope.as_deref()).await;
+            Ok(from_snapshot(&snapshot, scope.as_deref(), sides, &looked))
+        }
+        None => by_listing(&client, scope.as_deref(), sides, Some(state)).await,
+    }
+}
+
+/// The most names a poll reads one by one to say who holds them.
+const MAX_HOLDER_LOOKUPS: usize = 16;
+
+/// The names recent warnings give whose kind the lists do not hold, newest
+/// first: one metadata read each for who holds the name now.
+fn names_to_look_up<'a>(
+    events: impl IntoIterator<Item = &'a Event>,
+    scope: Option<&[String]>,
+) -> Vec<(String, Named)> {
+    let cutoff = Utc::now() - chrono::Duration::minutes(RECENT_WARNING_WINDOW_MINUTES);
+    let mut newest: HashMap<Named, (Option<DateTime<Utc>>, String)> = HashMap::new();
+    for event in events {
+        let object = &event.involved_object;
+        let last = event
+            .last_timestamp
+            .as_ref()
+            .map(Moment::moment)
+            .or_else(|| event.event_time.as_ref().map(Moment::moment));
+        let (Some(kind), Some(name), Some(uid), Some(api_version)) =
+            (&object.kind, &object.name, &object.uid, &object.api_version)
+        else {
+            continue;
+        };
+        if event.type_.as_deref() != Some("Warning")
+            || last.is_some_and(|at| at < cutoff)
+            || uid == name
+            || kind == "Node"
+            || HELD_KINDS.contains(&kind.as_str())
+            || object.namespace.as_ref().is_some_and(|namespace| {
+                scope.is_some_and(|scope| !scope.iter().any(|n| n == namespace))
+            })
+        {
+            continue;
+        }
+        let named = (kind.clone(), object.namespace.clone(), name.clone());
+        let seen = newest
+            .entry(named)
+            .or_insert_with(|| (last, api_version.clone()));
+        seen.0 = seen.0.max(last);
+    }
+    let mut names: Vec<_> = newest.into_iter().collect();
+    names.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then_with(|| a.0.cmp(&b.0)));
+    names
+        .into_iter()
+        .take(MAX_HOLDER_LOOKUPS)
+        .map(|(named, (_, api_version))| (api_version, named))
+        .collect()
+}
+
+/// Who holds each of those names now. A read that failed leaves its name
+/// out, so its warnings stay unchecked rather than gone.
+async fn look_up_holders<'a>(
+    state: &AppState,
+    events: impl IntoIterator<Item = &'a Event>,
+    scope: Option<&[String]>,
+) -> Looked {
+    let reads =
+        names_to_look_up(events, scope)
+            .into_iter()
+            .map(|(api_version, named)| async move {
+                let held = holder_of(state, &api_version, &named).await;
+                held.map(|held| (named, held))
+            });
+    join_all(reads).await.into_iter().flatten().collect()
+}
+
+async fn holder_of(state: &AppState, api_version: &str, named: &Named) -> Option<Held> {
+    let (kind, namespace, name) = named;
+    let group = crate::utils::group_of(api_version);
+    let plural = state
+        .served_kinds(group)
+        .await
+        .ok()??
+        .into_iter()
+        .find(|served| served.kind == *kind)?
+        .plural;
+    let served = state.served(group, &plural).await.ok()??;
+    if served.namespaced != namespace.is_some() {
+        return None;
+    }
+    match crate::commands::ownership::metadata(state, &served, name, namespace.clone()).await {
+        Ok(meta) => meta.uid.map(Held::By),
+        Err(error) if error.code() == "NOT_FOUND" => Some(Held::Nobody),
+        Err(_) => None,
     }
 }
 
@@ -2000,7 +2223,12 @@ fn project(snapshot: &Snapshot, scope: Option<&[String]>) -> Projected {
     }
 }
 
-fn from_snapshot(snapshot: &Snapshot, scope: Option<&[String]>, sides: Sides) -> ClusterOverview {
+fn from_snapshot(
+    snapshot: &Snapshot,
+    scope: Option<&[String]>,
+    sides: Sides,
+    looked: &Looked,
+) -> ClusterOverview {
     let scoped = project(snapshot, scope);
     build_overview(&OverviewInputs {
         scoped_pods: &scoped.scoped_pods,
@@ -2021,6 +2249,7 @@ fn from_snapshot(snapshot: &Snapshot, scope: Option<&[String]>, sides: Sides) ->
         scope,
         now: Utc::now(),
         served_from: OverviewSource::Watch,
+        looked,
     })
 }
 
@@ -2165,6 +2394,7 @@ async fn by_listing(
     client: &Client,
     scope: Option<&[String]>,
     sides: Sides,
+    state: Option<&AppState>,
 ) -> Result<ClusterOverview> {
     let params = ListParams::default();
     let nodes_api: Api<Node> = Api::all(client.clone());
@@ -2233,6 +2463,10 @@ async fn by_listing(
         }
     };
     let nodes_known = nodes.is_some() && accounting_known;
+    let looked = match state {
+        Some(state) => look_up_holders(state, refs(&listed.events), scope).await,
+        None => Looked::new(),
+    };
 
     Ok(build_overview(&OverviewInputs {
         scoped_pods: &listed.pods,
@@ -2251,6 +2485,7 @@ async fn by_listing(
         scope,
         now: Utc::now(),
         served_from: OverviewSource::List,
+        looked: &looked,
     }))
 }
 
@@ -2380,6 +2615,7 @@ mod tests {
             counts: ResourceCounts::default(),
             scope: scope.as_deref(),
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
             now: Utc::now(),
         })
     }
@@ -2419,6 +2655,7 @@ mod tests {
             counts: ResourceCounts::default(),
             scope: None,
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
             now: Utc::now(),
         })
         .warnings
@@ -2447,6 +2684,189 @@ mod tests {
         assert_eq!(
             incarnation("d10287fd", &[], &refused),
             Incarnation::Unchecked
+        );
+    }
+
+    fn metric_warning(uid: &str, count: i32, first_minutes_ago: i64) -> Event {
+        serde_json::from_value(serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Event",
+            "metadata": { "name": format!("hello-web.{uid}"), "namespace": "lena-sandbox" },
+            "type": "Warning",
+            "reason": "FailedGetResourceMetric",
+            "message": "failed to get cpu utilization",
+            "count": count,
+            "firstTimestamp": (Utc::now() - chrono::Duration::minutes(first_minutes_ago))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+            "lastTimestamp": (Utc::now() - chrono::Duration::minutes(1))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+            "involvedObject": {
+                "apiVersion": "autoscaling/v2", "kind": "HorizontalPodAutoscaler",
+                "name": "hello-web", "namespace": "lena-sandbox", "uid": uid,
+            },
+        }))
+        .expect("an event this test wrote")
+    }
+
+    fn warnings_looked(events: Vec<Event>, looked: &Looked) -> Vec<(i32, Incarnation)> {
+        let mut groups: Vec<_> = build_overview(&OverviewInputs {
+            scoped_pods: &[],
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &arcs(events),
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+            looked,
+        })
+        .warnings
+        .into_iter()
+        .map(|group| (group.count, group.incarnation))
+        .collect();
+        groups.sort_by_key(|(count, _)| std::cmp::Reverse(*count));
+        groups
+    }
+
+    /// Lena's Overview read `FailedGetResourceMetric x45` under
+    /// `HorizontalPodAutoscaler/hello-web`: 41 from the HPA there now and 4
+    /// from the one deleted before it, unmarked. Fails if an earlier object's
+    /// repeats join the row of the one holding the name, or if a kind the
+    /// lists never hold goes unchecked where a read or the events can tell.
+    #[test]
+    fn an_earlier_objects_warnings_are_kept_off_the_row_of_the_one_there_now() {
+        let events = || {
+            vec![
+                metric_warning("c20ecc6d", 4, 30),
+                metric_warning("8b3e3d88", 41, 10),
+            ]
+        };
+        let hello_web = (
+            "HorizontalPodAutoscaler".to_string(),
+            Some("lena-sandbox".to_string()),
+            "hello-web".to_string(),
+        );
+
+        let read = Looked::from([(hello_web.clone(), Held::By("8b3e3d88".to_string()))]);
+        assert_eq!(
+            warnings_looked(events(), &read),
+            vec![(41, Incarnation::Current), (4, Incarnation::Earlier)]
+        );
+
+        // Unread, the events alone still say which of the two came first.
+        assert_eq!(
+            warnings_looked(events(), &Looked::new()),
+            vec![(41, Incarnation::Unchecked), (4, Incarnation::Earlier)]
+        );
+
+        let deleted = Looked::from([(hello_web, Held::Nobody)]);
+        assert_eq!(
+            warnings_looked(events(), &deleted),
+            vec![(45, Incarnation::Gone)]
+        );
+    }
+
+    /// Fails if a read that was refused calls the object gone, or a found one
+    /// is not named as the holder.
+    #[tokio::test]
+    async fn a_name_is_read_for_its_holder_and_a_refusal_is_not_gone() {
+        use crate::client::served::test_server::{connected, failure};
+        use crate::client::served::ServedIndex;
+        const AT: &str = "/apis/autoscaling/v2/namespaces/lena-sandbox/horizontalpodautoscalers";
+        let (state, _) = connected(ServedIndex::default(), |path, _| match path {
+            "/apis" => (
+                200,
+                serde_json::json!({ "kind": "APIGroupList", "groups": [{
+                    "name": "autoscaling",
+                    "versions": [{ "groupVersion": "autoscaling/v2", "version": "v2" }],
+                    "preferredVersion": { "groupVersion": "autoscaling/v2", "version": "v2" },
+                }]})
+                .to_string(),
+            ),
+            "/apis/autoscaling/v2" => (
+                200,
+                serde_json::json!({
+                    "kind": "APIResourceList", "groupVersion": "autoscaling/v2",
+                    "resources": [{
+                        "name": "horizontalpodautoscalers", "singularName": "",
+                        "namespaced": true, "kind": "HorizontalPodAutoscaler",
+                        "verbs": ["get", "list", "watch"],
+                    }],
+                })
+                .to_string(),
+            ),
+            path if path == format!("{AT}/hello-web") => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "autoscaling/v2", "kind": "HorizontalPodAutoscaler",
+                    "metadata": { "name": "hello-web", "namespace": "lena-sandbox", "uid": "8b3e3d88" },
+                })
+                .to_string(),
+            ),
+            path if path == format!("{AT}/refused") => failure(403, "Forbidden"),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        let named = |name: &str| {
+            (
+                "HorizontalPodAutoscaler".to_string(),
+                Some("lena-sandbox".to_string()),
+                name.to_string(),
+            )
+        };
+        for (name, expected) in [
+            ("hello-web", Some(Held::By("8b3e3d88".to_string()))),
+            ("deleted", Some(Held::Nobody)),
+            ("refused", None),
+        ] {
+            assert_eq!(
+                holder_of(&state, "autoscaling/v2", &named(name)).await,
+                expected,
+                "{name}"
+            );
+        }
+    }
+
+    /// Fails if a poll reads a name the lists already answer, one outside the
+    /// scope, or the node-name stand-in the kubelet writes for a uid.
+    #[test]
+    fn only_the_names_the_lists_do_not_hold_are_read_one_by_one() {
+        let mut pod_event = metric_warning("p1", 1, 5);
+        pod_event.involved_object.kind = Some("Pod".to_string());
+        pod_event.involved_object.api_version = Some("v1".to_string());
+        let mut elsewhere = metric_warning("e1", 1, 5);
+        elsewhere.involved_object.namespace = Some("other".to_string());
+        let mut stand_in = metric_warning("hello-web", 1, 5);
+        stand_in.involved_object.name = Some("hello-web".to_string());
+        let events = [
+            metric_warning("8b3e3d88", 1, 5),
+            pod_event,
+            elsewhere,
+            stand_in,
+        ];
+
+        let scope = ["lena-sandbox".to_string()];
+        let names = names_to_look_up(&events, Some(&scope));
+        assert_eq!(
+            names,
+            vec![(
+                "autoscaling/v2".to_string(),
+                (
+                    "HorizontalPodAutoscaler".to_string(),
+                    Some("lena-sandbox".to_string()),
+                    "hello-web".to_string(),
+                ),
+            )]
         );
     }
 
@@ -2517,6 +2937,7 @@ mod tests {
             counts: ResourceCounts::default(),
             scope: Some(&["team-a".to_string()]),
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
             now: Utc::now(),
         });
 
@@ -2600,6 +3021,7 @@ mod tests {
             scope: None,
             now: Utc::now(),
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
         });
         assert!(!result.metrics_available);
         assert!(result.scheduler.cpu.usage.is_none());
@@ -2706,6 +3128,7 @@ mod tests {
             counts: ResourceCounts::default(),
             scope: None,
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
             now,
         });
 
@@ -2776,6 +3199,62 @@ mod tests {
         .expect("available metrics must yield an index");
 
         assert_eq!(usage.get("n1"), Some(&(250.0, 1024)));
+    }
+
+    /// Marco's Needs attention said "Evicted 3d", the pod's age, while its
+    /// `DisruptionTarget` condition dated the eviction to the night before.
+    /// Fails if a failed pod is dated by its creation, or by a guess where the
+    /// cluster recorded no time for the failure.
+    #[test]
+    fn a_failed_pod_is_dated_by_its_failure_and_not_by_its_age() {
+        let now = Utc::now();
+        let failed = |conditions: Option<Vec<PodCondition>>,
+                      exits: Option<Vec<ContainerStatus>>| {
+            let mut p = pod(
+                "checkout-worker-5b79c79b9c-fplfk",
+                PodStatus {
+                    phase: Some("Failed".to_string()),
+                    reason: Some("Evicted".to_string()),
+                    conditions,
+                    container_statuses: exits,
+                    ..Default::default()
+                },
+            );
+            p.metadata.creation_timestamp = Some(at(now, 3 * 86_400));
+            p
+        };
+        let since = |p: &Pod| pod_problem(p, now).and_then(|problem| problem.since);
+        let when = |seconds_ago| Some(at(now, seconds_ago).moment().to_rfc3339());
+
+        let evicted = failed(
+            Some(vec![PodCondition {
+                type_: "DisruptionTarget".to_string(),
+                status: "True".to_string(),
+                last_transition_time: Some(at(now, 14 * 3600)),
+                ..Default::default()
+            }]),
+            None,
+        );
+        assert_eq!(since(&evicted), when(14 * 3600));
+
+        let exited = failed(
+            None,
+            Some(vec![ContainerStatus {
+                name: "app".to_string(),
+                state: Some(ContainerState {
+                    terminated: Some(ContainerStateTerminated {
+                        exit_code: 1,
+                        finished_at: Some(at(now, 2 * 3600)),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }]),
+        );
+        assert_eq!(since(&exited), when(2 * 3600));
+
+        assert_eq!(since(&failed(None, None)), None);
     }
 
     /// Every pod is Pending for its first seconds. Reporting that made the
@@ -3624,8 +4103,8 @@ mod tests {
             usage_by_node: None,
         };
 
-        let scoped = from_snapshot(&snapshot, Some(&names(&["app"])), sides());
-        let whole = from_snapshot(&snapshot, None, sides());
+        let scoped = from_snapshot(&snapshot, Some(&names(&["app"])), sides(), &Looked::new());
+        let whole = from_snapshot(&snapshot, None, sides(), &Looked::new());
 
         assert!(
             !whole.nodes.is_empty(),
@@ -3730,6 +4209,7 @@ mod tests {
                     counts: ResourceCounts::default(),
                     usage_by_node: None,
                 },
+                &Looked::new(),
             );
             assert_eq!(built.served_from, OverviewSource::Watch);
             assert_eq!(built.counts.pods, Some(2));
@@ -3921,6 +4401,7 @@ mod tests {
             scope: None,
             now: Utc::now(),
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
         });
 
         assert_eq!(result.counts.deployments, None);
@@ -3963,6 +4444,7 @@ mod tests {
             scope: Some(&["app".to_string()]),
             now: Utc::now(),
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
         });
 
         assert_eq!(result.counts.pods, Some(1));
@@ -4282,6 +4764,7 @@ mod tests {
             counts: ResourceCounts::default(),
             scope: None,
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
             now: Utc::now(),
         })
         .problems
@@ -4489,6 +4972,7 @@ mod tests {
                 counts: ResourceCounts::default(),
                 scope: None,
                 served_from: OverviewSource::List,
+                looked: &Looked::new(),
                 now: Utc::now(),
             })
             .problems
@@ -4599,6 +5083,7 @@ mod tests {
             counts: ResourceCounts::default(),
             scope: None,
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
             now: Utc::now(),
         })
         .problems;
@@ -4688,6 +5173,7 @@ mod tests {
             counts: ResourceCounts::default(),
             scope: None,
             served_from: OverviewSource::List,
+            looked: &Looked::new(),
             now: Utc::now(),
         });
 
@@ -5069,7 +5555,10 @@ mod across_namespaces {
                 counts,
                 usage_by_node: None,
             };
-            (by_listing(&client, scope.as_deref(), sides).await, hits)
+            (
+                by_listing(&client, scope.as_deref(), sides, None).await,
+                hits,
+            )
         }
 
         async fn listed(self) -> ClusterOverview {
@@ -5421,7 +5910,7 @@ mod across_namespaces {
             counts: ResourceCounts::default(),
             usage_by_node: None,
         };
-        let overview = by_listing(&client, None, sides)
+        let overview = by_listing(&client, None, sides, None)
             .await
             .expect("the Deployments answered");
 
@@ -5906,6 +6395,7 @@ mod across_namespaces {
                     counts: ResourceCounts::default(),
                     usage_by_node,
                 },
+                &Looked::new(),
             )
         };
 

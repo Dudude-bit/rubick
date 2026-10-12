@@ -671,6 +671,23 @@ describe("what is still open", () => {
     expect(openQuestionsOf(undefined)).toEqual([]);
   });
 
+  /**
+   * Every pinned workload's card would read "Not looked at: NetworkPolicy",
+   * a gap no claim on the card depends on. Fails if the card lists the
+   * policies left to each pod's own tab.
+   */
+  it("leaves out the policies read on each pod's own tab", () => {
+    expect(
+      openQuestionsOf(
+        conns({
+          notLookedAt: [
+            { kind: "NetworkPolicy", why: { says: "policiesOnPodTabs" } },
+          ],
+        })
+      )
+    ).toEqual([]);
+  });
+
   it("keeps only this service's journal entries, newest first", () => {
     const entry = (name: string, at: number): JournalEntry => ({
       id: `${name}-${at}`,

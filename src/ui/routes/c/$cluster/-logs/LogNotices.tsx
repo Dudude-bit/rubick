@@ -93,6 +93,12 @@ export function StreamFailureNotice({
   // the container is no longer running, and the exit code, the reason
   // and the time are sitting in the pod's own status the whole while.
   const termination = info && !unfollowed ? lastTermination(info) : null;
+  const exitTone =
+    termination?.exitCode !== 0
+      ? "text-err"
+      : restarting
+        ? "text-warn"
+        : "text-ok";
   const headline: Record<StreamFailureKind, () => string> = {
     gone: () => t("empty", "streamEndedGone", { pod: podName, container }),
     broken: () => t("empty", "streamLost", { pod: podName, container }),
@@ -127,7 +133,7 @@ export function StreamFailureNotice({
           )}
         {termination && (
           <p
-            className="mt-0.5 text-[11px] text-err"
+            className={`mt-0.5 text-[11px] ${exitTone}`}
             data-testid="log-stream-termination"
             title={terminationAt(termination)}
           >

@@ -690,7 +690,7 @@ export function countOf(events: EventInfo[], since: number): Saying {
   const before = events.filter((event) => beganBefore(event, since));
   const within: Saying = {
     key: "countWithin",
-    values: { times: timesOf(inside), spanMs: spanOf(inside) },
+    values: { times: timesOf(inside), coverMs: spanOf(inside) },
   };
   if (before.length === 0) return within;
   const earlier: Saying = {
@@ -723,7 +723,7 @@ export function tallyOf(event: EventInfo): Saying | null {
 function whenOf(events: EventInfo[], since: number): Saying {
   const older = events.filter((event) => beganBefore(event, since));
   return older.length === 0
-    ? { key: "whenWithin", values: { spanMs: spanOf(events) } }
+    ? { key: "whenWithin", values: { coverMs: spanOf(events) } }
     : {
         key: "whenSince",
         values: {

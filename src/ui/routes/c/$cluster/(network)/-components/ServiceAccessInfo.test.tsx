@@ -86,3 +86,42 @@ describe("a LoadBalancer Service's Access tab", () => {
     ).toBeTruthy();
   });
 });
+
+describe("a ClusterIP Service's way in from this machine", () => {
+  const ledger: ServiceInfo = {
+    ...externalDemo,
+    name: "ledger",
+    namespace: "team-blind",
+    type: "ClusterIP",
+    clusterIp: "10.43.12.7",
+    externalName: null,
+    ports: [
+      {
+        name: null,
+        port: 80,
+        targetPort: "8080",
+        nodePort: null,
+        protocol: "TCP",
+      },
+    ],
+  };
+
+  /**
+   * ledger's header dimmed Port forward for no access while this tab's button
+   * opened the dialog. Fails if the tab forwards past the reason its page gives.
+   */
+  it("holds its Port forward to the page's own access answer", () => {
+    const onForward = vi.fn();
+    wrap(
+      <ServiceAccessInfo
+        service={ledger}
+        onForward={onForward}
+        forwardReason="Your access does not allow this"
+      />
+    );
+    const button = screen.getByRole("button", { name: "Port forward" });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    button.click();
+    expect(onForward).not.toHaveBeenCalled();
+  });
+});

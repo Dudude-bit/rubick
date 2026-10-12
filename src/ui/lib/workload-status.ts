@@ -313,6 +313,26 @@ export function rowsWithStarts<
 }
 
 /** The count beside a rollout's badge: a bare 1/1 where the badge already says Ready, so the word is not said twice. */
+/**
+ * The controller's verdict, moved by the pods a page has already read, so its
+ * header says what its Replicas block says: on a drain the pods turn first and
+ * the Deployment's status catches up a second later. Only ever towards less
+ * settled, since a pod's readiness is not the controller's availability.
+ */
+export function rolloutWithPods(
+  rollout: Rollout,
+  pods: { ready: number; failing: number } | null,
+  desired: number
+): Rollout {
+  if (!pods || rollout.state !== "ready" || pods.ready >= desired)
+    return rollout;
+  return {
+    state: pods.failing > 0 ? "short" : "comingUp",
+    available: pods.ready,
+    desired,
+  };
+}
+
 export function readyBesideBadge(
   ready: number,
   desired: number,
