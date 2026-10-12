@@ -230,20 +230,24 @@ export function reachableContainer(pod: PodInfo | undefined) {
   return shellTargets(pod)[0];
 }
 
-/** "app is waiting · ImagePullBackOff", when the API says that much. */
-function waitingNote(pod: PodInfo, t: T): string {
+/** "app is waiting · ImagePullBackOff", when the API says that much and the pod's own status word has not said it already. */
+function waitingNote(pod: PodInfo, shown: string, t: T): string {
   // Init containers included: a pod held at `Init:ImagePullBackOff` has
   // app containers that all read `PodInitializing`, and the one container
   // that knows what is wrong is in the other list.
-  const waiting = podContainers(pod).find(
+  const containers = podContainers(pod);
+  const waiting = containers.find(
     (container) => container.state.type === "waiting"
   );
-  if (!waiting || waiting.state.type !== "waiting") return "";
-  return waiting.state.reason
-    ? t("action", "waitingNote", {
-        container: waiting.name,
-        reason: waiting.state.reason,
-      })
+  if (!waiting || waiting.state.type !== "waiting" || !waiting.state.reason)
+    return "";
+  if (waiting.state.reason !== shown)
+    return t("action", "waitingNote", {
+      container: waiting.name,
+      reason: waiting.state.reason,
+    });
+  return containers.length > 1
+    ? t("action", "waitingIn", { container: waiting.name })
     : "";
 }
 
@@ -263,7 +267,7 @@ export function podForwardReason(
     ? t("action", "podEndedNoForward", { phase: shown })
     : t("action", "nothingListeningYet", {
         phase: shown,
-        note: waitingNote(pod, t),
+        note: waitingNote(pod, shown, t),
       });
 }
 
@@ -285,7 +289,7 @@ function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
   } else if (pod && !live) {
     shellReason = t("action", "noContainerRunningYet", {
       phase: shown,
-      note: waitingNote(pod, t),
+      note: waitingNote(pod, shown, t),
     });
   }
 

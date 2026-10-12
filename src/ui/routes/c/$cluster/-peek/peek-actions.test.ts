@@ -297,6 +297,35 @@ describe("why a pod action cannot run", () => {
   });
 
   /**
+   * Marco's checkout-worker read "this pod is CreateContainerConfigError ·
+   * worker CreateContainerConfigError". Fails if the waiting reason is said
+   * again after a status word that already said it, or if a pod with
+   * several containers stops naming which one is waiting.
+   */
+  it("says a waiting reason once, naming the container only where there are several", () => {
+    const waiting = container(
+      "worker",
+      { type: "waiting", reason: "CreateContainerConfigError" },
+      [8080]
+    );
+    const status = { ...pod().status, display: "CreateContainerConfigError" };
+    const alone = pod({ status, containers: [waiting] });
+    expect(find(all("Pod", alone), "portForward")?.reason).toBe(
+      "Nothing is listening yet: no container is running, this pod is CreateContainerConfigError."
+    );
+    const meshed = pod({
+      status,
+      containers: [
+        waiting,
+        container("proxy", { type: "waiting", reason: "PodInitializing" }, []),
+      ],
+    });
+    expect(find(all("Pod", meshed), "shell")?.reason).toBe(
+      "No container is running yet: this pod is CreateContainerConfigError · in worker."
+    );
+  });
+
+  /**
    * Marco's checkout-worker: CreateContainerConfigError, nothing running. Its
    * Shell said so and its Port forward opened a dialog for a forward that
    * cannot land. Fails if a pod with no running container is offered one, or

@@ -1377,6 +1377,7 @@ export const en = {
     noContainerRunningYet:
       "No container is running yet: this pod is {phase}{note}.",
     waitingNote: " · {container} {reason}",
+    waitingIn: " · in {container}",
     containerNotListening:
       "Nothing is listening: {container} is not running, so a forward to its port would reach nothing.",
     podEndedNoForward:
