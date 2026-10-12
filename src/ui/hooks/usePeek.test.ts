@@ -126,6 +126,33 @@ describe("usePeek", () => {
       });
     });
 
+    /** Lena's HPA from its list peeked with a CRD and from an Events row without, so two peeks of one object had different tabs; fails if a registry kind keeps its served segment. */
+    it("opens a registry kind addressed by its served segment as that kind", async () => {
+      const { result, search } = await renderPeek(
+        "/c/prod/events?peek=horizontalpodautoscalers.autoscaling/HorizontalPodAutoscaler/lena-sandbox/hello-web"
+      );
+      const plain = {
+        kind: "HorizontalPodAutoscaler",
+        name: "hello-web",
+        namespace: "lena-sandbox",
+      };
+      expect(result.current.target).toEqual(plain);
+
+      act(() => result.current.close());
+      act(() =>
+        result.current.open({
+          ...plain,
+          crd: "horizontalpodautoscalers.autoscaling",
+        })
+      );
+      await vi.waitFor(() =>
+        expect(search().peek).toBe(
+          "horizontalpodautoscalers/lena-sandbox/hello-web"
+        )
+      );
+      expect(result.current.target).toEqual(plain);
+    });
+
     /** A name may contain dots; only the first segment is ever a CRD. */
     it("does not read a dotted object name as a CRD", async () => {
       const { result } = await renderPeek(
