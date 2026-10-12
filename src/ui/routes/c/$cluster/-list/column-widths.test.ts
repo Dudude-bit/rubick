@@ -379,6 +379,49 @@ describe("the cells a narrow port draws at their floors", () => {
   );
 });
 
+describe("the Jobs status column", () => {
+  /**
+   * Lena read "Fai… BackoffLimitEx…" and "Повторя… 1 упавший под" in all
+   * namespaces at 1024 in Russian, with the Age column beside them half
+   * empty. Fails if the column's floor stops holding the widest badge with
+   * the reason or the failed pods it draws beside it, in either language.
+   */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)(
+    "holds a badge and what follows it whole in %s",
+    (_language, t) => {
+      const rows = [
+        {
+          status: "Failed",
+          failed: 6,
+          failure: { reason: "BackoffLimitExceeded" },
+        },
+        { status: "Retrying", failed: 1, failure: null },
+        { status: "Complete", failed: 0, failure: null },
+      ];
+      const columns = jobs();
+      const status = columns.findIndex((c) => nameOf(c) === "status");
+      const px = laidOut(columns, 640, t, rows).px[status];
+      const drawn = (word: string, beside: number) =>
+        word.length * 6.6 + 14 + 6 + beside + 20;
+      expect(px).toBeGreaterThanOrEqual(
+        drawn(
+          ownStatusWord("Failed", t) ?? "Failed",
+          "BackoffLimitExceeded".length * 6.6
+        )
+      );
+      expect(px).toBeGreaterThanOrEqual(
+        drawn(
+          ownStatusWord("Retrying", t) ?? "Retrying",
+          t("count", "failedPods", { n: 1 }).length * 6.2
+        )
+      );
+    }
+  );
+});
+
 describe("the CronJobs Suspend column", () => {
   /**
    * Lena read "Приостан…" in a column sized for "Suspended". Fails if the
