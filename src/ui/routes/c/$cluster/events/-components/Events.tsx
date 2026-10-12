@@ -48,6 +48,7 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW } from "@/components/object/detail-blocks";
 import { EventsTable } from "./EventsTable";
 import { StoryCard } from "./StoryCard";
+import { useGoneSubjects } from "./gone-subjects";
 import { useHeldOrder } from "../../-list/held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
@@ -68,6 +69,7 @@ import { scopeCacheKey } from "@/lib/namespace-scope";
 import {
   sortStories,
   storiesOf,
+  withGone,
   STORY_WINDOWS,
   WINDOW_MS,
   type Story,
@@ -477,12 +479,14 @@ export function Events() {
     () => ({ now, windowMs: WINDOW_MS[window], narrowed, readFrom, earlier }),
     [now, window, narrowed, readFrom, earlier]
   );
+  const folded = useMemo(
+    () => (view === "stories" ? storiesOf(matching, storyOptions) : []),
+    [view, matching, storyOptions]
+  );
+  const gone = useGoneSubjects(folded);
   const stories = useMemo(
-    () =>
-      view === "stories"
-        ? sortStories(storiesOf(matching, storyOptions), order)
-        : [],
-    [view, matching, storyOptions, order]
+    () => sortStories(withGone(folded, gone), order),
+    [folded, gone, order]
   );
   // The whole screen, header included: Dana read the rows with the pointer on
   // the view switch, and they moved before it reached the one she aimed at.

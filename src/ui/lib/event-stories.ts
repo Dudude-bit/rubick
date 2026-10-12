@@ -71,7 +71,9 @@ export type StoryState =
   | "done"
   | "unknown"
   /** About an object another has replaced: nothing more can happen to it. */
-  | "earlier";
+  | "earlier"
+  /** About an object read as deleted with nothing in its place. */
+  | "gone";
 
 export interface Story {
   key: string;
@@ -850,8 +852,29 @@ const STATE_RANK: Record<StoryState, number> = {
   settled: 1,
   unknown: 2,
   earlier: 3,
+  gone: 3,
   done: 4,
 };
+
+/** Where a story's object lives and what it is called, the key its existence is read by. */
+export const subjectKey = (subject: Subject): string =>
+  `${subject.namespace ?? ""}/${subject.kind ?? ""}/${subject.name}`;
+
+/** Whether a story's warnings may have stopped because its object is gone, which only reading it can say. */
+export const mayBeGone = (story: Story): boolean =>
+  story.subject.kind !== null &&
+  !story.subject.earlier &&
+  story.state === "settled";
+
+/** The stories whose object was read as deleted, as ended with it; the rest as they were. */
+export function withGone(stories: Story[], gone: ReadonlySet<string>): Story[] {
+  if (gone.size === 0) return stories;
+  return stories.map((story) =>
+    mayBeGone(story) && gone.has(subjectKey(story.subject))
+      ? { ...story, state: "gone" }
+      : story
+  );
+}
 
 export function sortStories(stories: Story[], order: StoryOrder): Story[] {
   return [...stories].sort((a, b) => {

@@ -37,6 +37,7 @@ const STATE_LABEL: Record<StoryState, keyof typeof en.readings> = {
   done: "storyDone",
   unknown: "storyStateUnknown",
   earlier: "storyEndedWithObject",
+  gone: "storyEndedWithObject",
 };
 
 // `unknown` is drawn neutral, never green: the reassuring colour is the one
@@ -47,6 +48,7 @@ const STATE_TONE: Record<StoryState, string> = {
   done: "bg-ok/15 text-ok",
   unknown: "bg-fg-fnt/15 text-fg-mut",
   earlier: "bg-fg-fnt/15 text-fg-mut",
+  gone: "bg-fg-fnt/15 text-fg-mut",
 };
 
 const STATE_EDGE: Record<StoryState, string> = {
@@ -55,6 +57,7 @@ const STATE_EDGE: Record<StoryState, string> = {
   done: "border-hair",
   unknown: "border-hair",
   earlier: "border-hair",
+  gone: "border-hair",
 };
 
 const STATE_LINE: Record<StoryState, string> = {
@@ -63,6 +66,7 @@ const STATE_LINE: Record<StoryState, string> = {
   done: "text-fg",
   unknown: "text-fg-mut",
   earlier: "text-fg-mut",
+  gone: "text-fg-mut",
 };
 
 /** How many of a story's pods the timeline asks about; the rest is said in words. */
@@ -146,10 +150,15 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
       ? spanWords(story.lastAt - story.firstAt, t, "alone")
       : null;
   const { subject } = story;
+  const past = subject.earlier
+    ? "earlier"
+    : story.state === "gone"
+      ? "gone"
+      : null;
   const landing = landingOfStory(story);
   const { open: openPeek } = usePeek();
   const peek =
-    subject.kind && !subject.earlier
+    subject.kind && !past
       ? {
           kind: subject.kind,
           name: subject.name,
@@ -181,13 +190,13 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
       }
     >
       <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
-        {subject.kind && subject.earlier ? (
+        {subject.kind && past ? (
           <PastObjectRef
             kind={subject.kind}
             name={subject.name}
             namespace={subject.namespace}
             showNamespace={showNamespace}
-            past="earlier"
+            past={past}
           />
         ) : subject.kind ? (
           <ResourceRef
@@ -212,11 +221,14 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
             STATE_TONE[story.state]
           )}
           title={
-            story.state === "earlier" && subject.kind
-              ? t("readings", "storyEndedWithObjectHint", {
-                  kind: subject.kind,
-                  name: subject.name,
-                })
+            past && subject.kind
+              ? t(
+                  "readings",
+                  past === "gone"
+                    ? "storyEndedGoneHint"
+                    : "storyEndedWithObjectHint",
+                  { kind: subject.kind, name: subject.name }
+                )
               : undefined
           }
         >

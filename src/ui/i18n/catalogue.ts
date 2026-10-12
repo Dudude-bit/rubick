@@ -3124,6 +3124,8 @@ export const en = {
     storyEndedWithObject: "ended with it",
     storyEndedWithObjectHint:
       "The {kind} {name} these events were about has been replaced, so nothing more can happen to it. The {kind} with this name now has a story of its own.",
+    storyEndedGoneHint:
+      "The {kind} {name} these events were about was read as deleted, with nothing in its place, so nothing more can happen to it.",
     refusedToRead: "Your access does not allow reading {kind} {name}.",
     namedRowsOnly: {
       one: "Showing only the {n} row the Overview listed as needing attention.",
