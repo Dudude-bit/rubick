@@ -236,7 +236,7 @@ describe("a running container for a reader who may neither exec nor forward", ()
         namespace="team-checkout"
         podName={pod.name}
         onOpenShell={vi.fn()}
-        shellDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i create pods/exec -n team-checkout."
+        shellDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i create pods --subresource=exec -n team-checkout."
       />
     );
 

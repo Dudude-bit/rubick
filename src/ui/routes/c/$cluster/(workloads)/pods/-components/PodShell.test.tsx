@@ -384,9 +384,9 @@ describe("PodShell when there is nothing to attach to", () => {
 
 describe("PodShell where the cluster refuses this user", () => {
   const NO_EXEC =
-    "Your access does not allow this: the cluster answers no to kubectl auth can-i create pods/exec -n k8s-gui-test.";
+    "Your access does not allow this: the cluster answers no to kubectl auth can-i create pods --subresource=exec -n k8s-gui-test.";
   const NO_EPHEMERAL =
-    "Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods/ephemeralcontainers -n k8s-gui-test.";
+    "Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods --subresource=ephemeralcontainers -n k8s-gui-test.";
 
   /**
    * A reader who may not exec gets a terminal that fails as it opens. Fails

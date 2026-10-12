@@ -469,7 +469,7 @@ describe("FilesTab", () => {
           via={null}
           onDebug={onDebug}
           onStopVia={() => {}}
-          debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods/ephemeralcontainers -n shop."
+          debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods --subresource=ephemeralcontainers -n shop."
         />
       </TooltipProvider>
     );
@@ -713,7 +713,7 @@ describe("FilesTab", () => {
         via={null}
         onDebug={onDebug}
         onStopVia={() => {}}
-        debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods/ephemeralcontainers -n shop."
+        debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods --subresource=ephemeralcontainers -n shop."
       />
     );
     expect(

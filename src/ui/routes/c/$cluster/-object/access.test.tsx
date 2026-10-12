@@ -382,7 +382,7 @@ describe("Debug for Marco, whose Role allows exec and port-forward and neither w
     const debug = await screen.findByRole("menuitem", { name: /^Debug/ });
     await waitFor(() => expect(debug).toHaveAttribute("data-disabled"));
     expect(debug.textContent).toContain(
-      "can-i patch pods/ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout"
+      "can-i patch pods --subresource=ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout"
     );
     for (const offered of [/^Shell/, /^Port forward/])
       expect(
@@ -413,7 +413,7 @@ describe("Debug for Marco, whose Role allows exec and port-forward and neither w
       const last = reports.at(-1);
       const actions = last?.reading === "ready" ? last.actions : [];
       expect(actions.find((action) => action.id === "debug")?.reason).toMatch(
-        /can-i patch pods\/ephemeralcontainers -n team-checkout/
+        /can-i patch pods --subresource=ephemeralcontainers -n team-checkout/
       );
       expect(
         actions.find((action) => action.id === "shell")?.reason

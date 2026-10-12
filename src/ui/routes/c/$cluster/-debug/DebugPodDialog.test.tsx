@@ -99,7 +99,7 @@ describe("DebugPodDialog", () => {
 describe("DebugPodDialog where the cluster refuses this user", () => {
   /**
    * Marco reached the dialog from checkout-api's row and Start Debug was
-   * live, though can-i patch pods/ephemeralcontainers and can-i create pods
+   * live, though can-i patch pods --subresource=ephemeralcontainers and can-i create pods
    * both say no. Fails if either way reads as open or Start reaches the
    * cluster.
    */
@@ -115,7 +115,9 @@ describe("DebugPodDialog where the cluster refuses this user", () => {
       expect(start()).toHaveAttribute("aria-disabled", "true")
     );
     expect(
-      screen.getByText(/can-i patch pods\/ephemeralcontainers -n team-checkout/)
+      screen.getByText(
+        /can-i patch pods --subresource=ephemeralcontainers -n team-checkout/
+      )
     ).toBeInTheDocument();
     expect(
       screen.getByText(/can-i create pods -n team-checkout/)

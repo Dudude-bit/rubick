@@ -116,7 +116,9 @@ describe("DebugNodeDialog where the cluster refuses this user", () => {
       expect(start()).toHaveAttribute("aria-disabled", "true")
     );
     expect(
-      screen.getByText(/can-i create pods\/exec -n team-checkout\./)
+      screen.getByText(
+        /can-i create pods --subresource=exec -n team-checkout\./
+      )
     ).toBeInTheDocument();
   });
 });

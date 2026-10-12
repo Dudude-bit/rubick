@@ -232,7 +232,7 @@ describe("a pod page whose pod is deleted while it is open", () => {
 describe("Marco's pod page, in a namespace where he may exec and forward but not debug", () => {
   /**
    * Marco's checkout-api page offered a live Debug whose Start the cluster
-   * refuses: can-i patch pods/ephemeralcontainers and can-i create pods both
+   * refuses: can-i patch pods --subresource=ephemeralcontainers and can-i create pods both
    * say no. Fails if Debug is runnable there, or if Port forward and Delete,
    * which his Role allows, are greyed with it.
    */
@@ -262,7 +262,7 @@ describe("Marco's pod page, in a namespace where he may exec and forward but not
     await advance(300);
     expect(
       screen.getAllByText(
-        /can-i patch pods\/ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout/
+        /can-i patch pods --subresource=ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout/
       ).length
     ).toBeGreaterThan(0);
     act(() => debug.click());
