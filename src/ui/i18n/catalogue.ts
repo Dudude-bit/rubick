@@ -4479,6 +4479,7 @@ export const en = {
     attentionClusterWide: "across the cluster",
     attentionFailed: "could not be read",
     attentionInNamespace: "in {namespace}",
+    attentionInNamedNamespaces: "in {list}",
     attentionInNamespaces: {
       one: "in {n} namespace",
       other: "in {n} namespaces",

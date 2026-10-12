@@ -22,6 +22,7 @@
  */
 
 import { sayWords } from "@/i18n/say";
+import { listWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 
 import type { Delivery, DeliveryQuery, DeliverySource } from "@/integrations";
@@ -206,19 +207,6 @@ export interface DeliveryLine {
  * - the label says delivered and nothing confirms it;
  * - two controllers both deliver it, and are undoing each other.
  */
-/** "a and b", "a, b, and c" — the last join is a word, so it comes from the catalogue. */
-function joinNames(names: string[], t: T): string {
-  if (names.length <= 1) return names[0] ?? "";
-  // Two names take no comma before the joining word; three or more do.
-  if (names.length === 2) {
-    return t("nav", "twoAnd", { a: names[0], b: names[1] });
-  }
-  return t("nav", "listAndLast", {
-    list: names.slice(0, -1).join(", "),
-    last: names[names.length - 1],
-  });
-}
-
 export function deliveryLine(
   deliveries: Delivery[],
   t: T
@@ -254,13 +242,13 @@ export function deliveryLine(
       title: t("readings", "delTwoDeliver", {
         // The joining word is a word: English puts "and" there, Russian puts
         // "и" with no comma before it.
-        vendors: joinNames(
+        vendors: listWords(
           sources.map((source) => source.vendor),
           t
         ),
       }),
       detail: t("readings", "delTwoDeliverDetail", {
-        names: joinNames(names, t),
+        names: listWords(names, t),
       }),
       where: null,
       to: sources[0].owner.to,

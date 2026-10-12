@@ -5007,6 +5007,7 @@ export const ru: Catalogue = {
     attentionClusterWide: "во всём кластере",
     attentionFailed: "не удалось прочитать",
     attentionInNamespace: "в пространстве имён {namespace}",
+    attentionInNamedNamespaces: "в пространствах имён {list}",
     attentionInNamespaces: {
       one: "в {n} пространстве имён",
       few: "в {n} пространствах имён",

@@ -64,6 +64,17 @@ export function momentWords(ms: number, now = Date.now()): string {
   return formatWhen(ms, day(ms) === day(now) ? "hourMinute" : "moment");
 }
 
+/** "a and b", "a, b, and c": the last join is a word, so it comes from the catalogue. */
+export function listWords(names: readonly string[], t: T): string {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2)
+    return t("nav", "twoAnd", { a: names[0], b: names[1] });
+  return t("nav", "listAndLast", {
+    list: names.slice(0, -1).join(", "),
+    last: names[names.length - 1],
+  });
+}
+
 /**
  * A {@link Saying}, in words.
  *

@@ -684,7 +684,8 @@ describe("what Needs attention could not look at", () => {
    * Marco, scoped to team-blind alone: an Ingress list the cluster refused in
    * that namespace said "list is forbidden across the cluster". Fails if a
    * whole refusal of a one-namespace read is placed across the cluster, or a
-   * cluster-wide read's refusal stops saying so.
+   * cluster-wide read's refusal stops saying so, or a few namespaces are
+   * counted where they could be named.
    */
   it("places a whole refusal in the namespaces the list was asked in", () => {
     const refusal = Object.assign(new Error("ingresses is forbidden"), {
@@ -699,7 +700,10 @@ describe("what Needs attention could not look at", () => {
         t
       );
     expect(said(["team-blind"])).toContain("in team-blind");
-    expect(said(["team-blind", "team-checkout"])).toContain("in 2 namespaces");
+    expect(said(["team-blind", "team-checkout"])).toContain(
+      "in team-blind and team-checkout"
+    );
+    expect(said(["a", "b", "c", "d"])).toContain("in 4 namespaces");
     expect(said(null)).toContain("across the cluster");
   });
 

@@ -869,7 +869,7 @@ describe("which spans watched an object", () => {
       unwatchedIn: ["StatefulSet/team-blind"],
     };
     expect(unwatchedWords(both, t)).toBe(
-      "DaemonSet not watched in 2 namespaces: the cluster refused · StatefulSet not watched in team-blind: the cluster refused"
+      "DaemonSet not watched in team-checkout and team-blind: the cluster refused · StatefulSet not watched in team-blind: the cluster refused"
     );
     expect(unwatchedWords(span(["team-checkout"], ["DaemonSet"]), t)).toBe(
       "DaemonSet not watched in team-checkout: the cluster refused"

@@ -26,6 +26,7 @@
  */
 
 import type { Scoped, UnreadNamespace } from "@/generated/types";
+import { listWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import { narrowingHelps, type ResourceKind } from "@/lib/resource-registry";
 
@@ -271,11 +272,16 @@ export function namespaceOfList(
   return kind && !narrowingHelps(kind) ? null : scope[0];
 }
 
+/** Past this many, a sentence counts the namespaces instead of naming them. */
+const NAMED_NAMESPACES = 3;
+
 /** Namespaces in words, `[]` being the whole cluster: the Overview's and the Changes header's one wording. */
 export function namespacesWhere(namespaces: readonly string[], t: T): string {
   const named = [...new Set(namespaces)];
   if (named.length === 0) return t("cluster", "attentionClusterWide");
-  return named.length === 1
-    ? t("cluster", "attentionInNamespace", { namespace: named[0] })
+  if (named.length === 1)
+    return t("cluster", "attentionInNamespace", { namespace: named[0] });
+  return named.length <= NAMED_NAMESPACES
+    ? t("cluster", "attentionInNamedNamespaces", { list: listWords(named, t) })
     : t("cluster", "attentionInNamespaces", { n: named.length });
 }
