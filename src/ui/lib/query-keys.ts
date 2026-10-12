@@ -500,6 +500,15 @@ export const queryKeys = {
     "autoscalers",
     scope(namespace),
   ],
+  /** The pod a forward to one Service would land on, read off its endpoints by its page and its peek alike. */
+  serviceForwardBackend: (
+    namespace: string | null | undefined,
+    name: string | undefined
+  ): (string | null | undefined)[] => [
+    "service-forward-backend",
+    home(namespace),
+    name,
+  ],
   serviceBacking: (namespaces: readonly string[] | null): string[] => [
     "service-backing",
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,

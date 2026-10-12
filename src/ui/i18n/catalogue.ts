@@ -1376,8 +1376,10 @@ export const en = {
     noContainerRunningYet:
       "No container is running yet: this pod is {phase}{note}.",
     waitingNote: " · {container} {reason}",
-    podDeclaresNoPort:
-      "No container in this pod declares a port, so there is nothing to forward to.",
+    containerNotListening:
+      "Nothing is listening: {container} is not running, so a forward to its port would reach nothing.",
+    podEndedNoForward:
+      "Nothing is listening: this pod has ended ({phase}), and none of its containers will run again.",
     nothingListeningYet:
       "Nothing is listening yet: no container is running, this pod is {phase}{note}.",
     serviceDeclaresNoPorts:

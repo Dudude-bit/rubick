@@ -50,6 +50,21 @@ vi.mock("@/components/terminal/Terminal", async () => {
 
 const NAME = "cart-9df89489c-n6rzf";
 
+const RUNNING = {
+  name: "cart",
+  image: "cart:1.4",
+  ready: true,
+  started: true,
+  phase: "app",
+  state: { type: "running" },
+  lastTerminated: null,
+  restartCount: 0,
+  ports: [],
+  env: [],
+  resources: { requests: {}, limits: {} },
+  envFrom: [],
+};
+
 const POD = {
   name: NAME,
   namespace: "shop",
@@ -242,7 +257,8 @@ describe("Marco's pod page, in a namespace where he may exec and forward but not
       connectionAttemptId: s.connectionAttemptId + 1,
     }));
     vi.mocked(invoke).mockImplementation(async (command: string, args) => {
-      if (command === "get_pod") return { ...POD, namespace: "team-checkout" };
+      if (command === "get_pod")
+        return { ...POD, namespace: "team-checkout", containers: [RUNNING] };
       if (command === "check_access")
         return marcoReview((args as { queries: AccessQuery[] }).queries);
       return undefined;
@@ -272,6 +288,59 @@ describe("Marco's pod page, in a namespace where he may exec and forward but not
       expect(screen.getByRole("button", { name: offered })).not.toHaveAttribute(
         "aria-disabled"
       );
+  });
+});
+
+describe("Port forward on a pod with no container running", () => {
+  /**
+   * Marco's checkout-worker, stuck in CreateContainerConfigError: its Shell
+   * tab said nothing runs while its Port forward opened a dialog as if
+   * something could answer. Fails if the page offers what the peek refuses.
+   */
+  it("greys Port forward with the peek's own reason", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) =>
+      command === "get_pod"
+        ? {
+            ...POD,
+            status: {
+              ...POD.status,
+              phase: "Pending",
+              display: "CreateContainerConfigError",
+              ready: false,
+            },
+            containers: [
+              {
+                ...RUNNING,
+                ready: false,
+                started: false,
+                state: {
+                  type: "waiting",
+                  reason: "CreateContainerConfigError",
+                },
+              },
+            ],
+          }
+        : undefined
+    );
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+
+    const forward = screen.getByRole("button", { name: "Port forward" });
+    expect(forward).toHaveAttribute("aria-disabled", "true");
+    await act(async () => {
+      forward.focus();
+    });
+    await advance(300);
+    expect(
+      screen.getAllByText(/^Nothing is listening yet: no container is running/)
+        .length
+    ).toBeGreaterThan(0);
+    act(() => forward.click());
+    expect(screen.queryByText("Port in the pod")).toBeNull();
   });
 });
 

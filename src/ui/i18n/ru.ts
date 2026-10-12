@@ -1391,8 +1391,10 @@ export const ru: Catalogue = {
     noContainerRunningYet:
       "Ни один контейнер ещё не запущен: под в состоянии {phase}{note}.",
     waitingNote: " · {container} {reason}",
-    podDeclaresNoPort:
-      "Ни один контейнер этого пода не объявляет порт, пробрасывать нечего.",
+    containerNotListening:
+      "Слушать некому: {container} не запущен, проброс на его порт никуда не попадёт.",
+    podEndedNoForward:
+      "Слушать некому: под завершился ({phase}), и его контейнеры больше не запустятся.",
     nothingListeningYet:
       "Пока никто не слушает: ни один контейнер не запущен, под в состоянии {phase}{note}.",
     serviceDeclaresNoPorts:

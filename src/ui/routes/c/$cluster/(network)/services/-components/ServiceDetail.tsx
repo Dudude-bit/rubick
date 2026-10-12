@@ -25,6 +25,8 @@ import {
 import { ReasonedAction } from "@/components/object/detail-blocks";
 import { usePodDenied } from "@/lib/access";
 import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
+import { useServiceForwardBackend } from "../../../-object/useServiceForwardBackend";
+import { serviceForwardReason } from "../../../-peek/peek-actions";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
@@ -85,10 +87,9 @@ export function ServiceDetail() {
   const intercept = useDeliveryIntercept(deliveryQuery);
   const [forwardOpen, setForwardOpen] = useState(false);
   const forwardDenied = usePodDenied(namespace || null).portForward;
+  const backend = useServiceForwardBackend(service, namespace, name ?? "");
   const forwardReason =
-    service?.ports.length === 0
-      ? t("action", "serviceDeclaresNoPorts")
-      : forwardDenied;
+    forwardDenied ?? serviceForwardReason(service, backend, t);
 
   const ports = service?.ports ?? [];
   const externalIps = service?.externalIps ?? [];
@@ -303,6 +304,7 @@ export function ServiceDetail() {
               label={t("action", "portForward")}
               icon={Network}
               onClick={() => setForwardOpen(true)}
+              busy={backend.fetching}
               reason={forwardReason}
             />
           )}

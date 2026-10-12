@@ -12,11 +12,7 @@ import {
 
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import {
-  podContainers,
-  podPorts,
-  shellTargets,
-} from "@/lib/container-sequence";
+import { podContainers, shellTargets } from "@/lib/container-sequence";
 import {
   isScalable,
   ResourceType,
@@ -251,6 +247,26 @@ function waitingNote(pod: PodInfo, t: T): string {
     : "";
 }
 
+/**
+ * Why a forward into this pod cannot land, the one answer its page and its
+ * peek give. A port it does not declare is still one a process may listen
+ * on, as kubectl allows; a pod with no container running has nothing to.
+ */
+export function podForwardReason(
+  pod: PodInfo | undefined,
+  t: T
+): string | undefined {
+  if (!pod || reachableContainer(pod)) return undefined;
+  const phase = pod.status.phase.toLowerCase();
+  const shown = pod.status.display || pod.status.phase;
+  return FINISHED_PHASES.has(phase) || phase === "failed"
+    ? t("action", "podEndedNoForward", { phase: shown })
+    : t("action", "nothingListeningYet", {
+        phase: shown,
+        note: waitingNote(pod, t),
+      });
+}
+
 function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
   const phase = pod?.status.phase ?? "";
   // The gates read the phase; the sentences name the status the badge
@@ -273,17 +289,6 @@ function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
     });
   }
 
-  const declaresPorts = !!pod && podPorts(pod).length > 0;
-  let forwardReason: string | undefined;
-  if (pod && !declaresPorts) {
-    forwardReason = t("action", "podDeclaresNoPort");
-  } else if (pod && !live) {
-    forwardReason = t("action", "nothingListeningYet", {
-      phase: shown,
-      note: waitingNote(pod, t),
-    });
-  }
-
   return [
     {
       id: "shell",
@@ -295,7 +300,7 @@ function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
       id: "portForward",
       label: t("action", "portForward"),
       icon: Network,
-      reason: forwardReason,
+      reason: podForwardReason(pod, t),
     },
     { id: "debug", label: t("action", "debug"), icon: Bug },
     podRestartAction(pod, t),
@@ -324,40 +329,32 @@ export function podRestartAction(pod: PodInfo | undefined, t: T): PeekAction {
 
 /* ---------- Service ---------- */
 
+/** Why a forward through this Service cannot land, the one answer its page and its peek give. */
+export function serviceForwardReason(
+  service: ServiceInfo | undefined,
+  context: PeekActionContext,
+  t: T
+): string | undefined {
+  if (!service) return undefined;
+  if (service.ports.length === 0) return t("action", "serviceDeclaresNoPorts");
+  if (context.backendError)
+    return t("action", "endpointsUnreadable", { error: context.backendError });
+  // Still looking: the control shows it busy rather than guessing either way.
+  if (context.backendPending || context.backend === undefined) return undefined;
+  return context.backend ? undefined : t("action", "noReadyEndpoints");
+}
+
 function serviceForwardAction(
   service: ServiceInfo | undefined,
   t: T,
   context: PeekActionContext
 ): PeekAction {
-  const action: PeekAction = {
+  return {
     id: "portForward",
     label: t("action", "portForward"),
     icon: Network,
+    reason: serviceForwardReason(service, context, t),
   };
-  if (!service) return action;
-  if (service.ports.length === 0) {
-    return {
-      ...action,
-      reason: t("action", "serviceDeclaresNoPorts"),
-    };
-  }
-  if (context.backendError) {
-    return {
-      ...action,
-      reason: t("action", "endpointsUnreadable", {
-        error: context.backendError,
-      }),
-    };
-  }
-  // Still looking: the row shows it busy rather than guessing either way.
-  if (context.backendPending || context.backend === undefined) return action;
-  if (!context.backend) {
-    return {
-      ...action,
-      reason: t("action", "noReadyEndpoints"),
-    };
-  }
-  return action;
 }
 
 /* ---------- Delete ---------- */
