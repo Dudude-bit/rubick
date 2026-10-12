@@ -14,6 +14,7 @@
 //! module holds, as the one file they were cut from did.
 #![allow(clippy::wildcard_imports)]
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 

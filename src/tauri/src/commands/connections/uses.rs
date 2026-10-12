@@ -2,7 +2,7 @@
 //! spec names.
 
 use super::*;
-use k8s_openapi::api::core::v1::ServiceAccount;
+use k8s_openapi::api::core::v1::{PersistentVolumeClaimVolumeSource, ServiceAccount, Volume};
 
 /// The `ConfigMaps`, Secrets, claims and identity a pod spec names, with how
 /// each one is used.
@@ -67,6 +67,57 @@ pub(super) fn uses_from_spec(
             Relation::Uses { usages },
         );
     }
+}
+
+/// A workload's pod template as its pods run it: as `default` where it names
+/// no identity, which admission writes into every pod, and for a
+/// `StatefulSet` with a volume for each claim its pods mount, which they name
+/// and the template does not. Read off the template alone, the Needs to run
+/// group was absent on every page whose pods showed one.
+pub(super) fn as_run(spec: &PodSpec, claims: &[(String, String)]) -> PodSpec {
+    let mut spec = spec.clone();
+    if spec.service_account_name.is_none() {
+        spec.service_account_name = Some(
+            spec.service_account
+                .clone()
+                .unwrap_or_else(|| "default".to_string()),
+        );
+    }
+    if !claims.is_empty() {
+        spec.volumes
+            .get_or_insert_with(Vec::new)
+            .extend(claims.iter().map(|(volume, claim)| Volume {
+                name: volume.clone(),
+                persistent_volume_claim: Some(PersistentVolumeClaimVolumeSource {
+                    claim_name: claim.clone(),
+                    read_only: None,
+                }),
+                ..Default::default()
+            }));
+    }
+    spec
+}
+
+/// `(volume, claim)` for each `volumeClaimTemplate` of each ordinal a
+/// `StatefulSet` wants, named as its controller names them.
+pub(super) fn set_claims(set: &StatefulSet) -> Vec<(String, String)> {
+    let Some(spec) = set.spec.as_ref() else {
+        return Vec::new();
+    };
+    let name = set.name_any();
+    let name = name.as_str();
+    let start = spec.ordinals.as_ref().and_then(|o| o.start).unwrap_or(0);
+    let ordinals = start..start + spec.replicas.unwrap_or(1).max(0);
+    spec.volume_claim_templates
+        .iter()
+        .flatten()
+        .filter_map(|template| template.metadata.name.clone())
+        .flat_map(|volume| {
+            ordinals
+                .clone()
+                .map(move |at| (volume.clone(), format!("{volume}-{name}-{at}")))
+        })
+        .collect()
 }
 
 /// Asks for each `ConfigMap`, Secret and `ServiceAccount` the spec named, by
