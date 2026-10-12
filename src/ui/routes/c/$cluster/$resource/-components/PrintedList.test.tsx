@@ -109,7 +109,7 @@ describe("a kind listed as the API server prints it", () => {
     expect(await screen.findByText("holder-node-1")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Lease node-1" })).toHaveAttribute(
       "href",
-      "/c/test/leases.coordination.k8s.io/kube-node-lease/node-1"
+      "/c/test/leases.coordination.k8s.io/kube-node-lease/node-1?view=own"
     );
   });
 

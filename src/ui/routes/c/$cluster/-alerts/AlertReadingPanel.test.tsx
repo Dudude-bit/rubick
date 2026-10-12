@@ -182,7 +182,7 @@ Labels:
       .getByRole("button", { name: /Open HorizontalPodAutoscaler checkout/ })
       .click();
     expect((opened.mock.calls[0][0] as AlertTarget).path).toBe(
-      "/c/prod-eu-1/horizontalpodautoscalers/shop/checkout"
+      "/c/prod-eu-1/horizontalpodautoscalers/shop/checkout?view=own"
     );
   });
 

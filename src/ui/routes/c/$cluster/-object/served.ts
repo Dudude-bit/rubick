@@ -4,33 +4,11 @@ import type { ApiCatalog, CatalogEntry } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
-import {
-  getResourceDefinition,
-  isResourceType,
-  toKind,
-} from "@/lib/resource-registry";
+import { getResourceDefinition, isResourceType } from "@/lib/resource-registry";
+import { servedOf, type ServedResource } from "@/lib/served-segment";
 import { useClusterStore } from "@/stores/clusterStore";
 
-export interface ServedResource {
-  group: string;
-  plural: string;
-}
-
-/**
- * The group and plural an address names: `<plural>.<group>`, or a bare
- * plural, which is the registry's group where it knows the kind and the core
- * group where it does not, as kubectl reads it.
- */
-export function servedOf(segment: string): ServedResource {
-  const dot = segment.indexOf(".");
-  if (dot !== -1)
-    return { plural: segment.slice(0, dot), group: segment.slice(dot + 1) };
-  const kind = isResourceType(segment) ? toKind(segment) : null;
-  return {
-    plural: segment,
-    group: kind ? getResourceDefinition(kind).group : "",
-  };
-}
+export { servedOf, type ServedResource } from "@/lib/served-segment";
 
 /** What the catalogue says about one kind: three answers, never two. */
 export type Served =

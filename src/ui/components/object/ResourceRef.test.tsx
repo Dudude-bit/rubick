@@ -203,12 +203,12 @@ describe("ResourceRef", () => {
     });
 
     // An Event has no page of its own, so it opens the generic one every
-    // registry kind falls back to.
+    // registry kind falls back to, as itself rather than as its object.
     it("links an Event to the generic page", async () => {
       await wrap(<ResourceRef kind="Event" name="web.17a2" namespace="shop" />);
       expect(screen.getByRole("link")).toHaveAttribute(
         "href",
-        "/c/prod/events/shop/web.17a2"
+        "/c/prod/events/shop/web.17a2?view=own"
       );
     });
 

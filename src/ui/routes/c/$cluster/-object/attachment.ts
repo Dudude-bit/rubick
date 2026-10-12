@@ -10,6 +10,7 @@ import {
   type ObjectRef,
 } from "@/lib/links";
 import { getApiVersion } from "@/lib/resource-registry";
+import { isAttached, type AttachedKind } from "@/lib/served-segment";
 import { useClusterStore } from "@/stores/clusterStore";
 import { catalogQuery, servedOf } from "./served";
 
@@ -268,9 +269,9 @@ async function lease(object: Json, read: Reader): Promise<Attachment> {
   return { state: "parent", parent: read.refOf(target) };
 }
 
-/** By `<group>/<plural>`: the kinds whose meaning belongs to one parent. */
+/** How each attached kind finds its parent. */
 const ATTACHED: Record<
-  string,
+  AttachedKind,
   (object: Json, read: Reader) => Promise<Attachment>
 > = {
   "autoscaling/horizontalpodautoscalers": autoscaler("spec.scaleTargetRef"),
@@ -288,12 +289,6 @@ const ATTACHED: Record<
   "events.k8s.io/events": event("regarding"),
   "coordination.k8s.io/leases": lease,
 };
-
-/** Whether objects of this kind may open on a parent instead of themselves. */
-export function isAttached(resource: string): boolean {
-  const { group, plural } = servedOf(resource);
-  return `${group}/${plural}` in ATTACHED;
-}
 
 /**
  * The view a reference to this very object opens with: its own page for an
@@ -320,7 +315,9 @@ export function decide(
   read: Reader
 ): Promise<Attachment> {
   const { group, plural } = servedOf(resource);
-  const decideFor = ATTACHED[`${group}/${plural}`];
+  const decideFor = isAttached(resource)
+    ? ATTACHED[`${group}/${plural}` as AttachedKind]
+    : undefined;
   return decideFor ? decideFor(object, read) : Promise.resolve(FREE);
 }
 
