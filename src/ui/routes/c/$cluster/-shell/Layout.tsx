@@ -9,7 +9,6 @@ import { PeekPanel } from "../-peek/PeekPanel";
 import { PeekHost, usePeekDock } from "../-peek/peek-dock";
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { PageSkeleton } from "@/components/ui/skeleton";
-import { clusterColor } from "@/lib/cluster-identity";
 import { useScopeTabs } from "./useScopeTabs";
 import { useCopyLink } from "./useCopyLink";
 import { useShortcuts } from "./useShortcuts";
@@ -21,8 +20,7 @@ import { useRefusedScope } from "./useRefusedScope";
 import { useScopeFromAddress } from "./useScopeFromAddress";
 import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
-import { useClusterMark } from "@/stores/clusterIdentityStore";
-import { useClusterStore } from "@/stores/clusterStore";
+import { useWindowCluster } from "./useWindowCluster";
 
 // Loaded on first use: it carries the YAML parser and the diff view, which
 // nothing needs until an object is opened for editing.
@@ -47,8 +45,7 @@ function EditorWhenOpened() {
 
 export function Layout() {
   const t = useT();
-  const currentContext = useClusterStore((s) => s.currentContext);
-  const { hue } = useClusterMark(currentContext);
+  const { context: currentContext, color } = useWindowCluster();
   const { critical } = useCritical();
   const dock = usePeekDock();
   const [peekHost, setPeekHost] = useState<HTMLElement | null>(null);
@@ -72,7 +69,7 @@ export function Layout() {
       // instead of being handed a colour prop.
       style={
         {
-          "--cluster": clusterColor(currentContext, hue),
+          "--cluster": color,
         } as React.CSSProperties
       }
     >
@@ -82,6 +79,7 @@ export function Layout() {
           reader has stopped seeing by the time it matters. */}
       {critical && currentContext ? (
         <div
+          data-window-cluster="accent"
           role="status"
           className="flex h-5 flex-none items-center justify-center gap-2 bg-err px-3 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-canvas"
         >
@@ -89,7 +87,10 @@ export function Layout() {
           {t("cluster", "criticalStripe", { context: currentContext })}
         </div>
       ) : (
-        <div className="h-0.5 flex-none bg-(--cluster)" />
+        <div
+          data-window-cluster="accent"
+          className="h-0.5 flex-none bg-(--cluster)"
+        />
       )}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />

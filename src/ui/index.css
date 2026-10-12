@@ -413,6 +413,12 @@
     transition-property: background-color, border-color, color, fill, stroke;
   }
 
+  /* A fade cannot finish while the page arrived at is drawn, so the cluster
+   * left stayed on the accent line and the dots for up to 1.4 s. */
+  [data-window-cluster] {
+    transition-property: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

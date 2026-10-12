@@ -21,10 +21,11 @@ import { scopeLabel } from "@/lib/namespace-scope";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useShownPath } from "@/lib/hide-paths";
-import { hasSession, useClusterStore } from "@/stores/clusterStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { podTotal } from "../-overview/health-share";
 import { ActivityPanel } from "./ActivityPanel";
+import { useWindowCluster } from "./useWindowCluster";
 import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
 import { useT, type T } from "@/i18n/useT";
@@ -70,8 +71,7 @@ const SIGN_IN_HINT: Record<
 export function StatusBar() {
   const t = useT();
   const show = useShownPath();
-  const currentContext = useClusterStore((s) => s.currentContext);
-  const connected = useClusterStore(hasSession);
+  const { context: currentContext, live: connected } = useWindowCluster();
   const connectedThrough = useClusterStore((s) => s.connectedThrough);
   const isLoading = useClusterStore((s) => s.isLoading);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);

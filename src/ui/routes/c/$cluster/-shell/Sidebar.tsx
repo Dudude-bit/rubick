@@ -34,6 +34,7 @@ import {
   useLocks,
   type Lock as ListLock,
 } from "./useListAccess";
+import { useWindowCluster } from "./useWindowCluster";
 import { useAppSearchValue } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
@@ -68,7 +69,7 @@ import { commands } from "@/lib/commands";
 import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
-import { hasSession, useClusterStore } from "@/stores/clusterStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import {
   inScope,
   joinScoped,
@@ -817,9 +818,8 @@ function IntegrationsGroup() {
  */
 function ClusterRow() {
   const t = useT();
-  const currentContext = useClusterStore((s) => s.currentContext);
+  const { context: currentContext, live: connected } = useWindowCluster();
   const alias = useClusterMark(currentContext).alias?.trim();
-  const connected = useClusterStore(hasSession);
   const isLoading = useClusterStore((s) => s.isLoading);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
 
@@ -828,6 +828,7 @@ function ClusterRow() {
   const body = (
     <>
       <ProviderMark
+        data-window-cluster="mark"
         provider={detectProvider(currentContext ?? "")}
         className="h-[15px] w-[15px] flex-none"
         style={{ color: "var(--cluster)" }}
@@ -852,6 +853,7 @@ function ClusterRow() {
       {/* The halo is what makes a 7px dot readable in peripheral vision,
           which is the only way this indicator is ever looked at. */}
       <span
+        data-window-cluster="dot"
         aria-label={
           connected ? "connected" : connecting ? "connecting" : "disconnected"
         }

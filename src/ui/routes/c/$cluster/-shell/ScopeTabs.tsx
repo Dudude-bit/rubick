@@ -62,6 +62,7 @@ import {
   type NamespaceAttention,
 } from "@/lib/attention";
 import { useNamespaceAccess } from "./useNamespaceAccess";
+import { useWindowCluster } from "./useWindowCluster";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
 import {
   clusterColor,
@@ -81,7 +82,7 @@ import { nameCut } from "@/components/object/ResourceName";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
-import { hasSession, useClusterStore } from "@/stores/clusterStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 import { useKeptShellStore } from "@/stores/keptShellStore";
 import { useT, type T } from "@/i18n/useT";
@@ -606,11 +607,14 @@ function ScopeTabItem({
   const tip = useTriggerTooltip(open !== null);
   const mark = useClusterMark(context);
   const alias = mark.alias?.trim();
-  const color = clusterColor(context, mark.hue);
-  // A filled dot read as live, so it is filled only where it is.
-  const connected = useClusterStore((s) =>
-    active ? hasSession(s) : context !== null && s.live.includes(context)
+  const windowLive = useWindowCluster().live;
+  const parkedLive = useClusterStore(
+    (s) => context !== null && s.live.includes(context)
   );
+  // The open tab wears the shell's own `--cluster`, as the accent line does.
+  const color = active ? "var(--cluster)" : clusterColor(context, mark.hue);
+  // A filled dot read as live, so it is filled only where it is.
+  const connected = active ? windowLive : parkedLive;
   const route = tabRouteLabel(tab.href, t);
   // Closing a tab ends the shell it keeps, so the tab says it keeps one.
   const shell = useKeptShellStore((s) =>
@@ -782,6 +786,7 @@ function ScopeTabItem({
                     kubeconfig has lost loses the hue too. */}
                   <span
                     data-connected={connected}
+                    data-window-cluster={active ? "dot" : undefined}
                     className={cn(
                       "h-1.5 w-1.5 flex-none rounded-full",
                       (tab.missing || !connected) && "border",
