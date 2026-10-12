@@ -16,7 +16,7 @@ import { hrefOf, objectLink } from "@/lib/links";
 import type { PeekTarget } from "@/hooks/usePeek";
 import { eventLanding } from "../../-object/attachment";
 import { PastObjectRef } from "../../-object/PastObjectRef";
-import { aboutEarlier } from "@/lib/event-incarnation";
+import type { Past } from "@/lib/event-incarnation";
 import { tallyOf } from "@/lib/event-stories";
 import { sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
@@ -71,22 +71,25 @@ function ReasonCell({ row }: { row: { original: EventInfo } }) {
 const landingOf = (event: EventInfo) =>
   eventLanding(event.involvedObject.kind, event);
 
-const NO_EARLIER: ReadonlySet<string> = new Set();
-const Earlier = createContext<ReadonlySet<string>>(NO_EARLIER);
+type PastOf = (event: EventInfo) => Past | undefined;
+
+const NO_PAST: PastOf = () => undefined;
+const PastRows = createContext<PastOf>(NO_PAST);
 
 /** A link to where the Event belongs; the row's whitespace is the peek. The glyph alone says the kind, on every row. */
 function ObjectCell({ row }: { row: { original: EventInfo } }) {
-  const earlier = useContext(Earlier);
+  const pastOf = useContext(PastRows);
   const subject = subjectOf(row.original);
   const landing = landingOf(row.original);
-  if (aboutEarlier(row.original, earlier))
+  const past = pastOf(row.original);
+  if (past)
     return (
       <PastObjectRef
         kind={subject.kind}
         name={subject.name}
         namespace={subject.namespace}
         showKind={false}
-        past="earlier"
+        past={past}
         fit
       />
     );
@@ -259,8 +262,8 @@ export const EVENT_COLUMNS = {
 const uidOf = (event: EventInfo) => event.uid;
 
 /** The object's Events tab where its page has one, the Event's own page otherwise. */
-function hrefOfEvent(event: EventInfo, earlier: ReadonlySet<string>): string {
-  const landing = aboutEarlier(event, earlier) ? undefined : landingOf(event);
+function hrefOfEvent(event: EventInfo, pastOf: PastOf): string {
+  const landing = pastOf(event) ? undefined : landingOf(event);
   const link = landing
     ? objectLink(subjectOf(event), landing)
     : objectLink({
@@ -271,13 +274,8 @@ function hrefOfEvent(event: EventInfo, earlier: ReadonlySet<string>): string {
   return link ? hrefOf(link) : "";
 }
 
-const peekOfEvent = (
-  event: EventInfo,
-  earlier: ReadonlySet<string>
-): PeekTarget | null =>
-  aboutEarlier(event, earlier)
-    ? null
-    : { ...subjectOf(event), via: landingOf(event)?.via };
+const peekOfEvent = (event: EventInfo, pastOf: PastOf): PeekTarget | null =>
+  pastOf(event) ? null : { ...subjectOf(event), via: landingOf(event)?.via };
 
 const Waiting = createContext<{ n: number; show: () => void }>({
   n: 0,
@@ -299,7 +297,7 @@ const NO_QUICK_ACTIONS: never[] = [];
  */
 export function EventsTable({
   events,
-  earlier = NO_EARLIER,
+  past = NO_PAST,
   showNamespace,
   emptyMessage,
   question,
@@ -307,8 +305,8 @@ export function EventsTable({
   cutAt,
 }: {
   events: EventInfo[];
-  /** The uids of objects another of the same name has replaced: their rows link to no object. */
-  earlier?: ReadonlySet<string>;
+  /** Where a row's object does not hold its name now: such a row links to no object. */
+  past?: PastOf;
   showNamespace: boolean;
   emptyMessage: string;
   /** The read stopped at this many events, so older ones are not listed. */
@@ -323,12 +321,12 @@ export function EventsTable({
     question
   );
   const rowHref = useCallback(
-    (event: EventInfo) => hrefOfEvent(event, earlier),
-    [earlier]
+    (event: EventInfo) => hrefOfEvent(event, past),
+    [past]
   );
   const rowPeek = useCallback(
-    (event: EventInfo) => peekOfEvent(event, earlier),
-    [earlier]
+    (event: EventInfo) => peekOfEvent(event, past),
+    [past]
   );
   const rowMenu = useRowMenu<EventInfo>({
     kind: "Event",
@@ -358,9 +356,9 @@ export function EventsTable({
   );
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <Earlier.Provider value={earlier}>
+      <PastRows.Provider value={past}>
         <Waiting.Provider value={waitingValue}>{table}</Waiting.Provider>
-      </Earlier.Provider>
+      </PastRows.Provider>
       {rowMenu.element(NO_QUICK_ACTIONS)}
     </div>
   );

@@ -5,11 +5,11 @@ import {
   ResourceName,
 } from "@/components/object/ResourceName";
 import type { en } from "@/i18n/catalogue";
+import type { Past } from "@/lib/event-incarnation";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
 
-/** Why a name an event gives is not the object there now: another took the name, or none has it. */
-export type Past = "earlier" | "gone";
+export type { Past };
 
 const MARK: Record<
   Past,

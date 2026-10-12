@@ -107,7 +107,7 @@ describe("a story about an earlier object of a name", () => {
       windowMs: HOUR,
       narrowed: false,
       readFrom: null,
-      earlier: new Set(["d10287fd"]),
+      past: new Map([["d10287fd", "earlier"]]),
     };
     const [story] = storiesOf([earlier], options);
     const { container } = await renderWithRouter(
@@ -137,7 +137,7 @@ describe("a story about an earlier object of a name", () => {
       windowMs: HOUR,
       narrowed: false,
       readFrom: null,
-      earlier: new Set(["d10287fd"]),
+      past: new Map([["d10287fd", "earlier"]]),
     };
     const [story] = storiesOf([earlier], options);
     await renderWithRouter(
@@ -149,7 +149,7 @@ describe("a story about an earlier object of a name", () => {
     expect(badge).toHaveAttribute(
       "title",
       expect.stringContaining(
-        "The Pod web-0 these events were about has been replaced"
+        "The Pod web-0 these events were about was replaced"
       )
     );
   });

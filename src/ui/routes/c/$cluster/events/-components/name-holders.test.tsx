@@ -3,6 +3,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
+import type { EventInfo } from "@/generated/types";
 import type { Story } from "@/lib/event-stories";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -15,7 +16,7 @@ vi.mock("@/lib/commands", () => ({
   commands: { getObjectMetadata, getClusterOverview },
 }));
 
-const { useGoneSubjects } = await import("./gone-subjects");
+const { useNameHolders } = await import("./name-holders");
 const { REFRESH_INTERVALS } = await import("@/lib/refresh");
 const { useClusterOverview } = await import("@/hooks/useClusterOverview");
 
@@ -32,20 +33,28 @@ const story = (name: string, state: Story["state"] = "settled") =>
 
 const NOT_FOUND = { code: "NOT_FOUND", message: "not found" };
 const GONE = "lena-sandbox/HorizontalPodAutoscaler/hello-web";
+const there = (uid: string | null = "f0644886") => ({
+  uid,
+  labels: {},
+  annotations: {},
+});
+const NO_EVENTS: EventInfo[] = [];
+const nobody = (held: ReadonlyMap<string, string | null>) =>
+  [...held].flatMap(([key, uid]) => (uid === null ? [key] : []));
 
-function mount(stories: Story[]) {
+function mount(stories: Story[], events: EventInfo[] = NO_EVENTS) {
   const client = testQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   const hook = renderHook(
-    ({ told }: { told: Story[] }) => useGoneSubjects(told),
+    ({ told }: { told: Story[] }) => useNameHolders(told, events),
     { wrapper, initialProps: { told: stories } }
   );
   return { client, ...hook };
 }
 
-describe("which stories' objects were deleted", () => {
+describe("who holds the names the page speaks of", () => {
   /**
    * Lena's deleted HPA read amber "settled". Fails if a story whose object
    * the cluster answered "not found" is not reported gone, or if a refused
@@ -59,7 +68,7 @@ describe("which stories' objects were deleted", () => {
       if (name === "hello-web") throw NOT_FOUND;
       if (name === "refused")
         throw { code: "PERMISSION", message: "forbidden" };
-      return { labels: {}, annotations: {} };
+      return there("api-uid");
     });
     const { result } = mount([
       story("hello-web"),
@@ -67,8 +76,46 @@ describe("which stories' objects were deleted", () => {
       story("api"),
       story("done-and-gone", "done"),
     ]);
-    await waitFor(() => expect([...result.current]).toEqual([GONE]));
+    await waitFor(() =>
+      expect([...result.current]).toEqual([
+        ["lena-sandbox/HorizontalPodAutoscaler/api", "api-uid"],
+        [GONE, null],
+      ])
+    );
     expect(getObjectMetadata).toHaveBeenCalledTimes(3);
+  });
+
+  /**
+   * Lena's two HPAs named hello-web, both deleted: the list view asked
+   * nothing, and the first one's chip said another HPA held the name. Fails
+   * if a name the events give two objects for is not asked with no story
+   * asking for it.
+   */
+  it("asks who holds a name several objects have had, with no story asking", async () => {
+    useClusterStore.setState({ isConnected: true });
+    getObjectMetadata.mockReset();
+    getObjectMetadata.mockRejectedValue(NOT_FOUND);
+    const said = (uid: string): EventInfo => ({
+      name: `hello-web.${uid}`,
+      namespace: "lena-sandbox",
+      uid: `event-${uid}`,
+      type: "Normal",
+      reason: "SuccessfulRescale",
+      message: null,
+      source: null,
+      involvedObject: {
+        kind: "HorizontalPodAutoscaler",
+        name: "hello-web",
+        namespace: "lena-sandbox",
+        uid,
+      },
+      count: 1,
+      firstTimestamp: null,
+      lastTimestamp: null,
+    });
+    const { result } = mount([], [said("caeffa0e"), said("f0644886")]);
+    await waitFor(() => expect(nobody(result.current)).toEqual([GONE]));
+    expect(getObjectMetadata).toHaveBeenCalledTimes(1);
   });
 
   /**
@@ -81,7 +128,7 @@ describe("which stories' objects were deleted", () => {
     getObjectMetadata.mockReset();
     getObjectMetadata.mockRejectedValue(NOT_FOUND);
     const { result } = mount([story("hello-web", "stillHappening")]);
-    await waitFor(() => expect([...result.current]).toEqual([GONE]));
+    await waitFor(() => expect(nobody(result.current)).toEqual([GONE]));
   });
 
   /**
@@ -96,7 +143,7 @@ describe("which stories' objects were deleted", () => {
       useClusterStore.setState({ isConnected: true });
       useWindowActivity.setState({ visible: true, focused: true });
       getObjectMetadata.mockReset();
-      getObjectMetadata.mockResolvedValue({ labels: {}, annotations: {} });
+      getObjectMetadata.mockResolvedValue(there());
       const { client, result } = mount([
         story("hello-web", "stillHappening"),
         story("api", "stillHappening"),
@@ -109,14 +156,14 @@ describe("which stories' objects were deleted", () => {
 
       getObjectMetadata.mockImplementation(async (_kind, _version, name) => {
         if (name === "hello-web") throw NOT_FOUND;
-        return { labels: {}, annotations: {} };
+        return there();
       });
       await vi.advanceTimersByTimeAsync(REFRESH_INTERVALS.steady / 2);
       expect(getObjectMetadata).toHaveBeenCalledTimes(2);
 
       await vi.advanceTimersByTimeAsync(REFRESH_INTERVALS.steady / 2 + 10);
       expect(getObjectMetadata).toHaveBeenCalledTimes(4);
-      expect([...result.current]).toEqual([GONE]);
+      expect(nobody(result.current)).toEqual([GONE]);
     } finally {
       vi.useRealTimers();
     }
@@ -130,14 +177,14 @@ describe("which stories' objects were deleted", () => {
   it("draws nothing for an answer that changes no story", async () => {
     useClusterStore.setState({ isConnected: true });
     getObjectMetadata.mockReset();
-    getObjectMetadata.mockResolvedValue({ labels: {}, annotations: {} });
+    getObjectMetadata.mockResolvedValue(there());
     let draws = 0;
     const client = testQueryClient();
     const told = [story("hello-web", "stillHappening")];
     renderHook(
       () => {
         draws += 1;
-        return useGoneSubjects(told);
+        return useNameHolders(told, NO_EVENTS);
       },
       {
         wrapper: ({ children }: { children: ReactNode }) => (
@@ -168,11 +215,11 @@ describe("which stories' objects were deleted", () => {
       namespaceScope: ["lena-sandbox"],
     });
     getObjectMetadata.mockReset();
-    getObjectMetadata.mockResolvedValue({ labels: {}, annotations: {} });
+    getObjectMetadata.mockResolvedValue(there());
     const { client, result } = mount([story("hello-web", "stillHappening")]);
     await waitFor(() => expect(getObjectMetadata).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve, 5));
-    expect(result.current.size).toBe(0);
+    expect(nobody(result.current)).toEqual([]);
 
     getObjectMetadata.mockRejectedValue(NOT_FOUND);
     client.setQueryData(queryKeys.clusterOverview("acme", ["lena-sandbox"]), {
@@ -191,7 +238,7 @@ describe("which stories' objects were deleted", () => {
         },
       ],
     });
-    await waitFor(() => expect([...result.current]).toEqual([GONE]));
+    await waitFor(() => expect(nobody(result.current)).toEqual([GONE]));
     expect(getObjectMetadata).toHaveBeenCalledTimes(2);
   });
 
@@ -208,7 +255,7 @@ describe("which stories' objects were deleted", () => {
       namespaceScope: ["lena-sandbox"],
     });
     getObjectMetadata.mockReset();
-    getObjectMetadata.mockResolvedValue({ labels: {}, annotations: {} });
+    getObjectMetadata.mockResolvedValue(there());
     getClusterOverview.mockReset();
     getClusterOverview.mockResolvedValue({ warnings: [] });
     const client = testQueryClient();
@@ -219,7 +266,7 @@ describe("which stories' objects were deleted", () => {
     renderHook(
       () => {
         useClusterOverview(["lena-sandbox"]);
-        return useGoneSubjects([story("hello-web")]);
+        return useNameHolders([story("hello-web")], NO_EVENTS);
       },
       { wrapper }
     );

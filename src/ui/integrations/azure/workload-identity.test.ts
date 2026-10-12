@@ -25,6 +25,7 @@ const pod = (name: string, account: string | null, use = true) =>
   }) as never;
 
 const federated = (clientId: string) => ({
+  uid: null,
   labels: {},
   annotations: { "azure.workload.identity/client-id": clientId },
 });
@@ -59,6 +60,7 @@ describe("which pods can become which identity", () => {
    */
   it("names a labelled pod whose ServiceAccount grants nothing", async () => {
     vi.mocked(commands.getObjectMetadata).mockResolvedValue({
+      uid: null,
       labels: {},
       annotations: {},
     });

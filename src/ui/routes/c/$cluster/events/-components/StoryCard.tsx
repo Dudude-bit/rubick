@@ -111,7 +111,7 @@ const sameStory = (a: Story, b: Story) =>
   a.subject.name === b.subject.name &&
   a.subject.namespace === b.subject.namespace &&
   a.subject.byName === b.subject.byName &&
-  a.subject.earlier === b.subject.earlier &&
+  a.subject.past === b.subject.past &&
   a.events.length === b.events.length &&
   a.events.every((event, index) => event === b.events[index]);
 
@@ -155,11 +155,7 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
     name: subject.name,
     n: podsAmong(story.members),
   });
-  const past = subject.earlier
-    ? "earlier"
-    : story.state === "gone"
-      ? "gone"
-      : null;
+  const past = subject.past ?? (story.state === "gone" ? "gone" : null);
   const landing = landingOfStory(story);
   const { open: openPeek } = usePeek();
   const peek =
@@ -345,7 +341,7 @@ function podsOf(story: Story): {
   /** How many of the story's pods were never asked about. */
   skipped: number;
 } {
-  if (story.subject.earlier) return { asked: [], skipped: 0 };
+  if (story.subject.past) return { asked: [], skipped: 0 };
   const all = story.members.filter((member) => member.startsWith("Pod/"));
   return {
     asked: all.slice(0, STATUS_PODS).map((member) => ({

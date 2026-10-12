@@ -416,10 +416,11 @@ async fn manifest_of(
     crate::commands::helpers::clean_yaml_for_editor(&yaml)
 }
 
-/// An object's labels and annotations.
+/// An object's uid, labels and annotations.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ObjectMetadata {
+    pub uid: Option<String>,
     pub labels: std::collections::BTreeMap<String, String>,
     pub annotations: std::collections::BTreeMap<String, String>,
 }
@@ -442,6 +443,7 @@ pub async fn get_object_metadata(
             .answered(&state, served.api.get_metadata(&name).await)?
             .metadata;
         Ok(ObjectMetadata {
+            uid: meta.uid,
             labels: meta.labels.unwrap_or_default(),
             annotations: meta.annotations.unwrap_or_default(),
         })

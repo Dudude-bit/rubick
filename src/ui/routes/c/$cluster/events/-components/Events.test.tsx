@@ -49,6 +49,11 @@ vi.mock("@/lib/commands", () => ({
     listEvents: vi.fn(async () => []),
     getPod: vi.fn(async () => ({ containers: [] })),
     checkListAccess: vi.fn(async () => []),
+    getObjectMetadata: vi.fn(async () => ({
+      uid: null,
+      labels: {},
+      annotations: {},
+    })),
     subscribeEventWatch: vi.fn(async () => "events-1"),
     resourceWatchSubscribed: vi.fn(async () => undefined),
     unsubscribeResourceWatch: vi.fn(async () => undefined),
@@ -475,6 +480,76 @@ describe("a feed a watch keeps", () => {
     );
   });
 
+  describe("two deleted objects of one name", () => {
+    const hpa = (
+      uid: string,
+      index: number,
+      minutesAgo: number
+    ): EventInfo => ({
+      ...event("lena-sandbox", index),
+      name: `hello-web.${uid}.${index}`,
+      uid: `${uid}-${index}`,
+      type: "Warning",
+      reason: "FailedGetResourceMetric",
+      message: "failed to get cpu utilization",
+      involvedObject: {
+        kind: "HorizontalPodAutoscaler",
+        name: "hello-web",
+        namespace: "lena-sandbox",
+        uid,
+      },
+      firstTimestamp: new Date(
+        Date.now() - (minutesAgo + 2) * 60_000
+      ).toISOString(),
+      lastTimestamp: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+    });
+    const LENA = [hpa("caeffa0e", 0, 11), hpa("f0644886", 1, 10)];
+
+    beforeEach(() => {
+      vi.mocked(commands.getObjectMetadata).mockRejectedValue({
+        code: "NOT_FOUND",
+        message: 'horizontalpodautoscalers.autoscaling "hello-web" not found',
+      });
+    });
+    afterEach(() => {
+      vi.mocked(commands.getObjectMetadata).mockResolvedValue({
+        uid: null,
+        labels: {},
+        annotations: {},
+      });
+    });
+
+    /**
+     * Lena deleted both HPAs named hello-web: the first one's story chip said
+     * another HPA held the name, while the second's said nothing did. Fails
+     * if a story about an object of a name nothing holds calls it an earlier
+     * object, or any of them is not called deleted.
+     */
+    it("calls both stories deleted, neither an earlier object", async () => {
+      await watched("stories");
+      burst(LENA);
+      await waitFor(() =>
+        expect(document.querySelectorAll("[data-past='gone']")).toHaveLength(2)
+      );
+      expect(document.querySelector("[data-past='earlier']")).toBeNull();
+    });
+
+    /**
+     * In All events Lena's second HPA's rows carried no chip while its story
+     * said deleted. Fails if a row about an object of a name nothing holds
+     * draws no deleted mark, or draws the earlier-object one.
+     */
+    it("marks every row of both deleted in the list", async () => {
+      layOutRows();
+      await watched("list");
+      burst(LENA);
+      await waitFor(() =>
+        expect(document.querySelectorAll("[data-past='gone']")).toHaveLength(2)
+      );
+      expect(document.querySelector("[data-past='earlier']")).toBeNull();
+    });
+  });
+
   /** Dana's story title opened a peek that knew nothing of the Event. Fails if the card's link drops it. */
   it("links a story's object to its Events tab, noting the latest Event about it", async () => {
     await watched("stories");
@@ -668,6 +743,7 @@ describe("a feed a watch keeps", () => {
    * once. Fails if the stories follow each batch, or stop following.
    */
   it("redraws the stories at most once a second however often the watch changes", async () => {
+    vi.mocked(commands.getObjectMetadata).mockClear();
     let commits = 0;
     await renderWithRouter(
       <Profiler id="events" onRender={() => commits++}>
@@ -694,6 +770,9 @@ describe("a feed a watch keeps", () => {
     });
     burst([failing(0)]);
     await screen.findByRole("article", { name: /worker-0/ });
+    // Who holds the story's name lands once, on its own clock.
+    await waitFor(() => expect(commands.getObjectMetadata).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
 
     commits = 0;
     for (let index = 1; index <= 12; index++) {

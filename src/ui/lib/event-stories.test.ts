@@ -236,13 +236,13 @@ describe("placing events", () => {
       now: NOW,
       windowMs: HOUR,
       narrowed: false,
-      earlier: new Set(["d10287fd"]),
+      past: new Map([["d10287fd", "earlier"]]),
     });
     expect(stories).toHaveLength(2);
-    const now = stories.find((story) => !story.subject.earlier)!;
+    const now = stories.find((story) => !story.subject.past)!;
     expect(now.occurrences).toBe(4);
     expect(now.warnings).toBe(0);
-    const before = stories.find((story) => story.subject.earlier)!;
+    const before = stories.find((story) => story.subject.past)!;
     expect(before.reasons.map((r) => r.reason)).toEqual(["FailedMount"]);
   });
 
@@ -272,7 +272,7 @@ describe("placing events", () => {
         now: NOW,
         windowMs: HOUR,
         narrowed: false,
-        earlier: new Set(["d10287fd"]),
+        past: new Map([["d10287fd", "earlier"]]),
       }
     );
     expect(stories[0].state).toBe("earlier");

@@ -1602,6 +1602,7 @@ export interface ShareTargetInfo {
 }
 
 export interface ObjectMetadata {
+  uid: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
 }

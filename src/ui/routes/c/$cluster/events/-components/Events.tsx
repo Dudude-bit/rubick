@@ -48,7 +48,7 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW } from "@/components/object/detail-blocks";
 import { EventsTable } from "./EventsTable";
 import { StoryCard } from "./StoryCard";
-import { useGoneSubjects } from "./gone-subjects";
+import { useNameHolders } from "./name-holders";
 import { useHeldOrder } from "../../-list/held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
@@ -78,7 +78,13 @@ import {
   type StoryWindow,
 } from "@/lib/event-stories";
 import { useNow } from "@/hooks/useNow";
-import { earlierObjects } from "@/lib/event-incarnation";
+import {
+  nameKey,
+  pastObjects,
+  pastOf,
+  type Holder,
+  type Past,
+} from "@/lib/event-incarnation";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { STALE_TIMES } from "@/lib/refresh";
 import { listQueryFor, ResourceType, toPlural } from "@/lib/resource-registry";
@@ -269,6 +275,13 @@ function useFolded(
   }, [bar, folded, layout]);
   return folded;
 }
+
+const samePast = (
+  a: ReadonlyMap<string, Past>,
+  b: ReadonlyMap<string, Past>
+): boolean =>
+  a === b ||
+  (a.size === b.size && [...a].every(([uid, past]) => b.get(uid) === past));
 
 const limitWords = (limit: string, t: ReturnType<typeof useT>) =>
   limit === "all"
@@ -462,32 +475,73 @@ export function Events() {
   }, [windowFull, pool]);
   // Over the whole pool, before the search narrows it: whether an object was
   // replaced is told by its other events, which a search may not match.
-  const earlier = useMemo(
-    () =>
-      earlierObjects(pool, (kind, namespace, name) => {
-        const read = client.getQueryData(
-          queryKeys.detail(kind, namespace, name)
-        );
-        const uid =
-          read && typeof read === "object" && "uid" in read
-            ? read.uid
-            : undefined;
-        return typeof uid === "string" && uid !== "" ? uid : undefined;
-      }),
-    [pool, client]
+  const opened = useCallback<Holder>(
+    (kind, namespace, name) => {
+      const read = client.getQueryData(queryKeys.detail(kind, namespace, name));
+      const uid =
+        read && typeof read === "object" && "uid" in read
+          ? read.uid
+          : undefined;
+      return typeof uid === "string" && uid !== "" ? uid : undefined;
+    },
+    [client]
   );
-  const storyOptions = useMemo(
-    () => ({ now, windowMs: WINDOW_MS[window], narrowed, readFrom, earlier }),
-    [now, window, narrowed, readFrom, earlier]
+  const inferred = useMemo(() => pastObjects(pool, opened), [pool, opened]);
+  const inferredOptions = useMemo(
+    () => ({
+      now,
+      windowMs: WINDOW_MS[window],
+      narrowed,
+      readFrom,
+      past: inferred,
+    }),
+    [now, window, narrowed, readFrom, inferred]
   );
   const folded = useMemo(
-    () => (view === "stories" ? storiesOf(matching, storyOptions) : []),
-    [view, matching, storyOptions]
+    () => (view === "stories" ? storiesOf(matching, inferredOptions) : []),
+    [view, matching, inferredOptions]
   );
-  const gone = useGoneSubjects(folded);
+  const holders = useNameHolders(folded, pool);
+  const past = useMemo(
+    () =>
+      holders.size === 0
+        ? inferred
+        : pastObjects(pool, (kind, namespace, name) => {
+            const held = holders.get(nameKey(kind, namespace, name));
+            return held === undefined ? opened(kind, namespace, name) : held;
+          }),
+    [holders, inferred, pool, opened]
+  );
+  const storyOptions = useMemo(
+    () =>
+      samePast(past, inferred) ? inferredOptions : { ...inferredOptions, past },
+    [past, inferred, inferredOptions]
+  );
+  const gone = useMemo(
+    () =>
+      new Set(
+        [...holders].flatMap(([key, held]) => (held === null ? [key] : []))
+      ),
+    [holders]
+  );
   const stories = useMemo(
-    () => sortStories(withGone(folded, gone), order),
-    [folded, gone, order]
+    () =>
+      sortStories(
+        withGone(
+          storyOptions === inferredOptions
+            ? folded
+            : view === "stories"
+              ? storiesOf(matching, storyOptions)
+              : [],
+          gone
+        ),
+        order
+      ),
+    [storyOptions, inferredOptions, folded, view, matching, gone, order]
+  );
+  const pastOfRow = useCallback(
+    (event: EventInfo) => pastOf(event, past, gone),
+    [past, gone]
   );
   // The whole screen, header included: Dana read the rows with the pointer on
   // the view switch, and they moved before it reached the one she aimed at.
@@ -842,7 +896,7 @@ export function Events() {
           ) : (
             <EventsTable
               events={events}
-              earlier={earlier}
+              past={pastOfRow}
               showNamespace={!currentNamespace}
               question={[cacheKey, eventType, eventLimit, query].join("\n")}
               held={pointed}

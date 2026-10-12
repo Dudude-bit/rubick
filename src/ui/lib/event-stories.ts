@@ -9,7 +9,7 @@
 
 import type { EventInfo } from "@/generated/types";
 import type { Saying } from "@/i18n/say";
-import { aboutEarlier, involvedUid } from "./event-incarnation";
+import { involvedUid, nameKey, pastOf, type Past } from "./event-incarnation";
 
 export type Activity =
   | "crash"
@@ -46,8 +46,8 @@ export interface Subject {
   namespace: string | null;
   /** Some member was placed here by its name's generated suffix, not by an event. */
   byName: boolean;
-  /** An earlier object of this name, not the one that has it now. */
-  earlier?: boolean;
+  /** An object of this name that does not hold it now: another does, or none. */
+  past?: Past;
 }
 
 export interface ReasonCount {
@@ -290,15 +290,16 @@ interface Placement {
 function place(
   event: EventInfo,
   evidence: Map<string, Owner>,
-  earlier: ReadonlySet<string>
+  pastObjects: ReadonlyMap<string, Past>
 ): Placement {
   const namespace = event.involvedObject.namespace ?? event.namespace;
   let kind = event.involvedObject.kind;
   let name = event.involvedObject.name;
-  if (aboutEarlier(event, earlier)) {
+  const past = pastOf(event, pastObjects);
+  if (past) {
     return {
       key: `${objectKey(namespace, kind, name)}@${involvedUid(event)}`,
-      subject: { kind, name, namespace, byName: false, earlier: true },
+      subject: { kind, name, namespace, byName: false, past },
     };
   }
   if (!FOLDED_KINDS.has(kind)) {
@@ -685,11 +686,11 @@ export interface StoryOptions {
    * warnings that would say otherwise may simply not have been passed in.
    */
   narrowed: boolean;
-  /** The uids of objects an event names that another object of the same name has replaced. */
-  earlier?: ReadonlySet<string>;
+  /** The uids of objects an event names that do not hold the name now. */
+  past?: ReadonlyMap<string, Past>;
 }
 
-const NONE: ReadonlySet<string> = new Set();
+const NONE: ReadonlyMap<string, Past> = new Map();
 
 /** How long the events the sentence counts actually cover. */
 function spanOf(events: EventInfo[]): number {
@@ -784,7 +785,7 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
   const evidence = evidenceOf(inWindow);
   const groups = new Map<string, { subject: Subject; events: EventInfo[] }>();
   for (const event of inWindow) {
-    const { key, subject } = place(event, evidence, options.earlier ?? NONE);
+    const { key, subject } = place(event, evidence, options.past ?? NONE);
     const group = groups.get(key);
     if (!group) {
       groups.set(key, { subject, events: [event] });
@@ -833,8 +834,8 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
     const latestWarningAt = latestWarning
       ? at(latestWarning.lastTimestamp)
       : null;
-    const state: StoryState = group.subject.earlier
-      ? "earlier"
+    const state: StoryState = group.subject.past
+      ? group.subject.past
       : warnings === 0
         ? // Nothing went wrong *in what was read*. Where a filter narrowed
           // that, the difference between "nothing went wrong" and "the
@@ -900,13 +901,11 @@ const STATE_RANK: Record<StoryState, number> = {
 
 /** Where a story's object lives and what it is called, the key its existence is read by. */
 export const subjectKey = (subject: Subject): string =>
-  `${subject.namespace ?? ""}/${subject.kind ?? ""}/${subject.name}`;
+  nameKey(subject.kind, subject.namespace, subject.name);
 
 /** Whether a story's object may have been deleted, its warnings still recent or not, which only reading it can say. */
 export const mayBeGone = (story: Story): boolean =>
-  story.subject.kind !== null &&
-  !story.subject.earlier &&
-  story.state !== "done";
+  story.subject.kind !== null && !story.subject.past && story.state !== "done";
 
 /** The stories whose object was read as deleted, as ended with it; the rest as they were. */
 export function withGone(stories: Story[], gone: ReadonlySet<string>): Story[] {

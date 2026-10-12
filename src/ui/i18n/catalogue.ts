@@ -3144,7 +3144,7 @@ export const en = {
     storyStateUnknown: "cannot say",
     storyEndedWithObject: "ended with it",
     storyEndedWithObjectHint:
-      "The {kind} {name} these events were about has been replaced, so nothing more can happen to it. The {kind} with this name now has a story of its own.",
+      "The {kind} {name} these events were about was replaced by another object of that name, so nothing more can happen to it.",
     storyEndedGoneHint:
       "The {kind} {name} these events were about was read as deleted, with nothing in its place, so nothing more can happen to it.",
     refusedToRead: "Your access does not allow reading {kind} {name}.",
@@ -3160,7 +3160,7 @@ export const en = {
     namedRowsShowAll: "Show all",
     earlierObject: "earlier object",
     earlierObjectHint:
-      "About an earlier {kind} named {name}. The {kind} with this name now is another object, and these events are not its own.",
+      "About an earlier {kind} named {name}. Another object took the name after it, and these events are not about that one.",
     goneObject: "deleted",
     goneObjectHint:
       "About a {kind} named {name} that no longer exists. Nothing with this name is there now.",
