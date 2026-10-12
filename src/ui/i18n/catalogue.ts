@@ -4828,6 +4828,10 @@ export const en = {
     diagnosticsReading: "Reading what this app can see of the machine…",
     diagnosticsUnread: "Could not read what this app can see of the machine.",
     copyDiagnostics: "Copy diagnostics",
+    readDiagnosticsAgain: "Read again",
+    diagnosticsReadAt: "Read at {at}",
+    diagnosticsReadAgainFailed:
+      "Could not read again. This is the read from {at}.",
     redactNamesAndPaths: "Redact names and paths",
     redactEverywhere:
       "Applies to every path from this computer the app shows, not only this report: your home folder reads ~ and your login name <user>.",

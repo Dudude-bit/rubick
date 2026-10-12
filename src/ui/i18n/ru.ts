@@ -5393,6 +5393,10 @@ export const ru: Catalogue = {
     diagnosticsUnread:
       "Не удалось прочитать, что приложение видит на этом компьютере.",
     copyDiagnostics: "Копировать диагностику",
+    readDiagnosticsAgain: "Прочитать заново",
+    diagnosticsReadAt: "Прочитано в {at}",
+    diagnosticsReadAgainFailed:
+      "Прочитать заново не удалось. На экране то, что прочитано в {at}.",
     redactNamesAndPaths: "Скрывать имена и пути",
     redactEverywhere:
       "Действует на все пути с этого компьютера, которые показывает приложение, а не только на этот отчёт: домашняя папка выглядит как ~, имя пользователя как <user>.",

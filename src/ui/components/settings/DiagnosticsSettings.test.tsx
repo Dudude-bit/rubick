@@ -96,6 +96,46 @@ describe("DiagnosticsSettings", () => {
     expect(usePrivacyStore.getState().hidePaths).toBe(false);
   });
 
+  /**
+   * Sam's recordings, taken from this page, counted collectDiagnostics at a
+   * quarter second every eight among the app's own numbers. Fails if the
+   * page reads the machine again on a timer, or not when asked.
+   */
+  it("reads the machine on open and when asked, never on a timer", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderPane();
+      await waitFor(() => expect(collectDiagnostics).toHaveBeenCalledTimes(1));
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(collectDiagnostics).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(
+        await screen.findByRole("button", { name: /read again/i })
+      );
+      await waitFor(() => expect(collectDiagnostics).toHaveBeenCalledTimes(2));
+      expect(screen.getByText(/^Read at /)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /** A read asked for again that failed left the last read on screen as if it were the new one. Fails if the failure is not said beside it. */
+  it("says a read asked for again failed, and which read is on screen", async () => {
+    renderPane();
+    await screen.findByText(/^Read at /);
+    refusedWith = { code: "INTERNAL", message: "spawn failed" };
+    try {
+      fireEvent.click(screen.getByRole("button", { name: /read again/i }));
+      expect(
+        await screen.findByText(
+          /^Could not read again\. This is the read from /
+        )
+      ).toHaveClass("text-err");
+    } finally {
+      refusedWith = null;
+    }
+  });
+
   it("copies a report that names the version", async () => {
     const user = userEvent.setup();
     renderPane();
