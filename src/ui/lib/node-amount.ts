@@ -5,6 +5,8 @@ import {
   formatCores,
   parseQuantity,
 } from "@/lib/k8s-quantity";
+import { formatDecimal } from "@/lib/utils";
+import { currentLocale } from "@/stores/localeStore";
 
 /** A node resource's figure, written the one way the node page and its peek write it. */
 export function nodeAmount(
@@ -23,11 +25,20 @@ export function nodeAmount(
 }
 
 /**
- * A share of what a node can give, in whole per cent cut down as `kubectl
- * describe node` cuts it: 32Mi of 2Gi is its 1%, never a rounded 2%.
+ * A share of what a node can give, in per cent to the nearest tenth that
+ * keeps the whole number `kubectl describe node` prints: 654Mi of 4Gi reads
+ * 15.6 where a bare 15 hid the rest, 32Mi of 2Gi 1.6 where kubectl says 1,
+ * never a rounded 2. A whole share carries no tenth.
  */
-export function allocatedPercent(value: number, of: number): number | null {
-  return of > 0 ? Math.trunc((value / of) * 100) : null;
+export function allocatedPercent(
+  value: number,
+  of: number,
+  locale: string = currentLocale()
+): string | null {
+  if (of <= 0) return null;
+  const share = (value / of) * 100;
+  const tenths = Math.min(Math.round(share * 10), Math.trunc(share) * 10 + 9);
+  return formatDecimal(tenths / 10, 1, locale, true);
 }
 
 /** The four resources every kubelet reports, under the names it reports them. */

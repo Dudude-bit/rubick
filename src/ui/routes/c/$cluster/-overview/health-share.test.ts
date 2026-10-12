@@ -55,17 +55,17 @@ describe("the scheduler headroom share", () => {
 
   /**
    * The node page cuts a share down as kubectl describe node does; the
-   * Overview rounded the same reservation up a point. Fails if it rounds.
+   * Overview rounded the same reservation up a point, and then Lena read
+   * 15.6% as 15%. Fails if it shows another share than the node page.
    */
-  it("is cut down to whole per cent as the node page cuts it", () => {
+  it("is written as the node page writes it, to a tenth", () => {
     const section = schedulerShare(
-      { cpu: pressure(465, 1000), memory: pressure(32, 2048) },
+      { cpu: pressure(9996, 10000), memory: pressure(654, 4194) },
       t
     );
     const texts = JSON.stringify(section.body);
-    expect(texts).toContain("· 46%");
-    expect(texts).toContain("· 1%");
-    expect(texts).not.toContain("· 47%");
+    expect(texts).toContain("· 99.9%");
+    expect(texts).toContain("· 15.6%");
   });
 });
 

@@ -55,7 +55,7 @@ describe("the node's CPU row", () => {
       "cpu",
       "1",
       "1",
-      "0,465" + "46%",
+      "0,465" + "46,5%",
       "1,2" + "120%",
       expect.stringMatching(/./),
     ]);
@@ -80,9 +80,10 @@ describe("the node's CPU row", () => {
 describe("the node's shares of allocatable", () => {
   /**
    * Lena read a 32 MiB memory limit as 2% of the node where kubectl describe
-   * node says 1%: kubectl cuts the share down. Fails if a share is rounded.
+   * node says 1%, and later 30.8% as 30%. Fails if a share's whole part stops
+   * being kubectl's, or its tenth is dropped.
    */
-  it("are cut down to whole per cent as kubectl describe node prints them", () => {
+  it("keep to a tenth the whole per cent kubectl describe node prints", () => {
     const mib = 1024 * 1024;
     render(
       <NodeResources
@@ -108,8 +109,8 @@ describe("the node's shares of allocatable", () => {
     const cells = within(screen.getByRole("row", { name: /^memory/ }))
       .getAllByRole("cell")
       .map((cell) => cell.textContent);
-    expect(cells[3]).toMatch(/0%$/);
-    expect(cells[4]).toMatch(/[^0-9]1%$/);
+    expect(cells[3]).toMatch(/[^0-9.]0%$/);
+    expect(cells[4]).toMatch(/[^0-9.]1\.6%$/);
   });
 });
 
