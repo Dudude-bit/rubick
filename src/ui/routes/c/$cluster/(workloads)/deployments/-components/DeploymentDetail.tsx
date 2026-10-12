@@ -36,10 +36,11 @@ import { RelatedResources } from "../../-components/RelatedResources";
 import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { useWorkloadPods } from "../../-components/workload-pods";
 import {
+  podsAhead,
   readyBesideBadge,
-  rolloutWithPods,
   workloadRole,
 } from "@/lib/workload-status";
+import { ROLE_ICON, ROLE_TEXT, type StatusRole } from "@/lib/status-role";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -97,6 +98,22 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DeploymentInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+
+function PodsAhead({ text, role }: { text: string; role: StatusRole }) {
+  const Icon = ROLE_ICON[role];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 text-[11px]",
+        ROLE_TEXT[role]
+      )}
+      data-testid="pods-ahead"
+    >
+      <Icon className="h-3 w-3 flex-none" aria-hidden />
+      {text}
+    </span>
+  );
+}
 
 export function DeploymentDetail() {
   const t = useT();
@@ -373,9 +390,8 @@ export function DeploymentDetail() {
     t,
     !!deployment && workloadRole(deployment.rollout) === "pending"
   );
-  const rollout =
-    deployment &&
-    rolloutWithPods(deployment.rollout, splitPods && split, desired);
+  const rollout = deployment?.rollout;
+  const ahead = rollout && podsAhead(rollout, splitPods && split, desired, t);
 
   // Desired, ready, available and up-to-date are one count read four ways, and
   // as four rows the reader had to subtract them to find the gap the bar shows
@@ -629,9 +645,12 @@ export function DeploymentDetail() {
         badges={
           rollout &&
           replicas && (
-            <span className="text-[11px] text-fg-mut">
-              {readyBesideBadge(split.ready, replicas.desired, rollout, t)}
-            </span>
+            <>
+              <span className="text-[11px] text-fg-mut">
+                {readyBesideBadge(replicas.ready, replicas.desired, rollout, t)}
+              </span>
+              {ahead && <PodsAhead {...ahead} />}
+            </>
           )
         }
         onBack={goBack}

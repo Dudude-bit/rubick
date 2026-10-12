@@ -9195,6 +9195,8 @@ export const ru: Catalogue = {
     },
     versionsWithDeprecated: "{n} · {deprecated} устарели",
     slashReady: "{n}/{total} готовы",
+    podsSayComingUp: "по подам: поднимаются, готово {ready} из {total}",
+    podsSayFailing: "по подам: сбоит {failing}, готово {ready} из {total}",
     readySummary: "готовы: {n}",
     notReadySummary: "не готовы: {n}",
     readyNotReadySummary: "готовы: {n} · не готовы: {notReady}",
