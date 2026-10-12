@@ -1066,7 +1066,7 @@ function AttentionCount({
   const t = useT();
   if (!attention || (attention.complete && attention.total === 0)) return null;
   const { total: n, complete, worst } = attention;
-  const behind = counts.heldAt !== null;
+  const behind = counts.heldAt !== null || counts.late;
   return (
     <span
       className={cn(
@@ -1102,7 +1102,7 @@ function AttentionCount({
  */
 function NavCount({ item, counts }: { item: NavItem; counts: ShellCounts }) {
   const t = useT();
-  const { overview, attention, heldAt } = counts;
+  const { overview, attention, heldAt, late } = counts;
   if (!overview) return null;
 
   if (item.labelKey === "overview")
@@ -1114,7 +1114,7 @@ function NavCount({ item, counts }: { item: NavItem; counts: ShellCounts }) {
     <span
       className={cn(
         "ml-auto text-[11px] text-fg-fnt",
-        heldAt !== null && HELD_CLASS
+        (heldAt !== null || late) && HELD_CLASS
       )}
       title={countAge(
         counts,
@@ -1139,6 +1139,7 @@ function countAge(
   if (counts.heldAt !== null) return t("cluster", "countsHeld");
   if (counts.readAt === null) return "";
   const at = formatWhen(counts.readAt, "clock");
+  if (counts.late) return t("cluster", "countsLate", { at });
   if (followed) return t("cluster", "countsFollowed", { at });
   return counts.everyMs === false
     ? t("cluster", "countsAt", { at })
@@ -1148,5 +1149,5 @@ function countAge(
       });
 }
 
-/** A count from before the window turned to this cluster, standing in until its own answer lands. */
+/** A count from before the window turned to this cluster, or from before a read that is late. */
 const HELD_CLASS = "opacity-60";

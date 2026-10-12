@@ -25,6 +25,8 @@ export interface ShellCounts {
   everyMs: number | false;
   /** The counts the overview's watched stores hold, read again on each change they take. */
   followed: ReadonlySet<keyof ResourceCounts>;
+  /** A re-read of the counts on screen has waited past the slow-read grace. */
+  late: boolean;
 }
 
 interface Held {
@@ -60,7 +62,7 @@ export function useShellCounts(): ShellCounts {
       : undefined;
   const at = scoped.dataUpdatedAt;
   const fresh = isConnected && answered !== undefined && at >= turnedAt;
-  const { everyMs } = scoped.freshness;
+  const { everyMs, slowRead } = scoped.freshness;
 
   useEffect(() => {
     if (!fresh || !answered || !attention) return;
@@ -78,6 +80,7 @@ export function useShellCounts(): ShellCounts {
       readAt: at,
       everyMs,
       followed,
+      late: slowRead,
     };
   const held =
     answered && attention && (!stored || at > stored.at)
@@ -92,6 +95,7 @@ export function useShellCounts(): ShellCounts {
       readAt: held.at,
       everyMs,
       followed: NONE,
+      late: false,
     };
   const shown = isConnected ? scoped.data : undefined;
   return {
@@ -101,5 +105,6 @@ export function useShellCounts(): ShellCounts {
     readAt: shown && at > 0 ? at : null,
     everyMs,
     followed: scoped.isPlaceholderData ? NONE : followed,
+    late: shown !== undefined && slowRead,
   };
 }

@@ -4458,6 +4458,8 @@ export const en = {
     countsFollowed: "Follows the cluster's changes. Counted at {at}.",
     countsEvery: "Counted at {at}, and again every {every} s.",
     countsAt: "Counted at {at}.",
+    countsLate: "Still reading. This count is from {at}.",
+    countsLateAll: "Still reading the counts. These are from {at}.",
     podsNotCounted: "pods not counted {where}",
     notReadWhere: "not read {where}",
     countsIn: "in {scope}",

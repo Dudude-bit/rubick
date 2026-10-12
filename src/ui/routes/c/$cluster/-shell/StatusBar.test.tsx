@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -104,6 +104,7 @@ beforeEach(() => {
   attentions.cluster = attentionOf(0);
   scoped.data = overviewOf(3, 0);
   scoped.isPlaceholderData = false;
+  scoped.freshness.slowRead = false;
   useClusterStore.setState({
     namespaceScope: [],
     currentContext: "prod",
@@ -365,6 +366,32 @@ describe("what the problem count counts", () => {
       ).not.toHaveLength(0)
     );
     expect(attentions.askedCluster).toBe(0);
+  });
+
+  /**
+   * hang28: one list of the counts' read sat for the whole minute and the
+   * bar went on drawing the last answer as current. Fails if a late read
+   * leaves the counts without the "still reading" ring, undimmed, or without
+   * the time they are from.
+   */
+  it("rings and dims the counts while their read is late, and says when they are from", async () => {
+    scoped.dataUpdatedAt = new Date(2026, 9, 12, 15, 3, 41).getTime();
+    scoped.freshness.slowRead = true;
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveClass("opacity-60");
+    expect(
+      within(counts).getByRole("img", { name: "still reading" })
+    ).toHaveClass("border-warn");
+    await userEvent.hover(counts);
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(
+          "Still reading the counts. These are from 15:03:41."
+        )
+      ).not.toHaveLength(0)
+    );
   });
 
   /**

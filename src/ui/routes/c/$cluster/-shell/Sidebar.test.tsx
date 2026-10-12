@@ -388,6 +388,26 @@ describe("how old a row's count is", () => {
       "Counted at 15:03:41, and again every 10 s."
     );
   });
+
+  /**
+   * hang28: a read of the counts can wait on the cluster for a minute, and
+   * the rail went on drawing the last answer as current. Fails if a late
+   * read leaves the counts undimmed or unexplained.
+   */
+  it("dims the counts and says so while their read is late", async () => {
+    read.at = AT;
+    read.slowRead = true;
+    overview = overviewWithPods(41);
+
+    await wrap(<Sidebar />);
+
+    const pods = await counted("Pods");
+    expect(pods).toHaveClass("opacity-60");
+    expect(pods).toHaveAttribute(
+      "title",
+      "Still reading. This count is from 15:03:41."
+    );
+  });
 });
 
 describe("the keyboard focus in the rail", () => {
