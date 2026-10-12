@@ -1025,6 +1025,11 @@ describe("the traffic chain", () => {
               to: subject,
               relation: { verb: "selects", selector: "app=ledger" },
             },
+            {
+              from: subject,
+              to: ref("Pod", "ledger-7d9f-x2k4p"),
+              relation: { verb: "selects", selector: "app=ledger" },
+            },
           ],
           [
             {
@@ -1068,6 +1073,63 @@ describe("the traffic chain", () => {
     });
     expect(hopTone(crashing.stop)).toBe("bad");
     expect(crashing.path.broken).toBe(true);
+  });
+
+  /**
+   * Sam's big-pull, made again while the old Deployment's two pods were
+   * still terminating: "3 pods carry app=big-pull ... its pods are on their
+   * way" over a Pods tab listing one. Fails if the selector's count is told
+   * as the workload's own, or a count of its own is not given.
+   */
+  it("says how many of the pods a stop counts are the workload's own", () => {
+    const front = service("big-pull", "app=big-pull");
+    const subject = ref("Deployment", "big-pull", {
+      kind: "workload",
+      replicas: 1,
+      readyReplicas: 0,
+      rollout: null,
+      revision: null,
+      current: null,
+    });
+    const stopOf = (own: string[]) =>
+      trafficChains(
+        connections(
+          subject,
+          [
+            {
+              from: front,
+              to: subject,
+              relation: { verb: "selects", selector: "app=big-pull" },
+            },
+            ...own.map((name) => ({
+              from: subject,
+              to: ref("Pod", name),
+              relation: { verb: "selects" as const, selector: "app=big-pull" },
+            })),
+          ],
+          [
+            {
+              reason: "noneReady",
+              service: front,
+              selector: "app=big-pull",
+              pods: 3,
+              why: "comingUp",
+            },
+          ]
+        ),
+        t
+      )[0].hops.at(-1)!;
+    expect(stopOf(["big-pull-67577558d6-cw6cr"])).toMatchObject({
+      title:
+        "3 pods carry app=big-pull, 1 of them this Deployment's, and none of them is ready",
+    });
+    expect(stopOf([])).toMatchObject({
+      title:
+        "3 pods carry app=big-pull, none of them this Deployment's, and none of them is ready",
+    });
+    expect(stopOf(["a", "b", "c"])).toMatchObject({
+      title: "3 pods carry app=big-pull, and none of them is ready",
+    });
   });
 
   /**

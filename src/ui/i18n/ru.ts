@@ -8117,6 +8117,20 @@ export const ru: Catalogue = {
       many: "У {n} подов метка {selector}, и ни один не готов",
       other: "У {n} пода метка {selector}, и ни один не готов",
     },
+    podsCarryNoneOwn: {
+      one: "У {n} пода метка {selector}, он не от этого {kind} и не готов",
+      few: "У {n} подов метка {selector}, ни один не от этого {kind}, и ни один не готов",
+      many: "У {n} подов метка {selector}, ни один не от этого {kind}, и ни один не готов",
+      other:
+        "У {n} пода метка {selector}, ни один не от этого {kind}, и ни один не готов",
+    },
+    podsCarrySomeOwn: {
+      one: "У {n} пода метка {selector}, и он не готов",
+      few: "У {n} подов метка {selector}, из них {own} от этого {kind}, и ни один не готов",
+      many: "У {n} подов метка {selector}, из них {own} от этого {kind}, и ни один не готов",
+      other:
+        "У {n} пода метка {selector}, из них {own} от этого {kind}, и ни один не готов",
+    },
     podsCarryPartOf: {
       one: "У {n} пода метка {carries}, но нет {lacks}",
       few: "У {n} подов метка {carries}, но нет {lacks}",

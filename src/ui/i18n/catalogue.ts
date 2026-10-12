@@ -7294,6 +7294,16 @@ export const en = {
       one: "{n} pod carries {selector}, and it is not ready",
       other: "{n} pods carry {selector}, and none of them is ready",
     },
+    podsCarryNoneOwn: {
+      one: "{n} pod carries {selector}, it is not this {kind}'s, and it is not ready",
+      other:
+        "{n} pods carry {selector}, none of them this {kind}'s, and none of them is ready",
+    },
+    podsCarrySomeOwn: {
+      one: "{n} pod carries {selector}, and it is not ready",
+      other:
+        "{n} pods carry {selector}, {own} of them this {kind}'s, and none of them is ready",
+    },
     podsCarryPartOf: {
       one: "{n} pod carries {carries} but not {lacks}",
       other: "{n} pods carry {carries} but not {lacks}",

@@ -9,6 +9,7 @@ import {
   connectionGroups,
   describeExistence,
   chainStopHop,
+  ownPods,
   hopTone,
   trafficChains,
   type ChainHop,
@@ -128,8 +129,9 @@ export function trafficOf(
     broken: path.broken,
     hops: path.hops.map((hop) => hopOf(hop, t)),
   }));
+  const own = ownPods(conns);
   for (const stop of conns.stops) {
-    const said = chainStopHop(stop, conns.subject, t);
+    const said = chainStopHop(stop, conns.subject, t, own);
     if (drawn.has(said.title)) continue;
     paths.push({
       broken: said.mood === "fault",

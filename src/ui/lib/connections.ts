@@ -646,11 +646,12 @@ function scaledToZeroWords(
   };
 }
 
-/** A stop as the chain says it about `subject`. */
+/** A stop as the chain says it about `subject`, whose own pods are `own` where they were read. */
 export function chainStopHop(
   stop: ChainStop,
   subject: ObjectRef,
-  t: T
+  t: T,
+  own: ReadonlySet<string> | null = null
 ): ChainHopStop {
   if (
     stop.reason === "selectsNothing" &&
@@ -663,7 +664,55 @@ export function chainStopHop(
       ...scaledToZeroWords([subject.name], t),
     };
   }
-  return { at: "stop", mood: stopMood(stop), ...describeStop(stop, t) };
+  const said = describeStop(stop, t);
+  // Big-pull counted the terminating pods of a Deployment deleted under its
+  // name as "its pods": the selector's count is not the workload's.
+  if (
+    stop.reason === "noneReady" &&
+    !SLICES_COUNTED.has(stop.why) &&
+    own &&
+    own.size < stop.pods
+  ) {
+    said.title =
+      own.size === 0
+        ? t("count", "podsCarryNoneOwn", {
+            n: stop.pods,
+            selector: stop.selector,
+            kind: subject.kind,
+          })
+        : t("count", "podsCarrySomeOwn", {
+            n: stop.pods,
+            selector: stop.selector,
+            own: own.size,
+            kind: subject.kind,
+          });
+  }
+  return { at: "stop", mood: stopMood(stop), ...said };
+}
+
+/**
+ * A workload's own pods, by uid, where they were read: the Service's
+ * addresses can be another's, the old pods of one deleted under its name.
+ * `null` for a subject with no pods of its own, or whose pods were not read.
+ */
+export function ownPods(
+  conns: ResourceConnections
+): ReadonlySet<string> | null {
+  const subject = conns.subject;
+  if (
+    subject.kind === "Service" ||
+    subject.kind === "Ingress" ||
+    subject.kind === "Pod" ||
+    conns.notLookedAt.some((entry) => entry.kind === "Pod")
+  )
+    return null;
+  return new Set(
+    verb(conns.edges, "selects")
+      .filter(
+        (edge) => sameObject(edge.from, subject) && edge.to.kind === "Pod"
+      )
+      .map((edge) => refKey(edge.to))
+  );
 }
 
 /**
@@ -982,21 +1031,7 @@ export function trafficChains(
   const attaches = verb(conns.edges, "attachesTo");
   const selects = verb(conns.edges, "selects");
   const tls = tlsSecrets(conns);
-  // A workload's own pods, by uid, where they were read: the Service's
-  // addresses can be another's, the old pods of one deleted under its name.
-  const own =
-    subject.kind === "Service" ||
-    subject.kind === "Ingress" ||
-    subject.kind === "Pod" ||
-    conns.notLookedAt.some((entry) => entry.kind === "Pod")
-      ? null
-      : new Set(
-          selects
-            .filter(
-              (edge) => sameObject(edge.from, subject) && edge.to.kind === "Pod"
-            )
-            .map((edge) => refKey(edge.to))
-        );
+  const own = ownPods(conns);
 
   const fronting: ObjectRef[] =
     subject.kind === "Service"
@@ -1115,7 +1150,7 @@ export function trafficChains(
           hops.push(gatewayRouteHop(mine, route, t));
           for (const entry of conns.stops) {
             if ("route" in entry && sameObject(entry.route, route)) {
-              hops.push(chainStopHop(entry, subject, t));
+              hops.push(chainStopHop(entry, subject, t, own));
             }
           }
         }
@@ -1152,7 +1187,7 @@ export function trafficChains(
       // A route-level refusal breaks the path even where the Service behind
       // it is perfectly healthy — an unaccepted route serves nothing.
       const routeBroken = hops.some((hop) => hop.at === "stop");
-      const said = stop ? chainStopHop(stop, subject, t) : null;
+      const said = stop ? chainStopHop(stop, subject, t, own) : null;
 
       if (said) hops.push(said);
       else if (
