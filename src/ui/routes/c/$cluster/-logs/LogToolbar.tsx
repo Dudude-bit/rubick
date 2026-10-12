@@ -31,6 +31,7 @@ import type { FieldIndex, Frozen } from "./hooks/log-buffer";
 import { LOG_LIMITS } from "./hooks/useLogStream";
 import { LogQuery } from "./LogQuery";
 import { type QueryTerm, type ViewMode } from "./types";
+import type { Followed, StoppedFollow } from "./readings";
 import { formatCount } from "@/lib/count";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -109,6 +110,9 @@ interface LogToolbarProps {
   isConnecting: boolean;
   /** Stopped by the reader, as opposed to stopped because the stream died. */
   isPaused: boolean;
+  followed: Followed;
+  /** What a click on Follow does while no line can arrive. */
+  stoppedFollow: StoppedFollow;
   autoScroll: boolean;
   isAtBottom: boolean;
   onAutoScrollToggle: () => void;
@@ -120,6 +124,12 @@ interface LogToolbarProps {
   stripMode: DensityStripMode;
   onStripModeChange: (mode: DensityStripMode) => void;
 }
+
+const STOPPED_FOLLOW_HINT: Record<StoppedFollow, keyof typeof en.action> = {
+  resumes: "followResumeHint",
+  previousRun: "followPreviousRunHint",
+  ended: "followEndedHint",
+};
 
 /**
  * Every control says what it is.
@@ -155,6 +165,8 @@ export function LogToolbar({
   isStreaming,
   isConnecting,
   isPaused,
+  followed,
+  stoppedFollow,
   autoScroll,
   isAtBottom,
   onAutoScrollToggle,
@@ -169,6 +181,7 @@ export function LogToolbar({
   // The chip and the status read one state: nothing is followed while no line can arrive.
   const live = isStreaming || isConnecting;
   const following = autoScroll && live;
+  const partly = isStreaming && followed.followed < followed.total;
 
   return (
     // Wraps because the same toolbar sits in the peek panel, which the
@@ -242,7 +255,7 @@ export function LogToolbar({
             ? t("action", "followOnHint")
             : live
               ? t("action", "followOffHint")
-              : t("action", "followStoppedHint")
+              : t("action", STOPPED_FOLLOW_HINT[stoppedFollow])
         }
       >
         <ArrowDown
@@ -284,9 +297,11 @@ export function LogToolbar({
           onClick={onToggleStreaming}
           disabled={isConnecting}
           title={
-            isStreaming
-              ? t("action", "stopStreamHint")
-              : t("action", "startStreamHint")
+            partly
+              ? t("action", "streamLivePartlyHint", { ...followed })
+              : isStreaming
+                ? t("action", "stopStreamHint")
+                : t("action", "startStreamHint")
           }
           className="flex h-6 items-center gap-1.5 rounded bg-sel px-2 text-xs text-fg hover:bg-hover disabled:opacity-60"
         >
@@ -300,17 +315,23 @@ export function LogToolbar({
               <span
                 aria-hidden="true"
                 className={`h-1.5 w-1.5 rounded-full ${
-                  isStreaming ? "animate-pulse bg-ok" : "bg-fg-fnt"
+                  partly
+                    ? "animate-pulse bg-warn"
+                    : isStreaming
+                      ? "animate-pulse bg-ok"
+                      : "bg-fg-fnt"
                 }`}
               />
               {/* Three states, not two: a stream the reader stopped and a
                   stream that died are both "not live", and calling the
                   second one "Paused" blames the reader for it. */}
-              {isStreaming
-                ? t("action", "streamLive")
-                : isPaused
-                  ? t("action", "streamPaused")
-                  : t("action", "streamStopped")}
+              {partly
+                ? t("action", "streamLivePartly", { ...followed })
+                : isStreaming
+                  ? t("action", "streamLive")
+                  : isPaused
+                    ? t("action", "streamPaused")
+                    : t("action", "streamStopped")}
             </>
           )}
         </button>

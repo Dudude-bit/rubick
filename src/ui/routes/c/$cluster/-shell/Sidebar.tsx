@@ -206,7 +206,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       // question asked when it is not yet known which Service is wrong.
       resource(ResourceType.Endpoints, "endpoints"),
       resource(ResourceType.Ingress, "ingresses"),
-      resource(ResourceType.NetworkPolicy),
+      resource(ResourceType.NetworkPolicy, "networkPolicies"),
     ],
   },
   {

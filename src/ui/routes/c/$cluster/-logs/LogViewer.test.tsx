@@ -140,8 +140,7 @@ describe("LogViewer when a live stream dies", () => {
   /**
    * Marco's Logs after Follow again read "Follow ✓" beside "Stopped" under a
    * "not followed" banner. Fails if the chip says following while no line
-   * can arrive, if a click on it then turns following off for later, or if
-   * it stays off once the stream is live again.
+   * can arrive, or stays off once the stream is live again.
    */
   it("unticks Follow while the stream is stopped, and ticks it again when lines can arrive", async () => {
     await renderStreaming();
@@ -156,13 +155,139 @@ describe("LogViewer when a live stream dies", () => {
     );
     await screen.findByRole("button", { name: /Stopped/ });
     expect(follow()).toHaveAttribute("aria-pressed", "false");
-    await userEvent.click(follow());
-    expect(follow()).toHaveAttribute("aria-pressed", "false");
 
     await userEvent.click(screen.getByRole("button", { name: /Follow again/ }));
     await waitFor(() =>
       expect(follow()).toHaveAttribute("aria-pressed", "true")
     );
+  });
+
+  describe("a click on Follow while nothing is followed", () => {
+    const follow = () => screen.getByRole("button", { name: "Follow" });
+    const followsAgain = async () => {
+      expect(follow()).toHaveAttribute("aria-pressed", "false");
+      expect(follow().title).toMatch(/Click to read again/);
+      const opened = vi.mocked(commands.streamPodLogs).mock.calls.length;
+      await userEvent.click(follow());
+      await screen.findByRole("button", { name: /^Live$/ });
+      await waitFor(() =>
+        expect(follow()).toHaveAttribute("aria-pressed", "true")
+      );
+      expect(
+        vi.mocked(commands.streamPodLogs).mock.calls.length
+      ).toBeGreaterThan(opened);
+    };
+
+    /** Marco after the node stopped following: the chip did nothing and said nothing. Fails if it does not follow again as the banner's button does. */
+    it("follows again after the node stopped following", async () => {
+      await renderStreaming();
+      fireFailure(
+        "follow-stopped",
+        "failed to create fsnotify watcher: too many open files"
+      );
+      await screen.findByRole("button", { name: /Stopped/ });
+      await followsAgain();
+    });
+
+    /** Fails if a reader's own pause is left in place by a click on Follow. */
+    it("resumes a stream the reader paused", async () => {
+      await renderStreaming();
+      await userEvent.click(
+        await screen.findByRole("button", { name: /^Live$/ })
+      );
+      await screen.findByRole("button", { name: /Paused/ });
+      await followsAgain();
+    });
+
+    /** Fails if a lost connection is not reconnected by the chip as by Reconnect. */
+    it("reconnects a stream that broke", async () => {
+      await renderStreaming();
+      fireFailure("broken", "connection reset by peer");
+      await screen.findByRole("button", { name: /Stopped/ });
+      await followsAgain();
+    });
+
+    /** Fails if the chip offers to follow an earlier run, which is read whole, or re-reads it on a click. */
+    it("says an earlier run is read whole and not followed", async () => {
+      await mount(
+        <LogViewer
+          {...props}
+          containers={[
+            container("app", {
+              restartCount: 3,
+              lastTerminated: {
+                exitCode: 1,
+                signal: null,
+                reason: "Error",
+                message: null,
+                startedAt: null,
+                finishedAt: "2026-10-12T00:00:00Z",
+              },
+            }),
+          ]}
+        />
+      );
+      await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
+      await userEvent.click(
+        await screen.findByRole("button", { name: /Previous run/ })
+      );
+      await waitFor(() =>
+        expect(follow().title).toMatch(/Turn Previous run off/)
+      );
+      const opened = vi.mocked(commands.streamPodLogs).mock.calls.length;
+      await userEvent.click(follow());
+      expect(vi.mocked(commands.streamPodLogs).mock.calls.length).toBe(opened);
+    });
+
+    /** Fails if the chip offers to follow a stream nothing can bring back, or opens one anyway. */
+    it("says why it cannot follow a container that has ended", async () => {
+      await renderStreaming();
+      fireFailure(
+        "gone",
+        "default/log-demo-7f9 stopped streaming: container app is no longer running."
+      );
+      await screen.findByRole("button", { name: /Stopped/ });
+      expect(follow().title).toMatch(/Nothing here can be followed again/);
+      const opened = vi.mocked(commands.streamPodLogs).mock.calls.length;
+      await userEvent.click(follow());
+      expect(vi.mocked(commands.streamPodLogs).mock.calls.length).toBe(opened);
+      expect(
+        screen.getByRole("button", { name: /Stopped/ })
+      ).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * Dana's log-demo said "Live" in the toolbar and "Streaming" in the
+   * footer while the node had stopped following three of its five
+   * containers. Fails if either word claims every stream while one is not
+   * followed, or keeps the partial count once all are followed again.
+   */
+  it("says how many streams are live while the node follows only some", async () => {
+    await mount(
+      <LogViewer
+        {...props}
+        containers={[container("app"), container("worker"), container("proxy")]}
+      />
+    );
+    await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
+    await screen.findByRole("button", { name: /^Live$/ });
+
+    fireFailure(
+      "follow-stopped",
+      "failed to create fsnotify watcher: too many open files",
+      "stream-worker"
+    );
+    expect(
+      await screen.findByRole("button", { name: /Live, 2 of 3/ })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Streaming 2 of 3")).toBeInTheDocument();
+    expect(screen.queryByText("Streaming")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: /Follow again/ }));
+    expect(
+      await screen.findByRole("button", { name: /^Live$/ })
+    ).toBeInTheDocument();
   });
 
   it("offers a reconnect for a connection that broke", async () => {

@@ -585,6 +585,8 @@ pub enum Unread {
     /// What mounts a volume's claim — one list in the claim's namespace,
     /// which is the claim's own page.
     VolumeMountsNotRead,
+    /// The policies that select a pod, read on its own `NetworkPolicies` tab.
+    PoliciesOnTheirTab,
 }
 
 impl UnexploredKind {
@@ -659,6 +661,13 @@ impl UnexploredKind {
     #[must_use]
     pub fn on_a_volume() -> Vec<Self> {
         vec![Self::new("Pod", Unread::VolumeMountsNotRead)]
+    }
+
+    /// A pod's policies, which its `NetworkPolicies` tab reads and this graph
+    /// does not: left out, the graph read as "no policy touches this pod".
+    #[must_use]
+    pub fn on_a_pod() -> Self {
+        Self::new("NetworkPolicy", Unread::PoliciesOnTheirTab)
     }
 }
 

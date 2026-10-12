@@ -38,6 +38,8 @@ import {
 } from "@/components/object/ResourceName";
 import type { ObjectRef, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { NodeRef } from "./NodeRef";
+import { ResourceType } from "@/lib/resource-registry";
 
 const GROUP_HEADING =
   "text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt";
@@ -51,6 +53,7 @@ function Name({ object }: { object: ObjectRef }) {
       </span>
     );
   }
+  if (object.kind === ResourceType.Node) return <NodeRef name={object.name} />;
   return (
     <ResourceRef
       kind={object.kind}

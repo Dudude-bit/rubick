@@ -64,6 +64,7 @@ pub(super) async fn pod_connections(
     governed_by(ns, &scalable, &subject, pod.labels(), &snapshot, out);
 
     out.not_looked_at.extend(unanswered(&snapshot));
+    out.not_looked_at.push(UnexploredKind::on_a_pod());
     Ok(())
 }
 

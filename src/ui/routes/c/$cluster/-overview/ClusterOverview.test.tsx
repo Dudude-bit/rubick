@@ -222,6 +222,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
     endpoints: 0,
     persistentVolumeClaims: 0,
     serviceAccounts: 0,
+    networkPolicies: 0,
     events: 0,
   },
   podsUnlisted: [],

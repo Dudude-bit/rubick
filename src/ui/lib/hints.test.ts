@@ -9,9 +9,11 @@ import {
   hintFor,
   namespaceOf,
   redact,
+  requiredTopologyKeys,
   schedulingCauses,
   searchQuery,
   searchUrl,
+  topologyReading,
   troubleOf,
   type Chain,
 } from "./hints";
@@ -156,6 +158,7 @@ const NONE: Chain = {
   service: null,
   sidecar: null,
   policies: { read: "unread", why: null },
+  topology: { read: "unread" },
   notRead: [],
 };
 
@@ -350,6 +353,7 @@ describe("troubleOf", () => {
       service: null,
       sidecar: null,
       policies: { read: "unread", why: null },
+      topology: { read: "unread" },
       notRead: [],
     });
     expect(hint.headline).toEqual({
@@ -542,6 +546,76 @@ describe("what the scheduler says keeps a pending pod out", () => {
     ]);
   });
 
+  const SPREAD = {
+    spec: {
+      topologySpreadConstraints: [
+        {
+          maxSkew: 1,
+          topologyKey: "topology.kubernetes.io/zone",
+          whenUnsatisfiable: "DoNotSchedule",
+        },
+        {
+          maxSkew: 1,
+          topologyKey: "kubernetes.io/hostname",
+          whenUnsatisfiable: "ScheduleAnyway",
+        },
+      ],
+    },
+  };
+  const NODES = [
+    { labels: { "kubernetes.io/hostname": "server-0" } },
+    { labels: { "kubernetes.io/hostname": "agent-0" } },
+  ];
+
+  /**
+   * Dana's topology-demo: the advice pointed at the nodes' labels and never
+   * named topology.kubernetes.io/zone, the key in the pod's own spec that no
+   * node carries. Fails if the key or the count of nodes carrying it is
+   * left out, or a ScheduleAnyway constraint is offered as the cause.
+   */
+  it("names the key the pod's spec spreads by and how many nodes carry it", () => {
+    const trouble = troubleOf(unplaced(-1), [
+      event("FailedScheduling", TOPOLOGY),
+    ])!;
+    const chain: Chain = {
+      ...NONE,
+      topology: topologyReading(requiredTopologyKeys(SPREAD), NODES),
+    };
+    const hint = hintFor(trouble, unplaced(-1), chain);
+    expect(hint.headline).toEqual({
+      key: "guessPendingTopologyKey",
+      values: { key: "topology.kubernetes.io/zone", carrying: 0, nodes: 2 },
+    });
+    expect(hint.checks.map((check) => check.says)).toEqual([
+      {
+        key: "checkTopologyKey",
+        values: { key: "topology.kubernetes.io/zone", carrying: 0, nodes: 2 },
+      },
+    ]);
+  });
+
+  /**
+   * Marco cannot list nodes. Fails if a refused node list is counted as
+   * "0 of 0 carry it", or the key is dropped because the count is missing.
+   */
+  it("names the key without a count where the nodes could not be read", () => {
+    const trouble = troubleOf(unplaced(-1), [
+      event("FailedScheduling", TOPOLOGY),
+    ])!;
+    const chain: Chain = {
+      ...NONE,
+      topology: topologyReading(requiredTopologyKeys(SPREAD), null),
+    };
+    const hint = hintFor(trouble, unplaced(-1), chain);
+    expect(hint.headline).toEqual({
+      key: "guessPendingTopologyKeyUncounted",
+      values: { key: "topology.kubernetes.io/zone" },
+    });
+    expect(hint.checks.map((check) => check.says.key)).toEqual([
+      "checkTopologyKeyUncounted",
+    ]);
+  });
+
   /** Fails if causes are read out of order, or the requests check is offered for a taint alone. */
   it("names each cause the answer gives, in its order", () => {
     expect(schedulingCauses(TAINT)).toEqual(["taint", "resources"]);
@@ -613,6 +687,7 @@ describe("hintFor", () => {
       endpointsKnown: true,
       sidecar: null,
       policies: { read: "unread", why: null },
+      topology: { read: "unread" },
       notRead: [],
     };
     const hint = hintFor(troubleOf(crashing(), [])!, crashing(), chain);
@@ -644,6 +719,7 @@ describe("hintFor", () => {
       service: null,
       sidecar: null,
       policies: { read: "unread", why: null },
+      topology: { read: "unread" },
       notRead: [],
     });
     expect(hint.checks.map((c) => c.says.key)).toEqual(["checkLastLines"]);
@@ -663,6 +739,7 @@ describe("hintFor", () => {
       endpointsKnown: true,
       sidecar,
       policies: { read: "unread", why: null },
+      topology: { read: "unread" },
       notRead: [],
     };
     const hint = hintFor(troubleOf(crashing(), [])!, crashing(), chain);
@@ -687,6 +764,7 @@ describe("hintFor", () => {
       endpointsKnown: true,
       sidecar: null,
       policies: { read: "unread", why: null },
+      topology: { read: "unread" },
       notRead: ["the NetworkPolicies of shop (forbidden)"],
     };
     const hint = hintFor(troubleOf(crashing(), [])!, crashing(), chain);
@@ -1223,6 +1301,7 @@ describe("agentReport", () => {
         service: { name: "shop-db-rw", namespace: "shop", ready: 0, total: 3 },
         sidecar: null,
         policies: { read: "unread", why: null },
+        topology: { read: "unread" },
         notRead: ["NetworkPolicy in shop (403)"],
       },
       mounts: [leaky],

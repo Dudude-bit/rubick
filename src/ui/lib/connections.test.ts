@@ -2451,3 +2451,31 @@ describe("a Links tab in Russian", () => {
     }
   });
 });
+
+describe("what a pod's Connections never reads", () => {
+  /**
+   * Marco's pod named only its disruption budget as not looked at while its
+   * NetworkPolicies tab said it could not say. Fails if the policies the
+   * graph never reads drop out of Not looked at, or lose the tab that reads
+   * them.
+   */
+  it("names the NetworkPolicies and the tab that reads them", () => {
+    const groups = connectionGroups(
+      connections(
+        pod("checkout-api-649f5449-h6x2v", true),
+        [],
+        [],
+        [{ kind: "NetworkPolicy", why: { says: "policiesOnTheirTab" } }]
+      ),
+      t
+    );
+    const unasked = groups.find((group) => group.key === "unasked");
+    expect(unasked?.rows).toMatchObject([
+      {
+        label: "NetworkPolicy",
+        detail:
+          "Connections does not read the policies that select this pod; its NetworkPolicies tab does",
+      },
+    ]);
+  });
+});

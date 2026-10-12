@@ -84,6 +84,8 @@ import {
   hitKey,
   isCold,
   isSelectable,
+  kindLabels,
+  unreadParts,
   type Entry,
   type HintTone,
   type Scope,
@@ -1434,10 +1436,8 @@ const HINT_MARK: Record<HintTone, ReactNode> = {
   empty: <SearchX className="h-3.5 w-3.5 text-fg-fnt" aria-hidden />,
 };
 
-const kindNames = (kinds: readonly { kind: string }[]) =>
-  byKindName(kinds)
-    .map((kind) => kind.kind)
-    .join(", ");
+const kindNames = (kinds: ReadonlyArray<{ kind: string; group?: string }>) =>
+  kindLabels(kinds).join(", ");
 
 /**
  * What a name search read in one cluster, and what it did not: the kinds it
@@ -1457,6 +1457,7 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
     served,
     split,
   } = entry;
+  const { refusals } = unreadParts(cluster);
   return (
     <div
       role="presentation"
@@ -1480,7 +1481,9 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
           title={unreadHover(cluster, t)}
         >
           <Lock className="h-3 w-3 flex-none" aria-hidden />
-          {t("count", "kindsPartlyRefused", { n: split.partly })}
+          {t("count", refusals ? "kindsPartlyRefused" : "kindsPartlyUnread", {
+            n: split.partly,
+          })}
         </span>
       )}
       {split !== null && split.refused > 0 && (
@@ -1489,7 +1492,13 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
           title={unreadHover(cluster, t)}
         >
           <Lock className="h-3 w-3 flex-none" aria-hidden />
-          {t("count", "kindsRefusedWherever", { n: split.refused })}
+          {t(
+            "count",
+            refusals ? "kindsRefusedWherever" : "kindsUnreadWherever",
+            {
+              n: split.refused,
+            }
+          )}
         </span>
       )}
       {scope !== null && (
@@ -1547,12 +1556,15 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
 /** Every refused kind on one line, and any other failure with its own words. */
 function unreadHover(cluster: ClusterSearchState, t: T): string {
   const unreadable = byKindName(cluster.unreadable);
+  const labels = new Map(
+    unreadable.map((unread, at) => [unread, kindLabels(unreadable)[at]])
+  );
   const refused = unreadable.filter((unread) => unread.reason === "forbidden");
   const failed = unreadable.filter((unread) => unread.reason !== "forbidden");
   const where = new Map<string, string[]>();
   for (const unread of refused) {
     const key = unread.namespaces.join(", ");
-    where.set(key, [...(where.get(key) ?? []), unread.kind]);
+    where.set(key, [...(where.get(key) ?? []), labels.get(unread)!]);
   }
   return [
     ...[...where].map(([namespaces, kinds]) =>
@@ -1565,9 +1577,9 @@ function unreadHover(cluster: ClusterSearchState, t: T): string {
     ),
     ...failed.map((unread) =>
       unread.namespaces.length === 0
-        ? `${unread.kind}: ${unread.message}`
+        ? `${labels.get(unread)}: ${unread.message}`
         : t("cluster", "kindFailedInHover", {
-            kind: unread.kind,
+            kind: labels.get(unread)!,
             namespaces: unread.namespaces.join(", "),
             message: unread.message,
           })
@@ -1643,12 +1655,33 @@ function ClusterGroup({
       // The one place the palette names what it could not read: cut to the
       // row, whole on hover. Refusals share one line: forty 403 sentences
       // made a tooltip taller than the screen.
+      // The summary's own words and counts: a kind read in one namespace
+      // and refused in another is not one the cluster refused outright.
+      const { wherever, somewhere, refusals } = unreadParts(cluster);
+      const counts = [
+        wherever.length > 0 &&
+          t(
+            "count",
+            refusals ? "kindsRefusedWherever" : "kindsUnreadWherever",
+            {
+              n: wherever.length,
+            }
+          ),
+        somewhere.length > 0 &&
+          t(
+            "count",
+            refusals ? "kindsRefusedSomewhere" : "kindsUnreadSomewhere",
+            { n: somewhere.length }
+          ),
+      ]
+        .filter(Boolean)
+        .join(", ");
       state = (
         <span className="min-w-0 truncate" title={unreadHover(cluster, t)}>
           {state} · <Mark className="inline h-3 w-3 align-[-2px]" aria-hidden />{" "}
-          {t("cluster", "kindsUnreadInline", {
-            n: cluster.unreadable.length,
-            kinds: kindNames(cluster.unreadable),
+          {t("cluster", "kindsUnreadNamed", {
+            counts,
+            kinds: kindNames([...wherever, ...somewhere]),
           })}
         </span>
       );

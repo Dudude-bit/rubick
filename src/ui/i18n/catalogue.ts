@@ -927,6 +927,7 @@ export const en = {
     intake: "intake",
     keepingOnlyMatches: "keeping only what matches",
     streaming: "Streaming",
+    streamingPartly: "Streaming {followed} of {total}",
     mixedFormat: "mixed",
     showInNamespace: "Show {label} in {namespace}",
     showInNamespaceNarrows:
@@ -1294,14 +1295,21 @@ export const en = {
     follow: "Follow",
     followOnHint: "Following the tail. Click to stop and read",
     followOffHint: "Jump to the newest line and follow it",
-    followStoppedHint:
-      "Nothing arrives while the stream is stopped. Click to go to the newest line",
+    followResumeHint:
+      "Nothing arrives while the stream is stopped. Click to read again and follow the newest line",
+    followPreviousRunHint:
+      "The run before the current one is read whole, not followed. Turn Previous run off to follow the current one",
+    followEndedHint:
+      "Nothing here can be followed again: every stream has ended or its log is gone. Click to go to the newest line",
     keepLines: "Keep {n}",
     keepLinesHint: "How many lines to backfill and then keep",
     startStreamHint: "Attach to the container and follow its output",
     stopStreamHint: "Stop reading from the container",
     connecting: "Connecting",
     streamLive: "Live",
+    streamLivePartly: "Live, {followed} of {total}",
+    streamLivePartlyHint:
+      "{followed} of {total} streams are followed; the notices above say why the rest are not. Click to stop reading",
     streamPaused: "Paused",
     filtering: "filtering…",
     streamStopped: "Stopped",
@@ -1813,6 +1821,10 @@ export const en = {
       "Most likely: no node fits it, and the scheduler's answer has changed over {attempts}, so the nodes are probably changing under it.",
     guessPendingTopologyLabel:
       "Most likely: no node has the label its topology spread constraint spreads by, so the scheduler probably cannot place it anywhere until one does.",
+    guessPendingTopologyKey:
+      "Most likely: the nodes lack {key}, the label its topology spread constraint spreads by: {carrying} of {nodes} carry it. The scheduler probably cannot place it on a node without it.",
+    guessPendingTopologyKeyUncounted:
+      "Most likely: the nodes lack {key}, the label its topology spread constraint spreads by, so the scheduler probably cannot place it until one carries it. The nodes could not be read, so how many carry it is not counted here.",
     guessPendingTopology:
       "Most likely: every node would break its topology spread constraint, so it probably waits until its pods or the nodes change.",
     notPlacedYet:
@@ -1867,6 +1879,9 @@ export const en = {
     checkNodes: "Look at the nodes: taints, capacity, what is already placed",
     checkTopologyLabels:
       "Look at the nodes' labels for the key its topology spread constraint spreads by",
+    checkTopologyKey:
+      "Look at the nodes' labels for {key}: {carrying} of {nodes} carry it",
+    checkTopologyKeyUncounted: "Look at the nodes' labels for {key}",
     checkTopologySpread:
       "Compare its topology spread constraint with where its pods already run",
     checkTaints: "Compare the nodes' taints with the pod's tolerations",
@@ -1883,6 +1898,8 @@ export const en = {
       "the Services of {namespace}, where that address lives: this app only listed this pod's own namespace",
     notReadPolicies: "the NetworkPolicies of {namespace} ({reason})",
     notReadPods: "the pods of {namespace} ({reason})",
+    notReadPodSpec: "the spec of this pod ({reason})",
+    notReadNodes: "the nodes ({reason})",
   },
   services: {
     myServices: "My services",
@@ -3489,6 +3506,8 @@ export const en = {
       "the app does not read the claims the pods on this node hold, so it cannot say which volumes would have to detach before those pods start elsewhere",
     unreadVolumeMounts:
       "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
+    unreadPoliciesOnTheirTab:
+      "Connections does not read the policies that select this pod; its NetworkPolicies tab does",
     connNoAddress: "no address is configured",
     stepAttempt: "attempt {revision}",
     stepChallengeOn: "{kind} on {domain}",
@@ -3892,11 +3911,18 @@ export const en = {
     logsPrintedBeforeExit: "What it printed before it exited is in Logs.",
     logsAttempts: "{attempts}{when}.",
     failedRunInLogs: "What the run that failed printed is in Logs.",
+    shellAnswerInFailedRun:
+      "What the shell would have told you is in the log of the run that failed.",
     failedRunLogAsking: "Asking the node for that run's log.",
     failedRunLogEmpty: "That run printed nothing.",
     failedRunLogGone: "The node no longer has that run's log.",
     failedRunLogUnread: "Could not ask the node for that run's log.",
-    logsFinishedComplete: "Finished{took}{when}. Its log is complete.",
+    logsFinished: "Finished{took}{when}.",
+    finishedLogComplete: "Its log is complete.",
+    finishedLogAsking: "Asking the node for its log.",
+    finishedLogEmpty: "It printed nothing.",
+    finishedLogGone: "The node no longer has its log.",
+    finishedLogUnread: "Could not ask the node for its log.",
     logsTook: " in {took}",
     logsWhen: ", {when}",
     logsLastWhen: ", last {when}",
@@ -4437,10 +4463,7 @@ export const en = {
     connectingInline: "connecting…",
     searchingInline: "searching…",
     failedInline: "failed",
-    kindsUnreadInline: {
-      one: "could not read {n} kind: {kinds}",
-      other: "could not read {n} kinds: {kinds}",
-    },
+    kindsUnreadNamed: "{counts}: {kinds}",
     kindsRefusedHover: "The cluster refused your account: {kinds}",
     kindsRefusedInHover: "Refused in {namespaces}: {kinds}",
     kindFailedInHover: "{kind} in {namespaces}: {message}",
@@ -5170,8 +5193,6 @@ export const en = {
     },
     whichExited: "which exited {code}",
     whichHasNotFinished: "which has not finished",
-    shellAnswerIsInTheLog:
-      "What the shell would have told you is in the log of the run that failed.",
     podStoppedInInit:
       "The pod is still in init and stopped on {container}, {failure}.",
     haveNotStarted: {
@@ -5489,21 +5510,19 @@ export const en = {
       "is being retried by the kubelet, with a longer wait after each attempt. The name, the tag or the pull credentials are what to check.",
     startsAndExits: "{container} starts and then exits, over and over",
     crashRestartsWithLastRun: {
-      one: "{n} restart so far; the last run ended {how}. What it printed before it died is in Logs.",
-      other:
-        "{n} restarts so far; the last run ended {how}. What it printed before it died is in Logs.",
+      one: "{n} restart so far; the last run ended {how}.",
+      other: "{n} restarts so far; the last run ended {how}.",
     },
     crashRestartsNoLastRun: {
-      one: "{n} restart so far. What it printed before it last died is in Logs.",
-      other:
-        "{n} restarts so far. What it printed before it last died is in Logs.",
+      one: "{n} restart so far.",
+      other: "{n} restarts so far.",
     },
     restartedExitUnreported:
       "{container} restarted, and its last exit is not reported",
     restartsExitUnreportedDetail: {
-      one: "{n} restart so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known. What it printed before it last exited is in Logs.",
+      one: "{n} restart so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known.",
       other:
-        "{n} restarts so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known. What it printed before it last exited is in Logs.",
+        "{n} restarts so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known.",
     },
     cannotBeBuilt: "{container} cannot be built from this spec",
     missingConfigMapSecretOrVolume:
@@ -7296,6 +7315,20 @@ export const en = {
       other: "One client address may hold {n} connections at a time.",
     },
     readyOfTotal: "{ready} of {total} ready",
+    takeTrafficOfTotal: {
+      one: "{n} of {total} takes traffic",
+      other: "{n} of {total} take traffic",
+    },
+    addressesOffPort: {
+      one: "{n} of its addresses has none of the ports this Service targets, so no traffic is sent to it",
+      other:
+        "{n} of its addresses have none of the ports this Service targets, so no traffic is sent to them",
+    },
+    addressesReadyOffPort: {
+      one: "{n} of its addresses is ready but has none of the ports this Service targets, so no traffic is sent to it",
+      other:
+        "{n} of its addresses are ready but have none of the ports this Service targets, so no traffic is sent to them",
+    },
     addressesTakeNoTraffic: {
       one: "{n} of its addresses takes no traffic",
       other: "{n} of its addresses take no traffic",
@@ -7727,6 +7760,22 @@ export const en = {
     kindsRefusedWherever: {
       one: "{n} kind refused wherever asked",
       other: "{n} kinds refused wherever asked",
+    },
+    kindsPartlyUnread: {
+      one: "{n} of them could not be read in some namespaces",
+      other: "{n} of them could not be read in some namespaces",
+    },
+    kindsUnreadWherever: {
+      one: "{n} kind could not be read wherever asked",
+      other: "{n} kinds could not be read wherever asked",
+    },
+    kindsRefusedSomewhere: {
+      one: "{n} kind refused in some namespaces",
+      other: "{n} kinds refused in some namespaces",
+    },
+    kindsUnreadSomewhere: {
+      one: "{n} kind could not be read in some namespaces",
+      other: "{n} kinds could not be read in some namespaces",
     },
     kindsNotSearched: {
       one: "{n} kind not searched",

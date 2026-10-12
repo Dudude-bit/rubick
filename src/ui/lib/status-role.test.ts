@@ -118,6 +118,17 @@ describe("statusRole", () => {
     expect(statusRole("Signal:11")).toBe("err");
   });
 
+  /**
+   * Marco's Jobs list drew a Complete Job grey beside a green Ready
+   * Deployment, and a Running Job green, so finishing read as worse than
+   * running. Fails if a Job that did what it was for is drawn neutral, or a
+   * completed Pod, which serves nothing, is drawn green.
+   */
+  it("draws a Complete Job green and a Completed pod neutral", () => {
+    expect(statusRole("Complete")).toBe("ok");
+    expect(statusRole("Completed")).toBe("neutral");
+  });
+
   it("keeps a healthy pod quiet", () => {
     expect(statusRole("Running")).toBe("ok");
   });

@@ -395,6 +395,46 @@ export function kindSplit(
   return split;
 }
 
+/**
+ * The kinds a search could not read, split as the summary splits them: not
+ * read anywhere it asked, or read in one namespace and refused in another.
+ * Marco's header counted both as one "could not read 22" beside a summary
+ * saying "13 refused wherever asked".
+ */
+export function unreadParts(cluster: ClusterSearchState): {
+  wherever: ClusterSearchState["unreadable"];
+  somewhere: ClusterSearchState["unreadable"];
+  /** Every one a refusal, so "refused" is the word; otherwise "could not read". */
+  refusals: boolean;
+} {
+  const read = new Set(
+    cluster.searched.map((kind) => `${kind.group}/${kind.plural}`)
+  );
+  const somewhere = cluster.unreadable.filter((kind) =>
+    read.has(`${kind.group}/${kind.plural}`)
+  );
+  return {
+    wherever: cluster.unreadable.filter((kind) => !somewhere.includes(kind)),
+    somewhere,
+    refusals: cluster.unreadable.every((kind) => kind.reason === "forbidden"),
+  };
+}
+
+/** Kind names in reading order, with the group beside a name two groups share: "Event (core), Event (events.k8s.io)". */
+export function kindLabels(
+  kinds: ReadonlyArray<{ kind: string; group?: string }>
+): string[] {
+  const sorted = byKindName(kinds);
+  const shared = new Set(
+    sorted
+      .filter((kind, at) => sorted.findIndex((o) => o.kind === kind.kind) < at)
+      .map((kind) => kind.kind)
+  );
+  return sorted.map((kind) =>
+    shared.has(kind.kind) ? `${kind.kind} (${kind.group || "core"})` : kind.kind
+  );
+}
+
 /** Listable kinds the cluster serves that this search compared no name of. */
 export function notSearchedOf(
   kinds: readonly CatalogEntry[],

@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { invoke } from "@tauri-apps/api/core";
 
 import type { ColumnDef } from "@/components/ui/table-features";
+import { renderWithRouter } from "@/test/render";
 import { columns } from "./PodList";
 
 const columnOf = (id: string) => {
@@ -98,5 +100,32 @@ describe("what a narrow pod column keeps on hover", () => {
     );
     const button = screen.getByRole("button", { name: /^Ready: / });
     expect(button).toHaveAttribute("title", "Ready");
+  });
+});
+
+describe("the Node column of the pod list", () => {
+  /**
+   * Marco's Pods list drew his pods' node as a plain link while the pod page
+   * padlocked it, and the click landed on "Could not read this Node". Fails
+   * if the list's link loses the padlock the node's own read earns it.
+   */
+  it("padlocks a node the reader may not read", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_node")
+        throw { code: "PERMISSION_DENIED", message: "nodes is forbidden" };
+      return undefined;
+    });
+    await renderWithRouter(
+      <>
+        {columnOf("node").cell({
+          row: { original: { nodeName: "k3d-rubick-live-agent-0" } },
+        } as never)}
+      </>
+    );
+    expect(await screen.findByTestId("node-refused")).toHaveAttribute(
+      "aria-label",
+      "Your access does not allow reading Node k3d-rubick-live-agent-0."
+    );
+    vi.mocked(invoke).mockImplementation(async () => undefined);
   });
 });

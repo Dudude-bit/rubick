@@ -13,7 +13,7 @@ import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useLocale } from "@/stores/localeStore";
 import type { LostLines } from "./hooks/log-buffer";
-import type { StreamReading } from "./readings";
+import { followsAgain, type StreamReading } from "./readings";
 import { formatSpan, termLabel, type QueryTerm } from "./types";
 import { formatCount } from "@/lib/count";
 
@@ -170,38 +170,14 @@ export function StreamFailureNotice({
         )}
       </div>
       {/* Not a retry: asking again cannot conjure a run that never
-          happened. The way out is the run that does exist. */}
-      {absent ? (
+          happened. The way out is the run that does exist, and where only
+          the earlier run is known to be gone, the current one is a read
+          that has not been tried. */}
+      {absent || offerCurrent ? (
         <NoticeAction onClick={onShowCurrentRun}>
           {t("action", "showCurrentRun")}
         </NoticeAction>
-      ) : offerCurrent ? (
-        // Only the earlier run is known to be gone; the current one is a
-        // read that has not been tried.
-        <NoticeAction onClick={onShowCurrentRun}>
-          {t("action", "showCurrentRun")}
-        </NoticeAction>
-      ) : notKept ? (
-        <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
-          {t("empty", "nothingToReconnectTo")}
-        </span>
-      ) : restarting ? (
-        info?.state.type === "running" && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={onRetry}
-          >
-            <RefreshCw aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
-            {t("action", "followNewRun")}
-          </Button>
-        )
-      ) : gone ? (
-        <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
-          {t("empty", "nothingToReconnectTo")}
-        </span>
-      ) : unfollowed ? (
+      ) : followsAgain(failure.kind, reading, info) ? (
         <Button
           variant="outline"
           size="sm"
@@ -209,18 +185,21 @@ export function StreamFailureNotice({
           onClick={onRetry}
         >
           <RefreshCw aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
-          {t("action", "followAgain")}
+          {t(
+            "action",
+            restarting
+              ? "followNewRun"
+              : unfollowed
+                ? "followAgain"
+                : "reconnect"
+          )}
         </Button>
       ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={onRetry}
-        >
-          <RefreshCw aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
-          {t("action", "reconnect")}
-        </Button>
+        !restarting && (
+          <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
+            {t("empty", "nothingToReconnectTo")}
+          </span>
+        )
       )}
     </div>
   );

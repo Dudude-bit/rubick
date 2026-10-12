@@ -392,6 +392,61 @@ describe("a crash-looping pod caught while its container is up", () => {
   });
 });
 
+describe("the log a crash-looping pod's headline points at", () => {
+  /**
+   * The headline said what the container printed before it died was in
+   * Logs, the promise Dana's init-demo showed the node had broken. Fails if
+   * the headline promises the log without the node's answer.
+   */
+  it("says the node no longer has the run's log when the node says so", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          status: { ...POD.status, display: "CrashLoopBackOff" },
+          containers: [
+            {
+              name: "app",
+              image: "busybox:1.36",
+              ready: false,
+              started: false,
+              phase: "app",
+              state: { type: "waiting", reason: "CrashLoopBackOff" },
+              lastTerminated: {
+                exitCode: 1,
+                signal: null,
+                reason: "Error",
+                message: null,
+                startedAt: null,
+                finishedAt: new Date(Date.now() - 30_000).toISOString(),
+              },
+              restartCount: 6,
+              ports: [],
+              resources: { requests: {}, limits: {} },
+              env: [],
+              envFrom: [],
+            },
+          ],
+        };
+      if (command === "get_replicaset") return REPLICA_SET;
+      if (command === "get_pod_logs")
+        throw { code: "LOG_NOT_KEPT", message: "unable to retrieve" };
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    for (let tick = 0; tick < 6; tick++) await advance(10);
+
+    expect(
+      screen.getAllByText(/The node no longer has that run's log\./).length
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/before it died is in Logs/)).toBeNull();
+    expect(screen.queryByText(/printed is in Logs/)).toBeNull();
+  });
+});
+
 describe("the age of a crash-looping pod's last exit", () => {
   /**
    * Sam's checkout page said "the last run ended Error · exit 1, 2s ago" for

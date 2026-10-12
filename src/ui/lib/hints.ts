@@ -168,10 +168,49 @@ const CAUSE_CHECKS: Record<SchedulingCause, Check[]> = {
 };
 
 /** The checks that follow the scheduler's own reasons, or the general two where it names none this knows. */
-function schedulingChecks(causes: readonly SchedulingCause[]): Check[] {
-  return causes.length > 0
-    ? causes.flatMap((cause) => CAUSE_CHECKS[cause])
-    : CAUSE_CHECKS.resources;
+function schedulingChecks(
+  causes: readonly SchedulingCause[],
+  topology: TopologyReading
+): Check[] {
+  if (causes.length === 0) return CAUSE_CHECKS.resources;
+  return causes.flatMap((cause) =>
+    cause === "topologyLabel" &&
+    topology.read === "read" &&
+    topology.keys.length > 0
+      ? topology.keys.map(({ key, carrying }): Check => ({
+          says:
+            carrying === null || topology.nodes === null
+              ? { key: "checkTopologyKeyUncounted", values: { key } }
+              : {
+                  key: "checkTopologyKey",
+                  values: { key, carrying, nodes: topology.nodes },
+                },
+          to: TO_NODES,
+        }))
+      : CAUSE_CHECKS[cause]
+  );
+}
+
+/** The scheduler's "missing required label" with the key the pod's spec names, and the nodes counted where they were read. */
+function topologyHeadline(topology: TopologyReading): HintSaying {
+  if (topology.read === "unread" || topology.keys.length === 0)
+    return { key: "guessPendingTopologyLabel" };
+  const scarcest = topology.keys.reduce((a, b) =>
+    (b.carrying ?? Infinity) < (a.carrying ?? Infinity) ? b : a
+  );
+  return scarcest.carrying === null || topology.nodes === null
+    ? {
+        key: "guessPendingTopologyKeyUncounted",
+        values: { key: scarcest.key },
+      }
+    : {
+        key: "guessPendingTopologyKey",
+        values: {
+          key: scarcest.key,
+          carrying: scarcest.carrying,
+          nodes: topology.nodes,
+        },
+      };
 }
 
 function occurrences(event: EventInfo): number {
@@ -478,8 +517,57 @@ export interface Chain {
    * as "none restricts it".
    */
   policies: PathPolicies;
+  /** The keys a pod's topology spread constraints require, from its own spec. */
+  topology: TopologyReading;
   /** What was asked for and refused or never read, in the reader's words. */
   notRead: string[];
+}
+
+/** `nodes` and every `carrying` are `null` where the nodes could not be read. */
+export type TopologyReading =
+  | { read: "unread" }
+  | {
+      read: "read";
+      keys: Array<{ key: string; carrying: number | null }>;
+      nodes: number | null;
+    };
+
+/** The keys of the constraints the scheduler holds a pod to: every one but ScheduleAnyway. */
+export function requiredTopologyKeys(pod: unknown): string[] {
+  const constraints = (
+    pod as {
+      spec?: {
+        topologySpreadConstraints?: Array<{
+          topologyKey?: unknown;
+          whenUnsatisfiable?: unknown;
+        }>;
+      };
+    } | null
+  )?.spec?.topologySpreadConstraints;
+  if (!Array.isArray(constraints)) return [];
+  const keys = constraints
+    .filter((c) => c.whenUnsatisfiable !== "ScheduleAnyway")
+    .map((c) => c.topologyKey)
+    .filter((key): key is string => typeof key === "string" && key !== "");
+  return [...new Set(keys)];
+}
+
+/** The required keys, with how many of the nodes carry each; `null` nodes where they were not read. */
+export function topologyReading(
+  keys: readonly string[],
+  nodes: ReadonlyArray<{ labels: Record<string, string> }> | null
+): TopologyReading {
+  return {
+    read: "read",
+    keys: keys.map((key) => ({
+      key,
+      carrying:
+        nodes === null
+          ? null
+          : nodes.filter((node) => key in node.labels).length,
+    })),
+    nodes: nodes?.length ?? null,
+  };
 }
 
 export interface Check {
@@ -823,12 +911,12 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
           key: "factSchedulerSaid",
           values: { message: trouble.message },
         });
-      checks.push(...schedulingChecks(trouble.causes));
+      checks.push(...schedulingChecks(trouble.causes, chain.topology));
       return {
         headline: trouble.waiting
           ? { key: "notPlacedYet" }
           : trouble.causes[0] === "topologyLabel"
-            ? { key: "guessPendingTopologyLabel" }
+            ? topologyHeadline(chain.topology)
             : trouble.causes[0] === "topology"
               ? { key: "guessPendingTopology" }
               : {
