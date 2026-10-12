@@ -31,7 +31,7 @@ import type { FieldIndex, Frozen } from "./hooks/log-buffer";
 import { LOG_LIMITS } from "./hooks/useLogStream";
 import { LogQuery } from "./LogQuery";
 import { type QueryTerm, type ViewMode } from "./types";
-import type { Followed } from "./readings";
+import type { Followed, StoppedFollow } from "./readings";
 import { formatCount } from "@/lib/count";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -111,6 +111,8 @@ interface LogToolbarProps {
   /** Stopped by the reader, as opposed to stopped because the stream died. */
   isPaused: boolean;
   followed: Followed;
+  /** What a click on Follow does while no line can arrive. */
+  stoppedFollow: StoppedFollow;
   autoScroll: boolean;
   isAtBottom: boolean;
   onAutoScrollToggle: () => void;
@@ -122,6 +124,12 @@ interface LogToolbarProps {
   stripMode: DensityStripMode;
   onStripModeChange: (mode: DensityStripMode) => void;
 }
+
+const STOPPED_FOLLOW_HINT: Record<StoppedFollow, keyof typeof en.action> = {
+  resumes: "followResumeHint",
+  previousRun: "followPreviousRunHint",
+  ended: "followEndedHint",
+};
 
 /**
  * Every control says what it is.
@@ -158,6 +166,7 @@ export function LogToolbar({
   isConnecting,
   isPaused,
   followed,
+  stoppedFollow,
   autoScroll,
   isAtBottom,
   onAutoScrollToggle,
@@ -246,7 +255,7 @@ export function LogToolbar({
             ? t("action", "followOnHint")
             : live
               ? t("action", "followOffHint")
-              : t("action", "followStoppedHint")
+              : t("action", STOPPED_FOLLOW_HINT[stoppedFollow])
         }
       >
         <ArrowDown

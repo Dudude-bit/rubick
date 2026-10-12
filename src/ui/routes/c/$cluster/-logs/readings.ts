@@ -2,6 +2,7 @@ import type { ContainerInfo } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
 
 import type { ContainerFailure } from "./hooks/useLogStream";
+import type { StreamFailureKind } from "@/lib/stream-failure";
 
 /**
  * What one stream, or the pod made of several, is doing for the reader.
@@ -185,3 +186,24 @@ export function followedOf(
   }
   return { followed, total };
 }
+
+/** Whether asking again can bring a stream back: the banner's button and the Follow chip offer it only then. */
+export function followsAgain(
+  kind: StreamFailureKind,
+  reading: StreamReading,
+  info: ContainerInfo | undefined
+): boolean {
+  switch (kind) {
+    case "no-previous-run":
+    case "log-not-kept":
+      return false;
+    case "gone":
+      return reading === "restarting" && info?.state.type === "running";
+    case "follow-stopped":
+    case "broken":
+      return true;
+  }
+}
+
+/** What a click on Follow does while nothing is followed: resumes, or says why it cannot. */
+export type StoppedFollow = "resumes" | "previousRun" | "ended";

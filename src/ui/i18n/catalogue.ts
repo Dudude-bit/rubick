@@ -1295,8 +1295,12 @@ export const en = {
     follow: "Follow",
     followOnHint: "Following the tail. Click to stop and read",
     followOffHint: "Jump to the newest line and follow it",
-    followStoppedHint:
-      "Nothing arrives while the stream is stopped. Click to go to the newest line",
+    followResumeHint:
+      "Nothing arrives while the stream is stopped. Click to read again and follow the newest line",
+    followPreviousRunHint:
+      "The run before the current one is read whole, not followed. Turn Previous run off to follow the current one",
+    followEndedHint:
+      "Nothing here can be followed again: every stream has ended or its log is gone. Click to go to the newest line",
     keepLines: "Keep {n}",
     keepLinesHint: "How many lines to backfill and then keep",
     startStreamHint: "Attach to the container and follow its output",

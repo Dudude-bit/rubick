@@ -51,9 +51,11 @@ import { LaneCoverage } from "./LaneCoverage";
 import {
   countReadings,
   followedOf,
+  followsAgain,
   readingOf,
   readLanes,
   type ReadSource,
+  type StoppedFollow,
 } from "./readings";
 import { downloadNotice } from "./download-notice";
 import { EmptyState } from "./LogEmptyState";
@@ -721,14 +723,6 @@ export function LogViewer({
     [handleAddTerm]
   );
 
-  const streamUp = isStreaming || isConnecting;
-  const handleAutoScrollToggle = useCallback(() => {
-    // Turning it back on is the same act as jumping to the foot: the list
-    // pins itself the moment `follow` flips true. A stopped stream shows the
-    // chip off, so a click there only ever goes to the foot.
-    setAutoScroll((previous) => !streamUp || !previous);
-  }, [streamUp]);
-
   const handleCopyLogs = useCallback(() => {
     if (visibleLogs.length === 0) return;
     // Not while the filter is still walking: what is here is how far it got,
@@ -874,6 +868,52 @@ export function LogViewer({
       }),
     [infoOfFailure, previousRun, restartsAlways]
   );
+  const streamUp = isStreaming || isConnecting;
+  // What the banners' buttons would bring back, so the Follow chip can do the same.
+  const resumable = useMemo(
+    () =>
+      failures.filter((failure) =>
+        followsAgain(
+          failure.kind,
+          readingOfFailure(failure),
+          infoOfFailure(failure)
+        )
+      ),
+    [failures, readingOfFailure, infoOfFailure]
+  );
+  // An earlier run is read whole and never followed, whatever its streams say.
+  const stoppedFollow: StoppedFollow = isPaused
+    ? "resumes"
+    : previousRun
+      ? "previousRun"
+      : resumable.length > 0
+        ? "resumes"
+        : "ended";
+  const handleAutoScrollToggle = useCallback(() => {
+    // Turning it back on is the same act as jumping to the foot: the list
+    // pins itself the moment `follow` flips true.
+    if (streamUp) {
+      setAutoScroll((previous) => !previous);
+      return;
+    }
+    setAutoScroll(true);
+    if (stoppedFollow !== "resumes") return;
+    if (isPaused) togglePause();
+    else if (!lanes) retry();
+    else
+      for (const failure of resumable)
+        retrySource(failure.pod, failure.container);
+  }, [
+    streamUp,
+    stoppedFollow,
+    isPaused,
+    togglePause,
+    lanes,
+    resumable,
+    retry,
+    retrySource,
+  ]);
+
   const streamsInView = lanes
     ? (sources ?? []).filter((source) => !hidden.has(source.pod)).length
     : shownContainers.length;
@@ -1083,6 +1123,7 @@ export function LogViewer({
         isConnecting={isConnecting}
         isPaused={isPaused}
         followed={followed}
+        stoppedFollow={stoppedFollow}
         autoScroll={autoScroll}
         isAtBottom={isAtBottom}
         onAutoScrollToggle={handleAutoScrollToggle}
