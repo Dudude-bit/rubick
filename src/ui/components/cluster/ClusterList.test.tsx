@@ -60,7 +60,11 @@ const onSelect = vi.fn();
 beforeEach(() => {
   onSelect.mockReset();
   localStorage.clear();
-  useClusterStore.setState({ contexts: NAMES.map(context) });
+  useClusterStore.setState({
+    contexts: NAMES.map(context),
+    live: [],
+    failures: {},
+  });
   useClusterRecencyStore.setState({ lastUsed: {} });
   useClusterIdentityStore.setState({ marks: {} });
 });
@@ -374,5 +378,33 @@ describe("the recent clusters, in Russian", () => {
     expect(screen.getByText(/открывался .* назад/)).toBeInTheDocument();
     expect(screen.queryByText(/last used/)).not.toBeInTheDocument();
     useLocaleStore.setState({ choice: "en" });
+  });
+});
+
+describe("what each row says about its cluster", () => {
+  const rowOf = (name: string) =>
+    rows().find((row) => row.textContent?.includes(name)) as HTMLElement;
+
+  /**
+   * Live round 24: after acme-prod-eu failed to connect, its row on the
+   * front door said nothing about it. Fails if a failure the window moved
+   * on from leaves no mark on its row, or no reason on hover.
+   */
+  it("marks a context whose last connect failed, with why on hover", () => {
+    useClusterStore.setState({
+      failures: {
+        "dev-euw1-mki": { kind: "timeout", error: "deadline has elapsed" },
+      },
+    });
+    render(<Harness />);
+
+    const failed = rowOf("dev-euw1-mki");
+    expect(failed.textContent).toContain(t("cluster", "failedInline"));
+    expect(failed.getAttribute("title")).toBe(
+      t("cluster", "failTimeout", {
+        host: "dev-euw1-mki.example:6443",
+        context: "dev-euw1-mki",
+      })
+    );
   });
 });

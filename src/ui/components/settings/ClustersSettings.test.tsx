@@ -130,6 +130,7 @@ describe("Clusters settings", () => {
       currentContext: "k3d-dev",
       isConnected: true,
       live: ["k3d-dev"],
+      failures: {},
     });
   });
 
@@ -144,21 +145,27 @@ describe("Clusters settings", () => {
      * Dana's switch to an unreachable acme-prod-eu: the cluster she left is
      * still connected and the one she tried failed. Fails if a row reads
      * "connected" off the current context rather than the backend's
-     * sessions.
+     * sessions, or the failure is read off the screen's passing error.
      */
-    it("says connected for every held cluster and connect failed for the one that failed", async () => {
+    it("says connected for every held cluster and connect failed, with why, for the one that failed", async () => {
       useClusterStore.setState({
         currentContext: "gke-shop",
         isConnected: false,
-        error: "deadline has elapsed",
-        errorContext: "gke-shop",
+        error: null,
+        errorContext: null,
         live: ["k3d-dev"],
+        failures: {
+          "gke-shop": { kind: "timeout", error: "deadline has elapsed" },
+        },
       });
       renderPane();
       await screen.findByText("gke-shop");
 
       expect(statusOf("k3d-dev")?.textContent).toBe("connected");
       expect(statusOf("gke-shop")?.textContent).toBe("connect failed");
+      expect(statusOf("gke-shop")?.getAttribute("title")).toContain(
+        "203.0.113.42 did not answer in time"
+      );
     });
   });
 

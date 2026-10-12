@@ -13,6 +13,7 @@ vi.mock("@/lib/commands", () => ({
     disconnectCluster: vi.fn(async () => undefined),
     focusCluster: vi.fn(async () => null),
     releaseClusters: vi.fn(async () => []),
+    connectionAttempt: vi.fn(async () => null),
     saveClusterPreferences: vi.fn(async () => undefined),
     listContexts: vi.fn(async () => [{ name: "dev" }, { name: "prod" }]),
     getCurrentContext: vi.fn(async () => "dev"),
@@ -443,6 +444,16 @@ function fakeBackend() {
       if (!keep.includes(name) && name !== current) live.delete(name);
     return [...live].sort();
   });
+  vi.mocked(commands.connectionAttempt).mockImplementation(async (context) => ({
+    context,
+    at: "2026-10-12T01:32:06Z",
+    direct: {
+      state: "failed",
+      error: "deadline has elapsed",
+      failure: "timeout",
+    },
+    proxy: { state: "notTried" },
+  }));
   return {
     live,
     hold: (context: string) => {
@@ -471,6 +482,7 @@ describe("switching clusters keeps the one left until the new one lands", () => 
       errorContext: null,
       live: [],
       wayBack: null,
+      failures: {},
       lastConnected: null,
     });
     backend = fakeBackend();
@@ -489,6 +501,7 @@ describe("switching clusters keeps the one left until the new one lands", () => 
       async () => undefined
     );
     vi.mocked(commands.releaseClusters).mockImplementation(async () => []);
+    vi.mocked(commands.connectionAttempt).mockImplementation(async () => null);
   });
 
   /**
@@ -626,5 +639,58 @@ describe("switching clusters keeps the one left until the new one lands", () => 
     expect(state().isConnected).toBe(false);
     expect(state().currentContext).toBeNull();
     expect([...backend.live]).toEqual([]);
+  });
+
+  /**
+   * Live round 24: a new tab on acme-prod-eu re-applied its namespace after
+   * the connect failed, and that wiped the error, so Settings and the front
+   * door said "not connected" with no reason anywhere. Fails if a scope
+   * change clears the failure, or if moving on loses it.
+   */
+  it("keeps a failed connect, with its kind and words, past a scope change and a move elsewhere", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const switching = state().connect("acme-prod-eu");
+    prod.fail(new Error("client error (Connect): deadline has elapsed"));
+    await switching;
+
+    await state().setNamespaceScope(["team-checkout"]);
+    expect(state().errorContext).toBe("acme-prod-eu");
+
+    await state().connect("acme-staging");
+    expect(state().failures["acme-prod-eu"]).toEqual({
+      kind: "timeout",
+      error: "client error (Connect): deadline has elapsed",
+    });
+  });
+
+  /** Fails if one context's failure overwrites another's. */
+  it("keeps each context's failure apart", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const first = state().connect("acme-prod-eu");
+    prod.fail(new Error("deadline has elapsed"));
+    await first;
+    const dr = backend.hold("acme-dr");
+    const second = state().connect("acme-dr");
+    dr.fail(new Error("connection refused"));
+    await second;
+
+    expect(Object.keys(state().failures).sort()).toEqual([
+      "acme-dr",
+      "acme-prod-eu",
+    ]);
+  });
+
+  /** Fails if a context that lands keeps reading as failed. */
+  it("forgets a failure once that context lands", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const switching = state().connect("acme-prod-eu");
+    prod.fail(new Error("deadline has elapsed"));
+    await switching;
+
+    prod.open();
+    backend.hold("acme-prod-eu").open();
+    await state().connect("acme-prod-eu");
+
+    expect(state().failures).toEqual({});
   });
 });

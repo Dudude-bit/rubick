@@ -8,7 +8,11 @@
  * @module stores/clusterStore
  */
 
-import type { ClusterInfo, ConnectionPath } from "@/generated/types";
+import type {
+  ClusterInfo,
+  ConnectFailure,
+  ConnectionPath,
+} from "@/generated/types";
 import { translate } from "@/i18n";
 import { currentLocale } from "./localeStore";
 import { create } from "zustand";
@@ -103,6 +107,11 @@ interface ClusterState {
    * lands, so one that fails leaves the reader somewhere to go back to.
    */
   wayBack: string | null;
+  /**
+   * Every context whose last connect failed, with why, until it lands. Kept
+   * apart from `error`, which is the screen's and goes with the next move.
+   */
+  failures: Record<string, ConnectFailed>;
 
   // Actions
   loadContexts: () => Promise<void>;
@@ -124,6 +133,12 @@ interface ClusterState {
   release: () => Promise<void>;
 }
 
+export interface ConnectFailed {
+  kind: ConnectFailure;
+  /** The server's words, for Details and a hover; never a headline. */
+  error: string;
+}
+
 /**
  * The clusters another surface still shows. A parked scope tab names its
  * own, and a switch in this tab must not tear that one down.
@@ -135,6 +150,11 @@ export function holdClusters(held: () => (string | null)[]): void {
 }
 
 let releases = 0;
+
+function without<T>(record: Record<string, T>, key: string) {
+  const { [key]: _gone, ...rest } = record;
+  return rest;
+}
 
 /**
  * What the window looks at after moving to `context`.
@@ -194,6 +214,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   contextSwitches: 0,
   live: [],
   wayBack: null,
+  failures: {},
 
   loadContexts: async () => {
     set({ isLoading: true, error: null, errorContext: null });
@@ -275,11 +296,11 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     const scope = clampScope([
       ...new Set(namespaces.filter((name) => name !== "")),
     ]);
+    // The connect error stays: a tab re-applying its scope after a failed
+    // connect wiped the only record of why.
     set({
       namespaceScope: scope,
       currentNamespace: wireNamespace(scope),
-      error: null,
-      errorContext: null,
     });
     if (context) {
       // The wire value, not the selection: this field is one opaque string
@@ -357,6 +378,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         connectStartedAt: null,
         wayBack: null,
         live: [...new Set([...get().live, connectedContext])],
+        failures: without(get().failures, connectedContext),
       });
       // Only a connection that landed counts as "used": ordering the
       // front door by clusters the reader failed to reach would put the
@@ -413,10 +435,29 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       if (get().connectionAttemptId !== attemptId) {
         return;
       }
+      // The backend filed the attempt before answering; its kind is what
+      // every reader leads with.
+      const attempt = await commands
+        .connectionAttempt(targetContext)
+        .catch(() => null);
+      if (get().connectionAttemptId !== attemptId) {
+        return;
+      }
+      const shown = errorToShow(error);
       set({
         // Every reader of this field puts it on screen.
-        error: errorToShow(error),
+        error: shown,
         errorContext: targetContext,
+        failures: {
+          ...get().failures,
+          [targetContext]: {
+            kind:
+              attempt?.direct.state === "failed"
+                ? attempt.direct.failure
+                : "unknown",
+            error: shown,
+          },
+        },
         isLoading: false,
         isAuthenticating: false,
         isConnected: false,

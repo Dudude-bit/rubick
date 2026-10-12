@@ -10,7 +10,7 @@ import { ErrorProvider } from "./error-context";
 
 beforeEach(() => {
   toast.mockClear();
-  useClusterStore.setState({ error: null, errorContext: null });
+  useClusterStore.setState({ error: null, errorContext: null, failures: {} });
 });
 
 describe("the toast for a failure nobody caught", () => {
@@ -68,6 +68,44 @@ describe("the toast for a cluster that could not be reached", () => {
     expect(shown.title).toBe("Could not connect to acme-prod-eu");
     expect(JSON.stringify(shown)).not.toMatch(
       /ServiceError|deadline|Network error/
+    );
+  });
+
+  /**
+   * Live round 24: the toast was the one trace a failed connect left, and it
+   * said only that it failed. Fails if it stops saying why, in the plain
+   * words the failed page leads with.
+   */
+  it("says why in plain words", () => {
+    useClusterStore.setState({
+      contexts: [
+        {
+          name: "acme-prod-eu",
+          server: "https://10.255.255.1:6443",
+          exec_command: null,
+        },
+      ] as never,
+    });
+    render(
+      <ErrorProvider>
+        <span />
+      </ErrorProvider>
+    );
+    act(() => {
+      useClusterStore.setState({
+        error: "Connection error: deadline has elapsed",
+        errorContext: "acme-prod-eu",
+        failures: {
+          "acme-prod-eu": {
+            kind: "timeout",
+            error: "Connection error: deadline has elapsed",
+          },
+        },
+      });
+    });
+
+    expect(toast.mock.calls[0][0].description).toBe(
+      "10.255.255.1:6443 did not answer in time. It may be off, or reachable only through a VPN."
     );
   });
 });

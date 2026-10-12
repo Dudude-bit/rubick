@@ -72,25 +72,28 @@ describe("the status word on a context row", () => {
 
   /**
    * The last connect to this context failed: the row has to say so in red,
-   * with the cluster's own words on hover, instead of the neutral word a
-   * context nobody tried gets.
+   * with why on hover, in plain words and then the cluster's own, instead of
+   * the neutral word a context nobody tried gets.
    */
-  it("says connect failed in red with the error on hover when the last connect failed", () => {
+  it("says connect failed in red with why on hover when the last connect failed", () => {
     render(
       <ContextRow
-        context={ctx(PROD)}
+        context={{ ...ctx(PROD), server: "https://10.255.255.1:6443" }}
         binding={undefined}
         binaries={new Map()}
         connected={false}
-        failure="dial tcp 10.255.255.1:6443: i/o timeout"
+        failure={{
+          kind: "timeout",
+          error: "dial tcp 10.255.255.1:6443: i/o timeout",
+        }}
         onBind={() => {}}
       />
     );
     const word = screen.getByText("connect failed");
     expect(word.className).toContain("text-err");
-    expect(word.getAttribute("title")).toBe(
-      "dial tcp 10.255.255.1:6443: i/o timeout"
-    );
+    const title = word.getAttribute("title") ?? "";
+    expect(title).toContain("10.255.255.1:6443 did not answer in time");
+    expect(title).toContain("dial tcp 10.255.255.1:6443: i/o timeout");
   });
 
   /**
@@ -116,7 +119,7 @@ describe("the status word on a context row", () => {
         binding={undefined}
         binaries={new Map()}
         connected={false}
-        failure="i/o timeout"
+        failure={{ kind: "timeout", error: "i/o timeout" }}
         onBind={() => {}}
       />
     );

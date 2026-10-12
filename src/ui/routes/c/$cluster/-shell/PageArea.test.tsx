@@ -89,6 +89,7 @@ beforeEach(() => {
     errorContext: null,
     live: [],
     wayBack: null,
+    failures: {},
   });
 });
 

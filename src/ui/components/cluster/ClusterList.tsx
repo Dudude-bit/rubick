@@ -13,6 +13,8 @@ import {
 } from "@/stores/clusterRecencyStore";
 import { useT } from "@/i18n/useT";
 import type { ContextInfo } from "@/generated/types";
+import { failureLine } from "@/components/cluster/connect-failure";
+import { useClusterStore, type ConnectFailed } from "@/stores/clusterStore";
 
 /**
  * Whether something that traps the keyboard already has it.
@@ -53,7 +55,6 @@ export function ClusterList({
   query,
   inputRef,
   onSelect,
-  failedContext,
   autoFocus = true,
 }: {
   /** Already filtered — see `useClusterFilter`. */
@@ -66,12 +67,11 @@ export function ClusterList({
   query: string;
   inputRef: React.RefObject<HTMLInputElement | null>;
   onSelect: (context: string) => void;
-  /** The cluster whose last connection attempt came back with an error. */
-  failedContext?: string | null;
   autoFocus?: boolean;
 }) {
   const t = useT();
   const lastUsed = useClusterRecencyStore((s) => s.lastUsed);
+  const failures = useClusterStore((s) => s.failures);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
@@ -205,9 +205,9 @@ export function ClusterList({
         {recent.map((ctx) => (
           <ClusterListRow
             key={ctx.name}
-            context={ctx.name}
+            context={ctx}
             lastUsedAt={lastUsed[ctx.name]}
-            failed={ctx.name === failedContext}
+            failure={failures[ctx.name]}
             onSelect={onSelect}
           />
         ))}
@@ -218,8 +218,8 @@ export function ClusterList({
         {rest.map((ctx) => (
           <ClusterListRow
             key={ctx.name}
-            context={ctx.name}
-            failed={ctx.name === failedContext}
+            context={ctx}
+            failure={failures[ctx.name]}
             onSelect={onSelect}
           />
         ))}
@@ -266,20 +266,22 @@ function Caption({ children }: { children: React.ReactNode }) {
 }
 
 function ClusterListRow({
-  context,
+  context: info,
   lastUsedAt,
-  failed,
+  failure,
   onSelect,
 }: {
-  context: string;
+  context: ContextInfo;
   lastUsedAt?: number;
-  failed?: boolean;
+  failure?: ConnectFailed;
   onSelect: (context: string) => void;
 }) {
   const t = useT();
+  const context = info.name;
   const age = useRealtimeAge(
     lastUsedAt ? new Date(lastUsedAt).toISOString() : null
   );
+  const failed = failure !== undefined;
 
   return (
     // Right is the key, not Down: Down already walks this list, and a menu
@@ -291,6 +293,17 @@ function ClusterListRow({
         aria-selected={false}
         aria-haspopup="menu"
         data-cluster-row
+        title={
+          failed
+            ? failureLine(
+                t,
+                failure.kind,
+                context,
+                info.server,
+                info.exec_command
+              )
+            : undefined
+        }
         onClick={() => onSelect(context)}
         className={cn(
           "group mx-[-7px] rounded-[5px] text-left transition-colors hover:bg-hover",

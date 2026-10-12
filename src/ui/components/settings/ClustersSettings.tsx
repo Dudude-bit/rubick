@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
-import { failedAt, useClusterStore } from "@/stores/clusterStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { BindingDialog } from "./clusters/BindingDialog";
 import { CloudProfilesPanel } from "./clusters/CloudProfilesPanel";
 import { ContextRow } from "./clusters/ContextRow";
@@ -38,8 +38,7 @@ export function ClustersSettings() {
   const [profiles, setProfiles] = React.useState(false);
 
   const currentContext = useClusterStore((state) => state.currentContext);
-  const failedContext = useClusterStore(failedAt);
-  const connectError = useClusterStore((state) => state.error);
+  const failures = useClusterStore((state) => state.failures);
   const live = useClusterStore((state) => state.live);
   const t = useT();
 
@@ -128,7 +127,7 @@ export function ClustersSettings() {
               binding={bindingByContext.get(context.name)}
               binaries={binaries}
               connected={live.includes(context.name)}
-              failure={context.name === failedContext ? connectError : null}
+              failure={failures[context.name] ?? null}
               onBind={setBinding}
               fromFile={fileOf.get(context.name)}
             />

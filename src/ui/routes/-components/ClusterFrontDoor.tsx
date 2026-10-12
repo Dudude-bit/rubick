@@ -2,17 +2,7 @@ import { ClusterList } from "@/components/cluster/ClusterList";
 import { ErrorDetails } from "@/components/ui/error-details";
 import { Spinner } from "@/components/ui/spinner";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Ban,
-  CircleCheck,
-  KeyRound,
-  SearchX,
-  ShieldX,
-  SquareTerminal,
-  TimerOff,
-  WifiOff,
-  type LucideIcon,
-} from "lucide-react";
+import { CircleCheck } from "lucide-react";
 
 import { useClusterFilter, type ClusterFilter } from "@/hooks/useClusterFilter";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
@@ -33,6 +23,7 @@ import type {
   ConnectFailure,
   KubeconfigSource,
 } from "@/generated/types";
+import { FAILURE, failureLine } from "@/components/cluster/connect-failure";
 import { useT, type T } from "@/i18n/useT";
 
 /**
@@ -100,7 +91,6 @@ export function ClusterFrontDoor() {
             query={cluster.query}
             inputRef={cluster.inputRef}
             onSelect={openCluster}
-            failedContext={failed}
           />
         </div>
         <SourceLine kubeconfig={kubeconfig} />
@@ -481,72 +471,6 @@ function Connecting({
       )}
     </>
   );
-}
-
-/** What the screen leads with for each kind of failure, as a total map. */
-const FAILURE: Record<
-  ConnectFailure,
-  {
-    icon: LucideIcon;
-    title: "didNotAnswer" | "couldNotConnect";
-    line:
-      | "failDns"
-      | "failRefused"
-      | "failTimeout"
-      | "failTls"
-      | "failCredentials"
-      | "failSignIn"
-      | "notReachable";
-  }
-> = {
-  dns: { icon: SearchX, title: "couldNotConnect", line: "failDns" },
-  refused: { icon: Ban, title: "couldNotConnect", line: "failRefused" },
-  timeout: { icon: TimerOff, title: "didNotAnswer", line: "failTimeout" },
-  tls: { icon: ShieldX, title: "couldNotConnect", line: "failTls" },
-  credentials: {
-    icon: KeyRound,
-    title: "couldNotConnect",
-    line: "failCredentials",
-  },
-  signIn: {
-    icon: SquareTerminal,
-    title: "couldNotConnect",
-    line: "failSignIn",
-  },
-  unknown: { icon: WifiOff, title: "didNotAnswer", line: "notReachable" },
-};
-
-/** The server's host and port, which name the machine without a path. */
-function hostOf(server: string | null | undefined): string | null {
-  if (!server) return null;
-  try {
-    return new URL(server).host || null;
-  } catch {
-    return null;
-  }
-}
-
-/** The program a credential plugin runs, without the directory it lives in. */
-function pluginOf(command: string | null | undefined): string | null {
-  const program = command?.trim().split(/\s+/)[0];
-  return program ? (program.split(/[\\/]/).pop() ?? null) : null;
-}
-
-function failureLine(
-  t: T,
-  failure: ConnectFailure,
-  context: string,
-  server: string | null | undefined,
-  exec: string | null | undefined
-): string {
-  const host = hostOf(server) ?? context;
-  if (failure === "signIn") {
-    const plugin = pluginOf(exec);
-    return plugin
-      ? t("cluster", "failPlugin", { plugin })
-      : t("cluster", "failSignIn");
-  }
-  return t("cluster", FAILURE[failure].line, { host, context });
 }
 
 /** Everything behind the human line, in the order it happened. */
