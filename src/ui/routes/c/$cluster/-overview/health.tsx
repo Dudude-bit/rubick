@@ -54,7 +54,8 @@ import {
   ROLE_TEXT,
   type StatusRole,
 } from "@/lib/status-role";
-import { cn, formatAge } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { RealtimeAge } from "@/components/ui/realtime";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   Census,
@@ -301,7 +302,7 @@ function AttentionRow({
         )}
       </span>
       <span className="whitespace-nowrap text-right text-[11px] leading-4 text-fg-fnt">
-        {item.since !== null && formatAge(item.since, t)}
+        {item.since !== null && <RealtimeAge timestamp={item.since} />}
       </span>
     </>
   );
@@ -491,7 +492,7 @@ function UnconfirmedRow({ item }: { item: AttentionItem }) {
           ? parts(t("cluster", "attentionUnconfirmedUndated"), { word })
           : parts(t("cluster", "attentionUnconfirmed"), {
               word,
-              age: formatAge(item.since, t),
+              age: <RealtimeAge timestamp={item.since} />,
             })}
         {item.namespace && (
           <span className="whitespace-nowrap text-fg-fnt">
@@ -1033,7 +1034,6 @@ const PAST_OF: Record<Incarnation, Past | null> = {
 };
 
 function WarningRow({ warning }: { warning: WarningGroup }) {
-  const t = useT();
   // Every row here is a Warning, so severity owns the colour outright and the
   // family mark contributes only shape.
   const { Icon } = eventReasonMark(warning.reason);
@@ -1099,7 +1099,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
         )}
       </span>
       <span className="text-right text-[11px] text-fg-fnt">
-        {formatAge(warning.lastSeen, t)}
+        <RealtimeAge timestamp={warning.lastSeen} />
       </span>
     </div>
   );

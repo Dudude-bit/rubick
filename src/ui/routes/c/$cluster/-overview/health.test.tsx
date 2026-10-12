@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, it } from "vite-plus/test";
-import { cleanup, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { act, cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
@@ -714,6 +714,52 @@ describe("a scope one namespace of which refused its pods", () => {
       "its controller has said Unavailable for 3h; its pods were not read"
     );
     expect(screen.getByTestId("attention-unchecked")).toContainElement(row);
+  });
+
+  /**
+   * Marco's "Unavailable for 22s" stood still between polls, ten seconds at a
+   * time, while the condition aged. Fails if the age is read once per payload
+   * instead of from the clock.
+   */
+  it("ticks a verdict's age with the clock between payloads", async () => {
+    vi.useFakeTimers();
+    try {
+      const said = {
+        ...overview,
+        unconfirmed: [
+          {
+            severity: "critical",
+            kind: "Deployment",
+            name: "ledger",
+            namespace: "team-blind",
+            reason: "Unavailable",
+            detail: null,
+            since: new Date(Date.now() - 20_000).toISOString(),
+            restarts: null,
+            foldedPods: null,
+          },
+        ],
+      } as unknown as ClusterOverview;
+      await wrap(
+        <AttentionPanel
+          attention={attentionFrom([], {
+            overview: said,
+          } as Partial<AttentionInputs>)}
+          pods={null}
+          podsUnread={[refusedPods]}
+          nodes={[]}
+          nodesKnown={false}
+        />
+      );
+      const row = screen.getByTestId("attention-unconfirmed");
+      expect(row).toHaveTextContent("Unavailable for 20s");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(row).toHaveTextContent("Unavailable for 25s");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   /**
