@@ -17,8 +17,7 @@ import { useDeepLinks } from "@/hooks/useDeepLinks";
 import { useTerminalSessionSync } from "@/hooks/useTerminalSessionSync";
 import { useKeptShells } from "@/hooks/useKeptShells";
 import { usePortForwardStore } from "@/stores/portForwardStore";
-import { useThemeStore } from "@/stores/themeStore";
-import { applyTheme } from "@/lib/theme";
+import { followTheme } from "@/stores/themeStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { setupFrontendLogger } from "@/lib/frontend-logger";
 import { startWindowActivity } from "@/lib/window-activity";
@@ -41,7 +40,6 @@ const SettingsOverlay = lazy(() =>
  * so a navigation re-renders them and not the shell.
  */
 export default function App() {
-  const { theme } = useThemeStore();
   const refreshPortForwardConfigs = usePortForwardStore(
     (state) => state.refreshConfigs
   );
@@ -99,7 +97,7 @@ export default function App() {
     });
   }, [refreshPortForwardConfigs, refreshPortForwardSessions]);
 
-  useEffect(() => applyTheme(theme), [theme]);
+  useEffect(() => followTheme(), []);
 
   return (
     <ErrorProvider>
