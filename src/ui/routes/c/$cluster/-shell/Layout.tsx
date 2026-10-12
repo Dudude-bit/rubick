@@ -103,14 +103,16 @@ export function Layout() {
             className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
           >
             <main
-              className="flex-1 overflow-auto scrollbar-thin p-4"
+              className="flex-1 overflow-auto scrollbar-thin px-4 pb-4"
               style={dock}
             >
               {/* `h-full` is what lets a page opt out of the page scroll: a page
                 that sizes itself to this box exactly fills it and this
                 container never gets anything to scroll. Pages taller than it
-                overflow as before. */}
-              <div className="h-full">
+                overflow as before. The top gap is here, not on the scroller:
+                a sticky tab bar sticks below a scroller's padding, and the
+                page showed through the strip above it. */}
+              <div className="h-full pt-4">
                 <Suspense fallback={<PageSkeleton className="p-0" />}>
                   <PageArea />
                 </Suspense>

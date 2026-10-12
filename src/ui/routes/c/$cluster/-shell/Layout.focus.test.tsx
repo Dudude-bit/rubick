@@ -198,3 +198,21 @@ describe("the shell's Tab order", () => {
     }
   });
 });
+
+describe("the page scroller", () => {
+  /**
+   * Lena scrolled a Deployment at 1024 and read the page through a strip
+   * above the stuck tab bar: a sticky bar sticks below its scroller's
+   * padding. Fails if the scroller gets top padding again.
+   */
+  it("keeps its top gap inside the page, where a stuck tab bar covers it", async () => {
+    await renderWithRouter(<Shell />, {
+      at: "/c/prod",
+      route: "/c/$cluster/$",
+    });
+    await act(async () => {});
+    const main = document.querySelector("main")!;
+    expect(main.className).not.toMatch(word("p-[0-9]+|pt-[0-9]+|py-[0-9]+"));
+    expect(main.firstElementChild?.className).toMatch(word("pt-4"));
+  });
+});
