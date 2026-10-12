@@ -491,6 +491,68 @@ fn stuck_waiting(cs: &ContainerStatus) -> Option<(String, Option<String>)> {
         .then(|| (reason.to_string(), waiting.message.clone()))
 }
 
+/// When a failed pod failed, as the cluster recorded it: the eviction or
+/// preemption it names, else its last exit, else, for one whose deadline ran
+/// out before a container started, the deadline, and for one the kubelet
+/// turned away before starting anything, its `startTime`, the moment the
+/// kubelet took it up and refused it. Its `Ready` condition comes last: the
+/// kubelet writes it again when it restarts, which dated Dana's rejected pods
+/// an hour and a half after the rejection. `None` for a pod that has not
+/// failed, or where none of these was recorded, since its age is not the
+/// failure's.
+#[must_use]
+pub fn failed_at(pod: &Pod) -> Option<DateTime<Utc>> {
+    let status = pod.status.as_ref()?;
+    if status.phase.as_deref() != Some("Failed") {
+        return None;
+    }
+    let conditions = status.conditions.as_deref().unwrap_or_default();
+    let changed = |kind: &str, to: &str| {
+        conditions
+            .iter()
+            .find(|c| c.type_ == kind && c.status == to)
+            .and_then(|c| c.last_transition_time.as_ref())
+            .map(Moment::moment)
+    };
+    let statuses = || {
+        status
+            .init_container_statuses
+            .iter()
+            .chain(status.container_statuses.iter())
+            .flatten()
+    };
+    let exited = statuses()
+        .filter_map(|cs| cs.state.as_ref()?.terminated.as_ref()?.finished_at.as_ref())
+        .map(Moment::moment)
+        .max();
+    let started = status.start_time.as_ref().map(Moment::moment);
+    let never_ran = !statuses().any(|cs| {
+        cs.started == Some(true)
+            || cs
+                .last_state
+                .as_ref()
+                .is_some_and(|s| s.terminated.is_some())
+            || cs.state.as_ref().is_some_and(|s| {
+                s.running.is_some()
+                    || s.terminated
+                        .as_ref()
+                        .is_some_and(|t| t.started_at.is_some())
+            })
+    });
+    let deadline = pod
+        .spec
+        .as_ref()
+        .and_then(|s| s.active_deadline_seconds)
+        .filter(|_| status.reason.as_deref() == Some("DeadlineExceeded"))
+        .zip(started)
+        .map(|(seconds, at)| at + chrono::Duration::seconds(seconds));
+    changed("DisruptionTarget", "True")
+        .or(exited)
+        .or(deadline)
+        .or_else(|| started.filter(|_| never_ran))
+        .or_else(|| changed("Ready", "False"))
+}
+
 /// When a Pending pod started waiting: its last scheduling decision, or its
 /// creation where there was none yet.
 #[must_use]
@@ -732,6 +794,48 @@ mod tests {
         ));
         assert_eq!(display_status(&p), "Terminating");
         assert_eq!(kubectl_status(&p), None);
+    }
+
+    /// Dana's admission-rejected pods were dated by their `Ready` condition,
+    /// which the kubelet wrote again an hour and a half after it turned them
+    /// away at `startTime`. Fails if a pod that never started a container is
+    /// dated by anything later than the kubelet taking it up, or a deadline
+    /// that ran out by its start rather than its end.
+    #[test]
+    fn a_failed_pod_that_never_ran_is_dated_by_the_kubelets_answer() {
+        let now = Utc::now();
+        let at = |hours_ago: i64| {
+            Time(
+                crate::utils::moment::as_cluster_time(now - chrono::Duration::hours(hours_ago))
+                    .expect("an instant this test wrote itself"),
+            )
+        };
+        let mut rejected = pod("Failed");
+        let s = rejected.status.as_mut().unwrap();
+        s.reason = Some("Evicted".to_string());
+        s.message = Some("Pod was rejected: The node had condition: [DiskPressure].".to_string());
+        s.start_time = Some(at(13));
+        s.container_statuses = Some(vec![status("app", waiting("ContainerCreating"), false)]);
+        s.conditions = Some(vec![PodCondition {
+            type_: "Ready".to_string(),
+            status: "False".to_string(),
+            reason: Some("PodFailed".to_string()),
+            last_transition_time: Some(at(11)),
+            ..Default::default()
+        }]);
+        assert_eq!(failed_at(&rejected), Some(at(13).moment()));
+
+        let mut ran = rejected.clone();
+        ran.status.as_mut().unwrap().container_statuses =
+            Some(vec![status("app", running(), false)]);
+        assert_eq!(failed_at(&ran), Some(at(11).moment()));
+
+        let mut late = rejected.clone();
+        late.status.as_mut().unwrap().reason = Some("DeadlineExceeded".to_string());
+        late.spec.as_mut().unwrap().active_deadline_seconds = Some(3600);
+        assert_eq!(failed_at(&late), Some(at(12).moment()));
+
+        assert_eq!(failed_at(&pod("Running")), None);
     }
 
     #[test]

@@ -28,6 +28,7 @@ import { silenceNote, silenceOf } from "@/lib/node-reporting";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { CopyableValue } from "@/components/ui/copyable-value";
+import { EndedAgo } from "../-object/EndedAgo";
 import { AlertsAbout } from "../-object/AlertsAbout";
 import { ownView, peekLanding } from "../-object/attachment";
 import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
@@ -309,6 +310,7 @@ export function PeekContent({
           ) : (
             summary?.status === null && <PhaseBadge phase={null} />
           )}
+          {!gone && summary?.endedAt && <EndedAgo at={summary.endedAt} />}
           <span>{target.kind}</span>
           {namespace && (
             <>

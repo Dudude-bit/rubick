@@ -605,4 +605,23 @@ describe("the peek at a pod the scheduler has not placed", () => {
       ]),
     });
   });
+
+  /** Fails if the peek's header drops the time a failed pod failed, which the page header says. */
+  it("carries a failed pod's failure time for its header, and none for a pod still coming", () => {
+    const summarise = (pod: object) =>
+      resolveSource(target).summarise(
+        pod,
+        target,
+        ((_section: string, key: string) => key) as never
+      );
+    const failedAt = "2026-10-11T22:19:29Z";
+    const evicted = unplaced(15);
+    expect(
+      summarise({
+        ...evicted,
+        status: { ...evicted.status, phase: "Failed", failedAt },
+      }).endedAt
+    ).toBe(failedAt);
+    expect(summarise(unplaced(15)).endedAt).toBeUndefined();
+  });
 });

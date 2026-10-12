@@ -28,8 +28,8 @@ use futures::future::join_all;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
-    ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolumeClaim, Pod, PodStatus, Secret,
-    Service, ServiceAccount,
+    ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolumeClaim, Pod, Secret, Service,
+    ServiceAccount,
 };
 use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
 use kube::api::ListParams;
@@ -740,7 +740,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 .clone()
                 .unwrap_or_else(|| "Failed".to_string()),
             detail: ProblemDetail::said(status.message.clone()),
-            since: failed_at(status).map(|t| t.to_rfc3339()),
+            since: crate::resources::failed_at(pod).map(|t| t.to_rfc3339()),
             restarts: (restarts > 0).then_some(restarts),
             folded_pods: None,
         });
@@ -796,31 +796,6 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     }
 
     None
-}
-
-/// When a pod failed, as the cluster recorded it: the eviction or preemption
-/// it names, else its last exit, else when it stopped being ready. `None`
-/// where it recorded none of them, since the pod's age is not the failure's.
-fn failed_at(status: &PodStatus) -> Option<DateTime<Utc>> {
-    let conditions = status.conditions.as_deref().unwrap_or_default();
-    let changed = |kind: &str, to: &str| {
-        conditions
-            .iter()
-            .find(|c| c.type_ == kind && c.status == to)
-            .and_then(|c| c.last_transition_time.as_ref())
-            .map(Moment::moment)
-    };
-    let exited = status
-        .init_container_statuses
-        .iter()
-        .chain(status.container_statuses.iter())
-        .flatten()
-        .filter_map(|cs| cs.state.as_ref()?.terminated.as_ref()?.finished_at.as_ref())
-        .map(Moment::moment)
-        .max();
-    changed("DisruptionTarget", "True")
-        .or(exited)
-        .or_else(|| changed("Ready", "False"))
 }
 
 /// A Pending pod inside the wait it gets and showing no fault, a restart

@@ -2232,6 +2232,7 @@ export interface PodStatusInfo {
   phase: string;
   display: string;
   kubectlStatus?: string;
+  failedAt?: string;
   ready: boolean;
   conditions: ConditionInfo[];
   message: string | null;

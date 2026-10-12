@@ -4384,6 +4384,7 @@ export const ru: Catalogue = {
     hpaNamesNoTarget:
       "Этот автомасштабировщик не называет, что масштабировать.",
     hpaLastScaled: "последнее масштабирование {ago} назад",
+    podEndedAgo: "завершился {ago} назад",
     pdbAtLeast: "минимум {n} доступно",
     pdbAtMost: "максимум {n} недоступно",
     pdbNoRule: "правило не задано",

@@ -109,6 +109,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
       statusRole: podRole(pod, null),
       statusTitle: podStatusTitle(pod, null, t),
       createdAt: pod.createdAt,
+      endedAt: pod.status.failedAt,
       groups: [
         {
           title: t("columns", "placement"),

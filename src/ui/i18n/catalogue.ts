@@ -3907,6 +3907,7 @@ export const en = {
       "This autoscaler could not be read, so what it scales is not known.",
     hpaNamesNoTarget: "This autoscaler names nothing to scale.",
     hpaLastScaled: "last scaled {ago} ago",
+    podEndedAgo: "ended {ago} ago",
     pdbAtLeast: "at least {n} available",
     pdbAtMost: "at most {n} unavailable",
     pdbNoRule: "no rule stated",
