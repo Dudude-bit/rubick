@@ -378,15 +378,16 @@ function noteFor(
 ): string | null {
   const phase = container.phase;
 
+  // Whether that run's log is still there is the node's to say, and the
+  // block asks it: said from here, it promised a log the node had dropped.
   if (mark === "failed") {
-    const death = lastTermination(container);
-    if (container.restartCount > 0) {
-      return t("readings", "logsAttemptsLast", {
-        attempts: t("count", "attemptsCount", { n: container.restartCount }),
-        when: dated(death) ? t("readings", "logsLastWhen") : "",
-      });
-    }
-    return t("readings", "logsPrintedBeforeExit");
+    if (container.restartCount === 0) return null;
+    return t("readings", "logsAttempts", {
+      attempts: t("count", "attemptsCount", { n: container.restartCount }),
+      when: dated(lastTermination(container))
+        ? t("readings", "logsLastWhen")
+        : "",
+    });
   }
 
   if (mark === "done" && phase !== "app") {

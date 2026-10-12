@@ -368,6 +368,21 @@ export const queryKeys = {
   ],
   /** Every kind the cluster serves. One answer for the whole app. */
   apiCatalog: (): string[] => ["api-catalog"],
+  /** Whether the node still has the log of one container's run, keyed by the exit that ended it. */
+  runLog: (
+    namespace: string,
+    pod: string,
+    container: string,
+    previous: boolean,
+    endedAt: string | null
+  ): (string | boolean | null)[] => [
+    "run-log",
+    home(namespace),
+    pod,
+    container,
+    previous,
+    endedAt,
+  ],
   /** The first `pages` pages of a kind's printed list, in one scope. */
   printedList: (
     group: string,

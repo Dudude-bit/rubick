@@ -4323,8 +4323,12 @@ export const ru: Catalogue = {
     shellStateUnknown: "состояние неизвестно, подключаться не к чему",
     logsPrintedBeforeExit:
       "То, что он напечатал перед выходом, есть во вкладке Logs.",
-    logsAttemptsLast:
-      "{attempts}{when}. То, что напечатал упавший запуск, есть во вкладке Logs.",
+    logsAttempts: "{attempts}{when}.",
+    failedRunInLogs: "То, что напечатал упавший запуск, есть во вкладке Logs.",
+    failedRunLogAsking: "Спрашиваем у узла лог этого запуска.",
+    failedRunLogEmpty: "Этот запуск ничего не напечатал.",
+    failedRunLogGone: "Лога этого запуска на узле больше нет.",
+    failedRunLogUnread: "Не удалось спросить у узла лог этого запуска.",
     logsFinishedComplete: "Завершился{took}{when}. Его лог полный.",
     logsTook: " за {took}",
     logsWhen: ", {when}",

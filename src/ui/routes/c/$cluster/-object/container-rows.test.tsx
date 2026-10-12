@@ -279,3 +279,76 @@ describe("a Deployment's template for a reader who may not patch it", () => {
     expect(onUpdateImage).not.toHaveBeenCalled();
   });
 });
+
+describe("the log of an init container's failed run", () => {
+  const exit = {
+    exitCode: 137,
+    signal: null,
+    reason: "ContainerStatusUnknown",
+    message: null,
+    startedAt: "2026-10-12T00:00:00Z",
+    finishedAt: "2026-10-12T00:01:00Z",
+  };
+  const migrate = {
+    name: "migrate",
+    image: "busybox:1.36",
+    ready: false,
+    started: false,
+    phase: "init",
+    state: { type: "terminated", termination: exit },
+    lastTerminated: exit,
+    restartCount: 7,
+    ports: [],
+    resources: { requests: {}, limits: {} },
+    env: [],
+    envFrom: [],
+  } satisfies ContainerInfo;
+  const open = async (logs: () => Promise<unknown>) => {
+    vi.mocked(invoke).mockImplementation(async (command: string) =>
+      command === "get_pod_logs" ? logs() : undefined
+    );
+    await renderWithRouter(
+      <ContainerRows
+        pod={{ containers: [], initContainers: [migrate] }}
+        namespace="k8s-gui-test"
+        podName="init-demo"
+      />
+    );
+  };
+
+  /**
+   * Dana's migrate said "What the run that failed printed is in Logs" beside
+   * a Logs tab that said the node had dropped that log. Fails if the line
+   * promises a log the node no longer has.
+   */
+  it("says the node no longer has it when the node says so", async () => {
+    await open(() =>
+      Promise.reject({
+        code: "LOG_NOT_KEPT",
+        message: "unable to retrieve container logs",
+      })
+    );
+    expect(
+      await screen.findByText(/The node no longer has that run's log\./)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/is in Logs/)).toBeNull();
+  });
+
+  /** Fails if a log the node does hold is not pointed at, or one that failed to answer is called gone. */
+  it("points at Logs only when the node answered with the run's lines", async () => {
+    await open(() =>
+      Promise.resolve([{ raw: "migrating", message: "migrating" }])
+    );
+    expect(
+      await screen.findByText(/What the run that failed printed is in Logs\./)
+    ).toBeInTheDocument();
+  });
+
+  /** A read that failed for another reason is not a log the node dropped. */
+  it("says it could not ask when the node did not answer", async () => {
+    await open(() => Promise.reject({ code: "TIMEOUT", message: "deadline" }));
+    expect(
+      await screen.findByText(/Could not ask the node for that run's log\./)
+    ).toBeInTheDocument();
+  });
+});

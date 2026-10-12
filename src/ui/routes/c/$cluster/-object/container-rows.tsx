@@ -29,6 +29,8 @@ import {
 import { containerStatus, lastTermination } from "@/lib/pod-status";
 import { parts } from "@/i18n/parts";
 import { ExitAgo, ExitWords } from "./ExitAgo";
+import { useRunLog, type RunLog } from "./useRunLog";
+import type { en } from "@/i18n/catalogue";
 import type {
   ContainerInfo,
   ContainerPhase,
@@ -301,6 +303,36 @@ function exitTone(
   return loopingNow(container) ? "warn" : undefined;
 }
 
+const RUN_LOG_WORDS: Record<
+  Exclude<RunLog, "kept">,
+  keyof typeof en.readings
+> = {
+  asking: "failedRunLogAsking",
+  empty: "failedRunLogEmpty",
+  gone: "failedRunLogGone",
+  unread: "failedRunLogUnread",
+};
+
+/** What the Logs tab will find of the run that failed, asked of the node rather than promised. */
+function RunLogWords({
+  pod,
+  namespace,
+  container,
+}: {
+  pod: string;
+  namespace: string;
+  container: ContainerInfo;
+}) {
+  const t = useT();
+  const log = useRunLog(pod, namespace, container);
+  if (log === "kept")
+    return t(
+      "readings",
+      container.restartCount > 0 ? "failedRunInLogs" : "logsPrintedBeforeExit"
+    );
+  return t("readings", RUN_LOG_WORDS[log]);
+}
+
 function ContainerBlock({
   container,
   step,
@@ -402,6 +434,10 @@ function ContainerBlock({
   // A container that has never run has no log to open, and offering one
   // that lands on an empty pane is worse than not offering it.
   const hasLogs = step ? step.mark !== "queued" : runtime;
+  const failedRun =
+    step?.mark === "failed" && podName && namespace
+      ? { pod: podName, namespace, container: step.container }
+      : null;
 
   return (
     <Section>
@@ -420,13 +456,22 @@ function ContainerBlock({
         // never got a turn, that this log is finished and will not grow,
         // that the app is waiting on init rather than being quiet.
         description={
-          step?.note ? (
+          step?.note || failedRun ? (
             <span
-              className={step.mark === "failed" ? "text-err" : "text-fg-fnt"}
+              className={step?.mark === "failed" ? "text-err" : "text-fg-fnt"}
             >
-              {parts(step.note, {
-                when: step.exit ? <ExitAgo termination={step.exit} /> : "",
-              })}
+              {step?.note &&
+                parts(step.note, {
+                  when: step.exit ? <ExitAgo termination={step.exit} /> : "",
+                })}
+              {step?.note && failedRun && " "}
+              {failedRun && (
+                <RunLogWords
+                  pod={failedRun.pod}
+                  namespace={failedRun.namespace}
+                  container={failedRun.container}
+                />
+              )}
             </span>
           ) : undefined
         }
