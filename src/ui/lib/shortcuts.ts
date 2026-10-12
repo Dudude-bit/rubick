@@ -37,6 +37,17 @@ export interface Shortcut {
 /** How long the second key of a chord may take. */
 export const CHORD_MS = 1500;
 
+/**
+ * Two letters closer than this are typing, not a shortcut, and a letter key
+ * waits this long before it acts. WebKitGTK delivers keys ahead of a click
+ * it is still holding while the page is busy, so text typed into a field the
+ * click had not focused yet arrived as page keys.
+ */
+export const TYPING_MS = 120;
+
+/** A field pressed this recently means the letters are meant for it, wherever the focus went. */
+export const FIELD_PRESS_MS = 1000;
+
 /** The event the detail layout listens for: open this tab if the page has it. */
 export const DETAIL_TAB_OPEN = "detail-tab-open";
 

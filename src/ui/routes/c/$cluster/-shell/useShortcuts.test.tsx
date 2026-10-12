@@ -9,7 +9,7 @@ import {
 import { act, fireEvent, screen } from "@testing-library/react";
 import type { AnyRouter } from "@tanstack/react-router";
 
-import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
+import { DETAIL_TAB_OPEN, TYPING_MS } from "@/lib/shortcuts";
 import { renderWithRouter } from "@/test/render";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
@@ -44,10 +44,21 @@ const mountWithOverlay = () =>
     </>
   );
 
+/** One key, then the pause a person leaves before the next. */
 const press = (key: string, target: Element | Window = window) =>
   act(() => {
     fireEvent.keyDown(target, { key });
+    vi.advanceTimersByTime(TYPING_MS);
   });
+
+/** Keys as WebKitGTK hands over text typed while the page was busy: all at once. */
+const burst = (keys: string, target: Element | Window = window) =>
+  act(() => {
+    for (const key of keys) fireEvent.keyDown(target, { key });
+    vi.advanceTimersByTime(TYPING_MS);
+  });
+
+const asked = vi.fn();
 
 /** A navigate writes history before it returns, so reading it at once cannot miss one still loading. */
 const stayed = (router: AnyRouter) =>
@@ -58,9 +69,12 @@ const landedOn = (router: AnyRouter, pathname: string) =>
 
 beforeEach(() => {
   useShortcutsOverlayStore.setState({ open: false });
+  asked.mockClear();
+  window.addEventListener(DETAIL_TAB_OPEN, asked);
 });
 
 afterEach(() => {
+  window.removeEventListener(DETAIL_TAB_OPEN, asked);
   vi.useRealTimers();
 });
 
@@ -172,15 +186,49 @@ describe("the keys that are the same on every screen", () => {
     expect(useShortcutsOverlayStore.getState().open).toBe(false);
   });
 
+  /**
+   * Marco clicked the Checks tab's Resolve field and typed at once while the
+   * page was busy: WebKitGTK handed the keys over before the click, the field
+   * had no focus yet, and an l in the name opened Logs. Fails if letters
+   * arriving together act as page keys or chords.
+   */
+  it("reads letters that arrive together as typing, not as page keys", async () => {
+    const router = await mount();
+    burst("checkout-api.local");
+    burst("logs-db.shop");
+    burst("gpu-node");
+    expect(asked).not.toHaveBeenCalled();
+    stayed(router);
+  });
+
+  /**
+   * The click on a field can land and the focus still miss it. Fails if a
+   * page key acts right after the pointer pressed a field, or if one pressed
+   * while it waits does not stop it.
+   */
+  it("leaves the letters to a field the pointer just pressed", async () => {
+    await mount();
+    const field = screen.getByLabelText("search");
+    act(() => {
+      fireEvent.keyDown(window, { key: "l" });
+      fireEvent.pointerDown(field);
+      vi.advanceTimersByTime(TYPING_MS);
+    });
+    press("e");
+    expect(asked).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    press("e");
+    expect(asked).toHaveBeenCalledTimes(1);
+  });
+
   it("asks the page to open the tab a letter names", async () => {
     await mount();
-    const asked = vi.fn();
-    window.addEventListener(DETAIL_TAB_OPEN, asked);
     press("l");
     expect(asked).toHaveBeenCalledTimes(1);
     expect(
       (asked.mock.calls[0][0] as CustomEvent<{ tab: string }>).detail.tab
     ).toBe("logs");
-    window.removeEventListener(DETAIL_TAB_OPEN, asked);
   });
 });
