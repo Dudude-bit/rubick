@@ -31,11 +31,12 @@ import { queryKeys } from "@/lib/query-keys";
 import { hrefOf, objectLink } from "@/lib/links";
 import { MetricsStatusBanner } from "../../../-metrics";
 import { getResourceRowId } from "@/lib/table-utils";
-import { formatAge } from "@/lib/utils";
+import { formatAge, formatTimeUnit } from "@/lib/utils";
+import { widestText } from "@/lib/text-width";
 import { refOf } from "@/lib/report-parts";
 import { podStatusValue } from "@/lib/share/pod-status";
 import type { QuickAction } from "@/components/ui/quick-actions";
-import { useT } from "@/i18n/useT";
+import { useT, type T as Translate } from "@/i18n/useT";
 import { narrowPods } from "@/lib/pod-filter";
 import { usePodFilter } from "@/hooks/usePodFilter";
 import { PodSelectorBanner } from "./PodSelectorBanner";
@@ -70,6 +71,16 @@ function RestartsCell({ pod }: { pod: PodRow }) {
       {last && <span className="text-fg-fnt"> ({last})</span>}
     </span>
   );
+}
+
+/** The most restarts a row counts, told with the widest age a restart is told in. */
+function restartsCellPx(t: Translate, rows: readonly PodRow[]): number {
+  const most = Math.max(...rows.map((pod) => pod.restartCount));
+  const said =
+    most > 0
+      ? `${most} (${t("action", "agoSuffix", { age: formatTimeUnit(59, "minute") })})`
+      : "0";
+  return widestText([said], "mono", 7.2) + 20;
 }
 
 /** The copy label is a word, so the cell needs the hook the array cannot use. */
@@ -162,8 +173,8 @@ export const columns: ColumnDef<PodRow>[] = [
     accessorFn: (pod) => pod.restartCount,
     enableSorting: true,
     meta: {
-      // "7 (59 мин назад)" at 7.2px a glyph and a cell's padding.
-      floor: 136,
+      floor: (t, rows: readonly PodRow[]) =>
+        rows.length === 0 ? 136 : restartsCellPx(t, rows),
       label: { section: "columns", key: "restarts" },
       share: (pod: PodRow) => ({
         text: String(pod.restartCount),

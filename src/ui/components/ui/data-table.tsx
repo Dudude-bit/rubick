@@ -915,6 +915,11 @@ function DataTableInner<TData extends RowData>({
   // By the ids rather than the array, so a resize that hides nothing new
   // leaves every row's props alone.
   const yieldedKey = yielded.join("\n");
+  const yieldedNames = columnsWithActions
+    .filter((column) => yielded.includes(columnIdOf(column)))
+    .map((column) => columnLabel(column, t))
+    .filter(Boolean)
+    .join(", ");
   const visibility = React.useMemo<ColumnVisibilityState>(
     () =>
       yieldedKey === ""
@@ -1696,7 +1701,7 @@ function DataTableInner<TData extends RowData>({
           stable page 2 — objects appear and vanish under the reader, so a row
           moves to another page they have to go and find — and Ctrl-F would
           only search the rows on screen. */}
-        <div className="flex flex-none items-center justify-between text-[11px] text-fg-fnt">
+        <div className="flex flex-none flex-wrap items-center justify-between gap-x-3 text-[11px] text-fg-fnt">
           <div>
             {/* The noun is the kind's own plural and stays as the cluster
               spells it; only the frame around it is translated. Without one
@@ -1714,21 +1719,17 @@ function DataTableInner<TData extends RowData>({
                       shown: formatCount(filteredRows),
                     })}
           </div>
-          {yielded.length > 0 && (
+          {yieldedNames && (
             <span
-              className="flex min-w-0 items-center gap-1"
-              title={t("readings", "columnsYieldedHint")}
+              className="flex min-w-0 max-w-full items-center gap-1"
+              title={t("readings", "columnsYieldedHint", {
+                columns: yieldedNames,
+              })}
               data-testid="columns-yielded"
             >
               <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
               <span className="truncate">
-                {t("readings", "columnsYielded", {
-                  columns: columnsWithActions
-                    .filter((column) => yielded.includes(columnIdOf(column)))
-                    .map((column) => columnLabel(column, t))
-                    .filter(Boolean)
-                    .join(", "),
-                })}
+                {t("readings", "columnsYielded", { columns: yieldedNames })}
               </span>
             </span>
           )}

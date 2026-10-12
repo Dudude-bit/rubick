@@ -14,6 +14,7 @@ import {
   createNamespaceColumn,
   createAgeColumn,
   badgeCellPx,
+  yielding,
 } from "../../../-list/columns";
 import { serviceVerdictLabels } from "@/lib/service-health";
 import { widestText } from "@/lib/text-width";
@@ -36,6 +37,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     accessorKey: "type",
     header: columnHeader("columns", "type"),
     meta: {
+      yields: 4,
       floor: () => widestText(["ExternalName", "LoadBalancer"], "sans", 7) + 20,
     },
     cell: ({ row }) => (
@@ -69,7 +71,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     size: 150,
     accessorKey: "clusterIp",
     header: columnHeader("columns", "clusterIp"),
-    meta: { floor: IPV4_CELL_PX },
+    meta: { yields: 3, floor: IPV4_CELL_PX },
     cell: ({ row }) => <ClusterIpValue clusterIp={row.original.clusterIp} />,
   },
   {
@@ -78,7 +80,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     accessorKey: "externalIps",
     header: columnHeader("columns", "externalIps"),
     // The address and the 16px icon before it.
-    meta: { floor: IPV4_CELL_PX + 16 },
+    meta: { yields: 2, floor: IPV4_CELL_PX + 16 },
     cell: ({ row }) => {
       const service = row.original;
       if (service.externalIps.length === 0 && service.type !== "LoadBalancer")
@@ -102,6 +104,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     size: 200,
     id: "ports",
     meta: {
+      yields: 5,
       floor: () =>
         widestText(["9964→9964"], "mono", 7.2) +
         4 +
@@ -119,7 +122,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
       <PortsDisplay ports={row.original.ports} maxDisplay={2} />
     ),
   },
-  createAgeColumn<ServiceInfo>(),
+  yielding(createAgeColumn<ServiceInfo>(), 1),
 ];
 
 export const ServiceList = createResourceListPage<ServiceInfo>({

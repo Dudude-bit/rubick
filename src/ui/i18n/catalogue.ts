@@ -3900,7 +3900,7 @@ export const en = {
     hpaNothingComputed: "nothing computed",
     columnsYielded: "Hidden at this width: {columns}",
     columnsYieldedHint:
-      "Widen the window, or close the panel beside the list, to see these columns. The search still reads them.",
+      "Hidden at this width: {columns}. Widen the window, or close the panel beside the list, to see them. The search still reads them.",
     hpaScaleUnread:
       "This autoscaler could not be read, so what it scales is not known.",
     hpaNamesNoTarget: "This autoscaler names nothing to scale.",

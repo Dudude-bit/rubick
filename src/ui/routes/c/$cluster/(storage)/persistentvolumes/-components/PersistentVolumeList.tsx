@@ -13,13 +13,14 @@ import {
   createCapacityColumn,
   createAgeColumn,
   createNameColumn,
+  yielding,
 } from "../../../-list/columns";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
 
 export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
   createNameColumn<PersistentVolumeInfo>(ResourceType.PersistentVolume),
   createCapacityColumn<PersistentVolumeInfo>(),
-  createAccessModesColumn<PersistentVolumeInfo>(),
+  yielding(createAccessModesColumn<PersistentVolumeInfo>(), 2),
   {
     // "Retain" or "Delete" under a two-word header.
     size: 120,
@@ -34,6 +35,7 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
         )}
       </span>
     ),
+    meta: { yields: 1 },
   },
   {
     size: 110,
@@ -53,8 +55,9 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     accessorKey: "storageClass",
     header: columnHeader("columns", "storageClass"),
     cell: ({ row }) => <StorageClassRef name={row.original.storageClass} />,
+    meta: { yields: 3 },
   },
-  createAgeColumn<PersistentVolumeInfo>(),
+  yielding(createAgeColumn<PersistentVolumeInfo>(), 4),
 ];
 
 export const PersistentVolumeList =

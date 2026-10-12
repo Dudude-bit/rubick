@@ -4,7 +4,11 @@ import { columnHeader } from "@/i18n/column-header";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
-import { NAME_CELL_PX, createAgeColumn } from "../../../-list/columns";
+import {
+  NAME_CELL_PX,
+  createAgeColumn,
+  yielding,
+} from "../../../-list/columns";
 import { ResourceType } from "@/lib/resource-registry";
 import {
   Tooltip,
@@ -64,6 +68,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     cell: ({ row }) => (
       <span className="text-fg-mid">{row.original.volumeBindingMode}</span>
     ),
+    meta: { yields: 4 },
   },
   {
     size: 100,
@@ -78,6 +83,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
         )}
       </span>
     ),
+    meta: { yields: 2 },
   },
   {
     // "4 params", with the pairs themselves in the tooltip.
@@ -108,8 +114,9 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
         </Tooltip>
       );
     },
+    meta: { yields: 1 },
   },
-  createAgeColumn<StorageClassInfo>(),
+  yielding(createAgeColumn<StorageClassInfo>(), 3),
 ];
 
 export const StorageClassList = createResourceListPage<StorageClassInfo>({

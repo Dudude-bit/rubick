@@ -29,6 +29,7 @@ import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
+  yielding,
 } from "../../../-list/columns";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import {
@@ -124,6 +125,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     cell: ({ row }) => (
       <span className="text-fg-mut">{row.original.className || "default"}</span>
     ),
+    meta: { yields: 2 },
   },
   {
     // The column people came to this page to read, and a hostname is long.
@@ -214,7 +216,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     size: 150,
     accessorKey: "loadBalancerIps",
     header: columnHeader("columns", "address"),
-    meta: { floor: IPV4_CELL_PX },
+    meta: { yields: 4, floor: IPV4_CELL_PX },
     cell: ({ row }) => <IngressAddressCell ingress={row.original} />,
   },
   {
@@ -222,8 +224,9 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     accessorKey: "tlsHosts",
     header: columnHeader("columns", "tls"),
     cell: ({ row }) => <VendorTlsCell ingress={row.original} />,
+    meta: { yields: 1 },
   },
-  createAgeColumn<IngressInfo>(),
+  yielding(createAgeColumn<IngressInfo>(), 3),
 ];
 
 const INGRESS_DETAIL = queryKeys.rowDetail(ResourceType.Ingress);
