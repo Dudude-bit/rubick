@@ -207,12 +207,9 @@ describe("containerSequence with a sidecar", () => {
     ]);
   });
 
-  it("says a finished init container's log is complete, not quiet", () => {
-    // Otherwise it is indistinguishable from a live container saying
-    // nothing, down to Follow sitting there doing nothing.
-    expect(groups[0].steps[0].note).toBe(
-      "Finished in 4s, {when}. Its log is complete."
-    );
+  /** Fails if the note promises a complete log itself: the node is asked for it, beside the note. */
+  it("says a finished init container finished, leaving its log to the node", () => {
+    expect(groups[0].steps[0].note).toBe("Finished in 4s, {when}.");
     expect(groups[0].steps[0].exit).not.toBeNull();
   });
 

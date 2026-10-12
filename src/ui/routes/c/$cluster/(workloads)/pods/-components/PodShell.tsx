@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import type { T } from "@/i18n/useT";
+import { RunLogWords } from "../../../-object/RunLogWords";
 
 /**
  * The Shell tab: a chooser, and the session it chose.
@@ -57,7 +58,7 @@ interface NoShell {
   headline: string;
   body: ReactNode;
   /** The second paragraph, where there is one worth saying. */
-  hint: string | null;
+  hint: ReactNode;
   /** The container whose log holds what the shell would have told you. */
   logs: { container: string; label: string } | null;
 }
@@ -93,7 +94,14 @@ function noShell(pod: PodInfo, t: T): NoShell {
     );
     return {
       headline,
-      hint: death ? t("empty", "shellAnswerIsInTheLog") : null,
+      hint: death ? (
+        <RunLogWords
+          pod={pod.name}
+          namespace={pod.namespace}
+          container={blocker}
+          run="shell"
+        />
+      ) : null,
       logs: death
         ? {
             container: blocker.name,

@@ -399,9 +399,7 @@ function noteFor(
     const took = termination
       ? runDuration(termination.startedAt, termination.finishedAt)
       : null;
-    // Said out loud because a finished container looks identical to a
-    // silent one in a log pane, and Follow does nothing on either.
-    return t("readings", "logsFinishedComplete", {
+    return t("readings", "logsFinished", {
       took: took ? t("readings", "logsTook", { took }) : "",
       when: dated(termination) ? t("readings", "logsWhen") : "",
     });

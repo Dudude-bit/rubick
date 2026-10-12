@@ -352,3 +352,87 @@ describe("the log of an init container's failed run", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("the log of an init container that finished", () => {
+  const exit = {
+    exitCode: 0,
+    signal: null,
+    reason: "Completed",
+    message: null,
+    startedAt: "2026-10-12T00:00:00Z",
+    finishedAt: "2026-10-12T00:00:03Z",
+  };
+  const waitForDb = {
+    name: "wait-for-db",
+    image: "busybox:1.36",
+    ready: false,
+    started: false,
+    phase: "init",
+    state: { type: "terminated", termination: exit },
+    lastTerminated: null,
+    restartCount: 0,
+    ports: [],
+    resources: { requests: {}, limits: {} },
+    env: [],
+    envFrom: [],
+  } satisfies ContainerInfo;
+  const open = async (
+    logs: () => Promise<unknown>,
+    as: "page" | "peek" = "page"
+  ) => {
+    vi.mocked(invoke).mockImplementation(async (command: string) =>
+      command === "get_pod_logs" ? logs() : undefined
+    );
+    await renderWithRouter(
+      <ContainerRows
+        pod={{ containers: [], initContainers: [waitForDb] }}
+        namespace="k8s-gui-test"
+        {...(as === "page"
+          ? { podName: "init-demo" }
+          : { logPod: "init-demo" })}
+      />
+    );
+  };
+
+  /**
+   * Dana's wait-for-db said "Its log is complete" on the page and in the
+   * peek while Logs said "log not kept" and kubectl could not retrieve it.
+   * Fails if a finished container promises a log the node has dropped.
+   */
+  it("says the node no longer has its log when the node says so", async () => {
+    await open(() =>
+      Promise.reject({
+        code: "LOG_NOT_KEPT",
+        message: "unable to retrieve container logs",
+      })
+    );
+    expect(
+      await screen.findByText(/The node no longer has its log\./)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Its log is complete/)).toBeNull();
+    expect(screen.getByText(/Finished in 3s/)).toBeInTheDocument();
+  });
+
+  /** Fails if a log the node does hold is no longer called complete. */
+  it("calls the log complete only when the node answered with its lines", async () => {
+    await open(() => Promise.resolve([{ raw: "db up", message: "db up" }]));
+    expect(
+      await screen.findByText(/Its log is complete\./)
+    ).toBeInTheDocument();
+  });
+
+  /** Dana's peek said the same as the page. Fails if the peek, which names the pod for its logs alone, stops asking. */
+  it("asks the node in the peek too", async () => {
+    await open(
+      () =>
+        Promise.reject({
+          code: "LOG_NOT_KEPT",
+          message: "unable to retrieve container logs",
+        }),
+      "peek"
+    );
+    expect(
+      await screen.findByText(/The node no longer has its log\./)
+    ).toBeInTheDocument();
+  });
+});

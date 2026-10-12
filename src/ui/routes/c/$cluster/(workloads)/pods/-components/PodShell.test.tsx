@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { invoke } from "@tauri-apps/api/core";
 
 import type { ContainerInfo, PodInfo } from "@/generated/types";
 
@@ -299,7 +300,7 @@ describe("PodShell when there is nothing to attach to", () => {
   });
 
   it("names the step the pod is stuck on and how often it has failed", () => {
-    render(
+    renderWithProviders(
       <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
     );
     // Whole sentences rather than clauses glued with "and" / "—": the join
@@ -312,7 +313,7 @@ describe("PodShell when there is nothing to attach to", () => {
 
   it("offers the failed run's log and Debug, which are the two things that work", async () => {
     const onOpenLogs = vi.fn();
-    render(
+    renderWithProviders(
       <PodShell
         pod={initDemo}
         container={null}
@@ -331,10 +332,33 @@ describe("PodShell when there is nothing to attach to", () => {
   });
 
   it("draws no chooser at all when no container could take a shell", () => {
-    render(
+    renderWithProviders(
       <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
     );
     expect(screen.queryByTestId("shell-chooser")).not.toBeInTheDocument();
+  });
+
+  /**
+   * Dana's init-demo: the node had dropped migrate's failed run, and the
+   * shell tab still said its answer was in that log. Fails if the line
+   * promises a log the node no longer has.
+   */
+  it("says the node no longer has the failed run's log when the node says so", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) =>
+      command === "get_pod_logs"
+        ? Promise.reject({
+            code: "LOG_NOT_KEPT",
+            message: "unable to retrieve container logs",
+          })
+        : undefined
+    );
+    renderWithProviders(
+      <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
+    );
+    expect(
+      await screen.findByText("The node no longer has that run's log.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/shell would have told you/)).toBeNull();
   });
 });
 

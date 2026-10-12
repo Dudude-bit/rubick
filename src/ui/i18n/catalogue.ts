@@ -3891,11 +3891,18 @@ export const en = {
     logsPrintedBeforeExit: "What it printed before it exited is in Logs.",
     logsAttempts: "{attempts}{when}.",
     failedRunInLogs: "What the run that failed printed is in Logs.",
+    shellAnswerInFailedRun:
+      "What the shell would have told you is in the log of the run that failed.",
     failedRunLogAsking: "Asking the node for that run's log.",
     failedRunLogEmpty: "That run printed nothing.",
     failedRunLogGone: "The node no longer has that run's log.",
     failedRunLogUnread: "Could not ask the node for that run's log.",
-    logsFinishedComplete: "Finished{took}{when}. Its log is complete.",
+    logsFinished: "Finished{took}{when}.",
+    finishedLogComplete: "Its log is complete.",
+    finishedLogAsking: "Asking the node for its log.",
+    finishedLogEmpty: "It printed nothing.",
+    finishedLogGone: "The node no longer has its log.",
+    finishedLogUnread: "Could not ask the node for its log.",
     logsTook: " in {took}",
     logsWhen: ", {when}",
     logsLastWhen: ", last {when}",
@@ -5157,8 +5164,6 @@ export const en = {
     },
     whichExited: "which exited {code}",
     whichHasNotFinished: "which has not finished",
-    shellAnswerIsInTheLog:
-      "What the shell would have told you is in the log of the run that failed.",
     podStoppedInInit:
       "The pod is still in init and stopped on {container}, {failure}.",
     haveNotStarted: {
@@ -5476,21 +5481,19 @@ export const en = {
       "is being retried by the kubelet, with a longer wait after each attempt. The name, the tag or the pull credentials are what to check.",
     startsAndExits: "{container} starts and then exits, over and over",
     crashRestartsWithLastRun: {
-      one: "{n} restart so far; the last run ended {how}. What it printed before it died is in Logs.",
-      other:
-        "{n} restarts so far; the last run ended {how}. What it printed before it died is in Logs.",
+      one: "{n} restart so far; the last run ended {how}.",
+      other: "{n} restarts so far; the last run ended {how}.",
     },
     crashRestartsNoLastRun: {
-      one: "{n} restart so far. What it printed before it last died is in Logs.",
-      other:
-        "{n} restarts so far. What it printed before it last died is in Logs.",
+      one: "{n} restart so far.",
+      other: "{n} restarts so far.",
     },
     restartedExitUnreported:
       "{container} restarted, and its last exit is not reported",
     restartsExitUnreportedDetail: {
-      one: "{n} restart so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known. What it printed before it last exited is in Logs.",
+      one: "{n} restart so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known.",
       other:
-        "{n} restarts so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known. What it printed before it last exited is in Logs.",
+        "{n} restarts so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known.",
     },
     cannotBeBuilt: "{container} cannot be built from this spec",
     missingConfigMapSecretOrVolume:

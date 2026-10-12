@@ -285,7 +285,7 @@ function PeekContainersTab({
   }
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-3.5 py-3">
-      <ContainerRows pod={pod} namespace={pod.namespace} />
+      <ContainerRows pod={pod} namespace={pod.namespace} logPod={pod.name} />
     </div>
   );
 }

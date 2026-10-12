@@ -87,6 +87,7 @@ import { eventsTab } from "../../../-object/events-tab";
 import { useNodePlacement } from "./useNodePlacement";
 import { SpotMark } from "../../../-object/spot-mark";
 import { ExitWords, RestartsWords } from "../../../-object/ExitAgo";
+import { RunLogWords } from "../../../-object/RunLogWords";
 import { parts } from "@/i18n/parts";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -157,6 +158,7 @@ const CANNOT_PULL =
   /^(ImagePull|ErrImagePull|InvalidImageName|RegistryUnavailable)/i;
 
 function describeWaiting(
+  pod: PodInfo,
   container: ContainerInfo,
   reason: string,
   t: ReturnType<typeof useT>
@@ -175,7 +177,7 @@ function describeWaiting(
     };
   }
   if (reason.toLowerCase() === "crashloopbackoff") {
-    return crashLoop(container, reason, t);
+    return crashLoop(pod, container, reason, t);
   }
   if (/^CreateContainer(Config)?Error$/i.test(reason)) {
     return {
@@ -213,6 +215,7 @@ function useKnownLoop(
 
 /** The same loop whichever instant of the back-off the read caught. */
 function crashLoop(
+  pod: PodInfo,
   container: ContainerInfo,
   reason: string,
   t: ReturnType<typeof useT>
@@ -221,12 +224,22 @@ function crashLoop(
   return {
     reason,
     headline: t("empty", "startsAndExits", { container: container.name }),
-    detail: last
-      ? parts(
+    detail: last ? (
+      <>
+        {parts(
           t("empty", "crashRestartsWithLastRun", { n: container.restartCount }),
           { how: <ExitWords termination={last} between=", " /> }
-        )
-      : t("empty", "crashRestartsNoLastRun", { n: container.restartCount }),
+        )}{" "}
+        <RunLogWords
+          pod={pod.name}
+          namespace={pod.namespace}
+          container={container}
+          run="failed"
+        />
+      </>
+    ) : (
+      t("empty", "crashRestartsNoLastRun", { n: container.restartCount })
+    ),
     tone: "err",
   };
 }
@@ -266,7 +279,7 @@ function podProblem(
       !STARTING.has(state.reason.toLowerCase())
     ) {
       return {
-        ...describeWaiting(container, state.reason, t),
+        ...describeWaiting(pod, container, state.reason, t),
         tab: "containers",
       };
     }
@@ -276,7 +289,7 @@ function podProblem(
       // the loop is what the page has been saying all along.
       if (loopingNow(container) || looping?.name === container.name)
         return {
-          ...crashLoop(container, termination.reason ?? "Error", t),
+          ...crashLoop(pod, container, termination.reason ?? "Error", t),
           tab: "containers",
         };
       return {
@@ -296,7 +309,7 @@ function podProblem(
 
   if (looping) {
     return {
-      ...crashLoop(looping, pod.status.display, t),
+      ...crashLoop(pod, looping, pod.status.display, t),
       tab: "containers",
     };
   }

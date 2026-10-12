@@ -29,8 +29,7 @@ import {
 import { containerStatus, lastTermination } from "@/lib/pod-status";
 import { parts } from "@/i18n/parts";
 import { ExitAgo, ExitWords } from "./ExitAgo";
-import { useRunLog, type RunLog } from "./useRunLog";
-import type { en } from "@/i18n/catalogue";
+import { RunLogWords } from "./RunLogWords";
 import type {
   ContainerInfo,
   ContainerPhase,
@@ -127,6 +126,8 @@ interface ContainerRowsCommon {
   namespace?: string;
   /** Enables the port-forward affordance on a running container's ports. */
   podName?: string;
+  /** The pod whose node is asked for a run's log, where `podName` is not given. */
+  logPod?: string;
   onOpenShell?: (containerName: string) => void;
   /** Why the cluster will not open a shell for this user; Shell stays, greyed, and says so. */
   shellDenied?: string;
@@ -162,6 +163,7 @@ export function ContainerRows(props: ContainerRowsProps) {
   const {
     namespace,
     podName,
+    logPod,
     onOpenShell,
     shellDenied,
     onUpdateImage,
@@ -241,6 +243,7 @@ export function ContainerRows(props: ContainerRowsProps) {
                   step={row.step}
                   namespace={namespace}
                   podName={podName}
+                  logPod={logPod ?? podName}
                   onOpenShell={onOpenShell}
                   shellDenied={shellDenied}
                   onUpdateImage={onUpdateImage}
@@ -303,41 +306,12 @@ function exitTone(
   return loopingNow(container) ? "warn" : undefined;
 }
 
-const RUN_LOG_WORDS: Record<
-  Exclude<RunLog, "kept">,
-  keyof typeof en.readings
-> = {
-  asking: "failedRunLogAsking",
-  empty: "failedRunLogEmpty",
-  gone: "failedRunLogGone",
-  unread: "failedRunLogUnread",
-};
-
-/** What the Logs tab will find of the run that failed, asked of the node rather than promised. */
-function RunLogWords({
-  pod,
-  namespace,
-  container,
-}: {
-  pod: string;
-  namespace: string;
-  container: ContainerInfo;
-}) {
-  const t = useT();
-  const log = useRunLog(pod, namespace, container);
-  if (log === "kept")
-    return t(
-      "readings",
-      container.restartCount > 0 ? "failedRunInLogs" : "logsPrintedBeforeExit"
-    );
-  return t("readings", RUN_LOG_WORDS[log]);
-}
-
 function ContainerBlock({
   container,
   step,
   namespace,
   podName,
+  logPod,
   onOpenShell,
   shellDenied,
   onUpdateImage,
@@ -349,6 +323,7 @@ function ContainerBlock({
   step?: ContainerStep;
   namespace?: string;
   podName?: string;
+  logPod?: string;
   onOpenShell?: (containerName: string) => void;
   shellDenied?: string;
   onUpdateImage?: (containerName: string, currentImage: string) => void;
@@ -434,9 +409,23 @@ function ContainerBlock({
   // A container that has never run has no log to open, and offering one
   // that lands on an empty pane is worse than not offering it.
   const hasLogs = step ? step.mark !== "queued" : runtime;
-  const failedRun =
-    step?.mark === "failed" && podName && namespace
-      ? { pod: podName, namespace, container: step.container }
+  const lastRun =
+    logPod &&
+    namespace &&
+    step &&
+    (step.mark === "failed" ||
+      (step.mark === "done" && step.container.phase !== "app"))
+      ? {
+          pod: logPod,
+          namespace,
+          container: step.container,
+          run:
+            step.mark === "done"
+              ? ("finished" as const)
+              : step.container.restartCount > 0
+                ? ("failed" as const)
+                : ("exited" as const),
+        }
       : null;
 
   return (
@@ -456,7 +445,7 @@ function ContainerBlock({
         // never got a turn, that this log is finished and will not grow,
         // that the app is waiting on init rather than being quiet.
         description={
-          step?.note || failedRun ? (
+          step?.note || lastRun ? (
             <span
               className={step?.mark === "failed" ? "text-err" : "text-fg-fnt"}
             >
@@ -464,14 +453,8 @@ function ContainerBlock({
                 parts(step.note, {
                   when: step.exit ? <ExitAgo termination={step.exit} /> : "",
                 })}
-              {step?.note && failedRun && " "}
-              {failedRun && (
-                <RunLogWords
-                  pod={failedRun.pod}
-                  namespace={failedRun.namespace}
-                  container={failedRun.container}
-                />
-              )}
+              {step?.note && lastRun && " "}
+              {lastRun && <RunLogWords {...lastRun} />}
             </span>
           ) : undefined
         }
