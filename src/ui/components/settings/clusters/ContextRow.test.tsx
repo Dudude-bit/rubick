@@ -92,4 +92,36 @@ describe("the status word on a context row", () => {
       "dial tcp 10.255.255.1:6443: i/o timeout"
     );
   });
+
+  /**
+   * Dana's acme-prod-eu wore a red name and dot, the colour somebody chose
+   * for it, beside "not connected" before any attempt, and read as failing.
+   * Fails if the status loses its own mark, or draws it in the cluster's
+   * colour instead of a role tone.
+   */
+  it("marks the status in a role tone of its own, apart from the cluster's colour", () => {
+    useClusterIdentityStore.setState({ marks: { [PROD]: { hue: 0 } } });
+    row(PROD);
+    const status = screen.getByTestId("context-status");
+    expect(status.className).toContain("text-fg-fnt");
+    expect(status.getAttribute("style")).toBeNull();
+    expect(status.querySelector("svg")).not.toBeNull();
+  });
+
+  /** Fails if a failed connect keeps the quiet mark of one nobody tried. */
+  it("marks a failed connect in red with an icon of its own", () => {
+    render(
+      <ContextRow
+        context={ctx(PROD)}
+        binding={undefined}
+        binaries={new Map()}
+        connected={false}
+        failure="i/o timeout"
+        onBind={() => {}}
+      />
+    );
+    const status = screen.getByTestId("context-status");
+    expect(status.className).toContain("text-err");
+    expect(status.querySelector("svg.lucide-circle-x")).not.toBeNull();
+  });
 });

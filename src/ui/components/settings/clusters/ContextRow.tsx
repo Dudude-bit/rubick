@@ -1,3 +1,11 @@
+import {
+  Circle,
+  CircleCheck,
+  CircleHelp,
+  CircleX,
+  type LucideIcon,
+} from "lucide-react";
+
 import type { ContextBindingInfo, ContextInfo } from "@/generated/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { clusterColor, clusterNameParts } from "@/lib/cluster-identity";
@@ -9,7 +17,12 @@ import {
   useClusterMark,
 } from "@/stores/clusterIdentityStore";
 import { useSettingSearchMatch } from "../settings-search";
-import { VENDOR_LABEL, binaryLabel, readContext } from "./context-reading";
+import {
+  VENDOR_LABEL,
+  binaryLabel,
+  readContext,
+  type ContextStatus,
+} from "./context-reading";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -31,6 +44,19 @@ const CONTEXT_STATUS = {
   "cannot connect": "contextCannotConnect",
   "cannot tell": "contextCannotTell",
 } as const;
+
+/**
+ * The status wears its own mark in a role colour. The dot and the name are
+ * the colour the reader gave the cluster, and a red one beside "not
+ * connected" read as a failure before anything had been tried.
+ */
+const STATUS_MARK: Record<ContextStatus, { icon: LucideIcon; tone: string }> = {
+  connected: { icon: CircleCheck, tone: "text-ok" },
+  "not connected": { icon: Circle, tone: "text-fg-fnt" },
+  "connect failed": { icon: CircleX, tone: "text-err" },
+  "cannot connect": { icon: CircleX, tone: "text-err" },
+  "cannot tell": { icon: CircleHelp, tone: "text-fg-mut" },
+};
 
 export function ContextRow({
   context,
@@ -71,6 +97,7 @@ export function ContextRow({
   const colour = clusterColor(context.name, mark.hue);
   const { prefix, label } = clusterNameParts(context.name);
 
+  const status = STATUS_MARK[reading.status];
   const missing = reading.missingBinary;
   const blocked = missing !== null || reading.status === "connect failed";
   // A plugin whose binary is missing has a louder problem than an unset
@@ -89,18 +116,8 @@ export function ContextRow({
       hidden={!visible}
     >
       <span
-        className={cn(
-          "mt-[5px] h-1.5 w-1.5 rounded-full",
-          blocked && "bg-err",
-          connected && "ring-[3px] ring-ok/20"
-        )}
-        style={
-          blocked
-            ? undefined
-            : connected
-              ? { background: colour }
-              : { boxShadow: `inset 0 0 0 1.5px ${colour}` }
-        }
+        className="mt-[5px] h-1.5 w-1.5 rounded-full"
+        style={{ background: colour }}
         aria-hidden
       />
 
@@ -198,20 +215,18 @@ export function ContextRow({
       </div>
 
       <span
+        data-testid="context-status"
         title={
           reading.status === "connect failed"
             ? (failure ?? undefined)
             : undefined
         }
         className={cn(
-          "whitespace-nowrap text-[11px]",
-          reading.status === "connected"
-            ? "text-ok"
-            : blocked
-              ? "text-err"
-              : "text-fg-fnt"
+          "flex items-center gap-1 whitespace-nowrap text-[11px]",
+          status.tone
         )}
       >
+        <status.icon className="h-3 w-3 flex-none" aria-hidden />
         {t("settings", CONTEXT_STATUS[reading.status])}
       </span>
     </div>
