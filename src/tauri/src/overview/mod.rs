@@ -64,9 +64,55 @@ pub struct OverviewCache {
     events: Option<broadcast::Sender<AppEvent>>,
 }
 
-/// The fastest a cluster's changes are announced. Changes inside it are
-/// gathered into the next announcement, never dropped.
+/// The steady rate a cluster's changes are announced at under churn.
+/// Changes past it are gathered into the next announcement, never dropped.
 const ANNOUNCE_EVERY: Duration = Duration::from_secs(1);
+/// Announcements a quiet cluster may spend back to back before the steady
+/// rate holds. A drain is four or five changes inside a second: on a strict
+/// one a second, the Deployment's status 30 ms behind its pod's delete waited
+/// out the rest of the second, and Sam's Overview counted it Ready meanwhile.
+const ANNOUNCE_BURST: f64 = 4.0;
+/// How long a change waits for the rest of its burst: a delete, its
+/// replacement and the controller's status land within this of each other.
+const ANNOUNCE_GATHER: Duration = Duration::from_millis(50);
+
+/// The announcements a cluster may still spend: refilled at the steady rate, up to a burst.
+#[derive(Debug, Clone, Copy)]
+struct Pace {
+    left: f64,
+    at: tokio::time::Instant,
+}
+
+impl Pace {
+    fn full(now: tokio::time::Instant) -> Self {
+        Self {
+            left: ANNOUNCE_BURST,
+            at: now,
+        }
+    }
+
+    fn left(&self, now: tokio::time::Instant) -> f64 {
+        let refilled =
+            now.saturating_duration_since(self.at).as_secs_f64() / ANNOUNCE_EVERY.as_secs_f64();
+        (self.left + refilled).min(ANNOUNCE_BURST)
+    }
+
+    /// When a change first noted at `noted` may be announced.
+    fn due(&self, noted: tokio::time::Instant) -> tokio::time::Instant {
+        let gathered = noted + ANNOUNCE_GATHER;
+        let short = 1.0 - self.left(gathered);
+        if short <= 0.0 {
+            gathered
+        } else {
+            gathered + ANNOUNCE_EVERY.mul_f64(short)
+        }
+    }
+
+    fn spend(&mut self, now: tokio::time::Instant) {
+        self.left = self.left(now) - 1.0;
+        self.at = now;
+    }
+}
 
 /// What changed in a cluster's stores since it was last announced.
 #[derive(Default)]
@@ -541,34 +587,39 @@ impl WatchConfigs {
         store
     }
 
-    /// Announces what the stores took, at most once every [`ANNOUNCE_EVERY`]
-    /// and only while they serve: a broken store is listed instead, and an
-    /// announcement would only make that listing more frequent.
+    /// Announces what the stores took, a burst as it lands and steady churn
+    /// at [`ANNOUNCE_EVERY`] (see [`Pace`]), and only while they serve: a
+    /// broken store is listed instead, and an announcement would only make
+    /// that listing more frequent.
     fn spawn_announcer(&self, events: broadcast::Sender<AppEvent>) {
         let changes = self.changes.clone();
         let health = self.health.clone();
         let stop = self.stop.clone();
         let context = self.context.clone();
         tokio::spawn(async move {
+            let mut pace = Pace::full(tokio::time::Instant::now());
             loop {
                 tokio::select! {
                     biased;
                     () = stop.cancelled() => break,
                     () = changes.pending.notified() => {}
                 }
-                let touched = changes.take();
-                if health.lock().serves() {
-                    let _ = events.send(AppEvent::OverviewChanged {
-                        context: context.clone(),
-                        namespaces: touched.namespaces.into_iter().collect(),
-                        cluster: touched.cluster,
-                    });
-                }
+                let due = pace.due(tokio::time::Instant::now());
                 tokio::select! {
                     biased;
                     () = stop.cancelled() => break,
-                    () = tokio::time::sleep(ANNOUNCE_EVERY) => {}
+                    () = tokio::time::sleep_until(due) => {}
                 }
+                let touched = changes.take();
+                if touched == Touched::default() || !health.lock().serves() {
+                    continue;
+                }
+                pace.spend(tokio::time::Instant::now());
+                let _ = events.send(AppEvent::OverviewChanged {
+                    context: context.clone(),
+                    namespaces: touched.namespaces.into_iter().collect(),
+                    cluster: touched.cluster,
+                });
             }
         });
     }
@@ -698,11 +749,10 @@ mod tests {
 
     /// Sam's Overview read "41 of 62 ready" for six seconds after kubectl was
     /// back at 40: it was read every ten seconds while the stores under it
-    /// knew at once. Fails if a change is not announced, if two inside a
-    /// second are announced apart or lost, if a resync counts as a change, or
-    /// if a cache that stopped serving still announces.
+    /// knew at once. Fails if a change is not announced, if a resync counts
+    /// as one, or if a cache that stopped serving still announces.
     #[tokio::test]
-    async fn changes_are_announced_at_most_once_a_second_and_only_while_served() {
+    async fn changes_are_announced_as_they_land_and_only_while_served() {
         let (tx, mut rx) = broadcast::channel(16);
         let cluster = WatchConfigs {
             context: "k3d-rubick".to_string(),
@@ -744,15 +794,9 @@ mod tests {
         cluster
             .changes
             .note(&watcher::Event::Apply(in_namespace(None)));
-        assert!(
-            tokio::time::timeout(Duration::from_millis(600), rx.recv())
-                .await
-                .is_err(),
-            "a second announcement inside the second"
-        );
-        let gathered = tokio::time::timeout(Duration::from_millis(1500), rx.recv())
+        let gathered = tokio::time::timeout(Duration::from_millis(500), rx.recv())
             .await
-            .expect("announced when the second is up")
+            .expect("the next change announced at once too")
             .expect("an event");
         assert_eq!(
             said(gathered),
@@ -776,6 +820,58 @@ mod tests {
             "a cache that is not serving announced a change"
         );
         cluster.stop.cancel();
+    }
+
+    /// When each change in `noted` (ms) is announced under [`Pace`], as the announcer spends it.
+    fn announced(noted: &[u64]) -> Vec<u64> {
+        let zero = tokio::time::Instant::now();
+        let mut pace = Pace::full(zero);
+        let mut said = Vec::new();
+        let mut next = 0;
+        while let Some(&first) = noted.get(next) {
+            let due = pace.due(zero + Duration::from_millis(first));
+            pace.spend(due);
+            let at = u64::try_from(due.duration_since(zero).as_millis()).expect("ms");
+            said.push(at);
+            next += noted[next..].iter().take_while(|&&ms| ms <= at).count();
+        }
+        said
+    }
+
+    /// Sam's drain: the delete announced at once and the Deployment's status,
+    /// 30 ms behind it, held for the rest of the second, so the Overview counted
+    /// big-pull Ready 0.6 to 1.0 s after kubectl said 0/1, and the new pod
+    /// was named at 114 ms or 676 ms depending on which side of the read it
+    /// landed. Fails if a change inside a drain waits longer than the gather.
+    #[test]
+    fn a_drain_is_announced_as_it_lands() {
+        let drain = [0, 10, 30, 150, 400, 1300, 1320];
+        let said = announced(&drain);
+        for change in drain {
+            let heard = said.iter().find(|&&at| at >= change).expect("announced");
+            assert!(
+                heard - change <= 50,
+                "the change at {change} ms waited until {heard} ms ({said:?})"
+            );
+        }
+    }
+
+    /// The overview is the costliest read in the app, and every announcement
+    /// is one. Fails if churn is announced faster than once a second past the
+    /// first burst, or if a quiet spell does not earn the burst back.
+    #[test]
+    fn steady_churn_is_announced_once_a_second() {
+        let churn: Vec<u64> = (0..1000).map(|at| at * 10).collect();
+        let said = announced(&churn);
+        assert!(
+            said.len() <= 4 + 10,
+            "{} announcements in ten seconds of churn",
+            said.len()
+        );
+        let mut after = churn.clone();
+        after.extend([14_000, 14_200, 14_400]);
+        let said = announced(&after);
+        assert_eq!(&said[said.len() - 3..], [14_050, 14_250, 14_450]);
     }
 
     /// One broken watch is enough: an overview built from four fresh stores and one stale one is one stale overview.
