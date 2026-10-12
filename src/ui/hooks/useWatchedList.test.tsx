@@ -18,7 +18,7 @@ vi.mock("@/hooks/useResourceWatch", () => ({
 
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useListFollowed, useWatchedList } from "./useWatchedList";
+import { useListFollowed, useListLive, useWatchedList } from "./useWatchedList";
 
 const POD_DETAIL = queryKeys.rowDetail("Pod");
 
@@ -237,5 +237,34 @@ describe("a list kept current by a watch", () => {
     again.unmount();
     follows.rerender();
     expect(follows.result.current).toBe(false);
+  });
+
+  /**
+   * The Events page was live while its sidebar row said it was polled: its
+   * watch recounts nothing, so nothing knew a watch fed it. Fails if a live
+   * watch that does not recount is not reported live, or a failed one or one
+   * no page holds still is.
+   */
+  it("reports a list live while any live watch feeds it, recounting or not", () => {
+    const live = renderHook(() => useListLive(["events", null, "watch"]));
+    const page = renderHook(() =>
+      useWatchedList({
+        enabled: true,
+        subscribe: () => Promise.resolve("stream"),
+        queryKey: ["events", null, "watch"],
+        detail: () => [],
+        reportFailure: "events",
+        recount: false,
+      })
+    );
+    live.rerender();
+    expect(live.result.current).toBe(true);
+
+    act(() => callbacks.onError?.("watch stream failed: connection reset"));
+    live.rerender();
+    expect(live.result.current).toBe(false);
+    page.unmount();
+    live.rerender();
+    expect(live.result.current).toBe(false);
   });
 });

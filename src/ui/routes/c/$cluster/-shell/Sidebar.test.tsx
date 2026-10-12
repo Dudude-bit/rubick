@@ -20,9 +20,13 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { forgetRefusals } from "@/lib/refusals";
 import { queryKeys } from "@/lib/query-keys";
 import { listSegment, ResourceType } from "@/lib/resource-registry";
-import { renderWithRouter } from "@/test/render";
+import { renderWithRouter, testQueryClient } from "@/test/render";
 
-import type { ClusterOverview, DetectedExtension } from "@/generated/types";
+import type {
+  ClusterOverview,
+  DetectedExtension,
+  EventInfo,
+} from "@/generated/types";
 import {
   attentionFigure,
   namespaceAttention,
@@ -124,11 +128,13 @@ vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
   }),
 }));
 
-/** The lists a page's live watch follows, by their key. */
+/** The lists a page's live watch follows, by their key, and the ones it only feeds. */
 const pageFollows = vi.hoisted(() => new Set<string>());
+const pageFeeds = vi.hoisted(() => new Set<string>());
 vi.mock("@/hooks/useWatchedList", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useWatchedList")>()),
   useListFollowed: (key: unknown) => pageFollows.has(JSON.stringify(key)),
+  useListLive: (key: unknown) => pageFeeds.has(JSON.stringify(key)),
 }));
 
 let attention: Pick<Attention, "total" | "worst" | "complete"> | null = null;
@@ -163,6 +169,7 @@ beforeEach(() => {
   read.slowRead = false;
   read.stale = false;
   pageFollows.clear();
+  pageFeeds.clear();
   useClusterStore.setState({
     isConnected: true,
     currentContext: "prod",
@@ -482,6 +489,54 @@ describe("how old a row's count is", () => {
     } finally {
       useClusterStore.setState({ namespaceScope: [] });
     }
+  });
+
+  /**
+   * Marco's Events page said "live" while its own row said it was counted
+   * every 30 s, and the row's 13 stood beside the page's 11 in its hour with
+   * nothing naming the row's window. Fails if the Events row does not follow
+   * the page's live watch while it runs, or does not say what its count
+   * covers, live or polled.
+   */
+  it("follows the Events page's live watch, and names what its count covers", async () => {
+    read.at = AT;
+    overview = {
+      ...overviewWithPods(41),
+      counts: { pods: 41, events: 13 } as ClusterOverview["counts"],
+      servedFrom: "list",
+    };
+    const covers =
+      "Every Event object the cluster still keeps, whatever its age, as All events lists them. Stories count only their own window.";
+    const client = testQueryClient();
+    const key = [...queryKeys.events(null), "watch"];
+    client.setQueryData(key, {
+      rows: Array.from({ length: 14 }, (_, i) => ({
+        name: `e${i}`,
+      })) as EventInfo[],
+      unread: [],
+    });
+    pageFeeds.add(JSON.stringify(key));
+    const live = await renderWithRouter(<Sidebar />, {
+      client,
+      at: "/c/prod",
+      route: "/c/$cluster/$",
+    });
+    const following = await counted("Events");
+    expect(following).toHaveTextContent("14");
+    expect(following).toHaveAttribute(
+      "title",
+      `Follows the cluster's changes, as the open page does.\n${covers}`
+    );
+    live.unmount();
+
+    pageFeeds.clear();
+    await wrap(<Sidebar />);
+    const polled = await counted("Events");
+    expect(polled).toHaveTextContent("13");
+    expect(polled).toHaveAttribute(
+      "title",
+      `Counted at 15:03:41, and again at least every 30 s.\n${covers}`
+    );
   });
 
   /**

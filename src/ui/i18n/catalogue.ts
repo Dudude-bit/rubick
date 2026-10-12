@@ -4477,6 +4477,9 @@ export const en = {
     countsLateAll: "Still reading the counts. These are from {at}.",
     countsFailed: "Could not count again. This count is from {at}.",
     countsFailedAll: "Could not count again. These are from {at}.",
+    countsFollowedLive: "Follows the cluster's changes, as the open page does.",
+    eventsCountWindow:
+      "Every Event object the cluster still keeps, whatever its age, as All events lists them. Stories count only their own window.",
     countPartialAtLeast: "at least {n}, not every namespace counted",
     countPartialCounted: "Counted {n} in {names}.",
     countPartialRefused:

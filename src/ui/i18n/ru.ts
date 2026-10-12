@@ -5011,6 +5011,10 @@ export const ru: Catalogue = {
     countsFailed: "Пересчитать не удалось. Это число посчитано в {at}.",
     countsFailedAll:
       "Пересчитать не удалось. На экране значения, посчитанные в {at}.",
+    countsFollowedLive:
+      "Обновляется вслед за изменениями в кластере, как и открытая страница.",
+    eventsCountWindow:
+      "Все объекты Event, которые кластер ещё хранит, любой давности, как в списке «Все события». Истории считают только своё окно.",
     countPartialAtLeast: "не меньше {n}, посчитаны не все пространства имён",
     countPartialCounted: "Посчитано {n} в {names}.",
     countPartialRefused:

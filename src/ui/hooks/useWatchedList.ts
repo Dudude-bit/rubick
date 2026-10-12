@@ -25,11 +25,36 @@ export interface WatchedList {
 
 /** How many live watches that recount the overview feed each list, by its key. */
 const useRecounting = create<Record<string, number>>(() => ({}));
+/** How many live watches feed each list, recounting or not, by its key. */
+const useFeeding = create<Record<string, number>>(() => ({}));
 
 /** Whether a live watch feeds the list under `queryKey` and has the overview's counts read again whenever it grows or shrinks. */
 export function useListFollowed(queryKey: QueryKey | null): boolean {
   const id = queryKey && JSON.stringify(queryKey);
   return useRecounting((counts) => !!id && (counts[id] ?? 0) > 0);
+}
+
+/** Whether a live watch feeds the list under `queryKey`, whatever it does to the overview. */
+export function useListLive(queryKey: QueryKey | null): boolean {
+  const id = queryKey && JSON.stringify(queryKey);
+  return useFeeding((counts) => !!id && (counts[id] ?? 0) > 0);
+}
+
+/** Holds `subscription` in `store` while `on`. */
+function useRegistered(
+  store: typeof useRecounting,
+  subscription: string,
+  on: boolean
+) {
+  useEffect(() => {
+    if (!on) return;
+    const add = (by: number) =>
+      store.setState((counts) => ({
+        [subscription]: (counts[subscription] ?? 0) + by,
+      }));
+    add(1);
+    return () => add(-1);
+  }, [store, on, subscription]);
 }
 
 /**
@@ -123,16 +148,8 @@ export function useWatchedList<
 
   const watchFailed = refusedBefore || failedFor === subscription;
   const live = enabled && !watchFailed;
-  const recounting = live && recount !== false;
-  useEffect(() => {
-    if (!recounting) return;
-    const add = (by: number) =>
-      useRecounting.setState((counts) => ({
-        [subscription]: (counts[subscription] ?? 0) + by,
-      }));
-    add(1);
-    return () => add(-1);
-  }, [recounting, subscription]);
+  useRegistered(useRecounting, subscription, live && recount !== false);
+  useRegistered(useFeeding, subscription, live);
   return {
     live,
     refresh: live ? false : "resourceList",

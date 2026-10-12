@@ -38,7 +38,8 @@ import { useShellCounts, type ShellCounts } from "./useShellCounts";
 import { useWindowCluster } from "./useWindowCluster";
 import { useAppSearchValue } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { useListFollowed } from "@/hooks/useWatchedList";
+import { useListFollowed, useListLive } from "@/hooks/useWatchedList";
+import { useReadAt } from "@/hooks/useReadUid";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "../-object/useGatewayRoutes";
 import {
@@ -85,9 +86,11 @@ import {
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type {
+  EventInfo,
   ListQuery,
   PartialCount,
   ResourceCounts,
+  Scoped,
 } from "@/generated/types";
 import { errorWords } from "@/i18n/say";
 import { useT, type T as Translate } from "@/i18n/useT";
@@ -1032,7 +1035,12 @@ function NavRow({
           {note !== undefined ? (
             <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
           ) : value === undefined ? (
-            counts && <NavCount item={item} counts={counts} missing={missing} />
+            counts &&
+            (item.count === "events" ? (
+              <EventsNavCount item={item} counts={counts} missing={missing} />
+            ) : (
+              <NavCount item={item} counts={counts} missing={missing} />
+            ))
           ) : (
             value !== null && (
               <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
@@ -1113,6 +1121,26 @@ function AttentionCount({
   );
 }
 
+/** The Events row: while the Events page's watch is live, its count is what that watch holds, so the row follows as the page does. */
+function EventsNavCount(props: {
+  item: NavItem;
+  counts: ShellCounts;
+  missing?: ScopeMissing;
+}) {
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const key = useMemo(
+    () => [...queryKeys.events(scopeCacheKey(scope)), "watch"],
+    [scope]
+  );
+  const live = useListLive(key);
+  const held = useReadAt(key, (state) =>
+    live
+      ? (state?.data as Scoped<EventInfo> | undefined)?.rows.length
+      : undefined
+  );
+  return <NavCount {...props} watched={held} />;
+}
+
 /**
  * The number at the end of a row.
  *
@@ -1124,10 +1152,13 @@ function NavCount({
   item,
   counts,
   missing,
+  watched,
 }: {
   item: NavItem;
   counts: ShellCounts;
   missing?: ScopeMissing;
+  /** The count a page's own live watch holds, which this row follows instead of the overview's. */
+  watched?: number;
 }) {
   const t = useT();
   const scope = useClusterStore((s) => s.namespaceScope);
@@ -1145,13 +1176,20 @@ function NavCount({
   if (item.labelKey === "overview")
     return <AttentionCount attention={attention} counts={counts} />;
 
-  const count = item.count && overview.counts[item.count];
-  const age = countAge(
-    counts,
-    pageFollows ||
-      (item.count !== undefined && counts.followed.has(item.count)),
-    t
-  );
+  const count = watched ?? (item.count && overview.counts[item.count]);
+  const age = [
+    watched === undefined
+      ? countAge(
+          counts,
+          pageFollows ||
+            (item.count !== undefined && counts.followed.has(item.count)),
+          t
+        )
+      : t("cluster", "countsFollowedLive"),
+    item.count === "events" ? t("cluster", "eventsCountWindow") : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
   const behind = (heldAt !== null || late || failed) && HELD_CLASS;
   if (count == null) {
     const partial = overview.countsPartial?.find(
