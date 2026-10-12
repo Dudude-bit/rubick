@@ -9,6 +9,7 @@ import { changesScreenSection, watchedSection } from "./changes-share";
 import {
   earlierRowsWords,
   quietSince,
+  quietStretches,
   refusedWhere,
   spansCovering,
   spansWatching,
@@ -59,19 +60,21 @@ export function Changes() {
     () => spansCovering(ours, { kinds: [], namespaces: scope.scope }),
     [ours, scope.scope]
   );
-  const items = useMemo(
-    () =>
-      timelineOf({
-        revisions: [],
-        deliveries: [],
-        helm: [],
-        journal: mine,
-        spans: covering,
-        watching: spansWatching(ours, []),
-        window: { from: now - WINDOWS[window], to: now },
-      }).filter((item) => item.at !== null && item.at >= now - WINDOWS[window]),
-    [mine, ours, covering, now, window]
-  );
+  const items = useMemo(() => {
+    const from = now - WINDOWS[window];
+    const timeline = timelineOf({
+      revisions: [],
+      deliveries: [],
+      helm: [],
+      journal: mine,
+      spans: covering,
+      watching: spansWatching(ours, []),
+      window: { from, to: now },
+    }).filter((item) => item.at !== null && item.at >= from);
+    return [...timeline, ...quietStretches(covering, timeline, from, now)].sort(
+      (a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity)
+    );
+  }, [mine, ours, covering, now, window]);
   const open = ours.find((span) => span.to === null);
   // From the start of the unbroken watch, not of the span: a scope change
   // retires one span and opens the next at the same moment.

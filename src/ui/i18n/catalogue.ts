@@ -1688,6 +1688,11 @@ export const en = {
       other: "Not observed for {n} seconds at {at}",
     },
     outsideScope: "Watching other namespaces, not this one, {from} to {to}",
+    watchedQuiet: "Watched {from} to {to}: nothing here changed",
+    watchedQuietBrief: {
+      one: "Watched for {n} second at {at}: nothing here changed",
+      other: "Watched for {n} seconds at {at}: nothing here changed",
+    },
     outsideScopeBrief: {
       one: "Watching other namespaces, not this one, for {n} second at {at}",
       other: "Watching other namespaces, not this one, for {n} seconds at {at}",

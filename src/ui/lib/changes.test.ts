@@ -12,6 +12,7 @@ import {
   gapsOf,
   gapWords,
   helmReleaseOf,
+  quietStretches,
   spansCovering,
   unwatchedWords,
   otherDifferences,
@@ -889,6 +890,62 @@ describe("which spans watched an object", () => {
         kinds: ["DaemonSet"],
         namespaces: ["shop"],
       })
+    ).toEqual([]);
+  });
+});
+
+describe("a stretch watched with nothing recorded", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const clock = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+  const MINUTE = 60_000;
+  const recorded = (at: number) => ({
+    kind: "journal" as const,
+    at,
+    entry: {
+      id: "e",
+      context: "acme",
+      kind: "Deployment",
+      namespace: "lena-sandbox",
+      name: "hello-web",
+      at,
+      field: "image" as const,
+      key: "app",
+      from: "a",
+      to: "b",
+    },
+  });
+
+  /**
+   * Lena's page said "watching since 07:24:23" and nothing of the nine quiet
+   * minutes it had watched lena-sandbox before a scope switch. Fails if a
+   * quiet stretch already over gets no row, or the running one gets a second.
+   */
+  it("gives every quiet stretch already over a row of its own", () => {
+    const now = T0 + 30 * MINUTE;
+    const spans = [
+      { from: T0, seenAt: T0 + 9 * MINUTE, to: T0 + 9 * MINUTE },
+      { from: T0 + 10 * MINUTE, seenAt: now, to: null },
+    ];
+    const rows = quietStretches(spans, [], T0 - HOUR, now);
+    expect(rows).toEqual([
+      {
+        kind: "watched",
+        at: T0 + 9 * MINUTE,
+        gap: { from: T0, to: T0 + 9 * MINUTE },
+      },
+    ]);
+    const [row] = rows;
+    if (row.kind !== "watched") throw new Error("not a watched row");
+    expect(gapWords(row.gap, t, clock, true)).toBe(
+      "Watched 00:00 to 00:09: nothing here changed"
+    );
+  });
+
+  /** A stretch that recorded a change already has rows; fails if it is also called quiet. */
+  it("calls no stretch quiet that recorded a change", () => {
+    const spans = [{ from: T0, seenAt: T0 + 9 * MINUTE, to: T0 + 9 * MINUTE }];
+    expect(
+      quietStretches(spans, [recorded(T0 + 4 * MINUTE)], T0 - HOUR, T0 + HOUR)
     ).toEqual([]);
   });
 });

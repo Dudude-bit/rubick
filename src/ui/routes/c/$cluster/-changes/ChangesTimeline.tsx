@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, CirclePlus } from "lucide-react";
+import { ChevronDown, ChevronRight, CirclePlus, Eye } from "lucide-react";
 import { RollBackLink } from "./RollBackLink";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -61,7 +61,7 @@ export function ChangesTimeline({
             data-after-since={after ? "true" : undefined}
           >
             <span className="font-mono text-[11px] text-fg-fnt">
-              {item.kind === "gap"
+              {item.kind === "gap" || item.kind === "watched"
                 ? ""
                 : item.at === null
                   ? "?"
@@ -111,6 +111,13 @@ function Row({
         >
           {gapWords(item.gap, t, clock)}
         </div>
+      );
+    case "watched":
+      return (
+        <p className="inline-flex items-center gap-1.5 text-[11px] text-fg-mut">
+          <Eye className="h-3 w-3 flex-none text-fg-fnt" aria-hidden="true" />
+          {gapWords(item.gap, t, clock, true)}
+        </p>
       );
     case "created":
       return (
