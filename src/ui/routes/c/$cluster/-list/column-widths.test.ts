@@ -422,6 +422,25 @@ describe("the Jobs status column", () => {
   );
 });
 
+describe("the Services type column", () => {
+  /**
+   * Lena read "ExternalName example…" in all namespaces at 1024 in Russian:
+   * the column was sized for the type alone. Fails if it stops holding an
+   * ExternalName's target and its copy mark whole beside a narrow window.
+   */
+  it("holds an ExternalName's target whole", () => {
+    const rows = [
+      { type: "ExternalName", externalName: "example.com" },
+      { type: "ClusterIP", externalName: null },
+    ];
+    const columns = services();
+    const type = columns.findIndex((c) => nameOf(c) === "type");
+    expect(laidOut(columns, 640, ru, rows).px[type]).toBeGreaterThanOrEqual(
+      "example.com".length * 7.2 + 14 + 20
+    );
+  });
+});
+
 describe("the CronJobs Suspend column", () => {
   /**
    * Lena read "Приостан…" in a column sized for "Suspended". Fails if the
