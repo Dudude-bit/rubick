@@ -11,9 +11,16 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const getClusterOverview = vi.fn();
+const subscribeDeploymentWatch = vi.fn(
+  async (_scope: string[] | null) => "deploy"
+);
 vi.mock("@/lib/commands", () => ({
   commands: {
     getClusterOverview: (scope: string[] | null) => getClusterOverview(scope),
+    subscribeDeploymentWatch: (scope: string[] | null) =>
+      subscribeDeploymentWatch(scope),
+    resourceWatchSubscribed: async () => {},
+    unsubscribeResourceWatch: async () => {},
   },
 }));
 
@@ -23,6 +30,7 @@ import { forgetChannels } from "@/lib/events";
 import { useWindowActivity } from "@/lib/window-activity";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
+  blindDeployments,
   useClusterOverview,
   useFollowedOverview,
   useScopedOverview,
@@ -215,5 +223,131 @@ describe("an overview served from the watched stores", () => {
     await waitFor(() => expect(getClusterOverview).toHaveBeenCalled());
     expect(result.current).toBe(false);
     expect(announce).toBeNull();
+  });
+});
+
+const refused = (kind: string, namespace: string | null) => ({
+  kind,
+  namespace,
+  code: "PERMISSION_DENIED",
+  message: `${kind} is forbidden`,
+});
+
+/** Marco's team-blind: Deployments readable, pods refused, ledger read in one of its Available windows. */
+const ledgerReadReady = (unread = [refused("Pod", "team-blind")]) => ({
+  servedFrom: "list",
+  counts: { pods: null },
+  deployments: {
+    read: [{ reason: "Ready", count: 1, podsUnread: false }],
+    complete: true,
+  },
+  unread,
+});
+
+describe("an overview whose pods went unread", () => {
+  let resourceEvent: ((event: { payload: unknown }) => void) | null = null;
+  const deploymentChanged = (op: string) =>
+    act(() =>
+      resourceEvent?.({
+        payload: {
+          stream_id: "deploy",
+          changes: [
+            {
+              op,
+              resource: { name: "ledger", namespace: "team-blind" },
+            },
+          ],
+          error: null,
+        },
+      })
+    );
+
+  beforeEach(() => {
+    forgetChannels();
+    resourceEvent = null;
+    subscribeDeploymentWatch.mockClear();
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "resource-event")
+        resourceEvent = handler as typeof resourceEvent;
+      return () => {};
+    });
+    useWindowActivity.setState({ visible: true });
+    useClusterStore.setState((s) => ({
+      namespaceScope: ["team-blind"],
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+  });
+
+  function follow(answer: unknown) {
+    getClusterOverview.mockResolvedValue(answer);
+    return renderHook(
+      () => {
+        const query = useScopedOverview();
+        return useFollowedOverview(query.data);
+      },
+      { wrapper }
+    );
+  }
+
+  /**
+   * Marco's team-blind Overview drew ledger green "1 Ready" from a read taken
+   * in one of its three-second Available windows, while the Deployments list
+   * beside it said Unavailable. Fails if a change on the Deployments' watch
+   * does not read the overview again where its pods could not be read.
+   */
+  it("reads again when a Deployment there changes on its watch", async () => {
+    const { result } = follow(ledgerReadReady());
+    await waitFor(() =>
+      expect(subscribeDeploymentWatch).toHaveBeenCalledWith(["team-blind"])
+    );
+    await waitFor(() => expect(resourceEvent).not.toBeNull());
+    expect(result.current).toBe(false);
+    deploymentChanged("synced");
+    const reads = getClusterOverview.mock.calls.length;
+
+    deploymentChanged("applied");
+    await waitFor(() =>
+      expect(getClusterOverview).toHaveBeenCalledTimes(reads + 1)
+    );
+  });
+
+  /** Fails if an overview that read its pods, and knows a crash loop when it sees one, opens a watch it does not need. */
+  it("does not watch Deployments where the pods were read", async () => {
+    follow(ledgerReadReady([]));
+    await waitFor(() => expect(getClusterOverview).toHaveBeenCalled());
+    await new Promise((settle) => setTimeout(settle, 50));
+    expect(subscribeDeploymentWatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("blindDeployments", () => {
+  /** Fails if a namespace whose Deployments were refused too is watched, which only collects a 403. */
+  it("names the namespaces whose pods were refused and Deployments were not", () => {
+    const overview = {
+      ...ledgerReadReady([
+        refused("Pod", "team-blind"),
+        refused("Pod", "vault"),
+        refused("Deployment", "vault"),
+      ]),
+    } as never;
+    expect(
+      blindDeployments(overview, ["team-checkout", "team-blind", "vault"])
+    ).toEqual(["team-blind"]);
+  });
+
+  /** Fails if a whole cluster whose pods were refused is not followed across every namespace. */
+  it("follows the whole cluster when the cluster-wide pod list was refused", () => {
+    expect(
+      blindDeployments(ledgerReadReady([refused("Pod", null)]) as never, [])
+    ).toBeNull();
+  });
+
+  /** Fails if an overview with no Deployment census at all opens a watch. */
+  it("watches nothing when no Deployment was read", () => {
+    expect(
+      blindDeployments({ ...ledgerReadReady(), deployments: null } as never, [
+        "team-blind",
+      ])
+    ).toBeUndefined();
   });
 });

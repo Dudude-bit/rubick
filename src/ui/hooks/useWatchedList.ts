@@ -43,6 +43,7 @@ export function useWatchedList<
   reportFailure,
   order,
   recount,
+  onChange,
 }: {
   enabled: boolean;
   subscribe: () => Promise<string>;
@@ -52,6 +53,7 @@ export function useWatchedList<
   reportFailure: string | ((message: string) => void);
   order?: (a: T, b: T) => boolean;
   recount?: boolean;
+  onChange?: () => void;
 }): WatchedList {
   const t = useT();
   const { toast } = useToast();
@@ -106,6 +108,7 @@ export function useWatchedList<
     onRecovered,
     order,
     recount,
+    onChange,
   });
 
   const watchFailed = refusedBefore || failedFor === subscription;

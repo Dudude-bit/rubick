@@ -247,6 +247,15 @@ export const queryKeys = {
     scopeCacheKey(namespaces) ?? EVERY_NAMESPACE,
   ],
   everyOverview: (): string[] => ["cluster-overview"],
+  /** The Deployments an overview whose pods went unread follows by watch, where its pods went unread. */
+  overviewDeployments: (
+    context: string | null,
+    namespaces: readonly string[] | null
+  ): (string | null)[] => [
+    "overview-deployments",
+    context,
+    scopeCacheKey(namespaces ?? []) ?? EVERY_NAMESPACE,
+  ],
 
   appInfo: (): string[] => ["app-info"],
 
