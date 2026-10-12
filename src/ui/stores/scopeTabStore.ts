@@ -40,7 +40,8 @@ import {
   getDisplayPlural,
   isResourceType,
 } from "@/lib/resource-registry";
-import { holdClusters, useClusterStore } from "./clusterStore";
+import { useClusterStore } from "./clusterStore";
+import { holdClusters } from "./heldClusters";
 
 /** The front door: no cluster yet, and a tab's address before it has one. */
 const HOME = "/";

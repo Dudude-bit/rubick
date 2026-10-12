@@ -29,6 +29,7 @@ import {
   wireNamespace,
 } from "@/lib/namespace-scope";
 import { useClusterRecencyStore } from "./clusterRecencyStore";
+import { heldClusters } from "./heldClusters";
 import { useNamespaceRecencyStore } from "./namespaceRecencyStore";
 
 /** Cluster store state and actions */
@@ -137,16 +138,6 @@ export interface ConnectFailed {
   kind: ConnectFailure;
   /** The server's words, for Details and a hover; never a headline. */
   error: string;
-}
-
-/**
- * The clusters another surface still shows. A parked scope tab names its
- * own, and a switch in this tab must not tear that one down.
- */
-let heldElsewhere: () => (string | null)[] = () => [];
-
-export function holdClusters(held: () => (string | null)[]): void {
-  heldElsewhere = held;
 }
 
 let releases = 0;
@@ -516,7 +507,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   release: async () => {
     const state = get();
     const keep = new Set(
-      [state.currentContext, state.wayBack, ...heldElsewhere()].filter(
+      [state.currentContext, state.wayBack, ...heldClusters()].filter(
         (name): name is string => name !== null
       )
     );

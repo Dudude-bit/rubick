@@ -33,7 +33,8 @@ import {
 } from "@/lib/credentials";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import type { ClusterInfo, ContextInfo } from "@/generated/types";
-import { holdClusters, useClusterStore, wayBackTo } from "./clusterStore";
+import { useClusterStore, wayBackTo } from "./clusterStore";
+import { holdClusters } from "./heldClusters";
 import { useClusterRecencyStore } from "./clusterRecencyStore";
 
 const saveClusterPreferences = vi.mocked(commands.saveClusterPreferences);
