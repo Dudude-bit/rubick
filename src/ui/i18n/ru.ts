@@ -1796,9 +1796,7 @@ export const ru: Catalogue = {
     watchingNow: "Наблюдаем с {since}",
     earlierRows:
       "Строки до {since} приложение записало, когда наблюдало с {from} по {to}",
-    unwatchedRefused: "{kinds} не отслеживаются: кластер отказал",
-    unwatchedRefusedIn:
-      "{kinds} не отслеживаются в {namespaces}: кластер отказал",
+    unwatchedRefused: "{kinds} не отслеживаются {where}: кластер отказал",
     deliveriesUnread: "Не удалось прочитать, кто это доставляет: {reason}",
     claimedOwner:
       "{owner} не перечисляет этот объект; на объекте только метка с его именем",

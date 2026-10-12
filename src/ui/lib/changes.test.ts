@@ -852,20 +852,34 @@ describe("which spans watched an object", () => {
     expect(covering(["team-blind"])).toEqual([]);
   });
 
-  /** Fails if the header stops naming where a kind was refused, or names a kind refused everywhere by namespace. */
-  it("says where each kind was refused", () => {
+  /**
+   * Marco's header said "DaemonSet not watched: the cluster refused" with no
+   * namespace though both in scope refused it, and nothing at all with one in
+   * scope, while the Overview said "in 2 namespaces". Fails if a refusal stops
+   * naming its scope, or words it otherwise than the Overview does.
+   */
+  it("says where each kind was refused, as the Overview says it", () => {
     const t: T = (section, key, values) =>
       translate("en", section, key, values);
+    const r: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const both = {
+      ...span(["team-checkout", "team-blind"], ["DaemonSet"]),
+      unwatchedIn: ["StatefulSet/team-blind"],
+    };
+    expect(unwatchedWords(both, t)).toBe(
+      "DaemonSet not watched in 2 namespaces: the cluster refused · StatefulSet not watched in team-blind: the cluster refused"
+    );
+    expect(unwatchedWords(span(["team-checkout"], ["DaemonSet"]), t)).toBe(
+      "DaemonSet not watched in team-checkout: the cluster refused"
+    );
     expect(
-      unwatchedWords(
-        {
-          ...span(["team-checkout", "team-blind"], ["DaemonSet"]),
-          unwatchedIn: ["StatefulSet/team-blind"],
-        },
-        t
-      )
+      unwatchedWords(span(["team-blind"], ["StatefulSet", "DaemonSet"]), r)
     ).toBe(
-      "DaemonSet not watched: the cluster refused · StatefulSet not watched in team-blind: the cluster refused"
+      "StatefulSet, DaemonSet не отслеживаются в пространстве имён team-blind: кластер отказал"
+    );
+    expect(unwatchedWords(span(undefined, ["DaemonSet"]), t)).toBe(
+      "DaemonSet not watched across the cluster: the cluster refused"
     );
   });
 

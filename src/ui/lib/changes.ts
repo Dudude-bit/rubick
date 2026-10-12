@@ -22,6 +22,7 @@ import type {
 import type { DeliveryRevision } from "@/integrations";
 import { probeFields } from "./probe-words";
 import type { T } from "@/i18n/useT";
+import { namespacesWhere } from "./namespace-scope";
 
 /**
  * The kinds whose history the Changes tab can draw, as a value as well as a
@@ -558,25 +559,32 @@ function refusedIn(
   );
 }
 
-/** The kinds a span was refused, each with where, in words, or `null` when it watched them all. */
-export function unwatchedWords(span: ObservedSpan, t: T): string | null {
-  const said: string[] = [];
-  if (span.unwatched?.length)
-    said.push(
-      t("changes", "unwatchedRefused", { kinds: span.unwatched.join(", ") })
-    );
+/** Each kind a span was refused, with the namespaces it was refused in; `[]` is the whole cluster. */
+export function refusedWhere(span: ObservedSpan): Map<string, string[]> {
   const where = new Map<string, string[]>();
+  for (const kind of span.unwatched ?? []) where.set(kind, span.scope ?? []);
   for (const entry of span.unwatchedIn ?? []) {
     const [kind, namespace] = entry.split("/");
     where.set(kind, [...(where.get(kind) ?? []), namespace]);
   }
-  for (const [kind, namespaces] of where)
-    said.push(
-      t("changes", "unwatchedRefusedIn", {
-        kinds: kind,
-        namespaces: namespaces.join(", "),
-      })
-    );
+  return where;
+}
+
+/** The kinds a span was refused, each with where, in words, or `null` when it watched them all. */
+export function unwatchedWords(span: ObservedSpan, t: T): string | null {
+  const kindsAt = new Map<string, { kinds: string[]; where: string[] }>();
+  for (const [kind, where] of refusedWhere(span)) {
+    const key = [...where].sort().join();
+    const same = kindsAt.get(key) ?? { kinds: [], where };
+    same.kinds.push(kind);
+    kindsAt.set(key, same);
+  }
+  const said = [...kindsAt.values()].map(({ kinds, where }) =>
+    t("changes", "unwatchedRefused", {
+      kinds: kinds.join(", "),
+      where: namespacesWhere(where, t),
+    })
+  );
   return said.length > 0 ? said.join(" · ") : null;
 }
 

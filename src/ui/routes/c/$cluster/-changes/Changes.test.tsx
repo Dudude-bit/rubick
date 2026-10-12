@@ -123,6 +123,7 @@ describe("what the Changes page offers Share", () => {
             seenAt: NOW,
             to: null,
             unwatched: ["DaemonSet"],
+            scope: ["team-checkout"],
           },
         ],
       },
@@ -130,8 +131,10 @@ describe("what the Changes page offers Share", () => {
 
     const collect = await mount();
     expect(
-      screen.getByText("DaemonSet not watched: the cluster refused")
-    ).toBeInTheDocument();
+      screen.getByText(
+        "DaemonSet not watched in team-checkout: the cluster refused"
+      )
+    ).toHaveAttribute("title", "DaemonSet: team-checkout");
     const watched = collect().find(
       (section) => section.id === "changes-watched"
     );

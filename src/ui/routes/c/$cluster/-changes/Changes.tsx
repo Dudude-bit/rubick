@@ -9,6 +9,7 @@ import { changesScreenSection, watchedSection } from "./changes-share";
 import {
   earlierRowsWords,
   quietSince,
+  refusedWhere,
   spansCovering,
   spansWatching,
   timelineOf,
@@ -103,7 +104,13 @@ export function Changes() {
                 since: formatWhen(watching.from, "clock"),
               })}
               {refused && (
-                <span className="ml-2 inline-flex items-center gap-1 text-warn">
+                <span
+                  className="ml-2 inline-flex items-center gap-1 text-warn"
+                  title={[...refusedWhere(watching)]
+                    .filter(([, where]) => where.length > 0)
+                    .map(([kind, where]) => `${kind}: ${where.join(", ")}`)
+                    .join("\n")}
+                >
                   <Lock className="h-3 w-3" aria-hidden="true" />
                   {refused}
                 </span>
