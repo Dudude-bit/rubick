@@ -214,6 +214,9 @@ pub struct WarningGroup {
     /// Whether that object is the one holding its name now. A pod made again
     /// under its name took its predecessor's `FailedMount` as its own.
     pub incarnation: Incarnation,
+    /// The object's uid where the row is about one past object, which no
+    /// other row shares: two deleted HPAs of one name are two rows.
+    pub uid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1151,8 +1154,9 @@ fn recent_warnings<'a>(
 ) -> Vec<WarningGroup> {
     let cutoff = chrono::Utc::now() - chrono::Duration::minutes(RECENT_WARNING_WINDOW_MINUTES);
     // An earlier or a gone object's repeats are kept off the reason's row for
-    // the objects there now, which they would otherwise be read as part of.
-    let mut grouped: BTreeMap<(String, bool), WarningGroup> = BTreeMap::new();
+    // the objects there now, which they would otherwise be read as part of,
+    // and off each other's: one past object to a row.
+    let mut grouped: BTreeMap<(String, Option<String>), WarningGroup> = BTreeMap::new();
 
     for event in events {
         if event.type_.as_deref() != Some("Warning") {
@@ -1171,9 +1175,11 @@ fn recent_warnings<'a>(
             .clone()
             .unwrap_or_else(|| "Unknown".to_string());
         let about = incarnation(event);
-        let past = matches!(about, Incarnation::Earlier | Incarnation::Gone);
+        let past = matches!(about, Incarnation::Earlier | Incarnation::Gone)
+            .then(|| event.involved_object.uid.clone())
+            .flatten();
         let entry = grouped
-            .entry((reason.clone(), past))
+            .entry((reason.clone(), past.clone()))
             .or_insert(WarningGroup {
                 reason,
                 count: 0,
@@ -1184,6 +1190,7 @@ fn recent_warnings<'a>(
                 object_name: None,
                 namespace: None,
                 incarnation: Incarnation::Unchecked,
+                uid: past,
             });
         let repeats = event
             .count
@@ -2769,7 +2776,58 @@ mod tests {
         let deleted = Looked::from([(hello_web, Held::Nobody)]);
         assert_eq!(
             warnings_looked(events(), &deleted),
-            vec![(45, Incarnation::Gone)]
+            vec![(41, Incarnation::Gone), (4, Incarnation::Gone)]
+        );
+    }
+
+    /// Lena deleted both hello-web HPAs and the Overview read
+    /// `FailedGetResourceMetric x54` under one deleted hello-web, 41 and 13
+    /// from two objects that Events kept as two stories. Fails if two past
+    /// objects of one name share a row, or a row stops naming its object's uid.
+    #[test]
+    fn two_deleted_objects_of_one_name_keep_a_row_each() {
+        let events = vec![
+            metric_warning("c20ecc6d", 13, 40),
+            metric_warning("8b3e3d88", 41, 10),
+        ];
+        let deleted = Looked::from([(
+            (
+                "HorizontalPodAutoscaler".to_string(),
+                Some("lena-sandbox".to_string()),
+                "hello-web".to_string(),
+            ),
+            Held::Nobody,
+        )]);
+        let mut rows: Vec<_> = build_overview(&OverviewInputs {
+            scoped_pods: &[],
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &arcs(events),
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+            looked: &deleted,
+        })
+        .warnings
+        .into_iter()
+        .map(|group| (group.count, group.uid))
+        .collect();
+        rows.sort();
+        assert_eq!(
+            rows,
+            vec![
+                (13, Some("c20ecc6d".to_string())),
+                (41, Some("8b3e3d88".to_string())),
+            ]
         );
     }
 

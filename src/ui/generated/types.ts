@@ -1969,6 +1969,7 @@ export interface WarningGroup {
   objectName: string | null;
   namespace: string | null;
   incarnation: Incarnation;
+  uid: string | null;
 }
 
 export interface OlderTally {

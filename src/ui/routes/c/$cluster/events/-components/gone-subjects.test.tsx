@@ -151,6 +151,7 @@ describe("which stories' objects were deleted", () => {
           objectName: "hello-web",
           namespace: "lena-sandbox",
           incarnation: "gone",
+          uid: "8b3e3d88",
         },
       ],
     });

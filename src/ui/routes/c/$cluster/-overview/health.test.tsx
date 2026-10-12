@@ -63,6 +63,7 @@ const warning: WarningGroup = {
   objectName: "meshed-demo",
   namespace: "k8s-gui-test",
   incarnation: "current",
+  uid: null,
 };
 
 /** The panel's list, from the reader every surface uses, with every kind read. */
@@ -166,12 +167,18 @@ describe("the overview's two event panels", () => {
     await wrap(
       <WarningsPanel
         warnings={[
-          { ...warning, reason: "FailedMount", incarnation: "earlier" },
+          {
+            ...warning,
+            reason: "FailedMount",
+            incarnation: "earlier",
+            uid: "d10287fd",
+          },
           {
             ...warning,
             reason: "BackOff",
             objectName: "gone-1",
             incarnation: "gone",
+            uid: "4afe41e6",
           },
           {
             ...warning,
@@ -214,7 +221,7 @@ describe("the overview's two event panels", () => {
       <WarningsPanel
         warnings={[
           { ...hpa, count: 41, incarnation: "current" },
-          { ...hpa, count: 4, incarnation: "earlier" },
+          { ...hpa, count: 4, incarnation: "earlier", uid: "c20ecc6d" },
         ]}
         known
       />
@@ -228,6 +235,38 @@ describe("the overview's two event panels", () => {
       })
     ).toHaveLength(1);
     expect(screen.getByText("earlier object")).toBeInTheDocument();
+    expect(
+      said.mock.calls.some((call) => String(call[0]).includes("same key"))
+    ).toBe(false);
+    said.mockRestore();
+  });
+
+  /**
+   * Lena deleted both hello-web HPAs and the Overview drew one row, ×54,
+   * where Events kept two stories. The backend now sends a row per past
+   * object; fails if the panel keys two of them as one and draws only one.
+   */
+  it("draws two deleted objects of one name as two rows", async () => {
+    const said = vi.spyOn(console, "error").mockImplementation(() => {});
+    const gone = {
+      ...warning,
+      reason: "FailedGetResourceMetric",
+      objectKind: "HorizontalPodAutoscaler",
+      objectName: "hello-web",
+      incarnation: "gone" as const,
+    };
+    await wrap(
+      <WarningsPanel
+        warnings={[
+          { ...gone, count: 41, uid: "8b3e3d88" },
+          { ...gone, count: 13, uid: "c20ecc6d" },
+        ]}
+        known
+      />
+    );
+    expect(screen.getAllByText("FailedGetResourceMetric")).toHaveLength(2);
+    expect(screen.getByText("×41")).toBeInTheDocument();
+    expect(screen.getByText("×13")).toBeInTheDocument();
     expect(
       said.mock.calls.some((call) => String(call[0]).includes("same key"))
     ).toBe(false);

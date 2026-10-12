@@ -1045,7 +1045,7 @@ export function WarningsPanel({
         <SectionBody>
           {warnings.map((warning) => (
             <WarningRow
-              key={`${warning.reason}/${PAST_OF[warning.incarnation] ?? "now"}`}
+              key={`${warning.reason}/${warning.uid ?? "now"}`}
               warning={warning}
             />
           ))}
