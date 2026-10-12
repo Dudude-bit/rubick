@@ -2362,9 +2362,104 @@ describe("connections read the same from both ends", () => {
     ).toEqual(routed);
   });
 
-  /** A Service with no pods behind it says nothing on a workload it does not select. */
-  it("leaves the group out where no Service selects the workload", () => {
-    expect(names(connections(deployment, []), "reached")).toBeUndefined();
+  /** A Service with no pods behind it names nothing on a workload it does not select, and the group says it read and found none. */
+  it("names no Service where none selects the workload", () => {
+    const rows =
+      connectionGroups(connections(deployment, []), t).find(
+        (g) => g.key === "reached"
+      )?.rows ?? [];
+    expect(rows.map((row) => row.object)).toEqual([null]);
+    expect(rows[0].detail).toBe(
+      "none: no Service, Ingress or route in k8s-gui-test sends traffic to these pods"
+    );
+  });
+});
+
+/**
+ * Marco's checkout-api listed only "Not looked at: Disruption budget": the
+ * groups it read and found empty simply vanished, the way an unread group
+ * does. A group read empty says so; one whose read failed stays absent.
+ */
+describe("a group read and found empty", () => {
+  const checkoutApi = service("checkout-api", "app=checkout-api,track=stable");
+  const group = (conns: ResourceConnections, key: string) =>
+    connectionGroups(conns, t).find((g) => g.key === key);
+
+  /** Fails if an empty answer and an unasked one look the same again. */
+  it("says none where it read, and nothing where the read failed", () => {
+    expect(group(connections(checkoutApi, []), "answers")?.rows[0].detail).toBe(
+      "none: no pod in k8s-gui-test carries this Service's selector"
+    );
+    expect(group(connections(checkoutApi, []), "routed")?.rows[0].detail).toBe(
+      "none: no Ingress or route in k8s-gui-test sends traffic to this address"
+    );
+    const podsRefused = connections(
+      checkoutApi,
+      [],
+      [],
+      [
+        {
+          kind: "Pod",
+          why: { says: "unanswered", version: "v1", said: "forbidden" },
+        },
+      ]
+    );
+    expect(group(podsRefused, "answers")).toBeUndefined();
+    expect(group(podsRefused, "unasked")?.rows.map((row) => row.key)).toEqual([
+      "Pod",
+    ]);
+  });
+
+  /** A Service with no selector picks no pod by design; saying none carry it would invent a selector. */
+  it("says nothing of pods behind a Service with no selector", () => {
+    expect(
+      group(connections(service("external", null), []), "answers")
+    ).toBeUndefined();
+  });
+
+  /** The workload's governors: fails if "nothing acts on this" is said over an unread autoscaler list. */
+  it("says nothing governs a workload only where the governors were read", () => {
+    const web = ref("Deployment", "web");
+    expect(group(connections(web, []), "governs")?.rows[0].detail).toBe(
+      "none: no autoscaler or disruption budget in k8s-gui-test acts on this"
+    );
+    expect(
+      group(
+        connections(
+          web,
+          [],
+          [],
+          [
+            {
+              kind: "HorizontalPodAutoscaler",
+              why: {
+                says: "unanswered",
+                version: "autoscaling/v2",
+                said: "forbidden",
+              },
+            },
+          ]
+        ),
+        "governs"
+      )
+    ).toBeUndefined();
+  });
+
+  /** Dana's Deployment and Service pages named no unread policies while the pod's did. */
+  it("words the policies left to each pod's own tab", () => {
+    const rows =
+      group(
+        connections(
+          ref("Deployment", "log-demo"),
+          [],
+          [],
+          [{ kind: "NetworkPolicy", why: { says: "policiesOnPodTabs" } }]
+        ),
+        "unasked"
+      )?.rows ?? [];
+    expect(rows[0].detail).toBe(
+      "Connections does not read the policies that select the pods here; each pod's NetworkPolicies tab does"
+    );
   });
 });
 

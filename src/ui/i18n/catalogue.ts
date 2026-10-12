@@ -92,6 +92,13 @@ export const en = {
     notLookedAt: "Not looked at",
     notLookedAtNote:
       "named, so a group that is absent is never read as a group that is empty",
+    noneRoutesHere:
+      "none: no Ingress or route {where} sends traffic to this address",
+    noPodAnswers: "none: no pod {where} carries this Service's selector",
+    noneReachesPods:
+      "none: no Service, Ingress or route {where} sends traffic to these pods",
+    noneGoverns:
+      "none: no autoscaler or disruption budget {where} acts on this",
     deliveredBy: "Delivered by",
     deliveredFromPath: "from {path}",
     disruptionBudget: "Disruption budget",
@@ -3510,6 +3517,8 @@ export const en = {
       "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
     unreadPoliciesOnTheirTab:
       "Connections does not read the policies that select this pod; its NetworkPolicies tab does",
+    unreadPoliciesOnPodTabs:
+      "Connections does not read the policies that select the pods here; each pod's NetworkPolicies tab does",
     connNoAddress: "no address is configured",
     stepAttempt: "attempt {revision}",
     stepChallengeOn: "{kind} on {domain}",

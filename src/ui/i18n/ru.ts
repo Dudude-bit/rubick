@@ -69,6 +69,14 @@ export const ru: Catalogue = {
     notLookedAt: "Не проверялось",
     notLookedAtNote:
       "перечислены по имени, чтобы отсутствующая группа не читалась как пустая",
+    noneRoutesHere:
+      "нет: ни один Ingress или маршрут {where} не направляет трафик на этот адрес",
+    noPodAnswers:
+      "нет: ни один под {where} не подходит под селектор этого Service",
+    noneReachesPods:
+      "нет: ни один Service, Ingress или маршрут {where} не направляет трафик на эти поды",
+    noneGoverns:
+      "нет: ни один автомасштабировщик или бюджет прерываний {where} не действует на этот объект",
     deliveredBy: "Доставлено",
     deliveredFromPath: "из {path}",
     disruptionBudget: "Бюджет прерываний",
@@ -3841,6 +3849,8 @@ export const ru: Catalogue = {
       "приложение не читает, кто монтирует заявку этого тома, поэтому не может сказать, пишет ли в него ещё кто-нибудь",
     unreadPoliciesOnTheirTab:
       "вкладка «Связи» не читает политики, которые выбирают этот под; их читает вкладка NetworkPolicies",
+    unreadPoliciesOnPodTabs:
+      "вкладка «Связи» не читает политики, которые выбирают эти поды; их читает вкладка NetworkPolicies каждого пода",
     connNoAddress: "адрес не задан",
     stepAttempt: "попытка {revision}",
     stepChallengeOn: "{kind} для {domain}",
