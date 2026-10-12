@@ -23,11 +23,20 @@ const HOST = "open";
  * A link is untrusted (it comes from a chat message or a report), and it
  * opens on arrival with no click. A tab is a view: the pod page's Shell and
  * Files land on an offer and run nothing until the reader clicks. `view` only
- * picks a layout, or an attached object's own page over its parent's. So this
- * is an allowlist, not a blocklist, and a param the app grows later stays out
- * until it is proven safe to open unattended.
+ * picks a layout, or an attached object's own page over its parent's, and a
+ * peek always opens on its Overview. So this is an allowlist, not a
+ * blocklist, and a param the app grows later stays out until it is proven
+ * safe to open unattended.
  */
-const SAFE_PARAMS = new Set(["tab", "view", "vendor", "type", "namespace"]);
+const SAFE_PARAMS = new Set([
+  "tab",
+  "view",
+  "peek",
+  "peekVia",
+  "vendor",
+  "type",
+  "namespace",
+]);
 
 export interface DeepLink {
   /** The cluster the address names. */

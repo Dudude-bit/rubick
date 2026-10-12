@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { act } from "@testing-library/react";
 
+import { buildDeepLink, parseDeepLink } from "@/lib/deep-link";
 import { renderWithRouter } from "@/test/render";
 import { peekTargetOfHref, usePeek } from "./usePeek";
 
@@ -52,6 +53,24 @@ describe("usePeek", () => {
       kind: "Node",
       name: "agent-0",
       namespace: null,
+    });
+  });
+
+  /**
+   * Lena's share link with a peek opened the list without it: the link
+   * parser dropped `peek`. Fails if the panel a link names, and the attached
+   * object it was opened for, do not arrive with it.
+   */
+  it("opens the peek a shared link names", async () => {
+    const shared = buildDeepLink(
+      "/c/prod/events?peek=deployments%2Fshop%2Fapi&peekVia=horizontalpodautoscalers%2Fshop%2Fapi"
+    );
+    const { result } = await renderPeek(parseDeepLink(shared)!.path);
+    expect(result.current.target).toEqual({
+      kind: "Deployment",
+      name: "api",
+      namespace: "shop",
+      via: "horizontalpodautoscalers/shop/api",
     });
   });
 
