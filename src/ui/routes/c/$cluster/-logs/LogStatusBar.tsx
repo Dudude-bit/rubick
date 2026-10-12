@@ -17,6 +17,7 @@ import {
 } from "./types";
 import { formatCount } from "@/lib/count";
 import type { Frozen } from "./hooks/log-buffer";
+import type { Followed } from "./readings";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -46,6 +47,7 @@ interface LogStatusBarProps {
   intakeFrom: number;
   unfilteredFrom: number;
   isStreaming: boolean;
+  followed: Followed;
 }
 
 /**
@@ -70,8 +72,10 @@ export function LogStatusBar({
   intakeFrom,
   unfilteredFrom,
   isStreaming,
+  followed,
 }: LogStatusBarProps) {
   const t = useT();
+  const partly = followed.followed < followed.total;
   const formatInfo = useMemo(() => describeFormat(logs, t), [logs, t]);
   const rate = useMemo(() => measureRate(logs), [logs]);
   // The meter is the cap's: frozen lines sit outside it, so they are
@@ -196,12 +200,16 @@ export function LogStatusBar({
           ` · ${t("count", "hiddenByFilter", { n: formatCount(hiddenCount) })}`}
       </span>
       {isStreaming && (
-        <span className="flex items-center gap-1 whitespace-nowrap">
+        <span
+          className={`flex items-center gap-1 whitespace-nowrap ${partly ? "text-warn" : ""}`}
+        >
           <span
             aria-hidden="true"
-            className="h-1.5 w-1.5 animate-pulse rounded-full bg-ok"
+            className={`h-1.5 w-1.5 animate-pulse rounded-full ${partly ? "bg-warn" : "bg-ok"}`}
           />
-          {t("action", "streaming")}
+          {partly
+            ? t("action", "streamingPartly", { ...followed })
+            : t("action", "streaming")}
         </span>
       )}
     </div>

@@ -165,6 +165,39 @@ describe("LogViewer when a live stream dies", () => {
     );
   });
 
+  /**
+   * Dana's log-demo said "Live" in the toolbar and "Streaming" in the
+   * footer while the node had stopped following three of its five
+   * containers. Fails if either word claims every stream while one is not
+   * followed, or keeps the partial count once all are followed again.
+   */
+  it("says how many streams are live while the node follows only some", async () => {
+    await mount(
+      <LogViewer
+        {...props}
+        containers={[container("app"), container("worker"), container("proxy")]}
+      />
+    );
+    await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
+    await screen.findByRole("button", { name: /^Live$/ });
+
+    fireFailure(
+      "follow-stopped",
+      "failed to create fsnotify watcher: too many open files",
+      "stream-worker"
+    );
+    expect(
+      await screen.findByRole("button", { name: /Live, 2 of 3/ })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Streaming 2 of 3")).toBeInTheDocument();
+    expect(screen.queryByText("Streaming")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: /Follow again/ }));
+    expect(
+      await screen.findByRole("button", { name: /^Live$/ })
+    ).toBeInTheDocument();
+  });
+
   it("offers a reconnect for a connection that broke", async () => {
     await renderStreaming();
 

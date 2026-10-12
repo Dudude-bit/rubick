@@ -927,6 +927,7 @@ export const en = {
     intake: "intake",
     keepingOnlyMatches: "keeping only what matches",
     streaming: "Streaming",
+    streamingPartly: "Streaming {followed} of {total}",
     mixedFormat: "mixed",
     showInNamespace: "Show {label} in {namespace}",
     showInNamespaceNarrows:
@@ -1302,6 +1303,9 @@ export const en = {
     stopStreamHint: "Stop reading from the container",
     connecting: "Connecting",
     streamLive: "Live",
+    streamLivePartly: "Live, {followed} of {total}",
+    streamLivePartlyHint:
+      "{followed} of {total} streams are followed; the notices above say why the rest are not. Click to stop reading",
     streamPaused: "Paused",
     filtering: "filtering…",
     streamStopped: "Stopped",

@@ -50,6 +50,7 @@ import {
 import { LaneCoverage } from "./LaneCoverage";
 import {
   countReadings,
+  followedOf,
   readingOf,
   readLanes,
   type ReadSource,
@@ -945,35 +946,41 @@ export function LogViewer({
     }
     return null;
   }, [lanes, bannered, containerInfos, hidden, podName, readingOfFailure]);
-  const readings = useMemo(() => {
-    const readSources: ReadSource[] = lanes
-      ? pods.flatMap((pod) =>
-          pod.containers.map((info) => ({
-            lane: pod.name,
-            pod: pod.name,
+  const readSources = useMemo<ReadSource[]>(
+    () =>
+      lanes
+        ? pods.flatMap((pod) =>
+            pod.containers.map((info) => ({
+              lane: pod.name,
+              pod: pod.name,
+              container: info.name,
+              info,
+            }))
+          )
+        : containerInfos.map((info) => ({
+            lane: info.name,
+            pod: podName,
             container: info.name,
             info,
-          }))
-        )
-      : containerInfos.map((info) => ({
-          lane: info.name,
-          pod: podName,
-          container: info.name,
-          info,
-        }));
-    return readLanes(readSources, failures, {
-      previous: previousRun,
-      restartsAlways,
-    });
-  }, [
-    lanes,
-    pods,
-    containerInfos,
-    podName,
-    failures,
-    previousRun,
-    restartsAlways,
-  ]);
+          })),
+    [lanes, pods, containerInfos, podName]
+  );
+  const readings = useMemo(
+    () =>
+      readLanes(readSources, failures, {
+        previous: previousRun,
+        restartsAlways,
+      }),
+    [readSources, failures, previousRun, restartsAlways]
+  );
+  const followed = useMemo(
+    () =>
+      followedOf(readSources, failures, {
+        previous: previousRun,
+        restartsAlways,
+      }),
+    [readSources, failures, previousRun, restartsAlways]
+  );
 
   const legendEntries = useMemo<LegendEntry[]>(
     () =>
@@ -1075,6 +1082,7 @@ export function LogViewer({
         isStreaming={isStreaming}
         isConnecting={isConnecting}
         isPaused={isPaused}
+        followed={followed}
         autoScroll={autoScroll}
         isAtBottom={isAtBottom}
         onAutoScrollToggle={handleAutoScrollToggle}
@@ -1259,6 +1267,7 @@ export function LogViewer({
         intakeFrom={intakeFrom}
         unfilteredFrom={unfilteredFrom}
         isStreaming={isStreaming}
+        followed={followed}
       />
     </div>
   );

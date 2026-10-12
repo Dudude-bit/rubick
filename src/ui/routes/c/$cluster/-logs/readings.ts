@@ -155,3 +155,33 @@ export function countReadings(
   for (const reading of readings) if (reading) counts[reading] += 1;
   return counts;
 }
+
+const UNFOLLOWED = new Set<StreamReading>([
+  "notFollowed",
+  "lost",
+  "restarting",
+]);
+
+/** Streams that should be live: the attached ones and the ones the node dropped, lost or let restart unfollowed. */
+export interface Followed {
+  followed: number;
+  total: number;
+}
+
+export function followedOf(
+  sources: readonly ReadSource[],
+  failures: readonly Pick<ContainerFailure, "pod" | "container" | "kind">[],
+  how: HowRead
+): Followed {
+  let followed = 0;
+  let total = 0;
+  for (const { pod, container, info } of sources) {
+    const failure = failures.find(
+      (entry) => entry.pod === pod && entry.container === container
+    );
+    const reading = readingOf(failure, info, how);
+    if (reading === "streaming") followed += 1;
+    if (UNFOLLOWED.has(reading) || reading === "streaming") total += 1;
+  }
+  return { followed, total };
+}

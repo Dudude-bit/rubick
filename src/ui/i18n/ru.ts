@@ -922,6 +922,7 @@ export const ru: Catalogue = {
     intake: "приём",
     keepingOnlyMatches: "оставляем только совпадения",
     streaming: "Идёт чтение",
+    streamingPartly: "Идёт чтение {followed} из {total}",
     mixedFormat: "смешанный",
     showInNamespace: "Показать {label} в {namespace}",
     showInNamespaceNarrows:
@@ -1308,6 +1309,9 @@ export const ru: Catalogue = {
     stopStreamHint: "Перестать читать из контейнера",
     connecting: "Подключение",
     streamLive: "Онлайн",
+    streamLivePartly: "Онлайн {followed} из {total}",
+    streamLivePartlyHint:
+      "Следим за {followed} из {total}; почему не за остальными, сказано в уведомлениях выше. Нажмите, чтобы перестать читать",
     streamPaused: "Пауза",
     filtering: "фильтрую…",
     streamStopped: "Остановлен",
