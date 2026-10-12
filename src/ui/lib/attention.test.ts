@@ -136,6 +136,7 @@ function claim(
   ageMs: number
 ): PersistentVolumeClaimInfo {
   return {
+    uid: "",
     name,
     namespace: "shop",
     status,

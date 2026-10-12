@@ -38,6 +38,7 @@ const gateway = (
   name: string,
   overrides: Partial<GatewayInfo> = {}
 ): GatewayInfo => ({
+  uid: "",
   name,
   namespace: "gwtest",
   apiVersion: "gateway.networking.k8s.io/v1",
@@ -83,6 +84,7 @@ const gatewayClass = (
   name: string,
   accepted: boolean | null
 ): GatewayClassInfo => ({
+  uid: "",
   name,
   controllerName: "example.net/gw",
   description: null,
@@ -119,6 +121,7 @@ const route = (
   name: string,
   overrides: Partial<RouteInfo> = {}
 ): RouteInfo => ({
+  uid: "",
   kind: "HTTPRoute",
   apiVersion: "gateway.networking.k8s.io/v1",
   name,

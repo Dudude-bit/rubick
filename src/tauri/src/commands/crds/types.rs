@@ -67,6 +67,7 @@ pub struct CrdCondition {
 #[serde(rename_all = "camelCase")]
 pub struct CrdDetailInfo {
     pub name: String,
+    pub uid: String,
     pub group: String,
     pub kind: String,
     pub plural: String,

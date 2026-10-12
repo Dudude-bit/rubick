@@ -8,6 +8,7 @@ import { endpointsAddressesSection, endpointsStats } from "./useEndpointsShare";
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 const endpoints: EndpointsInfo = {
+  uid: "",
   name: "checkout",
   namespace: "shop",
   createdAt: null,

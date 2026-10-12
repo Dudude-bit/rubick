@@ -22,6 +22,7 @@ fn format_access_mode(mode: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub struct PersistentVolumeInfo {
     pub name: String,
+    pub uid: String,
     /// What the cluster reported. Absent when it reported nothing —
     /// a hole the reader is told about, not filled with a word.
     pub capacity: Option<String>,
@@ -69,6 +70,7 @@ impl From<&PersistentVolume> for PersistentVolumeInfo {
 
         Self {
             name: pv.name_any(),
+            uid: pv.uid().unwrap_or_default(),
             capacity,
             access_modes,
             reclaim_policy: spec.and_then(|s| s.persistent_volume_reclaim_policy.clone()),
@@ -91,6 +93,7 @@ impl From<&PersistentVolume> for PersistentVolumeInfo {
 pub struct PersistentVolumeClaimInfo {
     pub name: String,
     pub namespace: String,
+    pub uid: String,
     /// The phase the cluster wrote. Absent when it wrote none: neither
     /// `PersistentVolume` nor its claim has an `Unknown` phase, so a word
     /// invented here would read as one the cluster chose.
@@ -133,6 +136,7 @@ impl From<&PersistentVolumeClaim> for PersistentVolumeClaimInfo {
         Self {
             name: pvc.name_any(),
             namespace: pvc.namespace().unwrap_or_default(),
+            uid: pvc.uid().unwrap_or_default(),
             status: status.and_then(|s| s.phase.clone()),
             volume: spec.and_then(|s| s.volume_name.clone()),
             capacity,
@@ -152,6 +156,7 @@ impl From<&PersistentVolumeClaim> for PersistentVolumeClaimInfo {
 #[serde(rename_all = "camelCase")]
 pub struct StorageClassInfo {
     pub name: String,
+    pub uid: String,
     pub provisioner: String,
     pub reclaim_policy: String,
     pub volume_binding_mode: String,
@@ -175,6 +180,7 @@ impl From<&StorageClass> for StorageClassInfo {
 
         Self {
             name: sc.name_any(),
+            uid: sc.uid().unwrap_or_default(),
             provisioner: sc.provisioner.clone(),
             reclaim_policy: sc
                 .reclaim_policy
@@ -197,7 +203,33 @@ impl From<&StorageClass> for StorageClassInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
+
+    /// Their Events tabs keep an earlier object's events off the one there now
+    /// by its uid. Fails if one of these kinds stops carrying it.
+    #[test]
+    fn every_storage_detail_carries_its_objects_uid() {
+        let metadata = ObjectMeta {
+            name: Some("data".into()),
+            uid: Some("4afe41e6".into()),
+            ..ObjectMeta::default()
+        };
+        let volume = PersistentVolume {
+            metadata: metadata.clone(),
+            ..PersistentVolume::default()
+        };
+        let claim = PersistentVolumeClaim {
+            metadata: metadata.clone(),
+            ..PersistentVolumeClaim::default()
+        };
+        let class = StorageClass {
+            metadata,
+            ..StorageClass::default()
+        };
+        assert_eq!(PersistentVolumeInfo::from(&volume).uid, "4afe41e6");
+        assert_eq!(PersistentVolumeClaimInfo::from(&claim).uid, "4afe41e6");
+        assert_eq!(StorageClassInfo::from(&class).uid, "4afe41e6");
+    }
 
     /// Would break if the age went back to being a word composed here. These
     /// three kinds used to send a finished string — `"5d"`, or `"Unknown"`

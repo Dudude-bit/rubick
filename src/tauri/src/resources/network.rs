@@ -63,6 +63,7 @@ pub struct IngressDefaultBackend {
 pub struct IngressInfo {
     pub name: String,
     pub namespace: String,
+    pub uid: String,
     pub class_name: Option<String>,
     pub rules: Vec<IngressRule>,
     pub default_backend: Option<IngressDefaultBackend>,
@@ -208,6 +209,7 @@ impl From<&Ingress> for IngressInfo {
         Self {
             name: ingress.name_any(),
             namespace: ingress.namespace().unwrap_or_default(),
+            uid: ingress.uid().unwrap_or_default(),
             class_name: spec.and_then(|s| s.ingress_class_name.clone()),
             rules,
             default_backend,
@@ -269,6 +271,7 @@ pub struct EndpointSubset {
 pub struct EndpointsInfo {
     pub name: String,
     pub namespace: String,
+    pub uid: String,
     pub subsets: Vec<EndpointSubset>,
     pub created_at: Option<String>,
     /// The control plane's own admission that it dropped addresses from this
@@ -344,6 +347,7 @@ impl From<&Endpoints> for EndpointsInfo {
         Self {
             name,
             namespace: ns,
+            uid: ep.uid().unwrap_or_default(),
             subsets,
             created_at,
             over_capacity: super::published::legacy_over_capacity(ep),
@@ -358,6 +362,33 @@ mod tests {
         IngressBackend, IngressServiceBackend, IngressSpec, ServiceBackendPort,
     };
     use kube::core::ObjectMeta;
+
+    /// Their Events tabs keep an earlier object's events off the one there now
+    /// by its uid. Fails if one of these kinds stops carrying it.
+    #[test]
+    fn every_network_detail_carries_its_objects_uid() {
+        let metadata = ObjectMeta {
+            name: Some("web".into()),
+            namespace: Some("shop".into()),
+            uid: Some("4afe41e6".into()),
+            ..ObjectMeta::default()
+        };
+        let ingress = Ingress {
+            metadata: metadata.clone(),
+            ..Ingress::default()
+        };
+        let endpoints = Endpoints {
+            metadata: metadata.clone(),
+            ..Endpoints::default()
+        };
+        let policy = k8s_openapi::api::networking::v1::NetworkPolicy {
+            metadata,
+            ..Default::default()
+        };
+        assert_eq!(IngressInfo::from(&ingress).uid, "4afe41e6");
+        assert_eq!(EndpointsInfo::from(&endpoints).uid, "4afe41e6");
+        assert_eq!(NetworkPolicyInfo::from(&policy).uid, "4afe41e6");
+    }
 
     fn ingress_with_default_backend() -> Ingress {
         Ingress {
@@ -499,6 +530,7 @@ impl PolicySelects {
 pub struct NetworkPolicyInfo {
     pub name: String,
     pub namespace: String,
+    pub uid: String,
     pub selects: PolicySelects,
     /// How many pods in scope it actually picks, and `None` where the pods
     /// were not read or the selector cannot be evaluated. A policy that
@@ -583,6 +615,7 @@ impl From<&k8s_openapi::api::networking::v1::NetworkPolicy> for NetworkPolicyInf
         Self {
             name: policy.name_any(),
             namespace: policy.namespace().unwrap_or_default(),
+            uid: policy.uid().unwrap_or_default(),
             selects: PolicySelects::read(spec.and_then(|s| s.pod_selector.as_ref())),
             selected: None,
             ingress: direction_of(types, "Ingress", ingress, wrote_in),

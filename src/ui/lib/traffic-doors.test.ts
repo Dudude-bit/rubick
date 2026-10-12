@@ -61,6 +61,7 @@ const gateway = (
   addresses: string[],
   listeners: Array<{ name: string; port: number; protocol: string }> = []
 ): GatewayInfo => ({
+  uid: "",
   name,
   namespace: "gwtest",
   apiVersion: "gateway.networking.k8s.io/v1",

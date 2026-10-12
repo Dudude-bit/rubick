@@ -287,6 +287,7 @@ export interface GcpProfileInfo {
 export interface EndpointsInfo {
   name: string;
   namespace: string;
+  uid: string;
   subsets: EndpointSubset[];
   createdAt: string | null;
   overCapacity: boolean;
@@ -412,6 +413,7 @@ export interface PublishedPort {
 export interface NetworkPolicyInfo {
   name: string;
   namespace: string;
+  uid: string;
   selects: PolicySelects;
   selected: number | null;
   ingress: PolicyDirection;
@@ -452,6 +454,7 @@ export interface PolicyIpBlock {
 export interface IngressInfo {
   name: string;
   namespace: string;
+  uid: string;
   className: string | null;
   rules: IngressRule[];
   defaultBackend: IngressDefaultBackend | null;
@@ -617,6 +620,7 @@ export interface PodMetrics {
 export interface PersistentVolumeClaimInfo {
   name: string;
   namespace: string;
+  uid: string;
   status: string | null;
   volume: string | null;
   capacity: string | null;
@@ -629,6 +633,7 @@ export interface PersistentVolumeClaimInfo {
 
 export interface StorageClassInfo {
   name: string;
+  uid: string;
   provisioner: string;
   reclaimPolicy: string;
   volumeBindingMode: string;
@@ -642,6 +647,7 @@ export interface StorageClassInfo {
 
 export interface PersistentVolumeInfo {
   name: string;
+  uid: string;
   capacity: string | null;
   accessModes: string[];
   reclaimPolicy: string | null;
@@ -671,6 +677,7 @@ export interface RouteInfo {
   apiVersion: string;
   name: string;
   namespace: string;
+  uid: string;
   hostnames: string[];
   parentRefs: ParentRefInfo[];
   rules: RouteRuleInfo[];
@@ -731,6 +738,7 @@ export interface ParentRefInfo {
 export interface GatewayInfo {
   name: string;
   namespace: string;
+  uid: string;
   apiVersion: string;
   className: string;
   listeners: ListenerInfo[];
@@ -799,6 +807,7 @@ export interface PolicyTargetRef {
 
 export interface GatewayClassInfo {
   name: string;
+  uid: string;
   controllerName: string;
   description: string | null;
   accepted: boolean | null;
@@ -1659,6 +1668,7 @@ export interface StreamLogConfig {
 
 export interface CrdDetailInfo {
   name: string;
+  uid: string;
   group: string;
   kind: string;
   plural: string;

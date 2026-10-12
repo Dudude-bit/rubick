@@ -24,6 +24,7 @@ vi.mock("@/lib/commands", () => ({
 const { default: GkeIngressPage } = await import("./page");
 
 const shop: IngressInfo = {
+  uid: "",
   name: "shop",
   namespace: "web",
   className: null,

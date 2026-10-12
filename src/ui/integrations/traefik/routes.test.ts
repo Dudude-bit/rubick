@@ -200,6 +200,7 @@ describe("which hosts reach a Service", () => {
   it("settles https from an edge terminating in front of the proxy", async () => {
     vi.mocked(commands.listIngresses).mockResolvedValue([
       {
+        uid: "",
         name: "edge",
         namespace: "edge",
         className: "gce",
@@ -334,6 +335,7 @@ describe("the scheme of a route on a plain entry point", () => {
 describe("the scheme of a route behind a load balancer holding the certificate", () => {
   /** An ALB Ingress sending the host to Traefik, its certificate an ACM ARN. */
   const alb: IngressInfo = {
+    uid: "",
     name: "edge",
     namespace: "edge",
     className: "alb",

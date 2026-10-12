@@ -8,6 +8,7 @@ import { gatewayClassStats } from "./useGatewayClassShare";
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 const cls = (over: Partial<GatewayClassInfo> = {}): GatewayClassInfo => ({
+  uid: "",
   name: "envoy",
   controllerName: "envoyproxy.io/gateway-controller",
   description: null,

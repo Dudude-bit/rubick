@@ -9,6 +9,7 @@ const t: T = (section, key, values) => translate("en", section, key, values);
 
 function sc(over: Partial<StorageClassInfo> = {}): StorageClassInfo {
   return {
+    uid: "",
     name: "standard",
     provisioner: "kubernetes.io/gce-pd",
     reclaimPolicy: "Delete",

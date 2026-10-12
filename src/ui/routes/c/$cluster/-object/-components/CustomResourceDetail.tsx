@@ -240,6 +240,7 @@ export function CustomResourceDetail({
   const events = useObjectEvents(crdInfo?.kind ?? "", name, namespace, {
     enabled: !!crdInfo?.kind,
     refresh: "slow",
+    uid: resource?.uid || null,
   });
 
   const served = servedOf(crdName);

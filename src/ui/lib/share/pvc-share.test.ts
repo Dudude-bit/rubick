@@ -11,6 +11,7 @@ function pvc(
   over: Partial<PersistentVolumeClaimInfo> = {}
 ): PersistentVolumeClaimInfo {
   return {
+    uid: "",
     name: "data",
     namespace: "shop",
     status: "Bound",

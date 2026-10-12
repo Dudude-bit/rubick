@@ -121,6 +121,7 @@ impl From<&CustomResourceDefinition> for CrdDetailInfo {
 
         CrdDetailInfo {
             name: crd.name_any(),
+            uid: crd.uid().unwrap_or_default(),
             group: spec.group.clone(),
             kind: names.kind.clone(),
             plural: names.plural.clone(),
@@ -261,6 +262,25 @@ pub(super) fn dynamic_object_to_detail_info(obj: &DynamicObject) -> CustomResour
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Its Events tab keeps an earlier definition's events off the one there
+    /// now by its uid. Fails if the detail stops carrying it.
+    #[test]
+    fn a_definition_carries_its_uid() {
+        let crd: CustomResourceDefinition = serde_json::from_value(json!({
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "metadata": { "name": "widgets.demo.io", "uid": "4afe41e6" },
+            "spec": {
+                "group": "demo.io",
+                "names": { "kind": "Widget", "plural": "widgets" },
+                "scope": "Namespaced",
+                "versions": [],
+            },
+        }))
+        .expect("a definition this test wrote");
+        assert_eq!(CrdDetailInfo::from(&crd).uid, "4afe41e6");
+    }
 
     /// An `EndpointSlice` keeps its endpoints at the top level; without them
     /// its peek read "No spec" about an object full of addresses.

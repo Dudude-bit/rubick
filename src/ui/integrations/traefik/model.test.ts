@@ -48,6 +48,7 @@ function ingress(
   } = {}
 ): IngressInfo {
   return {
+    uid: "",
     name,
     namespace: "shop",
     className: options.className === undefined ? "traefik" : options.className,
@@ -1012,6 +1013,7 @@ describe("a host whose TLS ends in front of the proxy", () => {
     }) as ServiceInfo;
 
   const edge = (overrides: Partial<IngressInfo> = {}): IngressInfo => ({
+    uid: "",
     name: "edge",
     namespace: "shop",
     className: "gce",

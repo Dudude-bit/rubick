@@ -25,6 +25,7 @@ const ingress = (
   annotations: Record<string, string> = {},
   host = `${name}.example.com`
 ): IngressInfo => ({
+  uid: "",
   name,
   namespace,
   className: null,

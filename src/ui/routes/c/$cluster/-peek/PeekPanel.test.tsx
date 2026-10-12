@@ -309,6 +309,7 @@ function buildServiceInfo(): ServiceInfo {
 
 function buildEndpointsInfo(): EndpointsInfo {
   return {
+    uid: "",
     name: "frontend",
     namespace: "storefront",
     subsets: [],
@@ -2416,6 +2417,7 @@ describe("PeekPanel traffic chain", () => {
 
   it("reads a route peek in the route's own words, not dotted paths", async () => {
     vi.mocked(commands.getGatewayRoute).mockResolvedValue({
+      uid: "",
       kind: "HTTPRoute",
       apiVersion: "gateway.networking.k8s.io/v1",
       name: "promo",

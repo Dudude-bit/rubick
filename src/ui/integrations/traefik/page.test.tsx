@@ -51,6 +51,7 @@ const { ScreenShareProvider, useScreenSections } =
   await import("@/components/share/screen-share");
 
 const shop: IngressInfo = {
+  uid: "",
   name: "shop",
   namespace: "web",
   className: "traefik",

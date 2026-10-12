@@ -10,6 +10,7 @@ import { IngressList } from "./IngressList";
 
 /** plain-nginx as `list_ingresses_in` returns it on a cluster with no IngressClass. */
 const plain: IngressInfo = {
+  uid: "",
   name: "plain-nginx",
   namespace: "k8s-gui-test",
   className: "nginx",

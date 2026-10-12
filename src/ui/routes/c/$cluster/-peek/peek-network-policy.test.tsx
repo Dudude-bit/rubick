@@ -16,6 +16,7 @@ const direction = (over: Partial<PolicyDirection>): PolicyDirection => ({
 });
 
 const policy = (over: Partial<NetworkPolicyInfo>): NetworkPolicyInfo => ({
+  uid: "",
   name: "p",
   namespace: "shop",
   selects: { kind: "everything" },

@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useReadUidAt } from "@/hooks/useReadUid";
 import {
   eventsOfEveryObject,
   latestOf,
@@ -844,8 +845,12 @@ const PEEK_EVENTS = 20;
 
 function PeekEvents({ target }: { target: PeekTarget }) {
   const t = useT();
+  // The peek's own read, which for a kind read from its manifest is not the
+  // detail entry `useObjectEvents` would otherwise look in.
+  const uid = useReadUidAt(peekQueryKey(target));
   const query = useObjectEvents(target.kind, target.name, target.namespace, {
     refresh: "overview",
+    uid,
   });
   const latest = query.data ? latestOf(query.data, PEEK_EVENTS) : null;
   const everyObject = eventsOfEveryObject(target.kind);

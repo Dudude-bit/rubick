@@ -111,6 +111,7 @@ describe("the address Argo's UI answers on", () => {
 });
 
 const serving = (overrides: Partial<IngressInfo>): IngressInfo => ({
+  uid: "",
   name: "argocd-server",
   namespace: "argocd",
   className: null,

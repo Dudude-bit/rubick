@@ -16,6 +16,7 @@ import { renderWithRouter } from "@/test/render";
 import { NetworkPolicyDetail } from "./NetworkPolicyDetail";
 
 const policy = (selected: number | null): NetworkPolicyInfo => ({
+  uid: "",
   name: "p",
   namespace: "shop",
   selects: { kind: "everything" },

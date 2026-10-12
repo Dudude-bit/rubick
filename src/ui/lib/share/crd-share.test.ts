@@ -10,6 +10,7 @@ const t: T = (section, key, values) => translate("en", section, key, values);
 
 function crd(over: Partial<CrdDetailInfo> = {}): CrdDetailInfo {
   return {
+    uid: "",
     name: "certificates.cert-manager.io",
     group: "cert-manager.io",
     kind: "Certificate",

@@ -26,6 +26,7 @@ const direction = (
 
 /** The persona cluster's two policies in `net`. */
 const DEFAULT_DENY: NetworkPolicyInfo = {
+  uid: "",
   name: "default-deny-ingress",
   namespace: "net",
   selects: { kind: "everything" },

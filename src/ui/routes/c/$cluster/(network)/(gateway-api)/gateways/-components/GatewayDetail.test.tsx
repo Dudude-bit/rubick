@@ -34,6 +34,7 @@ const said = (type: string, status: string, reason: string): ConditionInfo => ({
 });
 
 const edge = (listener: ConditionInfo[]): GatewayInfo => ({
+  uid: "",
   name: "edge",
   namespace: "infra",
   apiVersion: "gateway.networking.k8s.io/v1",

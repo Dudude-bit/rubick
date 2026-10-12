@@ -42,6 +42,7 @@ import { renderWithRouter } from "@/test/render";
 import { IngressDetail } from "./IngressDetail";
 
 const shop: IngressInfo = {
+  uid: "",
   name: "shop",
   namespace: "web",
   className: "gce",

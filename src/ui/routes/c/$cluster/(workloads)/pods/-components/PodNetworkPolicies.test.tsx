@@ -33,6 +33,7 @@ const API_POD = {
 } as unknown as PodInfo;
 
 const DEFAULT_DENY: NetworkPolicyInfo = {
+  uid: "",
   name: "default-deny-ingress",
   namespace: "net",
   selects: { kind: "everything" },

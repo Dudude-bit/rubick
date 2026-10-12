@@ -52,6 +52,7 @@ import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
+import { useReadUidAt } from "@/hooks/useReadUid";
 
 export function CrdDetail() {
   const t = useT();
@@ -62,6 +63,7 @@ export function CrdDetail() {
     null,
     {
       refresh: "slow",
+      uid: useReadUidAt(queryKeys.crd(name)),
     }
   );
   const navigate = useNavigate();
