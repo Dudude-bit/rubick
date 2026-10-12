@@ -43,6 +43,7 @@ import {
   ScreenShareProvider,
   useScreenSections,
 } from "@/components/share/screen-share";
+import { currentConnection, noteRefusal, readOf } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { Crds } from "./Crds";
@@ -107,6 +108,27 @@ describe("the CRD list when the read did not answer", () => {
       within(heading.parentElement!).queryByTestId("section-count")
     ).toBeNull();
     expect(screen.queryByText(/\b0 CRDs\b/)).toBeNull();
+  });
+
+  /**
+   * Marco's CRDs refusal page had no "refused · Ns ago" in its header, which
+   * every other refused list carries. Fails if a refused read leaves the
+   * header without the refusal and its age.
+   */
+  it("says refused in the header, as old as the refusal", async () => {
+    const refusal = new Error(
+      "customresourcedefinitions is forbidden (code: 403)"
+    );
+    noteRefusal(readOf("listCrds", [true])!, refusal, currentConnection());
+    listCrds.mockRejectedValue(refusal);
+    await draw();
+    await screen.findByText(/do not have permission to list/i);
+    const heading = screen.getByRole("heading", {
+      name: "Custom Resource Definitions",
+    });
+    const header = heading.parentElement!.parentElement!;
+    expect(within(header).getByText("refused")).toBeInTheDocument();
+    expect(within(header).getByText(/^\d+s ago$/)).toBeInTheDocument();
   });
 
   /**

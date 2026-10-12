@@ -24,6 +24,7 @@ import { KindAbout } from "@/components/object/KindAbout";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { createAgeColumn } from "../../../-list/columns";
 import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
+import { askedAgainFirst, useRefusedAt } from "@/lib/refusals";
 import { ObjectLink } from "@/components/object/ResourceRef";
 import { kindNoun, ResourceType } from "@/lib/resource-registry";
 import { crdInstancesLink, hrefOf, objectLink } from "@/lib/links";
@@ -54,6 +55,8 @@ export function Crds() {
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // A visit asks a refused list once more, so the age it shows is this visit's.
+  const [visit] = useState(askedAgainFirst);
   const [deleteTarget, setDeleteTarget] = useState<CrdListItem | null>(null);
   const deletion = deleteTarget
     ? describeDeletion(
@@ -76,7 +79,7 @@ export function Crds() {
     queryKey: queryKeys.crds(),
     queryFn: async () => {
       try {
-        return await commands.listCrds(true);
+        return await visit(() => commands.listCrds(true));
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
@@ -85,6 +88,10 @@ export function Crds() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "slow",
   });
+  // A refusal is about who asks now: rows an earlier read showed go with it,
+  // and the header says when it was refused, as every other list does.
+  const refused = !!crdsError && isRefusal(crdsError);
+  const refusedAt = useRefusedAt(refused ? crdsError : null);
 
   const deleteMutation = useMutation({
     mutationFn: async (item: CrdListItem) => {
@@ -246,9 +253,10 @@ export function Crds() {
         }
         dataUpdatedAt={dataUpdatedAt}
         slowed={freshness.slowed}
-        stale={!!crdsError && (crds.length > 0 || !isRefusal(crdsError))}
+        stale={!!crdsError && !refused}
+        refusedAt={refused ? refusedAt : undefined}
       />
-      {crdsError && crds.length > 0 && (
+      {crdsError && !refused && crds.length > 0 && (
         <StaleRows
           label="CRDs"
           since={dataUpdatedAt}
@@ -260,11 +268,11 @@ export function Crds() {
           DataTable — search, density toggle, pagination — inside every
           collapsible API group, so the same chrome appeared a dozen times
           over. The group is a caption row instead. */}
-      {crdsError && crds.length === 0 ? (
+      {crdsError && (refused || crds.length === 0) ? (
         <UnreadList
           error={crdsError}
           words={
-            isRefusal(crdsError)
+            refused
               ? t("nav", "noListAccess")
               : t("empty", "couldNotReadInScope", { label: "CRDs" })
           }
