@@ -86,22 +86,7 @@ pub async fn connect_cluster(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ClusterInfo> {
-    let generation = state.next_connect_generation();
-    let cancelled_sessions = state.cancel_auth_sessions_for_context(&context);
-    for session_id in cancelled_sessions {
-        state.emit(crate::state::AppEvent::AuthFlowCancelled {
-            session_id,
-            context: context.clone(),
-            why: Some(crate::state::AuthOutcome::Superseded),
-        });
-    }
-
-    // Reset any cached client/config for this context to ensure fresh auth
-    state.renew_manager.forget(&context);
-    state.client_manager.disconnect(&context);
-    state.overview_cache.forget(&context);
-    state.ownership.forget(&context);
-    state.remove_session(&context);
+    let generation = begin(&state, &context);
 
     let overrides = read_kubeconfig_overrides();
     // Load kubeconfig if not already loaded
@@ -168,7 +153,7 @@ pub async fn connect_cluster(
         }
     };
 
-    if !state.is_latest_connect_generation(generation) {
+    if !land(&state, generation, &info) {
         state.client_manager.disconnect(&context);
         state.remove_session(&context);
         return Err(crate::error::Error::Connection(
@@ -176,11 +161,126 @@ pub async fn connect_cluster(
         ));
     }
 
-    // Update state
-    state.set_current_context(Some(context.clone()));
-    state.create_session(&context);
-
     Ok(info)
+}
+
+/// The start of a connect: this context's own session is let go for a fresh
+/// one, every other context's is left alone, and the window points at this
+/// one at once. A cluster kept alive for the way back must not answer a read
+/// issued for the one being connected.
+fn begin(state: &AppState, context: &str) -> u64 {
+    for session_id in state.cancel_auth_sessions_for_context(context) {
+        state.emit(crate::state::AppEvent::AuthFlowCancelled {
+            session_id,
+            context: context.to_string(),
+            why: Some(crate::state::AuthOutcome::Superseded),
+        });
+    }
+    let _lifecycle = state.cluster_lifecycle.lock();
+    let generation = state.next_connect_generation();
+    state.renew_manager.forget(context);
+    state.client_manager.disconnect(context);
+    state.overview_cache.forget(context);
+    state.ownership.forget(context);
+    state.remove_session(context);
+    state.set_current_context(Some(context.to_string()));
+    generation
+}
+
+/// The connect's answer, kept only if nothing newer was asked meanwhile.
+fn land(state: &AppState, generation: u64, info: &ClusterInfo) -> bool {
+    let _lifecycle = state.cluster_lifecycle.lock();
+    if !state.is_latest_connect_generation(generation) {
+        return false;
+    }
+    state.set_current_context(Some(info.context.clone()));
+    state.create_session(info);
+    true
+}
+
+/// A context's session as it stands, if the window still holds one.
+fn held(state: &AppState, context: &str) -> Option<ClusterInfo> {
+    state.client_manager.get_client(context)?;
+    let mut info = state.sessions.get(context)?.info.clone();
+    info.credentials_expire_at = state
+        .client_manager
+        .credential_deadline(context)
+        .map(|at| at.to_rfc3339());
+    Some(info)
+}
+
+/// Every context the window holds a session for.
+fn live(state: &AppState) -> Vec<String> {
+    let mut names: Vec<String> = state
+        .sessions
+        .iter()
+        .map(|session| session.key().clone())
+        .collect();
+    names.retain(|name| state.client_manager.get_client(name).is_some());
+    names.sort();
+    names
+}
+
+/// Everything a disconnect lets go of, for one context.
+fn teardown(state: &AppState, context: &str) {
+    // Its sign-in modal only closes on a cancelled or completed event.
+    for session_id in state.cancel_auth_sessions_for_context(context) {
+        state.emit(crate::state::AppEvent::AuthFlowCancelled {
+            session_id,
+            context: context.to_string(),
+            why: Some(crate::state::AuthOutcome::SwitchedAway),
+        });
+    }
+    // Before the disconnect, so the task stops because it was told to.
+    state.renew_manager.forget(context);
+    state.client_manager.disconnect(context);
+    state.remove_session(context);
+    state.overview_cache.forget(context);
+    state.ownership.forget(context);
+    if state.get_current_context().as_deref() == Some(context) {
+        state.set_current_context(None);
+    }
+    tracing::info!("Disconnected from cluster: {}", context);
+}
+
+/// Make `context` the window's cluster again without connecting, where its
+/// session is still held. `None` makes no cluster current. Either way a
+/// connect still in flight can no longer land.
+#[tauri::command]
+#[must_use]
+pub fn focus_cluster(context: Option<String>, state: State<'_, AppState>) -> Option<ClusterInfo> {
+    focus(&state, context.as_deref())
+}
+
+fn focus(state: &AppState, context: Option<&str>) -> Option<ClusterInfo> {
+    let _lifecycle = state.cluster_lifecycle.lock();
+    state.next_connect_generation();
+    state.set_current_context(context.map(str::to_string));
+    held(state, context?)
+}
+
+/// Disconnect every context nothing on screen still uses, and say which are
+/// left. The current one is never let go of here: `focus_cluster(None)`
+/// comes first when that is the intent.
+#[tauri::command]
+#[must_use]
+pub fn release_clusters(keep: Vec<String>, state: State<'_, AppState>) -> Vec<String> {
+    release(&state, &keep)
+}
+
+fn release(state: &AppState, keep: &[String]) -> Vec<String> {
+    let _lifecycle = state.cluster_lifecycle.lock();
+    let current = state.get_current_context();
+    let unused: Vec<String> = state
+        .sessions
+        .iter()
+        .map(|session| session.key().clone())
+        .filter(|name| !keep.contains(name) && current.as_ref() != Some(name))
+        .collect();
+    for context in &unused {
+        teardown(state, context);
+    }
+    live(state)
 }
 
 /// The app's own way in: prepare credentials, build a client, ask `/version`.
@@ -314,38 +414,8 @@ pub fn connection_attempt(context: String, state: State<'_, AppState>) -> Option
 /// Disconnect from a cluster
 #[tauri::command]
 pub fn disconnect_cluster(context: String, state: State<'_, AppState>) -> Result<()> {
-    // Cancel any in-flight auth sessions for this context. Without this
-    // a sequence like `gke (auth modal open) → minikube (no auth needed)`
-    // leaves the gke modal stuck because nothing emits AuthFlowCancelled
-    // for the orphaned session — clusterStore.connect issues
-    // `disconnect_cluster(previous)` precisely here, and the modal only
-    // closes on cancel/completed events.
-    let cancelled_sessions = state.cancel_auth_sessions_for_context(&context);
-    for session_id in cancelled_sessions {
-        state.emit(crate::state::AppEvent::AuthFlowCancelled {
-            session_id,
-            context: context.clone(),
-            why: Some(crate::state::AuthOutcome::SwitchedAway),
-        });
-    }
-
-    // Before the disconnect, so the task stops because it was told to.
-    state.renew_manager.forget(&context);
-    state.client_manager.disconnect(&context);
-    state.remove_session(&context);
-    // The overview's watches too. They are cluster-wide and long-lived, and
-    // `connect_cluster` already forgets them; leaving this one out meant a
-    // cluster the reader left went on streaming five of them on a client
-    // that was just disconnected.
-    state.overview_cache.forget(&context);
-    state.ownership.forget(&context);
-
-    // Clear current context if it matches
-    if state.get_current_context().as_ref() == Some(&context) {
-        state.set_current_context(None);
-    }
-
-    tracing::info!("Disconnected from cluster: {}", context);
+    let _lifecycle = state.cluster_lifecycle.lock();
+    teardown(&state, &context);
     Ok(())
 }
 
@@ -677,6 +747,149 @@ mod proxy_tests {
             "{error}"
         );
         assert!(proxy_could_help(&error, false), "{error}");
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::{begin, focus, land, live, release};
+    use crate::client::{ClusterInfo, ConnectionPath};
+    use crate::error::Error;
+    use crate::state::AppState;
+
+    fn info(context: &str) -> ClusterInfo {
+        ClusterInfo {
+            context: context.to_string(),
+            server_version: "1.31".to_string(),
+            platform: "linux/amd64".to_string(),
+            git_version: "v1.31.0".to_string(),
+            credentials_expire_at: None,
+            connected_through: ConnectionPath::Direct,
+        }
+    }
+
+    /// A client built for `context`; nothing is dialled until it is asked.
+    async fn dial(state: &AppState, context: &str) {
+        let kubeconfig = kube::config::Kubeconfig::from_yaml(&format!(
+            "apiVersion: v1\nkind: Config\ncurrent-context: {context}\n\
+             clusters: [{{name: {context}, cluster: {{server: 'http://127.0.0.1:9'}}}}]\n\
+             users: [{{name: {context}, user: {{}}}}]\n\
+             contexts: [{{name: {context}, context: {{cluster: {context}, user: {context}}}}}]\n"
+        ))
+        .expect("kubeconfig");
+        state
+            .client_manager
+            .connect_with_kubeconfig(context, kubeconfig)
+            .await
+            .expect("client");
+    }
+
+    /// A connect to `context` that lands.
+    async fn hold(state: &AppState, context: &str) {
+        let generation = begin(state, context);
+        dial(state, context).await;
+        assert!(land(state, generation, &info(context)));
+    }
+
+    fn current(state: &AppState) -> Option<String> {
+        state.get_current_context()
+    }
+
+    /// The thesis on a switch: the previous cluster stays alive for the way
+    /// back, and every read goes through the current context. Fails if a
+    /// connect leaves the window pointing at the cluster it is leaving,
+    /// which would answer the new cluster's reads with the old one's objects.
+    #[tokio::test]
+    async fn a_cluster_kept_for_the_way_back_answers_nothing_for_the_one_being_connected() {
+        let state = AppState::new().expect("state");
+        hold(&state, "staging").await;
+
+        begin(&state, "prod-eu");
+
+        assert!(matches!(
+            state.current_client(),
+            Err(Error::NotConnected(context)) if context == "prod-eu"
+        ));
+        assert_eq!(live(&state), vec!["staging".to_string()]);
+    }
+
+    /// Going back after a failed switch is the session already held, not a
+    /// new connect. Fails if focus reconnects, or answers without making the
+    /// held cluster the one every read goes to.
+    #[tokio::test]
+    async fn focusing_a_held_cluster_makes_it_current_without_connecting() {
+        let state = AppState::new().expect("state");
+        hold(&state, "staging").await;
+        begin(&state, "prod-eu");
+
+        let back = focus(&state, Some("staging")).expect("held");
+
+        assert_eq!(back.context, "staging");
+        assert_eq!(current(&state).as_deref(), Some("staging"));
+        assert!(state.current_client().is_ok());
+    }
+
+    /// Last action wins: a connect still in flight when the reader went back
+    /// must not land over them. Fails if focus leaves the generation alone.
+    #[tokio::test]
+    async fn a_focus_supersedes_the_connect_in_flight() {
+        let state = AppState::new().expect("state");
+        hold(&state, "staging").await;
+        let generation = begin(&state, "prod-eu");
+        dial(&state, "prod-eu").await;
+
+        focus(&state, Some("staging"));
+
+        assert!(!land(&state, generation, &info("prod-eu")));
+        assert_eq!(current(&state).as_deref(), Some("staging"));
+        assert!(!state.sessions.contains_key("prod-eu"));
+    }
+
+    /// A disconnect issued mid-switch is the last word too. Fails if the
+    /// abandoned connect can still land a session nothing on screen uses.
+    #[tokio::test]
+    async fn focusing_nothing_leaves_no_cluster_current_and_no_connect_to_land() {
+        let state = AppState::new().expect("state");
+        let generation = begin(&state, "prod-eu");
+        dial(&state, "prod-eu").await;
+
+        assert!(focus(&state, None).is_none());
+
+        assert!(!land(&state, generation, &info("prod-eu")));
+        assert_eq!(current(&state), None);
+    }
+
+    /// A context the window holds no session for is not brought back: the
+    /// caller connects. Fails if a bare client, or nothing, counts as held.
+    #[tokio::test]
+    async fn focusing_a_cluster_the_window_does_not_hold_answers_nothing() {
+        let state = AppState::new().expect("state");
+        dial(&state, "orphan").await;
+
+        assert!(focus(&state, Some("orphan")).is_none());
+        assert!(focus(&state, Some("never")).is_none());
+        assert!(matches!(
+            state.current_client(),
+            Err(Error::NotConnected(context)) if context == "never"
+        ));
+    }
+
+    /// The disconnect that follows a switch. Fails if a cluster another tab
+    /// still shows is let go of, if the current one is, or if one nothing
+    /// uses is kept.
+    #[tokio::test]
+    async fn releasing_disconnects_every_cluster_not_kept_and_never_the_current_one() {
+        let state = AppState::new().expect("state");
+        hold(&state, "staging").await;
+        hold(&state, "tab-two").await;
+        hold(&state, "prod-eu").await;
+
+        let left = release(&state, &["tab-two".to_string()]);
+
+        assert_eq!(left, vec!["prod-eu".to_string(), "tab-two".to_string()]);
+        assert!(state.client_manager.get_client("staging").is_none());
+        assert!(!state.sessions.contains_key("staging"));
+        assert_eq!(current(&state).as_deref(), Some("prod-eu"));
     }
 }
 

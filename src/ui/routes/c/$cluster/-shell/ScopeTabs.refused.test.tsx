@@ -42,6 +42,8 @@ setTransport(
   fakeTransport({
     connect_cluster: (args) => ({ context: args?.context }),
     disconnect_cluster: () => undefined,
+    focus_cluster: () => null,
+    release_clusters: () => [],
     save_cluster_preferences: () => undefined,
     list_contexts: () => [],
     check_namespace_access: () => [

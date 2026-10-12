@@ -40,7 +40,7 @@ export function ClustersSettings() {
   const currentContext = useClusterStore((state) => state.currentContext);
   const failedContext = useClusterStore(failedAt);
   const connectError = useClusterStore((state) => state.error);
-  const isConnected = useClusterStore((state) => state.isConnected);
+  const live = useClusterStore((state) => state.live);
   const t = useT();
 
   const { data: contexts, isLoading } = useQuery({
@@ -127,7 +127,7 @@ export function ClustersSettings() {
               context={context}
               binding={bindingByContext.get(context.name)}
               binaries={binaries}
-              connected={isConnected && context.name === currentContext}
+              connected={live.includes(context.name)}
               failure={context.name === failedContext ? connectError : null}
               onBind={setBinding}
               fromFile={fileOf.get(context.name)}

@@ -126,7 +126,40 @@ describe("Clusters settings", () => {
     vi.clearAllMocks();
     listContexts.mockResolvedValue(CONTEXTS);
     setKubeconfigPath.mockResolvedValue(undefined);
-    useClusterStore.setState({ currentContext: "k3d-dev", isConnected: true });
+    useClusterStore.setState({
+      currentContext: "k3d-dev",
+      isConnected: true,
+      live: ["k3d-dev"],
+    });
+  });
+
+  describe("every row says whether it is connected", () => {
+    const statusOf = (name: string) =>
+      screen
+        .getByText(name)
+        .closest("div.grid")
+        ?.querySelector("[data-testid=context-status]");
+
+    /**
+     * Dana's switch to an unreachable acme-prod-eu: the cluster she left is
+     * still connected and the one she tried failed. Fails if a row reads
+     * "connected" off the current context rather than the backend's
+     * sessions.
+     */
+    it("says connected for every held cluster and connect failed for the one that failed", async () => {
+      useClusterStore.setState({
+        currentContext: "gke-shop",
+        isConnected: false,
+        error: "deadline has elapsed",
+        errorContext: "gke-shop",
+        live: ["k3d-dev"],
+      });
+      renderPane();
+      await screen.findByText("gke-shop");
+
+      expect(statusOf("k3d-dev")?.textContent).toBe("connected");
+      expect(statusOf("gke-shop")?.textContent).toBe("connect failed");
+    });
   });
 
   describe("every row says how it authenticates", () => {

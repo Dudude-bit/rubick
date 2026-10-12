@@ -163,6 +163,7 @@ export function CommandPalette() {
 
   const contexts = useClusterStore((s) => s.contexts);
   const currentContext = useClusterStore((s) => s.currentContext);
+  const live = useClusterStore((s) => s.live);
   const namespaceScope = useNamespaceScope();
   const isConnected = useClusterStore((s) => s.isConnected);
   const catalog = useQuery({
@@ -298,6 +299,7 @@ export function CommandPalette() {
         scope,
         contexts,
         currentContext,
+        live,
         marks,
         recentItems,
         isConnected,
@@ -322,6 +324,7 @@ export function CommandPalette() {
       scope,
       contexts,
       currentContext,
+      live,
       marks,
       recentItems,
       isConnected,

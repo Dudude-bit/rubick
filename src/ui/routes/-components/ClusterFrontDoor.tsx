@@ -4,6 +4,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useQuery } from "@tanstack/react-query";
 import {
   Ban,
+  CircleCheck,
   KeyRound,
   SearchX,
   ShieldX,
@@ -19,7 +20,12 @@ import { useOpenCluster } from "@/hooks/useOpenCluster";
 import { useShownPath } from "@/lib/hide-paths";
 import { commands } from "@/lib/commands";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
-import { connectingTo, failedAt, useClusterStore } from "@/stores/clusterStore";
+import {
+  connectingTo,
+  failedAt,
+  useClusterStore,
+  wayBackTo,
+} from "@/stores/clusterStore";
 import { verbatim } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -59,6 +65,7 @@ export function ClusterFrontDoor() {
   const error = useClusterStore((s) => s.error);
   const openCluster = useOpenCluster();
   const disconnect = useClusterStore((s) => s.disconnect);
+  const wayBack = useClusterStore(wayBackTo);
 
   const kubeconfig = useKubeconfigPath();
 
@@ -68,7 +75,7 @@ export function ClusterFrontDoor() {
         <Connecting
           context={connecting}
           startedAt={connectStartedAt}
-          onCancel={() => disconnect()}
+          onCancel={() => (wayBack ? openCluster(wayBack) : disconnect())}
         />
       </Door>
     );
@@ -81,6 +88,8 @@ export function ClusterFrontDoor() {
           context={failed}
           message={error}
           onRetry={() => openCluster(failed)}
+          wayBack={wayBack}
+          onBack={openCluster}
         />
         <div className="mt-7">
           <ClusterList
@@ -563,10 +572,14 @@ function Failed({
   context,
   message,
   onRetry,
+  wayBack,
+  onBack,
 }: {
   context: string;
   message: string;
   onRetry: () => void;
+  wayBack: string | null;
+  onBack: (context: string) => void;
 }) {
   const t = useT();
   const info = useClusterStore((s) =>
@@ -604,6 +617,15 @@ function Failed({
       </div>
       <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
         <Act onClick={onRetry}>{t("action", "retry")}</Act>
+        {wayBack && (
+          <Act onClick={() => onBack(wayBack)}>
+            <CircleCheck
+              aria-hidden="true"
+              className="mr-1 inline size-3 -translate-y-px text-ok"
+            />
+            {t("cluster", "backToConnected", { context: wayBack })}
+          </Act>
+        )}
         <span>{t("cluster", "orPickAnother")}</span>
       </div>
       <SecondWay attempt={attempt} />

@@ -203,6 +203,8 @@ fn main() {
             commands::cluster::get_current_context,
             commands::cluster::connect_cluster,
             commands::cluster::disconnect_cluster,
+            commands::cluster::focus_cluster,
+            commands::cluster::release_clusters,
             commands::cluster::get_cluster_info,
             commands::cluster::connection_attempt,
             commands::cluster::credential_renewal,

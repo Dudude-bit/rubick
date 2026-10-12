@@ -16,6 +16,8 @@ export function PageArea() {
   const catchingUp = useScopeTabStore((s) => s.pendingHref !== null);
   const connecting = useClusterStore(connectingTo);
   const failed = useClusterStore(failedAt);
+  // A held cluster coming back: the cache is still the last one's until it lands.
+  const returning = useClusterStore((s) => s.pendingContext !== null);
 
   // A refused session replaces the page: every list under it would draw its
   // empty state, which is how an expired token said a cluster had no pods.
@@ -23,7 +25,7 @@ export function PageArea() {
   // So does a connect in flight or failed, which each list's "no cluster" hid.
   if (connecting || failed) return <ClusterFrontDoor />;
   // A parked tab's cache is minutes old: hold it until its route has landed.
-  if (catchingUp) return <PageSkeleton className="p-0" />;
+  if (catchingUp || returning) return <PageSkeleton className="p-0" />;
   return (
     <>
       <DeepLinkBanner />
