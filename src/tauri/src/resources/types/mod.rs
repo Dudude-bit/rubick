@@ -9,6 +9,7 @@ pub mod deployment;
 pub mod metadata;
 pub mod node;
 pub mod pod;
+pub mod pod_cause;
 pub mod pod_display;
 pub mod pod_row;
 pub mod probe;
@@ -29,6 +30,7 @@ pub use pod::{
     mounts_of, volume_source, ContainerRestarts, PodInfo, PodStatusInfo, PodVolumeInfo,
     VolumeMountInfo, VolumeObjectRef,
 };
+pub use pod_cause::{pod_cause, EndedRun, Evidence, PodCause, ProbeCheck};
 pub use pod_display::{
     backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, failed_at,
     looping_until, pending_grace, pending_since, rejected_at_admission, restarting_until, restarts,

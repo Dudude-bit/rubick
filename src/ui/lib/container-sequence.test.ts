@@ -72,15 +72,17 @@ const stuckInInit = [
   }),
   container("migrate", {
     phase: "init",
-    state: { type: "waiting", reason: "CrashLoopBackOff" },
+    state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
     lastTerminated: termination({ exitCode: 1, reason: "Error" }),
     restartCount: 9,
   }),
   container("seed", {
     phase: "init",
-    state: { type: "waiting", reason: "PodInitializing" },
+    state: { type: "waiting", reason: "PodInitializing", message: null },
   }),
-  container("app", { state: { type: "waiting", reason: "PodInitializing" } }),
+  container("app", {
+    state: { type: "waiting", reason: "PodInitializing", message: null },
+  }),
 ];
 
 /**
@@ -190,7 +192,7 @@ describe("containerSequence on a pod held in init", () => {
           restartCount: 9,
         }),
         container("app", {
-          state: { type: "waiting", reason: "PodInitializing" },
+          state: { type: "waiting", reason: "PodInitializing", message: null },
         }),
       ],
       t
@@ -386,7 +388,11 @@ describe("podReadiness", () => {
           meshedPod.initContainers[0],
           container("proxy", {
             phase: "sidecar",
-            state: { type: "waiting", reason: "CrashLoopBackOff" },
+            state: {
+              type: "waiting",
+              reason: "CrashLoopBackOff",
+              message: null,
+            },
             lastTerminated: termination({ exitCode: 1 }),
           }),
         ],
@@ -429,14 +435,22 @@ describe("podReadiness", () => {
         initContainers: [
           container("migrate", {
             phase: "init",
-            state: { type: "waiting", reason: "CrashLoopBackOff" },
+            state: {
+              type: "waiting",
+              reason: "CrashLoopBackOff",
+              message: null,
+            },
             lastTerminated: termination({ exitCode: 1 }),
           }),
           container("proxy", { phase: "sidecar", ready: true }),
         ],
         containers: [
           container("app", {
-            state: { type: "waiting", reason: "PodInitializing" },
+            state: {
+              type: "waiting",
+              reason: "PodInitializing",
+              message: null,
+            },
           }),
         ],
       })
@@ -502,7 +516,11 @@ describe("shellTargets", () => {
         ...meshedPod,
         containers: [
           container("app", {
-            state: { type: "waiting", reason: "CrashLoopBackOff" },
+            state: {
+              type: "waiting",
+              reason: "CrashLoopBackOff",
+              message: null,
+            },
             lastTerminated: termination({ exitCode: 1 }),
           }),
         ],
@@ -517,7 +535,9 @@ describe("shellTargets", () => {
       shellTargets({
         initContainers: [container("migrate", { phase: "init" })],
         containers: [
-          container("app", { state: { type: "waiting", reason: null } }),
+          container("app", {
+            state: { type: "waiting", reason: null, message: null },
+          }),
         ],
       }).map((c) => c.name)
     ).toEqual(["migrate"]);

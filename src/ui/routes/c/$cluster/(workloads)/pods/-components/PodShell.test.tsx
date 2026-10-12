@@ -273,7 +273,7 @@ describe("PodShell when there is nothing to attach to", () => {
         phase: "init",
         ready: false,
         restartCount: 33,
-        state: { type: "waiting", reason: "CrashLoopBackOff" },
+        state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
         lastTerminated: {
           exitCode: 1,
           signal: null,
@@ -287,14 +287,14 @@ describe("PodShell when there is nothing to attach to", () => {
         name: "seed",
         phase: "init",
         ready: false,
-        state: { type: "waiting", reason: "PodInitializing" },
+        state: { type: "waiting", reason: "PodInitializing", message: null },
       }),
     ],
     containers: [
       container({
         name: "app",
         ready: false,
-        state: { type: "waiting", reason: "PodInitializing" },
+        state: { type: "waiting", reason: "PodInitializing", message: null },
       }),
     ],
   });
@@ -503,7 +503,11 @@ describe("PodShell where the cluster refuses this user", () => {
           containers: [
             container({
               ready: false,
-              state: { type: "waiting", reason: "PodInitializing" },
+              state: {
+                type: "waiting",
+                reason: "PodInitializing",
+                message: null,
+              },
             }),
           ],
         } as Partial<PodInfo>)}

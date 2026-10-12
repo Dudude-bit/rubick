@@ -6,6 +6,10 @@ import {
   type ReactNode,
 } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
+import { CauseEvidence } from "../../../-object/CauseLine";
+import { useCauseLog } from "../../../-object/useCauseLog";
+import { causeWords } from "@/lib/pod-cause";
+import { troubleCause } from "@/lib/share/pod-status";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -782,6 +786,11 @@ export function PodDetail() {
   ];
 
   const problem = useMemo(() => podProblem(pod, waiting, t), [pod, waiting, t]);
+  const cause = useCauseLog(
+    pod ?? { name: "", namespace: "" },
+    pod ? troubleCause(pod) : null
+  );
+  const causeSaid = cause && causeWords(cause, t);
 
   // A shell the reader opened and left is invisible the moment they click
   // Logs. The store already knows it is there; the dot is how the tab says so.
@@ -846,21 +855,27 @@ export function PodDetail() {
           )
         }
         summary={
-          problem && (
+          (problem || causeSaid) && (
             <ProblemSummary
-              headline={problem.headline}
-              detail={problem.detail}
-              tone={problem.tone}
+              headline={causeSaid?.sentence ?? problem?.headline}
+              detail={
+                causeSaid ? (
+                  <CauseEvidence words={causeSaid} inline />
+                ) : (
+                  problem?.detail
+                )
+              }
+              tone={causeSaid?.tone ?? problem?.tone}
               action={
                 <DetailAction
                   label={t(
                     "action",
-                    problem.tab === "containers"
+                    (problem?.tab ?? "conditions") === "containers"
                       ? "seeContainers"
                       : "seeConditions"
                   )}
                   icon={ArrowRight}
-                  onClick={() => setActiveTab(problem.tab)}
+                  onClick={() => setActiveTab(problem?.tab ?? "conditions")}
                 />
               }
             />

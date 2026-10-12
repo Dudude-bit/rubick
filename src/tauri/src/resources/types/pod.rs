@@ -427,6 +427,9 @@ pub struct PodStatusInfo {
     /// See [`rejected_at_admission`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rejected: Option<String>,
+    /// See [`super::pod_cause::pod_cause`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cause: Option<super::PodCause>,
 }
 
 impl PodStatusInfo {
@@ -446,6 +449,7 @@ impl PodStatusInfo {
                 exit_unreported: false,
                 restarting_until: None,
                 rejected: None,
+                cause: None,
             };
         };
 
@@ -470,6 +474,7 @@ impl PodStatusInfo {
             exit_unreported: exit_unreported(pod),
             restarting_until: restarting_until(pod),
             rejected: rejected_at_admission(pod),
+            cause: super::pod_cause(pod),
         }
     }
 }
@@ -602,7 +607,7 @@ mod tests {
 
         assert!(matches!(
             &migrate.state,
-            ContainerState::Waiting { reason } if reason.as_deref() == Some("CrashLoopBackOff")
+            ContainerState::Waiting { reason, .. } if reason.as_deref() == Some("CrashLoopBackOff")
         ));
         assert_eq!(migrate.restart_count, 4);
         let death = migrate

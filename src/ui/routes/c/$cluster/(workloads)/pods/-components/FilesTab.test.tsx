@@ -568,6 +568,7 @@ describe("FilesTab", () => {
     stopped.containers[0].state = {
       type: "waiting",
       reason: "CrashLoopBackOff",
+      message: null,
     };
     await wrap(
       <FilesTab
@@ -591,6 +592,7 @@ describe("FilesTab", () => {
     stopped.containers[0].state = {
       type: "waiting",
       reason: "CrashLoopBackOff",
+      message: null,
     };
     const view = await wrap(
       <FilesTab
@@ -705,6 +707,7 @@ describe("FilesTab", () => {
     stopped.containers[0].state = {
       type: "waiting",
       reason: "CrashLoopBackOff",
+      message: null,
     };
     const onDebug = vi.fn();
     const refused = await wrap(

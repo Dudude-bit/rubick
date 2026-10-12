@@ -1458,6 +1458,129 @@ export interface ServedGatewayKind {
   readVersion: string;
 }
 
+export interface PodInfo {
+  name: string;
+  namespace: string;
+  uid: string;
+  status: PodStatusInfo;
+  nodeName: string | null;
+  podIp: string | null;
+  hostIp: string | null;
+  containers: ContainerInfo[];
+  initContainers: ContainerInfo[];
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  createdAt: string | null;
+  restartCount: number;
+  lastRestartAt: string | null;
+  restartsBy?: ContainerRestarts[];
+  cpuRequests: string | null;
+  cpuLimits: string | null;
+  memoryRequests: string | null;
+  memoryLimits: string | null;
+  ownerReferences: OwnerReference[];
+  volumes: PodVolumeInfo[];
+  serviceAccountName: string | null;
+  start: PodStart;
+  workload: PodWorkload | null;
+}
+
+export interface PodWorkload {
+  kind: string;
+  name: string;
+}
+
+export interface PodVolumeInfo {
+  name: string;
+  source: string;
+  refs: VolumeObjectRef[];
+  mounts: VolumeMountInfo[];
+  projections: VolumeProjectionInfo[];
+}
+
+export interface VolumeProjectionInfo {
+  source: string;
+  object: VolumeObjectRef | null;
+  paths: string[];
+}
+
+export interface VolumeMountInfo {
+  container: string;
+  path: string;
+  readOnly: boolean;
+  subPath: string | null;
+}
+
+export interface VolumeObjectRef {
+  kind: string;
+  name: string;
+}
+
+export interface ContainerRestarts {
+  container: string;
+  n: number;
+}
+
+export interface ContainerInfo {
+  name: string;
+  image: string;
+  ready: boolean;
+  started: boolean;
+  phase: ContainerPhase;
+  state: ContainerState;
+  lastTerminated: TerminationInfo | null;
+  restartCount: number;
+  loopingUntil?: string;
+  restartingUntil?: string;
+  ports: ContainerPortInfo[];
+  resources: DeploymentContainerResources;
+  env: EnvVarInfo[];
+  envFrom: EnvFromInfo[];
+}
+
+export interface ContainerPortInfo {
+  name: string | null;
+  containerPort: number;
+  protocol: string;
+}
+
+export interface TerminationInfo {
+  exitCode: number;
+  signal: number | null;
+  reason: string | null;
+  message: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface PodStatusInfo {
+  phase: string;
+  display: string;
+  kubectlStatus?: string;
+  failedAt?: string;
+  ready: boolean;
+  conditions: ConditionInfo[];
+  message: string | null;
+  reason: string | null;
+  loopingUntil?: string;
+  exitUnreported: boolean;
+  restartingUntil?: string;
+  rejected?: string;
+  cause?: PodCause;
+}
+
+export interface EndedRun {
+  code: number;
+  signal: number | null;
+  reason: string | null;
+  started: string | null;
+  ended: string | null;
+  previous: boolean;
+  said: string | null;
+  log: Evidence;
+  limit: string | null;
+}
+
 export type PodFilters = {
   statusFilter: string | null;
   selector: Record<string, string> | null;
@@ -1936,11 +2059,6 @@ export interface RolloutCount {
   podsUnread: boolean;
 }
 
-export interface ReasonCount {
-  reason: string;
-  count: number;
-}
-
 export interface PodComposition {
   running: number;
   pending: number;
@@ -1958,6 +2076,11 @@ export interface PodComposition {
 export interface Census<T> {
   read: T;
   complete: boolean;
+}
+
+export interface ReasonCount {
+  reason: string;
+  count: number;
 }
 
 export interface ResourceCounts {
@@ -2004,8 +2127,6 @@ export interface OlderTally {
   since: string;
 }
 
-export type Incarnation = "current" | "earlier" | "gone" | "unchecked";
-
 export interface NodeSummary {
   name: string;
   ready: boolean;
@@ -2038,11 +2159,6 @@ export interface ClusterProblem {
   since: string | null;
   restarts: number | null;
   foldedPods: number | null;
-}
-
-export interface ContainerRestarts {
-  container: string;
-  n: number;
 }
 
 export interface TlsCertificate {
@@ -2083,26 +2199,12 @@ export interface PodRow {
   workload: PodWorkload | null;
 }
 
-export interface PodWorkload {
-  kind: string;
-  name: string;
-}
-
 export interface RowContainer {
   name: string;
   ready: boolean;
   started: boolean;
   phase: ContainerPhase;
   state: ContainerState;
-}
-
-export interface TerminationInfo {
-  exitCode: number;
-  signal: number | null;
-  reason: string | null;
-  message: string | null;
-  startedAt: string | null;
-  finishedAt: string | null;
 }
 
 export interface PodRowStatus {
@@ -2113,6 +2215,7 @@ export interface PodRowStatus {
   exitUnreported: boolean;
   restartingUntil?: string;
   rejected?: string;
+  cause?: PodCause;
 }
 
 export interface FileEntry {
@@ -2179,97 +2282,6 @@ export interface LogLineEvent {
   fields: Record<string, string> | null;
   raw: string;
   segments?: StyledSegment[];
-}
-
-export interface PodInfo {
-  name: string;
-  namespace: string;
-  uid: string;
-  status: PodStatusInfo;
-  nodeName: string | null;
-  podIp: string | null;
-  hostIp: string | null;
-  containers: ContainerInfo[];
-  initContainers: ContainerInfo[];
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  createdAt: string | null;
-  restartCount: number;
-  lastRestartAt: string | null;
-  restartsBy?: ContainerRestarts[];
-  cpuRequests: string | null;
-  cpuLimits: string | null;
-  memoryRequests: string | null;
-  memoryLimits: string | null;
-  ownerReferences: OwnerReference[];
-  volumes: PodVolumeInfo[];
-  serviceAccountName: string | null;
-  start: PodStart;
-  workload: PodWorkload | null;
-}
-
-export interface PodVolumeInfo {
-  name: string;
-  source: string;
-  refs: VolumeObjectRef[];
-  mounts: VolumeMountInfo[];
-  projections: VolumeProjectionInfo[];
-}
-
-export interface VolumeProjectionInfo {
-  source: string;
-  object: VolumeObjectRef | null;
-  paths: string[];
-}
-
-export interface VolumeMountInfo {
-  container: string;
-  path: string;
-  readOnly: boolean;
-  subPath: string | null;
-}
-
-export interface VolumeObjectRef {
-  kind: string;
-  name: string;
-}
-
-export interface ContainerInfo {
-  name: string;
-  image: string;
-  ready: boolean;
-  started: boolean;
-  phase: ContainerPhase;
-  state: ContainerState;
-  lastTerminated: TerminationInfo | null;
-  restartCount: number;
-  loopingUntil?: string;
-  restartingUntil?: string;
-  ports: ContainerPortInfo[];
-  resources: DeploymentContainerResources;
-  env: EnvVarInfo[];
-  envFrom: EnvFromInfo[];
-}
-
-export interface ContainerPortInfo {
-  name: string | null;
-  containerPort: number;
-  protocol: string;
-}
-
-export interface PodStatusInfo {
-  phase: string;
-  display: string;
-  kubectlStatus?: string;
-  failedAt?: string;
-  ready: boolean;
-  conditions: ConditionInfo[];
-  message: string | null;
-  reason: string | null;
-  loopingUntil?: string;
-  exitUnreported: boolean;
-  restartingUntil?: string;
-  rejected?: string;
 }
 
 export interface DeploymentPods {
@@ -2747,6 +2759,49 @@ export type Usage =
   | { how: "identity" }
   | { how: "ingressTls"; hosts: string[] };
 
+export type PodStart =
+  | { state: "settled" }
+  | { state: "up"; until: string }
+  | { state: "starting"; until: string }
+  | { state: "failing" };
+
+export type ContainerState =
+  | { type: "running" }
+  | { type: "waiting"; reason: string | null; message: string | null }
+  | { type: "terminated"; termination: TerminationInfo }
+  | { type: "unknown" };
+
+export type PodCause =
+  | {
+      says: "exits";
+      container: string;
+      restarts: number;
+      run: EndedRun | null;
+      until: string | null;
+    }
+  | {
+      says: "notReady";
+      containers: string[];
+      since: string | null;
+      probe: ProbeCheck | null;
+    };
+
+export type ProbeCheck =
+  | { says: "http"; scheme: string; path: string; port: string }
+  | { says: "tcp"; port: string }
+  | { says: "grpc"; port: number }
+  | { says: "exec"; command: string[] };
+
+export type Evidence =
+  | { says: "line"; text: string; last: boolean }
+  | { says: "event"; text: string; count: number; at: string | null }
+  | { says: "notRead" }
+  | { says: "reading" }
+  | { says: "nothing" }
+  | { says: "gone" }
+  | { says: "refused" }
+  | { says: "failed"; said: string };
+
 export type Severity = "blocking" | "misconfigured" | "unverified" | "optional";
 
 export type ShellEnvReport =
@@ -2819,11 +2874,14 @@ export type RollbackOutcome =
 
 export type OverviewSource = "watch" | "list";
 
+export type Incarnation = "current" | "earlier" | "gone" | "unchecked";
+
 export type ProblemDetail =
   | { says: "said"; text: string }
   | { says: "restarts"; n: number; by: ContainerRestarts[] | null }
   | { says: "replicasReady"; ready: number; desired: number }
-  | { says: "unschedulable" };
+  | { says: "unschedulable" }
+  | { says: "cause"; cause: PodCause; by: ContainerRestarts[] | null };
 
 export type ProblemSeverity = "critical" | "warning";
 
@@ -2961,18 +3019,6 @@ export type AppEvent =
       namespaces: string[];
       cluster: boolean;
     };
-
-export type PodStart =
-  | { state: "settled" }
-  | { state: "up"; until: string }
-  | { state: "starting"; until: string }
-  | { state: "failing" };
-
-export type ContainerState =
-  | { type: "running" }
-  | { type: "waiting"; reason: string | null }
-  | { type: "terminated"; termination: TerminationInfo }
-  | { type: "unknown" };
 
 export type ListingFailure =
   | "noTools"

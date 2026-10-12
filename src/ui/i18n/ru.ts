@@ -1886,6 +1886,8 @@ export const ru: Catalogue = {
     searchNoEngine:
       "Поисковика нет: свой URL в настройках не является адресом.",
     searchOpens: "откроется {site}; движок меняется в настройках",
+    killedByLiveness:
+      "{container} не завершается сам: kubelet убивает его, потому что не проходит liveness-проба, уже {restarts}. Слова kubelet: {said}",
     guessCrashLoop:
       "Скорее всего: {container} сам завершается сразу после старта, уже {restarts}. Причина, скорее всего, в его последних строках перед выходом.",
     guessCrashRefusedSidecar:
@@ -7827,6 +7829,38 @@ export const ru: Catalogue = {
       many: "на паузе",
       other: "на паузе",
     },
+  },
+  cause: {
+    exited: "{container} завершился ({how})",
+    restartedUnreported:
+      "{container} перезапускался, а kubelet не сообщил, чем закончился его последний запуск",
+    ranFor: "проработав {ran}",
+    meansOomLimit: "убит за превышение своего лимита памяти {limit}",
+    meansOomNoLimit:
+      "убит из-за памяти, своего лимита у него нет: памяти не хватило узлу",
+    meansClean:
+      "он завершился успешно, а политика перезапуска запускает его снова",
+    meansNotExecutable:
+      "его команда есть, но её нельзя запустить (права или формат)",
+    meansNotFound: "его команды нет в образе",
+    meansKilled:
+      "убит сигналом SIGKILL извне: liveness-пробой, ядром или узлом",
+    meansTerminated: "остановлен сигналом SIGTERM, как при штатной остановке",
+    meansSegfault: "упал с ошибкой сегментации",
+    meansAborted: "прервал себя сам (SIGABRT)",
+    meansSignal: "убит сигналом {signal}",
+    notReady:
+      "{containers} работает, но не Ready, поэтому его Service его не учитывают",
+    notReadyFor:
+      "{containers} работает, но не Ready уже {age}, поэтому его Service его не учитывают",
+    readinessProbe: "Его readiness-проба:",
+    noReadinessProbe:
+      "Readiness-пробы у него нет, значит его держат собственные проверки kubelet или readiness gate.",
+    exitMessage: "Его сообщение при выходе:",
+    lastLine: "Его последняя строка:",
+    loggedLine: "В его логе перед выходом:",
+    logRefused: "Его лог недоступен с этими правами.",
+    logFailed: "Не удалось прочитать его лог: {said}",
   },
   statusMeaning: {
     phasePending:

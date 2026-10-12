@@ -40,7 +40,7 @@ function container(
 
 const migrate = container("migrate", {
   phase: "init",
-  state: { type: "waiting", reason: "CrashLoopBackOff" },
+  state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
   lastTerminated: termination({ exitCode: 1, reason: "Error" }),
   restartCount: 9,
 });
@@ -53,9 +53,11 @@ const stuckInInit = [
   migrate,
   container("seed", {
     phase: "init",
-    state: { type: "waiting", reason: "PodInitializing" },
+    state: { type: "waiting", reason: "PodInitializing", message: null },
   }),
-  container("app", { state: { type: "waiting", reason: "PodInitializing" } }),
+  container("app", {
+    state: { type: "waiting", reason: "PodInitializing", message: null },
+  }),
 ];
 
 /**
@@ -94,7 +96,7 @@ describe("initialFocus on a pod held in init", () => {
         },
       }),
       container("app", {
-        state: { type: "waiting", reason: "PodInitializing" },
+        state: { type: "waiting", reason: "PodInitializing", message: null },
       }),
     ]);
     expect(terminated.previous).toBe(false);

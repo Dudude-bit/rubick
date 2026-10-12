@@ -137,7 +137,7 @@ const crashing = () =>
     containers: [
       container("app", {
         ready: false,
-        state: { type: "waiting", reason: "CrashLoopBackOff" },
+        state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
         lastTerminated: {
           exitCode: 1,
           signal: null,
@@ -240,7 +240,7 @@ describe("troubleOf", () => {
   it("quotes the killed container's own limit, never the pod's sum", () => {
     const oomKilled = (name: string, over: Partial<ContainerInfo> = {}) =>
       container(name, {
-        state: { type: "waiting", reason: "CrashLoopBackOff" },
+        state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
         lastTerminated: {
           exitCode: 137,
           signal: 9,
@@ -295,7 +295,7 @@ describe("troubleOf", () => {
           image: "busybox:1.36",
           ready: false,
           started: false,
-          state: { type: "waiting", reason: "CrashLoopBackOff" },
+          state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
           lastTerminated: {
             exitCode: 137,
             signal: null,
@@ -396,7 +396,11 @@ describe("troubleOf", () => {
       pod({
         containers: [
           container("app", {
-            state: { type: "waiting", reason: "ImagePullBackOff" },
+            state: {
+              type: "waiting",
+              reason: "ImagePullBackOff",
+              message: null,
+            },
           }),
         ],
       }),
@@ -769,6 +773,38 @@ describe("hintFor", () => {
     };
     const hint = hintFor(troubleOf(crashing(), [])!, crashing(), chain);
     expect(hint.headline.key).toBe("guessCrashTimeoutOutside");
+  });
+
+  /**
+   * A container its liveness probe kills was told it "exits on its own".
+   * Fails if the kubelet's record of the kill does not take the headline, or
+   * if its words are not quoted.
+   */
+  it("says the liveness probe killed it where the kubelet records the kill", () => {
+    const events = [
+      event(
+        "Unhealthy",
+        "Liveness probe failed: HTTP probe failed with statuscode: 500",
+        6
+      ),
+      event(
+        "Killing",
+        "Container app failed liveness probe, will be restarted"
+      ),
+    ];
+    const hint = hintFor(troubleOf(crashing(), events)!, crashing(), NONE);
+    expect(hint.headline.key).toBe("killedByLiveness");
+    expect(hint.headline.values?.said).toBe(
+      "Liveness probe failed: HTTP probe failed with statuscode: 500"
+    );
+    const killOnly = hintFor(
+      troubleOf(crashing(), [events[1]])!,
+      crashing(),
+      NONE
+    );
+    expect(killOnly.headline.values?.said).toBe(
+      "Container app failed liveness probe, will be restarted"
+    );
   });
 
   it("falls back to the plain crash sentence when the log named no address", () => {

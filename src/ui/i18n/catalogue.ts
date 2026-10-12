@@ -1815,6 +1815,8 @@ export const en = {
     searchNoEngine:
       "No search engine: the custom URL in Settings is not an address.",
     searchOpens: "opens {site}; change the engine in Settings",
+    killedByLiveness:
+      "{container} does not exit on its own: the kubelet kills it because its liveness probe fails, {restarts} so far. The kubelet said: {said}",
     guessCrashLoop:
       "Most likely: {container} exits on its own right after starting, {restarts} so far. The reason is probably in its last lines before the exit.",
     guessCrashRefusedSidecar:
@@ -7088,6 +7090,38 @@ export const en = {
     progressingCounted: { other: "Progressing" },
     unavailableCounted: { other: "Unavailable" },
     pausedCounted: { other: "Paused" },
+  },
+  cause: {
+    exited: "{container} exited ({how})",
+    restartedUnreported:
+      "{container} restarted, and the kubelet did not report how its last run ended",
+    ranFor: "after running {ran}",
+    meansOomLimit: "killed for using more memory than its {limit} limit",
+    meansOomNoLimit:
+      "killed for memory, with no limit of its own: the node ran short",
+    meansClean:
+      "it finished successfully, and its restart policy starts it again",
+    meansNotExecutable:
+      "its command exists but cannot be run (permissions or format)",
+    meansNotFound: "its command was not found in the image",
+    meansKilled:
+      "killed with SIGKILL from outside: a liveness kill, the kernel or the node",
+    meansTerminated: "stopped with SIGTERM, as a shutdown asks",
+    meansSegfault: "crashed on a segmentation fault",
+    meansAborted: "aborted itself (SIGABRT)",
+    meansSignal: "killed by signal {signal}",
+    notReady:
+      "{containers} runs but is not Ready, so its Services leave it out",
+    notReadyFor:
+      "{containers} runs but has not been Ready for {age}, so its Services leave it out",
+    readinessProbe: "Its readiness probe:",
+    noReadinessProbe:
+      "It declares no readiness probe, so the kubelet's own checks or a readiness gate hold it.",
+    exitMessage: "Its exit message:",
+    lastLine: "Its last line:",
+    loggedLine: "Its log before the exit:",
+    logRefused: "Its log is not readable with this access.",
+    logFailed: "Its log could not be read: {said}",
   },
   statusMeaning: {
     phasePending:

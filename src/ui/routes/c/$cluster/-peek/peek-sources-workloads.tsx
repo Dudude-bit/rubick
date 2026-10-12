@@ -14,7 +14,13 @@ import { declaredQuantity } from "@/lib/metric-format";
 import { RestartsWords } from "../-object/ExitAgo";
 import { NodeRef } from "../-object/NodeRef";
 import { restartsAreNews } from "@/lib/crash-loop";
-import { insideWait, podRole, podStatusTitle } from "@/lib/share/pod-status";
+import {
+  insideWait,
+  podRole,
+  podStatusTitle,
+  troubleCause,
+} from "@/lib/share/pod-status";
+import { PodCauseLine } from "../-object/CauseLine";
 import { formatDate } from "@/lib/utils";
 import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
@@ -103,6 +109,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   Pod: source(commands.getPod, (pod, _target, t) => {
     const readiness = podReadiness(pod);
     const notUp: KeyValueTone = insideWait(pod) ? "info" : "warn";
+    const cause = troubleCause(pod);
     return {
       status: pod.status.display,
       statusFrom: pod.nodeName,
@@ -110,6 +117,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
       statusTitle: podStatusTitle(pod, null, t),
       createdAt: pod.createdAt,
       endedAt: pod.status.failedAt,
+      lead: cause && <PodCauseLine pod={pod} cause={cause} className="mt-3" />,
       groups: [
         {
           title: t("columns", "placement"),

@@ -25,7 +25,7 @@ const container = (ready: boolean): PodRow["containers"][number] => ({
   phase: "app",
   state: ready
     ? { type: "running" }
-    : { type: "waiting", reason: "CrashLoopBackOff" },
+    : { type: "waiting", reason: "CrashLoopBackOff", message: null },
 });
 
 const pod = (name: string, namespace: string, display: string): PodRow => ({

@@ -114,6 +114,13 @@ pub enum ProblemDetail {
     ReplicasReady { ready: i32, desired: i32 },
     /// A node marked unschedulable.
     Unschedulable,
+    /// A pod's cause, as every surface that draws the pod reads it, and
+    /// the containers behind its count where more than one restarted.
+    Cause {
+        cause: crate::resources::PodCause,
+        #[serde(default)]
+        by: Option<Vec<crate::resources::ContainerRestarts>>,
+    },
 }
 
 impl ProblemDetail {
@@ -128,6 +135,19 @@ impl ProblemDetail {
             n,
             by: crate::resources::restarts_by(pod),
         }
+    }
+
+    /// Why `pod` is in trouble, where its containers say.
+    fn cause(pod: &Pod) -> Option<Self> {
+        crate::resources::pod_cause(pod).map(|cause| Self::Cause {
+            cause,
+            by: crate::resources::restarts_by(pod),
+        })
+    }
+
+    /// Why `pod` restarts, where its containers say; else how often.
+    fn restarts_why(pod: &Pod, n: i32) -> Self {
+        Self::cause(pod).unwrap_or_else(|| Self::restarts(pod, n))
     }
 }
 
@@ -724,7 +744,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 CRASH_LOOPING
             }
             .to_string(),
-            detail: Some(ProblemDetail::restarts(pod, restarts)),
+            detail: Some(ProblemDetail::restarts_why(pod, restarts)),
             since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
             restarts: Some(restarts),
             folded_pods: None,
@@ -742,7 +762,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             namespace,
             reason,
             detail: if looping {
-                Some(ProblemDetail::restarts(pod, restarts))
+                Some(ProblemDetail::restarts_why(pod, restarts))
             } else {
                 ProblemDetail::said(message)
             },
@@ -769,7 +789,8 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 .reason
                 .clone()
                 .unwrap_or_else(|| "Failed".to_string()),
-            detail: ProblemDetail::said(status.message.clone()),
+            detail: ProblemDetail::said(status.message.clone())
+                .or_else(|| ProblemDetail::cause(pod)),
             since: crate::resources::failed_at(pod).map(|t| t.to_rfc3339()),
             restarts: (restarts > 0).then_some(restarts),
             folded_pods: None,
@@ -816,7 +837,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             name,
             namespace,
             reason: "Restarting".to_string(),
-            detail: Some(ProblemDetail::restarts(pod, restarts)),
+            detail: Some(ProblemDetail::restarts_why(pod, restarts)),
             // Dated by the restart, not by the pod. `since: created` put a
             // twelve-day-old date on something that happened minutes ago.
             since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
@@ -825,8 +846,36 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
         });
     }
 
+    // Past a rollout's normal settling, a pod that runs and is still left
+    // out of its Services is the reason a Deployment reads short.
+    if let Some(cause @ crate::resources::PodCause::NotReady { since, .. }) =
+        crate::resources::pod_cause(pod)
+    {
+        let settled = since.is_none_or(|at| now - at >= NOT_READY_GRACE);
+        if settled {
+            return Some(ClusterProblem {
+                severity: ProblemSeverity::Warning,
+                kind: "Pod".to_string(),
+                name,
+                namespace,
+                reason: NOT_READY.to_string(),
+                since: since.map(|t| t.to_rfc3339()),
+                detail: Some(ProblemDetail::Cause { cause, by: None }),
+                restarts: (restarts > 0).then_some(restarts),
+                folded_pods: None,
+            });
+        }
+    }
+
     None
 }
+
+/// This app's word for a pod that runs and is not Ready; the kubelet has none.
+const NOT_READY: &str = "NotReady";
+
+/// How long a running pod may stay not Ready before Needs attention says so:
+/// longer than a readiness probe's usual first passes.
+const NOT_READY_GRACE: chrono::Duration = chrono::Duration::minutes(2);
 
 /// A Pending pod inside the wait it gets and showing no fault, a restart
 /// included, as the workload running it reads it.
@@ -3679,6 +3728,43 @@ mod tests {
 
     /// A pod that restarted `count` times, the last of them `ago` seconds
     /// back, and has been `Running` ever since.
+    fn not_ready_for(seconds: i64, now: DateTime<Utc>) -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "web-1", "namespace": "shop"},
+            "spec": {"containers": [{"name": "web", "readinessProbe": {
+                "httpGet": {"path": "/ready", "port": 8080}
+            }}]},
+            "status": {
+                "phase": "Running",
+                "conditions": [{"type": "Ready", "status": "False",
+                    "lastTransitionTime": (now - chrono::Duration::seconds(seconds)).to_rfc3339()}],
+                "containerStatuses": [{
+                    "name": "web", "image": "", "imageID": "", "ready": false, "restartCount": 0,
+                    "state": {"running": {}}
+                }]
+            }
+        }))
+        .unwrap()
+    }
+
+    /// A pod that runs and stays out of its Services had no row at all.
+    /// Fails if it gets none past the grace, or one inside it.
+    #[test]
+    fn a_pod_running_but_not_ready_past_the_grace_needs_attention() {
+        let now = Utc::now();
+        let row = pod_problem(&not_ready_for(300, now), now).expect("past the grace");
+        assert_eq!(row.reason, NOT_READY);
+        assert_eq!(row.severity, ProblemSeverity::Warning);
+        assert!(matches!(
+            row.detail,
+            Some(ProblemDetail::Cause {
+                cause: crate::resources::PodCause::NotReady { .. },
+                ..
+            })
+        ));
+        assert!(pod_problem(&not_ready_for(30, now), now).is_none());
+    }
+
     fn restarted_pod(name: &str, now: DateTime<Utc>, count: i32, ago: Option<i64>) -> Pod {
         pod(
             name,
@@ -3776,11 +3862,21 @@ mod tests {
             assert_eq!(problems.len(), 1, "{instant}");
             assert_eq!(problems[0].reason, word, "{instant}");
             assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
-            assert_eq!(
-                problems[0].detail,
-                Some(ProblemDetail::Restarts { n: 9, by: None }),
-                "{instant}"
-            );
+            let Some(ProblemDetail::Cause {
+                cause:
+                    crate::resources::PodCause::Exits {
+                        container,
+                        restarts,
+                        run: Some(run),
+                        ..
+                    },
+                by: None,
+            }) = &problems[0].detail
+            else {
+                panic!("{instant}: {:?}", problems[0].detail);
+            };
+            assert_eq!((container.as_str(), *restarts), ("app", 9), "{instant}");
+            assert_eq!((run.code, run.previous), (1, true), "{instant}");
         }
     }
 
@@ -3964,13 +4060,16 @@ mod tests {
                 n: 12,
             },
         ];
-        assert_eq!(
-            problems[0].detail,
-            Some(ProblemDetail::Restarts {
-                n: 17,
-                by: Some(by.clone())
-            })
-        );
+        let Some(ProblemDetail::Cause {
+            cause: crate::resources::PodCause::Exits { container, .. },
+            by: Some(split),
+        }) = &problems[0].detail
+        else {
+            panic!("{:?}", problems[0].detail);
+        };
+        assert_eq!(container, "migrate");
+        assert_eq!(split, &by);
+        assert_eq!(problems[0].restarts, Some(17));
         assert_eq!(problems[0].since, Some(ago(120)));
         assert_eq!(crate::resources::PodInfo::from(&pod).restarts_by, Some(by));
     }
@@ -4056,10 +4155,7 @@ mod tests {
         let now = Utc::now();
 
         let ours = pod_problems(&[restarted_pod("flapper", now, 7, Some(120))], now);
-        assert_eq!(
-            ours[0].detail,
-            Some(ProblemDetail::Restarts { n: 7, by: None })
-        );
+        assert!(matches!(ours[0].detail, Some(ProblemDetail::Cause { .. })));
 
         let cordoned = node_problems(&[unschedulable_node("worker-1")]);
         assert_eq!(cordoned[0].detail, Some(ProblemDetail::Unschedulable));

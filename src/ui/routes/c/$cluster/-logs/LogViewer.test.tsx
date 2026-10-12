@@ -345,7 +345,11 @@ describe("LogViewer when a live stream dies", () => {
         containers={[
           container("app", {
             ready: false,
-            state: { type: "waiting", reason: "CrashLoopBackOff" },
+            state: {
+              type: "waiting",
+              reason: "CrashLoopBackOff",
+              message: null,
+            },
             lastTerminated: termination,
             restartCount: 653,
           }),
@@ -510,7 +514,7 @@ describe("LogViewer when a live stream dies", () => {
       />
     );
     const { rerender } = await mount(
-      pod({ type: "waiting", reason: "CrashLoopBackOff" }, 7)
+      pod({ type: "waiting", reason: "CrashLoopBackOff", message: null }, 7)
     );
     await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
 
@@ -1026,7 +1030,7 @@ describe("LogViewer on a pod held in init", () => {
     container("migrate", {
       phase: "init",
       ready: false,
-      state: { type: "waiting", reason: "CrashLoopBackOff" },
+      state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
       restartCount: 9,
       lastTerminated: {
         exitCode: 1,
@@ -1039,7 +1043,7 @@ describe("LogViewer on a pod held in init", () => {
     }),
     container("app", {
       ready: false,
-      state: { type: "waiting", reason: "PodInitializing" },
+      state: { type: "waiting", reason: "PodInitializing", message: null },
     }),
   ];
 
@@ -1459,7 +1463,7 @@ describe("a workload pane", () => {
     );
     const crashing = container("app", {
       ready: false,
-      state: { type: "waiting", reason: "CrashLoopBackOff" },
+      state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
       lastTerminated: {
         exitCode: 1,
         signal: null,
@@ -1691,6 +1695,7 @@ describe("a workload pane", () => {
   const waitingInBackoff = {
     type: "waiting",
     reason: "CrashLoopBackOff",
+    message: null,
   } as const;
   const exited = {
     type: "terminated",

@@ -14,6 +14,7 @@ import { Composition } from "@/components/object/detail-blocks";
 import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { PastObjectRef, type Past } from "../-object/PastObjectRef";
+import { CauseLine } from "../-object/CauseLine";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
 import {
@@ -30,6 +31,7 @@ import {
   PRESSURE_WARN,
   attentionShare,
   schedulerShare,
+  splitWords,
   uncheckedShare,
   warningsShare,
   workloadCards,
@@ -142,6 +144,15 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
   const t = useT();
   const { detail } = item;
   if (!detail) return null;
+  if (detail.says === "cause")
+    return (
+      <>
+        <CauseLine cause={detail.cause} compact />
+        {detail.by && (
+          <span className="text-fg-fnt"> {splitWords(detail.by, t)}</span>
+        )}
+      </>
+    );
   if (detail.says === "said")
     return (
       <ResourceMessage

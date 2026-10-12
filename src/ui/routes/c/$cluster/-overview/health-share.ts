@@ -37,6 +37,7 @@ import type {
   NodeSummary,
   Incarnation,
   OverviewUnread,
+  ContainerRestarts,
   ProblemDetail,
   PodComposition,
   ReasonCount,
@@ -54,6 +55,7 @@ import { splitUnit } from "@/lib/metric-format";
 import { formatAge, formatDecimal } from "@/lib/utils";
 import { formatCount } from "@/lib/count";
 import { withRestartsBy } from "@/lib/pod-status";
+import { causeText } from "@/lib/pod-cause";
 
 /**
  * The detail line, for the rows this app writes itself.
@@ -80,7 +82,21 @@ export function composedDetail(
       });
     case "unschedulable":
       return t("readings", "problemUnschedulable");
+    case "cause":
+      return [causeText(detail.cause, t), splitWords(detail.by, t)]
+        .filter(Boolean)
+        .join(" ");
   }
+}
+
+/** A pod's restarts split by the containers behind them, where more than one restarted. */
+export function splitWords(
+  by: readonly ContainerRestarts[] | null,
+  t: T
+): string | null {
+  if (!by || by.length < 2) return null;
+  const n = by.reduce((sum, { n }) => sum + n, 0);
+  return `${withRestartsBy(t("readings", "problemRestarts", { n }), by, t)}.`;
 }
 
 /** A row's detail as plain words, whoever wrote them. */
