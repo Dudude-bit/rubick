@@ -85,6 +85,10 @@ export function ServiceDetail() {
   const intercept = useDeliveryIntercept(deliveryQuery);
   const [forwardOpen, setForwardOpen] = useState(false);
   const forwardDenied = usePodDenied(namespace || null).portForward;
+  const forwardReason =
+    service?.ports.length === 0
+      ? t("action", "serviceDeclaresNoPorts")
+      : forwardDenied;
 
   const ports = service?.ports ?? [];
   const externalIps = service?.externalIps ?? [];
@@ -161,6 +165,7 @@ export function ServiceDetail() {
         <ServiceAccessInfo
           service={service}
           onForward={() => setForwardOpen(true)}
+          forwardReason={forwardReason}
         />
       ) : null,
     },
@@ -298,11 +303,7 @@ export function ServiceDetail() {
               label={t("action", "portForward")}
               icon={Network}
               onClick={() => setForwardOpen(true)}
-              reason={
-                service.ports.length === 0
-                  ? t("action", "serviceDeclaresNoPorts")
-                  : forwardDenied
-              }
+              reason={forwardReason}
             />
           )}
           <DeleteAction
