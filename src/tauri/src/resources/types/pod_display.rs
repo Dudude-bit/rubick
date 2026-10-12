@@ -72,14 +72,14 @@ pub fn counts_ready(pod: &Pod) -> bool {
     pod.metadata.deletion_timestamp.is_none() && condition_is_true(pod.status.as_ref(), "Ready")
 }
 
-fn last_terminated(cs: &ContainerStatus) -> Option<&ContainerStateTerminated> {
+pub(crate) fn last_terminated(cs: &ContainerStatus) -> Option<&ContainerStateTerminated> {
     cs.last_state.as_ref()?.terminated.as_ref()
 }
 
 /// The run a container ended last: the state it is in now while it sits
 /// exited, otherwise the one it is backing off from. `lastState` alone is the
 /// exit before that while the container is still terminated.
-fn latest_exit(cs: &ContainerStatus) -> Option<&ContainerStateTerminated> {
+pub(crate) fn latest_exit(cs: &ContainerStatus) -> Option<&ContainerStateTerminated> {
     cs.state
         .as_ref()
         .and_then(|s| s.terminated.as_ref())
@@ -106,7 +106,7 @@ fn sidecar_at(pod: &Pod, index: usize) -> bool {
 
 /// The first init container that has not finished, if there is one. It
 /// decides the whole pod's status, which is why the search stops at it.
-fn blocking_init(pod: &Pod) -> Option<(usize, &ContainerStatus)> {
+pub(crate) fn blocking_init(pod: &Pod) -> Option<(usize, &ContainerStatus)> {
     pod.status
         .as_ref()
         .and_then(|s| s.init_container_statuses.as_ref())?
@@ -126,7 +126,7 @@ fn blocking_init(pod: &Pod) -> Option<(usize, &ContainerStatus)> {
 /// The verdict the kubelet wrote on a failed pod as a whole: `Evicted`,
 /// `OutOfcpu`, `DeadlineExceeded`. Not for one being deleted, which kubectl
 /// and every screen call `Terminating`.
-fn pod_verdict(pod: &Pod) -> Option<&str> {
+pub(crate) fn pod_verdict(pod: &Pod) -> Option<&str> {
     let status = pod.status.as_ref()?;
     (status.phase.as_deref() == Some("Failed") && pod.metadata.deletion_timestamp.is_none())
         .then_some(status.reason.as_deref())
@@ -641,7 +641,7 @@ pub fn pending_since(pod: &Pod) -> Option<DateTime<Utc>> {
 /// The container statuses whose restarts kubectl counts: while a pod is still
 /// initializing, its init containers' own; after, its sidecars' and its app
 /// containers'. Not a plain walk of `containerStatuses`.
-fn counted(pod: &Pod) -> Vec<&ContainerStatus> {
+pub(crate) fn counted(pod: &Pod) -> Vec<&ContainerStatus> {
     let status = pod.status.as_ref();
     let inits = status
         .and_then(|s| s.init_container_statuses.as_deref())

@@ -2078,6 +2078,17 @@ export interface TerminationInfo {
   finishedAt: string | null;
 }
 
+export interface EndedRun {
+  code: number;
+  signal: number | null;
+  reason: string | null;
+  started: string | null;
+  ended: string | null;
+  previous: boolean;
+  said: string | null;
+  log: Evidence;
+}
+
 export interface PodRowStatus {
   phase: string;
   display: string;
@@ -2086,6 +2097,7 @@ export interface PodRowStatus {
   exitUnreported: boolean;
   restartingUntil?: string;
   rejected?: string;
+  cause?: PodCause;
 }
 
 export interface FileEntry {
@@ -2243,6 +2255,7 @@ export interface PodStatusInfo {
   exitUnreported: boolean;
   restartingUntil?: string;
   rejected?: string;
+  cause?: PodCause;
 }
 
 export interface DeploymentPods {
@@ -2796,7 +2809,26 @@ export type ProblemDetail =
   | { says: "said"; text: string }
   | { says: "restarts"; n: number; by: ContainerRestarts[] | null }
   | { says: "replicasReady"; ready: number; desired: number }
-  | { says: "unschedulable" };
+  | { says: "unschedulable" }
+  | { says: "cause"; cause: PodCause; by: ContainerRestarts[] | null };
+
+export type PodCause = {
+  says: "exits";
+  container: string;
+  restarts: number;
+  run: EndedRun | null;
+  until: string | null;
+};
+
+export type Evidence =
+  | { says: "line"; text: string; last: boolean }
+  | { says: "event"; text: string; count: number; at: string | null }
+  | { says: "notRead" }
+  | { says: "reading" }
+  | { says: "nothing" }
+  | { says: "gone" }
+  | { says: "refused" }
+  | { says: "failed"; said: string };
 
 export type ProblemSeverity = "critical" | "warning";
 
@@ -2943,7 +2975,7 @@ export type PodStart =
 
 export type ContainerState =
   | { type: "running" }
-  | { type: "waiting"; reason: string | null }
+  | { type: "waiting"; reason: string | null; message?: string }
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
 

@@ -771,6 +771,38 @@ describe("hintFor", () => {
     expect(hint.headline.key).toBe("guessCrashTimeoutOutside");
   });
 
+  /**
+   * A container its liveness probe kills was told it "exits on its own".
+   * Fails if the kubelet's record of the kill does not take the headline, or
+   * if its words are not quoted.
+   */
+  it("says the liveness probe killed it where the kubelet records the kill", () => {
+    const events = [
+      event(
+        "Unhealthy",
+        "Liveness probe failed: HTTP probe failed with statuscode: 500",
+        6
+      ),
+      event(
+        "Killing",
+        "Container app failed liveness probe, will be restarted"
+      ),
+    ];
+    const hint = hintFor(troubleOf(crashing(), events)!, crashing(), NONE);
+    expect(hint.headline.key).toBe("killedByLiveness");
+    expect(hint.headline.values?.said).toBe(
+      "Liveness probe failed: HTTP probe failed with statuscode: 500"
+    );
+    const killOnly = hintFor(
+      troubleOf(crashing(), [events[1]])!,
+      crashing(),
+      NONE
+    );
+    expect(killOnly.headline.values?.said).toBe(
+      "Container app failed liveness probe, will be restarted"
+    );
+  });
+
   it("falls back to the plain crash sentence when the log named no address", () => {
     const hint = hintFor(troubleOf(crashing(), [])!, crashing(), NONE);
     expect(hint.headline.key).toBe("guessCrashLoop");

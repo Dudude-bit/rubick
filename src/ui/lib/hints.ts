@@ -71,6 +71,8 @@ export type Trouble =
       container: string;
       exit: TerminationInfo | null;
       restarts: number;
+      /** The kubelet's own words where it killed the container for a failed liveness probe. */
+      liveness: string | null;
     }
   | {
       reason: "oomKilled";
@@ -289,6 +291,7 @@ export function troubleOf(
       container: crashing.name,
       exit: lastTermination(crashing),
       restarts: crashing.restartCount,
+      liveness: livenessKill(events),
     };
   }
   const pulling = all.find(
@@ -366,11 +369,22 @@ const STALE_TROUBLE_MS = 30 * 60_000;
 
 /** The kubelet's own record of killing a container for a failed liveness probe. */
 function killedByLiveness(events: EventInfo[]): boolean {
-  return events.some(
-    (e) =>
-      (e.reason === "Killing" && /liveness probe/i.test(e.message ?? "")) ||
-      (e.reason === "Unhealthy" && /^Liveness probe/i.test(e.message ?? ""))
+  return livenessKill(events) !== null;
+}
+
+/** What the failing liveness probe answered, or the kill itself where no answer is kept. */
+function livenessKill(events: EventInfo[]): string | null {
+  const said = (e: EventInfo) => e.message ?? "";
+  const failed = latest(
+    events.filter((e) => /^Liveness probe/i.test(said(e))),
+    "Unhealthy"
   );
+  if (failed) return said(failed);
+  const kill = latest(
+    events.filter((e) => /liveness probe/i.test(said(e))),
+    "Killing"
+  );
+  return kill ? said(kill) : null;
 }
 
 export interface Address {
@@ -683,14 +697,21 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
     case "crashLoop": {
       const exit = trouble.exit;
       const address = chain.address;
-      let headline: HintSaying = {
-        key: "guessCrashLoop",
-        values: {
-          container: trouble.container,
-          restarts: counted("countRestarts", trouble.restarts),
-        },
-      };
-      if (address) {
+      const restarts = counted("countRestarts", trouble.restarts);
+      let headline: HintSaying = trouble.liveness
+        ? {
+            key: "killedByLiveness",
+            values: {
+              container: trouble.container,
+              restarts,
+              said: trouble.liveness,
+            },
+          }
+        : {
+            key: "guessCrashLoop",
+            values: { container: trouble.container, restarts },
+          };
+      if (address && !trouble.liveness) {
         const at = { host: address.host, port: address.port ?? "" };
         if (address.where === "sidecar" && chain.sidecar) {
           headline = {

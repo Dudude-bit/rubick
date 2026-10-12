@@ -85,6 +85,9 @@ pub struct PodRowStatus {
     /// See `PodStatusInfo::rejected`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rejected: Option<String>,
+    /// See `PodStatusInfo::cause`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cause: Option<super::PodCause>,
 }
 
 /// What the Ready column is decided from, per container.
@@ -154,6 +157,7 @@ impl From<&Pod> for PodRow {
                 exit_unreported: exit_unreported(pod),
                 restarting_until: restarting_until(pod),
                 rejected: rejected_at_admission(pod),
+                cause: super::pod_cause(pod),
             },
             node_name: spec.and_then(|s| s.node_name.clone()),
             pod_ip: status.and_then(|s| s.pod_ip.clone()),
@@ -281,6 +285,8 @@ mod tests {
         }
         assert_eq!(row.status.display, info.status.display);
         assert_eq!(row.status.display, "CrashLoopBackOff");
+        assert!(row.status.cause.is_some());
+        assert_eq!(row.status.cause, info.status.cause);
         assert_eq!(row.status.phase, info.status.phase);
         assert_eq!(row.restart_count, info.restart_count);
         assert_eq!(row.last_restart_at, info.last_restart_at);
@@ -298,7 +304,7 @@ mod tests {
         assert!(row.init_containers[0].ready && row.init_containers[0].started);
         assert!(matches!(
             &row.containers[0].state,
-            ContainerState::Waiting { reason: Some(r) } if r == "CrashLoopBackOff"
+            ContainerState::Waiting { reason: Some(r), .. } if r == "CrashLoopBackOff"
         ));
 
         // Every container, both lists, against the full info — not a

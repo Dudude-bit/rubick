@@ -385,6 +385,7 @@ pub fn state_of(cs: &ContainerStatus) -> ContainerState {
     } else if let Some(waiting) = state.and_then(|s| s.waiting.as_ref()) {
         ContainerState::Waiting {
             reason: waiting.reason.clone(),
+            message: waiting.message.clone().filter(|m| !m.is_empty()),
         }
     } else if let Some(terminated) = state.and_then(|s| s.terminated.as_ref()) {
         ContainerState::Terminated {
@@ -426,8 +427,15 @@ impl From<&ContainerStateTerminated> for TerminationInfo {
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ContainerState {
     Running,
-    Waiting { reason: Option<String> },
-    Terminated { termination: TerminationInfo },
+    Waiting {
+        reason: Option<String>,
+        /// The kubelet's own sentence: `couldn't find key DB_PASSWORD in Secret checkout-db`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    Terminated {
+        termination: TerminationInfo,
+    },
     Unknown,
 }
 

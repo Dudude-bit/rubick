@@ -5,7 +5,8 @@ import type { ReportValue } from "@/lib/report";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { podStatusMeaning } from "@/lib/status-meaning";
 import { loopState } from "@/lib/crash-loop";
-import type { PodStart } from "@/generated/types";
+import { causeText, currentCause } from "@/lib/pod-cause";
+import type { PodCause, PodStart } from "@/generated/types";
 
 type LoopStatus = {
   display: string;
@@ -13,6 +14,8 @@ type LoopStatus = {
   exitUnreported?: boolean;
   /** The kubelet's words for a pod it turned away on arrival, which never ran. */
   rejected?: string;
+  /** Why it is red or amber, as every surface reads it. */
+  cause?: PodCause;
 };
 
 export type PodBadgeInput = ReadinessLists & {
@@ -88,15 +91,29 @@ export function podRole(
     : role;
 }
 
-/** What a pod's word means on hover, the one sentence every screen that draws it gives. */
+/** The cause a pod's red or amber word leads with, where it has one now. */
+export function troubleCause(
+  pod: PodBadgeInput,
+  now: number = Date.now()
+): PodCause | null {
+  const role = podRole(pod, null, now);
+  return role === "err" || role === "warn"
+    ? currentCause(pod.status.cause, now)
+    : null;
+}
+
+/** What a pod's word means on hover, the one sentence every screen that draws it gives: its cause first. */
 export function podStatusTitle(
   pod: PodBadgeInput & { status: { phase: string } },
   silence: NodeSilence | null,
-  t: T
+  t: T,
+  /** The cause with what this surface read beside it. */
+  cause: PodCause | null = troubleCause(pod)
 ): string | undefined {
   if (silence) return silenceNote(silence, t);
   return (
     [
+      cause && causeText(cause, t),
       pod.status.rejected
         ? `${pod.status.display}: ${t("statusMeaning", "rejectedOnArrival", {
             said: pod.status.rejected,

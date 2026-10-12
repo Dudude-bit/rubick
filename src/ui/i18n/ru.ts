@@ -1881,6 +1881,8 @@ export const ru: Catalogue = {
     searchNoEngine:
       "Поисковика нет: свой URL в настройках не является адресом.",
     searchOpens: "откроется {site}; движок меняется в настройках",
+    killedByLiveness:
+      "{container} не завершается сам: kubelet убивает его, потому что не проходит liveness-проба, уже {restarts}. Слова kubelet: {said}",
     guessCrashLoop:
       "Скорее всего: {container} сам завершается сразу после старта, уже {restarts}. Причина, скорее всего, в его последних строках перед выходом.",
     guessCrashRefusedSidecar:
@@ -7790,6 +7792,17 @@ export const ru: Catalogue = {
       many: "на паузе",
       other: "на паузе",
     },
+  },
+  cause: {
+    exited: "{container} завершился ({how})",
+    restartedUnreported:
+      "{container} перезапускался, а kubelet не сообщил, чем закончился его последний запуск",
+    ranFor: "проработав {ran}",
+    exitMessage: "Его сообщение при выходе:",
+    lastLine: "Его последняя строка:",
+    loggedLine: "В его логе перед выходом:",
+    logRefused: "Его лог недоступен с этими правами.",
+    logFailed: "Не удалось прочитать его лог: {said}",
   },
   statusMeaning: {
     phasePending:

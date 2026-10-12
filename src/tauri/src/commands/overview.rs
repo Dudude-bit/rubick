@@ -114,6 +114,13 @@ pub enum ProblemDetail {
     ReplicasReady { ready: i32, desired: i32 },
     /// A node marked unschedulable.
     Unschedulable,
+    /// A pod's cause, as every surface that draws the pod reads it, and
+    /// the containers behind its count where more than one restarted.
+    Cause {
+        cause: crate::resources::PodCause,
+        #[serde(default)]
+        by: Option<Vec<crate::resources::ContainerRestarts>>,
+    },
 }
 
 impl ProblemDetail {
@@ -128,6 +135,19 @@ impl ProblemDetail {
             n,
             by: crate::resources::restarts_by(pod),
         }
+    }
+
+    /// Why `pod` is in trouble, where its containers say.
+    fn cause(pod: &Pod) -> Option<Self> {
+        crate::resources::pod_cause(pod).map(|cause| Self::Cause {
+            cause,
+            by: crate::resources::restarts_by(pod),
+        })
+    }
+
+    /// Why `pod` restarts, where its containers say; else how often.
+    fn restarts_why(pod: &Pod, n: i32) -> Self {
+        Self::cause(pod).unwrap_or_else(|| Self::restarts(pod, n))
     }
 }
 
@@ -685,7 +705,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 CRASH_LOOPING
             }
             .to_string(),
-            detail: Some(ProblemDetail::restarts(pod, restarts)),
+            detail: Some(ProblemDetail::restarts_why(pod, restarts)),
             since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
             restarts: Some(restarts),
             folded_pods: None,
@@ -703,7 +723,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             namespace,
             reason,
             detail: if looping {
-                Some(ProblemDetail::restarts(pod, restarts))
+                Some(ProblemDetail::restarts_why(pod, restarts))
             } else {
                 ProblemDetail::said(message)
             },
@@ -730,7 +750,8 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 .reason
                 .clone()
                 .unwrap_or_else(|| "Failed".to_string()),
-            detail: ProblemDetail::said(status.message.clone()),
+            detail: ProblemDetail::said(status.message.clone())
+                .or_else(|| ProblemDetail::cause(pod)),
             since: crate::resources::failed_at(pod).map(|t| t.to_rfc3339()),
             restarts: (restarts > 0).then_some(restarts),
             folded_pods: None,
@@ -777,7 +798,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             name,
             namespace,
             reason: "Restarting".to_string(),
-            detail: Some(ProblemDetail::restarts(pod, restarts)),
+            detail: Some(ProblemDetail::restarts_why(pod, restarts)),
             // Dated by the restart, not by the pod. `since: created` put a
             // twelve-day-old date on something that happened minutes ago.
             since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
@@ -3604,11 +3625,21 @@ mod tests {
             assert_eq!(problems.len(), 1, "{instant}");
             assert_eq!(problems[0].reason, word, "{instant}");
             assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
-            assert_eq!(
-                problems[0].detail,
-                Some(ProblemDetail::Restarts { n: 9, by: None }),
-                "{instant}"
-            );
+            let Some(ProblemDetail::Cause {
+                cause:
+                    crate::resources::PodCause::Exits {
+                        container,
+                        restarts,
+                        run: Some(run),
+                        ..
+                    },
+                by: None,
+            }) = &problems[0].detail
+            else {
+                panic!("{instant}: {:?}", problems[0].detail);
+            };
+            assert_eq!((container.as_str(), *restarts), ("app", 9), "{instant}");
+            assert_eq!((run.code, run.previous), (1, true), "{instant}");
         }
     }
 
@@ -3792,13 +3823,16 @@ mod tests {
                 n: 12,
             },
         ];
-        assert_eq!(
-            problems[0].detail,
-            Some(ProblemDetail::Restarts {
-                n: 17,
-                by: Some(by.clone())
-            })
-        );
+        let Some(ProblemDetail::Cause {
+            cause: crate::resources::PodCause::Exits { container, .. },
+            by: Some(split),
+        }) = &problems[0].detail
+        else {
+            panic!("{:?}", problems[0].detail);
+        };
+        assert_eq!(container, "migrate");
+        assert_eq!(split, &by);
+        assert_eq!(problems[0].restarts, Some(17));
         assert_eq!(problems[0].since, Some(ago(120)));
         assert_eq!(crate::resources::PodInfo::from(&pod).restarts_by, Some(by));
     }
@@ -3884,10 +3918,7 @@ mod tests {
         let now = Utc::now();
 
         let ours = pod_problems(&[restarted_pod("flapper", now, 7, Some(120))], now);
-        assert_eq!(
-            ours[0].detail,
-            Some(ProblemDetail::Restarts { n: 7, by: None })
-        );
+        assert!(matches!(ours[0].detail, Some(ProblemDetail::Cause { .. })));
 
         let cordoned = node_problems(&[unschedulable_node("worker-1")]);
         assert_eq!(cordoned[0].detail, Some(ProblemDetail::Unschedulable));
