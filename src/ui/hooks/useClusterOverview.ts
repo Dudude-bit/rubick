@@ -11,6 +11,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useRefusedOn } from "@/lib/refusals";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { readSoon } from "@/hooks/useResourceWatch";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ClusterOverview, DeploymentInfo } from "@/generated/types";
@@ -123,11 +124,7 @@ export function useFollowedOverview(
         scope.length === 0 ||
         payload.cluster ||
         payload.namespaces.some((namespace) => scope.includes(namespace));
-      if (inScope)
-        void client.invalidateQueries(
-          { queryKey: key, exact: true },
-          { cancelRefetch: false }
-        );
+      if (inScope) readSoon(client, key, 0);
     }).then((unlisten) => {
       if (left) unlisten();
       else leave = unlisten;
