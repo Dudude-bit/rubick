@@ -8,6 +8,9 @@ use tokio::sync::{mpsc, oneshot};
 /// near 80 KB/s.
 pub const TERMINAL_BUFFER_SIZE: usize = 32 * 1024;
 
+/// Keystrokes and resizes a session holds before a send waits for its loop.
+pub(crate) const INPUT_ROOM: usize = 100;
+
 /// Terminal session state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -50,6 +53,28 @@ pub enum TerminalInput {
     Resize { width: u16, height: u16 },
 }
 
+/// A session's input channel, apart from its entry in the session list.
+#[derive(Clone)]
+pub struct Input(mpsc::Sender<TerminalInput>);
+
+impl Input {
+    /// Send data to terminal
+    pub async fn send(&self, data: &str) -> Result<()> {
+        self.0
+            .send(TerminalInput::Data(data.to_string()))
+            .await
+            .map_err(|e| Error::Terminal(format!("Failed to send: {e}")))
+    }
+
+    /// Resize terminal
+    pub async fn resize(&self, width: u16, height: u16) -> Result<()> {
+        self.0
+            .send(TerminalInput::Resize { width, height })
+            .await
+            .map_err(|e| Error::Terminal(format!("Failed to resize: {e}")))
+    }
+}
+
 /// Terminal session handle
 pub struct TerminalSession {
     /// Session ID
@@ -80,7 +105,7 @@ impl TerminalSession {
         oneshot::Receiver<()>,
         oneshot::Receiver<()>,
     ) {
-        let (input_tx, input_rx) = mpsc::channel(100);
+        let (input_tx, input_rx) = mpsc::channel(INPUT_ROOM);
         let (cancel_tx, cancel_rx) = oneshot::channel();
         let (subscribe_tx, subscribe_rx) = oneshot::channel();
         let state = Arc::new(RwLock::new(TerminalState::Idle));
@@ -129,20 +154,10 @@ impl TerminalSession {
         }
     }
 
-    /// Send data to terminal
-    pub async fn send(&self, data: &str) -> Result<()> {
-        self.input_tx
-            .send(TerminalInput::Data(data.to_string()))
-            .await
-            .map_err(|e| Error::Terminal(format!("Failed to send: {e}")))
-    }
-
-    /// Resize terminal
-    pub async fn resize(&self, width: u16, height: u16) -> Result<()> {
-        self.input_tx
-            .send(TerminalInput::Resize { width, height })
-            .await
-            .map_err(|e| Error::Terminal(format!("Failed to resize: {e}")))
+    /// Where this session's keystrokes go, to be awaited without the session list held.
+    #[must_use]
+    pub fn input(&self) -> Input {
+        Input(self.input_tx.clone())
     }
 
     /// Ask the session to end. Whether it was still running is the answer.
