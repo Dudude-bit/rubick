@@ -21,7 +21,7 @@ import { scopeLabel } from "@/lib/namespace-scope";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useShownPath } from "@/lib/hide-paths";
-import { useClusterStore } from "@/stores/clusterStore";
+import { hasSession, useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { podTotal } from "../-overview/health-share";
 import { ActivityPanel } from "./ActivityPanel";
@@ -71,7 +71,7 @@ export function StatusBar() {
   const t = useT();
   const show = useShownPath();
   const currentContext = useClusterStore((s) => s.currentContext);
-  const isConnected = useClusterStore((s) => s.isConnected);
+  const connected = useClusterStore(hasSession);
   const connectedThrough = useClusterStore((s) => s.connectedThrough);
   const isLoading = useClusterStore((s) => s.isLoading);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
@@ -157,7 +157,7 @@ export function StatusBar() {
             {show(error)}
           </TooltipContent>
         </Tooltip>
-      ) : isConnected ? (
+      ) : connected ? (
         <>
           {connectedThrough === "kubectl_proxy" && (
             <>

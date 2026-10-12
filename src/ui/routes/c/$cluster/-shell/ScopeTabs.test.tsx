@@ -145,6 +145,7 @@ beforeEach(() => {
     isAuthenticating: false,
     error: null,
     pendingContext: null,
+    live: [],
   });
 });
 
@@ -182,6 +183,28 @@ describe("what a tab's dot says", () => {
       expect(dotOf(index).style.background).toBe("");
       expect(dotOf(index).style.borderColor).not.toBe("");
     }
+  });
+
+  /**
+   * Live round 25: the open tab's dot went hollow for up to 3.4 s on the way
+   * back to a cluster the backend kept. Fails if the open tab reads the gate
+   * on the window's reads instead of whether its cluster has a session.
+   */
+  it("keeps the open tab's dot filled while its held cluster comes back", async () => {
+    useClusterStore.setState({
+      currentContext: "k3d-dev",
+      isConnected: false,
+      pendingContext: "k3d-dev",
+      live: ["k3d-dev"],
+    });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: "k3d-dev" })],
+      activeId: "a",
+      pendingHref: null,
+    });
+    await mount();
+
+    expect(dotOf(0).dataset.connected).toBe("true");
   });
 });
 

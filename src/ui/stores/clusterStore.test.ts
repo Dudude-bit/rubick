@@ -33,7 +33,7 @@ import {
 } from "@/lib/credentials";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import type { ClusterInfo, ContextInfo } from "@/generated/types";
-import { useClusterStore, wayBackTo } from "./clusterStore";
+import { hasSession, useClusterStore, wayBackTo } from "./clusterStore";
 import { holdClusters } from "./heldClusters";
 import { useClusterRecencyStore } from "./clusterRecencyStore";
 
@@ -549,6 +549,55 @@ describe("switching clusters keeps the one left until the new one lands", () => 
     expect(connecting).toBe(false);
     expect(state().isConnected).toBe(true);
     expect(state().currentContext).toBe("acme-staging");
+  });
+
+  /**
+   * Live round 25: Back to acme-staging read "not connected" for 0.4 to
+   * 3.4 s while the backend turned to it. Fails if any state on the way back
+   * says the kept cluster has no session.
+   */
+  it("says a kept cluster is connected at every step of the way back", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const switching = state().connect("acme-prod-eu");
+    prod.fail(new Error("deadline has elapsed"));
+    await switching;
+    await settle();
+
+    const said: boolean[] = [];
+    const stop = useClusterStore.subscribe((s) => said.push(hasSession(s)));
+    await state().connect("acme-staging", { keepRoute: true });
+    stop();
+
+    expect(said.length).toBeGreaterThan(1);
+    expect(said).not.toContain(false);
+  });
+
+  /** Fails if a session through kubectl reads as the ordinary path while it comes back. */
+  it("keeps naming the proxy while a cluster reached through it comes back", async () => {
+    holdClusters(() => ["acme-staging", "acme-dev"]);
+    vi.mocked(commands.connectCluster).mockImplementationOnce(
+      async (context) => {
+        backend.live.add(context);
+        return { context, connected_through: "kubectl_proxy" } as ClusterInfo;
+      }
+    );
+    await state().connect("acme-dev");
+    await state().connect("acme-staging");
+    await settle();
+
+    const said: (string | null)[] = [];
+    const stop = useClusterStore.subscribe((s) => {
+      if (s.currentContext === "acme-dev") said.push(s.connectedThrough);
+    });
+    vi.mocked(commands.focusCluster).mockImplementationOnce(
+      async (context) =>
+        ({ context, connected_through: "kubectl_proxy" }) as ClusterInfo
+    );
+    await state().connect("acme-dev");
+    stop();
+
+    expect(said.length).toBeGreaterThan(1);
+    expect(new Set(said)).toEqual(new Set(["kubectl_proxy"]));
   });
 
   /** Fails if a switch that landed leaves the cluster it left connected. */

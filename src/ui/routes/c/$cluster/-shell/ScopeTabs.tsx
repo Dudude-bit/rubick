@@ -85,7 +85,7 @@ import {
   splitByRecency,
   useClusterRecencyStore,
 } from "@/stores/clusterRecencyStore";
-import { useClusterStore } from "@/stores/clusterStore";
+import { hasSession, useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 import { useKeptShellStore } from "@/stores/keptShellStore";
 import { useT, type T } from "@/i18n/useT";
@@ -613,7 +613,7 @@ function ScopeTabItem({
   const color = clusterColor(context, mark.hue);
   // A filled dot read as live, so it is filled only where it is.
   const connected = useClusterStore((s) =>
-    active ? s.isConnected : context !== null && s.live.includes(context)
+    active ? hasSession(s) : context !== null && s.live.includes(context)
   );
   const route = tabRouteLabel(tab.href, t);
   // Closing a tab ends the shell it keeps, so the tab says it keeps one.
