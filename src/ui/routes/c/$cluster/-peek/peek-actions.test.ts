@@ -199,7 +199,7 @@ describe("why a pod action cannot run", () => {
     containers: [
       container(
         "app",
-        { type: "waiting", reason: "ContainerCreating" },
+        { type: "waiting", reason: "ContainerCreating", message: null },
         [8080]
       ),
     ],
@@ -311,7 +311,11 @@ describe("why a pod action cannot run", () => {
       containers: [
         container(
           "worker",
-          { type: "waiting", reason: "CreateContainerConfigError" },
+          {
+            type: "waiting",
+            reason: "CreateContainerConfigError",
+            message: null,
+          },
           [8080]
         ),
       ],

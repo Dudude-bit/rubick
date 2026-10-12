@@ -430,7 +430,6 @@ pub enum ContainerState {
     Waiting {
         reason: Option<String>,
         /// The kubelet's own sentence: `couldn't find key DB_PASSWORD in Secret checkout-db`.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },
     Terminated {

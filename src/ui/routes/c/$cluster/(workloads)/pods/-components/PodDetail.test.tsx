@@ -461,6 +461,97 @@ describe("a crash-looping pod caught while its container is up", () => {
   });
 });
 
+describe("the cause a crash-looping pod's page leads with", () => {
+  /**
+   * The owner's question on every red page is why. Fails if the headline
+   * stops leading with the exit and its meaning, or the run's own last line
+   * read from the node does not follow it.
+   */
+  it("leads with the exit, what it means and the run's last line", async () => {
+    const ended = new Date(Date.now() - 20_000).toISOString();
+    const started = new Date(Date.now() - 23_000).toISOString();
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          status: {
+            ...POD.status,
+            display: "CrashLoopBackOff",
+            cause: {
+              says: "exits",
+              container: "app",
+              restarts: 7,
+              until: null,
+              run: {
+                code: 127,
+                signal: null,
+                reason: "Error",
+                started,
+                ended,
+                previous: true,
+                said: null,
+                log: { says: "notRead" },
+                limit: null,
+              },
+            },
+          },
+          containers: [
+            {
+              name: "app",
+              image: "busybox:1.36",
+              ready: false,
+              started: false,
+              phase: "app",
+              state: {
+                type: "waiting",
+                reason: "CrashLoopBackOff",
+                message: null,
+              },
+              lastTerminated: {
+                exitCode: 127,
+                signal: null,
+                reason: "Error",
+                message: null,
+                startedAt: started,
+                finishedAt: ended,
+              },
+              restartCount: 7,
+              ports: [],
+              resources: { requests: {}, limits: {} },
+              env: [],
+              envFrom: [],
+            },
+          ],
+        };
+      if (command === "get_pod_logs")
+        return [
+          {
+            raw: "sh: /app/server: not found",
+            message: "sh: /app/server: not found",
+          },
+        ];
+      if (command === "get_replicaset") return REPLICA_SET;
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+    await advance(0);
+
+    expect(
+      screen.getAllByText(
+        "app exited (exit 127, Error): its command was not found in the image, after running 3s"
+      ).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("sh: /app/server: not found").length
+    ).toBeGreaterThan(0);
+  });
+});
+
 describe("the log a crash-looping pod's headline points at", () => {
   /**
    * The headline said what the container printed before it died was in

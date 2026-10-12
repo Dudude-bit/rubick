@@ -216,7 +216,7 @@ describe("a container's restarts", () => {
     expect(
       containerRestartsAreNews(
         container({
-          state: { type: "waiting", reason: "CrashLoopBackOff" },
+          state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
           ready: false,
         }),
         now

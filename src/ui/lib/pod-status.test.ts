@@ -35,13 +35,13 @@ describe("containerStatus", () => {
     expect(
       containerStatus({
         ready: false,
-        state: { type: "waiting", reason: "CrashLoopBackOff" },
+        state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
       })
     ).toEqual({ text: "CrashLoopBackOff", role: "err" });
     expect(
       containerStatus({
         ready: false,
-        state: { type: "waiting", reason: "ContainerCreating" },
+        state: { type: "waiting", reason: "ContainerCreating", message: null },
       })
     ).toEqual({ text: "ContainerCreating", role: "pending" });
   });
@@ -51,7 +51,7 @@ describe("containerStatus", () => {
     expect(
       containerStatus({
         ready: false,
-        state: { type: "waiting", reason: "SomeOperatorReason" },
+        state: { type: "waiting", reason: "SomeOperatorReason", message: null },
       })
     ).toEqual({ text: "SomeOperatorReason", role: "pending" });
   });

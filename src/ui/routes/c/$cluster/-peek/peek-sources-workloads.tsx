@@ -20,7 +20,7 @@ import {
   podStatusTitle,
   troubleCause,
 } from "@/lib/share/pod-status";
-import { CauseLine } from "../-object/CauseLine";
+import { PodCauseLine } from "../-object/CauseLine";
 import { formatDate } from "@/lib/utils";
 import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
@@ -117,7 +117,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
       statusTitle: podStatusTitle(pod, null, t),
       createdAt: pod.createdAt,
       endedAt: pod.status.failedAt,
-      lead: cause && <CauseLine cause={cause} className="mt-3" />,
+      lead: cause && <PodCauseLine pod={pod} cause={cause} className="mt-3" />,
       groups: [
         {
           title: t("columns", "placement"),

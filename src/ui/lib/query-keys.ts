@@ -389,6 +389,21 @@ export const queryKeys = {
     previous,
     endedAt,
   ],
+  /** The last lines of the run a pod's cause names, read once per exit. */
+  runTail: (
+    namespace: string,
+    pod: string,
+    container: string,
+    previous: boolean,
+    endedAt: string | null
+  ): (string | boolean | null)[] => [
+    "run-tail",
+    home(namespace),
+    pod,
+    container,
+    previous,
+    endedAt,
+  ],
   /** The first `pages` pages of a kind's printed list, in one scope. */
   printedList: (
     group: string,

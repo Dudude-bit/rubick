@@ -39,7 +39,7 @@ const exited = (exitCode: number): ContainerInfo["state"] => ({
 });
 
 const backoff = container({
-  state: { type: "waiting", reason: "CrashLoopBackOff" },
+  state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
   lastTerminated: {
     exitCode: 1,
     signal: null,
@@ -51,7 +51,7 @@ const backoff = container({
   restartCount: 9,
 });
 const neverRun = container({
-  state: { type: "waiting", reason: "ImagePullBackOff" },
+  state: { type: "waiting", reason: "ImagePullBackOff", message: null },
 });
 
 const followed: HowRead = { previous: false, restartsAlways: false };

@@ -137,7 +137,7 @@ const crashing = () =>
     containers: [
       container("app", {
         ready: false,
-        state: { type: "waiting", reason: "CrashLoopBackOff" },
+        state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
         lastTerminated: {
           exitCode: 1,
           signal: null,
@@ -240,7 +240,7 @@ describe("troubleOf", () => {
   it("quotes the killed container's own limit, never the pod's sum", () => {
     const oomKilled = (name: string, over: Partial<ContainerInfo> = {}) =>
       container(name, {
-        state: { type: "waiting", reason: "CrashLoopBackOff" },
+        state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
         lastTerminated: {
           exitCode: 137,
           signal: 9,
@@ -295,7 +295,7 @@ describe("troubleOf", () => {
           image: "busybox:1.36",
           ready: false,
           started: false,
-          state: { type: "waiting", reason: "CrashLoopBackOff" },
+          state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
           lastTerminated: {
             exitCode: 137,
             signal: null,
@@ -396,7 +396,11 @@ describe("troubleOf", () => {
       pod({
         containers: [
           container("app", {
-            state: { type: "waiting", reason: "ImagePullBackOff" },
+            state: {
+              type: "waiting",
+              reason: "ImagePullBackOff",
+              message: null,
+            },
           }),
         ],
       }),

@@ -5,6 +5,7 @@ import { useT } from "@/i18n/useT";
 import { causeWords, type CauseWords } from "@/lib/pod-cause";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
+import { useCauseLog } from "./useCauseLog";
 
 /** The mark a cause leads with, by what it is. */
 function CauseMark({
@@ -94,4 +95,18 @@ export function CauseLine({
       </div>
     </div>
   );
+}
+
+/** A pod's cause with the last words of the run it names, for a page or peek that shows one pod. */
+export function PodCauseLine({
+  pod,
+  cause,
+  className,
+}: {
+  pod: { name: string; namespace: string };
+  cause: PodCause;
+  className?: string;
+}) {
+  const read = useCauseLog(pod, cause) ?? cause;
+  return <CauseLine cause={read} className={className} />;
 }

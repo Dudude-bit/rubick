@@ -88,7 +88,7 @@ describe("a running pod's containers on the Containers tab", () => {
     ready: false,
     started: false,
     phase: "app",
-    state: { type: "waiting", reason: "CrashLoopBackOff" },
+    state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
     lastTerminated: {
       exitCode: 137,
       signal: null,
@@ -290,7 +290,11 @@ describe("a port of a container that is not running", () => {
           started: false,
           restartCount: 0,
           resources: { requests: {}, limits: {} },
-          state: { type: "waiting", reason: "CreateContainerConfigError" },
+          state: {
+            type: "waiting",
+            reason: "CreateContainerConfigError",
+            message: null,
+          },
           lastTerminated: null,
           ports: [{ containerPort: 9090, name: null, protocol: "TCP" }],
           env: [],
@@ -507,7 +511,7 @@ describe("the containers of a pod that has failed", () => {
       ready: false,
       started: false,
       phase: "app",
-      state: { type: "waiting", reason: "PodInitializing" },
+      state: { type: "waiting", reason: "PodInitializing", message: null },
       lastTerminated: null,
       restartCount: 0,
       ports: [],
@@ -519,7 +523,7 @@ describe("the containers of a pod that has failed", () => {
       ...app,
       name: "migrate",
       phase: "init",
-      state: { type: "waiting", reason: "CrashLoopBackOff" },
+      state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
       restartCount: 7,
     } satisfies ContainerInfo;
     await renderWithRouter(
