@@ -245,6 +245,9 @@ function podProblem(
   t: ReturnType<typeof useT>
 ): PodProblem | null {
   if (!pod || pod.status.phase === "Succeeded") return null;
+  // A verdict on the whole pod outranks what its containers did: an evicted
+  // pod's init container reads exit 137 because the node stopped it.
+  if (pod.status.reason) return podVerdict(pod, pod.status.reason, t);
 
   const loop = loopState(pod.status);
   const looping =
@@ -348,24 +351,29 @@ function podProblem(
     };
   }
 
-  // Eviction and the other node-level verdicts land here, and nowhere else
-  // in the object says them.
-  if (pod.status.reason || pod.status.message) {
-    return {
-      reason: pod.status.reason ?? "Failed",
-      headline: pod.status.reason ?? t("empty", "thisPodFailed"),
-      detail: (
-        <ResourceMessage
-          message={pod.status.message ?? ""}
-          subject={{ kind: "Pod", name: pod.name, namespace: pod.namespace }}
-        />
-      ),
-      tone: "err",
-      tab: "conditions",
-    };
-  }
+  if (pod.status.message) return podVerdict(pod, null, t);
 
   return null;
+}
+
+/** What the kubelet or the node controller said about the whole pod: eviction and the other node-level verdicts. */
+function podVerdict(
+  pod: PodInfo,
+  reason: string | null,
+  t: ReturnType<typeof useT>
+): PodProblem {
+  return {
+    reason: reason ?? "Failed",
+    headline: reason ?? t("empty", "thisPodFailed"),
+    detail: (
+      <ResourceMessage
+        message={pod.status.message ?? ""}
+        subject={{ kind: "Pod", name: pod.name, namespace: pod.namespace }}
+      />
+    ),
+    tone: "err",
+    tab: "conditions",
+  };
 }
 
 /** Whether opening Files would run anything: a stopped pod's tab only shows its mounts. */

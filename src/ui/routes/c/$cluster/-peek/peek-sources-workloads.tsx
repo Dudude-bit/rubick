@@ -112,6 +112,18 @@ export const WORKLOAD_SOURCES: PeekSources = {
         {
           title: t("columns", "placement"),
           items: [
+            // First: a verdict on the whole pod outranks what its containers did.
+            ...(pod.status.message || pod.status.reason
+              ? [
+                  {
+                    label: t("columns", "reason"),
+                    value: [pod.status.reason, pod.status.message]
+                      .filter(Boolean)
+                      .join(": "),
+                    tone: "err" as const,
+                  },
+                ]
+              : []),
             {
               label: t("columns", "node"),
               value: pod.nodeName
@@ -150,15 +162,6 @@ export const WORKLOAD_SOURCES: PeekSources = {
                     label: t("columns", "phase"),
                     value: pod.status.phase,
                     mono: true,
-                  },
-                ]
-              : []),
-            ...(pod.status.message || pod.status.reason
-              ? [
-                  {
-                    label: t("columns", "reason"),
-                    value: pod.status.message || pod.status.reason || "",
-                    tone: "err" as const,
                   },
                 ]
               : []),

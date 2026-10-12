@@ -616,6 +616,69 @@ describe("a pod that restarted while the kubelet reports no last exit", () => {
   });
 });
 
+describe("a pod the node evicted while an init container ran", () => {
+  const exit = {
+    exitCode: 137,
+    signal: null,
+    reason: "ContainerStatusUnknown",
+    message: null,
+    startedAt: "2026-10-12T00:00:00Z",
+    finishedAt: "2026-10-12T00:01:00Z",
+  };
+  const EVICTED = {
+    ...POD,
+    status: {
+      ...POD.status,
+      phase: "Failed",
+      display: "Init:ContainerStatusUnknown",
+      ready: false,
+      reason: "Evicted",
+      message: "The node was low on resource: ephemeral-storage.",
+    },
+    initContainers: [
+      {
+        name: "migrate",
+        image: "busybox:1.36",
+        ready: false,
+        started: false,
+        phase: "init",
+        state: { type: "terminated", termination: exit },
+        lastTerminated: exit,
+        restartCount: 7,
+        ports: [],
+        resources: { requests: {}, limits: {} },
+        env: [],
+        envFrom: [],
+      },
+    ],
+  };
+
+  /**
+   * Dana's init-demo headline blamed migrate's exit 137 and never said
+   * Evicted, while the Overview said Evicted with the node's message. Fails
+   * if a container's exit leads over the verdict on the whole pod.
+   */
+  it("leads with the eviction and the node's words, not the container's exit", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod") return EVICTED;
+      if (command === "get_replicaset") return REPLICA_SET;
+      if (command === "list_events") return [];
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+    expect(screen.getAllByText("Evicted").length).toBeGreaterThan(0);
+    expect(document.body).toHaveTextContent(
+      "The node was low on resource: ephemeral-storage."
+    );
+    expect(screen.queryByText("migrate exited with 137")).toBeNull();
+  });
+});
+
 const podEvent = (
   reason: string,
   type: "Normal" | "Warning",

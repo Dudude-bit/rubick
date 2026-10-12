@@ -5,6 +5,7 @@ import { screen } from "@testing-library/react";
 import type {
   DeploymentInfo,
   ObjectRef,
+  PodInfo,
   ResourceConnections,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
@@ -180,5 +181,45 @@ describe("the peek's Replicas line", () => {
         desired: 1,
       })
     ).toBe("warn");
+  });
+});
+
+describe("the peek of a pod the node evicted", () => {
+  /**
+   * Dana's init-demo peek put the node's message last, without the word
+   * Evicted, under a badge naming an init container. Fails if the pod-level
+   * reason stops leading the peek or loses its word or its message.
+   */
+  it("leads with the reason and the node's message", () => {
+    const pod = {
+      name: "init-demo",
+      namespace: "k8s-gui-test",
+      nodeName: "agent-0",
+      podIp: null,
+      restartCount: 17,
+      status: {
+        phase: "Failed",
+        display: "Init:ContainerStatusUnknown",
+        ready: false,
+        conditions: [],
+        reason: "Evicted",
+        message: "The node was low on resource: ephemeral-storage.",
+      },
+      containers: [],
+      initContainers: [],
+      ownerReferences: [],
+      createdAt: null,
+    } as unknown as PodInfo;
+    const summary = WORKLOAD_SOURCES.Pod!.summarise(
+      pod,
+      { kind: "Pod", name: "init-demo", namespace: "k8s-gui-test" },
+      t
+    );
+    const first = summary.groups?.[0]?.items[0];
+    expect(first?.label).toBe("columns.reason");
+    expect(first?.value).toBe(
+      "Evicted: The node was low on resource: ephemeral-storage."
+    );
+    expect(first?.tone).toBe("err");
   });
 });
