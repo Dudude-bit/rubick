@@ -59,7 +59,7 @@ export function useCauseLog(
 function evidenceOf(query: {
   isPending: boolean;
   error: unknown;
-  data: { raw?: string | null; message: string }[] | undefined;
+  data: { raw: string; message: string }[] | undefined;
 }): Evidence {
   if (query.error) {
     if (DROPPED.has(errorCode(query.error))) return { says: "gone" };
@@ -68,7 +68,7 @@ function evidenceOf(query: {
   }
   if (query.isPending || !query.data) return { says: "reading" };
   const line = tellingLine(
-    query.data.map((each) => each.raw || each.message).join("\n")
+    query.data.map((each) => each.message || each.raw).join("\n")
   );
   return line ? { says: "line", ...line } : { says: "nothing" };
 }
