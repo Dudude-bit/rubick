@@ -74,12 +74,12 @@ export const SPEC = {
     fontFamily:
       "'JetBrains Mono Variable', 'JetBrains Mono', Consolas, monospace",
     lineHeight: "1.5",
-    // CodeMirror builds this element, so `scrollbar-thin` never reaches it.
-    scrollbarWidth: "thin",
-    scrollbarColor: "hsl(var(--sel)) transparent",
+    // CodeMirror builds this element, so `scrollbar-lane` never reaches it.
+    scrollbarColor: "auto",
   },
   ".cm-scroller::-webkit-scrollbar": { width: "8px", height: "8px" },
-  ".cm-scroller::-webkit-scrollbar-track": { background: "transparent" },
+  ".cm-scroller::-webkit-scrollbar-track, .cm-scroller::-webkit-scrollbar-corner":
+    { background: "transparent" },
   ".cm-scroller::-webkit-scrollbar-thumb": {
     background: "hsl(var(--sel))",
     borderRadius: "4px",

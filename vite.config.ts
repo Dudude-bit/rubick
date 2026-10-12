@@ -114,6 +114,7 @@ export default defineConfig({
       "rubick/no-vendor-import": "error",
       "rubick/status-is-a-code": "error",
       "rubick/no-native-select": "error",
+      "rubick/no-overlay-scrollbar": "error",
     },
     overrides: [
       {
@@ -210,6 +211,11 @@ export default defineConfig({
       {
         files: ["src/ui/hooks/useLiveQuery.ts"],
         rules: { "rubick/no-refetch-interval": "off" },
+      },
+      {
+        // Tests name the old class to say it is gone; they draw no scroller.
+        files: ["src/ui/**/*.test.{ts,tsx}"],
+        rules: { "rubick/no-overlay-scrollbar": "off" },
       },
     ],
     jsPlugins: [

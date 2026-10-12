@@ -4,6 +4,8 @@ const THEME_BRANCH = /(^|[^a-z0-9-])dark:/;
 const LEGACY_TOKEN =
   /(^|[^a-z0-9-])(bg|text|border|ring|fill|stroke|from|via|to)-(background|foreground|card|popover|primary|secondary|muted|accent|destructive|input|border|ring)(-foreground)?(?![a-z0-9-])/;
 const VENDOR_PATH = /(^|\/)integrations\/[^-]/;
+const OVERLAY_SCROLLBAR =
+  /(^|[^a-z0-9-])(scrollbar-thin(?![a-z0-9-])|\[scrollbar-width:(?!none\])|\[scrollbar-color:(?!auto\]))/;
 const INTERVAL_KEY = /^refetchInterval(InBackground)?$/;
 
 /** A rule that reports `message` on every node `test` accepts, for each node type listed. */
@@ -21,6 +23,19 @@ function guard(types, test, message) {
 
 const stringMatching = (pattern) => (node) =>
   typeof node.value === "string" && pattern.test(node.value);
+
+const overlayScrollbar = (node) => {
+  if (node.type === "Property") {
+    const key = node.key?.name ?? node.key?.value;
+    const value = node.value?.value;
+    return (
+      (key === "scrollbarWidth" && value !== "none") ||
+      (key === "scrollbarColor" && value !== "auto")
+    );
+  }
+  const text = node.type === "TemplateElement" ? node.value?.raw : node.value;
+  return typeof text === "string" && OVERLAY_SCROLLBAR.test(text);
+};
 
 const sourceMatching = (pattern) => (node) =>
   node.source?.type === "Literal" && stringMatching(pattern)(node.source);
@@ -74,6 +89,13 @@ export default {
         node.value.expression?.type === "CallExpression" &&
         /^(t|translate)$/.test(node.value.expression.callee?.name ?? ""),
       "StatusBadge's `status` decides the colour by table lookup, so it must stay the untranslated code. Put the translated text in children: <StatusBadge status={code}>{label}</StatusBadge>."
+    ),
+    // WebKitGTK drew these as an overlay that took the clicks on the last
+    // 14 px of every menu and list while it was not even drawn.
+    "no-overlay-scrollbar": guard(
+      ["Literal", "TemplateElement", "Property"],
+      overlayScrollbar,
+      "Use scrollbar-lane. The thin utility, or any scrollbar-width or scrollbar-color, hands WebKit its overlay scrollbar, which takes the pointer over the last 14 px of the scroller while it is not drawn, so whatever sits there ignores clicks."
     ),
     // The OS paints it: in a dark window it opens white. Reported an hour
     // after a release.

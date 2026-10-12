@@ -155,7 +155,7 @@ Claims here are settled by running things, not by reasoning about them.
   editor (#163) and What's New. `ScrollArea` needs a height of its own
   (`h-[200px]`, `max-h-[60vh]`), which `scroll-area.test.ts` checks; where the
   height comes from a flex parent, make the element itself the scroller —
-  `min-h-0 flex-1 overflow-y-auto scrollbar-thin`.
+  `min-h-0 flex-1 overflow-y-auto scrollbar-lane`.
 
 ## Rust
 

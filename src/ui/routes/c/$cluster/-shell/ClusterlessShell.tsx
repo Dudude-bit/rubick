@@ -8,7 +8,9 @@ import type { ReactNode } from "react";
 export function ClusterlessShell({ page }: { page: ReactNode }) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-canvas text-fg-mid">
-      <main className="flex-1 overflow-auto scrollbar-thin p-4">{page}</main>
+      <main className="flex-1 overflow-auto scrollbar-lane [scrollbar-gutter:stable] py-4 pl-4 pr-2">
+        {page}
+      </main>
     </div>
   );
 }

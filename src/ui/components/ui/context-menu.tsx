@@ -88,7 +88,7 @@ const ContextMenuContent = React.forwardRef<
       className={cn(
         // As tall as the space Radix measured, like `SelectContent`: the
         // picker beside it caps the same kubeconfig list, this did not.
-        "z-50 max-h-[min(var(--radix-context-menu-content-available-height),24rem)] min-w-36 overflow-y-auto scrollbar-thin rounded-lg border border-hair bg-raise p-1 text-fg-mid shadow-pop data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        "z-50 max-h-[min(var(--radix-context-menu-content-available-height),24rem)] min-w-36 overflow-y-auto scrollbar-lane rounded-lg border border-hair bg-raise p-1 text-fg-mid shadow-pop data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className
       )}
       {...props}

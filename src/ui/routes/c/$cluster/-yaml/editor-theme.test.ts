@@ -175,20 +175,21 @@ describe("plain scalars the core schema calls constants", () => {
 
 describe("the editor's own scrollbar", () => {
   /**
-   * CodeMirror builds `.cm-scroller` itself, so `scrollbar-thin` never
-   * reaches it and the manifest was the one pane with a platform-default bar
-   * where those are laid out rather than overlaid. Fails if the rules go or
-   * stop using role tokens.
+   * CodeMirror builds `.cm-scroller` itself, so `scrollbar-lane` never
+   * reaches it and the manifest was the one pane with a platform-default bar.
+   * A scrollbar width or colour hands WebKit its overlay bar, which takes the
+   * clicks on the last 14 px of every line. Fails if the rules go, bring the
+   * overlay back, or stop using role tokens.
    */
-  it("is styled like every other scroller in the window", () => {
+  it("is styled like every other scroller in the window, in a lane of its own", () => {
     const rules = Object.entries(SPEC).filter(([selector]) =>
       selector.startsWith(".cm-scroller")
     );
     const bySelector = Object.fromEntries(rules);
     expect(bySelector[".cm-scroller"]).toMatchObject({
-      scrollbarWidth: "thin",
-      scrollbarColor: "hsl(var(--sel)) transparent",
+      scrollbarColor: "auto",
     });
+    expect(bySelector[".cm-scroller"]).not.toHaveProperty("scrollbarWidth");
     expect(bySelector[".cm-scroller::-webkit-scrollbar"]).toMatchObject({
       width: "8px",
     });

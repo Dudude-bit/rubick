@@ -84,7 +84,7 @@ export function DangerousConfirmDialog({
           {details && (
             <div
               data-testid="confirm-details"
-              className="max-h-[40vh] min-h-0 overflow-y-auto scrollbar-thin"
+              className="max-h-[40vh] min-h-0 overflow-y-auto scrollbar-lane"
             >
               {details}
             </div>

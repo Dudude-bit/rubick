@@ -921,7 +921,7 @@ export function CommandPalette() {
           </div>
 
           {alert !== null ? (
-            <div className="max-h-[420px] overflow-y-auto scrollbar-thin">
+            <div className="max-h-[420px] overflow-y-auto scrollbar-lane">
               {/*
               Keyed by the alert itself: the panel holds which cluster,
               object and namespace the reader picked, and a second paste
@@ -938,7 +938,7 @@ export function CommandPalette() {
               id={listId}
               role="listbox"
               aria-label={t("action", "results")}
-              className="max-h-[380px] overflow-y-auto p-1 scrollbar-thin"
+              className="max-h-[380px] overflow-y-auto p-1 scrollbar-lane"
             >
               {entries.map((entry) => (
                 <EntryRow

@@ -21,7 +21,7 @@ export function WordTable({
   );
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="overflow-x-auto scrollbar-thin">
+      <div className="overflow-x-auto scrollbar-lane">
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr>

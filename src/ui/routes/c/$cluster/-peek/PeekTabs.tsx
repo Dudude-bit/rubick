@@ -291,7 +291,7 @@ function PeekContainersTab({
     );
   }
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin px-3.5 py-3">
+    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
       <ContainerRows pod={pod} namespace={pod.namespace} logPod={pod.name} />
     </div>
   );
@@ -342,7 +342,7 @@ function PeekDataTab({
   }
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin px-3.5 py-3">
+    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
       <DataSection
         data={data?.values ?? {}}
         withheld={data?.withheld}
@@ -587,7 +587,7 @@ function ChildrenSection({
   children: ReactNode;
 }) {
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin px-2 py-3">
+    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-2">
       <Section>
         <SectionHeader
           className="px-1.5"
@@ -628,7 +628,7 @@ function PeekRelatedTab({
   );
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin px-3.5 py-3">
+    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
       <RelatedPanel query={related} kind={target.kind} />
     </div>
   );
@@ -645,7 +645,7 @@ function PeekScalesTab({
   isLoading: boolean;
 }) {
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin px-3.5 py-3">
+    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] py-3 pl-3.5 pr-1.5">
       <AutoscalerScales
         object={detail}
         namespace={target.namespace ?? null}

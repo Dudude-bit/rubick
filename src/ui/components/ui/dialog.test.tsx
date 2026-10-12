@@ -21,6 +21,6 @@ describe("every dialog panel is bounded by the window", () => {
     expect(panel, `${path} has no centred panel class`).toBeDefined();
     expect(panel).toContain("max-h-[calc(100vh-2rem)]");
     expect(panel).toContain("overflow-y-auto");
-    expect(panel).toContain("scrollbar-thin");
+    expect(panel).toContain("scrollbar-lane");
   });
 });

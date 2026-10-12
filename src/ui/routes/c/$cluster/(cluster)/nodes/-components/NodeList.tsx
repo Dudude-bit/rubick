@@ -380,7 +380,7 @@ export function NodeList() {
             dataUpdatedAt={nodesForTrends.dataUpdatedAt}
             live={live && !resyncing}
           />
-          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-lane">
             <NodeUtilisation
               nodes={nodesForTrends.data?.rows ?? []}
               nodesKnown={nodesForTrends.data !== undefined}

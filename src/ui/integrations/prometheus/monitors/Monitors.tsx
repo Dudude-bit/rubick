@@ -148,7 +148,7 @@ export default function Monitors() {
           onKeyDown={onKeyDown}
           targets={picture.data.targets}
         />
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-thin">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-lane">
           {selected ? (
             <Detail
               key={keyOf(selected)}
@@ -449,7 +449,7 @@ function Ladder({
         aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-thin outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-lane outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
       >
         {GROUPS.map((group) => {
           const members = shown.filter((row) => groupOf(row) === group);
