@@ -1021,3 +1021,118 @@ describe("a story about an object read as deleted", () => {
     ).toBe(false);
   });
 });
+
+describe("what a CronJob's story says it ran", () => {
+  const en: T = (section, key, values) => translate("en", section, key, values);
+  const said = (
+    kind: string,
+    name: string,
+    reason: string,
+    message: string,
+    minutesAgo: number,
+    count = 1
+  ) =>
+    event({
+      kind,
+      name,
+      reason,
+      message,
+      count,
+      lastTimestamp: ago(minutesAgo * 60_000),
+    });
+  const run = (n: number) => {
+    const job = `cron-demo-2986343${n}`;
+    const at = 30 - n * 4;
+    return [
+      said(
+        "CronJob",
+        "cron-demo",
+        "SuccessfulCreate",
+        `Created job ${job}`,
+        at
+      ),
+      said("Job", job, "SuccessfulCreate", `Created pod: ${job}-x8k2p`, at),
+      said("Pod", `${job}-x8k2p`, "Started", "Started container app", at),
+      said("Job", job, "Completed", "Job completed", at - 1),
+      said(
+        "CronJob",
+        "cron-demo",
+        "SawCompletedJob",
+        `Saw completed job: ${job}, status: Complete`,
+        at - 1,
+        n % 2 === 0 ? 2 : 1
+      ),
+    ];
+  };
+
+  /**
+   * Dana's cron-demo read "16 Jobs created, 22 completed" where kubectl
+   * showed 8 Jobs: the CronJob's "Created job" was added to each Job's
+   * "Created pod", and its SawCompletedJob to each Job's Completed. Fails if
+   * a run is counted once per controller that spoke of it.
+   */
+  it("counts each Job once, whichever controllers spoke of it", () => {
+    const events = [0, 1, 2, 3, 4, 5, 6].flatMap(run);
+    const [story] = storiesOf(events, {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+    });
+    expect(story.subject).toMatchObject({ kind: "CronJob", name: "cron-demo" });
+    expect(story.says.values).toMatchObject({
+      created: { key: "jobsCreated", values: { n: 7 } },
+      completed: 7,
+    });
+    expect(sayWords(story.says, en)).toMatch(
+      /: 7 Jobs created, 7 completed\.$/
+    );
+  });
+
+  /** Fails if a Job's retried pods are read as more Jobs, or a failed one as completed. */
+  it("reads a Job that made two pods as one Job, and a failed run as not completed", () => {
+    const events = [
+      said(
+        "Job",
+        "backup",
+        "SuccessfulCreate",
+        "Created pod: backup-b7kqz",
+        20
+      ),
+      said(
+        "Job",
+        "backup",
+        "SuccessfulCreate",
+        "Created pod: backup-x9m2c",
+        15
+      ),
+      said("Job", "backup", "Completed", "Job completed", 10),
+      said(
+        "CronJob",
+        "nightly",
+        "SuccessfulCreate",
+        "Created job nightly-29863430",
+        9
+      ),
+      said(
+        "CronJob",
+        "nightly",
+        "SawCompletedJob",
+        "Saw completed job: nightly-29863430, status: Failed",
+        8
+      ),
+    ];
+    const stories = storiesOf(events, {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+    });
+    expect(one(stories, "backup").says.values).toMatchObject({
+      created: { values: { n: 1 } },
+      completed: 1,
+    });
+    expect(one(stories, "nightly").says.values).toMatchObject({
+      created: { values: { n: 1 } },
+      completed: 0,
+    });
+  });
+});

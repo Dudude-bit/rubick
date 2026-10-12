@@ -522,6 +522,34 @@ function countReason(events: EventInfo[], ...reasons: string[]): number {
     .reduce((sum, e) => sum + occurrencesOf(e), 0);
 }
 
+const SAW_COMPLETED = /^Saw completed job: ([^,\s]+),? status: (\w+)/;
+
+/**
+ * The Jobs a story holds, each counted once. A CronJob says "Created job x"
+ * and "Saw completed job: x", and the Job itself says "Created pod" and
+ * "Job completed": summed by reason, every run was counted twice.
+ */
+function jobRuns(events: EventInfo[]): { created: number; completed: number } {
+  const created = new Set<string>();
+  const completed = new Set<string>();
+  for (const event of events) {
+    const { kind, name } = event.involvedObject;
+    const message = event.message ?? "";
+    if (event.reason === "SuccessfulCreate") {
+      if (kind === "CronJob")
+        created.add(CREATED_JOB.exec(message)?.[1] ?? message);
+      else if (kind === "Job") created.add(name);
+    } else if (event.reason === "Completed" && kind === "Job") {
+      completed.add(name);
+    } else if (event.reason === "SawCompletedJob") {
+      const saw = SAW_COMPLETED.exec(message);
+      if (!saw) completed.add(message);
+      else if (saw[2] === "Complete") completed.add(saw[1]);
+    }
+  }
+  return { created: created.size, completed: completed.size };
+}
+
 function topReasons(reasons: ReasonCount[]): string {
   return reasons
     .slice(0, 3)
@@ -567,18 +595,20 @@ function sentenceOf(
           ? { key: "storyChanged", values: { ...pods, changes } }
           : { key: onePod ? "storyPod" : "storyPods", values: pods };
       }
-      case "job":
+      case "job": {
+        const runs = jobRuns(events);
         return {
           key: "storyJob",
           values: {
             when,
             created: {
               key: "jobsCreated" as const,
-              values: { n: countReason(events, "SuccessfulCreate") },
+              values: { n: runs.created },
             },
-            completed: countReason(events, "Completed", "SawCompletedJob"),
+            completed: runs.completed,
           },
         };
+      }
       default:
         return {
           key: "storyQuiet",
