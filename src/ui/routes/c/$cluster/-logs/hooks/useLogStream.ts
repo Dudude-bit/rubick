@@ -55,6 +55,11 @@ export interface LogSource {
 export const sourceKey = (source: LogSource) =>
   `${source.namespace}/${source.pod}/${source.container}`;
 
+const sameSource = (
+  failure: Pick<ContainerFailure, "pod" | "container">,
+  source: Pick<LogSource, "pod" | "container">
+) => failure.pod === source.pod && failure.container === source.container;
+
 /** A stream that stopped on its own, and the container it belonged to. */
 export interface ContainerFailure extends StreamFailure {
   container: string;
@@ -271,6 +276,9 @@ export function useLogStream({
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [failures, setFailures] = useState<ContainerFailure[]>([]);
+  const failuresRef = useRef(failures);
+  // oxlint-disable-next-line react-hooks/refs
+  failuresRef.current = failures;
   const [isPaused, setIsPaused] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
   const [lastBatchAt, setLastBatchAt] = useState(() => Date.now());
@@ -651,9 +659,21 @@ export function useLogStream({
       let unlistenFailure: (() => void) | null = null;
       try {
         unlistenBatch = await listenEvent("log-batch", (event) => {
-          const source = s.sourceOf.get(event.payload.stream_id);
+          const streamId = event.payload.stream_id;
+          const source = s.sourceOf.get(streamId);
           if (source === undefined || event.payload.lines.length === 0) {
             return;
+          }
+          // Lines from the stream that holds the source are the source
+          // delivering, whatever an earlier stream of it said: Dana's
+          // header said "1 of 5" over four containers' arriving lines.
+          if (s.opened.get(sourceKey(source)) === streamId) {
+            if (!previous && !s.live.has(streamId)) {
+              s.live.add(streamId);
+              setIsStreaming(true);
+            }
+            if (failuresRef.current.some((f) => sameSource(f, source)))
+              setFailures((prev) => prev.filter((f) => !sameSource(f, source)));
           }
 
           let epoch = s.lastEpoch.get(event.payload.stream_id) ?? Date.now();
@@ -685,16 +705,22 @@ export function useLogStream({
           const source = s.sourceOf.get(streamId);
           if (!s.active || source === undefined) return;
           s.live.delete(streamId);
-          setFailures((prev) =>
-            prev.some(
-              (f) => f.container === source.container && f.pod === source.pod
-            )
-              ? prev
-              : [
-                  ...prev,
-                  { ...failure, container: source.container, pod: source.pod },
-                ]
-          );
+          // A stream the source has since been opened again past says
+          // nothing of the one that holds it now.
+          if (s.opened.get(sourceKey(source)) === streamId)
+            setFailures((prev) =>
+              prev.some((f) => sameSource(f, source))
+                ? prev
+                : [
+                    ...prev,
+                    {
+                      ...failure,
+                      container: source.container,
+                      pod: source.pod,
+                    },
+                  ]
+            );
+          else s.sourceOf.delete(streamId);
           if (s.live.size === 0) {
             setIsStreaming(false);
             setIsConnecting(false);

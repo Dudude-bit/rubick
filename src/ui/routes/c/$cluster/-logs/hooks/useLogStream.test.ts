@@ -530,6 +530,66 @@ describe("useLogStream surfaces a stream that dies after it started", () => {
     expect(result.current.failures).toHaveLength(0);
   });
 
+  /**
+   * Dana's header said "Streaming 1 of 5" while four containers labelled
+   * "not followed" went on delivering lines. Fails if a container whose
+   * stream delivers lines is still counted unfollowed, or not streaming.
+   */
+  it("counts a container whose stream delivers lines as streaming, whatever it said before", async () => {
+    const { result } = renderHook(() =>
+      useLogStream({ ...baseProps, containers: FIVE })
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(5));
+    act(() => {
+      for (const container of FIVE.slice(0, 4))
+        listeners["stream-failed"]!(
+          failureEvent(container, "broken", "fsnotify")
+        );
+    });
+    await waitFor(() => expect(result.current.failures).toHaveLength(4));
+
+    act(() => {
+      listeners["log-batch"]!(logEvent("json-logger", "still arriving"));
+    });
+
+    await waitFor(() => expect(result.current.failures).toHaveLength(3));
+    expect(
+      result.current.failures.map((failure) => failure.container)
+    ).not.toContain("json-logger");
+    expect(result.current.isStreaming).toBe(true);
+  });
+
+  /**
+   * A container followed again has a new stream; the old one's word,
+   * arriving late, marked it unfollowed beside the lines the new one
+   * delivered. Fails if a failure of a stream the container no longer
+   * reads through is said.
+   */
+  it("says nothing of a stream its container has been opened again past", async () => {
+    const { commands } = await import("@/lib/commands");
+    const { result } = renderHook(() =>
+      useLogStream({ ...baseProps, containers: FIVE })
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(5));
+    act(() => {
+      listeners["stream-failed"]!(failureEvent("web", "broken", "dropped"));
+    });
+    await waitFor(() => expect(result.current.failures).toHaveLength(1));
+
+    vi.mocked(commands.streamPodLogs).mockResolvedValueOnce("stream-web-2");
+    act(() => result.current.retrySource("p", "web"));
+    await waitFor(() => expect(subscribedCalls).toHaveLength(6));
+    expect(result.current.failures).toHaveLength(0);
+
+    act(() => {
+      listeners["stream-failed"]!(failureEvent("web", "broken", "late"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(result.current.failures).toHaveLength(0);
+    expect(result.current.isStreaming).toBe(true);
+  });
+
   it("clears the failures when retry restarts the streams", async () => {
     const { result } = renderHook(() => useLogStream(baseProps));
 
