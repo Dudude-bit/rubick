@@ -5227,7 +5227,9 @@ export const ru: Catalogue = {
     framework: "Фреймворк",
     updates: "Обновления",
     updateAvailable: "Доступна версия {version}",
-    upToDate: "Установлена последняя версия",
+    upToDate: "В ленте релизов нет версии новее",
+    updateCheckFailed: "Не удалось проверить обновления",
+    updatesNotChecked: "Обновления ещё не проверялись",
     updateHint: "После загрузки обновления приложение перезапустится.",
     downloadingUpdate: "Загрузка обновления",
     downloadingUpdateHint:

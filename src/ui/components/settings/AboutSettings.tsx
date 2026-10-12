@@ -12,6 +12,34 @@ import { useWhatsNewStore } from "@/stores/whatsNewStore";
 import { SettingRow, SettingsGroup } from "./settings-row";
 import { useT } from "@/i18n/useT";
 import { formatWhen } from "@/lib/utils";
+import type { en } from "@/i18n/catalogue";
+
+type UpdateLine = "checking" | "failed" | "upToDate" | "notChecked";
+
+/** "Latest" only from a check that reached the release feed and found nothing newer. */
+const UPDATE_LINE: Record<UpdateLine, keyof typeof en.settings> = {
+  checking: "checkingUpdates",
+  failed: "updateCheckFailed",
+  upToDate: "upToDate",
+  notChecked: "updatesNotChecked",
+};
+
+const updateLine = ({
+  checking,
+  error,
+  checkedAt,
+}: {
+  checking: boolean;
+  error?: string;
+  checkedAt: number | null;
+}): UpdateLine =>
+  checking
+    ? "checking"
+    : error
+      ? "failed"
+      : checkedAt !== null
+        ? "upToDate"
+        : "notChecked";
 
 /**
  * What this build is, and — separately — replacing it.
@@ -104,7 +132,10 @@ export function AboutSettings() {
           label={
             available && version
               ? t("settings", "updateAvailable", { version })
-              : t("settings", "upToDate")
+              : t(
+                  "settings",
+                  UPDATE_LINE[updateLine({ checking, error, checkedAt })]
+                )
           }
           hint={
             checkedAt === null
@@ -145,7 +176,7 @@ export function AboutSettings() {
                         version: update.version,
                       }),
                     });
-                  } else if (!error) {
+                  } else if (!useUpdaterStore.getState().error) {
                     toast({
                       title: t("settings", "noUpdates"),
                       description: t("settings", "upToDateToast"),
