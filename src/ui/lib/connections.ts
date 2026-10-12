@@ -1445,6 +1445,8 @@ export function unreadWhy(why: Unread, t: T): string {
       return t("readings", "unreadNodeClaims");
     case "volumeMountsNotRead":
       return t("readings", "unreadVolumeMounts");
+    case "policiesOnTheirTab":
+      return t("readings", "unreadPoliciesOnTheirTab");
   }
 }
 

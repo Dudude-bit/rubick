@@ -2646,7 +2646,8 @@ export type ContextAuth =
 export type Unread =
   | { says: "unanswered"; version: string; said: string }
   | { says: "nodeClaimsNotRead" }
-  | { says: "volumeMountsNotRead" };
+  | { says: "volumeMountsNotRead" }
+  | { says: "policiesOnTheirTab" };
 
 export type Relation =
   | { verb: "owns"; controller: boolean }

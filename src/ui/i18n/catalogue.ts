@@ -3496,6 +3496,8 @@ export const en = {
       "the app does not read the claims the pods on this node hold, so it cannot say which volumes would have to detach before those pods start elsewhere",
     unreadVolumeMounts:
       "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
+    unreadPoliciesOnTheirTab:
+      "Connections does not read the policies that select this pod; its NetworkPolicies tab does",
     connNoAddress: "no address is configured",
     stepAttempt: "attempt {revision}",
     stepChallengeOn: "{kind} on {domain}",

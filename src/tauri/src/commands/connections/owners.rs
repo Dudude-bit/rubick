@@ -255,6 +255,20 @@ mod walk_tests {
         ));
     }
 
+    /// Marco's pod named only its disruption budget as not looked at while
+    /// its `NetworkPolicies` tab said it could not say. Fails if a pod's page
+    /// stops naming the policies this graph never reads.
+    #[tokio::test]
+    async fn a_pod_names_its_policies_as_read_on_their_own_tab() {
+        let page = pod_page(failure(404, "NotFound")).await.expect("a page");
+        let policies = page
+            .not_looked_at
+            .iter()
+            .find(|entry| entry.kind == "NetworkPolicy")
+            .expect("the policies are named");
+        assert_eq!(policies.why, crate::resources::Unread::PoliciesOnTheirTab);
+    }
+
     /// An owner deleted since the pod named it ends the walk, and is not a
     /// read that failed.
     #[tokio::test]
