@@ -4444,10 +4444,7 @@ export const en = {
     connectingInline: "connecting…",
     searchingInline: "searching…",
     failedInline: "failed",
-    kindsUnreadInline: {
-      one: "could not read {n} kind: {kinds}",
-      other: "could not read {n} kinds: {kinds}",
-    },
+    kindsUnreadNamed: "{counts}: {kinds}",
     kindsRefusedHover: "The cluster refused your account: {kinds}",
     kindsRefusedInHover: "Refused in {namespaces}: {kinds}",
     kindFailedInHover: "{kind} in {namespaces}: {message}",
@@ -7735,6 +7732,22 @@ export const en = {
     kindsRefusedWherever: {
       one: "{n} kind refused wherever asked",
       other: "{n} kinds refused wherever asked",
+    },
+    kindsPartlyUnread: {
+      one: "{n} of them could not be read in some namespaces",
+      other: "{n} of them could not be read in some namespaces",
+    },
+    kindsUnreadWherever: {
+      one: "{n} kind could not be read wherever asked",
+      other: "{n} kinds could not be read wherever asked",
+    },
+    kindsRefusedSomewhere: {
+      one: "{n} kind refused in some namespaces",
+      other: "{n} kinds refused in some namespaces",
+    },
+    kindsUnreadSomewhere: {
+      one: "{n} kind could not be read in some namespaces",
+      other: "{n} kinds could not be read in some namespaces",
     },
     kindsNotSearched: {
       one: "{n} kind not searched",

@@ -244,7 +244,7 @@ describe("the command palette's hits", () => {
     ];
     await open("burst-demo");
     expect(
-      await screen.findByText(/could not read 1 kind: Service/)
+      await screen.findByText(/1 kind refused wherever asked: Service/)
     ).toBeInTheDocument();
   });
 
@@ -289,7 +289,7 @@ describe("the command palette's hits", () => {
     }));
     await open("access");
     const line = await screen.findByText(
-      /could not read 7 kinds: ClusterRole, ClusterRoleBinding, DaemonSet/
+      /7 kinds refused wherever asked: ClusterRole, ClusterRoleBinding, DaemonSet/
     );
     expect(line).toHaveClass("truncate");
     expect(line).toHaveAttribute(
@@ -299,7 +299,7 @@ describe("the command palette's hits", () => {
     expect(document.body.textContent?.split("PodDisruptionBudget").length).toBe(
       2
     );
-    expect(screen.queryByText(/kinds? refused/)).toBeNull();
+    expect(screen.getAllByText(/kinds? refused/)).toEqual([line]);
   });
 
   /**
@@ -327,7 +327,9 @@ describe("the command palette's hits", () => {
       },
     ];
     await open("access");
-    const line = await screen.findByText(/could not read 5 kinds: DaemonSet/);
+    const line = await screen.findByText(
+      /5 kinds could not be read wherever asked: DaemonSet/
+    );
     expect(line.getAttribute("title")?.split("\n")).toEqual([
       "The cluster refused your account: DaemonSet, Lease, Node, Role",
       "Widget: request timed out",
@@ -356,7 +358,9 @@ describe("the command palette's hits", () => {
       refusal("Node", []),
     ];
     await open("ledger");
-    const line = await screen.findByText(/could not read 4 kinds/);
+    const line = await screen.findByText(
+      /3 kinds refused wherever asked, 1 kind refused in some namespaces/
+    );
     expect(line.getAttribute("title")?.split("\n")).toEqual([
       "Refused in team-blind: Job, Pod",
       "The cluster refused your account: Node",
@@ -384,7 +388,7 @@ describe("the command palette's hits", () => {
     ];
     await open("marco");
     const refused = await screen.findByText(
-      /could not read 1 kind: ServiceAccount/
+      /1 kind refused wherever asked: ServiceAccount/
     );
     expect(refused.parentElement).toHaveClass("text-warn");
     expect(refused).toHaveAttribute(
@@ -423,7 +427,7 @@ describe("the command palette's hits", () => {
       await screen.findByText("Names searched in 1 of 2 kinds served")
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/could not read 1 kind: PriorityClass/)
+      screen.getByText(/1 kind refused wherever asked: PriorityClass/)
     ).toBeInTheDocument();
   });
 
@@ -464,6 +468,41 @@ describe("the command palette's hits", () => {
     expect(screen.getByText("1 kind refused wherever asked")).toHaveClass(
       "text-warn"
     );
+  });
+
+  /**
+   * Marco's header said "could not read 22 kinds" beside a summary saying
+   * "13 refused wherever asked" and "9 of them refused in some namespaces":
+   * one fact, two counts. Fails if the header counts a kind read in one
+   * namespace as one the cluster refused outright, or uses other words.
+   */
+  it("counts what it could not read in the summary's own words", async () => {
+    search.searched = [{ kind: "Pod", group: "", plural: "pods" }];
+    search.unreadable = [
+      {
+        kind: "Pod",
+        group: "",
+        plural: "pods",
+        reason: "forbidden",
+        message: "pods is forbidden",
+        namespaces: ["team-blind"],
+      },
+      {
+        kind: "PriorityClass",
+        group: "scheduling.k8s.io",
+        plural: "priorityclasses",
+        reason: "forbidden",
+        message: "priorityclasses is forbidden",
+        namespaces: [],
+      },
+    ];
+    await open("checkout");
+    expect(
+      await screen.findByText(
+        /1 kind refused wherever asked, 1 kind refused in some namespaces: Pod, PriorityClass/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/could not read/)).toBeNull();
   });
 
   /**

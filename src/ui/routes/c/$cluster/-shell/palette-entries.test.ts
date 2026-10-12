@@ -19,6 +19,7 @@ import {
   type Entry,
   type PaletteState,
   byKindName,
+  kindLabels,
   kindSplit,
   orderHits,
 } from "./palette-entries";
@@ -1579,5 +1580,22 @@ describe("the order the palette draws hits in", () => {
       "Role",
     ]);
     expect(byKindName([...kinds].reverse())).toEqual(byKindName(kinds));
+  });
+});
+
+describe("kind names on hover", () => {
+  /**
+   * Marco's "3 kinds not searched" read "ComponentStatus, Event, Event": the
+   * core Event and events.k8s.io's, with nothing to tell them apart. Fails
+   * if a name two groups share loses its group, or a unique one gains one.
+   */
+  it("names the group beside a kind name two groups share", () => {
+    expect(
+      kindLabels([
+        { kind: "Event", group: "events.k8s.io" },
+        { kind: "ComponentStatus", group: "" },
+        { kind: "Event", group: "" },
+      ])
+    ).toEqual(["ComponentStatus", "Event (core)", "Event (events.k8s.io)"]);
   });
 });
