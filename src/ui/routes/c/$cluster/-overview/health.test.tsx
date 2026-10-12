@@ -197,6 +197,44 @@ describe("the overview's two event panels", () => {
   });
 
   /**
+   * Lena's FailedGetResourceMetric read ×45 under the HPA there now, 4 of
+   * them the deleted one's. The backend now sends the earlier object's
+   * repeats as a row of their own; fails if the panel folds the two rows of
+   * one reason into one, or draws the earlier one's as the current object's.
+   */
+  it("draws an earlier object's repeats of a reason on a marked row of their own", async () => {
+    const said = vi.spyOn(console, "error").mockImplementation(() => {});
+    const hpa = {
+      ...warning,
+      reason: "FailedGetResourceMetric",
+      objectKind: "HorizontalPodAutoscaler",
+      objectName: "hello-web",
+    };
+    await wrap(
+      <WarningsPanel
+        warnings={[
+          { ...hpa, count: 41, incarnation: "current" },
+          { ...hpa, count: 4, incarnation: "earlier" },
+        ]}
+        known
+      />
+    );
+    expect(screen.getAllByText("FailedGetResourceMetric")).toHaveLength(2);
+    expect(screen.getByText("×41")).toBeInTheDocument();
+    expect(screen.getByText("×4")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", {
+        name: "HorizontalPodAutoscaler hello-web",
+      })
+    ).toHaveLength(1);
+    expect(screen.getByText("earlier object")).toBeInTheDocument();
+    expect(
+      said.mock.calls.some((call) => String(call[0]).includes("same key"))
+    ).toBe(false);
+    said.mockRestore();
+  });
+
+  /**
    * Marco's BackOff read ×767 under "last hour" where 696 were one event first
    * seen two and a half hours earlier. Fails if the older event's lifetime
    * count is drawn as the hour's, or its tally stops naming when it began.

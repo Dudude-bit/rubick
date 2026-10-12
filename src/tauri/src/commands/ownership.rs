@@ -156,7 +156,7 @@ fn followed(owners: &[OwnerReference]) -> std::result::Result<Option<&OwnerRefer
     }
 }
 
-async fn metadata(
+pub(crate) async fn metadata(
     state: &AppState,
     served: &Served,
     name: &str,
