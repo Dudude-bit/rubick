@@ -247,6 +247,14 @@ pub(super) mod tests {
     pub(in crate::client) async fn server(
         answer: impl Fn(&str) -> (u16, Vec<String>) + Send + Sync + 'static,
     ) -> (kube::Client, Asked) {
+        slow_server(move |target| Some((Duration::ZERO, answer(target)))).await
+    }
+
+    /// As [`server`], each answer begun after its delay, and none ever where
+    /// it is `None`: a cache waiting on a version, or a connection gone quiet.
+    pub(in crate::client) async fn slow_server(
+        answer: impl Fn(&str) -> Option<(Duration, (u16, Vec<String>))> + Send + Sync + 'static,
+    ) -> (kube::Client, Asked) {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
             .await
             .expect("bind");
@@ -263,7 +271,10 @@ pub(super) mod tests {
                     let head = String::from_utf8_lossy(&buf[..n]).to_string();
                     let target = head.split_whitespace().nth(1).unwrap_or("").to_string();
                     seen.lock().unwrap().push(target.clone());
-                    let (status, pieces) = answer(&target);
+                    let Some((delay, (status, pieces))) = answer(&target) else {
+                        return std::future::pending::<()>().await;
+                    };
+                    tokio::time::sleep(delay).await;
                     let start = format!(
                         "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\n\
                          transfer-encoding: chunked\r\nconnection: close\r\n\r\n"

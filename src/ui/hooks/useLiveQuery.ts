@@ -23,8 +23,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  hashKey,
   useQueries,
   useQuery,
+  useQueryClient,
+  type Query,
   type QueryKey,
   type RefetchOptions,
   type UseQueryOptions,
@@ -39,6 +42,7 @@ import {
   type RefreshRate,
 } from "@/lib/refresh";
 import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
+import { SLOW_READ_MS } from "@/lib/read-deadline";
 import { LONGEST_TIMEOUT_MS } from "@/hooks/useNow";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { useWindowActivity } from "@/lib/window-activity";
@@ -84,6 +88,11 @@ export interface Freshness {
   everyMs: number | false;
   /** The last read failed, and what is on screen is from the one before it. */
   stale: boolean;
+  /**
+   * A re-read of what is on screen has waited on the cluster past
+   * `SLOW_READ_MS`: the screen is the last answer, and the next one is late.
+   */
+  slowRead: boolean;
   /** Why the last read failed, or `null` where it answered. */
   failure: unknown;
   /**
@@ -255,6 +264,7 @@ export function useLiveQueries<T>(options: {
     combine: joinParts,
   });
   const waitingSince = useWaitingSince(isLoading);
+  const slowRead = useSlowRead(options.queries.map((query) => query.queryKey));
 
   // The join is only as fresh as its stalest part: reporting the newest would
   // put a time on screen that one of the numbers under it predates. A part
@@ -368,6 +378,7 @@ export function useLiveQueries<T>(options: {
       waitingSince,
       // A part that never answered is unread, not old.
       stale: failed.some(Boolean) && data.every((part) => part !== undefined),
+      slowRead,
       failure: error,
     },
   };
@@ -391,6 +402,55 @@ function useWaitingSince(waiting: boolean): number | null {
     setSince(waiting ? Date.now() : null);
   }, [waiting]);
   return since;
+}
+
+/**
+ * Whether a re-read of any of `keys`, with an answer already on screen, has
+ * been waiting past `SLOW_READ_MS`. Read off the cache rather than
+ * `fetchStatus`, which would draw the screen at the start of every poll: this
+ * draws it only when a read turns late and when the late read lands.
+ */
+function useSlowRead(keys: readonly QueryKey[]): boolean {
+  const client = useQueryClient();
+  const hashes = keys.map((key) => hashKey(key)).join("\n");
+  const [lateFor, setLateFor] = useState<string | null>(null);
+  useEffect(() => {
+    const watched = new Set(hashes.split("\n"));
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const late = new Set<string>();
+    const show = () => setLateFor(late.size > 0 ? hashes : null);
+    const seen = (query: Query) => {
+      const hash = query.queryHash;
+      if (!watched.has(hash)) return;
+      const { fetchStatus, data } = query.state;
+      if (fetchStatus === "fetching" && data !== undefined) {
+        if (!timers.has(hash)) {
+          timers.set(
+            hash,
+            setTimeout(() => {
+              late.add(hash);
+              show();
+            }, SLOW_READ_MS)
+          );
+        }
+        return;
+      }
+      clearTimeout(timers.get(hash));
+      timers.delete(hash);
+      if (late.delete(hash)) show();
+    };
+    const cache = client.getQueryCache();
+    for (const hash of watched) {
+      const query = cache.get(hash);
+      if (query) seen(query);
+    }
+    const unsubscribe = cache.subscribe((event) => seen(event.query));
+    return () => {
+      unsubscribe();
+      timers.forEach(clearTimeout);
+    };
+  }, [client, hashes]);
+  return lateFor === hashes;
 }
 
 export function useLiveQuery<
@@ -453,6 +513,7 @@ export function useLiveQuery<
   // `isLoading` is already "fetching with nothing to show". Reading
   // `fetchStatus` as well drew every page once more at the start of each poll.
   const waitingSince = useWaitingSince(isLoading);
+  const slowRead = useSlowRead([queryOptions.queryKey]);
 
   // How many answers in a row came back identical.
   //
@@ -559,6 +620,7 @@ export function useLiveQuery<
     everyMs,
     waitingSince,
     stale: failed && data !== undefined,
+    slowRead,
     failure: failed ? error : null,
   };
 

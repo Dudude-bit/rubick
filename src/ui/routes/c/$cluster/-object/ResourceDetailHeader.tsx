@@ -59,6 +59,8 @@ export interface ResourceDetailHeaderProps {
   slowed?: boolean;
   /** The last read failed, and the object on screen is from the one before it. */
   stale?: boolean;
+  /** A re-read has waited on the cluster past the slow-read grace. */
+  slowRead?: boolean;
   /** Where a kind the registry does not hold is served, for its owners. */
   served?: ServedResource | null;
 }
@@ -178,6 +180,7 @@ export function ResourceDetailHeader({
   live,
   slowed,
   stale,
+  slowRead,
   served,
 }: ResourceDetailHeaderProps) {
   const t = useT();
@@ -270,6 +273,7 @@ export function ResourceDetailHeader({
           live={live}
           slowed={slowed}
           stale={stale}
+          slowRead={slowRead}
           reserve={false}
         />
       </span>

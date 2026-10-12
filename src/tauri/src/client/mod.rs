@@ -277,8 +277,9 @@ fn client_with_deadline(config: Config, deadline: std::time::Duration) -> Result
         .with_layer(&tower::retry::RetryLayer::new(
             send_again::SendAgain::default(),
         ))
-        .with_layer(&tower::timeout::TimeoutLayer::new(deadline))
         .with_layer(&floors::Floors::default())
+        // Outside the floors, so a list asked again without its floor shares the one deadline.
+        .with_layer(&tower::timeout::TimeoutLayer::new(deadline))
         .with_layer(&clock::Clock)
         .build())
 }
