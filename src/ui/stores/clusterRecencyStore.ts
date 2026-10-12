@@ -19,7 +19,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 interface ClusterRecencyState {
-  /** Context name to the epoch millisecond it was last connected. */
+  /** Context name to the epoch millisecond it was last in use: landed on, or left. */
   lastUsed: Record<string, number>;
   recordUse: (context: string) => void;
 }

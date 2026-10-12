@@ -151,6 +151,18 @@ export function holdClusters(held: () => (string | null)[]): void {
 
 let releases = 0;
 
+/**
+ * A cluster stops being in use when the reader leaves it, not when it was
+ * connected: "last used 15m ago" sat beside one in use seconds before.
+ */
+function leaving(state: {
+  isConnected: boolean;
+  currentContext: string | null;
+}) {
+  if (state.isConnected && state.currentContext)
+    useClusterRecencyStore.getState().recordUse(state.currentContext);
+}
+
 function without<T>(record: Record<string, T>, key: string) {
   const { [key]: _gone, ...rest } = record;
   return rest;
@@ -345,6 +357,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     // behind is the last cluster's — not this one's.
     const changed = before.currentContext !== targetContext;
     const attemptId = before.connectionAttemptId + 1;
+    if (changed) leaving(before);
     const moving = {
       error: null,
       errorContext: null,
@@ -471,6 +484,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
 
   disconnect: async () => {
     const { pendingContext, isAuthenticating } = get();
+    leaving(get());
     set({
       isConnected: false,
       connectedThrough: null,
@@ -519,3 +533,9 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
 }));
 
 followConnections(() => useClusterStore.getState().connectionAttemptId);
+
+// Quitting is the last moment the cluster on screen was in use.
+if (typeof window !== "undefined")
+  window.addEventListener("pagehide", () =>
+    leaving(useClusterStore.getState())
+  );

@@ -34,6 +34,7 @@ import {
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import type { ClusterInfo, ContextInfo } from "@/generated/types";
 import { holdClusters, useClusterStore, wayBackTo } from "./clusterStore";
+import { useClusterRecencyStore } from "./clusterRecencyStore";
 
 const saveClusterPreferences = vi.mocked(commands.saveClusterPreferences);
 
@@ -692,5 +693,20 @@ describe("switching clusters keeps the one left until the new one lands", () => 
     await state().connect("acme-prod-eu");
 
     expect(state().failures).toEqual({});
+  });
+
+  /**
+   * The front door said acme-staging was last used 15 minutes ago, seconds
+   * after it was on screen: the time was the connect's. Fails if leaving a
+   * cluster does not count as its last use.
+   */
+  it("counts leaving a cluster as its last use", async () => {
+    useClusterRecencyStore.setState({ lastUsed: { "acme-staging": 1 } });
+
+    await state().connect("acme-dev");
+
+    expect(
+      useClusterRecencyStore.getState().lastUsed["acme-staging"]
+    ).toBeGreaterThan(1);
   });
 });

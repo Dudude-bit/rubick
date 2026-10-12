@@ -71,6 +71,7 @@ export function ClusterList({
 }) {
   const t = useT();
   const lastUsed = useClusterRecencyStore((s) => s.lastUsed);
+  const live = useClusterStore((s) => s.live);
   const failures = useClusterStore((s) => s.failures);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -207,6 +208,7 @@ export function ClusterList({
             key={ctx.name}
             context={ctx}
             lastUsedAt={lastUsed[ctx.name]}
+            live={live.includes(ctx.name)}
             failure={failures[ctx.name]}
             onSelect={onSelect}
           />
@@ -219,6 +221,7 @@ export function ClusterList({
           <ClusterListRow
             key={ctx.name}
             context={ctx}
+            live={live.includes(ctx.name)}
             failure={failures[ctx.name]}
             onSelect={onSelect}
           />
@@ -268,11 +271,14 @@ function Caption({ children }: { children: React.ReactNode }) {
 function ClusterListRow({
   context: info,
   lastUsedAt,
+  live,
   failure,
   onSelect,
 }: {
   context: ContextInfo;
   lastUsedAt?: number;
+  /** Connected now, so in use now: there is no age to give. */
+  live: boolean;
   failure?: ConnectFailed;
   onSelect: (context: string) => void;
 }) {
@@ -281,7 +287,7 @@ function ClusterListRow({
   const age = useRealtimeAge(
     lastUsedAt ? new Date(lastUsedAt).toISOString() : null
   );
-  const failed = failure !== undefined;
+  const failed = !live && failure !== undefined;
 
   return (
     // Right is the key, not Down: Down already walks this list, and a menu
@@ -315,11 +321,15 @@ function ClusterListRow({
           failed={failed}
           meta={
             <span className="flex items-center gap-1.5">
-              {failed
-                ? t("cluster", "failedInline")
-                : lastUsedAt
-                  ? t("cluster", "lastUsedAgo", { age })
-                  : providerLabel(detectProvider(context)).toLowerCase()}
+              {live ? (
+                <span className="text-ok">{t("cluster", "liveInline")}</span>
+              ) : failed ? (
+                t("cluster", "failedInline")
+              ) : lastUsedAt ? (
+                t("cluster", "lastUsedAgo", { age })
+              ) : (
+                providerLabel(detectProvider(context)).toLowerCase()
+              )}
               {/* Both ways in are only worth their width on the row the
                   reader is standing on. The arrow is spelled out for
                   screen readers by `aria-keyshortcuts` on the trigger, so
