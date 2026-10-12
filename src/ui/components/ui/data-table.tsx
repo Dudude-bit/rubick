@@ -414,16 +414,18 @@ const FoldedActions = React.createContext<
 
 function RowActionsProvider<TData extends RowData>({
   actions,
+  folded,
   children,
 }: {
   actions: QuickAction<TData>[] | undefined;
+  folded: React.ContextType<typeof FoldedActions>;
   children: React.ReactNode;
 }) {
   return (
     <RowActions.Provider
       value={(actions as unknown as QuickAction<never>[]) ?? NO_ACTIONS}
     >
-      {children}
+      <FoldedActions.Provider value={folded}>{children}</FoldedActions.Provider>
     </RowActions.Provider>
   );
 }
@@ -1507,357 +1509,351 @@ function DataTableInner<TData extends RowData>({
   // the height a target rather than a ceiling and strand the count line at
   // the bottom of a mostly empty window.
   return (
-    <RowActionsProvider actions={quickActions}>
-      <FoldedActions.Provider value={foldActions ? openRowMenuAt : null}>
-        <div className={cn("flex flex-col gap-2", fill && "min-h-0")}>
-          <div className="flex flex-none flex-wrap items-center justify-between gap-2">
-            {/* A search field is a text entry, not a panel: the box only
+    <RowActionsProvider
+      actions={quickActions}
+      folded={foldActions ? openRowMenuAt : null}
+    >
+      <div className={cn("flex flex-col gap-2", fill && "min-h-0")}>
+        <div className="flex flex-none flex-wrap items-center justify-between gap-2">
+          {/* A search field is a text entry, not a panel: the box only
             appears once it has focus or a value. */}
-            {toolbar !== undefined ? (
-              <div className="flex h-7 min-w-0 items-center">{toolbar}</div>
-            ) : (
-              <div className="flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
-                <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <input
-                  ref={filterRef}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  type="text"
-                  aria-label={
-                    searchPlaceholder ?? t("action", "searchEllipsis")
+          {toolbar !== undefined ? (
+            <div className="flex h-7 min-w-0 items-center">{toolbar}</div>
+          ) : (
+            <div className="flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
+              <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <input
+                ref={filterRef}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                type="text"
+                aria-label={searchPlaceholder ?? t("action", "searchEllipsis")}
+                placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}
+                value={searchValue}
+                onChange={(event) => changeSearch(event.target.value)}
+                // Back out to the rows without reaching for the mouse.
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    if (searchValue) changeSearch("");
+                    else event.currentTarget.blur();
+                  } else if (event.key === "ArrowDown" && keyboardNavEnabled) {
+                    event.preventDefault();
+                    select(0);
                   }
-                  placeholder={
-                    searchPlaceholder ?? t("action", "searchEllipsis")
-                  }
-                  value={searchValue}
-                  onChange={(event) => changeSearch(event.target.value)}
-                  // Back out to the rows without reaching for the mouse.
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      if (searchValue) changeSearch("");
-                      else event.currentTarget.blur();
-                    } else if (
-                      event.key === "ArrowDown" &&
-                      keyboardNavEnabled
-                    ) {
-                      event.preventDefault();
-                      select(0);
-                    }
-                  }}
-                  className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
-                />
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              {/* A warning only where rows are missing. A long list that is
+                }}
+                className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            {/* A warning only where rows are missing. A long list that is
               whole is only advice: "why is this list slow" and "why is my
               pod not here" have the same answer often enough. */}
-              {cutAt !== undefined ? (
-                <div className="flex items-center gap-1.5 text-[11px] text-fg-mut">
-                  <AlertTriangle
-                    className="h-3.5 w-3.5 shrink-0 text-warn"
-                    aria-hidden="true"
-                  />
-                  <span>
-                    {t("readings", "listCutAt", { n: formatCount(cutAt) })}
-                  </span>
-                </div>
-              ) : (
-                isLong && (
-                  <span className="text-[11px] text-fg-fnt">
-                    {t("readings", "longListTrim", { n: data.length })}
-                  </span>
-                )
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setTableDensity(isCompact ? "comfortable" : "compact")
-                    }
-                    className="h-7 w-7 p-0 text-fg-mut"
-                    aria-label={
-                      isCompact
-                        ? t("action", "comfortableView")
-                        : t("action", "compactView")
-                    }
-                  >
-                    {isCompact ? (
-                      <AlignJustify className="h-3.5 w-3.5" />
-                    ) : (
-                      <List className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isCompact
-                    ? t("action", "comfortableView")
-                    : t("action", "compactView")}
-                </TooltipContent>
-              </Tooltip>
-            </div>
+            {cutAt !== undefined ? (
+              <div className="flex items-center gap-1.5 text-[11px] text-fg-mut">
+                <AlertTriangle
+                  className="h-3.5 w-3.5 shrink-0 text-warn"
+                  aria-hidden="true"
+                />
+                <span>
+                  {t("readings", "listCutAt", { n: formatCount(cutAt) })}
+                </span>
+              </div>
+            ) : (
+              isLong && (
+                <span className="text-[11px] text-fg-fnt">
+                  {t("readings", "longListTrim", { n: data.length })}
+                </span>
+              )
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setTableDensity(isCompact ? "comfortable" : "compact")
+                  }
+                  className="h-7 w-7 p-0 text-fg-mut"
+                  aria-label={
+                    isCompact
+                      ? t("action", "comfortableView")
+                      : t("action", "compactView")
+                  }
+                >
+                  {isCompact ? (
+                    <AlignJustify className="h-3.5 w-3.5" />
+                  ) : (
+                    <List className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isCompact
+                  ? t("action", "comfortableView")
+                  : t("action", "compactView")}
+              </TooltipContent>
+            </Tooltip>
           </div>
-          <div
-            ref={containerRef}
-            className={cn("relative", fill && "flex min-h-0 flex-col")}
-            role={keyboardNavEnabled ? "grid" : undefined}
-            aria-label={keyboardNavEnabled ? t("nav", "dataTable") : undefined}
+        </div>
+        <div
+          ref={containerRef}
+          className={cn("relative", fill && "flex min-h-0 flex-col")}
+          role={keyboardNavEnabled ? "grid" : undefined}
+          aria-label={keyboardNavEnabled ? t("nav", "dataTable") : undefined}
+        >
+          <Table
+            // The scroll port has to be the element the header sticks to and
+            // the element the virtualiser measures. Wrapping another div around
+            // the table's own container gave it neither.
+            containerRef={attachPort}
+            // Every column here declares a width, which is what makes fixed
+            // layout safe: it stops the browser re-measuring columns from
+            // content that changes on every watch tick.
+            className="group/table table-fixed"
+            data-density={tableDensity}
+            style={
+              {
+                ...(layout.scrolls ? { minWidth: layout.span } : undefined),
+                "--actions-gutter": `${gutter}px`,
+              } as React.CSSProperties
+            }
+            containerClassName={cn("scrollbar-lane", fill && "min-h-0")}
+            // A filled table takes its bound from the flex row above; only an
+            // unfilled one falls back to the fixed port.
+            containerStyle={{
+              ...(shouldVirtualScroll && !fill
+                ? { maxHeight: virtualScrollHeight }
+                : undefined),
+              ...(layout.scrolls ? SIDEWAYS_LANE : undefined),
+            }}
           >
-            <Table
-              // The scroll port has to be the element the header sticks to and
-              // the element the virtualiser measures. Wrapping another div around
-              // the table's own container gave it neither.
-              containerRef={attachPort}
-              // Every column here declares a width, which is what makes fixed
-              // layout safe: it stops the browser re-measuring columns from
-              // content that changes on every watch tick.
-              className="group/table table-fixed"
-              data-density={tableDensity}
-              style={
-                {
-                  ...(layout.scrolls ? { minWidth: layout.span } : undefined),
-                  "--actions-gutter": `${gutter}px`,
-                } as React.CSSProperties
-              }
-              containerClassName={cn("scrollbar-lane", fill && "min-h-0")}
-              // A filled table takes its bound from the flex row above; only an
-              // unfilled one falls back to the fixed port.
-              containerStyle={{
-                ...(shouldVirtualScroll && !fill
-                  ? { maxHeight: virtualScrollHeight }
-                  : undefined),
-                ...(layout.scrolls ? SIDEWAYS_LANE : undefined),
-              }}
+            <TableHeader
+              ref={headerRef}
+              className={cn(
+                // Wherever the port can scroll. A filled table's does whenever
+                // its rows outgrow the pane, which is not only past the
+                // windowing mark — a 40-row list in a short window used to
+                // scroll its own column labels away.
+                stickyHeader && "sticky top-0 z-10 bg-canvas"
+              )}
             >
-              <TableHeader
-                ref={headerRef}
-                className={cn(
-                  // Wherever the port can scroll. A filled table's does whenever
-                  // its rows outgrow the pane, which is not only past the
-                  // windowing mark — a 40-row list in a short window used to
-                  // scroll its own column labels away.
-                  stickyHeader && "sticky top-0 z-10 bg-canvas"
-                )}
-              >
-                {table.getHeaderGroups().map((headerGroup) => {
-                  return (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header, index) => {
-                        // Who gives up the width this one takes.
-                        const next = headerGroup.headers[index + 1];
-                        return (
-                          <TableHead
-                            key={header.id}
-                            // A share of the table, not a pixel count. Fixed
-                            // layout reads its widths from the first row
-                            // and resolves `width: 100%` as
-                            // `max(100%, Σ widths)`, so declared pixels never
-                            // shrink: the ten columns a Pods list wants add up to
-                            // 378px more than the default window has — a
-                            // permanent horizontal scrollbar with the row's
-                            // actions off the right edge. As percentages the same
-                            // numbers keep their proportions and sum to the table
-                            // at any width.
-                            style={{ width: `${layout.shares[index]}%` }}
-                            className={cn(pinned && index === 0 && PINNED)}
-                          >
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext()
-                                )}
-                            {/* Inside the column's own right edge, not
+              {table.getHeaderGroups().map((headerGroup) => {
+                return (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header, index) => {
+                      // Who gives up the width this one takes.
+                      const next = headerGroup.headers[index + 1];
+                      return (
+                        <TableHead
+                          key={header.id}
+                          // A share of the table, not a pixel count. Fixed
+                          // layout reads its widths from the first row
+                          // and resolves `width: 100%` as
+                          // `max(100%, Σ widths)`, so declared pixels never
+                          // shrink: the ten columns a Pods list wants add up to
+                          // 378px more than the default window has — a
+                          // permanent horizontal scrollbar with the row's
+                          // actions off the right edge. As percentages the same
+                          // numbers keep their proportions and sum to the table
+                          // at any width.
+                          style={{ width: `${layout.shares[index]}%` }}
+                          className={cn(pinned && index === 0 && PINNED)}
+                        >
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                          {/* Inside the column's own right edge, not
                               straddling it: straddling put 4.5px of the last
                               header past the table and gave every list a
                               little horizontal scroll it never had. The last
                               column has no grip — nothing to its right to
                               take width from. Double-click puts both columns
                               back to their declared widths. */}
-                            {next && (
-                              <span
-                                // `presentation`, and deliberately: anything in
-                                // the accessibility tree inside a `th` joins
-                                // that header's name, so a labelled separator
-                                // here made every column announce as "Name Drag
-                                // to resize". The keyboard path belongs on an
-                                // affordance of its own, not on this grip.
-                                role="presentation"
-                                onPointerDown={(event) => {
-                                  const drawn = tableLayout(
-                                    specs,
-                                    scrollRef.current?.clientWidth ?? 0
-                                  );
-                                  startResize(
-                                    event,
-                                    header.column.id,
-                                    next.column.id,
-                                    {
-                                      own: header.getSize(),
-                                      next: next.getSize(),
-                                    },
-                                    ((drawn.shares[index] +
-                                      drawn.shares[index + 1]) /
-                                      100) *
-                                      drawn.span,
-                                    columnSizing
-                                  );
-                                }}
-                                onDoubleClick={() =>
-                                  setColumnSizing((old) => {
-                                    const back = { ...old };
-                                    delete back[header.column.id];
-                                    delete back[next.column.id];
-                                    return back;
-                                  })
-                                }
-                                title={t("action", "dragToResize")}
-                                className={cn(
-                                  "absolute inset-y-0 right-0 z-10 w-[9px] cursor-col-resize touch-none select-none",
-                                  "after:absolute after:inset-y-1 after:right-0 after:w-px after:bg-hair after:opacity-0 after:transition-opacity",
-                                  "hover:after:opacity-100"
-                                )}
-                              />
-                            )}
-                          </TableHead>
-                        );
-                      })}
-                    </TableRow>
-                  );
-                })}
-              </TableHeader>
-              <TableBody>
-                {rows.length ? (
-                  body
-                ) : (
-                  <TableRow data-quiet>
-                    <TableCell
-                      colSpan={visibleColumnCount}
-                      className="h-32 p-0 text-center"
-                    >
-                      {/* Held to the visible port: centred across columns
+                          {next && (
+                            <span
+                              // `presentation`, and deliberately: anything in
+                              // the accessibility tree inside a `th` joins
+                              // that header's name, so a labelled separator
+                              // here made every column announce as "Name Drag
+                              // to resize". The keyboard path belongs on an
+                              // affordance of its own, not on this grip.
+                              role="presentation"
+                              onPointerDown={(event) => {
+                                const drawn = tableLayout(
+                                  specs,
+                                  scrollRef.current?.clientWidth ?? 0
+                                );
+                                startResize(
+                                  event,
+                                  header.column.id,
+                                  next.column.id,
+                                  {
+                                    own: header.getSize(),
+                                    next: next.getSize(),
+                                  },
+                                  ((drawn.shares[index] +
+                                    drawn.shares[index + 1]) /
+                                    100) *
+                                    drawn.span,
+                                  columnSizing
+                                );
+                              }}
+                              onDoubleClick={() =>
+                                setColumnSizing((old) => {
+                                  const back = { ...old };
+                                  delete back[header.column.id];
+                                  delete back[next.column.id];
+                                  return back;
+                                })
+                              }
+                              title={t("action", "dragToResize")}
+                              className={cn(
+                                "absolute inset-y-0 right-0 z-10 w-[9px] cursor-col-resize touch-none select-none",
+                                "after:absolute after:inset-y-1 after:right-0 after:w-px after:bg-hair after:opacity-0 after:transition-opacity",
+                                "hover:after:opacity-100"
+                              )}
+                            />
+                          )}
+                        </TableHead>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
+            </TableHeader>
+            <TableBody>
+              {rows.length ? (
+                body
+              ) : (
+                <TableRow data-quiet>
+                  <TableCell
+                    colSpan={visibleColumnCount}
+                    className="h-32 p-0 text-center"
+                  >
+                    {/* Held to the visible port: centred across columns
                         scrolled out of view, beside a peek it was cut
                         mid-word. */}
-                      <div
-                        data-empty-state
-                        className="sticky left-0 px-2.5 py-1"
-                        style={portWidth > 0 ? { width: portWidth } : undefined}
-                      >
-                        {/* "Nothing matches your filter" and "this cluster has
-                         * none of these" are different problems with different
-                         * fixes; saying "No results." for both leaves the user
-                         * guessing which one they're looking at. */}
-                        {searchValue ? (
-                          <div className="flex flex-col items-center gap-2">
-                            <SearchX
-                              className="h-5 w-5 text-fg-mut"
-                              aria-hidden="true"
-                            />
-                            <p className="text-xs text-fg-mut">
-                              <T section="empty" k="nothingMatches" />{" "}
-                              <span className="font-mono text-fg">
-                                {searchValue}
-                              </span>
-                            </p>
-                            {searched && (
-                              <p
-                                className="max-w-md text-[11px] text-balance text-fg-fnt"
-                                data-testid="searched-columns"
-                              >
-                                {t("empty", "searchedColumns", {
-                                  columns: searched,
-                                })}
-                              </p>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => changeSearch("")}
+                    <div
+                      data-empty-state
+                      className="sticky left-0 px-2.5 py-1"
+                      style={portWidth > 0 ? { width: portWidth } : undefined}
+                    >
+                      {/* "Nothing matches your filter" and "this cluster has
+                       * none of these" are different problems with different
+                       * fixes; saying "No results." for both leaves the user
+                       * guessing which one they're looking at. */}
+                      {searchValue ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <SearchX
+                            className="h-5 w-5 text-fg-mut"
+                            aria-hidden="true"
+                          />
+                          <p className="text-xs text-fg-mut">
+                            <T section="empty" k="nothingMatches" />{" "}
+                            <span className="font-mono text-fg">
+                              {searchValue}
+                            </span>
+                          </p>
+                          {searched && (
+                            <p
+                              className="max-w-md text-[11px] text-balance text-fg-fnt"
+                              data-testid="searched-columns"
                             >
-                              {t("action", "clearSearch")}
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2">
-                            <Inbox
-                              className="h-5 w-5 text-fg-mut"
-                              aria-hidden="true"
-                            />
-                            <p className="text-xs text-fg-mut">
-                              {emptyMessage ?? (
-                                <T section="empty" k="noResourcesInScope" />
-                              )}
+                              {t("empty", "searchedColumns", {
+                                columns: searched,
+                              })}
                             </p>
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-            {edges.before && (
-              <div
-                aria-hidden="true"
-                data-edge="before"
-                className="pointer-events-none absolute top-0 z-20 w-3 border-l border-hair bg-[linear-gradient(to_right,var(--color-fold),transparent),linear-gradient(to_right,var(--color-canvas),transparent)]"
-                style={{ left: edges.pinned, bottom: edges.bottom }}
-              />
-            )}
-            {edges.after && (
-              <div
-                aria-hidden="true"
-                data-edge="after"
-                className="pointer-events-none absolute top-0 z-20 w-10 bg-[linear-gradient(to_left,var(--color-fold),transparent),linear-gradient(to_left,var(--color-canvas),transparent)]"
-                style={{ right: edges.right, bottom: edges.bottom }}
-              />
-            )}
-          </div>
-          {/* What the table holds, and nothing about pages: a live list has no
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => changeSearch("")}
+                          >
+                            {t("action", "clearSearch")}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2">
+                          <Inbox
+                            className="h-5 w-5 text-fg-mut"
+                            aria-hidden="true"
+                          />
+                          <p className="text-xs text-fg-mut">
+                            {emptyMessage ?? (
+                              <T section="empty" k="noResourcesInScope" />
+                            )}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          {edges.before && (
+            <div
+              aria-hidden="true"
+              data-edge="before"
+              className="pointer-events-none absolute top-0 z-20 w-3 border-l border-hair bg-[linear-gradient(to_right,var(--color-fold),transparent),linear-gradient(to_right,var(--color-canvas),transparent)]"
+              style={{ left: edges.pinned, bottom: edges.bottom }}
+            />
+          )}
+          {edges.after && (
+            <div
+              aria-hidden="true"
+              data-edge="after"
+              className="pointer-events-none absolute top-0 z-20 w-10 bg-[linear-gradient(to_left,var(--color-fold),transparent),linear-gradient(to_left,var(--color-canvas),transparent)]"
+              style={{ right: edges.right, bottom: edges.bottom }}
+            />
+          )}
+        </div>
+        {/* What the table holds, and nothing about pages: a live list has no
           stable page 2 — objects appear and vanish under the reader, so a row
           moves to another page they have to go and find — and Ctrl-F would
           only search the rows on screen. */}
-          <div className="flex flex-none flex-wrap items-center justify-between gap-x-3 text-[11px] text-fg-fnt">
-            <div>
-              {/* The noun is the kind's own plural and stays as the cluster
+        <div className="flex flex-none flex-wrap items-center justify-between gap-x-3 text-[11px] text-fg-fnt">
+          <div>
+            {/* The noun is the kind's own plural and stays as the cluster
               spells it; only the frame around it is translated. Without one
               — a table of something with no kind — the frame counts rows. */}
-              {rowLabel === undefined && rowNoun === undefined
-                ? partial
-                  ? t("readings", "rowCountWhereAnswered", { n: filteredRows })
-                  : t("readings", "rowCount", { n: filteredRows })
-                : partial
-                  ? t("readings", "rowsWhereAnswered", nounsOf(filteredRows))
-                  : filteredRows === totalRows
-                    ? t("readings", "objectCount", nounsOf(totalRows))
-                    : t("readings", "rowsOfTotal", {
-                        ...nounsOf(totalRows),
-                        shown: formatCount(filteredRows),
-                      })}
-            </div>
-            {yieldedNames && (
-              <span
-                className="flex min-w-0 max-w-full items-center gap-1"
-                title={t("readings", "columnsYieldedHint", {
-                  columns: yieldedNames,
-                })}
-                data-testid="columns-yielded"
-              >
-                <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
-                <span className="truncate">
-                  {t("readings", "columnsYielded", { columns: yieldedNames })}
-                </span>
-              </span>
-            )}
+            {rowLabel === undefined && rowNoun === undefined
+              ? partial
+                ? t("readings", "rowCountWhereAnswered", { n: filteredRows })
+                : t("readings", "rowCount", { n: filteredRows })
+              : partial
+                ? t("readings", "rowsWhereAnswered", nounsOf(filteredRows))
+                : filteredRows === totalRows
+                  ? t("readings", "objectCount", nounsOf(totalRows))
+                  : t("readings", "rowsOfTotal", {
+                      ...nounsOf(totalRows),
+                      shown: formatCount(filteredRows),
+                    })}
           </div>
+          {yieldedNames && (
+            <span
+              className="flex min-w-0 max-w-full items-center gap-1"
+              title={t("readings", "columnsYieldedHint", {
+                columns: yieldedNames,
+              })}
+              data-testid="columns-yielded"
+            >
+              <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
+              <span className="truncate">
+                {t("readings", "columnsYielded", { columns: yieldedNames })}
+              </span>
+            </span>
+          )}
         </div>
-      </FoldedActions.Provider>
+      </div>
     </RowActionsProvider>
   );
 }
