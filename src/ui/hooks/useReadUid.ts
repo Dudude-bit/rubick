@@ -42,7 +42,7 @@ function useReadAt<T extends string | number | null | undefined>(
 }
 
 /** The uid a read carries, typed (`uid`) or as the manifest has it (`metadata.uid`). */
-function uidIn(read: unknown): string | undefined {
+export function uidIn(read: unknown): string | undefined {
   if (!read || typeof read !== "object") return undefined;
   const own = "uid" in read ? read.uid : undefined;
   const meta =

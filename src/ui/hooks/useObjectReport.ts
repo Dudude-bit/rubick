@@ -10,6 +10,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { useServiceAnswer } from "@/hooks/useServiceAnswer";
 import { eventsOfEveryObject, useObjectEvents } from "@/hooks/useObjectEvents";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
+import { uidIn } from "@/hooks/useReadUid";
 import { useLocationHref } from "@/hooks/useLocationHref";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { useCapabilities } from "@/integrations";
@@ -142,7 +143,7 @@ export function useObjectReport(
     subject?.kind ?? "",
     subject?.name,
     subject?.namespace,
-    { enabled: capturing && !!subject, refresh: "slow" }
+    { enabled: capturing && !!subject, refresh: "slow", uid: uidIn(resource) }
   );
 
   const capturedAt = useMemo(() => {
