@@ -7687,6 +7687,14 @@ export const en = {
       one: "{n} kind still loading",
       other: "{n} kinds still loading",
     },
+    kindsPartlyRefused: {
+      one: "{n} of them refused in some namespaces",
+      other: "{n} of them refused in some namespaces",
+    },
+    kindsRefusedWherever: {
+      one: "{n} kind refused wherever asked",
+      other: "{n} kinds refused wherever asked",
+    },
     kindsNotSearched: {
       one: "{n} kind not searched",
       other: "{n} kinds not searched",

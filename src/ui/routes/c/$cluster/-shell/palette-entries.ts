@@ -268,6 +268,8 @@ export type Entry =
       unlistable: CatalogEntry[] | null;
       /** Every kind this cluster serves, API resources' count; null where it was not read. */
       served: number | null;
+      /** Each served kind counted once, so the parts add up to `served`; null where it was not read. */
+      split: KindSplit | null;
       /** API groups discovery did not answer, whose kinds nobody could name. */
       unreadGroups: number;
     }
@@ -345,6 +347,52 @@ function saidAnything(cluster: ClusterSearchState): boolean {
     (cluster.status === "searching" &&
       cluster.searched.length + cluster.loading.length > 0)
   );
+}
+
+/**
+ * Each served kind in exactly one part: names read (some of them refused in
+ * other namespaces), refused wherever asked, still loading, never asked, or
+ * listable by nobody. A kind read in one namespace and refused in another
+ * was counted twice, and Marco's parts summed to 79 of 70.
+ */
+export interface KindSplit {
+  read: number;
+  /** Of `read`, the kinds refused in some namespace it was asked in. */
+  partly: number;
+  refused: number;
+  loading: number;
+  notSearched: number;
+  unlistable: number;
+}
+
+export function kindSplit(
+  kinds: readonly CatalogEntry[],
+  cluster: ClusterSearchState
+): KindSplit {
+  const keys = (list: ReadonlyArray<{ group: string; plural: string }>) =>
+    new Set(list.map((kind) => `${kind.group}/${kind.plural}`));
+  const read = keys(cluster.searched);
+  const unread = keys(cluster.unreadable);
+  const loading = keys(cluster.loading);
+  const split: KindSplit = {
+    read: 0,
+    partly: 0,
+    refused: 0,
+    loading: 0,
+    notSearched: 0,
+    unlistable: 0,
+  };
+  for (const entry of kinds) {
+    const key = `${entry.group}/${entry.plural}`;
+    if (!entry.verbs.includes("list")) split.unlistable += 1;
+    else if (read.has(key)) {
+      split.read += 1;
+      if (unread.has(key)) split.partly += 1;
+    } else if (unread.has(key)) split.refused += 1;
+    else if (loading.has(key)) split.loading += 1;
+    else split.notSearched += 1;
+  }
+  return split;
 }
 
 /** Listable kinds the cluster serves that this search compared no name of. */
@@ -902,6 +950,7 @@ export function buildPaletteEntries({
         ? kinds.filter((entry) => !entry.verbs.includes("list"))
         : null,
       served: counted ? kinds.length : null,
+      split: counted ? kindSplit(kinds, cluster) : null,
       unreadGroups: own ? unreadGroups : 0,
     });
     if (own && narrowedTo) {

@@ -19,6 +19,7 @@ import {
   type Entry,
   type PaletteState,
   byKindName,
+  kindSplit,
   orderHits,
 } from "./palette-entries";
 
@@ -940,6 +941,68 @@ describe("kinds the cluster serves", () => {
     expect(links.map((entry) => where(entry.path))).toContain(
       "/c/k3d-dev/api-resources"
     );
+  });
+});
+
+describe("each served kind counted once", () => {
+  const entry = (plural: string, verbs = ["list"]) => ({
+    group: "",
+    version: "v1",
+    kind: plural,
+    plural,
+    namespaced: true,
+    verbs,
+    shortNames: [],
+  });
+  const kind = (plural: string) => ({ kind: plural, group: "", plural });
+  const refused = (plural: string, namespaces: string[]) => ({
+    ...kind(plural),
+    reason: "forbidden" as const,
+    message: "forbidden",
+    namespaces,
+  });
+  const served = ["a", "b", "c", "d", "e"].map((plural) => entry(plural));
+  const catalogue = [...served, entry("tokenreviews", ["create"])];
+
+  /**
+   * Marco's palette said 15 of 70 searched, 22 and then 54 could not be
+   * read, and 3 not searched: a kind read in team-checkout and refused in
+   * team-blind was counted twice. Fails if the parts stop summing to what
+   * is served, or a further search moves nothing in the summary.
+   */
+  it("sums its parts to the kinds served, and moves them when more are asked", () => {
+    const first = {
+      ...cluster("k3d-dev"),
+      searched: [kind("a"), kind("b")],
+      unreadable: [refused("b", ["team-blind"])],
+    };
+    const before = kindSplit(catalogue, first);
+    expect(before).toEqual({
+      read: 2,
+      partly: 1,
+      refused: 0,
+      loading: 0,
+      notSearched: 3,
+      unlistable: 1,
+    });
+    const after = kindSplit(catalogue, {
+      ...first,
+      unreadable: [
+        ...first.unreadable,
+        refused("c", []),
+        refused("d", []),
+        refused("e", []),
+      ],
+    });
+    expect(after).toMatchObject({ read: 2, refused: 3, notSearched: 0 });
+    for (const split of [before, after])
+      expect(
+        split.read +
+          split.refused +
+          split.loading +
+          split.notSearched +
+          split.unlistable
+      ).toBe(catalogue.length);
   });
 });
 
