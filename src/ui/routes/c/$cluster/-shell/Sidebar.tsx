@@ -114,7 +114,8 @@ type NavItem = NavName & {
 // without merging them, so the two text colours must never meet.
 const ROW_FOCUS_CLASS =
   "transition-colors hover:bg-hover outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info";
-const ROW_BASE_CLASS = `group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] ${ROW_FOCUS_CLASS}`;
+// The scroll margin outdoes the rail's 24px fades, so a focused row lands clear of them.
+const ROW_BASE_CLASS = `group flex scroll-my-7 items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] ${ROW_FOCUS_CLASS}`;
 const ROW_SHUT_CLASS = "text-fg-mid";
 const ROW_CLASS = `${ROW_BASE_CLASS} ${ROW_SHUT_CLASS}`;
 const ROW_OPEN_CLASS = "bg-sel font-medium text-fg";
