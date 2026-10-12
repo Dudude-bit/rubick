@@ -7284,6 +7284,7 @@ export const ru: Catalogue = {
     scaledToZero: "масштабирован до нуля",
     noResourcesInScope: "В текущей области нет объектов этого типа.",
     nothingMatches: "Ничего не найдено по запросу",
+    searchedColumns: "Искали в столбцах: {columns}.",
     noDataKeys: "Ключей данных нет",
     nothingBelongsToObject: "Этому объекту не принадлежит ничего такого рода.",
     deploymentHasNoReplicaSets: "У этого Deployment нет ни одного ReplicaSet",

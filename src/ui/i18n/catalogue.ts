@@ -6624,6 +6624,7 @@ export const en = {
     scaledToZero: "scaled to zero",
     noResourcesInScope: "No resources of this type in the current scope.",
     nothingMatches: "Nothing matches",
+    searchedColumns: "Searched in {columns}.",
     noDataKeys: "No data keys",
     nothingBelongsToObject: "Nothing of this kind belongs to this object.",
     deploymentHasNoReplicaSets: "This Deployment has no ReplicaSets",
