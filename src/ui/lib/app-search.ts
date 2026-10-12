@@ -27,6 +27,8 @@ export interface AppSearch {
   namespace?: string;
   /** The plural of a kind with no list of its own, on the list that shows it instead. */
   listOf?: string;
+  /** The rows a list is narrowed to, comma-separated `<namespace>/<name>`, an empty namespace for a cluster-scoped one. */
+  names?: string;
 }
 
 const KEYS: ReadonlyArray<keyof AppSearch> = [
@@ -47,6 +49,7 @@ const KEYS: ReadonlyArray<keyof AppSearch> = [
   "in",
   "namespace",
   "listOf",
+  "names",
 ];
 
 export function appSearch(raw: Record<string, unknown>): AppSearch {

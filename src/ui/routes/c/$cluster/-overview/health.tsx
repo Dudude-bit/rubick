@@ -47,7 +47,7 @@ import {
   type AttentionItem,
 } from "@/lib/attention";
 import { ERROR_CODES } from "@/lib/error-utils";
-import { listLink, objectLink } from "@/lib/links";
+import { namedListLink, objectLink } from "@/lib/links";
 import {
   ROLE_DOT,
   ROLE_ICON,
@@ -347,9 +347,9 @@ function MoreRows({
   onCollapse?: () => void;
 }) {
   const t = useT();
-  const byKind = new Map<string, number>();
+  const byKind = new Map<string, AttentionItem[]>();
   for (const item of hidden)
-    byKind.set(item.kind, (byKind.get(item.kind) ?? 0) + 1);
+    byKind.set(item.kind, [...(byKind.get(item.kind) ?? []), item]);
   const more = t("cluster", "attentionMore", { n: hidden.length + cut });
   return (
     <p className="col-span-full flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-[11px] text-fg-fnt">
@@ -375,15 +375,15 @@ function MoreRows({
       ) : (
         <span>{more}</span>
       )}
-      {[...byKind].map(([kind, n]) => (
+      {[...byKind].map(([kind, items]) => (
         <Link
           key={kind}
-          {...listLink(kind)}
+          {...namedListLink(kind, items)}
           className="inline-flex items-center gap-1 text-fg-mut hover:text-fg"
         >
           <KindIcon kind={kind} className="h-2.5 w-2.5" />
           <span className="font-mono">
-            {n} {n === 1 ? kind : getDisplayPlural(kind)}
+            {items.length} {items.length === 1 ? kind : getDisplayPlural(kind)}
           </span>
         </Link>
       ))}

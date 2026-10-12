@@ -1789,8 +1789,12 @@ describe("what Needs attention says it checked", () => {
     ).toHaveClass("@max-[56rem]:hidden");
   });
 
-  /** Fifty rows push the rest of the page off screen; the tail is a count and a way into each list. */
-  it("caps the rows and links what it left out to each kind's list", async () => {
+  /**
+   * Fifty rows push the rest of the page off screen; the tail is a count and
+   * a way into each list. Dana's "3 Pods" opened every pod. Fails if the
+   * count's link stops narrowing the list to exactly the rows it counts.
+   */
+  it("caps the rows and links what it left out to those rows of each kind's list", async () => {
     const pods = Array.from({ length: 14 }, (_, at) => ({
       ...problem,
       kind: "Pod",
@@ -1799,11 +1803,22 @@ describe("what Needs attention says it checked", () => {
     }));
     await panel(attentionFrom(pods));
 
-    expect(screen.getAllByRole("link", { name: /^Pod api-/ })).toHaveLength(12);
+    const shown = screen
+      .getAllByRole("link", { name: /^Pod api-/ })
+      .map((link) => link.getAttribute("aria-label")!.slice("Pod ".length));
+    expect(shown).toHaveLength(12);
     expect(screen.getByText("and 2 more")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "2 Pods" })).toHaveAttribute(
-      "href",
-      "/c/prod/pods"
+    const href = screen
+      .getByRole("link", { name: "2 Pods" })
+      .getAttribute("href")!;
+    const url = new URL(href, "http://app");
+    expect(url.pathname).toBe("/c/prod/pods");
+    expect(url.searchParams.get("names")!.split(",").sort()).toEqual(
+      pods
+        .map((pod) => pod.name)
+        .filter((name) => !shown.includes(name))
+        .map((name) => `${problem.namespace}/${name}`)
+        .sort()
     );
   });
 

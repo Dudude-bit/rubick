@@ -3077,6 +3077,16 @@ export const en = {
     storyStillHappening: "still happening",
     storySettled: "settled",
     storyStateUnknown: "cannot say",
+    namedRowsOnly: {
+      one: "Showing only the {n} row the Overview listed as needing attention.",
+      other:
+        "Showing only the {n} rows the Overview listed as needing attention.",
+    },
+    namedRowsMissing: {
+      one: "{n} of them is not in this list now.",
+      other: "{n} of them are not in this list now.",
+    },
+    namedRowsShowAll: "Show all",
     earlierObject: "earlier object",
     earlierObjectHint:
       "About an earlier {kind} named {name}. The {kind} with this name now is another object, and these events are not its own.",
