@@ -140,6 +140,7 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
 }
 
 const NO_JOBS: JobInfo[] = [];
+const RUNS_IN_FLIGHT = new Set(["Running", "Retrying", "Pending"]);
 
 export function CronJobDetail() {
   const t = useT();
@@ -229,11 +230,12 @@ export function CronJobDetail() {
     };
   }, [jobs]);
 
-  // A CronJob's pods are two hops away — its runs own them — so they are
-  // asked for only while the controller says a run is in flight. Between
-  // runs there is nothing to list, and listing a namespace to find that out
-  // is a fetch that answers a question already answered.
-  const inFlight = (cronJob?.active ?? 0) > 0;
+  // A CronJob's pods are two hops away, owned by its runs, so they are asked
+  // for only while the controller or a Job held here says a run is in flight.
+  // Between runs there is nothing to list, and that is already an answer.
+  const inFlight =
+    (cronJob?.active ?? 0) > 0 ||
+    jobs.some((job) => RUNS_IN_FLIGHT.has(job.status));
 
   // The refusal is carried rather than swallowed: an empty list from a 403
   // reads as "this CronJob has run nothing", which is the one thing the pane
@@ -368,7 +370,7 @@ export function CronJobDetail() {
                   template={cronJob}
                   pods={pods}
                   podsError={podsError}
-                  podsPending={podsPending}
+                  podsPending={inFlight ? podsPending : !cronJob}
                   idle={
                     cronJob?.suspend
                       ? t("empty", "cronJobSuspended")
@@ -489,6 +491,7 @@ export function CronJobDetail() {
       pods,
       podsError,
       podsPending,
+      inFlight,
       yaml,
       copyYaml,
       namespace,
