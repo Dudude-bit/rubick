@@ -108,7 +108,7 @@ export function WhatsNew() {
             root whose own height is `auto` — 892px of notes in a 581px root,
             clipped by `overflow-hidden`, and 4.17.0's notes ended mid-word
             with no scrollbar anywhere. */}
-        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin pr-3">
+        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-lane pr-3">
           <div className="flex flex-col gap-5">
             {releases.map((release) => (
               <section key={release.version} className="flex flex-col gap-3">

@@ -171,10 +171,9 @@ pub(super) async fn run_oidc_auth(
     // moment it is spent, so refreshing without being able to write the
     // replacement back would leave the file holding a dead token and break the
     // `kubectl` beside us. No single file to write means no refresh.
-    let override_path =
-        crate::commands::settings::helpers::read_config(|c| c.kubernetes.kubeconfig_path.clone())
-            .ok()
-            .flatten();
+    let override_path = crate::config::AppConfig::load()
+        .ok()
+        .and_then(|c| c.kubernetes.kubeconfig_path);
     if let Some(result) = refreshed(config, user, &kubeconfig_files(override_path)).await {
         return Ok(result);
     }

@@ -374,7 +374,7 @@ export function LogQuery({
               ? t("action", "valuesOfKey", { key: active.key })
               : t("action", "fieldsInBufferedLog")
           }
-          className="max-h-56 overflow-y-auto scrollbar-thin"
+          className="max-h-56 overflow-y-auto scrollbar-lane"
         >
           {options.map((option, index) => (
             <OptionRow

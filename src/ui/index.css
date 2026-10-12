@@ -146,30 +146,6 @@
   }
 }
 
-@utility scrollbar-thin {
-  /* Custom scrollbar */
-  scrollbar-width: thin;
-  scrollbar-color: hsl(var(--sel)) transparent;
-
-  &::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: hsl(var(--sel));
-    border-radius: 4px;
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--fg-fnt));
-  }
-}
-
 @utility scrollbar-lane {
   /* A scrollbar-width or scrollbar-color, inherited ones included, hands
    * WebKit back its overlay scrollbar, which lies over the last row and eats

@@ -876,7 +876,7 @@ function Rows({
   return (
     <div
       ref={scrollRef}
-      className="min-h-0 flex-1 overflow-auto scrollbar-thin"
+      className="min-h-0 flex-1 overflow-auto scrollbar-lane"
     >
       <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
         {virtualizer.getVirtualItems().map((item) => {
@@ -1319,7 +1319,7 @@ function Preview({
           </button>
         </p>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin px-3 py-2 font-mono text-[11px]">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-lane px-3 py-2 font-mono text-[11px]">
         {query.isPending ? (
           <span className="text-fg-fnt">{t("action", "readingInline")}</span>
         ) : query.error ? (

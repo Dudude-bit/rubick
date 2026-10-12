@@ -110,10 +110,8 @@ fn read_sharing() -> Result<SharingConfig> {
     }
 }
 
-fn write_sharing(sharing: SharingConfig) -> Result<()> {
-    let mut config = AppConfig::load()?;
-    config.sharing = sharing;
-    crate::commands::settings::helpers::save_config(&config)
+async fn write_sharing(sharing: SharingConfig) -> Result<()> {
+    crate::commands::settings::with_config(move |config| config.sharing = sharing).await
 }
 
 #[tauri::command]
@@ -180,7 +178,7 @@ pub async fn save_share_target(input: ShareTargetInput) -> Result<ShareTargetInf
         Some(index) => sharing.targets[index] = target,
         None => sharing.targets.push(target),
     }
-    write_sharing(sharing)?;
+    write_sharing(sharing).await?;
     Ok(info)
 }
 
@@ -188,7 +186,7 @@ pub async fn save_share_target(input: ShareTargetInput) -> Result<ShareTargetInf
 pub async fn remove_share_target(id: String) -> Result<()> {
     let mut sharing = read_sharing()?;
     sharing.targets.retain(|target| target.id != id);
-    write_sharing(sharing)
+    write_sharing(sharing).await
 }
 
 /// Asks the target who this key belongs to. The one read that happens before
@@ -294,7 +292,7 @@ pub async fn publish_report(
         // than fail forever against a draft that was deleted over there.
         if status == reqwest::StatusCode::NOT_FOUND {
             forget_draft(&mut sharing, &target_id, &object);
-            write_sharing(sharing)?;
+            write_sharing(sharing).await?;
         }
         return Err(Error::InvalidInput(format!(
             "{} answered {}{}",
@@ -339,7 +337,7 @@ pub async fn publish_report(
         if let Some(entry) = sharing.targets.iter_mut().find(|t| t.id == target_id) {
             entry.drafts.insert(object, draft.clone());
         }
-        write_sharing(sharing)?;
+        write_sharing(sharing).await?;
     }
     Ok(published)
 }

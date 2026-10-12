@@ -43,7 +43,7 @@ describe("ScrollArea", () => {
    * So a `ScrollArea` needs a height of its own — `h-64`, `h-[200px]`,
    * `max-h-[60vh]`. Where the height comes from a flex parent, the scroller
    * has to be the element itself: `min-h-0 flex-1 overflow-y-auto
-   * scrollbar-thin`, which measures itself and needs no percentage.
+   * scrollbar-lane`, which measures itself and needs no percentage.
    */
   it("is never given its height by a flex parent", () => {
     const wrong: string[] = [];

@@ -93,15 +93,19 @@ export function useReadSelector(
   });
 }
 
-/** When its page or peek last read the object there, or 0 where the last read of it failed or none has answered. */
+/** When its page or peek last read the object there, or its watch last delivered it; 0 where neither holds it. */
 export function useReadThereAt(
   kind: string,
   namespace: string | null | undefined,
   name: string | null | undefined
 ): number {
-  return useReadOf(kind, namespace, name, (state) =>
-    state?.status === "success" && state.data !== undefined
-      ? state.dataUpdatedAt
-      : 0
+  const read = useReadOf(kind, namespace, name, thereAt);
+  const watched = useReadAt(
+    queryKeys.objectWatch(kind, namespace, name ?? undefined),
+    thereAt
   );
+  return Math.max(read, watched);
 }
+
+const thereAt = (state: QueryState | undefined) =>
+  state?.status === "success" && state.data != null ? state.dataUpdatedAt : 0;

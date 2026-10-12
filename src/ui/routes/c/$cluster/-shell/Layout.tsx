@@ -111,7 +111,7 @@ export function Layout() {
             className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
           >
             <main
-              className="flex-1 overflow-auto scrollbar-thin px-4 pb-4"
+              className="flex-1 overflow-auto scrollbar-lane [scrollbar-gutter:stable] pb-4 pl-4 pr-2"
               style={dock}
             >
               {/* `h-full` is what lets a page opt out of the page scroll: a page

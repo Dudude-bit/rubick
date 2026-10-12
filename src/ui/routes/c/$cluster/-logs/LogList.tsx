@@ -351,7 +351,7 @@ function LogListInner({
         // Focusable so ctrl+A lands here rather than on the document.
         tabIndex={0}
         data-testid="log-scroll"
-        className="h-full overflow-y-auto scrollbar-thin px-1 py-1.5 font-mono text-xs leading-[1.45] outline-hidden focus-visible:ring-1 focus-visible:ring-hair"
+        className="h-full overflow-y-auto scrollbar-lane px-1 py-1.5 font-mono text-xs leading-[1.45] outline-hidden focus-visible:ring-1 focus-visible:ring-hair"
       >
         {rows.length === 0 ? (
           children

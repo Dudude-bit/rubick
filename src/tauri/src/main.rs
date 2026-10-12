@@ -546,7 +546,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::Path;
 
@@ -1006,5 +1006,112 @@ mod tests {
             "read the cluster and are not timed, or answer from this machine and belong in \
              the exemptions: {untimed:?}"
         );
+    }
+
+    /// Every sync command by name, with its body. A `#[tauri::command(async)]`
+    /// runs on the async runtime and is left out, as an `async fn` is.
+    fn sync_commands_in(sources: &[String]) -> BTreeMap<String, String> {
+        let mut found = BTreeMap::new();
+        for source in sources {
+            let mut lines = source.lines();
+            while let Some(line) = lines.next() {
+                let attribute = line.trim();
+                if attribute != "#[tauri::command]" && !attribute.starts_with("#[tauri::command(") {
+                    continue;
+                }
+                for next in lines.by_ref() {
+                    let Some(rest) = next.split(" fn ").nth(1) else {
+                        continue;
+                    };
+                    if attribute.contains("async") || next.contains("async fn") {
+                        break;
+                    }
+                    let end = format!("{}}}", &next[..next.len() - next.trim_start().len()]);
+                    let body: Vec<&str> = lines.by_ref().take_while(|l| *l != end).collect();
+                    found.insert(ident(rest), body.join("\n"));
+                    break;
+                }
+            }
+        }
+        found
+    }
+
+    /// Tauri runs a sync command on the thread that draws the window, so a
+    /// save of config.toml that ended in an fsync froze every frame and every
+    /// answer for 1.7 to 3.2 s on a busy disk, and saving the namespace did it
+    /// on every switch. Fails if a sync command is not one of these, which
+    /// touch only memory, or if one of these names a way to the disk.
+    #[test]
+    fn a_command_on_the_window_thread_touches_only_memory() {
+        const ON_THE_WINDOW_THREAD: [&str; 26] = [
+            "cancel_auth_session",
+            "cancel_node_drain",
+            "cancel_resource_search",
+            "close_terminal",
+            "connection_attempt",
+            "credential_renewal",
+            "disconnect_cluster",
+            "files_subscribed",
+            "focus_cluster",
+            "get_app_info",
+            "list_port_forwards",
+            "list_terminal_sessions",
+            "log_stream_subscribed",
+            "node_drain_subscribed",
+            "pod_rows_subscribed",
+            "port_forward_subscribed",
+            "recheck_metrics",
+            "release_clusters",
+            "resource_search_subscribed",
+            "resource_watch_subscribed",
+            "stop_files_listing",
+            "stop_log_stream",
+            "stop_pod_rows",
+            "stop_port_forward",
+            "terminal_subscribed",
+            "unsubscribe_resource_watch",
+        ];
+        const WAYS_TO_THE_DISK: [&str; 12] = [
+            "fs::",
+            "File",
+            "Path",
+            "AppConfig",
+            "config_path",
+            "read_config",
+            "update_config",
+            "with_config",
+            "entry_for",
+            "in_sandbox",
+            "dirs::",
+            "read_to_string",
+        ];
+        let (_, sources) = command_sources();
+        let sync = sync_commands_in(&sources);
+        assert!(
+            sync.len() >= 20,
+            "the scan found only {} sync commands; it is not reading the tree",
+            sync.len()
+        );
+
+        let unlisted: Vec<&String> = sync
+            .keys()
+            .filter(|name| !ON_THE_WINDOW_THREAD.contains(&name.as_str()))
+            .collect();
+        assert!(
+            unlisted.is_empty(),
+            "sync commands run on the window thread: make these async and do their disk \
+             work through settings::off_main, or list them if they touch only memory: \
+             {unlisted:?}"
+        );
+        for name in ON_THE_WINDOW_THREAD {
+            let body = sync
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} is listed and is no longer a sync command"));
+            let way = WAYS_TO_THE_DISK.iter().find(|way| body.contains(*way));
+            assert!(
+                way.is_none(),
+                "{name} runs on the window thread and reaches the disk through {way:?}"
+            );
+        }
     }
 }

@@ -73,7 +73,7 @@ function SettingsShell() {
     <div className="flex h-full min-h-0 flex-row">
       <SettingsNav activeId={active.id} onSelect={openSettings} />
 
-      <div className="min-w-0 flex-1 overflow-auto scrollbar-thin pb-8 pl-5 pr-1 pt-1">
+      <div className="min-w-0 flex-1 overflow-auto scrollbar-lane [scrollbar-gutter:stable] pb-8 pl-5 pt-1">
         {/* Capped, because a row 950px wide puts the control it belongs to
             at the other end of the screen from its label. */}
         <div className="max-w-3xl">

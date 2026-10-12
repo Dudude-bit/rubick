@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
@@ -12,6 +12,7 @@ const VIOLATIONS: Record<string, string> = {
   "no-vendor-import": `export { x } from "@/integrations/cert-manager";`,
   "status-is-a-code": `export const b = <Badge status={t("ready")} />;`,
   "no-native-select": `export const s = <select />;`,
+  "no-overlay-scrollbar": `export const c = "overflow-y-auto scrollbar-thin";`,
 };
 
 const CLEAN = `
@@ -20,6 +21,8 @@ import { IntegrationPage } from "./integrations/-components/IntegrationPage";
 export const c = "bg-canvas text-fg-mut border-hair";
 export const b = <Badge status={code}>{t("ready")}</Badge>;
 export const s = <Select />;
+export const l = "overflow-y-auto scrollbar-lane [scrollbar-width:none]";
+export const cm = { scrollbarColor: "auto" };
 `;
 
 interface Diagnostic {
@@ -60,6 +63,39 @@ describe("the project's own lint guards", () => {
     expect(rubickIn(`${rule}.tsx`)).toContainEqual(
       expect.objectContaining({ code: `rubick(${rule})`, severity: "error" })
     );
+  });
+
+  /** Fails if a scrollbar width or colour reaches WebKit through a style object or a class built in a template, the two ways around the class name. */
+  it("refuse an overlay scrollbar however it is spelled", () => {
+    const spelled = {
+      "overlay-object.tsx": `export const s = { scrollbarWidth: "thin" };`,
+      "overlay-template.tsx":
+        "export const c = (x: string) => `${x} [scrollbar-color:red]`;",
+    };
+    const at = mkdtempSync(join(tmpdir(), "rubick-lint-"));
+    try {
+      for (const [file, code] of Object.entries(spelled))
+        writeFileSync(join(at, file), code);
+      const run = spawnSync(
+        "node_modules/.bin/vp",
+        ["lint", "-f", "json", "--threads=2", at],
+        { encoding: "utf8" }
+      );
+      const codes = (
+        JSON.parse(run.stdout) as { diagnostics: Diagnostic[] }
+      ).diagnostics.map((d) => `${d.filename.split("/").pop()} ${d.code}`);
+      for (const file of Object.keys(spelled))
+        expect(codes).toContain(`${file} rubick(no-overlay-scrollbar)`);
+    } finally {
+      rmSync(at, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  /** index.css is not linted. Fails if a utility there sets a scrollbar width or colour, which brings the overlay back to every scroller wearing it. */
+  it("find no overlay scrollbar in the stylesheet", () => {
+    const css = readFileSync("src/ui/index.css", "utf8");
+    expect(css).not.toMatch(/scrollbar-width:(?!\s*none\b)/);
+    expect(css).not.toMatch(/scrollbar-color:(?!\s*auto\b)/);
   });
 
   /** A pattern that also matched role tokens would be switched off within a day. */

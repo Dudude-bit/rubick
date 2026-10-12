@@ -488,7 +488,7 @@ function PeekOverview({
 }) {
   const t = useT();
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin px-3.5 pb-5">
+    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] pb-5 pl-3.5 pr-1.5">
       {error && gone !== false ? (
         <GoneNotice
           className="mt-4"

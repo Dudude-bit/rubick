@@ -161,15 +161,22 @@ fn entry_for(context: &str) -> Result<Option<LokiEntry>> {
 
 /// This cluster's Loki, or `None` where nobody configured one.
 #[tauri::command]
-pub fn get_loki_connection(state: State<'_, AppState>) -> Result<Option<LokiConnection>> {
+pub async fn get_loki_connection(state: State<'_, AppState>) -> Result<Option<LokiConnection>> {
     let context = context_of(&state)?;
-    Ok(entry_for(&context)?.map(|entry| LokiConnection::from(&entry)))
+    crate::commands::settings::read_config(move |config| {
+        config
+            .integrations
+            .loki
+            .get(&context)
+            .map(LokiConnection::from)
+    })
+    .await
 }
 
 /// Save this cluster's Loki. An empty `token` keeps whatever is stored — the
 /// form never receives the credential, so it cannot send it back.
 #[tauri::command]
-pub fn save_loki_connection(
+pub async fn save_loki_connection(
     url: String,
     auth_type: String,
     token: Option<String>,
@@ -182,34 +189,36 @@ pub fn save_loki_connection(
         return Err(Error::InvalidInput("A Loki needs an address".into()));
     }
 
-    let mut config = AppConfig::load()?;
-    let existing = config.integrations.loki.get(&context);
-    let token = match auth_type.as_str() {
-        "bearer" => token
-            .filter(|t| !t.is_empty())
-            .or_else(|| existing.and_then(|entry| entry.token.clone())),
-        _ => existing.and_then(|entry| entry.token.clone()),
-    };
+    crate::commands::settings::with_config(move |config| {
+        let existing = config.integrations.loki.get(&context);
+        let token = match auth_type.as_str() {
+            "bearer" => token
+                .filter(|t| !t.is_empty())
+                .or_else(|| existing.and_then(|entry| entry.token.clone())),
+            _ => existing.and_then(|entry| entry.token.clone()),
+        };
 
-    config.integrations.loki.insert(
-        context,
-        LokiEntry {
-            url,
-            auth_type,
-            token,
-            insecure_tls,
-        },
-    );
-    crate::commands::settings::helpers::save_config(&config)
+        config.integrations.loki.insert(
+            context,
+            LokiEntry {
+                url,
+                auth_type,
+                token,
+                insecure_tls,
+            },
+        );
+    })
+    .await
 }
 
 /// Forget this cluster's Loki, credential included.
 #[tauri::command]
-pub fn forget_loki_connection(state: State<'_, AppState>) -> Result<()> {
+pub async fn forget_loki_connection(state: State<'_, AppState>) -> Result<()> {
     let context = context_of(&state)?;
-    crate::commands::settings::helpers::with_config(|config| {
+    crate::commands::settings::with_config(move |config| {
         config.integrations.loki.remove(&context);
     })
+    .await
 }
 
 // ---------------------------------------------------------------------------

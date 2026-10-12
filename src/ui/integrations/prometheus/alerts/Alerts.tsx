@@ -182,7 +182,7 @@ export default function Alerts() {
           onSelect={select}
           onKeyDown={onKeyDown}
         />
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-thin">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-lane">
           {selected ? (
             <Detail
               key={keyOf(selected)}
@@ -375,7 +375,7 @@ function Ladder({
         aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-thin rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-lane rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
       >
         {GROUPS.map((group) => {
           const members = shown.filter((row) => row.group === group);

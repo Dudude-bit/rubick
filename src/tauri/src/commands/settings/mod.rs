@@ -1,7 +1,7 @@
 //! Settings and configuration commands.
 //!
 //! Split into:
-//! - `helpers`: thin `save_config` / `with_config` / `read_config` wrappers
+//! - `helpers`: `read_config` / `update_config` / `with_config`, off the main thread
 //! - `cloud`:   GCP + Azure + bindings + CLI paths
 //! - `prefs`:   theme + YAML history + recent +
 //!   updater + cluster preferences + `AppInfo`
