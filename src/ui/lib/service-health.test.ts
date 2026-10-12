@@ -261,7 +261,8 @@ describe("one verdict for a Service on every surface", () => {
    * mixed-port-demo: one pod published, one in a slice with no port, both
    * ready in their slices. The list said "1 of 2 ready" and the peek "1 of
    * its addresses takes no traffic". Fails if the address with no port is
-   * counted not ready, or its readiness is dropped where the slices said it.
+   * counted not ready, or its readiness is dropped where the slices said it,
+   * or if the sentence stops saying it is the slice that lists no ports.
    */
   it("counts traffic and readiness apart when an address has none of the ports", () => {
     const health = serviceHealthOf(
@@ -281,7 +282,7 @@ describe("one verdict for a Service on every surface", () => {
     expect(words.role).toBe("warn");
     expect(words.label).toBe("1 of 2 takes traffic");
     expect(words.reason).toBe(
-      "1 of its addresses is ready but has none of the ports this Service targets, so no traffic is sent to it"
+      "1 ready address is in an EndpointSlice that lists no ports, as it has none of the ports this Service targets, so no traffic is sent to it"
     );
   });
 
@@ -298,7 +299,7 @@ describe("one verdict for a Service on every surface", () => {
     );
     expect(words.label).toBe("1 of 3 takes traffic");
     expect(words.reason).toBe(
-      "1 of its addresses takes no traffic, 1 of its addresses has none of the ports this Service targets, so no traffic is sent to it"
+      "1 of its addresses takes no traffic, 1 address is in an EndpointSlice that lists no ports, as it has none of the ports this Service targets, so no traffic is sent to it"
     );
   });
 
@@ -388,6 +389,29 @@ describe("one verdict for a Service on every surface", () => {
         null
       ).state
     ).toBe("selectorless");
+  });
+
+  /**
+   * Dana's manual-demo, two hand-written addresses no pod owns, read a green
+   * "2 ready" with nothing probed. Fails if a Service with no selector whose
+   * addresses say ready is called ready in the ok tone, or stops saying the
+   * addresses were written by hand and never probed, or which are not ready.
+   */
+  it("says a selectorless Service's ready addresses were written by hand, in no healthy tone", () => {
+    const manual = { type: "ClusterIP", selectorless: true };
+    const health = serviceHealthOf(manual, published({ ready: 2 }), null);
+    expect(health).toEqual({ state: "byHand", ready: 2, total: 2 });
+    const words = serviceHealthWords(health, t);
+    expect(words).toMatchObject({ role: "neutral", label: "2 by hand" });
+    expect(words.reason).toBe(
+      "This Service has no selector: its 2 addresses were written by hand or by another controller, not picked from pods this app can see, and nothing here probed them."
+    );
+    expect(
+      serviceHealthWords(
+        serviceHealthOf(manual, published({ ready: 1, notReady: 1 }), null),
+        t
+      ).reason
+    ).toMatch(/ 1 of them is marked not ready\.$/);
   });
 
   /**

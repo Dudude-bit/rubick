@@ -4225,6 +4225,15 @@ export const en = {
     healthDnsAliasWhy:
       "An ExternalName Service answers with another DNS name and has no endpoints.",
     healthByHand: "by hand",
+    healthByHandWhy: {
+      one: "This Service has no selector: its address was written by hand or by another controller, not picked from pods this app can see, and nothing here probed it.",
+      other:
+        "This Service has no selector: its {n} addresses were written by hand or by another controller, not picked from pods this app can see, and nothing here probed them.",
+    },
+    healthByHandNotReady: {
+      one: "{n} of them is marked not ready.",
+      other: "{n} of them are marked not ready.",
+    },
     healthStillReading: "still reading",
     healthNothingServesClass:
       "No IngressClass named {name} in this cluster, so nothing picks this Ingress up",
@@ -7449,14 +7458,14 @@ export const en = {
       other: "{n} of {total} take traffic",
     },
     addressesOffPort: {
-      one: "{n} of its addresses has none of the ports this Service targets, so no traffic is sent to it",
+      one: "{n} address is in an EndpointSlice that lists no ports, as it has none of the ports this Service targets, so no traffic is sent to it",
       other:
-        "{n} of its addresses have none of the ports this Service targets, so no traffic is sent to them",
+        "{n} addresses are in EndpointSlices that list no ports, as they have none of the ports this Service targets, so no traffic is sent to them",
     },
     addressesReadyOffPort: {
-      one: "{n} of its addresses is ready but has none of the ports this Service targets, so no traffic is sent to it",
+      one: "{n} ready address is in an EndpointSlice that lists no ports, as it has none of the ports this Service targets, so no traffic is sent to it",
       other:
-        "{n} of its addresses are ready but have none of the ports this Service targets, so no traffic is sent to them",
+        "{n} ready addresses are in EndpointSlices that list no ports, as they have none of the ports this Service targets, so no traffic is sent to them",
     },
     addressesTakeNoTraffic: {
       one: "{n} of its addresses takes no traffic",
@@ -7815,6 +7824,7 @@ export const en = {
     nodesCount: { one: "{n} node", other: "{n} nodes" },
     allSpot: "spot",
     nReady: { one: "{n} ready", other: "{n} ready" },
+    nByHand: { one: "{n} by hand", other: "{n} by hand" },
     nNotReady: { one: "{n} not ready", other: "{n} not ready" },
     nPublished: { one: "{n} published", other: "{n} published" },
     nDraining: { one: "{n} draining", other: "{n} draining" },

@@ -21,6 +21,7 @@ const WAITS: Record<ServiceHealth["state"], boolean> = {
   noEndpoints: false,
   externalName: false,
   selectorless: false,
+  byHand: false,
   unknown: false,
 };
 

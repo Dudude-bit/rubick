@@ -8,7 +8,7 @@
  * which both backend readers ask alike; the page only adds a sharper reason.
  */
 
-import { EyeOff, type LucideIcon } from "lucide-react";
+import { EyeOff, PenLine, type LucideIcon } from "lucide-react";
 
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
@@ -50,6 +50,8 @@ export type ServiceHealth =
   | { state: "externalName" }
   /** No selector, and nobody wrote an endpoint by hand. */
   | { state: "selectorless" }
+  /** No selector, and addresses someone wrote: not picked from pods, and never probed here. */
+  | { state: "byHand"; ready: number; total: number }
   /** What it publishes was not read, or not yet. */
   | { state: "unknown"; why: string | null };
 
@@ -81,6 +83,8 @@ export function serviceHealthOf(
   const listed = endpointCount(published);
   const total = listed + published.unrouted;
   if (service.selectorless && total === 0) return { state: "selectorless" };
+  if (service.selectorless && serving > 0)
+    return { state: "byHand", ready: published.ready, total };
   if (serving > 0) {
     const { ready, draining } = published;
     if (ready === total) return { state: "ready", ready };
@@ -278,6 +282,22 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         role: "neutral",
         reason: t("nav", "endpointsByHandNoneWritten"),
       };
+    case "byHand":
+      return {
+        code: health.state,
+        label: t("count", "nByHand", { n: health.total }),
+        role: "neutral",
+        reason: [
+          t("readings", "healthByHandWhy", { n: health.total }),
+          health.ready < health.total &&
+            t("readings", "healthByHandNotReady", {
+              n: health.total - health.ready,
+            }),
+        ]
+          .filter(Boolean)
+          .join(" "),
+        glyph: PenLine,
+      };
     case "unknown":
       // Refused and not yet answered are two states, and only one is final.
       return health.why === null
@@ -308,6 +328,7 @@ export const serviceVerdictLabels = (t: T) => [
   t("readings", "healthIdle"),
   t("readings", "healthDnsAlias"),
   t("readings", "healthByHand"),
+  t("count", "nByHand", { n: 99 }),
   t("readings", "healthStillReading"),
   t("nav", "notChecked"),
 ];

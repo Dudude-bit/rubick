@@ -93,6 +93,7 @@ const BACKEND_PROBLEM: Record<
   idle: "backendIdle",
   externalName: null,
   selectorless: null,
+  byHand: null,
   unknown: null,
 };
 
