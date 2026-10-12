@@ -9231,6 +9231,13 @@ export const ru: Catalogue = {
     slashReady: "{n}/{total} готовы",
     podsSayComingUp: "по подам: поднимаются, готово {ready} из {total}",
     podsSayFailing: "по подам: сбоит {failing}, готово {ready} из {total}",
+    podsSayTerminating: {
+      one: "по подам: {n} завершается, готово {ready} из {total}",
+      few: "по подам: {n} завершаются, готово {ready} из {total}",
+      many: "по подам: {n} завершаются, готово {ready} из {total}",
+      other: "по подам: {n} завершаются, готово {ready} из {total}",
+    },
+    podsSayReady: "по подам: готово {ready} из {total}",
     readySummary: "готовы: {n}",
     notReadySummary: "не готовы: {n}",
     readyNotReadySummary: "готовы: {n} · не готовы: {notReady}",

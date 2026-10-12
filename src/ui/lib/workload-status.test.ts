@@ -7,6 +7,7 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { statusRole } from "./status-role";
 import {
+  type PodCounts,
   NEEDS_ATTENTION,
   ROLLOUT_CODES,
   attentionOf,
@@ -15,7 +16,7 @@ import {
   rolloutLine,
   rolloutStatusOf,
   rolloutVerdict,
-  rolloutWithPods,
+  podCounts,
   podsAhead,
   rowsWithStarts,
   startsOf,
@@ -150,48 +151,78 @@ describe("the word a workload's rollout comes to", () => {
    * again, or one beside any other verdict stops saying what it counts.
    */
   /**
-   * The header said Ready while the Replicas block below it counted a pod
-   * not ready. Fails if pods that disagree with Ready leave it standing, or
-   * if pods move a verdict towards settled, which only the controller can
-   * say once minReadySeconds has run.
-   */
-  it("moves a Ready verdict by the pods read, and nothing else", () => {
-    const ready: Rollout = { state: "ready" };
-    expect(rolloutWithPods(ready, { ready: 0, failing: 0 }, 1)).toEqual({
-      state: "comingUp",
-      available: 0,
-      desired: 1,
-    });
-    expect(rolloutWithPods(ready, { ready: 2, failing: 1 }, 3)).toEqual({
-      state: "short",
-      available: 2,
-      desired: 3,
-    });
-    expect(rolloutWithPods(ready, { ready: 1, failing: 0 }, 1)).toBe(ready);
-    expect(rolloutWithPods(ready, null, 1)).toBe(ready);
-    const coming: Rollout = { state: "comingUp", available: 0, desired: 1 };
-    expect(rolloutWithPods(coming, { ready: 1, failing: 0 }, 1)).toBe(coming);
-  });
-
-  /**
    * The page header said Progressing while the Overview and kubectl still
-   * said Ready. Fails if the pods' answer is not said where they are ahead
-   * of the controller, or is said where they agree.
+   * said Ready, and on Sam's drains "coming up" 290 to 440 ms before any
+   * replacement pod existed. Fails if the pods' answer is not said where
+   * they are ahead of the controller, is said where they agree, or names a
+   * pod coming up that no pod read is.
    */
-  it("says what the pods say beside a verdict they are ahead of, and only then", () => {
+  it("says what the pods that exist say beside a verdict they are ahead of, and only then", () => {
     const ready: Rollout = { state: "ready" };
     const ru: T = (section, key, values) =>
       translate("ru", section, key, values);
-    expect(podsAhead(ready, { ready: 0, failing: 0 }, 1, ru)).toEqual({
+    const pods = (counts: Partial<PodCounts>): PodCounts => ({
+      ready: 0,
+      failing: 0,
+      starting: 0,
+      terminating: 0,
+      ...counts,
+    });
+    expect(podsAhead(ready, pods({ starting: 1 }), 1, ru)).toEqual({
       text: "по подам: поднимаются, готово 0 из 1",
       role: "pending",
     });
-    expect(podsAhead(ready, { ready: 2, failing: 1 }, 3, ru)).toEqual({
+    expect(podsAhead(ready, pods({ ready: 2, failing: 1 }), 3, ru)).toEqual({
       text: "по подам: сбоит 1, готово 2 из 3",
       role: "warn",
     });
-    expect(podsAhead(ready, { ready: 1, failing: 0 }, 1, ru)).toBeNull();
+    expect(podsAhead(ready, pods({ terminating: 1 }), 1, ru)).toEqual({
+      text: "по подам: 1 завершается, готово 0 из 1",
+      role: "warn",
+    });
+    expect(podsAhead(ready, pods({ terminating: 2 }), 2, t)?.text).toBe(
+      "count.podsSayTerminating"
+    );
+    expect(podsAhead(ready, pods({ ready: 1 }), 2, ru)).toEqual({
+      text: "по подам: готово 1 из 2",
+      role: "warn",
+    });
+    expect(podsAhead(ready, pods({ ready: 1 }), 1, ru)).toBeNull();
     expect(podsAhead(ready, null, 1, ru)).toBeNull();
+    expect(
+      podsAhead(
+        { state: "comingUp", available: 0, desired: 1 },
+        pods({ starting: 1 }),
+        1,
+        ru
+      )
+    ).toBeNull();
+  });
+
+  /** Fails if a pod on its way out is counted ready or coming up, or a crash loop between its crashes is counted ready. */
+  it("counts a page's pods as their rows paint them", () => {
+    const status = { display: "Running", ready: true, exitUnreported: false };
+    const now = Date.parse("2026-10-12T17:00:00Z");
+    expect(
+      podCounts(
+        [
+          { start: { state: "settled" }, status },
+          {
+            start: { state: "settled" },
+            status: { ...status, display: "Terminating" },
+          },
+          {
+            start: { state: "starting", until: "2026-10-12T17:01:00Z" },
+            status: { ...status, ready: false, display: "ContainerCreating" },
+          },
+          {
+            start: { state: "settled" },
+            status: { ...status, loopingUntil: "2026-10-12T17:05:00Z" },
+          },
+        ],
+        now
+      )
+    ).toEqual({ ready: 1, failing: 1, starting: 1, terminating: 1 });
   });
 
   it("says ready once beside a Ready badge", () => {

@@ -1,16 +1,7 @@
 import type { CompositionSegment } from "@/components/object/detail-blocks";
-import type { PodStart, PodStatusInfo } from "@/generated/types";
 import { useLastPassed } from "@/hooks/useNow";
 import type { T } from "@/i18n/useT";
-import { loopState } from "@/lib/crash-loop";
-
-type Counted = {
-  start: PodStart;
-  status: Pick<
-    PodStatusInfo,
-    "display" | "ready" | "loopingUntil" | "exitUnreported"
-  >;
-};
+import { podCounts, type CountedPod as Counted } from "@/lib/workload-status";
 
 /** What a bar counts, which Russian agrees its words with: a replica, or a DaemonSet's node. */
 export type ReplicaUnit = "replica" | "node";
@@ -52,17 +43,10 @@ export function replicaSplit(
   let failing = 0;
   let unaccounted = made - ready;
   if (pods !== null) {
-    ready = 0;
-    for (const { start, status } of pods) {
-      if (start.state === "failing" || loopState(status, now) === "looping")
-        failing += 1;
-      else if (start.state === "starting" && Date.parse(start.until) > now)
-        starting += 1;
-      else if (status.ready && status.display !== "Terminating") ready += 1;
-    }
-    ready = Math.min(ready, made);
-    failing = Math.min(failing, made - ready);
-    starting = Math.min(starting, made - ready - failing);
+    const counts = podCounts(pods, now);
+    ready = Math.min(counts.ready, made);
+    failing = Math.min(counts.failing, made - ready);
+    starting = Math.min(counts.starting, made - ready - failing);
     unaccounted = Math.max(0, made - pods.length);
   }
   if (waiting)

@@ -36,6 +36,7 @@ import { RelatedResources } from "../../-components/RelatedResources";
 import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { useWorkloadPods } from "../../-components/workload-pods";
 import {
+  podCounts,
   podsAhead,
   readyBesideBadge,
   watchedWorkload,
@@ -408,7 +409,14 @@ export function DeploymentDetail() {
     !!deployment && workloadRole(deployment.rollout) === "pending"
   );
   const rollout = deployment?.rollout;
-  const ahead = rollout && podsAhead(rollout, splitPods && split, desired, t);
+  const ahead =
+    rollout &&
+    podsAhead(
+      rollout,
+      splitPods && podCounts(splitPods, startsNow),
+      desired,
+      t
+    );
 
   // Desired, ready, available and up-to-date are one count read four ways, and
   // as four rows the reader had to subtract them to find the gap the bar shows

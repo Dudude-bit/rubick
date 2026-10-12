@@ -7904,6 +7904,11 @@ export const en = {
     slashReady: "{n}/{total} ready",
     podsSayComingUp: "its pods say coming up, {ready} of {total} ready",
     podsSayFailing: "its pods say {failing} failing, {ready} of {total} ready",
+    podsSayTerminating: {
+      one: "its pods say {n} terminating, {ready} of {total} ready",
+      other: "its pods say {n} terminating, {ready} of {total} ready",
+    },
+    podsSayReady: "its pods say {ready} of {total} ready",
     readySummary: "{n} ready",
     notReadySummary: "{n} not ready",
     readyNotReadySummary: "{n} ready · {notReady} not ready",

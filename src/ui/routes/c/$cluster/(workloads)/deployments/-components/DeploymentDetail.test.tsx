@@ -328,6 +328,43 @@ describe("the rollout line", () => {
     expect(screen.getByText("1/1")).toBeInTheDocument();
   });
 
+  /**
+   * Sam's d2 and d4: "its pods say coming up" 290 to 440 ms before the
+   * ReplicaSet had made a replacement, while the only pod was terminating.
+   * Fails if a drain with no new pod yet is said to be coming up, or the
+   * terminating pod is not named.
+   */
+  it("names the pod terminating, and nothing coming up, before a replacement exists", async () => {
+    answering(
+      () => new Promise(() => {}),
+      () =>
+        Promise.resolve({
+          uid: "uid",
+          pods: [
+            {
+              ...CREATING,
+              status: {
+                ...CREATING.status,
+                phase: "Running",
+                display: "Terminating",
+                ready: true,
+              },
+              start: { state: "settled" },
+            },
+          ],
+        })
+    );
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    expect(await screen.findByTestId("pods-ahead")).toHaveTextContent(
+      "its pods say 1 terminating, 0 of 1 ready"
+    );
+    expect(screen.queryByText(/coming up/)).toBeNull();
+  });
+
   /** Fails if the note is drawn where the pods agree with the controller. */
   it("says nothing beside the verdict where the pods agree with it", async () => {
     answering(
