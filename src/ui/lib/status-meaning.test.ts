@@ -118,7 +118,7 @@ describe("what a Job's word means", () => {
     for (const code of shared.codes)
       expect(statusMeaning("Job", code, t)).toMatch(new RegExp(`^${code}: `));
     expect(shared.codes.map(statusRole)).toEqual([
-      "neutral",
+      "ok",
       "err",
       "warn",
       "warn",

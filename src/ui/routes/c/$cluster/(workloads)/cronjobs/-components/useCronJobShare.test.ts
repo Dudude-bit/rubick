@@ -70,7 +70,7 @@ describe("what the CronJob page adds to Share", () => {
         {
           cells: [
             { text: "nightly-backup-29123456" },
-            { text: "Complete", role: "neutral" },
+            { text: "Complete", role: "ok" },
             { text: "1/1" },
             { text: "10h" },
           ],

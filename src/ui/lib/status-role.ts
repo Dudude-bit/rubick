@@ -60,6 +60,9 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "available",
     "active",
     "succeeded",
+    // A Job its controller marked Complete: what it was for is done, as a
+    // Ready Deployment's is. A completed Pod stays neutral: it serves nothing.
+    "complete",
     "bound",
     "deployed",
     // The revision a Deployment is on, against the "superseded" ones below.
@@ -140,8 +143,6 @@ const ROLES: Record<StatusRole, readonly string[]> = {
   ],
   neutral: [
     "completed",
-    // A Job its controller marked Complete: finished, like a completed Pod.
-    "complete",
     "terminated",
     "superseded",
     "uninstalled",

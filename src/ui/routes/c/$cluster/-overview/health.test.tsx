@@ -934,7 +934,7 @@ describe("a scope one namespace of which refused its pods", () => {
     const workloads = workloadsShare(beside, t);
     const rows = workloads.body.type === "facts" ? workloads.body.rows : [];
     expect(rows.find((row) => row.label === "Jobs")?.values).toEqual([
-      { text: "1 Complete", role: "neutral" },
+      { text: "1 Complete", role: "ok" },
       { text: "not read in team-blind", quiet: true },
     ]);
   });
