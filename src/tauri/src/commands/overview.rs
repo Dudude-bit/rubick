@@ -17,8 +17,8 @@ use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
     backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, job_state,
-    looping_until, pending_since, pod_start, restarting_until, stuck_reason, within_pending_grace,
-    PodStart, Rollout,
+    looping_until, pending_since, pod_start, restarting_until, stuck_reason, stuck_since,
+    within_pending_grace, PodStart, Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -654,11 +654,8 @@ fn pod_problems<'a>(
 fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     let name = pod.metadata.name.clone().unwrap_or_default();
     let namespace = pod.metadata.namespace.clone();
-    let created = pod
-        .metadata
-        .creation_timestamp
-        .as_ref()
-        .map(|t| t.moment().to_rfc3339());
+    // The reason's own time, never the pod's age.
+    let stuck_at = || stuck_since(pod).map(|t| t.to_rfc3339());
     let status = pod.status.as_ref()?;
     let phase = status.phase.as_deref().unwrap_or("");
 
@@ -689,7 +686,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             }
             .to_string(),
             detail: Some(ProblemDetail::restarts(pod, restarts)),
-            since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
+            since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
             restarts: Some(restarts),
             folded_pods: None,
         });
@@ -711,9 +708,9 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 ProblemDetail::said(message)
             },
             since: if looping {
-                last_restart_at.map(|t| t.to_rfc3339()).or(created)
+                last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at)
             } else {
-                created
+                stuck_at()
             },
             restarts: Some(restarts),
             folded_pods: None,
@@ -783,7 +780,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             detail: Some(ProblemDetail::restarts(pod, restarts)),
             // Dated by the restart, not by the pod. `since: created` put a
             // twelve-day-old date on something that happened minutes ago.
-            since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
+            since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
             restarts: Some(restarts),
             folded_pods: None,
         });
@@ -4752,6 +4749,34 @@ mod tests {
             },
         }))
         .expect("a pod the kubelet wrote")
+    }
+
+    /// Marco's Needs attention read `CreateContainerConfigError 14h` beside
+    /// the pod's own Ready False since 12h58m: the row was dated by the pod's
+    /// creation, over an hour before it was even initialized. Fails if a
+    /// stuck reason is dated by anything but when its containers stopped
+    /// being ready, or by the pod's age where the cluster recorded nothing.
+    #[test]
+    fn a_stuck_reason_is_dated_by_when_its_containers_stopped_being_ready() {
+        let mut pod = config_error_pod();
+        let status = pod.status.as_mut().expect("a status");
+        for condition in status.conditions.iter_mut().flatten() {
+            if condition.type_ == "Ready" || condition.type_ == "ContainersReady" {
+                condition.last_transition_time =
+                    Some(Time("2026-10-12T01:16:18Z".parse().expect("a time")));
+            }
+        }
+        let since = |pod: &Pod| {
+            pod_problem(pod, Utc::now())
+                .expect("a problem")
+                .since
+                .map(|at| at.parse::<DateTime<Utc>>().expect("a time"))
+        };
+        assert_eq!(
+            since(&pod),
+            Some("2026-10-12T01:16:18Z".parse().expect("a time"))
+        );
+        assert_eq!(since(&config_error_pod()), None);
     }
 
     /// Sam's team-checkout Overview read "1 Pending" for the pod its Pods

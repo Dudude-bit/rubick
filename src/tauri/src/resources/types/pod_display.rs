@@ -553,6 +553,44 @@ pub fn failed_at(pod: &Pod) -> Option<DateTime<Utc>> {
         .or_else(|| changed("Ready", "False"))
 }
 
+/// When a stuck pod's reason began, as the cluster recorded it: the end of
+/// the held container's last run, else the moment its init sequence or its
+/// containers stopped being ready. `None` where neither was recorded, since
+/// the pod's age is not the reason's.
+#[must_use]
+pub fn stuck_since(pod: &Pod) -> Option<DateTime<Utc>> {
+    let status = pod.status.as_ref()?;
+    let initializing = status.phase.as_deref().is_none_or(|p| p == "Pending")
+        && !condition_is_true(Some(status), "Initialized");
+    let (held, conditions): (Option<&ContainerStatus>, &[&str]) =
+        match blocking_init(pod).filter(|_| initializing) {
+            Some((_, cs)) => (Some(cs), &["Initialized"]),
+            None => (
+                status
+                    .container_statuses
+                    .iter()
+                    .flatten()
+                    .find(|cs| stuck_waiting(cs).is_some()),
+                &["ContainersReady", "Ready"],
+            ),
+        };
+    let exited = held
+        .and_then(latest_exit)
+        .and_then(|t| t.finished_at.as_ref())
+        .map(Moment::moment);
+    exited.or_else(|| {
+        conditions.iter().find_map(|kind| {
+            status
+                .conditions
+                .iter()
+                .flatten()
+                .find(|c| c.type_ == *kind && c.status != "True")
+                .and_then(|c| c.last_transition_time.as_ref())
+                .map(Moment::moment)
+        })
+    })
+}
+
 /// When a Pending pod started waiting: its last scheduling decision, or its
 /// creation where there was none yet.
 #[must_use]
@@ -836,6 +874,64 @@ mod tests {
         assert_eq!(failed_at(&late), Some(at(12).moment()));
 
         assert_eq!(failed_at(&pod("Running")), None);
+    }
+
+    /// An init container's wait is dated by when initialisation stopped, an
+    /// app container's by its last run where it had one. Fails if either is
+    /// dated by the other's condition, or a run's end is passed over.
+    #[test]
+    fn a_stuck_containers_wait_is_dated_by_its_own_record() {
+        let at = |text: &str| Time(text.parse().expect("a time"));
+        let mut held = pod("Pending");
+        let s = held.status.as_mut().unwrap();
+        s.conditions = Some(vec![
+            PodCondition {
+                type_: "Initialized".to_string(),
+                status: "False".to_string(),
+                last_transition_time: Some(at("2026-10-12T01:00:00Z")),
+                ..Default::default()
+            },
+            PodCondition {
+                type_: "ContainersReady".to_string(),
+                status: "False".to_string(),
+                last_transition_time: Some(at("2026-10-12T00:00:00Z")),
+                ..Default::default()
+            },
+        ]);
+        s.init_container_statuses =
+            Some(vec![status("migrate", waiting("ImagePullBackOff"), false)]);
+        held.spec.as_mut().unwrap().init_containers = Some(vec![Container {
+            name: "migrate".to_string(),
+            ..Default::default()
+        }]);
+        assert_eq!(
+            stuck_since(&held),
+            Some(at("2026-10-12T01:00:00Z").moment())
+        );
+
+        let mut app = pod("Running");
+        let s = app.status.as_mut().unwrap();
+        s.conditions = held.status.as_ref().unwrap().conditions.clone();
+        let mut config = status("worker", waiting("CreateContainerConfigError"), false);
+        config.last_state = Some(ContainerState {
+            terminated: Some(ContainerStateTerminated {
+                exit_code: 0,
+                finished_at: Some(at("2026-10-12T02:00:00Z")),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        s.container_statuses = Some(vec![config]);
+        assert_eq!(stuck_since(&app), Some(at("2026-10-12T02:00:00Z").moment()));
+
+        app.status
+            .as_mut()
+            .unwrap()
+            .container_statuses
+            .as_mut()
+            .unwrap()[0]
+            .last_state = None;
+        assert_eq!(stuck_since(&app), Some(at("2026-10-12T00:00:00Z").moment()));
     }
 
     #[test]
