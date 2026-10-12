@@ -27,6 +27,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { LIST_DEADLINE_SECONDS, SLOW_READ_MS } from "@/lib/read-deadline";
 import { cn, formatTimeUnit } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { RealtimeAge } from "./realtime-age";
@@ -55,6 +56,11 @@ export interface DataFreshnessProps {
   slowed?: boolean;
   /** The last read failed: what is on screen, if anything, is from one before it. Wins over live. */
   stale?: boolean;
+  /**
+   * A re-read has waited on the cluster past the slow-read grace. Wins over
+   * live: a watch beside the poll does not make the polled half current.
+   */
+  slowRead?: boolean;
   /**
    * The cluster refused the last read: when, or `null` where that is not
    * known. Nothing asks a refused read again on its own, so it is neither
@@ -96,6 +102,11 @@ const STATES = {
     dot: "border border-warn",
     note: "freshStaleNote",
   },
+  behind: {
+    label: "freshBehind",
+    dot: "border border-warn",
+    note: "freshBehindNote",
+  },
   refused: {
     label: "freshRefused",
     dot: null,
@@ -107,6 +118,7 @@ const AGED = new Set<string>([
   "freshSlowed",
   "freshOffline",
   "freshStale",
+  "freshBehind",
   "freshRefused",
 ]);
 
@@ -150,6 +162,7 @@ export const DataFreshness = memo(function DataFreshness({
   live = false,
   slowed = false,
   stale = false,
+  slowRead = false,
   refusedAt,
   reserve = true,
   className,
@@ -169,12 +182,15 @@ export const DataFreshness = memo(function DataFreshness({
       ? "refused"
       : stale
         ? "stale"
-        : live
-          ? "live"
-          : slowed
-            ? "slowed"
-            : "polling";
+        : slowRead
+          ? "behind"
+          : live
+            ? "live"
+            : slowed
+              ? "slowed"
+              : "polling";
   const { label, dot, note } = STATES[state];
+  const warned = state === "stale" || state === "behind" || state === "refused";
   const at = state === "refused" ? refusedAt : neverRead ? null : dataUpdatedAt;
   const stamp = at ? new Date(at).toISOString() : "";
 
@@ -197,11 +213,7 @@ export const DataFreshness = memo(function DataFreshness({
             ) : (
               <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
             )}
-            <span
-              className={cn(
-                (state === "stale" || state === "refused") && "text-warn"
-              )}
-            >
+            <span className={cn(warned && "text-warn")}>
               {t("cluster", label)}
             </span>
             {/* The readings where how old the data is changes what the
@@ -218,7 +230,8 @@ export const DataFreshness = memo(function DataFreshness({
       <TooltipContent side="bottom">
         {t(
           "cluster",
-          neverRead && state !== "refused" ? "freshNeverReadNote" : note
+          neverRead && state !== "refused" ? "freshNeverReadNote" : note,
+          { slow: SLOW_READ_MS / 1000, deadline: LIST_DEADLINE_SECONDS }
         )}
         {state !== "offline" && state !== "refused" && !neverRead && (
           <>

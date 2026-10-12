@@ -31,6 +31,19 @@ describe("what the freshness reading claims", () => {
     expect(screen.queryByText(/ago/)).not.toBeInTheDocument();
   });
 
+  /**
+   * The Overview is followed by watches while its counts are polled, and a
+   * poll that sat a minute on the cluster stayed under a green "live". Fails
+   * if a late read loses to live, or carries no age and no warning tone.
+   */
+  it("says a late read is still reading, with the age of what is shown, over live", () => {
+    wrap(<DataFreshness dataUpdatedAt={UPDATED} live slowRead />);
+    const label = screen.getByText("still reading");
+    expect(label).toHaveClass("text-warn");
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+    expect(screen.getByText(/ago/)).toBeInTheDocument();
+  });
+
   it("only says live when a watch is actually feeding the view", () => {
     wrap(<DataFreshness dataUpdatedAt={UPDATED} live />);
     expect(screen.getByText("live")).toBeInTheDocument();

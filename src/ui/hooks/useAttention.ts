@@ -14,11 +14,19 @@ import { overdue, REFRESH_INTERVALS, type RefreshRate } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 
-/** Older than the shell's own rate is older than any reader of this asks for. */
+/**
+ * Older than the shell's own rate is older than any reader of this asks for,
+ * and a re-read that has waited past the slow-read grace is late at any rate.
+ */
 const late = (
-  { dataUpdatedAt, everyMs }: Pick<Freshness, "dataUpdatedAt" | "everyMs">,
+  {
+    dataUpdatedAt,
+    everyMs,
+    slowRead,
+  }: Pick<Freshness, "dataUpdatedAt" | "everyMs" | "slowRead">,
   now: number
 ) =>
+  slowRead ||
   overdue(
     dataUpdatedAt,
     everyMs && Math.max(everyMs, REFRESH_INTERVALS.shell),

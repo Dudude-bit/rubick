@@ -4290,6 +4290,9 @@ export const en = {
     freshOfflineNote: "Not connected. Nothing on this screen is updating.",
     freshStaleNote:
       "The last read failed, so what is on screen is from the last read that answered.",
+    freshBehind: "still reading",
+    freshBehindNote:
+      "A read of this screen has waited on the cluster for more than {slow} s, so what is on screen is the last answer. After {deadline} s the app stops waiting and says so.",
     freshRefused: "refused",
     freshRefusedNote:
       "The cluster refused the last read, and this screen does not ask again on its own. Try the read again asks once more.",

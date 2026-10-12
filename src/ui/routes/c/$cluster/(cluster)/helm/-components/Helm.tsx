@@ -358,6 +358,7 @@ export function Helm() {
                 dataUpdatedAt={freshness.dataUpdatedAt}
                 slowed={freshness.slowed}
                 stale={freshness.stale}
+                slowRead={freshness.slowRead}
               />
               <ShareScreenAction screen={{ title: "Helm" }} />
             </>

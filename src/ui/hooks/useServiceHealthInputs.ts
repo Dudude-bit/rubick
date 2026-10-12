@@ -17,7 +17,7 @@ export interface ServiceHealthRead {
   answered: ServiceHealthInputs[];
   /** The namespaces that did not answer, the whole read if its latest look failed, or "reading". */
   unread: Unread[] | "reading";
-  freshness: Pick<Freshness, "dataUpdatedAt" | "everyMs">;
+  freshness: Pick<Freshness, "dataUpdatedAt" | "everyMs" | "slowRead">;
 }
 
 const NONE: NamespaceBacking = new Map();
@@ -41,7 +41,7 @@ export function useServiceHealthInputs(
     refresh,
   });
 
-  const { dataUpdatedAt, everyMs } = freshness;
+  const { dataUpdatedAt, everyMs, slowRead } = freshness;
   return useMemo(() => {
     const byNamespace = new Map<string, NamespaceBacking>(
       (data?.rows ?? []).map(({ namespace, groups }) => [
@@ -58,7 +58,7 @@ export function useServiceHealthInputs(
     return {
       answered: data?.rows ?? [],
       unread: error ? failedWhole(scope, error) : (data?.unread ?? "reading"),
-      freshness: { dataUpdatedAt, everyMs },
+      freshness: { dataUpdatedAt, everyMs, slowRead },
       in: (namespace) => {
         if (!data || !covers(namespace)) {
           return { known: false, why: error ? errorToShow(error) : null };
@@ -68,5 +68,5 @@ export function useServiceHealthInputs(
         return { known: true, value: byNamespace.get(namespace) ?? NONE };
       },
     };
-  }, [data, error, scope, dataUpdatedAt, everyMs]);
+  }, [data, error, scope, dataUpdatedAt, everyMs, slowRead]);
 }

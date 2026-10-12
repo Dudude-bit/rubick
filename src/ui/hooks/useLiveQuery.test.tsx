@@ -669,6 +669,55 @@ describe("a read with nothing yet to show", () => {
   });
 });
 
+describe("a re-read that the cluster does not answer", () => {
+  let answer: (value: string) => void = () => {};
+  function Late() {
+    const { data, freshness } = useLiveQuery<string>({
+      queryKey: ["late"],
+      queryFn: () => {
+        reads++;
+        if (reads === 1) return Promise.resolve("first");
+        return new Promise<string>((resolve) => (answer = resolve));
+      },
+      refresh: "resourceList",
+      staleTime: 0,
+    });
+    return (
+      <>
+        <span data-testid="data">{data}</span>
+        <DataFreshness
+          dataUpdatedAt={freshness.dataUpdatedAt}
+          slowRead={freshness.slowRead}
+        />
+      </>
+    );
+  }
+
+  /**
+   * One list sat out the whole minute while the page went on saying
+   * "polling" over the last answer. Fails if the badge does not turn once a
+   * re-read waits past the slow-read grace, or keeps saying so after the
+   * answer lands.
+   */
+  it("says it is still reading once a re-read waits past the grace, and not after it answers", async () => {
+    const { SLOW_READ_MS } = await import("@/lib/read-deadline");
+    wrap(<Late />);
+    await settle();
+    expect(screen.getByTestId("data")).toHaveTextContent("first");
+
+    await advance(RATE + SLOW_READ_MS - 500);
+    expect(screen.getByText("polling")).toBeInTheDocument();
+    await advance(1_000);
+    expect(screen.getByText("still reading")).toBeInTheDocument();
+    expect(screen.getByTestId("data")).toHaveTextContent("first");
+
+    await act(async () => answer("second"));
+    await settle();
+    expect(screen.getByTestId("data")).toHaveTextContent("second");
+    expect(screen.queryByText("still reading")).not.toBeInTheDocument();
+  });
+});
+
 describe("a cluster that is down while the reader is still at the screen", () => {
   let renders = 0;
   function Down() {

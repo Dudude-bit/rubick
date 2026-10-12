@@ -16,6 +16,8 @@ interface ResourceListHeaderProps {
   slowed?: boolean;
   /** The last read failed and the rows are from the one before it. */
   stale?: boolean;
+  /** A re-read has waited on the cluster past the slow-read grace. */
+  slowRead?: boolean;
   /** The cluster refused the last read; see `DataFreshness`. */
   refusedAt?: number | null;
 }
@@ -34,6 +36,7 @@ export function ResourceListHeader({
   live,
   slowed,
   stale,
+  slowRead,
   refusedAt,
 }: ResourceListHeaderProps) {
   return (
@@ -49,6 +52,7 @@ export function ResourceListHeader({
             live={live}
             slowed={slowed}
             stale={stale}
+            slowRead={slowRead}
             refusedAt={refusedAt}
           />
           {actions}

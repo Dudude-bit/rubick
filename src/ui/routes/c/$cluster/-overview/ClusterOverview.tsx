@@ -202,6 +202,7 @@ export function ClusterOverview() {
           live={following}
           slowed={freshness.slowed}
           stale={freshness.stale}
+          slowRead={freshness.slowRead}
         />
         <ShareScreenAction screen={screen} />
       </div>

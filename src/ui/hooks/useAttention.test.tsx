@@ -165,6 +165,37 @@ describe("how often the lists behind the count are asked", () => {
     expect(asked()).toEqual([2, 2, 2, 2]);
   });
 
+  /**
+   * Sam's Overview: one list of Services sat a whole minute on the cluster
+   * while the rest answered, and the count went on saying every Service was
+   * checked. Fails if a re-read waiting past the slow-read grace leaves the
+   * kind read, or if it stays "still reading" once the answer lands.
+   */
+  it("names a list still reading once its re-read waits past the slow-read grace", async () => {
+    const { SLOW_READ_MS } = await import("@/lib/read-deadline");
+    const { result } = renderHook(() => useAttention({ refresh: "slow" }), {
+      wrapper: wrapper(),
+    });
+    await advance(0);
+    expect(result.current?.complete).toBe(true);
+    let answer: (value: typeof EMPTY) => void = () => {};
+    commands.listServiceHealthInputs.mockReturnValue(
+      new Promise((resolve) => (answer = resolve))
+    );
+    const service = () =>
+      result.current?.checks.find((check) => check.kind === "Service")?.state;
+
+    await advance(REFRESH_INTERVALS.slow + SLOW_READ_MS - 1_000);
+    expect(service()).toBe("read");
+    await advance(2_000);
+    expect(service()).toBe("reading");
+    expect(result.current?.complete).toBe(false);
+
+    await act(async () => answer(EMPTY));
+    await advance(0);
+    expect(service()).toBe("read");
+  });
+
   /** Fails if the Overview, the page about these lists, reads them at the shell's minute. */
   it("asks at the Overview's own rate while the Overview reads it", async () => {
     renderHook(() => useAttention({ refresh: "slow" }), {

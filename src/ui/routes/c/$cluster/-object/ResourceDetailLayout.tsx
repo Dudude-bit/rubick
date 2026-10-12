@@ -404,6 +404,7 @@ export function ResourceDetailLayout({
           live={freshness?.live}
           slowed={freshness?.slowed}
           stale={freshness?.stale}
+          slowRead={freshness?.slowRead}
         />
 
         {/* Above the strip, and so on every tab: both say something about the

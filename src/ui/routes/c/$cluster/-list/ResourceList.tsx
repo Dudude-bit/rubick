@@ -582,6 +582,7 @@ export function ResourceList<
           live={live && !resyncing && !refused}
           slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
           stale={stale || (failed !== null && !isRefusal(failed))}
+          slowRead={!live && queryResult.freshness.slowRead}
           refusedAt={refused ? refusedAt : undefined}
         />
       )}

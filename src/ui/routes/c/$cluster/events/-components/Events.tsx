@@ -755,6 +755,7 @@ export function Events() {
               dataUpdatedAt={freshness.dataUpdatedAt}
               live={watching && !watch.resyncing}
               slowed={!fromWatch && freshness.slowed}
+              slowRead={!fromWatch && freshness.slowRead}
               stale={stale || (nothingRead && !isRefusal(failed))}
               refusedAt={refused ? refusedAt : undefined}
             />
