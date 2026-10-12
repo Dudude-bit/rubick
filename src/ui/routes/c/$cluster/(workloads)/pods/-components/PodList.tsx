@@ -83,6 +83,16 @@ function restartsCellPx(t: Translate, rows: readonly PodRow[]): number {
   return widestText([said], "mono", 7.2) + 20;
 }
 
+function readyText(pod: PodRow): string {
+  const { ready, total } = podReadiness(pod);
+  return `${ready}/${total}`;
+}
+
+function shortfall(pod: PodRow): number {
+  const { ready, total } = podReadiness(pod);
+  return total - ready;
+}
+
 /** The copy label is a word, so the cell needs the hook the array cannot use. */
 function PodIpCell({ pod }: { pod: PodRow }) {
   const t = useT();
@@ -139,32 +149,24 @@ export const columns: ColumnDef<PodRow>[] = [
     // "Готовность" and its sort mark.
     size: 120,
     id: "ready",
-    // By what is missing, so the ones short of a replica sort together —
+    // The words the cell shows, which is what the search box reads.
+    accessorFn: readyText,
+    // By what is missing, so the ones short of a replica sort together:
     // 0/3 before 2/3 before 1/1.
-    accessorFn: (pod) => {
-      const { ready, total } = podReadiness(pod);
-      return total - ready;
-    },
+    sortFn: (a, b) => shortfall(a.original) - shortfall(b.original),
+    sortDescFirst: true,
     enableSorting: true,
     meta: {
       label: { section: "columns", key: "ready" },
-      share: (pod: PodRow) => {
-        const { ready, total } = podReadiness(pod);
-        return { text: `${ready}/${total}`, mono: true };
-      },
+      share: (pod: PodRow) => ({ text: readyText(pod), mono: true }),
     },
     header: ({ column }) => <SortableHeader column={column} k="ready" />,
     // The number people compare against `kubectl get pod` in the next
     // window, so it is kubectl's number: sidecars in both halves,
     // finished init containers in neither.
-    cell: ({ row }) => {
-      const { ready, total } = podReadiness(row.original);
-      return (
-        <span className="font-mono text-fg-mid">
-          {ready}/{total}
-        </span>
-      );
-    },
+    cell: ({ row }) => (
+      <span className="font-mono text-fg-mid">{readyText(row.original)}</span>
+    ),
   },
   {
     // The count and the age of the last one: "7 (2 мин назад)".

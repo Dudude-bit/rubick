@@ -18,6 +18,16 @@ vi.mock("@/stores/clusterStore", () => ({
   ),
 }));
 
+const container = (ready: boolean): PodRow["containers"][number] => ({
+  name: "app",
+  ready,
+  started: true,
+  phase: "app",
+  state: ready
+    ? { type: "running" }
+    : { type: "waiting", reason: "CrashLoopBackOff" },
+});
+
 const pod = (name: string, namespace: string, display: string): PodRow => ({
   name,
   namespace,
@@ -25,7 +35,7 @@ const pod = (name: string, namespace: string, display: string): PodRow => ({
   status: { phase: "Running", display, exitUnreported: false },
   nodeName: "n1",
   podIp: null,
-  containers: [],
+  containers: [container(display === "Running")],
   initContainers: [],
   labels: {},
   createdAt: null,
@@ -91,5 +101,22 @@ describe("the Pods list search", () => {
     expect(await screen.findByTestId("searched-columns")).toHaveTextContent(
       /^Searched in .*\bStatus\b.*\.$/
     );
+  });
+
+  /**
+   * Dana typed "0/1", "1/1" and "5/5" and read "Nothing matches ... Searched
+   * in ... Ready": the column was searched by the shortfall it sorts on, a
+   * number no cell shows. Fails if Ready is searched by anything but its text.
+   */
+  it("finds a pod by the Ready count it shows", async () => {
+    await renderWithRouter(<PodList />, { at: "/c/prod/pods" });
+    searchFor("0/1");
+    await waitFor(() => expect(drawn()).toHaveLength(2));
+    for (const row of drawn())
+      expect(row.textContent).toContain("CrashLoopBackOff");
+
+    searchFor("1/1");
+    await waitFor(() => expect(drawn()).toHaveLength(2));
+    for (const row of drawn()) expect(row.textContent).toContain("Running");
   });
 });
