@@ -15,6 +15,7 @@ import {
   rolloutLine,
   rolloutStatusOf,
   rolloutVerdict,
+  rolloutWithPods,
   rowsWithStarts,
   startsOf,
   withStarts,
@@ -146,6 +147,30 @@ describe("the word a workload's rollout comes to", () => {
    * then the count's. Fails if the count beside a Ready badge says ready
    * again, or one beside any other verdict stops saying what it counts.
    */
+  /**
+   * The header said Ready while the Replicas block below it counted a pod
+   * not ready. Fails if pods that disagree with Ready leave it standing, or
+   * if pods move a verdict towards settled, which only the controller can
+   * say once minReadySeconds has run.
+   */
+  it("moves a Ready verdict by the pods read, and nothing else", () => {
+    const ready: Rollout = { state: "ready" };
+    expect(rolloutWithPods(ready, { ready: 0, failing: 0 }, 1)).toEqual({
+      state: "comingUp",
+      available: 0,
+      desired: 1,
+    });
+    expect(rolloutWithPods(ready, { ready: 2, failing: 1 }, 3)).toEqual({
+      state: "short",
+      available: 2,
+      desired: 3,
+    });
+    expect(rolloutWithPods(ready, { ready: 1, failing: 0 }, 1)).toBe(ready);
+    expect(rolloutWithPods(ready, null, 1)).toBe(ready);
+    const coming: Rollout = { state: "comingUp", available: 0, desired: 1 };
+    expect(rolloutWithPods(coming, { ready: 1, failing: 0 }, 1)).toBe(coming);
+  });
+
   it("says ready once beside a Ready badge", () => {
     const ru: T = (section, key, values) =>
       translate("ru", section, key, values);
