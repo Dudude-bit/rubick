@@ -58,6 +58,7 @@ describe("usePrefetchCoreLists", () => {
     invalidate = vi.spyOn(client, "invalidateQueries");
     useClusterStore.setState({
       currentContext: "prod-eu",
+      lastConnected: "prod-eu",
       currentNamespace: "",
       namespaceScope: [],
       isConnected: true,
@@ -95,8 +96,32 @@ describe("usePrefetchCoreLists", () => {
     renderHook(() => usePrefetchCoreLists(), { wrapper });
     await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
 
-    act(() => useClusterStore.setState({ currentContext: "staging-eu" }));
+    act(() =>
+      useClusterStore.setState({
+        currentContext: "staging-eu",
+        lastConnected: "staging-eu",
+      })
+    );
     await waitFor(() => expect(client.getQueryData(PARKED)).toBeUndefined());
+  });
+
+  /**
+   * The drop has to happen in the store's own update, not in an effect after
+   * the frame: in between, the page under the new cluster's name drew the
+   * last one's rows. Fails if the drop waits for React to render.
+   */
+  it("drops them before the landing's first frame can draw them", async () => {
+    client.setQueryDefaults(PARKED, { gcTime: Infinity });
+    client.setQueryData(PARKED, [{ name: "shop-db-1" }]);
+    renderHook(() => usePrefetchCoreLists(), { wrapper });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+
+    useClusterStore.setState({
+      currentContext: "staging-eu",
+      lastConnected: "staging-eu",
+    });
+
+    expect(client.getQueryData(PARKED)).toBeUndefined();
   });
 
   /**

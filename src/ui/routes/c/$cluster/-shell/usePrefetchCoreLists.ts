@@ -30,7 +30,26 @@ export function usePrefetchCoreLists(): void {
   const context = useClusterStore((state) => state.currentContext);
   const queryClient = useQueryClient();
   const warmed = useRef<string | null>(null);
-  const lastContext = useRef<string | null>(null);
+  const dropped = useRef<string | null>(null);
+
+  // A resource key does not carry the context: `["pods","default"]` is the
+  // same entry in every cluster. So the cluster left behind is dropped in the
+  // same beat the store lands on another, before the first frame under the
+  // new name can draw it. Invalidating instead left it on screen until the
+  // refetch answered, and forever where the new cluster refuses the read.
+  useEffect(
+    () =>
+      useClusterStore.subscribe((state, prev) => {
+        if (
+          prev.lastConnected === null ||
+          state.lastConnected === prev.lastConnected
+        )
+          return;
+        queryClient.removeQueries();
+        dropped.current = state.lastConnected;
+      }),
+    [queryClient]
+  );
 
   useEffect(() => {
     if (!isConnected || context === null) {
@@ -47,17 +66,8 @@ export function usePrefetchCoreLists(): void {
     if (warmed.current === scope) return;
     warmed.current = scope;
 
-    const switched =
-      lastContext.current !== null && lastContext.current !== context;
-    lastContext.current = context;
-
-    if (switched) {
-      // A resource key does not carry the context — `["pods","default"]` is
-      // the same entry in every cluster — so an invalidation leaves the
-      // cluster just left on screen until the refetch answers, and where the
-      // new one refuses the read it never answers. Same trade as
-      // `useScopeTabs` makes for a parked tab.
-      queryClient.removeQueries();
+    if (dropped.current === context) {
+      dropped.current = null;
     } else {
       // Everything asked before this connection stood was answered by
       // nothing — a restored route fires its list the moment it mounts,
