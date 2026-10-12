@@ -87,6 +87,7 @@ function ObjectCell({ row }: { row: { original: EventInfo } }) {
         namespace={subject.namespace}
         showKind={false}
         past="earlier"
+        fit
       />
     );
   return (

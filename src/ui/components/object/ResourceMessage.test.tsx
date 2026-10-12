@@ -165,6 +165,27 @@ describe("ResourceMessage", () => {
     );
     expect(container.querySelector(".inline-block")).toBeNull();
   });
+
+  /**
+   * "Successfully assigned lena-sandbox/wd-demo to…" ended with 200 px free:
+   * the node's name was one box, and an ellipsis hides a box that does not
+   * fit whole. Fails if a name in a cut line is drawn as a box again.
+   */
+  it("keeps a linked name on a cut line as text the ellipsis can cut", async () => {
+    const { container } = await wrap(
+      <ResourceMessage
+        message="Successfully assigned lena-sandbox/wd-demo to k3d-rubick-live-server-0"
+        subject={{ kind: "Pod", name: "wd-demo", namespace: "lena-sandbox" }}
+        oneLine
+      />
+    );
+    const node = screen.getByRole("link", {
+      name: "Node k3d-rubick-live-server-0",
+    });
+    expect(node).toHaveTextContent("k3d-rubick-live-server-0");
+    expect(node.className).not.toMatch(/inline-(flex|block)/);
+    expect(container.querySelector(".inline-flex")).toBeNull();
+  });
 });
 
 describe("Prose", () => {

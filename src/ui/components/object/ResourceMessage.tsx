@@ -3,7 +3,7 @@ import { Fragment, type ReactElement, type ReactNode } from "react";
 import { linkifyMessage, type MessageSubject } from "@/lib/message-refs";
 import { ImageRef } from "./ImageRef";
 import { objectLink } from "@/lib/links";
-import { ResourceRef } from "./ResourceRef";
+import { ObjectLink, ResourceRef } from "./ResourceRef";
 
 export interface ResourceMessageProps {
   message: string;
@@ -66,6 +66,18 @@ export function ResourceMessage({
         segment.text
       ) : segment.kind === "image" ? (
         <ImageRef image={segment.ref.reference} inline />
+      ) : objectLink(segment.ref) && oneLine ? (
+        // Plain text inside the link, so the line's ellipsis cuts through the
+        // name: a whole box that does not fit is hidden whole, and the row
+        // ended at "to…" with a node name's width still free.
+        <ObjectLink
+          kind={segment.ref.kind}
+          name={segment.ref.name}
+          namespace={segment.ref.namespace}
+          className="rounded-[3px] font-mono text-fg-mid hover:bg-hover"
+        >
+          {segment.text}
+        </ObjectLink>
       ) : objectLink(segment.ref) ? (
         <ResourceRef
           kind={segment.ref.kind}
