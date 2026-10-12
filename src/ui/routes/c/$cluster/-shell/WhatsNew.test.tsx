@@ -1,8 +1,16 @@
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { useLocaleStore } from "@/stores/localeStore";
 import { useWhatsNewStore } from "@/stores/whatsNewStore";
 import { renderWithProviders } from "@/test/render";
 import { WhatsNew } from "./WhatsNew";
@@ -22,7 +30,7 @@ vi.mock("@/../../CHANGELOG.md?raw", () => ({
 
 ## [4.12.0] - 2026-09-11
 
-### Added
+### Fixed \u2014 the tab close button no longer drops the cluster
 
 - **Files tab on a pod.**
 `,
@@ -40,6 +48,7 @@ describe("WhatsNew", () => {
     });
     useWhatsNewStore.setState({ seenVersion: null, showing: [] });
   });
+  afterEach(() => useLocaleStore.setState({ choice: null }));
 
   /** Issue #178: nobody who skips GitHub ever saw the notes. Would break if the update stopped opening them, or if a first launch started to. */
   it("opens the notes once after an update, and not on a first launch", async () => {
@@ -89,5 +98,36 @@ describe("WhatsNew", () => {
     const line = await screen.findByText(/was counted as/);
     expect(line.textContent).not.toContain("`");
     expect(line.querySelector("code")?.textContent).toBe("AzureIdentity");
+  });
+
+  /**
+   * Lena's Russian What's New headed its notes "FIXED" over a date written
+   * 2026-09-30, and nothing said why the notes were English. Fails if a
+   * section's kind or a release's date is left in English, if a subtitle the
+   * changelog wrote is lost, or if the dialog stops saying the notes are as
+   * written.
+   */
+  it("says the headings and dates in the reader's language, and that the notes are as written", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    useWhatsNewStore.setState({ seenVersion: "4.11.0" });
+    wrap(<WhatsNew />);
+    expect(await screen.findByText("Добавлено")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Исправлено · the tab close button no longer drops the cluster"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/4\.12\.0 · 11 сент\. 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/как они записаны в журнале/)).toBeInTheDocument();
+    expect(screen.queryByText(/2026-09-1/)).toBeNull();
+  });
+
+  /** An English reader is told nothing about the notes' language. */
+  it("says nothing about the notes' language to an English reader", async () => {
+    useWhatsNewStore.setState({ seenVersion: "4.12.0" });
+    wrap(<WhatsNew />);
+    expect(await screen.findByText("Sep 12, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Added")).toBeInTheDocument();
+    expect(screen.queryByText(/as the changelog writes them/)).toBeNull();
   });
 });
