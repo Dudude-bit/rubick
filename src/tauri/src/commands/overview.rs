@@ -36,12 +36,13 @@ use kube::api::ListParams;
 use kube::{Api, Client, Resource};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Debug;
 use std::sync::Arc;
 use tauri::State;
 
-use crate::overview::{RefusedCounts, Snapshot};
+use crate::overview::holders::{Held, Named};
+use crate::overview::{HolderMemo, RefusedCounts, Snapshot};
 
 /// How far back an event still counts as "recent" for the warnings feed.
 const RECENT_WARNING_WINDOW_MINUTES: i64 = 60;
@@ -234,16 +235,6 @@ pub enum Incarnation {
     Gone,
     /// The event names no uid, or its kind was not read where it lives.
     Unchecked,
-}
-
-/// An object a warning names: kind, namespace where it has one, and name.
-type Named = (String, Option<String>, String);
-
-/// What a read of one named object found holding its name.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Held {
-    By(String),
-    Nobody,
 }
 
 /// The holders read one by one for the kinds the lists do not hold.
@@ -2074,36 +2065,50 @@ pub async fn cluster_overview(
         .get_current_context()
         .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
     let refused = state.overview_cache.refused_counts(&context);
-    let (metrics, counts, snapshot) = tokio::join!(
+    let memo = state.overview_cache.holders(&context);
+    let (metrics, counts, watched) = tokio::join!(
         crate::metrics::get_node_metrics(state),
         side_counts(&client, scope.as_deref(), &refused),
-        state.overview_cache.snapshot(&context, || client.clone()),
+        async {
+            let snapshot = state
+                .overview_cache
+                .snapshot(&context, || client.clone())
+                .await?;
+            let looked =
+                look_up_holders(state, &memo, refs(&snapshot.events), scope.as_deref()).await;
+            Some((snapshot, looked))
+        },
     );
     let sides = Sides {
         counts,
         // Live usage is best-effort: metrics-server is not installed everywhere.
         usage_by_node: usage_index(metrics.ok()),
     };
-    match snapshot {
-        Some(snapshot) => {
-            let looked = look_up_holders(state, refs(&snapshot.events), scope.as_deref()).await;
-            Ok(from_snapshot(&snapshot, scope.as_deref(), sides, &looked))
-        }
-        None => by_listing(&client, scope.as_deref(), sides, Some(state)).await,
+    match watched {
+        Some((snapshot, looked)) => Ok(from_snapshot(&snapshot, scope.as_deref(), sides, &looked)),
+        None => by_listing(&client, scope.as_deref(), sides, Some((state, &memo))).await,
     }
 }
 
 /// The most names a poll reads one by one to say who holds them.
 const MAX_HOLDER_LOOKUPS: usize = 16;
 
+/// A name to read, the API version to read it at, and the uids its events give.
+type ToLookUp = (String, Named, BTreeSet<String>);
+
 /// The names recent warnings give whose kind the lists do not hold, newest
 /// first: one metadata read each for who holds the name now.
 fn names_to_look_up<'a>(
     events: impl IntoIterator<Item = &'a Event>,
     scope: Option<&[String]>,
-) -> Vec<(String, Named)> {
+) -> Vec<ToLookUp> {
+    struct Warned {
+        last: Option<DateTime<Utc>>,
+        api_version: String,
+        uids: BTreeSet<String>,
+    }
     let cutoff = Utc::now() - chrono::Duration::minutes(RECENT_WARNING_WINDOW_MINUTES);
-    let mut newest: HashMap<Named, (Option<DateTime<Utc>>, String)> = HashMap::new();
+    let mut newest: HashMap<Named, Warned> = HashMap::new();
     for event in events {
         let object = &event.involved_object;
         let last = event
@@ -2128,35 +2133,52 @@ fn names_to_look_up<'a>(
             continue;
         }
         let named = (kind.clone(), object.namespace.clone(), name.clone());
-        let seen = newest
-            .entry(named)
-            .or_insert_with(|| (last, api_version.clone()));
-        seen.0 = seen.0.max(last);
+        let seen = newest.entry(named).or_insert_with(|| Warned {
+            last,
+            api_version: api_version.clone(),
+            uids: BTreeSet::new(),
+        });
+        seen.last = seen.last.max(last);
+        seen.uids.insert(uid.clone());
     }
     let mut names: Vec<_> = newest.into_iter().collect();
-    names.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then_with(|| a.0.cmp(&b.0)));
+    names.sort_by(|a, b| b.1.last.cmp(&a.1.last).then_with(|| a.0.cmp(&b.0)));
     names
         .into_iter()
         .take(MAX_HOLDER_LOOKUPS)
-        .map(|(named, (_, api_version))| (api_version, named))
+        .map(|(named, warned)| (warned.api_version, named, warned.uids))
         .collect()
 }
 
-/// Who holds each of those names now. A read that failed leaves its name
-/// out, so its warnings stay unchecked rather than gone.
+/// Who holds each of those names now, read again only where `memo` no
+/// longer answers. A read that failed leaves its name out, so its warnings
+/// stay unchecked rather than gone.
 async fn look_up_holders<'a>(
     state: &AppState,
+    memo: &HolderMemo,
     events: impl IntoIterator<Item = &'a Event>,
     scope: Option<&[String]>,
 ) -> Looked {
-    let reads =
-        names_to_look_up(events, scope)
-            .into_iter()
-            .map(|(api_version, named)| async move {
-                let held = holder_of(state, &api_version, &named).await;
-                held.map(|held| (named, held))
-            });
-    join_all(reads).await.into_iter().flatten().collect()
+    let now = std::time::Instant::now();
+    let mut looked = Looked::new();
+    let mut unread = Vec::new();
+    for (api_version, named, uids) in names_to_look_up(events, scope) {
+        match memo.recall(&named, &uids, now) {
+            Some(held) => looked.extend(held.map(|held| (named, held))),
+            None => unread.push((api_version, named, uids)),
+        }
+    }
+    let reads = unread
+        .into_iter()
+        .map(|(api_version, named, uids)| async move {
+            let held = holder_of(state, &api_version, &named).await;
+            (named, uids, held)
+        });
+    for (named, uids, held) in join_all(reads).await {
+        memo.remember(named.clone(), uids, held.clone(), now);
+        looked.extend(held.map(|held| (named, held)));
+    }
+    looked
 }
 
 async fn holder_of(state: &AppState, api_version: &str, named: &Named) -> Option<Held> {
@@ -2394,7 +2416,7 @@ async fn by_listing(
     client: &Client,
     scope: Option<&[String]>,
     sides: Sides,
-    state: Option<&AppState>,
+    holders: Option<(&AppState, &HolderMemo)>,
 ) -> Result<ClusterOverview> {
     let params = ListParams::default();
     let nodes_api: Api<Node> = Api::all(client.clone());
@@ -2463,8 +2485,8 @@ async fn by_listing(
         }
     };
     let nodes_known = nodes.is_some() && accounting_known;
-    let looked = match state {
-        Some(state) => look_up_holders(state, refs(&listed.events), scope).await,
+    let looked = match holders {
+        Some((state, memo)) => look_up_holders(state, memo, refs(&listed.events), scope).await,
         None => Looked::new(),
     };
 
@@ -2776,14 +2798,15 @@ mod tests {
         );
     }
 
-    /// Fails if a read that was refused calls the object gone, or a found one
-    /// is not named as the holder.
-    #[tokio::test]
-    async fn a_name_is_read_for_its_holder_and_a_refusal_is_not_gone() {
+    const HPAS_AT: &str = "/apis/autoscaling/v2/namespaces/lena-sandbox/horizontalpodautoscalers";
+
+    /// An API server serving HPAs in lena-sandbox: hello-web is 8b3e3d88,
+    /// `refused` is forbidden, and every other name is not found.
+    async fn hpa_server() -> (AppState, crate::client::served::test_server::Hits) {
         use crate::client::served::test_server::{connected, failure};
         use crate::client::served::ServedIndex;
-        const AT: &str = "/apis/autoscaling/v2/namespaces/lena-sandbox/horizontalpodautoscalers";
-        let (state, _) = connected(ServedIndex::default(), |path, _| match path {
+        const AT: &str = HPAS_AT;
+        connected(ServedIndex::default(), |path, _| match path {
             "/apis" => (
                 200,
                 serde_json::json!({ "kind": "APIGroupList", "groups": [{
@@ -2816,7 +2839,14 @@ mod tests {
             path if path == format!("{AT}/refused") => failure(403, "Forbidden"),
             _ => failure(404, "NotFound"),
         })
-        .await;
+        .await
+    }
+
+    /// Fails if a read that was refused calls the object gone, or a found one
+    /// is not named as the holder.
+    #[tokio::test]
+    async fn a_name_is_read_for_its_holder_and_a_refusal_is_not_gone() {
+        let (state, _) = hpa_server().await;
         let named = |name: &str| {
             (
                 "HorizontalPodAutoscaler".to_string(),
@@ -2866,8 +2896,41 @@ mod tests {
                     Some("lena-sandbox".to_string()),
                     "hello-web".to_string(),
                 ),
+                BTreeSet::from(["8b3e3d88".to_string()]),
             )]
         );
+    }
+
+    /// Sam's Overview read every warned-about HPA, Service and claim again on
+    /// each poll, every five seconds, though nothing about them had changed.
+    /// Fails if a poll whose events give the same uids reads a name again,
+    /// or if a uid the read never saw is not read at once.
+    #[tokio::test]
+    async fn a_holder_is_read_once_until_its_events_name_a_new_uid() {
+        let (state, hits) = hpa_server().await;
+        let memo = HolderMemo::default();
+        let hello_web = (
+            "HorizontalPodAutoscaler".to_string(),
+            Some("lena-sandbox".to_string()),
+            "hello-web".to_string(),
+        );
+        let reads = || hits.lock().unwrap()[&format!("{HPAS_AT}/hello-web")];
+        let polls = [metric_warning("8b3e3d88", 41, 10)];
+        for _ in 0..6 {
+            let looked = look_up_holders(&state, &memo, &polls, None).await;
+            assert_eq!(
+                looked.get(&hello_web),
+                Some(&Held::By("8b3e3d88".to_string()))
+            );
+        }
+        assert_eq!(reads(), 1, "six polls, one read");
+
+        let remade = [
+            metric_warning("8b3e3d88", 41, 10),
+            metric_warning("f00dcafe", 1, 1),
+        ];
+        look_up_holders(&state, &memo, &remade, None).await;
+        assert_eq!(reads(), 2, "a new object of the name is read at once");
     }
 
     fn node_metrics_response(

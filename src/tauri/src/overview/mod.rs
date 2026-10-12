@@ -33,6 +33,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::state::AppEvent;
 
+pub mod holders;
+pub use holders::HolderMemo;
+
 /// Errors in a row before a kind counts as broken and the cache stops serving.
 const BROKEN_STREAK: u32 = 3;
 /// Errors in a row before the whole cluster's watches are dropped.
@@ -59,6 +62,7 @@ pub struct OverviewCache {
     refused: Arc<DashSet<String>>,
     /// Per cluster, the counts it refused: not asked again until a reconnect.
     refused_counts: DashMap<String, Arc<RefusedCounts>>,
+    holders: DashMap<String, Arc<HolderMemo>>,
     /// Where a change the stores took is announced, so a screen showing the
     /// overview reads it again then rather than a ten-second poll later.
     events: Option<broadcast::Sender<AppEvent>>,
@@ -344,6 +348,7 @@ impl OverviewCache {
         self.cooldown.remove(context);
         self.refused.remove(context);
         self.refused_counts.remove(context);
+        self.holders.remove(context);
     }
 
     pub fn forget_all(&self) {
@@ -354,6 +359,7 @@ impl OverviewCache {
         self.cooldown.clear();
         self.refused.clear();
         self.refused_counts.clear();
+        self.holders.clear();
     }
 
     /// The counts `context` refused on this connection.
@@ -363,6 +369,12 @@ impl OverviewCache {
             .entry(context.to_string())
             .or_default()
             .clone()
+    }
+
+    /// Who held the names `context`'s warnings gave, as last read.
+    #[must_use]
+    pub fn holders(&self, context: &str) -> Arc<HolderMemo> {
+        self.holders.entry(context.to_string()).or_default().clone()
     }
 
     /// The watches this process holds, for diagnostics.
