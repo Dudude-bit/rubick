@@ -20,6 +20,7 @@ import type { CatalogEntry, UnreadGroup } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
 import { servedListLink } from "@/lib/links";
+import { textWidth, type TextFace } from "@/lib/text-width";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -32,6 +33,19 @@ export function ApiResources() {
   const shown = useMemo(
     () => (catalog.data ? catalogGroups(catalog.data, filter) : null),
     [catalog.data, filter]
+  );
+  // From every kind, not the ones a filter leaves, so typing keeps the columns.
+  const rowPx = useMemo(
+    () =>
+      catalog.data
+        ? Math.max(
+            0,
+            ...catalogGroups(catalog.data, "").groups.flatMap((group) =>
+              group.entries.map((entry) => kindRowPx(entry, t))
+            )
+          )
+        : 0,
+    [catalog.data, t]
   );
 
   return (
@@ -97,7 +111,11 @@ export function ApiResources() {
             </p>
           )}
           {shown.groups.map((group) => (
-            <GroupSection key={group.group || "core"} group={group} />
+            <GroupSection
+              key={group.group || "core"}
+              group={group}
+              rowPx={rowPx}
+            />
           ))}
           {shown.unread.map((group) => (
             <UnreadSection key={group.group} group={group} />
@@ -111,7 +129,41 @@ export function ApiResources() {
 const groupName = (group: string, t: ReturnType<typeof useT>) =>
   group || t("apiResources", "core");
 
-function GroupSection({ group }: { group: CatalogGroup }) {
+const drawn = (text: string, face: TextFace, perGlyph: number) =>
+  Math.ceil(textWidth(text, face) ?? text.length * perGlyph);
+
+/** The row's padding, the kind's icon and the gaps around the version and the scope. */
+const ROW_CHROME_PX = 8 + 14 + 3 * 8;
+/** A scope mark's icon and gap, and the gap before it. */
+const MARK_CHROME_PX = 12 + 4 + 8;
+/** Past half the widest page two columns never fit, and the longest kinds end in an ellipsis instead. */
+const ROW_CAP_PX = 564;
+
+/** What a kind's row takes with its name, version and scope words whole. */
+function kindRowPx(entry: CatalogEntry, t: ReturnType<typeof useT>): number {
+  const marks = [
+    ...(listable(entry) ? [] : [t("apiResources", "notListable")]),
+    t("apiResources", entry.namespaced ? "namespaced" : "clusterWide"),
+  ];
+  return Math.min(
+    ROW_CAP_PX,
+    ROW_CHROME_PX +
+      drawn(entry.kind, "mono", 7.2) +
+      drawn(entry.version, "badge", 6.6) +
+      marks.reduce(
+        (sum, mark) => sum + MARK_CHROME_PX + drawn(mark, "caption", 6),
+        0
+      )
+  );
+}
+
+function GroupSection({
+  group,
+  rowPx,
+}: {
+  group: CatalogGroup;
+  rowPx: number;
+}) {
   const t = useT();
   return (
     <Section aria-label={groupName(group.group, t)}>
@@ -121,7 +173,14 @@ function GroupSection({ group }: { group: CatalogGroup }) {
           {group.entries.length}
         </span>
       </h3>
-      <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
+      {/* Two columns only where each holds the longest row whole: in Russian
+          at 1024 they cut "Binding" and its scope words. */}
+      <ul
+        className="grid gap-x-6"
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, max(${rowPx}px, calc((100% - 1.5rem) / 2))), 1fr))`,
+        }}
+      >
         {group.entries.map((entry) => (
           <KindRow key={`${entry.group}/${entry.plural}`} entry={entry} />
         ))}

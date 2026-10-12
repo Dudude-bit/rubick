@@ -5205,6 +5205,15 @@ export const ru: Catalogue = {
     showWhatsNew: "Показать",
     whatsNewIn: "Что нового в {version}",
     whatsNewSince: "Всё с версии {version}",
+    whatsNewAsWritten:
+      "Сами заметки приведены по-английски, так, как они записаны в журнале изменений.",
+    changelogAdded: "Добавлено",
+    changelogChanged: "Изменено",
+    changelogFixed: "Исправлено",
+    changelogRemoved: "Убрано",
+    changelogDeprecated: "Устарело",
+    changelogSecurity: "Безопасность",
+    changelogPerformance: "Производительность",
     updateAvailableToast:
       "Доступна версия {version}. Загрузить её можно в настройках.",
     notOnPathPlain: "{label} нет в PATH. Укажите путь ниже.",

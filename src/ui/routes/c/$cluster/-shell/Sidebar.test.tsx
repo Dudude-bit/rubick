@@ -631,8 +631,10 @@ describe("a rail taller than the window", () => {
 
   /**
    * At 900 tall Dana read RoleBindings, faded at the edge above the App block,
-   * as a row clipped under it. Fails if a rail with rows past its foot stops
-   * counting them and offering to scroll there, or keeps saying so at the end.
+   * as a row clipped under it, and at 800 Lena read the Access caption as a
+   * ghost beside the count. Fails if a rail with rows past its foot stops
+   * counting them and offering to scroll there across the whole foot, or
+   * keeps saying so at the end.
    */
   it("counts the rows past its foot and scrolls to them", async () => {
     railOf(900);
@@ -654,6 +656,7 @@ describe("a rail taller than the window", () => {
 
     const more = screen.getByRole("button", { name: "3 more below" });
     expect(more).toHaveAttribute("tabindex", "-1");
+    expect(more).toHaveClass("left-0", "right-2", "bottom-0", "bg-canvas");
     fireEvent.click(more);
     expect(scrollBy).toHaveBeenCalledWith(
       expect.objectContaining({ top: 480 })

@@ -4642,6 +4642,15 @@ export const en = {
     showWhatsNew: "Show",
     whatsNewIn: "What's new in {version}",
     whatsNewSince: "Everything since {version}",
+    whatsNewAsWritten:
+      "The notes themselves are in English, as the changelog writes them.",
+    changelogAdded: "Added",
+    changelogChanged: "Changed",
+    changelogFixed: "Fixed",
+    changelogRemoved: "Removed",
+    changelogDeprecated: "Deprecated",
+    changelogSecurity: "Security",
+    changelogPerformance: "Performance",
     updateAvailableToast:
       "Version {version} is available. Go to Settings to download it.",
     notOnPathPlain: "{label} is not on PATH. Set the path below.",

@@ -311,6 +311,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     // No isLoading for a scope change: it causes flickering, and the queries
     // refetch on their own once the key changes.
     const context = get().currentContext;
+    const left = get().namespaceScope;
     // The one place the ceiling is applied. A selection this window cannot
     // afford to answer for would leave every number on screen describing a
     // subset of the namespaces its own label names.
@@ -330,7 +331,8 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       set((state) => ({
         savedScopes: { ...state.savedScopes, [context]: scope },
       }));
-      useNamespaceRecencyStore.getState().record(context, scope);
+      // The scope left behind too: without a list it is offered only from here.
+      useNamespaceRecencyStore.getState().record(context, [...scope, ...left]);
       commands
         .saveClusterPreferences(null, context, wireNamespace(scope), scope)
         .catch(() => {

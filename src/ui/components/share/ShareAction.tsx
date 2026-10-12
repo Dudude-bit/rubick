@@ -3,6 +3,7 @@ import { Share2, type LucideIcon } from "lucide-react";
 
 import { DetailAction } from "@/components/object/detail-blocks";
 import { Button } from "@/components/ui/button";
+import { useHeaderFolded } from "@/components/ui/header-folded";
 import { cn } from "@/lib/utils";
 import { useAppInfo } from "@/hooks/useAppInfo";
 import { useLocationHref } from "@/hooks/useLocationHref";
@@ -74,6 +75,7 @@ export function ShareScreenAction({
   look?: "button" | "detail" | "icon";
 }) {
   const t = useT();
+  const folded = useHeaderFolded();
   const locale = useLocale();
   const href = useLocationHref();
   const context = useClusterStore((s) => s.currentContext) ?? "";
@@ -145,9 +147,10 @@ export function ShareScreenAction({
   ]);
 
   if (!collect) return null;
+  const shape = look === "button" && folded ? "icon" : look;
   return (
     <>
-      {look === "detail" ? (
+      {shape === "detail" ? (
         <DetailAction
           label={t("share", "share")}
           icon={Share2}
@@ -159,14 +162,14 @@ export function ShareScreenAction({
           variant="ghost"
           className={cn(
             "h-7 gap-1.5 text-xs text-fg-mut",
-            look === "icon" ? "w-7 px-0" : "px-2"
+            shape === "icon" ? "w-7 px-0" : "px-2"
           )}
           onClick={() => setOpen(true)}
           title={t("share", "shareScreen")}
-          aria-label={look === "icon" ? t("share", "shareScreen") : undefined}
+          aria-label={shape === "icon" ? t("share", "shareScreen") : undefined}
         >
           <Share2 aria-hidden="true" className="h-3.5 w-3.5" />
-          {look !== "icon" && t("share", "share")}
+          {shape !== "icon" && t("share", "share")}
         </Button>
       )}
       <ShareDialog report={report} open={open} onOpenChange={setOpen} />

@@ -773,38 +773,37 @@ describe("watching several namespaces at once", () => {
   });
 
   /**
-   * The reader from #137 stands in several namespaces on a cluster of many,
-   * and came to the list to turn one off. The ones already selected float to
-   * the top so they are found and deselected at a glance, instead of hunting
-   * them out of sixty. Would break if the list went back to raw summary order.
+   * Lena picked All namespaces with lena-sandbox selected, reopened the
+   * picker and clicked its second row twice: lena-sandbox had sat there
+   * because it was selected, and shop, the one with the most problems, sat
+   * there now. Fails if a row's place depends on what is selected or on its
+   * problems, rather than on its name.
    */
-  it("floats the selected namespaces to the top of the list", async () => {
+  it("keeps the rows in name order, whatever is selected or has problems", async () => {
     const user = userEvent.setup();
-    // ns-3 and ns-4 are picked, and sit in the middle of the summary order.
-    await draw(["ns-3", "ns-4"]);
+    await draw(["ns-4"]);
+    summary.namespaces = [...summary.namespaces].reverse();
     const list = await openPicker(user);
+    const names = (shown: HTMLElement) =>
+      within(shown)
+        .getAllByRole("option")
+        .slice(1)
+        .map((option) => option.getAttribute("aria-label")?.split(",")[0]);
+    const before = names(list);
+    expect(before).toEqual(["ns-0", "ns-1", "ns-2", "ns-3", "ns-4", "ns-5"]);
 
-    const label = (option: HTMLElement) => {
-      const name = option.getAttribute("aria-label") ?? "";
-      return /^All namespaces/.test(name)
-        ? "all"
-        : (name.match(/^ns-\d+/)?.[0] ?? "?");
-    };
-    const order = within(list).getAllByRole("option").map(label);
-
-    // Row 0 is "All namespaces"; the two selected come next, then the rest in
-    // the summary's own order.
-    expect(order.slice(0, 3)).toEqual(["all", "ns-3", "ns-4"]);
-    expect(order.slice(3)).toEqual(["ns-0", "ns-1", "ns-2", "ns-5"]);
+    await user.click(screen.getByRole("option", { name: /^All namespaces/ }));
+    expect(scope()).toEqual([]);
+    expect(names(await openPicker(user))).toEqual(before);
   });
 
   /**
    * Lena aimed at "shop" and got "net": the rows moved between her looking
    * and her clicking. Fails if counts that change while the list is open, or
    * a namespace added to the selection, move any row under the pointer, or
-   * if the next opening stops putting the selection first.
+   * if the next opening draws them anywhere else.
    */
-  it("holds every row still while the list is open, and reorders at the next opening", async () => {
+  it("holds every row still while the list is open, and at the next opening", async () => {
     const user = userEvent.setup();
     await draw(["ns-0"]);
     const list = await openPicker(user);
@@ -830,7 +829,7 @@ describe("watching several namespaces at once", () => {
       .getAllByRole("option")
       .slice(1)
       .map((option) => option.getAttribute("aria-label")?.split(",")[0]);
-    expect(reopened.slice(0, 3)).toEqual(["ns-4", "ns-0", "ns-5"]);
+    expect(reopened).toEqual(before);
   });
 
   /**

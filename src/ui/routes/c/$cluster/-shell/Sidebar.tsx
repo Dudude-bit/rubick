@@ -352,7 +352,11 @@ function useRailFade() {
   return [attach, fade && RAIL_FADE[fade], below, more] as const;
 }
 
-/** Says the rail goes on past the App block, where a faded row alone read as clipped. */
+/**
+ * Says the rail goes on past the App block, where a faded row alone read as
+ * clipped. A band across the rail's foot, short of its scrollbar, so a
+ * caption the edge cuts is under it rather than a ghost beside it.
+ */
 function RailMore({ n, onClick }: { n: number; onClick: () => void }) {
   const t = useT();
   if (n === 0) return null;
@@ -361,7 +365,7 @@ function RailMore({ n, onClick }: { n: number; onClick: () => void }) {
       type="button"
       tabIndex={-1}
       onClick={onClick}
-      className="absolute bottom-0.5 right-2 flex items-center gap-1 rounded bg-canvas px-1.5 py-0.5 text-[10px] leading-[13px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+      className="absolute bottom-0 left-0 right-2 flex h-[18px] items-center justify-end gap-1 bg-canvas px-1.5 text-[10px] leading-[13px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
     >
       <ChevronsDown className="h-3 w-3" aria-hidden="true" />
       {t("count", "railRowsBelow", { n })}

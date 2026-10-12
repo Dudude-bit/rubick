@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/lib/count";
+import { HeaderFolded } from "./header-folded";
 
 /**
  * A region on the flat canvas — the replacement for `Card`.
@@ -104,6 +105,45 @@ export interface SectionHeaderProps extends React.HTMLAttributes<HTMLDivElement>
   actions?: React.ReactNode;
   /** The count truncates rather than pushing the actions onto a row of their own. */
   countYields?: boolean;
+  /**
+   * The row never wraps: where its actions' words do not fit, they draw as
+   * icons. Above a list, a row that wrapped beside a peek moved every row
+   * of the list under the pointer.
+   */
+  foldActions?: boolean;
+}
+
+/** What the row's items take side by side, each at its own width. */
+function itemsWidth(row: HTMLElement): number {
+  const items = Array.from(row.children) as HTMLElement[];
+  const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+  return (
+    items.reduce((sum, item) => sum + item.offsetWidth, 0) +
+    gap * Math.max(items.length - 1, 0)
+  );
+}
+
+function useFoldedRow(enabled: boolean) {
+  const row = React.useRef<HTMLDivElement>(null);
+  const actions = React.useRef<HTMLDivElement>(null);
+  const unfolded = React.useRef(0);
+  const [folded, setFolded] = React.useState(false);
+  React.useLayoutEffect(() => {
+    const node = row.current;
+    if (!enabled || !node) return;
+    const measure = () => {
+      if (node.dataset.folded === undefined)
+        unfolded.current = itemsWidth(node);
+      setFolded(node.clientWidth > 0 && node.clientWidth < unfolded.current);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    if (actions.current) observer.observe(actions.current);
+    return () => observer.disconnect();
+  }, [enabled]);
+  return [row, actions, enabled && folded] as const;
 }
 
 export function SectionHeader({
@@ -112,10 +152,12 @@ export function SectionHeader({
   description,
   actions,
   countYields = false,
+  foldActions = false,
   className,
   ...props
 }: SectionHeaderProps) {
   const frame = React.useContext(CaptionFrameContext);
+  const [rowRef, actionsRef, folded] = useFoldedRow(foldActions);
 
   if (restatesFrame(title, frame)) {
     const caption = tally(count, title);
@@ -137,8 +179,20 @@ export function SectionHeader({
 
   return (
     <div className={cn("flex flex-col gap-0.5", className)} {...props}>
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h2 className="text-[13px] font-semibold tracking-tight text-fg">
+      <div
+        ref={rowRef}
+        data-folded={folded || undefined}
+        className={cn(
+          "flex items-baseline gap-x-2 gap-y-1",
+          foldActions ? "flex-nowrap" : "flex-wrap"
+        )}
+      >
+        <h2
+          className={cn(
+            "text-[13px] font-semibold tracking-tight text-fg",
+            foldActions && "shrink-0 whitespace-nowrap"
+          )}
+        >
           {title}
         </h2>
         {count != null && (
@@ -146,15 +200,24 @@ export function SectionHeader({
             data-testid="section-count"
             className={cn(
               "min-w-0 text-xs text-fg-fnt",
-              countYields && "flex-[1_1_0]"
+              countYields && "flex-[1_1_0]",
+              foldActions && !countYields && "shrink-0 whitespace-nowrap"
             )}
           >
             {typeof count === "number" ? formatCount(count) : count}
           </span>
         )}
         {actions && (
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
-            {actions}
+          <div
+            ref={actionsRef}
+            className={cn(
+              "ml-auto flex items-center justify-end gap-1",
+              foldActions ? "shrink-0 flex-nowrap" : "flex-wrap"
+            )}
+          >
+            <HeaderFolded.Provider value={folded}>
+              {actions}
+            </HeaderFolded.Provider>
           </div>
         )}
       </div>

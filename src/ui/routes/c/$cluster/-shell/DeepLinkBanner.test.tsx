@@ -75,12 +75,13 @@ describe("the note a live link leaves", () => {
   /**
    * At the narrowest window Lena saw the note shrink to its icon, at 1024
    * "Открыто по ссылке. Вы см…", and at a wide one Dana saw its whole
-   * sentence repeated above it. Fails if a bar too narrow for the sentence
-   * draws a cut sentence rather than its first clause with the whole on
+   * sentence repeated above it; in round 29 the first clause alone read as
+   * the whole note. Fails if a bar too narrow for the sentence draws a cut
+   * sentence rather than its first clause marked as cut with the whole on
    * hover, or a whole one offers itself again.
    */
   it.each([
-    [400, 120, "Opened from a link", true],
+    [400, 120, "Opened from a link…", true],
     [
       120,
       120,

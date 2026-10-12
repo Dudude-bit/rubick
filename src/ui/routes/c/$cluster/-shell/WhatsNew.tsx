@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import {
   parseChangelog,
   releasesSince,
@@ -18,9 +18,37 @@ import {
   type Release,
 } from "@/lib/changelog";
 import { useAppInfo } from "@/hooks/useAppInfo";
+import { formatWhen } from "@/lib/utils";
+import type { Locale } from "@/i18n";
+import { useLocale } from "@/stores/localeStore";
 import { useWhatsNewStore } from "@/stores/whatsNewStore";
 
 const RELEASES = parseChangelog(changelog);
+
+const SECTION_WORDS = {
+  Added: "changelogAdded",
+  Changed: "changelogChanged",
+  Fixed: "changelogFixed",
+  Removed: "changelogRemoved",
+  Deprecated: "changelogDeprecated",
+  Security: "changelogSecurity",
+  Performance: "changelogPerformance",
+} as const;
+
+/** "Fixed", or "Fixed" and the changelog's own subtitle after it: the kind in the reader's words, the rest as written. */
+function sectionTitle(title: string, t: T): string {
+  const [kind, ...rest] = title.split(/\s+\u2014\s+/);
+  const key = SECTION_WORDS[kind as keyof typeof SECTION_WORDS];
+  return key ? [t("settings", key), ...rest].join(" · ") : title;
+}
+
+/** A release's calendar day in the reader's language; the changelog writes it as `2026-09-30`. */
+function releaseDay(date: string | null, locale: Locale): string | null {
+  const day = date && /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  return day
+    ? formatWhen(new Date(+day[1], +day[2] - 1, +day[3]), "day", locale)
+    : date;
+}
 
 /**
  * The release notes, shown once after an update. The notes live in
@@ -30,6 +58,7 @@ const RELEASES = parseChangelog(changelog);
  */
 export function WhatsNew() {
   const t = useT();
+  const locale = useLocale();
   const { data: appInfo } = useAppInfo();
   const version = appInfo?.version ?? null;
   const seen = useWhatsNewStore((state) => state.seenVersion);
@@ -64,8 +93,13 @@ export function WhatsNew() {
               ? t("settings", "whatsNewSince", {
                   version: releases[releases.length - 1].version,
                 })
-              : (releases[0].date ?? "")}
+              : (releaseDay(releases[0].date, locale) ?? "")}
           </DialogDescription>
+          {locale !== "en" && (
+            <p className="text-[11px] text-fg-fnt">
+              {t("settings", "whatsNewAsWritten")}
+            </p>
+          )}
         </DialogHeader>
         {/* The scroller is this element, not a viewport sized in per cent
             inside it: the dialog's height comes from these notes, so the box
@@ -81,13 +115,15 @@ export function WhatsNew() {
                 {releases.length > 1 && (
                   <h3 className="font-mono text-xs text-fg-fnt">
                     {release.version}
-                    {release.date ? ` · ${release.date}` : ""}
+                    {release.date
+                      ? ` · ${releaseDay(release.date, locale)}`
+                      : ""}
                   </h3>
                 )}
                 {release.sections.map((section) => (
                   <div key={section.title}>
                     <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.07em] text-fg-fnt">
-                      {section.title}
+                      {sectionTitle(section.title, t)}
                     </h4>
                     <Items items={section.items} />
                   </div>

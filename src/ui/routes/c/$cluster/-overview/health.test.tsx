@@ -2177,3 +2177,80 @@ describe("Ingresses asking for an IngressClass the cluster does not have", () =>
     expect(titles).toContain("no controller");
   });
 });
+
+describe("the overall line as a job's pod starts and settles", () => {
+  /**
+   * Dana watched the overall line wrap onto a second line when "1 Pending ·
+   * starting" joined it and unwrap when the pod settled: 15 flaps in 40 s,
+   * and the page jumped 15 px each time. Fails if the line gives back room
+   * it took at this width, holds less than two lines, or keeps a width's
+   * room after the width changed.
+   */
+  it("keeps the most room it took at this width, two lines at least", async () => {
+    let drawn = 16;
+    let width = 900;
+    const resized: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resized.push(callback);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    const computed = window.getComputedStyle.bind(window);
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element) => {
+      const style = computed(element);
+      return new Proxy(style, {
+        get: (target, key) => {
+          if (key === "lineHeight") return "16px";
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return this.parentElement?.dataset.testid === "attention-overall"
+          ? drawn
+          : 0;
+      }
+    );
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
+      () => width
+    );
+    try {
+      await wrap(
+        <AttentionPanel
+          attention={attentionFrom([])}
+          pods={RUNNING}
+          podsUnread={[]}
+          nodes={[]}
+          nodesKnown={false}
+        />
+      );
+      const overall = screen.getByTestId("attention-overall");
+      const resize = () =>
+        act(() => resized.forEach((call) => call([], {} as ResizeObserver)));
+      expect(overall.style.minHeight).toBe("32px");
+
+      drawn = 48;
+      resize();
+      expect(overall.style.minHeight).toBe("48px");
+
+      drawn = 16;
+      resize();
+      expect(overall.style.minHeight).toBe("48px");
+
+      width = 700;
+      resize();
+      expect(overall.style.minHeight).toBe("32px");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
+  });
+});

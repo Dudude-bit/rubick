@@ -44,6 +44,7 @@ export function ResourceListHeader({
     <SectionHeader
       title={title}
       count={count}
+      foldActions
       description={description && <HeldLines>{description}</HeldLines>}
       actions={
         <>

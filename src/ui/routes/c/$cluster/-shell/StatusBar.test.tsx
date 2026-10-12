@@ -169,8 +169,10 @@ describe("the strip at the narrowest window", () => {
 
   /**
    * The hints are what gives way first, and the note is the one item there
-   * that never wraps out of sight, only truncates past a readable start.
-   * Fails if the note stops leading its zone or loses its floor.
+   * that never wraps out of sight. In Russian at 1024 it was held to 176 px
+   * beside controls that could have given way, and drew only its first
+   * clause. Fails if the note stops leading its zone, or its zone stops
+   * asking for the note's whole sentence up to the note's cap.
    */
   it("lets the hints give way before the link note", () => {
     live();
@@ -181,9 +183,11 @@ describe("the strip at the narrowest window", () => {
       "flex-wrap",
       "flex-row-reverse",
       "overflow-hidden",
-      "has-[[data-link-note]]:min-w-44"
+      "has-[[data-link-note]]:min-w-min"
     );
     expect(hints.firstElementChild).toBe(screen.getByRole("status"));
+    expect(screen.getByRole("status")).toHaveClass("max-w-[45cqw]");
+    expect(footer).toHaveClass("@container");
     expect(hints).toHaveTextContent("Ctrl+K search");
     expect(footer.firstElementChild).toBe(hints);
     useDeepLinkStore.setState({ arrival: null });

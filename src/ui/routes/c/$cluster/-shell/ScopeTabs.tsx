@@ -1101,14 +1101,6 @@ function NamespacePopover({
   /** The namespace the ceiling has just turned down, until anything else
    *  happens. A refusal nobody is told about is a control that broke. */
   const [refused, setRefused] = useState<string | null>(null);
-  /** Which namespaces were selected when the list opened, so the ones the
-   *  reader came to deselect sit at the top — pinned at open rather than live,
-   *  so a row does not slide out from under the pointer as it is toggled. */
-  const [pinned, setPinned] = useState<readonly string[]>([]);
-  /** The rows in the order this opening first drew them; counts that move
-   *  while it is open, and toggles, leave every row where the pointer last
-   *  saw it. A name that arrives later joins at the end. */
-  const [order, setOrder] = useState<readonly string[]>([]);
   /** Every row this opening has drawn: a toggle or a late answer about
    *  access never takes one away while the list is open. */
   const [drawn, setDrawn] = useState<readonly string[]>([]);
@@ -1122,8 +1114,6 @@ function NamespacePopover({
   if (opening) {
     setWasOpen(open);
     if (open) {
-      setPinned(scope);
-      setOrder([]);
       setDrawn([]);
     } else {
       setFilter("");
@@ -1186,25 +1176,11 @@ function NamespacePopover({
     .filter((name) => !drawn.includes(name));
   if (open && !opening && undrawn.length > 0) setDrawn([...drawn, ...undrawn]);
 
-  // Selected-at-open first, the rest after, each group keeping the summary's
-  // own problem/pod/name order. A stable sort keyed only on membership does
-  // exactly that. Ordering is what changes here; `selected`/`closed`/`full`
-  // below still read the live `scope`, so the ceiling and the checkmarks
-  // stay honest as the reader toggles.
-  const pinnedSet = new Set(pinned);
-  const unranked = [...offered]
-    .sort(
-      (a, b) => Number(pinnedSet.has(b.name)) - Number(pinnedSet.has(a.name))
-    )
-    .map((ns) => ns.name)
-    .filter((name) => !order.includes(name));
-  if (open && !opening && unranked.length > 0)
-    setOrder([...order, ...unranked]);
-  const rank = new Map(
-    [...order, ...unranked].map((name, index) => [name, index])
-  );
-  const ordered = [...shown].sort(
-    (a, b) => (rank.get(a.name) ?? 0) - (rank.get(b.name) ?? 0)
+  // By name, and nothing else: a row ordered by its problems or floated for
+  // being selected sat elsewhere at the next opening, and a click aimed from
+  // memory landed on another namespace. The counts and checks say the rest.
+  const ordered = [...shown].sort((a, b) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0
   );
 
   const full = scope.length >= SCOPE_LIMIT;

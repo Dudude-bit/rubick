@@ -202,6 +202,33 @@ describe("a namespace the window has moved off", () => {
   });
 });
 
+describe("the namespace the window has just left", () => {
+  /**
+   * Marco cannot list namespaces, moved from team-checkout to lena, and the
+   * picker no longer offered team-checkout: without a list it names only the
+   * kubeconfig's namespace and the ones scoped to before, and the one the
+   * window opened on was neither. Fails if the scope left behind is not
+   * offered back.
+   */
+  it("is offered back when the namespaces cannot be listed", async () => {
+    useClusterStore.setState({
+      contexts: [{ name: "acme-staging" } as never],
+    });
+    await act(() => useClusterStore.getState().setNamespaceScope(["lena"]));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await renderWithRouter(<ScopeTabs />, {
+      at: "/c/acme-staging",
+      route: "$",
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    await user.click(within(screen.getAllByRole("tab")[0]).getByText(/lena/));
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+
+    const row = await screen.findByRole("option", { name: /^team-checkout/ });
+    expect(within(row).getByText("recent")).toBeInTheDocument();
+  });
+});
+
 describe("the picker's footer under a selection of two", () => {
   const two = () =>
     useClusterStore.setState({
