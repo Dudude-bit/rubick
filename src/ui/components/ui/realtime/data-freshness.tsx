@@ -22,6 +22,7 @@
 import { memo } from "react";
 import { Lock } from "lucide-react";
 
+import { useHeaderFolded } from "@/components/ui/header-folded";
 import {
   Tooltip,
   TooltipContent,
@@ -168,6 +169,7 @@ export const DataFreshness = memo(function DataFreshness({
   className,
 }: DataFreshnessProps) {
   const t = useT();
+  const folded = useHeaderFolded();
   const isConnected = useClusterStore((s) => s.isConnected);
   const refused = refusedAt !== undefined;
 
@@ -203,7 +205,7 @@ export const DataFreshness = memo(function DataFreshness({
             className
           )}
         >
-          {reserve && <Reserve />}
+          {reserve && !folded && <Reserve />}
           <span className="col-start-1 row-start-1 inline-flex items-center gap-1.5">
             {dot === null ? (
               <Lock
@@ -213,12 +215,12 @@ export const DataFreshness = memo(function DataFreshness({
             ) : (
               <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
             )}
-            <span className={cn(warned && "text-warn")}>
+            <span className={cn(warned && "text-warn", folded && "sr-only")}>
               {t("cluster", label)}
             </span>
             {/* The readings where how old the data is changes what the
                 reader should do with it carry the age on their face. */}
-            {AGED.has(label) && stamp !== "" && (
+            {AGED.has(label) && stamp !== "" && !folded && (
               <>
                 <span aria-hidden="true">·</span>
                 <AgeOnFace stamp={stamp} />
@@ -228,6 +230,11 @@ export const DataFreshness = memo(function DataFreshness({
         </div>
       </TooltipTrigger>
       <TooltipContent side="bottom">
+        {folded && (
+          <span className={cn("block font-medium", warned && "text-warn")}>
+            {t("cluster", label)}
+          </span>
+        )}
         {t(
           "cluster",
           neverRead && state !== "refused" ? "freshNeverReadNote" : note,
