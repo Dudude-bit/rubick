@@ -7078,6 +7078,13 @@ export const en = {
     meansSegfault: "crashed on a segmentation fault",
     meansAborted: "aborted itself (SIGABRT)",
     meansSignal: "killed by signal {signal}",
+    notReady:
+      "{containers} runs but is not Ready, so its Services leave it out",
+    notReadyFor:
+      "{containers} runs but has not been Ready for {age}, so its Services leave it out",
+    readinessProbe: "Its readiness probe:",
+    noReadinessProbe:
+      "It declares no readiness probe, so the kubelet's own checks or a readiness gate hold it.",
     exitMessage: "Its exit message:",
     lastLine: "Its last line:",
     loggedLine: "Its log before the exit:",

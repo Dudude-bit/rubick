@@ -28,13 +28,14 @@ export function useCauseLog(
   pod: { name: string; namespace: string },
   cause: PodCause | null
 ): PodCause | null {
-  const run = cause?.run ?? null;
-  const wanted = !!cause && !!run && !run.said;
+  const exits = cause?.says === "exits" ? cause : null;
+  const run = exits?.run ?? null;
+  const wanted = !!run && !run.said;
   const query = useQuery({
     queryKey: queryKeys.runTail(
       pod.namespace,
       pod.name,
-      cause?.container ?? "",
+      exits?.container ?? "",
       run?.previous ?? false,
       run?.ended ?? null
     ),
@@ -42,7 +43,7 @@ export function useCauseLog(
       commands.getPodLogs(
         pod.name,
         pod.namespace,
-        cause!.container,
+        exits!.container,
         LINES,
         null,
         run!.previous
@@ -51,8 +52,8 @@ export function useCauseLog(
     staleTime: Infinity,
     retry: false,
   });
-  if (!cause || !run || !wanted) return cause;
-  return { ...cause, run: { ...run, log: evidenceOf(query) } };
+  if (!exits || !run || !wanted) return cause;
+  return { ...exits, run: { ...run, log: evidenceOf(query) } };
 }
 
 function evidenceOf(query: {

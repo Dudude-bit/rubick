@@ -1,6 +1,12 @@
-import type { EndedRun, Evidence, PodCause } from "@/generated/types";
+import type {
+  EndedRun,
+  Evidence,
+  PodCause,
+  ProbeCheck,
+} from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { formatDuration } from "@/lib/utils";
+import { listWords } from "@/i18n/say";
+import { formatAge, formatDuration } from "@/lib/utils";
 
 /**
  * Why a pod is red or amber, in the words every surface that draws it says.
@@ -28,7 +34,8 @@ export function currentCause(
   now: number = Date.now()
 ): PodCause | null {
   if (!cause) return null;
-  if (cause.until && Date.parse(cause.until) <= now) return null;
+  if (cause.says === "exits" && cause.until && Date.parse(cause.until) <= now)
+    return null;
   return cause;
 }
 
@@ -130,8 +137,41 @@ export function exitMeaning(run: EndedRun, t: T): string | null {
   }
 }
 
+/** What a readiness probe asks, in the form kubectl describe prints it. */
+export function probeText(probe: ProbeCheck): string {
+  switch (probe.says) {
+    case "http":
+      return `${probe.scheme === "HTTPS" ? "HTTPS " : ""}GET ${probe.path} on port ${probe.port}`;
+    case "tcp":
+      return `TCP port ${probe.port}`;
+    case "grpc":
+      return `gRPC port ${probe.port}`;
+    case "exec":
+      return probe.command.join(" ");
+  }
+}
+
+function notReadyWords(
+  cause: Extract<PodCause, { says: "notReady" }>,
+  t: T
+): CauseWords {
+  const containers = listWords(cause.containers, t);
+  const sentence = cause.since
+    ? t("cause", "notReadyFor", { containers, age: formatAge(cause.since, t) })
+    : t("cause", "notReady", { containers });
+  return {
+    sentence,
+    quote: cause.probe
+      ? { label: t("cause", "readinessProbe"), text: probeText(cause.probe) }
+      : null,
+    note: cause.probe ? null : t("cause", "noReadinessProbe"),
+    tone: "warn",
+  };
+}
+
 /** The cause in words. */
 export function causeWords(cause: PodCause, t: T): CauseWords {
+  if (cause.says === "notReady") return notReadyWords(cause, t);
   const { container, run } = cause;
   if (!run)
     return {

@@ -7812,6 +7812,13 @@ export const ru: Catalogue = {
     meansSegfault: "упал с ошибкой сегментации",
     meansAborted: "прервал себя сам (SIGABRT)",
     meansSignal: "убит сигналом {signal}",
+    notReady:
+      "{containers} работает, но не Ready, поэтому его Service его не учитывают",
+    notReadyFor:
+      "{containers} работает, но не Ready уже {age}, поэтому его Service его не учитывают",
+    readinessProbe: "Его readiness-проба:",
+    noReadinessProbe:
+      "Readiness-пробы у него нет, значит его держат собственные проверки kubelet или readiness gate.",
     exitMessage: "Его сообщение при выходе:",
     lastLine: "Его последняя строка:",
     loggedLine: "В его логе перед выходом:",

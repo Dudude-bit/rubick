@@ -146,3 +146,43 @@ describe("currentCause", () => {
     expect(currentCause(cause, Date.parse("2026-10-12T10:59:59Z"))).toBe(cause);
   });
 });
+
+describe("a pod that runs and is not Ready", () => {
+  const notReady = (
+    probe: Extract<PodCause, { says: "notReady" }>["probe"]
+  ): PodCause => ({
+    says: "notReady",
+    containers: ["web"],
+    since: new Date(Date.now() - 12 * 60_000).toISOString(),
+    probe,
+  });
+
+  /** Fails if the readiness probe stops being quoted, or the time out of its Services stops being said. */
+  it("says how long it has been out and quotes the probe", () => {
+    const words = causeWords(
+      notReady({ says: "http", scheme: "HTTP", path: "/ready", port: "8080" }),
+      t
+    );
+    expect(words.sentence).toBe(
+      "web runs but has not been Ready for 12m, so its Services leave it out"
+    );
+    expect(words.quote).toEqual({
+      label: "Its readiness probe:",
+      text: "GET /ready on port 8080",
+    });
+    expect(words.tone).toBe("warn");
+  });
+
+  /** No probe is said as no probe. Fails if a missing probe reads as a failing one. */
+  it("says there is no readiness probe where none is declared", () => {
+    const words = causeWords(notReady(null), t);
+    expect(words.quote).toBeNull();
+    expect(words.note).toContain("no readiness probe");
+  });
+
+  /** Not-ready has no exit, so nothing expires it. */
+  it("stays current whatever the time", () => {
+    const cause = notReady(null);
+    expect(currentCause(cause, Date.now() + 86_400_000)).toBe(cause);
+  });
+});

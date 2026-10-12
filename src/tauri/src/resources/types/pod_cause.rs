@@ -6,7 +6,8 @@
 //! slot that says `notRead` until the reader that fetched it fills it in.
 
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::core::v1::{ContainerStateTerminated, ContainerStatus, Pod};
+use k8s_openapi::api::core::v1::{ContainerStateTerminated, ContainerStatus, Pod, Probe};
+use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use serde::{Deserialize, Serialize};
 
 use super::pod_display::{
@@ -31,6 +32,36 @@ pub enum PodCause {
         /// For a container up again since, when that exit stops being news;
         /// `None` while it is down. The reader compares it with its own clock.
         until: Option<DateTime<Utc>>,
+    },
+    /// Every container runs and the pod is still not Ready, so its Services
+    /// leave it out: a readiness probe that fails, or one that has not passed yet.
+    NotReady {
+        /// The running containers that are not ready, in spec order.
+        containers: Vec<String>,
+        /// When the `Ready` condition last turned `False`.
+        since: Option<DateTime<Utc>>,
+        /// The first of them's readiness probe, as declared; `None` where it has none.
+        probe: Option<ProbeCheck>,
+    },
+}
+
+/// What a readiness probe asks, as its spec says.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum ProbeCheck {
+    Http {
+        scheme: String,
+        path: String,
+        port: String,
+    },
+    Tcp {
+        port: String,
+    },
+    Grpc {
+        port: i32,
+    },
+    Exec {
+        command: Vec<String>,
     },
 }
 
@@ -106,6 +137,75 @@ pub fn pod_cause(pod: &Pod) -> Option<PodCause> {
         .find_map(|cs| down(cs))
         .or_else(|| candidates.iter().find_map(|cs| up_again(cs, running)))
         .map(|cause| with_limit(cause, pod))
+        .or_else(|| not_ready(pod))
+}
+
+fn not_ready(pod: &Pod) -> Option<PodCause> {
+    let status = pod.status.as_ref()?;
+    if status.phase.as_deref() != Some("Running") || condition_is_true(Some(status), "Ready") {
+        return None;
+    }
+    let statuses = status.container_statuses.as_deref().unwrap_or_default();
+    let all_running = !statuses.is_empty()
+        && statuses
+            .iter()
+            .all(|cs| cs.state.as_ref().is_some_and(|s| s.running.is_some()));
+    let containers: Vec<String> = statuses
+        .iter()
+        .filter(|cs| !cs.ready)
+        .map(|cs| cs.name.clone())
+        .collect();
+    if !all_running || containers.is_empty() {
+        return None;
+    }
+    let since = status
+        .conditions
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .find(|c| c.type_ == "Ready")
+        .and_then(|c| c.last_transition_time.as_ref())
+        .map(Moment::moment);
+    let probe = pod
+        .spec
+        .as_ref()?
+        .containers
+        .iter()
+        .find(|c| c.name == containers[0])
+        .and_then(|c| c.readiness_probe.as_ref())
+        .and_then(probe_check);
+    Some(PodCause::NotReady {
+        containers,
+        since,
+        probe,
+    })
+}
+
+fn port_text(port: &IntOrString) -> String {
+    match port {
+        IntOrString::Int(n) => n.to_string(),
+        IntOrString::String(name) => name.clone(),
+    }
+}
+
+fn probe_check(probe: &Probe) -> Option<ProbeCheck> {
+    if let Some(http) = &probe.http_get {
+        return Some(ProbeCheck::Http {
+            scheme: http.scheme.clone().unwrap_or_else(|| "HTTP".to_string()),
+            path: http.path.clone().unwrap_or_else(|| "/".to_string()),
+            port: port_text(&http.port),
+        });
+    }
+    if let Some(tcp) = &probe.tcp_socket {
+        return Some(ProbeCheck::Tcp {
+            port: port_text(&tcp.port),
+        });
+    }
+    if let Some(grpc) = &probe.grpc {
+        return Some(ProbeCheck::Grpc { port: grpc.port });
+    }
+    let command = probe.exec.as_ref()?.command.clone().unwrap_or_default();
+    Some(ProbeCheck::Exec { command })
 }
 
 fn with_limit(mut cause: PodCause, pod: &Pod) -> PodCause {
@@ -394,6 +494,70 @@ mod tests {
             panic!("a crash loop has a cause");
         };
         assert_eq!(run.limit.as_deref(), Some("256Mi"));
+    }
+
+    fn not_ready_pod() -> Pod {
+        pod(serde_json::json!({
+            "metadata": {"name": "web-1", "namespace": "shop"},
+            "spec": {"containers": [{"name": "web", "readinessProbe": {
+                "httpGet": {"path": "/ready", "port": 8080}
+            }}]},
+            "status": {
+                "phase": "Running",
+                "conditions": [{"type": "Ready", "status": "False",
+                    "lastTransitionTime": "2026-10-12T10:00:00Z"}],
+                "containerStatuses": [{
+                    "name": "web", "image": "", "imageID": "", "ready": false, "restartCount": 0,
+                    "state": {"running": {"startedAt": "2026-10-12T09:59:50Z"}}
+                }]
+            }
+        }))
+    }
+
+    /// Running and left out of its Services: the cause names the probe that
+    /// keeps it out and since when. Fails if the branch is dropped.
+    #[test]
+    fn a_running_pod_that_is_not_ready_names_its_readiness_probe() {
+        assert_eq!(
+            pod_cause(&not_ready_pod()),
+            Some(PodCause::NotReady {
+                containers: vec!["web".to_string()],
+                since: Some("2026-10-12T10:00:00Z".parse().unwrap()),
+                probe: Some(ProbeCheck::Http {
+                    scheme: "HTTP".to_string(),
+                    path: "/ready".to_string(),
+                    port: "8080".to_string(),
+                }),
+            })
+        );
+    }
+
+    /// A container still starting is not "running and not ready"; its own
+    /// state is the story. Fails if a waiting container is called not ready.
+    #[test]
+    fn a_pod_with_a_container_not_running_is_not_called_not_ready() {
+        let mut pod = not_ready_pod();
+        pod.status
+            .as_mut()
+            .unwrap()
+            .container_statuses
+            .as_mut()
+            .unwrap()[0]
+            .state =
+            serde_json::from_value(serde_json::json!({"waiting": {"reason": "ContainerCreating"}}))
+                .unwrap();
+        assert_eq!(pod_cause(&pod), None);
+    }
+
+    /// No probe declared is said as none, not as a probe that fails.
+    #[test]
+    fn a_container_with_no_readiness_probe_carries_none() {
+        let mut pod = not_ready_pod();
+        pod.spec.as_mut().unwrap().containers[0].readiness_probe = None;
+        assert!(matches!(
+            pod_cause(&pod),
+            Some(PodCause::NotReady { probe: None, .. })
+        ));
     }
 
     /// A healthy pod has no cause, a restart long ago included.

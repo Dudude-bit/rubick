@@ -807,8 +807,36 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
         });
     }
 
+    // Past a rollout's normal settling, a pod that runs and is still left
+    // out of its Services is the reason a Deployment reads short.
+    if let Some(cause @ crate::resources::PodCause::NotReady { since, .. }) =
+        crate::resources::pod_cause(pod)
+    {
+        let settled = since.is_none_or(|at| now - at >= NOT_READY_GRACE);
+        if settled {
+            return Some(ClusterProblem {
+                severity: ProblemSeverity::Warning,
+                kind: "Pod".to_string(),
+                name,
+                namespace,
+                reason: NOT_READY.to_string(),
+                since: since.map(|t| t.to_rfc3339()),
+                detail: Some(ProblemDetail::Cause { cause, by: None }),
+                restarts: (restarts > 0).then_some(restarts),
+                folded_pods: None,
+            });
+        }
+    }
+
     None
 }
+
+/// This app's word for a pod that runs and is not Ready; the kubelet has none.
+const NOT_READY: &str = "NotReady";
+
+/// How long a running pod may stay not Ready before Needs attention says so:
+/// longer than a readiness probe's usual first passes.
+const NOT_READY_GRACE: chrono::Duration = chrono::Duration::minutes(2);
 
 /// A Pending pod inside the wait it gets and showing no fault, a restart
 /// included, as the workload running it reads it.
@@ -3528,6 +3556,43 @@ mod tests {
 
     /// A pod that restarted `count` times, the last of them `ago` seconds
     /// back, and has been `Running` ever since.
+    fn not_ready_for(seconds: i64, now: DateTime<Utc>) -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "web-1", "namespace": "shop"},
+            "spec": {"containers": [{"name": "web", "readinessProbe": {
+                "httpGet": {"path": "/ready", "port": 8080}
+            }}]},
+            "status": {
+                "phase": "Running",
+                "conditions": [{"type": "Ready", "status": "False",
+                    "lastTransitionTime": (now - chrono::Duration::seconds(seconds)).to_rfc3339()}],
+                "containerStatuses": [{
+                    "name": "web", "image": "", "imageID": "", "ready": false, "restartCount": 0,
+                    "state": {"running": {}}
+                }]
+            }
+        }))
+        .unwrap()
+    }
+
+    /// A pod that runs and stays out of its Services had no row at all.
+    /// Fails if it gets none past the grace, or one inside it.
+    #[test]
+    fn a_pod_running_but_not_ready_past_the_grace_needs_attention() {
+        let now = Utc::now();
+        let row = pod_problem(&not_ready_for(300, now), now).expect("past the grace");
+        assert_eq!(row.reason, NOT_READY);
+        assert_eq!(row.severity, ProblemSeverity::Warning);
+        assert!(matches!(
+            row.detail,
+            Some(ProblemDetail::Cause {
+                cause: crate::resources::PodCause::NotReady { .. },
+                ..
+            })
+        ));
+        assert!(pod_problem(&not_ready_for(30, now), now).is_none());
+    }
+
     fn restarted_pod(name: &str, now: DateTime<Utc>, count: i32, ago: Option<i64>) -> Pod {
         pod(
             name,

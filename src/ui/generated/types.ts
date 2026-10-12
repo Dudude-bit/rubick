@@ -2744,13 +2744,26 @@ export type ContainerState =
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
 
-export type PodCause = {
-  says: "exits";
-  container: string;
-  restarts: number;
-  run: EndedRun | null;
-  until: string | null;
-};
+export type PodCause =
+  | {
+      says: "exits";
+      container: string;
+      restarts: number;
+      run: EndedRun | null;
+      until: string | null;
+    }
+  | {
+      says: "notReady";
+      containers: string[];
+      since: string | null;
+      probe: ProbeCheck | null;
+    };
+
+export type ProbeCheck =
+  | { says: "http"; scheme: string; path: string; port: string }
+  | { says: "tcp"; port: string }
+  | { says: "grpc"; port: number }
+  | { says: "exec"; command: string[] };
 
 export type Evidence =
   | { says: "line"; text: string; last: boolean }

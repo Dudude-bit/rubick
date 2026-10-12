@@ -855,27 +855,27 @@ export function PodDetail() {
           )
         }
         summary={
-          problem && (
+          (problem || causeSaid) && (
             <ProblemSummary
-              headline={causeSaid?.sentence ?? problem.headline}
+              headline={causeSaid?.sentence ?? problem?.headline}
               detail={
                 causeSaid ? (
                   <CauseEvidence words={causeSaid} inline />
                 ) : (
-                  problem.detail
+                  problem?.detail
                 )
               }
-              tone={causeSaid?.tone ?? problem.tone}
+              tone={causeSaid?.tone ?? problem?.tone}
               action={
                 <DetailAction
                   label={t(
                     "action",
-                    problem.tab === "containers"
+                    (problem?.tab ?? "conditions") === "containers"
                       ? "seeContainers"
                       : "seeConditions"
                   )}
                   icon={ArrowRight}
-                  onClick={() => setActiveTab(problem.tab)}
+                  onClick={() => setActiveTab(problem?.tab ?? "conditions")}
                 />
               }
             />
