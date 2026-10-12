@@ -28,8 +28,8 @@ use futures::future::join_all;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
-    ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolumeClaim, Pod, Secret, Service,
-    ServiceAccount,
+    ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolumeClaim, Pod, PodStatus, Secret,
+    Service, ServiceAccount,
 };
 use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
 use kube::api::ListParams;
@@ -640,7 +640,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 .clone()
                 .unwrap_or_else(|| "Failed".to_string()),
             detail: ProblemDetail::said(status.message.clone()),
-            since: created,
+            since: failed_at(status).map(|t| t.to_rfc3339()),
             restarts: (restarts > 0).then_some(restarts),
             folded_pods: None,
         });
@@ -696,6 +696,31 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     }
 
     None
+}
+
+/// When a pod failed, as the cluster recorded it: the eviction or preemption
+/// it names, else its last exit, else when it stopped being ready. `None`
+/// where it recorded none of them, since the pod's age is not the failure's.
+fn failed_at(status: &PodStatus) -> Option<DateTime<Utc>> {
+    let conditions = status.conditions.as_deref().unwrap_or_default();
+    let changed = |kind: &str, to: &str| {
+        conditions
+            .iter()
+            .find(|c| c.type_ == kind && c.status == to)
+            .and_then(|c| c.last_transition_time.as_ref())
+            .map(Moment::moment)
+    };
+    let exited = status
+        .init_container_statuses
+        .iter()
+        .chain(status.container_statuses.iter())
+        .flatten()
+        .filter_map(|cs| cs.state.as_ref()?.terminated.as_ref()?.finished_at.as_ref())
+        .map(Moment::moment)
+        .max();
+    changed("DisruptionTarget", "True")
+        .or(exited)
+        .or_else(|| changed("Ready", "False"))
 }
 
 /// A Pending pod inside the wait it gets and showing no fault, a restart
@@ -2776,6 +2801,62 @@ mod tests {
         .expect("available metrics must yield an index");
 
         assert_eq!(usage.get("n1"), Some(&(250.0, 1024)));
+    }
+
+    /// Marco's Needs attention said "Evicted 3d", the pod's age, while its
+    /// `DisruptionTarget` condition dated the eviction to the night before.
+    /// Fails if a failed pod is dated by its creation, or by a guess where the
+    /// cluster recorded no time for the failure.
+    #[test]
+    fn a_failed_pod_is_dated_by_its_failure_and_not_by_its_age() {
+        let now = Utc::now();
+        let failed = |conditions: Option<Vec<PodCondition>>,
+                      exits: Option<Vec<ContainerStatus>>| {
+            let mut p = pod(
+                "checkout-worker-5b79c79b9c-fplfk",
+                PodStatus {
+                    phase: Some("Failed".to_string()),
+                    reason: Some("Evicted".to_string()),
+                    conditions,
+                    container_statuses: exits,
+                    ..Default::default()
+                },
+            );
+            p.metadata.creation_timestamp = Some(at(now, 3 * 86_400));
+            p
+        };
+        let since = |p: &Pod| pod_problem(p, now).and_then(|problem| problem.since);
+        let when = |seconds_ago| Some(at(now, seconds_ago).moment().to_rfc3339());
+
+        let evicted = failed(
+            Some(vec![PodCondition {
+                type_: "DisruptionTarget".to_string(),
+                status: "True".to_string(),
+                last_transition_time: Some(at(now, 14 * 3600)),
+                ..Default::default()
+            }]),
+            None,
+        );
+        assert_eq!(since(&evicted), when(14 * 3600));
+
+        let exited = failed(
+            None,
+            Some(vec![ContainerStatus {
+                name: "app".to_string(),
+                state: Some(ContainerState {
+                    terminated: Some(ContainerStateTerminated {
+                        exit_code: 1,
+                        finished_at: Some(at(now, 2 * 3600)),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }]),
+        );
+        assert_eq!(since(&exited), when(2 * 3600));
+
+        assert_eq!(since(&failed(None, None)), None);
     }
 
     /// Every pod is Pending for its first seconds. Reporting that made the
