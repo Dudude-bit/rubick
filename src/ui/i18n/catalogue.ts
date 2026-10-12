@@ -7064,6 +7064,20 @@ export const en = {
     restartedUnreported:
       "{container} restarted, and the kubelet did not report how its last run ended",
     ranFor: "after running {ran}",
+    meansOomLimit: "killed for using more memory than its {limit} limit",
+    meansOomNoLimit:
+      "killed for memory, with no limit of its own: the node ran short",
+    meansClean:
+      "it finished successfully, and its restart policy starts it again",
+    meansNotExecutable:
+      "its command exists but cannot be run (permissions or format)",
+    meansNotFound: "its command was not found in the image",
+    meansKilled:
+      "killed with SIGKILL from outside: a liveness kill, the kernel or the node",
+    meansTerminated: "stopped with SIGTERM, as a shutdown asks",
+    meansSegfault: "crashed on a segmentation fault",
+    meansAborted: "aborted itself (SIGABRT)",
+    meansSignal: "killed by signal {signal}",
     exitMessage: "Its exit message:",
     lastLine: "Its last line:",
     loggedLine: "Its log before the exit:",

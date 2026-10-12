@@ -50,6 +50,8 @@ pub struct EndedRun {
     pub said: Option<String>,
     /// What the run printed before it ended.
     pub log: Evidence,
+    /// The container's memory limit as declared, which an OOM kill is measured against.
+    pub limit: Option<String>,
 }
 
 /// What a reader found where the pod's own status stops.
@@ -103,6 +105,31 @@ pub fn pod_cause(pod: &Pod) -> Option<PodCause> {
         .iter()
         .find_map(|cs| down(cs))
         .or_else(|| candidates.iter().find_map(|cs| up_again(cs, running)))
+        .map(|cause| with_limit(cause, pod))
+}
+
+fn with_limit(mut cause: PodCause, pod: &Pod) -> PodCause {
+    let PodCause::Exits {
+        container,
+        run: Some(run),
+        ..
+    } = &mut cause
+    else {
+        return cause;
+    };
+    run.limit = pod.spec.as_ref().and_then(|spec| {
+        spec.containers
+            .iter()
+            .chain(spec.init_containers.iter().flatten())
+            .find(|c| &c.name == container)?
+            .resources
+            .as_ref()?
+            .limits
+            .as_ref()?
+            .get("memory")
+            .map(|q| q.0.clone())
+    });
+    cause
 }
 
 /// A container down after a run that ended badly, or backing off from one.
@@ -167,6 +194,7 @@ fn ended_run(t: &ContainerStateTerminated, previous: bool) -> EndedRun {
             .filter(|m| !m.is_empty())
             .map(tail),
         log: Evidence::NotRead,
+        limit: None,
     }
 }
 
@@ -350,6 +378,22 @@ mod tests {
         status.phase = Some("Failed".to_string());
         status.reason = Some("Evicted".to_string());
         assert_eq!(pod_cause(&pod), None);
+    }
+
+    /// An OOM kill is measured against the limit the container declared.
+    /// Fails if the cause stops carrying it, or carries another container's.
+    #[test]
+    fn an_exit_carries_its_containers_memory_limit() {
+        let mut pod = backing_off();
+        pod.spec = serde_json::from_value(serde_json::json!({"containers": [
+            {"name": "sidecar", "resources": {"limits": {"memory": "64Mi"}}},
+            {"name": "api", "resources": {"limits": {"memory": "256Mi"}}}
+        ]}))
+        .ok();
+        let Some(PodCause::Exits { run: Some(run), .. }) = pod_cause(&pod) else {
+            panic!("a crash loop has a cause");
+        };
+        assert_eq!(run.limit.as_deref(), Some("256Mi"));
     }
 
     /// A healthy pod has no cause, a restart long ago included.

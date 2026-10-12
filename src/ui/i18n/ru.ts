@@ -7798,6 +7798,20 @@ export const ru: Catalogue = {
     restartedUnreported:
       "{container} перезапускался, а kubelet не сообщил, чем закончился его последний запуск",
     ranFor: "проработав {ran}",
+    meansOomLimit: "убит за превышение своего лимита памяти {limit}",
+    meansOomNoLimit:
+      "убит из-за памяти, своего лимита у него нет: памяти не хватило узлу",
+    meansClean:
+      "он завершился успешно, а политика перезапуска запускает его снова",
+    meansNotExecutable:
+      "его команда есть, но её нельзя запустить (права или формат)",
+    meansNotFound: "его команды нет в образе",
+    meansKilled:
+      "убит сигналом SIGKILL извне: liveness-пробой, ядром или узлом",
+    meansTerminated: "остановлен сигналом SIGTERM, как при штатной остановке",
+    meansSegfault: "упал с ошибкой сегментации",
+    meansAborted: "прервал себя сам (SIGABRT)",
+    meansSignal: "убит сигналом {signal}",
     exitMessage: "Его сообщение при выходе:",
     lastLine: "Его последняя строка:",
     loggedLine: "В его логе перед выходом:",

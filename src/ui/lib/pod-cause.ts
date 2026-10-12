@@ -104,6 +104,32 @@ function quoteOf(run: EndedRun, t: T): CauseWords["quote"] {
   };
 }
 
+/** What an exit means where its code or signal has a standard meaning, or null for the app's own. */
+export function exitMeaning(run: EndedRun, t: T): string | null {
+  if (run.reason === "OOMKilled")
+    return run.limit
+      ? t("cause", "meansOomLimit", { limit: run.limit })
+      : t("cause", "meansOomNoLimit");
+  const signal = run.signal ?? (run.code > 128 ? run.code - 128 : null);
+  if (run.code === 0 && signal === null) return t("cause", "meansClean");
+  if (run.code === 126) return t("cause", "meansNotExecutable");
+  if (run.code === 127) return t("cause", "meansNotFound");
+  switch (signal) {
+    case 9:
+      return t("cause", "meansKilled");
+    case 15:
+      return t("cause", "meansTerminated");
+    case 11:
+      return t("cause", "meansSegfault");
+    case 6:
+      return t("cause", "meansAborted");
+    case null:
+      return null;
+    default:
+      return t("cause", "meansSignal", { signal });
+  }
+}
+
 /** The cause in words. */
 export function causeWords(cause: PodCause, t: T): CauseWords {
   const { container, run } = cause;
@@ -115,7 +141,9 @@ export function causeWords(cause: PodCause, t: T): CauseWords {
       tone: "warn",
     };
   const ran = ranSeconds(run);
-  const head = t("cause", "exited", { container, how: howItEnded(run) });
+  const exited = t("cause", "exited", { container, how: howItEnded(run) });
+  const meaning = exitMeaning(run, t);
+  const head = meaning ? `${exited}: ${meaning}` : exited;
   return {
     sentence:
       ran === null
