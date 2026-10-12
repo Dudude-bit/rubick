@@ -43,6 +43,7 @@ const attentionOf = (total: number, complete = true) => ({
 const scoped = vi.hoisted(() => ({
   data: undefined as unknown,
   isPlaceholderData: false,
+  dataUpdatedAt: 0,
 }));
 
 vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
@@ -112,6 +113,7 @@ beforeEach(() => {
     error: null,
     errorContext: null,
     pendingContext: null,
+    turnedAt: 0,
   });
 });
 

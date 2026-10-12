@@ -4409,6 +4409,8 @@ export const en = {
     whatCanIDoIn: "What can I do in {namespace}?",
     whatCanIDo: "What can I do here?",
     countsUnread: "not counted",
+    countsHeld: "counted before the switch, reading again",
+    countsHeldAt: "Counted {ago}, before the switch. Reading again.",
     podsNotCounted: "pods not counted {where}",
     notReadWhere: "not read {where}",
     countsIn: "in {scope}",
