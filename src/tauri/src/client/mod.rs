@@ -17,6 +17,7 @@ use tokio::sync::RwLock;
 pub mod clock;
 mod context;
 mod floors;
+mod hedge;
 pub mod proxy;
 mod send_again;
 pub mod served;
@@ -269,6 +270,14 @@ fn build_client(config: Config) -> Result<Client> {
 /// way to reach it was a sixty-second test, so it had none and deleting the
 /// layer left every Rust test green.
 fn client_with_deadline(config: Config, deadline: std::time::Duration) -> Result<Client> {
+    client_with(config, deadline, hedge::HEDGE_AFTER)
+}
+
+fn client_with(
+    config: Config,
+    deadline: std::time::Duration,
+    hedge_after: std::time::Duration,
+) -> Result<Client> {
     let builder = kube::client::ClientBuilder::try_from(config)
         .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
     Ok(builder
@@ -277,6 +286,8 @@ fn client_with_deadline(config: Config, deadline: std::time::Duration) -> Result
         .with_layer(&tower::retry::RetryLayer::new(
             send_again::SendAgain::default(),
         ))
+        // Inside the floors, so a list asked again without its floor is hedged too.
+        .with_layer(&hedge::Hedge::after(hedge_after))
         .with_layer(&floors::Floors::default())
         // Outside the floors, so a list asked again without its floor shares the one deadline.
         .with_layer(&tower::timeout::TimeoutLayer::new(deadline))
