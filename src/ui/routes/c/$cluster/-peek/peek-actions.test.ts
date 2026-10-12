@@ -305,7 +305,7 @@ describe("why a pod action cannot run", () => {
   it("says a waiting reason once, naming the container only where there are several", () => {
     const waiting = container(
       "worker",
-      { type: "waiting", reason: "CreateContainerConfigError" },
+      { type: "waiting", reason: "CreateContainerConfigError", message: null },
       [8080]
     );
     const status = { ...pod().status, display: "CreateContainerConfigError" };
@@ -317,7 +317,11 @@ describe("why a pod action cannot run", () => {
       status,
       containers: [
         waiting,
-        container("proxy", { type: "waiting", reason: "PodInitializing" }, []),
+        container(
+          "proxy",
+          { type: "waiting", reason: "PodInitializing", message: null },
+          []
+        ),
       ],
     });
     expect(find(all("Pod", meshed), "shell")?.reason).toBe(
