@@ -1277,6 +1277,63 @@ describe("the readers beside a watched list", () => {
   });
 
   /**
+   * The Deployment's own pod watch reads its chain a quarter second after a
+   * change and the Service's watches a twentieth; the slower one asking
+   * first held Sam's chain to its own settle. Fails if a sooner read waits
+   * on one asked for later.
+   */
+  it("reads as soon as the soonest watch asks, not when the first one would", async () => {
+    const client = testQueryClient();
+    let readAt = 0;
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 1 })
+      .mockImplementation(async () => {
+        readAt ||= Date.now();
+        return { pods: 2 };
+      });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    let settleMs = 1000;
+    const hook = renderHook(
+      () => {
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: PODS,
+          detail: () => [SIDEBAR],
+          settleMs,
+        });
+        return useReader(SIDEBAR, overview);
+      },
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    await waitFor(() => expect(hook.result.current).toBeDefined());
+
+    emit("stream-cm-1", "applied", {
+      name: "pod-0",
+      namespace: "shop",
+      data: 1,
+    });
+    settleMs = 50;
+    hook.rerender();
+    const asked = Date.now();
+    emit("stream-cm-1", "applied", {
+      name: "pod-0",
+      namespace: "shop",
+      data: 2,
+    });
+
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 2 }), {
+      timeout: 3000,
+    });
+    expect(readAt - asked).toBeLessThan(500);
+  });
+
+  /**
    * A minimised window stops polling; a watch still writing rows must not
    * start reading on its behalf. Fails if a hidden window re-reads at once.
    */
