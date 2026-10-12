@@ -36,6 +36,9 @@ const KINDS: Array<{
   { kind: "DaemonSet", subscribe: commands.subscribeDaemonsetWatch },
 ];
 
+/** The kinds the journal follows, and so the only kinds a quiet stretch can speak for. */
+export const JOURNAL_KINDS: readonly string[] = KINDS.map(({ kind }) => kind);
+
 let counter = 0;
 
 type Change = Pick<JournalEntry, "field" | "key" | "from" | "to">;

@@ -1704,7 +1704,7 @@ export const en = {
     explained:
       "Four records on one clock: the controller's revisions, the delivery owner's history, Helm's history, and what this app watched while it was connected. Where it was not watching, the clock shows a gap.",
     clusterExplained:
-      "What this app saw change in the cluster's workloads while it was connected, in the order it saw it. A gap is a stretch it was not watching; nothing is known about it.",
+      "What this app saw change in the cluster's {kinds} while it was connected, in the order it saw it. A gap is a stretch it was not watching; nothing is known about it.",
     notObserved: "Not observed {from} to {to}",
     notObservedStill: "Not observed since {from}",
     notObservedBrief: {
@@ -1775,7 +1775,7 @@ export const en = {
     sinceMarker: "since the link was made",
     sinceNothing: "Nothing on this clock since {when}.",
     nothingRecordedSince:
-      "No change recorded since {since}: no workload here was created, deleted, scaled or edited.",
+      "No change recorded since {since}: of the {kinds} this app watches here, none was created, deleted, scaled or edited.",
     revisionsUnread: "The revisions could not be read: {reason}",
     historyUnread: "{owner}'s history could not be read: {reason}",
     helmUnread: "Helm's history for {release} could not be read: {reason}",

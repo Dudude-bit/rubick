@@ -18,6 +18,9 @@ import {
   type PlacedSection,
 } from "@/lib/report-parts";
 import type { T } from "@/i18n/useT";
+import { listWords } from "@/i18n/say";
+import { JOURNAL_KINDS } from "@/hooks/useChangeJournal";
+import { getDisplayPlural } from "@/lib/resource-registry";
 import { dateFormat } from "@/lib/utils";
 import { currentLocale } from "@/stores/localeStore";
 
@@ -99,6 +102,10 @@ export function changesScreenSection(
  * gap sits inside the changes list as a row, and this says the same fact
  * again as a fact nobody can scroll past.
  */
+/** The kinds the journal follows, named: a quiet stretch speaks for these and for nothing else. */
+export const journalKindsWords = (t: T): string =>
+  listWords(JOURNAL_KINDS.map(getDisplayPlural), t);
+
 export function watchedSection(
   watching: ObservedSpan | undefined,
   spans: readonly ObservedSpan[],
@@ -115,7 +122,10 @@ export function watchedSection(
   const quiet = quietSince(watching, items);
   const nothing =
     quiet !== null &&
-    t("changes", "nothingRecordedSince", { since: clock(quiet) });
+    t("changes", "nothingRecordedSince", {
+      since: clock(quiet),
+      kinds: journalKindsWords(t),
+    });
   const base = [since, refused, earlier, nothing].filter(Boolean).join(" · ");
   const warn = !watching || gaps > 0 || Boolean(refused);
   return {

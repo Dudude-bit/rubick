@@ -5,7 +5,11 @@ import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
-import { changesScreenSection, watchedSection } from "./changes-share";
+import {
+  changesScreenSection,
+  journalKindsWords,
+  watchedSection,
+} from "./changes-share";
 import {
   earlierRowsWords,
   quietSince,
@@ -171,6 +175,7 @@ export function Changes() {
               />
               {t("changes", "nothingRecordedSince", {
                 since: formatWhen(quiet, "clock"),
+                kinds: journalKindsWords(t),
               })}
             </p>
           )}
@@ -178,7 +183,7 @@ export function Changes() {
             <ChangesTimeline items={items} showObject />
           )}
           <p className="px-1.5 pt-2 text-[11px] text-fg-fnt">
-            {t("changes", "clusterExplained")}
+            {t("changes", "clusterExplained", { kinds: journalKindsWords(t) })}
           </p>
         </SectionBody>
       </Section>

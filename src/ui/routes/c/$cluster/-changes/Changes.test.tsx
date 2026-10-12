@@ -10,6 +10,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { formatWhen } from "@/lib/utils";
 import { renderWithRouter } from "@/test/render";
+import { JOURNAL_KINDS } from "@/hooks/useChangeJournal";
 import { Changes } from "./Changes";
 
 const NOW = Date.now();
@@ -459,7 +460,7 @@ describe("a watch that has recorded nothing", () => {
     to: NOW - 20 * 60 * MIN,
   };
   const running = { from: watchingSince, seenAt: NOW, to: null };
-  const quiet = `No change recorded since ${formatWhen(watchingSince, "clock")}: no workload here was created, deleted, scaled or edited.`;
+  const quiet = `No change recorded since ${formatWhen(watchingSince, "clock")}: of the Deployments, StatefulSets, and DaemonSets this app watches here, none was created, deleted, scaled or edited.`;
 
   /**
    * Marco's Changes page showed only the "Not observed" box, never whether
@@ -486,6 +487,34 @@ describe("a watch that has recorded nothing", () => {
     expect(watched?.body).toMatchObject({
       text: expect.stringContaining("No change recorded since"),
     });
+  });
+
+  /**
+   * Dana read "no workload here was created, deleted, scaled or edited" while
+   * cron-demo made and deleted a Job every five minutes: the journal follows
+   * three kinds and the sentence spoke for all of them. Fails if the quiet
+   * line stops naming exactly the kinds the journal follows, in either language.
+   */
+  it("names the kinds a quiet watch speaks for, and only those", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    useChangeJournalStore.setState({ entries: [], spans: { prod: [running] } });
+
+    await mount();
+    const said = screen.getByTestId("changes-quiet").textContent ?? "";
+    for (const kind of JOURNAL_KINDS) expect(said).toContain(kind);
+    expect(said).not.toMatch(/\bJobs?\b|workload/);
+
+    useLocaleStore.setState({ choice: "ru" });
+    await waitFor(() =>
+      expect(screen.getByTestId("changes-quiet").textContent).toContain(
+        "Deployments, StatefulSets и DaemonSets"
+      )
+    );
+    useLocaleStore.setState({ choice: null });
   });
 
   /** Fails if a change the running watch recorded is denied, or one recorded before it counts as its own. */
