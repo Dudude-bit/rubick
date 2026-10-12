@@ -1888,6 +1888,9 @@ export const ru: Catalogue = {
     searchOpens: "откроется {site}; движок меняется в настройках",
     killedByLiveness:
       "{container} не завершается сам: kubelet убивает его, потому что не проходит liveness-проба, уже {restarts}. Слова kubelet: {said}",
+    guessPendingClaims:
+      "Скорее всего: PersistentVolumeClaim, который он монтирует, не привязан, а пока это так, планировщик узлы не рассматривает. Ёмкость узлов, скорее всего, ни при чём; что ждёт provisioner, обычно видно в событиях самого claim.",
+    checkClaims: "Посмотрите его PersistentVolumeClaim: привязаны ли и к чему",
     guessCrashLoop:
       "Скорее всего: {container} сам завершается сразу после старта, уже {restarts}. Причина, скорее всего, в его последних строках перед выходом.",
     guessCrashRefusedSidecar:
@@ -3864,6 +3867,12 @@ export const ru: Catalogue = {
       many: "каждые {n} часов, в :{minute}",
       other: "каждые {n} часа, в :{minute}",
     },
+    podsShareCause: {
+      one: "{pods} из {n} пода:",
+      few: "{pods} из {n} подов:",
+      many: "{pods} из {n} подов:",
+      other: "{pods} из {n} пода:",
+    },
     problemRestarts: {
       one: "{n} перезапуск с момента создания",
       few: "{n} перезапуска с момента создания",
@@ -5194,6 +5203,12 @@ export const ru: Catalogue = {
     podsUnlistedHint:
       "«Требует внимания» называет под отдельно, когда неисправен он сам. Неготовый под засчитывается своей нагрузке или Service, упавшие поды упавшего Job считаются в строке этого Job, а удаляемый под уже уходит.",
     attentionPartly: "проверено не всё",
+    claimClassMissing:
+      "Он указывает StorageClass {name}, которого нет, так что том для него никто не создаст.",
+    claimNoDefaultClass:
+      "Он не указывает StorageClass, а класса по умолчанию в кластере нет, так что том для него никто не создаст.",
+    claimClassUnread:
+      "Его StorageClass прочитать не удалось, поэтому неизвестно, ждёт ли он под по замыслу.",
     claimPendingDetail:
       "К нему ещё не привязан том, поэтому под, который его монтирует, не запустится.",
   },
@@ -7856,6 +7871,96 @@ export const ru: Catalogue = {
     readinessProbe: "Его readiness-проба:",
     noReadinessProbe:
       "Readiness-пробы у него нет, значит его держат собственные проверки kubelet или readiness gate.",
+    pullNotFound:
+      "{container} не может стартовать: образа {image} нет в реестре",
+    pullDenied:
+      "{container} не может стартовать: реестр отказался отдать {image}",
+    pullRateLimited:
+      "{container} не может стартовать: реестр ограничивает частоту скачиваний {image}",
+    pullUnreachable:
+      "{container} не может стартовать: узел не может достучаться до реестра {image}",
+    pullBackingOff:
+      "{container} не может стартовать: скачать {image} не удалось, и kubelet ждёт перед следующей попыткой",
+    pullBackingOffNote:
+      "Пока kubelet ждёт, он не повторяет ошибку; ошибка последней попытки есть в событиях пода.",
+    pullOther: "{container} не может стартовать: не удалось скачать {image}",
+    pullSecretsNamed: "Под указывает pull-секреты {secrets}.",
+    pullSecretsNone:
+      "Под не указывает ни одного pull-секрета, так что приватный реестр не получит учётных данных, если их нет у его ServiceAccount.",
+    invalidImage:
+      "{container} не может стартовать: {image} не является корректной ссылкой на образ",
+    configError:
+      "{container} не удаётся создать: чего-то, что его спецификация берёт из ConfigMap или Secret, нет",
+    createError: "{container} не удаётся создать средой выполнения контейнеров",
+    runError: "{container} создан, но среда выполнения не смогла его запустить",
+    blockedOther: "{container} не может стартовать ({reason})",
+    kubeletSaid: "Слова kubelet:",
+    unplaced: "Ни один узел не принимает этот под",
+    unplacedOf: {
+      one: "Ни один из {n} узла не принимает этот под",
+      few: "Ни один из {n} узлов не принимает этот под",
+      many: "Ни один из {n} узлов не принимает этот под",
+      other: "Ни один из {n} узла не принимает этот под",
+    },
+    unplacedFor: "Ждёт узел уже {age}.",
+    unfitShort: {
+      one: "на {n} узле не хватает свободного {resource}, который он запрашивает",
+      few: "на {n} узлах не хватает свободного {resource}, который он запрашивает",
+      many: "на {n} узлах не хватает свободного {resource}, который он запрашивает",
+      other:
+        "на {n} узлах не хватает свободного {resource}, который он запрашивает",
+    },
+    unfitTaint: {
+      one: "у {n} узла есть taint, который он не терпит: {taint}",
+      few: "у {n} узлов есть taint, который он не терпит: {taint}",
+      many: "у {n} узлов есть taint, который он не терпит: {taint}",
+      other: "у {n} узлов есть taint, который он не терпит: {taint}",
+    },
+    unfitSelector: {
+      one: "{n} узел не подходит под его nodeSelector или affinity",
+      few: "{n} узла не подходят под его nodeSelector или affinity",
+      many: "{n} узлов не подходят под его nodeSelector или affinity",
+      other: "{n} узлов не подходят под его nodeSelector или affinity",
+    },
+    unfitPodAffinity: {
+      one: "{n} узел нарушает его pod affinity или anti-affinity",
+      few: "{n} узла нарушают его pod affinity или anti-affinity",
+      many: "{n} узлов нарушают его pod affinity или anti-affinity",
+      other: "{n} узлов нарушают его pod affinity или anti-affinity",
+    },
+    unfitCordoned: {
+      one: "{n} узел закордонен",
+      few: "{n} узла закордонены",
+      many: "{n} узлов закордонены",
+      other: "{n} узлов закордонены",
+    },
+    unfitTooManyPods: {
+      one: "на {n} узле уже максимум подов",
+      few: "на {n} узлах уже максимум подов",
+      many: "на {n} узлах уже максимум подов",
+      other: "на {n} узлах уже максимум подов",
+    },
+    unfitVolumeZone: {
+      one: "{n} узел не видит том, к которому он привязан",
+      few: "{n} узла не видят том, к которому он привязан",
+      many: "{n} узлов не видят том, к которому он привязан",
+      other: "{n} узлов не видят том, к которому он привязан",
+    },
+    unfitTopology: {
+      one: "{n} узел нарушил бы его topology spread",
+      few: "{n} узла нарушили бы его topology spread",
+      many: "{n} узлов нарушили бы его topology spread",
+      other: "{n} узлов нарушили бы его topology spread",
+    },
+    unfitClaimsUnbound:
+      "его PersistentVolumeClaim ещё не привязаны, поэтому планировщик узлы даже не рассматривал",
+    unfitOther: {
+      one: "{n} узел: {text}",
+      few: "{n} узла: {text}",
+      many: "{n} узлов: {text}",
+      other: "{n} узлов: {text}",
+    },
+    schedulerSaid: "Слова планировщика:",
     exitMessage: "Его сообщение при выходе:",
     lastLine: "Его последняя строка:",
     loggedLine: "В его логе перед выходом:",

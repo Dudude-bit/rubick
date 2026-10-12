@@ -86,7 +86,19 @@ export function composedDetail(
       return [causeText(detail.cause, t), splitWords(detail.by, t)]
         .filter(Boolean)
         .join(" ");
+    case "podsCause":
+      return [
+        `${podsShare(detail.pods, detail.of, t)} ${causeText(detail.cause, t)}`,
+        detail.said && t("readings", "controllerSaid", { said: detail.said }),
+      ]
+        .filter(Boolean)
+        .join(" ");
   }
+}
+
+/** "2 of 3 pods:", the share of a workload's pods its cause is told from. */
+export function podsShare(pods: number, of: number, t: T): string {
+  return t("readings", "podsShareCause", { pods, n: of });
 }
 
 /** A pod's restarts split by the containers behind them, where more than one restarted. */

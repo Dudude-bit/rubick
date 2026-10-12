@@ -186,3 +186,65 @@ describe("a pod that runs and is not Ready", () => {
     expect(currentCause(cause, Date.now() + 86_400_000)).toBe(cause);
   });
 });
+
+describe("a container the kubelet cannot start", () => {
+  const blocked = (
+    over: Partial<Extract<PodCause, { says: "blocked" }>>
+  ): PodCause => ({
+    says: "blocked",
+    container: "api",
+    reason: "ErrImagePull",
+    said: "pull access denied for registry.example/shop/api",
+    image: "registry.example/shop/api:9",
+    pull: "denied",
+    secrets: [],
+    ...over,
+  });
+
+  /** Fails if a refused pull stops saying which pull secrets the pod names, or that it names none. */
+  it("says which pull secrets a refused pull had to offer", () => {
+    const none = causeWords(blocked({}), t);
+    expect(none.sentence).toBe(
+      "api cannot start: the registry refused to hand over registry.example/shop/api:9"
+    );
+    expect(none.note).toContain("names no pull secret");
+    expect(none.quote?.text).toBe(
+      "pull access denied for registry.example/shop/api"
+    );
+    expect(causeWords(blocked({ secrets: ["regcred"] }), t).note).toBe(
+      "The pod names the pull secrets regcred."
+    );
+  });
+
+  /** Each registry answer reads as itself. Fails if two share a sentence. */
+  it("words each registry answer apart", () => {
+    const sentences = (
+      [
+        "notFound",
+        "denied",
+        "rateLimited",
+        "unreachable",
+        "backingOff",
+        "other",
+      ] as const
+    ).map((pull) => causeWords(blocked({ pull }), t).sentence);
+    expect(new Set(sentences).size).toBe(sentences.length);
+  });
+
+  /** The missing key is the kubelet's sentence. Fails if the config error loses it. */
+  it("quotes the kubelet on a config error", () => {
+    const words = causeWords(
+      blocked({
+        reason: "CreateContainerConfigError",
+        pull: null,
+        said: "couldn't find key DB_PASSWORD in Secret team-checkout/checkout-db",
+      }),
+      t
+    );
+    expect(words.sentence).toContain("ConfigMap or Secret is missing");
+    expect(words.quote).toEqual({
+      label: "The kubelet said:",
+      text: "couldn't find key DB_PASSWORD in Secret team-checkout/checkout-db",
+    });
+  });
+});

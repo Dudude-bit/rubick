@@ -2021,13 +2021,6 @@ export interface ClusterOverview {
   countsPartial: PartialCount[];
 }
 
-export interface OverviewUnread {
-  kind: string;
-  namespace: string | null;
-  code: string;
-  message: string;
-}
-
 export interface PartialCount {
   count: CountKind;
   counted: number;
@@ -2036,22 +2029,12 @@ export interface PartialCount {
   unreadIn: string[];
 }
 
-export type CountKind =
-  | "pods"
-  | "deployments"
-  | "statefulSets"
-  | "daemonSets"
-  | "jobs"
-  | "cronJobs"
-  | "services"
-  | "ingresses"
-  | "configMaps"
-  | "secrets"
-  | "endpoints"
-  | "persistentVolumeClaims"
-  | "serviceAccounts"
-  | "networkPolicies"
-  | "events";
+export interface OverviewUnread {
+  kind: string;
+  namespace: string | null;
+  code: string;
+  message: string;
+}
 
 export interface RolloutCount {
   reason: string;
@@ -2780,6 +2763,22 @@ export type PodCause =
       until: string | null;
     }
   | {
+      says: "unplaced";
+      said: string | null;
+      since: string | null;
+      nodes: number | null;
+      why: Unfit[];
+    }
+  | {
+      says: "blocked";
+      container: string;
+      reason: string;
+      said: string | null;
+      image: string;
+      pull: PullFailure | null;
+      secrets: string[];
+    }
+  | {
       says: "notReady";
       containers: string[];
       since: string | null;
@@ -2791,6 +2790,26 @@ export type ProbeCheck =
   | { says: "tcp"; port: string }
   | { says: "grpc"; port: number }
   | { says: "exec"; command: string[] };
+
+export type PullFailure =
+  | "notFound"
+  | "denied"
+  | "rateLimited"
+  | "unreachable"
+  | "backingOff"
+  | "other";
+
+export type Unfit =
+  | { says: "short"; resource: string; nodes: number }
+  | { says: "taint"; taint: string; nodes: number }
+  | { says: "selector"; nodes: number }
+  | { says: "podAffinity"; nodes: number }
+  | { says: "cordoned"; nodes: number }
+  | { says: "tooManyPods"; nodes: number }
+  | { says: "volumeZone"; nodes: number }
+  | { says: "topology"; nodes: number }
+  | { says: "claimsUnbound" }
+  | { says: "other"; text: string; nodes: number | null };
 
 export type Evidence =
   | { says: "line"; text: string; last: boolean }
@@ -2872,6 +2891,23 @@ export type RollbackOutcome =
   | { outcome: "rolledBack" }
   | { outcome: "alreadyThere" };
 
+export type CountKind =
+  | "pods"
+  | "deployments"
+  | "statefulSets"
+  | "daemonSets"
+  | "jobs"
+  | "cronJobs"
+  | "services"
+  | "ingresses"
+  | "configMaps"
+  | "secrets"
+  | "endpoints"
+  | "persistentVolumeClaims"
+  | "serviceAccounts"
+  | "networkPolicies"
+  | "events";
+
 export type OverviewSource = "watch" | "list";
 
 export type Incarnation = "current" | "earlier" | "gone" | "unchecked";
@@ -2881,6 +2917,13 @@ export type ProblemDetail =
   | { says: "restarts"; n: number; by: ContainerRestarts[] | null }
   | { says: "replicasReady"; ready: number; desired: number }
   | { says: "unschedulable" }
+  | {
+      says: "podsCause";
+      cause: PodCause;
+      pods: number;
+      of: number;
+      said: string | null;
+    }
   | { says: "cause"; cause: PodCause; by: ContainerRestarts[] | null };
 
 export type ProblemSeverity = "critical" | "warning";

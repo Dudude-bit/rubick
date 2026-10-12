@@ -15,6 +15,7 @@ import type {
   ClusterProblem,
   IngressHealthInput,
   PersistentVolumeClaimInfo,
+  StorageClassInfo,
   ProblemDetail,
   Scoped,
   ServiceHealthInputs,
@@ -354,13 +355,49 @@ const autoscalerItems = remember((rows: AutoscalerInfo[]): AttentionItem[] =>
   })
 );
 
+/** The class a claim names, the cluster's default for an empty name; `undefined` where the classes were not read. */
+function classOf(
+  claim: PersistentVolumeClaimInfo,
+  classes: readonly StorageClassInfo[] | undefined
+): StorageClassInfo | null | undefined {
+  if (!classes) return undefined;
+  return (
+    classes.find((each) =>
+      claim.storageClass ? each.name === claim.storageClass : each.isDefault
+    ) ?? null
+  );
+}
+
+function claimDetail(
+  claim: PersistentVolumeClaimInfo,
+  cls: StorageClassInfo | null | undefined,
+  t: T
+): string {
+  if (cls === null)
+    return claim.storageClass
+      ? t("cluster", "claimClassMissing", { name: claim.storageClass })
+      : t("cluster", "claimNoDefaultClass");
+  const pending = t("cluster", "claimPendingDetail");
+  return cls === undefined
+    ? `${pending} ${t("cluster", "claimClassUnread")}`
+    : pending;
+}
+
 const claimItems = remember(
-  (rows: PersistentVolumeClaimInfo[], now: number, t: T): AttentionItem[] =>
+  (
+    rows: PersistentVolumeClaimInfo[],
+    classes: readonly StorageClassInfo[] | undefined,
+    now: number,
+    t: T
+  ): AttentionItem[] =>
     rows.flatMap((claim) => {
       if (claim.status !== "Pending") return [];
       const created = claim.createdAt ? Date.parse(claim.createdAt) : NaN;
       // Undated claims still report: an unknown age is not evidence of a young one.
       if (now - created < CLAIM_GRACE_MS) return [];
+      const cls = classOf(claim, classes);
+      // Pending by design until a pod mounts it; that pod's row says so if it cannot start.
+      if (cls?.volumeBindingMode === "WaitForFirstConsumer") return [];
       const subject = {
         kind: "PersistentVolumeClaim",
         name: claim.name,
@@ -369,9 +406,9 @@ const claimItems = remember(
       return [
         withKey({
           ...subject,
-          tone: "warn",
+          tone: cls === null ? "err" : "warn",
           reason: "Pending",
-          detail: { says: "ours", text: t("cluster", "claimPendingDetail") },
+          detail: { says: "ours", text: claimDetail(claim, cls, t) },
           since: claim.createdAt,
           restarts: null,
           foldedPods: null,
@@ -414,6 +451,8 @@ export interface AttentionInputs {
   ingressHealth: (ingress: IngressHealthInput) => IngressHealth;
   autoscalers: Answer<Scoped<AutoscalerInfo>>;
   claims: Answer<Scoped<PersistentVolumeClaimInfo>>;
+  /** The StorageClasses, read only while a claim is Pending: a class's binding mode decides whether that is news. */
+  classes?: readonly StorageClassInfo[];
   now: number;
 }
 
@@ -542,7 +581,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     ...serviceItems(services.answered, t),
     ...ingress.items,
     ...autoscalerItems(input.autoscalers.data?.rows ?? []),
-    ...claimItems(input.claims.data?.rows ?? [], input.now, t),
+    ...claimItems(input.claims.data?.rows ?? [], input.classes, input.now, t),
   ];
   const items = ranked([...backend, ...ours]);
 

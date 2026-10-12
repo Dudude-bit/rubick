@@ -1,4 +1,4 @@
-import { CircleDashed, RotateCcw } from "lucide-react";
+import { CircleDashed, PackageX, RotateCcw, ServerOff } from "lucide-react";
 
 import type { PodCause } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -18,6 +18,10 @@ function CauseMark({
   switch (cause.says) {
     case "exits":
       return <RotateCcw className={className} aria-hidden="true" />;
+    case "unplaced":
+      return <ServerOff className={className} aria-hidden="true" />;
+    case "blocked":
+      return <PackageX className={className} aria-hidden="true" />;
     case "notReady":
       return <CircleDashed className={className} aria-hidden="true" />;
   }

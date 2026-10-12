@@ -126,7 +126,8 @@ export type SchedulingCause =
   | "topology"
   | "taint"
   | "nodeSelector"
-  | "resources";
+  | "resources"
+  | "claimsUnbound";
 
 /** By the scheduler's own wording: `0/2 nodes are available: 2 node(s) didn't match pod topology spread constraints (missing required label)`. */
 const SCHEDULING_CAUSES: Array<[SchedulingCause, RegExp]> = [
@@ -135,6 +136,7 @@ const SCHEDULING_CAUSES: Array<[SchedulingCause, RegExp]> = [
   ["taint", /untolerated taint|didn't tolerate/i],
   ["nodeSelector", /node affinity\/selector|didn't match node selector/i],
   ["resources", /\bInsufficient\b/],
+  ["claimsUnbound", /unbound immediate PersistentVolumeClaims/i],
 ];
 
 /** The causes an answer names, in the order it names them, one of each. */
@@ -167,6 +169,7 @@ const CAUSE_CHECKS: Record<SchedulingCause, Check[]> = {
     { says: { key: "checkRequests" }, to: { kind: "tab", tab: "containers" } },
     { says: { key: "checkNodes" }, to: TO_NODES },
   ],
+  claimsUnbound: [{ says: { key: "checkClaims" }, to: null }],
 };
 
 /** The checks that follow the scheduler's own reasons, or the general two where it names none this knows. */
@@ -940,14 +943,16 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
             ? topologyHeadline(chain.topology)
             : trouble.causes[0] === "topology"
               ? { key: "guessPendingTopology" }
-              : {
-                  key: trouble.sameEachTime
-                    ? "guessPendingSame"
-                    : "guessPendingVaried",
-                  values: trouble.sameEachTime
-                    ? { times: counted("countTimes", trouble.count) }
-                    : { attempts: counted("countAttempts", trouble.count) },
-                },
+              : trouble.causes[0] === "claimsUnbound"
+                ? { key: "guessPendingClaims" }
+                : {
+                    key: trouble.sameEachTime
+                      ? "guessPendingSame"
+                      : "guessPendingVaried",
+                    values: trouble.sameEachTime
+                      ? { times: counted("countTimes", trouble.count) }
+                      : { attempts: counted("countAttempts", trouble.count) },
+                  },
         lines,
         checks,
       };

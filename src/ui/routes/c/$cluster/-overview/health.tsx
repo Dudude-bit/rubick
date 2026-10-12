@@ -32,6 +32,7 @@ import {
   attentionShare,
   schedulerShare,
   splitWords,
+  podsShare,
   uncheckedShare,
   warningsShare,
   workloadCards,
@@ -150,6 +151,21 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
         <CauseLine cause={detail.cause} compact />
         {detail.by && (
           <span className="text-fg-fnt"> {splitWords(detail.by, t)}</span>
+        )}
+      </>
+    );
+  if (detail.says === "podsCause")
+    return (
+      <>
+        <span className="text-fg-mut">
+          {podsShare(detail.pods, detail.of, t)}{" "}
+        </span>
+        <CauseLine cause={detail.cause} compact />
+        {detail.said && (
+          <span className="text-fg-fnt">
+            {" "}
+            {t("readings", "controllerSaid", { said: detail.said })}
+          </span>
         )}
       </>
     );

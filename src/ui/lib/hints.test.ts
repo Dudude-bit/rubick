@@ -807,6 +807,19 @@ describe("hintFor", () => {
     );
   });
 
+  /**
+   * "pod has unbound immediate PersistentVolumeClaims" fell to "no node
+   * fits it" and pointed at node capacity. Fails if unbound claims lose
+   * their own headline.
+   */
+  it("says a pod waits on its unbound claims, not on node capacity", () => {
+    expect(
+      schedulingCauses(
+        "0/3 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling."
+      )
+    ).toEqual(["claimsUnbound"]);
+  });
+
   it("falls back to the plain crash sentence when the log named no address", () => {
     const hint = hintFor(troubleOf(crashing(), [])!, crashing(), NONE);
     expect(hint.headline.key).toBe("guessCrashLoop");

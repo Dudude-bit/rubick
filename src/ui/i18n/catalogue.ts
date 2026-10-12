@@ -1817,6 +1817,9 @@ export const en = {
     searchOpens: "opens {site}; change the engine in Settings",
     killedByLiveness:
       "{container} does not exit on its own: the kubelet kills it because its liveness probe fails, {restarts} so far. The kubelet said: {said}",
+    guessPendingClaims:
+      "Most likely: a PersistentVolumeClaim it mounts is not bound, and the scheduler does not weigh nodes until it is. The node capacity is probably not the problem; the claim's own events usually say what its provisioner is waiting for.",
+    checkClaims: "Look at its PersistentVolumeClaims: bound, and to what",
     guessCrashLoop:
       "Most likely: {container} exits on its own right after starting, {restarts} so far. The reason is probably in its last lines before the exit.",
     guessCrashRefusedSidecar:
@@ -3526,6 +3529,10 @@ export const en = {
       one: "every {n} hour, at :{minute}",
       other: "every {n} hours, at :{minute}",
     },
+    podsShareCause: {
+      one: "{pods} of {n} pod:",
+      other: "{pods} of {n} pods:",
+    },
     problemRestarts: {
       one: "{n} restart since creation",
       other: "{n} restarts since creation",
@@ -4631,6 +4638,12 @@ export const en = {
     podsUnlistedHint:
       "Needs attention names a pod when the pod itself is at fault. A pod that is not ready counts against its workload or Service, a failed Job's failed pods are counted in the Job's row, and a pod being deleted is on its way out.",
     attentionPartly: "partly checked",
+    claimClassMissing:
+      "It names StorageClass {name}, which does not exist, so nothing will provision a volume for it.",
+    claimNoDefaultClass:
+      "It names no StorageClass and the cluster has no default one, so nothing will provision a volume for it.",
+    claimClassUnread:
+      "Its StorageClass could not be read, so whether it waits for a pod by design is unknown.",
     claimPendingDetail:
       "No volume is bound to it yet, so a pod that mounts it cannot start.",
   },
@@ -7117,6 +7130,75 @@ export const en = {
     readinessProbe: "Its readiness probe:",
     noReadinessProbe:
       "It declares no readiness probe, so the kubelet's own checks or a readiness gate hold it.",
+    pullNotFound:
+      "{container} cannot start: its image {image} does not exist in the registry",
+    pullDenied:
+      "{container} cannot start: the registry refused to hand over {image}",
+    pullRateLimited:
+      "{container} cannot start: the registry is rate-limiting pulls of {image}",
+    pullUnreachable:
+      "{container} cannot start: the node cannot reach the registry for {image}",
+    pullBackingOff:
+      "{container} cannot start: pulling {image} failed, and the kubelet waits before trying again",
+    pullBackingOffNote:
+      "While it waits the kubelet does not repeat the error; the last attempt's is in the pod's events.",
+    pullOther: "{container} cannot start: pulling {image} failed",
+    pullSecretsNamed: "The pod names the pull secrets {secrets}.",
+    pullSecretsNone:
+      "The pod names no pull secret, so a private registry gets no credentials unless its ServiceAccount carries them.",
+    invalidImage:
+      "{container} cannot start: {image} is not a valid image reference",
+    configError:
+      "{container} cannot be created: something its spec takes from a ConfigMap or Secret is missing",
+    createError: "{container} cannot be created by the container runtime",
+    runError: "{container} was created but the runtime could not start it",
+    blockedOther: "{container} cannot start ({reason})",
+    kubeletSaid: "The kubelet said:",
+    unplaced: "No node takes this pod",
+    unplacedOf: {
+      one: "Its {n} node does not take this pod",
+      other: "None of the {n} nodes takes this pod",
+    },
+    unplacedFor: "Waiting for a node for {age}.",
+    unfitShort: {
+      one: "{n} node lacks the free {resource} it requests",
+      other: "{n} nodes lack the free {resource} it requests",
+    },
+    unfitTaint: {
+      one: "{n} node has a taint it does not tolerate, {taint}",
+      other: "{n} nodes have a taint it does not tolerate, {taint}",
+    },
+    unfitSelector: {
+      one: "{n} node does not match its node selector or affinity",
+      other: "{n} nodes do not match its node selector or affinity",
+    },
+    unfitPodAffinity: {
+      one: "{n} node breaks its pod affinity or anti-affinity",
+      other: "{n} nodes break its pod affinity or anti-affinity",
+    },
+    unfitCordoned: {
+      one: "{n} node is cordoned",
+      other: "{n} nodes are cordoned",
+    },
+    unfitTooManyPods: {
+      one: "{n} node already runs as many pods as it may",
+      other: "{n} nodes already run as many pods as they may",
+    },
+    unfitVolumeZone: {
+      one: "{n} node cannot reach a volume it is bound to",
+      other: "{n} nodes cannot reach a volume it is bound to",
+    },
+    unfitTopology: {
+      one: "{n} node would break its topology spread",
+      other: "{n} nodes would break its topology spread",
+    },
+    unfitClaimsUnbound:
+      "its PersistentVolumeClaims are not bound yet, so the scheduler has not weighed a node",
+    unfitOther: {
+      one: "{n} node: {text}",
+      other: "{n} nodes: {text}",
+    },
+    schedulerSaid: "The scheduler said:",
     exitMessage: "Its exit message:",
     lastLine: "Its last line:",
     loggedLine: "Its log before the exit:",

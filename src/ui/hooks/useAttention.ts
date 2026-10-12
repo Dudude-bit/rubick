@@ -91,6 +91,17 @@ export function useAttention({
     refresh,
   });
 
+  const anyPending = !!claims.data?.rows.some(
+    (claim) => claim.status === "Pending"
+  );
+  const classes = useLiveQuery({
+    queryKey: ["attention", "storage-classes"],
+    queryFn: () => commands.listStorageClasses(null),
+    enabled: reading && anyPending,
+    refresh: "steady",
+  });
+  const classData = classes.data;
+
   const answered =
     enabled && overview.data !== undefined && !overview.isPlaceholderData
       ? overview.data
@@ -132,6 +143,7 @@ export function useAttention({
             overdue: autoscalerLate,
           },
           claims: { data: claimData, error: claimError, overdue: claimLate },
+          classes: classData,
           now,
         },
         t
@@ -151,6 +163,7 @@ export function useAttention({
       claimData,
       claimError,
       claimLate,
+      classData,
       now,
       t,
     ]

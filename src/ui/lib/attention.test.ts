@@ -540,6 +540,50 @@ describe("what Needs attention lists beyond pods", () => {
     expect(listed.items[0]).toMatchObject({ tone: "warn", reason: "Pending" });
   });
 
+  /**
+   * A claim whose class binds on first consumer is Pending by design, and
+   * was listed as a problem. Fails if it is listed, if a claim naming a
+   * class that does not exist is not said to, or if unread classes read as
+   * either.
+   */
+  it("passes over a claim that waits for its pod and names a missing class", () => {
+    const cls = (name: string, mode: string, isDefault = false) => ({
+      name,
+      uid: name,
+      provisioner: "rancher.io/local-path",
+      reclaimPolicy: "Delete",
+      volumeBindingMode: mode,
+      allowVolumeExpansion: false,
+      isDefault,
+      parameters: {},
+      labels: {},
+      annotations: {},
+      createdAt: null,
+    });
+    const rows = [
+      { ...claim("waits", "Pending", 10 * 60_000), storageClass: "local-path" },
+      { ...claim("orphan", "Pending", 10 * 60_000), storageClass: "fast-ssd" },
+    ];
+    const claims = { data: { rows, unread: [] }, error: null };
+    const read = attention({
+      claims,
+      classes: [cls("local-path", "WaitForFirstConsumer", true)],
+    });
+    expect(read.items.map((item) => item.name)).toEqual(["orphan"]);
+    expect(read.items[0]).toMatchObject({
+      tone: "err",
+      detail: {
+        says: "ours",
+        text: "It names StorageClass fast-ssd, which does not exist, so nothing will provision a volume for it.",
+      },
+    });
+    const unread = attention({ claims });
+    expect(unread.items.map((item) => item.name)).toEqual(["waits", "orphan"]);
+    expect(unread.items[0].detail).toMatchObject({
+      text: expect.stringContaining("could not be read"),
+    });
+  });
+
   /** The worst row leads whichever reader found it, and the backend's cut still counts. */
   it("ranks errors before warnings and counts what the backend cut", () => {
     const warning: ClusterProblem = {

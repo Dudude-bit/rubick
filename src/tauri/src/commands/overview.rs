@@ -114,6 +114,15 @@ pub enum ProblemDetail {
     ReplicasReady { ready: i32, desired: i32 },
     /// A node marked unschedulable.
     Unschedulable,
+    /// A workload's trouble told by its pods: the cause most of them share,
+    /// how many share it out of how many it runs, and the controller's own
+    /// sentence beside it.
+    PodsCause {
+        cause: crate::resources::PodCause,
+        pods: i32,
+        of: i32,
+        said: Option<String>,
+    },
     /// A pod's cause, as every surface that draws the pod reads it, and
     /// the containers behind its count where more than one restarted.
     Cause {
@@ -148,6 +157,65 @@ impl ProblemDetail {
     /// Why `pod` restarts, where its containers say; else how often.
     fn restarts_why(pod: &Pod, n: i32) -> Self {
         Self::cause(pod).unwrap_or_else(|| Self::restarts(pod, n))
+    }
+}
+
+/// The cause most of `pods` share, how many share it, and how many there are.
+fn shared_cause<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+) -> Option<(crate::resources::PodCause, i32, i32)> {
+    let mut total = 0;
+    let mut groups: Vec<(String, crate::resources::PodCause, i32)> = Vec::new();
+    for pod in pods {
+        if pod.metadata.deletion_timestamp.is_some() {
+            continue;
+        }
+        total += 1;
+        let Some(cause) = crate::resources::pod_cause(pod) else {
+            continue;
+        };
+        let key = cause_key(&cause);
+        match groups.iter_mut().find(|(k, _, _)| *k == key) {
+            Some((_, _, n)) => *n += 1,
+            None => groups.push((key, cause, 1)),
+        }
+    }
+    let (_, cause, n) = groups.into_iter().max_by_key(|(_, _, n)| *n)?;
+    Some((cause, n, total))
+}
+
+/// Two pods share a cause when it is the same mechanism in the same container.
+fn cause_key(cause: &crate::resources::PodCause) -> String {
+    use crate::resources::PodCause;
+    match cause {
+        PodCause::Exits { container, run, .. } => format!(
+            "exits/{container}/{:?}",
+            run.as_ref().map(|r| (r.code, r.reason.clone()))
+        ),
+        PodCause::Blocked {
+            container,
+            reason,
+            pull,
+            ..
+        } => format!("blocked/{container}/{reason}/{pull:?}"),
+        PodCause::NotReady { containers, .. } => format!("notReady/{containers:?}"),
+        PodCause::Unplaced { why, .. } => format!("unplaced/{why:?}"),
+    }
+}
+
+/// The workload's detail: its pods' shared cause where they have one, else the controller's sentence.
+fn workload_detail<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    said: Option<String>,
+) -> Option<ProblemDetail> {
+    match shared_cause(pods) {
+        Some((cause, pods, of)) => Some(ProblemDetail::PodsCause {
+            cause,
+            pods,
+            of,
+            said,
+        }),
+        None => ProblemDetail::said(said),
     }
 }
 
@@ -764,7 +832,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             detail: if looping {
                 Some(ProblemDetail::restarts_why(pod, restarts))
             } else {
-                ProblemDetail::said(message)
+                ProblemDetail::cause(pod).or_else(|| ProblemDetail::said(message))
             },
             since: if looping {
                 last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at)
@@ -937,6 +1005,13 @@ fn with_pods_read<'a>(
     crate::resources::with_pods(rollout, pods, now)
 }
 
+fn key_of(d: &Deployment) -> (&str, &str) {
+    (
+        d.metadata.namespace.as_deref().unwrap_or_default(),
+        d.metadata.name.as_deref().unwrap_or_default(),
+    )
+}
+
 /// A Deployment's rollout as its list and page read it, its own pods included.
 fn rollout_with_pods(
     d: &Deployment,
@@ -1014,8 +1089,11 @@ fn deployments_saying<'a>(
                 name: d.metadata.name.clone().unwrap_or_default(),
                 namespace: d.metadata.namespace.clone(),
                 reason: rollout.code().to_string(),
-                detail: ProblemDetail::said(condition.as_ref().and_then(|c| c.message.clone()))
-                    .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
+                detail: workload_detail(
+                    owned.get(&key_of(d)).into_iter().flatten().copied(),
+                    condition.as_ref().and_then(|c| c.message.clone()),
+                )
+                .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
                 since: condition
                     .as_ref()
                     .and_then(|c| c.last_transition_time.as_ref())
@@ -1043,14 +1121,17 @@ fn set_problem(
     rollout: &Rollout,
     ready: i32,
     desired: i32,
+    owned: &HashMap<&str, Vec<&Pod>>,
 ) -> Option<ClusterProblem> {
+    let pods = meta.uid.as_deref().and_then(|uid| owned.get(uid));
     rollout.is_problem().then(|| ClusterProblem {
         severity: rollout_severity(rollout),
         kind: kind.to_string(),
         name: meta.name.clone().unwrap_or_default(),
         namespace: meta.namespace.clone(),
         reason: rollout.code().to_string(),
-        detail: Some(ProblemDetail::ReplicasReady { ready, desired }),
+        detail: workload_detail(pods.into_iter().flatten().copied(), None)
+            .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
         since: None,
         restarts: None,
         folded_pods: None,
@@ -1118,6 +1199,7 @@ fn stateful_set_problems<'a>(
                     .and_then(|s| s.ready_replicas)
                     .unwrap_or(0),
                 set.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
+                owned,
             )
         })
         .collect()
@@ -1145,6 +1227,7 @@ fn daemon_set_problems<'a>(
                 ))?,
                 status.map_or(0, |s| s.number_ready),
                 status.map_or(0, |s| s.desired_number_scheduled),
+                owned,
             )
         })
         .collect()
@@ -3728,6 +3811,53 @@ mod tests {
 
     /// A pod that restarted `count` times, the last of them `ago` seconds
     /// back, and has been `Running` ever since.
+    fn exited_pod(name: &str, code: i32) -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {"name": name, "namespace": "shop"},
+            "spec": {"containers": [{"name": "api"}]},
+            "status": {
+                "phase": "Running",
+                "containerStatuses": [{
+                    "name": "api", "image": "", "imageID": "", "ready": false, "restartCount": 7,
+                    "state": {"waiting": {"reason": "CrashLoopBackOff"}},
+                    "lastState": {"terminated": {"exitCode": code, "reason": "Error"}}
+                }]
+            }
+        }))
+        .unwrap()
+    }
+
+    /// A Stalled Deployment said "ReplicaSet has timed out progressing",
+    /// the symptom. Fails if its row stops leading with what most of its
+    /// pods share, or miscounts them.
+    #[test]
+    fn a_workload_row_leads_with_the_cause_most_of_its_pods_share() {
+        let pods = [
+            exited_pod("api-1", 1),
+            exited_pod("api-2", 1),
+            exited_pod("api-3", 137),
+        ];
+        let Some(ProblemDetail::PodsCause {
+            cause,
+            pods,
+            of,
+            said,
+        }) = workload_detail(pods.iter(), Some("timed out".to_string()))
+        else {
+            panic!("pods with causes tell the workload's");
+        };
+        assert_eq!((pods, of), (2, 3));
+        assert!(matches!(
+            cause,
+            crate::resources::PodCause::Exits { run: Some(run), .. } if run.code == 1
+        ));
+        assert_eq!(said.as_deref(), Some("timed out"));
+        assert_eq!(
+            workload_detail(std::iter::empty(), Some("timed out".to_string())),
+            ProblemDetail::said(Some("timed out".to_string()))
+        );
+    }
+
     fn not_ready_for(seconds: i64, now: DateTime<Utc>) -> Pod {
         serde_json::from_value(serde_json::json!({
             "metadata": {"name": "web-1", "namespace": "shop"},

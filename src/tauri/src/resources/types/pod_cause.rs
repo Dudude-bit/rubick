@@ -33,6 +33,28 @@ pub enum PodCause {
         /// `None` while it is down. The reader compares it with its own clock.
         until: Option<DateTime<Utc>>,
     },
+    /// No node takes the pod, in the scheduler's words and what they come to.
+    Unplaced {
+        said: Option<String>,
+        since: Option<DateTime<Utc>>,
+        /// How many nodes the scheduler weighed, where it said.
+        nodes: Option<i32>,
+        /// Why the nodes turned it down, one entry per reason it gave.
+        why: Vec<Unfit>,
+    },
+    /// A container the kubelet cannot pull, build or start, in its words.
+    Blocked {
+        container: String,
+        /// The kubelet's reason: `ErrImagePull`, `CreateContainerConfigError`, `RunContainerError`.
+        reason: String,
+        /// The kubelet's own sentence about it, as written.
+        said: Option<String>,
+        image: String,
+        /// For a pull, what the registry's answer comes to.
+        pull: Option<PullFailure>,
+        /// The pull secrets the pod names, for a registry that refused it.
+        secrets: Vec<String>,
+    },
     /// Every container runs and the pod is still not Ready, so its Services
     /// leave it out: a readiness probe that fails, or one that has not passed yet.
     NotReady {
@@ -43,6 +65,64 @@ pub enum PodCause {
         /// The first of them's readiness probe, as declared; `None` where it has none.
         probe: Option<ProbeCheck>,
     },
+}
+
+/// One reason the scheduler gave for a set of nodes, and how many it covers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum Unfit {
+    /// `Insufficient cpu`: the free amount is short of the pod's request.
+    Short {
+        resource: String,
+        nodes: i32,
+    },
+    /// A taint the pod does not tolerate, as the scheduler printed it.
+    Taint {
+        taint: String,
+        nodes: i32,
+    },
+    /// The pod's nodeSelector or required node affinity.
+    Selector {
+        nodes: i32,
+    },
+    /// Inter-pod affinity or anti-affinity.
+    PodAffinity {
+        nodes: i32,
+    },
+    /// Cordoned.
+    Cordoned {
+        nodes: i32,
+    },
+    TooManyPods {
+        nodes: i32,
+    },
+    /// A bound volume pins the pod to nodes it cannot use.
+    VolumeZone {
+        nodes: i32,
+    },
+    Topology {
+        nodes: i32,
+    },
+    /// Its claims are not bound, so the scheduler did not weigh nodes at all.
+    ClaimsUnbound,
+    /// A reason this app does not know yet, quoted.
+    Other {
+        text: String,
+        nodes: Option<i32>,
+    },
+}
+
+/// What a registry's refusal to hand over an image comes to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PullFailure {
+    NotFound,
+    Denied,
+    RateLimited,
+    Unreachable,
+    /// `ImagePullBackOff`: the kubelet waits, and its message names no error.
+    BackingOff,
+    Other,
 }
 
 /// What a readiness probe asks, as its spec says.
@@ -125,6 +205,9 @@ pub fn pod_cause(pod: &Pod) -> Option<PodCause> {
         return None;
     }
     let status = pod.status.as_ref()?;
+    if let Some(unplaced) = unplaced(pod) {
+        return Some(unplaced);
+    }
     let initializing = status.phase.as_deref().is_none_or(|p| p == "Pending")
         && !condition_is_true(Some(status), "Initialized");
     let candidates = match blocking_init(pod).filter(|_| initializing) {
@@ -137,7 +220,177 @@ pub fn pod_cause(pod: &Pod) -> Option<PodCause> {
         .find_map(|cs| down(cs))
         .or_else(|| candidates.iter().find_map(|cs| up_again(cs, running)))
         .map(|cause| with_limit(cause, pod))
+        .or_else(|| candidates.iter().find_map(|cs| blocked(cs, pod)))
         .or_else(|| not_ready(pod))
+}
+
+fn unplaced(pod: &Pod) -> Option<PodCause> {
+    let status = pod.status.as_ref()?;
+    if status.phase.as_deref() != Some("Pending") {
+        return None;
+    }
+    let scheduled = status
+        .conditions
+        .as_deref()?
+        .iter()
+        .find(|c| c.type_ == "PodScheduled" && c.status == "False")?;
+    let said = scheduled.message.clone().filter(|m| !m.is_empty());
+    let (nodes, why) = said.as_deref().map(scheduler_reasons).unwrap_or_default();
+    Some(PodCause::Unplaced {
+        said,
+        since: scheduled.last_transition_time.as_ref().map(Moment::moment),
+        nodes,
+        why,
+    })
+}
+
+/// `0/3 nodes are available: 1 node(s) had untolerated taint {x: }, 2 Insufficient cpu. preemption: ...`
+fn scheduler_reasons(said: &str) -> (Option<i32>, Vec<Unfit>) {
+    if said.contains("unbound immediate PersistentVolumeClaims") {
+        return (None, vec![Unfit::ClaimsUnbound]);
+    }
+    let Some((head, rest)) = said.split_once(" nodes are available: ") else {
+        return (None, vec![]);
+    };
+    let nodes = head.rsplit('/').next().and_then(|n| n.trim().parse().ok());
+    let body = rest.split(". preemption:").next().unwrap_or(rest);
+    let body = body.trim_end_matches('.');
+    let why = split_outside_braces(body)
+        .into_iter()
+        .filter_map(|part| {
+            let (count, text) = part.trim().split_once(' ')?;
+            let n: i32 = count.parse().ok()?;
+            Some(unfit(text.trim(), n))
+        })
+        .collect();
+    (nodes, why)
+}
+
+fn split_outside_braces(text: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let (mut depth, mut start) = (0i32, 0usize);
+    for (at, ch) in text.char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            ',' if depth == 0 => {
+                parts.push(&text[start..at]);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&text[start..]);
+    parts
+}
+
+fn unfit(text: &str, nodes: i32) -> Unfit {
+    if let Some(resource) = text.strip_prefix("Insufficient ") {
+        return Unfit::Short {
+            resource: resource.to_string(),
+            nodes,
+        };
+    }
+    if let Some(taint) = text
+        .split_once("untolerated taint")
+        .or_else(|| text.split_once("had taint"))
+        .map(|(_, taint)| {
+            taint
+                .trim()
+                .trim_end_matches(", that the pod didn't tolerate")
+        })
+    {
+        return Unfit::Taint {
+            taint: taint.to_string(),
+            nodes,
+        };
+    }
+    let has = |words: &str| text.contains(words);
+    if has("node affinity/selector") || has("node selector") {
+        Unfit::Selector { nodes }
+    } else if has("pod affinity") || has("pod anti-affinity") {
+        Unfit::PodAffinity { nodes }
+    } else if has("unschedulable") {
+        Unfit::Cordoned { nodes }
+    } else if has("Too many pods") {
+        Unfit::TooManyPods { nodes }
+    } else if has("volume node affinity conflict") {
+        Unfit::VolumeZone { nodes }
+    } else if has("topology spread constraints") {
+        Unfit::Topology { nodes }
+    } else {
+        Unfit::Other {
+            text: text.to_string(),
+            nodes: Some(nodes),
+        }
+    }
+}
+
+const BLOCKED: &[&str] = &[
+    "ErrImagePull",
+    "ImagePullBackOff",
+    "InvalidImageName",
+    "CreateContainerConfigError",
+    "CreateContainerError",
+    "RunContainerError",
+];
+
+fn blocked(cs: &ContainerStatus, pod: &Pod) -> Option<PodCause> {
+    let waiting = cs.state.as_ref()?.waiting.as_ref()?;
+    let reason = waiting.reason.as_deref().filter(|r| BLOCKED.contains(r))?;
+    let said = waiting
+        .message
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .map(tail);
+    let pull = matches!(reason, "ErrImagePull" | "ImagePullBackOff")
+        .then(|| pull_failure(reason, said.as_deref().unwrap_or_default()));
+    let secrets = pod
+        .spec
+        .as_ref()
+        .and_then(|s| s.image_pull_secrets.as_ref())
+        .map(|refs| refs.iter().map(|r| r.name.clone()).collect())
+        .unwrap_or_default();
+    Some(PodCause::Blocked {
+        container: cs.name.clone(),
+        reason: reason.to_string(),
+        said,
+        image: cs.image.clone(),
+        pull,
+        secrets,
+    })
+}
+
+/// The registry's answer, by the words containerd, CRI-O and Docker use for it.
+fn pull_failure(reason: &str, said: &str) -> PullFailure {
+    let said = said.to_ascii_lowercase();
+    let any = |words: &[&str]| words.iter().any(|w| said.contains(w));
+    if any(&["toomanyrequests", "429", "rate limit"]) {
+        PullFailure::RateLimited
+    } else if any(&[
+        "unauthorized",
+        "pull access denied",
+        "authentication required",
+        "403 forbidden",
+        "denied",
+    ]) {
+        PullFailure::Denied
+    } else if any(&["not found", "manifest unknown", "no such image"]) {
+        PullFailure::NotFound
+    } else if any(&[
+        "no such host",
+        "i/o timeout",
+        "connection refused",
+        "network is unreachable",
+        "tls handshake timeout",
+    ]) {
+        PullFailure::Unreachable
+    } else if reason == "ImagePullBackOff" {
+        PullFailure::BackingOff
+    } else {
+        PullFailure::Other
+    }
 }
 
 fn not_ready(pod: &Pod) -> Option<PodCause> {
@@ -558,6 +811,147 @@ mod tests {
             pod_cause(&pod),
             Some(PodCause::NotReady { probe: None, .. })
         ));
+    }
+
+    fn pending_with(message: &str) -> Pod {
+        pod(serde_json::json!({
+            "metadata": {"name": "big-1", "namespace": "shop"},
+            "spec": {"containers": [{"name": "big"}]},
+            "status": {
+                "phase": "Pending",
+                "conditions": [{"type": "PodScheduled", "status": "False", "reason": "Unschedulable",
+                    "message": message, "lastTransitionTime": "2026-10-12T10:00:00Z"}]
+            }
+        }))
+    }
+
+    /// The scheduler's one line is several reasons over several nodes.
+    /// Fails if a reason is lost, miscounted, or a taint is split at its comma.
+    #[test]
+    fn a_pod_no_node_takes_carries_each_reason_with_its_nodes() {
+        let Some(PodCause::Unplaced { nodes, why, .. }) = pod_cause(&pending_with(
+            "0/4 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, \
+             2 Insufficient cpu, 1 node(s) didn't match Pod's node affinity/selector. \
+             preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.",
+        )) else {
+            panic!("an unplaced pod has a cause");
+        };
+        assert_eq!(nodes, Some(4));
+        assert_eq!(
+            why,
+            vec![
+                Unfit::Taint {
+                    taint: "{node-role.kubernetes.io/control-plane: }".to_string(),
+                    nodes: 1
+                },
+                Unfit::Short {
+                    resource: "cpu".to_string(),
+                    nodes: 2
+                },
+                Unfit::Selector { nodes: 1 },
+            ]
+        );
+    }
+
+    /// Unbound claims stop the scheduler before it weighs a node; calling
+    /// that "no node fits" sent readers to node capacity. Fails if it does.
+    #[test]
+    fn unbound_claims_are_their_own_reason_and_weigh_no_nodes() {
+        assert!(matches!(
+            pod_cause(&pending_with("0/3 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling.")),
+            Some(PodCause::Unplaced { nodes: None, why, .. }) if why == vec![Unfit::ClaimsUnbound]
+        ));
+    }
+
+    /// A reason this app has no word for is quoted, never dropped.
+    #[test]
+    fn an_unknown_scheduler_reason_is_kept_as_written() {
+        assert!(matches!(
+            pod_cause(&pending_with("0/1 nodes are available: 1 node(s) had volume limit exceeded.")),
+            Some(PodCause::Unplaced { why, .. })
+                if why == vec![Unfit::Other { text: "node(s) had volume limit exceeded".to_string(), nodes: Some(1) }]
+        ));
+    }
+
+    fn waiting_pod(reason: &str, message: &str) -> Pod {
+        pod(serde_json::json!({
+            "metadata": {"name": "api-1", "namespace": "shop"},
+            "spec": {"containers": [{"name": "api"}], "imagePullSecrets": [{"name": "regcred"}]},
+            "status": {
+                "phase": "Pending",
+                "containerStatuses": [{
+                    "name": "api", "image": "registry.example/shop/api:9", "imageID": "",
+                    "ready": false, "restartCount": 0,
+                    "state": {"waiting": {"reason": reason, "message": message}}
+                }]
+            }
+        }))
+    }
+
+    /// Each registry answer is its own cause. Fails if one is read as another.
+    #[test]
+    fn a_pull_is_explained_by_what_the_registry_answered() {
+        for (message, want) in [
+            (
+                "failed to resolve reference \"x\": registry.example/shop/api:9: not found",
+                PullFailure::NotFound,
+            ),
+            (
+                "pull access denied, repository does not exist or may require authorization",
+                PullFailure::Denied,
+            ),
+            ("failed to authorize: 401 Unauthorized", PullFailure::Denied),
+            (
+                "toomanyrequests: You have reached your pull rate limit",
+                PullFailure::RateLimited,
+            ),
+            (
+                "dial tcp: lookup registry.example: no such host",
+                PullFailure::Unreachable,
+            ),
+            ("something new", PullFailure::Other),
+        ] {
+            let Some(PodCause::Blocked { pull, secrets, .. }) =
+                pod_cause(&waiting_pod("ErrImagePull", message))
+            else {
+                panic!("{message}");
+            };
+            assert_eq!(pull, Some(want), "{message}");
+            assert_eq!(secrets, vec!["regcred".to_string()]);
+        }
+        assert!(matches!(
+            pod_cause(&waiting_pod(
+                "ImagePullBackOff",
+                "Back-off pulling image \"x\""
+            )),
+            Some(PodCause::Blocked {
+                pull: Some(PullFailure::BackingOff),
+                ..
+            })
+        ));
+    }
+
+    /// A missing key is the kubelet's sentence, kept whole. Fails if it is dropped.
+    #[test]
+    fn a_config_error_carries_the_kubelets_sentence() {
+        let message = "couldn't find key DB_PASSWORD in Secret team-checkout/checkout-db";
+        assert_eq!(
+            pod_cause(&waiting_pod("CreateContainerConfigError", message)),
+            Some(PodCause::Blocked {
+                container: "api".to_string(),
+                reason: "CreateContainerConfigError".to_string(),
+                said: Some(message.to_string()),
+                image: "registry.example/shop/api:9".to_string(),
+                pull: None,
+                secrets: vec!["regcred".to_string()],
+            })
+        );
+    }
+
+    /// A container still being created has no cause yet. Fails if it is called blocked.
+    #[test]
+    fn a_container_still_creating_is_not_blocked() {
+        assert_eq!(pod_cause(&waiting_pod("ContainerCreating", "")), None);
     }
 
     /// A healthy pod has no cause, a restart long ago included.

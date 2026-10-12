@@ -3,7 +3,10 @@ import type {
   Evidence,
   PodCause,
   ProbeCheck,
+  PullFailure,
+  Unfit,
 } from "@/generated/types";
+import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { listWords } from "@/i18n/say";
 import { formatAge, formatDuration } from "@/lib/utils";
@@ -169,9 +172,104 @@ function notReadyWords(
   };
 }
 
+const PULL_SAYING = {
+  notFound: "pullNotFound",
+  denied: "pullDenied",
+  rateLimited: "pullRateLimited",
+  unreachable: "pullUnreachable",
+  backingOff: "pullBackingOff",
+  other: "pullOther",
+} as const satisfies Record<PullFailure, string>;
+
+const BLOCKED_SAYING: Record<string, keyof typeof en.cause> = {
+  InvalidImageName: "invalidImage",
+  CreateContainerConfigError: "configError",
+  CreateContainerError: "createError",
+  RunContainerError: "runError",
+};
+
+function blockedWords(
+  cause: Extract<PodCause, { says: "blocked" }>,
+  t: T
+): CauseWords {
+  const { container, image, reason, said, pull, secrets } = cause;
+  const sentence = t(
+    "cause",
+    pull ? PULL_SAYING[pull] : (BLOCKED_SAYING[reason] ?? "blockedOther"),
+    { container, image, reason }
+  );
+  const note =
+    pull === "denied"
+      ? secrets.length > 0
+        ? t("cause", "pullSecretsNamed", { secrets: secrets.join(", ") })
+        : t("cause", "pullSecretsNone")
+      : pull === "backingOff"
+        ? t("cause", "pullBackingOffNote")
+        : null;
+  return {
+    sentence,
+    quote: said ? { label: t("cause", "kubeletSaid"), text: said } : null,
+    note,
+    tone: "err",
+  };
+}
+
+/** One reason the scheduler gave, as a clause over the nodes it covers. */
+export function unfitWords(unfit: Unfit, t: T): string {
+  switch (unfit.says) {
+    case "short":
+      return t("cause", "unfitShort", {
+        n: unfit.nodes,
+        resource: unfit.resource,
+      });
+    case "taint":
+      return t("cause", "unfitTaint", { n: unfit.nodes, taint: unfit.taint });
+    case "selector":
+      return t("cause", "unfitSelector", { n: unfit.nodes });
+    case "podAffinity":
+      return t("cause", "unfitPodAffinity", { n: unfit.nodes });
+    case "cordoned":
+      return t("cause", "unfitCordoned", { n: unfit.nodes });
+    case "tooManyPods":
+      return t("cause", "unfitTooManyPods", { n: unfit.nodes });
+    case "volumeZone":
+      return t("cause", "unfitVolumeZone", { n: unfit.nodes });
+    case "topology":
+      return t("cause", "unfitTopology", { n: unfit.nodes });
+    case "claimsUnbound":
+      return t("cause", "unfitClaimsUnbound");
+    case "other":
+      return unfit.nodes === null
+        ? unfit.text
+        : t("cause", "unfitOther", { n: unfit.nodes, text: unfit.text });
+  }
+}
+
+function unplacedWords(
+  cause: Extract<PodCause, { says: "unplaced" }>,
+  t: T
+): CauseWords {
+  const reasons = cause.why.map((unfit) => unfitWords(unfit, t));
+  const since = cause.since ? formatAge(cause.since, t) : null;
+  const head =
+    cause.nodes !== null && reasons.length > 0
+      ? t("cause", "unplacedOf", { n: cause.nodes })
+      : t("cause", "unplaced");
+  return {
+    sentence: [head, reasons.join("; ")].filter(Boolean).join(": "),
+    quote: cause.said
+      ? { label: t("cause", "schedulerSaid"), text: cause.said }
+      : null,
+    note: since ? t("cause", "unplacedFor", { age: since }) : null,
+    tone: "err",
+  };
+}
+
 /** The cause in words. */
 export function causeWords(cause: PodCause, t: T): CauseWords {
+  if (cause.says === "unplaced") return unplacedWords(cause, t);
   if (cause.says === "notReady") return notReadyWords(cause, t);
+  if (cause.says === "blocked") return blockedWords(cause, t);
   const { container, run } = cause;
   if (!run)
     return {
