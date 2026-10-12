@@ -836,12 +836,16 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
         ofActivity,
         reasons,
         since,
-        members.length === 1 && members[0].startsWith("Pod/")
+        podsAmong(members) === 1
       ),
     });
   }
   return stories;
 }
+
+/** How many pods a story's events were about: the one count its title and its sentence both read. */
+export const podsAmong = (members: readonly string[]): number =>
+  members.filter((member) => member.startsWith("Pod/")).length;
 
 export type StoryOrder = "warningsFirst" | "newest";
 

@@ -3169,7 +3169,7 @@ export const en = {
     timesSeen: { one: "once", other: "{n} times" },
     jobsCreated: { one: "1 Job created", other: "{n} Jobs created" },
     storyDone: "done",
-    podsOf: "pods of {name}",
+    podsOf: { one: "pod of {name}", other: "pods of {name}" },
     groupedByName:
       "Grouped by the generated suffix of the pod names. No controller event in this window names the owner of these pods.",
     fromPodStatus: "from the pod status, not an event",

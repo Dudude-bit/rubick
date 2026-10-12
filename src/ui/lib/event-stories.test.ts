@@ -11,6 +11,7 @@ import {
   densityOf,
   familyOf,
   mayBeGone,
+  podsAmong,
   RECENT_MS,
   sortStories,
   storiesOf,
@@ -976,6 +977,35 @@ describe("what a Deployment's story says it did", () => {
     );
     expect(group.members).toHaveLength(2);
     expect(sayWords(group.says, ru)).toMatch(/^Поды за /);
+  });
+
+  /**
+   * A ReplicaSet's story about one pod read "Поды" because the ReplicaSet
+   * itself was counted among the objects its events were about. Fails if
+   * the sentence counts anything but the pods.
+   */
+  it("counts only pods when it chooses between one pod and several", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const [story] = storiesOf(
+      [
+        event({
+          kind: "ReplicaSet",
+          name: "hello-web-5966d9b889",
+          reason: "SuccessfulCreate",
+          message: "Created pod: hello-web-5966d9b889-7nvr5",
+        }),
+        event({
+          kind: "Pod",
+          name: "hello-web-5966d9b889-7nvr5",
+          reason: "Started",
+        }),
+      ],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(story.members).toHaveLength(2);
+    expect(podsAmong(story.members)).toBe(1);
+    expect(sayWords(story.says, ru)).toMatch(/^Под за /);
   });
 });
 
