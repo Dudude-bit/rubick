@@ -8,6 +8,7 @@ import {
   BACKOFF,
   REFRESH_INTERVALS,
   effectiveInterval,
+  longestInterval,
   overdue,
 } from "./refresh";
 
@@ -53,6 +54,32 @@ describe("what a query is allowed to re-read at", () => {
     // promise to re-read more often than the surface asked for.
     const steady = REFRESH_INTERVALS.steady;
     expect(effectiveInterval(steady, { ...on, focused: false })).toBe(steady);
+  });
+});
+
+describe("the longest a visible query waits", () => {
+  /**
+   * Marco's count said "every 10 s" over a stamp 14 s old, and "every 30 s"
+   * a minute later. Fails if any stillness or focus lets a visible query
+   * wait longer than the bound a reader is told.
+   */
+  it("bounds every interval backing off or losing focus can reach", () => {
+    for (const rate of [
+      REFRESH_INTERVALS.overview,
+      REFRESH_INTERVALS.resourceList,
+      REFRESH_INTERVALS.shell,
+    ])
+      for (const focused of [true, false])
+        for (let steadyRuns = 0; steadyRuns < 30; steadyRuns++) {
+          const every = effectiveInterval(rate, {
+            ...on,
+            focused,
+            steadyRuns,
+          });
+          expect(every).not.toBe(false);
+          expect(every).toBeLessThanOrEqual(longestInterval(rate));
+        }
+    expect(longestInterval(REFRESH_INTERVALS.overview)).toBe(BACKOFF.cap);
   });
 });
 

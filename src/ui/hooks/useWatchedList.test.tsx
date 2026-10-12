@@ -18,7 +18,7 @@ vi.mock("@/hooks/useResourceWatch", () => ({
 
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useWatchedList } from "./useWatchedList";
+import { useListFollowed, useWatchedList } from "./useWatchedList";
 
 const POD_DETAIL = queryKeys.rowDetail("Pod");
 
@@ -198,5 +198,44 @@ describe("a list kept current by a watch", () => {
     act(() => callbacks.onError?.("refused"));
     expect(report).toHaveBeenCalledWith("refused");
     expect(toast).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Marco's Deployments page carried the green live badge while its sidebar
+   * count said it was polled. Fails if a live list that recounts is not
+   * reported followed, or a failed one, one that does not recount, or one no
+   * page holds any more still is.
+   */
+  it("reports a list followed only while a live watch that recounts feeds it", () => {
+    const follows = renderHook(() => useListFollowed(["pods"]));
+    const page = watched();
+    follows.rerender();
+    expect(follows.result.current).toBe(true);
+
+    act(() => callbacks.onError?.("watch stream failed: connection reset"));
+    follows.rerender();
+    expect(follows.result.current).toBe(false);
+    page.unmount();
+
+    const quiet = renderHook(() =>
+      useWatchedList({
+        enabled: true,
+        subscribe: () => Promise.resolve("stream"),
+        queryKey: ["pods"],
+        detail: POD_DETAIL,
+        reportFailure: "Pods",
+        recount: false,
+      })
+    );
+    follows.rerender();
+    expect(follows.result.current).toBe(false);
+    quiet.unmount();
+
+    const again = watched();
+    follows.rerender();
+    expect(follows.result.current).toBe(true);
+    again.unmount();
+    follows.rerender();
+    expect(follows.result.current).toBe(false);
   });
 });

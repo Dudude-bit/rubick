@@ -4999,11 +4999,15 @@ export const ru: Catalogue = {
     countsHeldAt: "Посчитано {ago}, до переключения. Читаем заново.",
     countsFollowed:
       "Обновляется вслед за изменениями в кластере. Посчитано в {at}.",
-    countsEvery: "Посчитано в {at}, пересчитывается каждые {every} с.",
+    countsEvery:
+      "Посчитано в {at}, пересчитывается не реже чем раз в {every} с.",
     countsAt: "Посчитано в {at}.",
     countsLate: "Ещё читается. Это число посчитано в {at}.",
     countsLateAll:
       "Счётчики ещё читаются. На экране значения, посчитанные в {at}.",
+    countsFailed: "Пересчитать не удалось. Это число посчитано в {at}.",
+    countsFailedAll:
+      "Пересчитать не удалось. На экране значения, посчитанные в {at}.",
     podsNotCounted: "поды не посчитаны {where}",
     notReadWhere: "не прочитано {where}",
     countsIn: "в {scope}",
