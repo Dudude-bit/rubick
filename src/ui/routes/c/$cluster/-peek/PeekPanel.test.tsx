@@ -1213,7 +1213,7 @@ describe("PeekPanel reads what the detail pages read", () => {
         wrap.client.getQueryData(
           queryKeys.ownedPods("Deployment", "shop", "api")
         )
-      ).toEqual({ uid: "deploy-uid", pods: [buildPod()] })
+      ).toEqual({ uid: "deploy-uid", cause: null, pods: [buildPod()] })
     );
   });
 
