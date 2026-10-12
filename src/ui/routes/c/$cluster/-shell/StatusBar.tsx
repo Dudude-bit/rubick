@@ -108,13 +108,14 @@ export function StatusBar({
   const connecting = isLoading || isAuthenticating;
 
   return (
-    <footer className="flex h-6 flex-none items-center gap-3.5 overflow-hidden whitespace-nowrap border-t border-hair px-3 text-[11px] text-fg-fnt">
+    <footer className="@container flex h-6 flex-none items-center gap-3.5 overflow-hidden whitespace-nowrap border-t border-hair px-3 text-[11px] text-fg-fnt">
       {/* Gives way first. A hint with no room wraps onto the clipped second
-          line; reversed, so the note never does and truncates only once every
-          hint has gone. The empty item holds line one when there is no note. */}
+          line; reversed, so the note never does. The note keeps its whole
+          sentence up to its cap, and the controls give way to it. The empty
+          item holds line one when there is no note. */}
       <div
         data-testid="status-hints"
-        className="flex h-6 min-w-0 flex-1 flex-row-reverse flex-wrap items-center justify-end gap-x-3.5 overflow-hidden has-[[data-link-note]]:min-w-44"
+        className="flex h-6 min-w-0 flex-1 flex-row-reverse flex-wrap items-center justify-end gap-x-3.5 overflow-hidden has-[[data-link-note]]:min-w-min"
       >
         <LinkOpenedNote />
         <span aria-hidden="true" className="-ml-3.5 h-6" />

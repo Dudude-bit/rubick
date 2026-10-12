@@ -144,11 +144,12 @@ function LiveNote({ capturedAt }: { capturedAt: Date | null }) {
       onMouseLeave={() => setHeld(false)}
       onFocus={() => setHeld(true)}
       onBlur={() => setHeld(false)}
-      className="flex h-6 min-w-0 items-center gap-1.5 text-fg-mid"
+      className="flex h-6 min-w-0 max-w-[45cqw] items-center gap-1.5 text-fg-mid"
     >
       <Link2 className="h-3 w-3 flex-none text-info" aria-hidden="true" />
       {/* The whole sentence sets the width it asks for; where the bar has
-          less, its first clause is drawn and the rest is on hover. */}
+          less, its first clause is drawn, marked as cut, and the rest is on
+          hover. */}
       <span ref={box} title={cut ? text : undefined} className="min-w-0">
         <span
           ref={whole}
@@ -158,7 +159,7 @@ function LiveNote({ capturedAt }: { capturedAt: Date | null }) {
           {text}
         </span>
         <span className="block truncate" aria-hidden={cut || undefined}>
-          {cut ? short : text}
+          {cut ? `${short}…` : text}
         </span>
         {cut && <span className="sr-only">{text}</span>}
       </span>
