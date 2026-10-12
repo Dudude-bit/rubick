@@ -665,49 +665,60 @@ describe("a feed a watch keeps", () => {
   /**
    * Stories fold the whole feed: redrawn on every batch, a busy cluster
    * redraws every card twenty times a second where the poll redrew them
-   * once. Fails if the stories follow each batch, or stop following.
+   * once. Fails if the stories follow each batch, or stop following. On the
+   * test's own clock, so a loaded machine cannot stretch the batches apart.
    */
   it("redraws the stories at most once a second however often the watch changes", async () => {
-    let commits = 0;
-    await renderWithRouter(
-      <Profiler id="events" onRender={() => commits++}>
-        <Events />
-      </Profiler>,
-      eventsAt("stories")
-    );
-    await waitFor(() =>
-      expect(commands.resourceWatchSubscribed).toHaveBeenCalled()
-    );
-    const now = Date.now();
-    const failing = (index: number): EventInfo => ({
-      ...event("prod", index),
-      type: "Warning",
-      reason: "BackOff",
-      message: "Back-off restarting failed container app",
-      involvedObject: {
-        kind: "Pod",
-        name: `worker-${index}`,
-        namespace: "prod",
-        uid: null,
-      },
-      lastTimestamp: new Date(now - 60_000 + index * 1000).toISOString(),
-    });
-    burst([failing(0)]);
-    await screen.findByRole("article", { name: /worker-0/ });
+    // Ages held still while the page loads, so only the watch moves a card.
+    const start = Date.UTC(2026, 9, 12, 12, 0, 0);
+    vi.useFakeTimers({ now: start, toFake: ["Date"] });
+    try {
+      const redrawn = new Set<number>();
+      await renderWithRouter(
+        <Profiler id="events" onRender={() => redrawn.add(Date.now())}>
+          <Events />
+        </Profiler>,
+        eventsAt("stories")
+      );
+      await waitFor(() =>
+        expect(commands.resourceWatchSubscribed).toHaveBeenCalled()
+      );
+      const failing = (index: number): EventInfo => ({
+        ...event("prod", index),
+        type: "Warning",
+        reason: "BackOff",
+        message: "Back-off restarting failed container app",
+        involvedObject: {
+          kind: "Pod",
+          name: `worker-${index}`,
+          namespace: "prod",
+          uid: null,
+        },
+        lastTimestamp: new Date(start - 60_000 + index * 1000).toISOString(),
+      });
+      burst([failing(0)]);
+      await screen.findByRole("article", { name: /worker-0/ });
 
-    commits = 0;
-    for (let index = 1; index <= 12; index++) {
-      send([{ op: "applied", resource: failing(index) }]);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      vi.useRealTimers();
+      vi.useFakeTimers({
+        now: start,
+        toFake: ["Date", "setTimeout", "clearTimeout"],
+      });
+      redrawn.clear();
+      for (let index = 1; index <= 12; index++) {
+        send([{ op: "applied", resource: failing(index) }]);
+        await act(() => vi.advanceTimersByTimeAsync(50));
+      }
+      expect(redrawn.size).toBeLessThanOrEqual(1);
+      expect(screen.queryByRole("article", { name: /worker-12/ })).toBeNull();
+
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+      expect(
+        screen.getByRole("article", { name: /worker-12/ })
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
     }
-    expect(commits).toBeLessThanOrEqual(2);
-    expect(
-      await screen.findByRole(
-        "article",
-        { name: /worker-12/ },
-        { timeout: 2000 }
-      )
-    ).toBeInTheDocument();
   });
 
   /**
