@@ -11,7 +11,7 @@ import {
 } from "@/lib/container-sequence";
 import { lastTermination } from "@/lib/pod-status";
 import { ExitAgo } from "../../../-object/ExitAgo";
-import type { PodInfo } from "@/generated/types";
+import type { ContainerInfo, PodInfo } from "@/generated/types";
 
 import { PodTerminal } from "./PodTerminal";
 import { StartOnAsk } from "./StartOnAsk";
@@ -22,6 +22,7 @@ import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import type { T } from "@/i18n/useT";
 import { RunLogWords } from "../../../-object/RunLogWords";
+import { useRunLog } from "../../../-object/useRunLog";
 
 /**
  * The Shell tab: a chooser, and the session it chose.
@@ -59,8 +60,8 @@ interface NoShell {
   body: ReactNode;
   /** The second paragraph, where there is one worth saying. */
   hint: ReactNode;
-  /** The container whose log holds what the shell would have told you. */
-  logs: { container: string; label: string } | null;
+  /** The container whose log holds what the shell would have told you, and why it cannot be read once the node has dropped it. */
+  logs: { container: ContainerInfo; label: string; gone: string } | null;
 }
 
 /**
@@ -107,8 +108,9 @@ function noShell(pod: PodInfo, t: T): NoShell {
       ) : null,
       logs: death
         ? {
-            container: blocker.name,
+            container: blocker,
             label: t("action", "readLastRunOf", { name: blocker.name }),
+            gone: t("readings", "failedRunLogGone"),
           }
         : null,
       body: failed ? (
@@ -161,8 +163,9 @@ function noShell(pod: PodInfo, t: T): NoShell {
       headline,
       hint: null,
       logs: {
-        container: last.name,
+        container: last,
         label: t("action", "readLogOf", { name: last.name }),
+        gone: t("readings", "finishedLogGone"),
       },
       body: (
         <>
@@ -191,8 +194,9 @@ function noShell(pod: PodInfo, t: T): NoShell {
     hint: null,
     logs: crashed
       ? {
-          container: crashed.name,
+          container: crashed,
           label: t("action", "readLastRunOf", { name: crashed.name }),
+          gone: t("readings", "failedRunLogGone"),
         }
       : null,
     body: (
@@ -265,16 +269,46 @@ function HollowLink({
   );
 }
 
+/**
+ * The offer of a run's log, asked of the node as the line above it asks. Where
+ * the node no longer has it the offer goes, or stays greyed with that reason
+ * when no line above has said so.
+ */
+function RunLogLink({
+  pod,
+  logs,
+  said,
+  onOpenLogs,
+}: {
+  pod: PodInfo;
+  logs: NonNullable<NoShell["logs"]>;
+  said: boolean;
+  onOpenLogs: (container: string) => void;
+}) {
+  const gone = useRunLog(pod.name, pod.namespace, logs.container) === "gone";
+  if (gone && said) return null;
+  return (
+    <HollowLink
+      onClick={() => onOpenLogs(logs.container.name)}
+      reason={gone ? logs.gone : undefined}
+    >
+      {logs.label}
+    </HollowLink>
+  );
+}
+
 /** A pod that has run its course: an ephemeral container has nowhere to land. */
 const FINISHED = new Set(["succeeded", "failed"]);
 
 function NoShellState({
+  pod,
   state,
   finished,
   onOpenLogs,
   onDebug,
   denied,
 }: {
+  pod: PodInfo;
   state: NoShell;
   finished: boolean;
   onOpenLogs: (container: string) => void;
@@ -289,9 +323,12 @@ function NoShellState({
       {state.hint && <p className="mb-3.5 text-xs text-fg-mut">{state.hint}</p>}
       <div className="flex flex-wrap items-center gap-4">
         {logs && (
-          <HollowLink onClick={() => onOpenLogs(logs.container)}>
-            {logs.label}
-          </HollowLink>
+          <RunLogLink
+            pod={pod}
+            logs={logs}
+            said={state.hint !== null}
+            onOpenLogs={onOpenLogs}
+          />
         )}
         {/* An ephemeral container is added to a pod that still exists; on one
             that has finished, the dialog's other half — a copy of the pod with
@@ -456,6 +493,7 @@ export function PodShell({
       ) : (
         hollow && (
           <NoShellState
+            pod={pod}
             state={hollow}
             finished={FINISHED.has(pod.status.phase.toLowerCase())}
             onOpenLogs={onOpenLogs}

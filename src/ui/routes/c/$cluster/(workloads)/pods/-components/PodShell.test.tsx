@@ -380,6 +380,84 @@ describe("PodShell when there is nothing to attach to", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/shell would have told you/)).toBeNull();
   });
+
+  /**
+   * Dana's Evicted init-demo offered "Read migrate's last run" right under
+   * "The node no longer has that run's log." Fails if the offer outlives
+   * the node's answer.
+   */
+  it("withdraws the offer of a run's log once the node says it is gone", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) =>
+      command === "get_pod_logs"
+        ? Promise.reject({ code: "LOG_NOT_KEPT", message: "gone" })
+        : undefined
+    );
+    renderWithProviders(
+      <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
+    );
+    await screen.findByText("The node no longer has that run's log.");
+    expect(
+      screen.queryByRole("button", { name: "Read migrate's last run" })
+    ).toBeNull();
+  });
+
+  /**
+   * Where no line has said the log is gone, the offer stays and says why it
+   * is greyed. Fails if it opens a Logs tab the node cannot fill, or goes
+   * without a word.
+   */
+  it("greys the offer of a finished pod's log with the node's reason", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) =>
+      command === "get_pod_logs"
+        ? Promise.reject({ code: "LOG_NOT_KEPT", message: "gone" })
+        : undefined
+    );
+    const onOpenLogs = vi.fn();
+    const ended = container({
+      name: "app",
+      ready: false,
+      state: {
+        type: "terminated",
+        termination: {
+          exitCode: 1,
+          signal: null,
+          reason: "Error",
+          message: null,
+          startedAt: "2026-08-08T12:00:00Z",
+          finishedAt: "2026-08-08T12:00:04Z",
+        },
+      },
+    });
+    renderWithProviders(
+      <PodShell
+        pod={pod({
+          status: {
+            phase: "Failed",
+            display: "Error",
+            exitUnreported: false,
+            ready: false,
+            conditions: [],
+            message: null,
+            reason: null,
+          },
+          containers: [ended],
+        } as Partial<PodInfo>)}
+        container={null}
+        ended={false}
+        {...handlers}
+        onOpenLogs={onOpenLogs}
+      />
+    );
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Read app's log" })
+      ).toHaveAttribute("aria-disabled", "true")
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Read app's log" })
+    );
+    expect(onOpenLogs).not.toHaveBeenCalled();
+  });
 });
 
 describe("PodShell where the cluster refuses this user", () => {
