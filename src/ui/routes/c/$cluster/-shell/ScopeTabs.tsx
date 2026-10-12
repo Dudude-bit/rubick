@@ -611,6 +611,10 @@ function ScopeTabItem({
   const mark = useClusterMark(context);
   const alias = mark.alias?.trim();
   const color = clusterColor(context, mark.hue);
+  // A filled dot read as live, so it is filled only where it is.
+  const connected = useClusterStore((s) =>
+    active ? s.isConnected : context !== null && s.live.includes(context)
+  );
   const route = tabRouteLabel(tab.href, t);
   // Closing a tab ends the shell it keeps, so the tab says it keeps one.
   const shell = useKeptShellStore((s) =>
@@ -777,15 +781,23 @@ function ScopeTabItem({
                 >
                   {/* Only the dot carries the cluster colour here, and the mark
                     stays at text contrast so the tab reads as one label and
-                    the colour signal has a single owner. A cluster the
-                    kubeconfig has lost gets a ring instead of a fill, so the
-                    state survives with the hue taken away. */}
+                    the colour signal has a single owner. A cluster that is
+                    not connected keeps its hue as a ring, and one the
+                    kubeconfig has lost loses the hue too. */}
                   <span
+                    data-connected={connected}
                     className={cn(
                       "h-1.5 w-1.5 flex-none rounded-full",
-                      tab.missing && "border border-fg-fnt"
+                      (tab.missing || !connected) && "border",
+                      tab.missing && "border-fg-fnt"
                     )}
-                    style={tab.missing ? undefined : { background: color }}
+                    style={
+                      tab.missing
+                        ? undefined
+                        : connected
+                          ? { background: color }
+                          : { borderColor: color }
+                    }
                   />
                   <ProviderMark
                     provider={detectProvider(context ?? "")}
