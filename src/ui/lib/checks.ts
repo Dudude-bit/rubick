@@ -52,9 +52,13 @@ export function addressesIn(stdout: string): string[] {
   return [...found];
 }
 
+/** The resolver's own word for a name it does not have. */
+const NXDOMAIN = /\bNXDOMAIN\b/;
+
 export type Verdict =
   | { says: "resolved"; addresses: string[] }
-  | { says: "notResolved" }
+  /** `nxdomain` where the resolver itself answered that no such name exists. */
+  | { says: "notResolved"; nxdomain?: boolean }
   | { says: "connected" }
   | { says: "refused" }
   | { says: "noTool"; tried: string[] }
@@ -64,13 +68,14 @@ export type Verdict =
    * name that does not resolve or a port that refuses — those are findings
    * about the cluster, this is a finding about the attempt.
    */
-  | { says: "unanswered"; tool: string | null };
+  | { says: "unanswered"; tool: string | null; exitCode: number | null };
 
 /** What the outcome means, as a key the catalogue turns into words. */
 export function verdictOf(kind: "dns" | "tcp", outcome: CheckOutcome): Verdict {
   const unanswered: Verdict = {
     says: "unanswered",
     tool: outcome.answeredWith ?? null,
+    exitCode: outcome.exitCode,
   };
   if (outcome.answer === "noTool")
     return { says: "noTool", tried: outcome.tried };
@@ -78,7 +83,13 @@ export function verdictOf(kind: "dns" | "tcp", outcome: CheckOutcome): Verdict {
   // nothing either way, has not answered the question. Saying "does not
   // resolve" there states a fact about the name from a run that produced
   // no fact at all.
-  if (outcome.answer === "unanswered") return unanswered;
+  if (outcome.answer === "unanswered")
+    // busybox nslookup exits 1 for a name the resolver does not have, and
+    // for a resolver it could not reach alike: its words tell them apart.
+    return kind === "dns" &&
+      NXDOMAIN.test(`${outcome.stdout}\n${outcome.stderr}`)
+      ? { says: "notResolved", nxdomain: true }
+      : unanswered;
   if (kind === "dns") {
     const addresses = addressesIn(outcome.stdout);
     // `nslookup` exits 0 with "can't resolve" in its output on busybox, so

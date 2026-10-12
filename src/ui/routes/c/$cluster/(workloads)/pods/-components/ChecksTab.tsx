@@ -406,7 +406,13 @@ function sentence(verdict: Verdict, subject: string, t: T): string {
         addresses: verdict.addresses.join(", "),
       });
     case "notResolved":
-      return t("checks", "notResolved", { name: subject });
+      return t(
+        "checks",
+        verdict.nxdomain ? "notResolvedNxdomain" : "notResolved",
+        {
+          name: subject,
+        }
+      );
     case "connected":
       return t("checks", "connected", { address: subject });
     case "refused":
@@ -414,8 +420,13 @@ function sentence(verdict: Verdict, subject: string, t: T): string {
     case "noTool":
       return t("checks", "noTool", { tried: verdict.tried.join(", ") });
     case "unanswered":
-      return verdict.tool
-        ? t("checks", "unansweredBy", { tool: verdict.tool })
-        : t("checks", "unanswered");
+      return verdict.tool && verdict.exitCode !== null
+        ? t("checks", "unansweredExit", {
+            tool: verdict.tool,
+            code: verdict.exitCode,
+          })
+        : verdict.tool
+          ? t("checks", "unansweredBy", { tool: verdict.tool })
+          : t("checks", "unanswered");
   }
 }

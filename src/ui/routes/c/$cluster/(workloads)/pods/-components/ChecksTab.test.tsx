@@ -137,6 +137,52 @@ describe("testing a hypothesis from the pod", () => {
     expect(screen.queryByText(/resolves to/)).toBeNull();
   });
 
+  /**
+   * Marco's busybox nslookup printed NXDOMAIN and exited 1, and the card said
+   * it "ended without saying how it went". Fails if a resolver's NXDOMAIN
+   * with a failing exit is not said as a name that does not resolve, with
+   * the resolver's word, or if a failing exit with no such word drops its
+   * code from the card.
+   */
+  it("reads busybox's NXDOMAIN exit as no such name, and names any other exit's code", async () => {
+    vi.mocked(commands.runPodCheck).mockResolvedValue(
+      outcome({
+        tried: ["getent", "nslookup"],
+        answeredWith: "nslookup",
+        answer: "unanswered",
+        exitCode: 1,
+        stdout:
+          "Server:\t\t10.43.0.10\nAddress:\t10.43.0.10:53\n\n** server can't find kubernetes.default.svc: NXDOMAIN\n",
+      })
+    );
+    mount();
+    await userEvent.type(
+      screen.getByLabelText(/Resolve/),
+      "kubernetes.default.svc"
+    );
+    await userEvent.click(screen.getAllByRole("button", { name: /Run/ })[0]);
+    const said = await screen.findByText(
+      "kubernetes.default.svc does not resolve from here: the resolver answered NXDOMAIN, no such name"
+    );
+    expect(said.className).toContain("text-warn");
+
+    vi.mocked(commands.runPodCheck).mockResolvedValue(
+      outcome({
+        tried: ["getent", "nslookup"],
+        answeredWith: "nslookup",
+        answer: "unanswered",
+        exitCode: 1,
+        stdout: ";; connection timed out; no servers could be reached\n",
+      })
+    );
+    await userEvent.click(screen.getAllByRole("button", { name: /Run/ })[0]);
+    expect(
+      await screen.findByText(
+        "nslookup exited with code 1 and printed no answer this can read, so this is not an answer about the cluster"
+      )
+    ).toBeVisible();
+  });
+
   it("says a port does not answer, and not that it accepted", async () => {
     vi.mocked(commands.runPodCheck).mockResolvedValue(
       outcome({ answer: "no", exitCode: 7 })

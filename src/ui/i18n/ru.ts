@@ -1723,6 +1723,8 @@ export const ru: Catalogue = {
     answers: "Ответы",
     resolved: "{name} разрешается в {addresses}",
     notResolved: "{name} отсюда не разрешается",
+    notResolvedNxdomain:
+      "{name} отсюда не разрешается: резолвер ответил NXDOMAIN, такого имени нет",
     connected: "{address} принимает соединение отсюда",
     refused: "{address} отсюда не отвечает",
     noTool: "В образе нечем спросить (пробовали {tried})",
@@ -1733,6 +1735,8 @@ export const ru: Catalogue = {
     unanswered: "Проверка завершилась, не сообщив результат",
     unansweredBy:
       "{tool} завершился, не сообщив результат, поэтому это не ответ о кластере",
+    unansweredExit:
+      "{tool} завершился с кодом {code} и не напечатал ответа, который можно прочитать, поэтому это не ответ о кластере",
     answeredWith: "ответил {tool}",
     runFromCopy: "Запустить из копии",
     copyImage: "Образ для копии",

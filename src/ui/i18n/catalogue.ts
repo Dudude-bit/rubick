@@ -1679,6 +1679,8 @@ export const en = {
     answers: "Answers",
     resolved: "{name} resolves to {addresses}",
     notResolved: "{name} does not resolve from here",
+    notResolvedNxdomain:
+      "{name} does not resolve from here: the resolver answered NXDOMAIN, no such name",
     connected: "{address} accepts a connection from here",
     refused: "{address} does not answer from here",
     noTool: "The image has nothing to ask with (tried {tried})",
@@ -1689,6 +1691,8 @@ export const en = {
     unanswered: "The check ended without saying how it went",
     unansweredBy:
       "{tool} ended without saying how it went, so this is not an answer about the cluster",
+    unansweredExit:
+      "{tool} exited with code {code} and printed no answer this can read, so this is not an answer about the cluster",
 
     answeredWith: "answered by {tool}",
     runFromCopy: "Run from a copy",
