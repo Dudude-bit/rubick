@@ -37,6 +37,7 @@ import { yamlTab } from "../../../-object/yaml-tab";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { TrafficChain } from "../../../-object/TrafficChain";
+import { NodeRef } from "../../../-object/NodeRef";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
@@ -64,7 +65,6 @@ import { usePodDenied } from "@/lib/access";
 import { UsageBlock } from "../../../-usage/usage-block";
 import { ImageRef } from "@/components/object/ImageRef";
 import { ResourceMessage } from "@/components/object/ResourceMessage";
-import { ResourceRef } from "@/components/object/ResourceRef";
 import { MostLikelyPanel } from "./MostLikelyPanel";
 import { PodStatusBadge } from "./PodStatusBadge";
 import { usePodShare } from "./usePodShare";
@@ -709,11 +709,7 @@ export function PodDetail() {
       label: t("columns", "node"),
       value: pod?.nodeName ? (
         <span className="inline-flex items-baseline gap-2">
-          <ResourceRef
-            kind={ResourceType.Node}
-            name={pod.nodeName}
-            showKind={false}
-          />
+          <NodeRef name={pod.nodeName} />
           {nodeIsSpot && <SpotMark says="spot" />}
         </span>
       ) : (

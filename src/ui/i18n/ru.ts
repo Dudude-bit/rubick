@@ -3301,6 +3301,7 @@ export const ru: Catalogue = {
     storyStillHappening: "продолжается",
     storySettled: "прекратилось",
     storyStateUnknown: "неизвестно",
+    refusedToRead: "Ваш доступ не позволяет читать {kind} {name}.",
     namedRowsOnly: {
       one: "Показана только {n} строка, которую Обзор отметил как требующую внимания.",
       few: "Показаны только {n} строки, которые Обзор отметил как требующие внимания.",

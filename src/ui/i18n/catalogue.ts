@@ -3077,6 +3077,7 @@ export const en = {
     storyStillHappening: "still happening",
     storySettled: "settled",
     storyStateUnknown: "cannot say",
+    refusedToRead: "Your access does not allow reading {kind} {name}.",
     namedRowsOnly: {
       one: "Showing only the {n} row the Overview listed as needing attention.",
       other:

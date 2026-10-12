@@ -12,6 +12,7 @@ import {
 } from "@/lib/container-sequence";
 import { declaredQuantity } from "@/lib/metric-format";
 import { RestartsWords } from "../-object/ExitAgo";
+import { NodeRef } from "../-object/NodeRef";
 import { restartsAreNews } from "@/lib/crash-loop";
 import { insideWait, podRole, podStatusTitle } from "@/lib/share/pod-status";
 import { formatDate } from "@/lib/utils";
@@ -126,9 +127,11 @@ export const WORKLOAD_SOURCES: PeekSources = {
               : []),
             {
               label: t("columns", "node"),
-              value: pod.nodeName
-                ? ref("Node", pod.nodeName)
-                : t("empty", "unscheduled"),
+              value: pod.nodeName ? (
+                <NodeRef name={pod.nodeName} className="max-w-full" />
+              ) : (
+                t("empty", "unscheduled")
+              ),
               tone: pod.nodeName ? undefined : notUp,
             },
             {
