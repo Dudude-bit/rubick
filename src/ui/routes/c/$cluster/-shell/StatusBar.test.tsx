@@ -197,6 +197,43 @@ describe("the strip at the narrowest window", () => {
   });
 });
 
+describe("a cluster the backend holds, on its way back", () => {
+  const returning = (live: string[]) =>
+    useClusterStore.setState({
+      isConnected: false,
+      pendingContext: "prod",
+      live,
+      connectedThrough: "kubectl_proxy",
+    });
+
+  /**
+   * Live round 25: Back to a kept cluster read "not connected" for up to
+   * 3.4 s with its session up. Fails if the bar reads the gate on the
+   * window's reads instead of whether the cluster has a session.
+   */
+  it("says connected, not 'not connected', while the backend turns to it", () => {
+    returning(["prod"]);
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.queryByText("not connected")).toBeNull();
+    expect(screen.getByText("through kubectl proxy")).toBeInTheDocument();
+  });
+
+  /** Fails if a cluster with no session left is called connected because it is pending. */
+  it("still says not connected for a cluster the backend let go of", () => {
+    returning([]);
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.getByText("not connected")).toBeInTheDocument();
+  });
+});
+
 describe("which way the session goes", () => {
   /** A session through kubectl is a different session: no deadline of its own, and kubectl's plugin doing the talking. The bar has to say so or the reader debugs the wrong path. */
   it("names the proxy when the app's own credentials were refused", () => {

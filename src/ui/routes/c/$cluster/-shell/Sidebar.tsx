@@ -68,7 +68,7 @@ import { commands } from "@/lib/commands";
 import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
-import { useClusterStore } from "@/stores/clusterStore";
+import { hasSession, useClusterStore } from "@/stores/clusterStore";
 import {
   inScope,
   joinScoped,
@@ -819,7 +819,7 @@ function ClusterRow() {
   const t = useT();
   const currentContext = useClusterStore((s) => s.currentContext);
   const alias = useClusterMark(currentContext).alias?.trim();
-  const isConnected = useClusterStore((s) => s.isConnected);
+  const connected = useClusterStore(hasSession);
   const isLoading = useClusterStore((s) => s.isLoading);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
 
@@ -853,14 +853,14 @@ function ClusterRow() {
           which is the only way this indicator is ever looked at. */}
       <span
         aria-label={
-          isConnected ? "connected" : connecting ? "connecting" : "disconnected"
+          connected ? "connected" : connecting ? "connecting" : "disconnected"
         }
         className={cn(
           "ml-auto h-[7px] w-[7px] flex-none rounded-full",
-          !isConnected && (connecting ? "bg-warn" : "bg-fg-fnt")
+          !connected && (connecting ? "bg-warn" : "bg-fg-fnt")
         )}
         style={
-          isConnected
+          connected
             ? {
                 background: "var(--cluster)",
                 boxShadow:

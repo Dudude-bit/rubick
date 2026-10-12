@@ -138,7 +138,12 @@ beforeEach(() => {
   listServices.mockResolvedValue([]);
   listServiceEndpoints.mockResolvedValue([]);
   overview = undefined;
-  useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+  useClusterStore.setState({
+    isConnected: true,
+    currentContext: "prod",
+    pendingContext: null,
+    live: [],
+  });
   useUpdaterStore.setState({ available: false });
   // A test that fails mid-way must not leave the next one reading Russian.
   useLocaleStore.setState({ choice: "en" });
@@ -435,6 +440,26 @@ describe("a rail taller than the window", () => {
     expect(screen.getByRole("navigation").className).not.toContain(
       "mask-image"
     );
+  });
+});
+
+describe("the cluster's dot", () => {
+  /**
+   * Live round 25: the dot went grey for up to 3.4 s on the way back to a
+   * cluster the backend kept. Fails if it reads the gate on the window's
+   * reads instead of whether the cluster has a session.
+   */
+  it("stays lit while a cluster the backend holds comes back", async () => {
+    useClusterStore.setState({
+      isConnected: false,
+      isLoading: false,
+      isAuthenticating: false,
+      pendingContext: "prod",
+      live: ["prod"],
+    });
+    await wrap(<Sidebar />);
+
+    expect(await screen.findByLabelText("connected")).toBeInTheDocument();
   });
 });
 

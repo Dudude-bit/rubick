@@ -113,6 +113,8 @@ interface ClusterState {
    * apart from `error`, which is the screen's and goes with the next move.
    */
   failures: Record<string, ConnectFailed>;
+  /** Which way each session that landed reaches its cluster. */
+  paths: Record<string, ConnectionPath>;
 
   // Actions
   loadContexts: () => Promise<void>;
@@ -196,6 +198,18 @@ export const failedAt = (s: ClusterState): string | null =>
 export const wayBackTo = (s: ClusterState): string | null =>
   s.wayBack !== null && s.live.includes(s.wayBack) ? s.wayBack : null;
 
+/** A held cluster coming back: its reads wait for the backend, its session never went. */
+export const returningTo = (s: ClusterState): string | null =>
+  s.pendingContext !== null &&
+  !s.isAuthenticating &&
+  s.live.includes(s.pendingContext)
+    ? s.pendingContext
+    : null;
+
+/** For whatever says "connected": `isConnected` gates reads, so it lags a held cluster coming back. */
+export const hasSession = (s: ClusterState): boolean =>
+  s.isConnected || returningTo(s) !== null;
+
 export const useClusterStore = create<ClusterState>((set, get) => ({
   contexts: [],
   contextsKnown: false,
@@ -218,6 +232,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   live: [],
   wayBack: null,
   failures: {},
+  paths: {},
 
   loadContexts: async () => {
     set({ isLoading: true, error: null, errorContext: null });
@@ -383,6 +398,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         wayBack: null,
         live: [...new Set([...get().live, connectedContext])],
         failures: without(get().failures, connectedContext),
+        paths: { ...get().paths, [connectedContext]: info.connected_through },
       });
       // Only a connection that landed counts as "used": ordering the
       // front door by clusters the reader failed to reach would put the
@@ -402,6 +418,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     if (changed && before.live.includes(targetContext)) {
       set({
         ...moving,
+        connectedThrough: before.paths[targetContext] ?? null,
         isLoading: false,
         isAuthenticating: false,
         connectStartedAt: null,

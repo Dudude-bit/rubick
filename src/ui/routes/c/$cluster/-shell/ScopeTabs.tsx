@@ -81,11 +81,7 @@ import { nameCut } from "@/components/object/ResourceName";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
-import {
-  splitByRecency,
-  useClusterRecencyStore,
-} from "@/stores/clusterRecencyStore";
-import { useClusterStore } from "@/stores/clusterStore";
+import { hasSession, useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 import { useKeptShellStore } from "@/stores/keptShellStore";
 import { useT, type T } from "@/i18n/useT";
@@ -613,7 +609,7 @@ function ScopeTabItem({
   const color = clusterColor(context, mark.hue);
   // A filled dot read as live, so it is filled only where it is.
   const connected = useClusterStore((s) =>
-    active ? s.isConnected : context !== null && s.live.includes(context)
+    active ? hasSession(s) : context !== null && s.live.includes(context)
   );
   const route = tabRouteLabel(tab.href, t);
   // Closing a tab ends the shell it keeps, so the tab says it keeps one.
@@ -930,14 +926,9 @@ function ContextPopover({
   activeContext?: string | null;
 }) {
   const t = useT();
+  // The kubeconfig's order: a list reordered by use moved its rows between
+  // openings, and a click aimed from memory landed on the wrong cluster.
   const contexts = useClusterStore((s) => s.contexts);
-  const lastUsed = useClusterRecencyStore((s) => s.lastUsed);
-
-  // The same order the front door uses. Two cluster lists that disagree
-  // about which cluster is first is exactly the drift that made them one
-  // component in the first place.
-  const { recent, rest } = splitByRecency(contexts, lastUsed);
-  const ordered = [...recent, ...rest];
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -956,7 +947,7 @@ function ContextPopover({
               {t("empty", "noContextsInKubeconfig")}
             </p>
           )}
-          {ordered.map((ctx) => {
+          {contexts.map((ctx) => {
             const selected = ctx.name === activeContext;
             return (
               <button
@@ -974,8 +965,18 @@ function ContextPopover({
                   context={ctx.name}
                   selected={selected}
                   meta={
-                    <span className="text-[10px] uppercase tracking-wider">
-                      {providerLabel(detectProvider(ctx.name))}
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-wider">
+                        {providerLabel(detectProvider(ctx.name))}
+                      </span>
+                      {selected ? (
+                        <Check
+                          className="h-3 w-3 flex-none text-fg"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <span className="w-3 flex-none" />
+                      )}
                     </span>
                   }
                 />

@@ -18,7 +18,8 @@ import { commands } from "@/lib/commands";
 import { hrefOf, listLink, objectLink, setRouter } from "@/lib/links";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
-import { useClusterStore } from "./clusterStore";
+import type { ClusterInfo } from "@/generated/types";
+import { hasSession, useClusterStore } from "./clusterStore";
 import {
   listBehind,
   tabRouteLabel,
@@ -369,6 +370,58 @@ describe("stepping", () => {
   it("ignores a position no tab occupies", async () => {
     await state().activateIndex(7);
     expect(state().activeId).toBe("a");
+  });
+});
+
+describe("tabs on two clusters the backend holds", () => {
+  /**
+   * Live round 25: four of eight switches between acme-staging and acme-qa
+   * read "not connected" for up to 0.8 s, with both sessions up throughout.
+   * Fails if any state between the click and the backend's answer, either
+   * way, says the held cluster has no session.
+   */
+  it("never reads as not connected while a switch waits on the backend", async () => {
+    const focus = vi.mocked(commands.focusCluster);
+    const release = vi.mocked(commands.releaseClusters);
+    vi.mocked(commands.connectCluster).mockClear();
+    let answer = () => {};
+    focus.mockImplementation(
+      (context) =>
+        new Promise((resolve) => {
+          answer = () => resolve({ context } as ClusterInfo);
+        })
+    );
+    release.mockImplementation(async (keep) => [...keep].sort());
+    useClusterStore.setState({
+      currentContext: "acme-staging",
+      isConnected: true,
+      pendingContext: null,
+      isAuthenticating: false,
+      live: ["acme-qa", "acme-staging"],
+    });
+    seed([
+      tab({ id: "a", context: "acme-staging", href: "/c/acme-staging" }),
+      tab({ id: "b", context: "acme-qa", href: "/c/acme-qa" }),
+    ]);
+    const said: boolean[] = [];
+    const stop = useClusterStore.subscribe((s) => said.push(hasSession(s)));
+
+    try {
+      for (const id of ["b", "a"]) {
+        const switching = state().activateTab(id);
+        expect(useClusterStore.getState().isConnected).toBe(false);
+        answer();
+        await switching;
+      }
+    } finally {
+      stop();
+      focus.mockImplementation(async () => null);
+      release.mockImplementation(async () => []);
+    }
+
+    expect(commands.connectCluster).not.toHaveBeenCalled();
+    expect(useClusterStore.getState().currentContext).toBe("acme-staging");
+    expect(said).not.toContain(false);
   });
 });
 
