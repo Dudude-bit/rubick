@@ -9037,7 +9037,19 @@ export const ru: Catalogue = {
     readySummary: "готовы: {n}",
     notReadySummary: "не готовы: {n}",
     readyNotReadySummary: "готовы: {n} · не готовы: {notReady}",
-    upToDateAvailable: "{updated} обновлено · {available} доступно",
+    upToDateAvailable: "{updated} · {available}",
+    replicasUpToDate: {
+      one: "{n} обновлена",
+      few: "{n} обновлены",
+      many: "{n} обновлены",
+      other: "{n} обновлены",
+    },
+    replicasAvailable: {
+      one: "{n} доступна",
+      few: "{n} доступны",
+      many: "{n} доступны",
+      other: "{n} доступны",
+    },
     notReadyWord: "не готово",
     certificates: {
       one: "{n} сертификат",

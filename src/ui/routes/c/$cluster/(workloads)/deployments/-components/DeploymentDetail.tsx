@@ -418,8 +418,12 @@ export function DeploymentDetail() {
                   ]}
                   emptyMessage={t("empty", "scaledToZero")}
                   note={t("count", "upToDateAvailable", {
-                    updated: replicas?.updated ?? 0,
-                    available: replicas?.available ?? 0,
+                    updated: t("count", "replicasUpToDate", {
+                      n: replicas?.updated ?? 0,
+                    }),
+                    available: t("count", "replicasAvailable", {
+                      n: replicas?.available ?? 0,
+                    }),
                   })}
                 />
               </CountBlock>

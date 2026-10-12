@@ -225,6 +225,26 @@ describe("the Overview", () => {
   });
 });
 
+describe("the Replicas block", () => {
+  /**
+   * Lena's page read "1 готова" above "1 обновлено · 1 доступно": both counts
+   * in one string, so neither could take the form its own number and
+   * "реплика" ask for. Fails if the note stops counting each number with its
+   * own plural.
+   */
+  it("counts the up to date and the available replicas each in its own words", async () => {
+    answering(() => new Promise(() => {}));
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    expect(
+      await screen.findByText("1 up to date · 1 available")
+    ).toBeInTheDocument();
+  });
+});
+
 describe("the Pods tab", () => {
   /**
    * Sam deleted big-pull and applied it again: the new Deployment's Pods tab
