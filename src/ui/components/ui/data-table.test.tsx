@@ -383,6 +383,54 @@ describe("DataTable rows", () => {
   });
 
   /**
+   * Beside a peek in Russian at 1024, Lena's Pods kept only the Name column,
+   * pinned and nearly as wide as the list, and the row's buttons were a 2 px
+   * sliver at its right edge. Fails if the pinned name leaves the folded
+   * menu button less than its own room, or the table scrolls sideways for it.
+   */
+  it("leaves the folded menu button its room beside a pinned name as wide as the list", async () => {
+    const port = 296;
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(port);
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 300, meta: { floor: 280 } },
+            {
+              accessorKey: "namespace",
+              header: "Namespace",
+              size: 150,
+              meta: { floor: 150, yields: 1 },
+            },
+          ]}
+          data={DATA}
+          getRowHref={href}
+          fill
+          quickActions={["Logs", "Shell", "Delete"].map((label) => ({
+            icon: Eye,
+            label,
+            onClick: vi.fn(),
+          }))}
+          onRowMenu={vi.fn()}
+        />
+      );
+    } finally {
+      width.mockRestore();
+    }
+    expect(
+      screen.getAllByRole("button", { name: "More actions" })
+    ).toHaveLength(2);
+    const table = screen.getByRole("table");
+    expect(table.style.minWidth).toBe("");
+    const name = screen.getByRole("columnheader", { name: "Name" });
+    expect((parseFloat(name.style.width) / 100) * port).toBeLessThanOrEqual(
+      port - actionsColumnSize(1, 10)
+    );
+  });
+
+  /**
    * The PVs list drew "k8s-gui-hostpath." with a stray dot: the storage
    * class link took its name's whole width, the cell clipped it, and the
    * cell's own ellipsis drew after it. Fails if a link that is a text cell's

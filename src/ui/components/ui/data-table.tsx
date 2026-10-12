@@ -917,17 +917,37 @@ function DataTableInner<TData extends RowData>({
   // A filled table's port draws its own scrollbar in a lane, so only a table
   // the page scrolls keeps the room the page's overlay scrollbar reaches over.
   const gutter = fill ? CELL_PAD_PX : SCROLLBAR_REACH;
+  // The pinned first column leaves the row's menu button its room: beside a
+  // peek in Russian a name as wide as the port left it a 2 px sliver.
+  const pinnedRoom =
+    actionCount > 0 && portWidth > 0
+      ? Math.max(
+          0,
+          portWidth -
+            actionsColumnSize(
+              onRowMenu && actionCount >= 2 ? 1 : actionCount,
+              gutter
+            )
+        )
+      : Infinity;
   const dataYields = React.useMemo(
     () =>
-      dataColumns.flatMap((column) => {
-        const id = columnIdOf(column);
-        if (columnVisibility[id] === false) return [];
-        const meta = column.meta as AppColumnMeta | undefined;
-        const floor = dataBounds.get(id)?.floor ?? 0;
-        return [{ id, floor, yields: meta?.yields }];
-      }),
-    [dataColumns, columnVisibility, dataBounds]
+      dataColumns
+        .flatMap((column) => {
+          const id = columnIdOf(column);
+          if (columnVisibility[id] === false) return [];
+          const meta = column.meta as AppColumnMeta | undefined;
+          const floor = dataBounds.get(id)?.floor ?? 0;
+          return [{ id, floor, yields: meta?.yields }];
+        })
+        .map((column, index) =>
+          index === 0
+            ? { ...column, floor: Math.min(column.floor, pinnedRoom) }
+            : column
+        ),
+    [dataColumns, columnVisibility, dataBounds, pinnedRoom]
   );
+  const pinnedId = dataYields[0]?.id;
   // The row's buttons fold into one that opens its menu, which offers them
   // all, wherever that keeps a column the full row would hide, or a sideways
   // scroll away: Lena's lists hid columns beside room held for buttons drawn
@@ -1069,12 +1089,15 @@ function DataTableInner<TData extends RowData>({
 
   // Only the columns actually on screen count, so hiding one hands its room
   // to the rest instead of leaving a gap.
-  const specs = table.getVisibleFlatColumns().map((column) => ({
-    size: column.getSize(),
-    floor: bounds.get(column.id)?.floor ?? 0,
-    ideal: bounds.get(column.id)?.ideal ?? 0,
-    fixed: CONTROL_COLUMNS.has(column.id),
-  }));
+  const specs = table.getVisibleFlatColumns().map((column) => {
+    const room = column.id === pinnedId ? pinnedRoom : Infinity;
+    return {
+      size: column.getSize(),
+      floor: Math.min(bounds.get(column.id)?.floor ?? 0, room),
+      ideal: Math.min(bounds.get(column.id)?.ideal ?? 0, room),
+      fixed: CONTROL_COLUMNS.has(column.id),
+    };
+  });
   const layout = tableLayout(specs, portWidth);
 
   const pinned = layout.scrolls;
