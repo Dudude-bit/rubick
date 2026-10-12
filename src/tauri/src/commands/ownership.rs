@@ -31,12 +31,15 @@ pub async fn list_dependents(
     state: State<'_, AppState>,
 ) -> Result<Dependents> {
     validate_uid(&uid)?;
-    let index = state.ownership.ensure(&state, scope_of(scope)?).await?;
-    let (dependents, not_read) = index.dependents(&uid);
-    Ok(Dependents {
-        dependents,
-        not_read,
+    crate::client::clock::timed(&state.perf, "listDependents", async {
+        let index = state.ownership.ensure(&state, scope_of(scope)?).await?;
+        let (dependents, not_read) = index.dependents(&uid);
+        Ok(Dependents {
+            dependents,
+            not_read,
+        })
     })
+    .await
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +58,16 @@ pub async fn preview_cascade(
     state: State<'_, AppState>,
 ) -> Result<Cascade> {
     validate_uid(&uid)?;
-    let index = state.ownership.ensure(&state, scope_of(scope)?).await?;
+    crate::client::clock::timed(
+        &state.perf,
+        "previewCascade",
+        cascade_of(&state, uid, scope),
+    )
+    .await
+}
+
+async fn cascade_of(state: &AppState, uid: String, scope: Option<Vec<String>>) -> Result<Cascade> {
+    let index = state.ownership.ensure(state, scope_of(scope)?).await?;
     let unindexed = match index.unindexed_definition(&uid) {
         None => None,
         Some(kind) => match state.served(&kind.group, &kind.plural).await {
@@ -188,12 +200,15 @@ pub async fn object_lineage(
         crate::validation::validate_dns_subdomain(&group)?;
     }
     crate::validation::validate_dns_label(&plural)?;
-    let served = state
-        .served(&group, &plural)
-        .await?
-        .ok_or_else(|| Error::not_found("APIResource", plural.clone(), ""))?;
-    let subject = metadata(&state, &served, &name, namespace.clone()).await?;
-    lineage_of(&state, subject, namespace).await
+    crate::client::clock::timed(&state.perf, "objectLineage", async {
+        let served = state
+            .served(&group, &plural)
+            .await?
+            .ok_or_else(|| Error::not_found("APIResource", plural.clone(), ""))?;
+        let subject = metadata(&state, &served, &name, namespace.clone()).await?;
+        lineage_of(&state, subject, namespace).await
+    })
+    .await
 }
 
 async fn lineage_of(

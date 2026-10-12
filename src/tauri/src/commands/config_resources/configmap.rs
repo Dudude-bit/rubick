@@ -17,7 +17,12 @@ pub async fn get_configmap(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ConfigMapInfo> {
-    get_resource_info::<ConfigMap, ConfigMapInfo>(name, namespace, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getConfigmap",
+        get_resource_info::<ConfigMap, ConfigMapInfo>(name, namespace, state.clone()),
+    )
+    .await
 }
 
 /// Get `ConfigMap` data.
@@ -34,8 +39,12 @@ pub async fn get_configmap_data(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ConfigData> {
-    let configmap: ConfigMap =
-        crate::commands::helpers::get_resource(name, namespace, state).await?;
+    let configmap: ConfigMap = crate::client::clock::timed(
+        &state.perf,
+        "getConfigmapData",
+        crate::commands::helpers::get_resource(name, namespace, state.clone()),
+    )
+    .await?;
 
     let mut out = ConfigData::default();
     for (key, value) in configmap.data.unwrap_or_default() {

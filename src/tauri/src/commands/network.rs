@@ -31,7 +31,12 @@ pub async fn list_ingresses(
     filters: Option<ResourceFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<IngressInfo>> {
-    list_resource_infos::<Ingress, IngressInfo>(filters, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listIngresses",
+        list_resource_infos::<Ingress, IngressInfo>(filters, state.clone()),
+    )
+    .await
 }
 
 list_in_scope!(list_ingresses_in, Ingress, IngressInfo);
@@ -85,7 +90,12 @@ pub async fn list_network_policies_in(
     state: State<'_, AppState>,
 ) -> Result<Scoped<NetworkPolicyInfo>> {
     let client = (*state.current_client()?).clone();
-    across(scope, |reach| policies_in(client.clone(), reach)).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listNetworkPoliciesIn",
+        across(scope, |reach| policies_in(client.clone(), reach)),
+    )
+    .await
 }
 
 async fn policies_in(
@@ -120,21 +130,24 @@ pub async fn get_network_policy(
 ) -> Result<NetworkPolicyInfo> {
     crate::validation::validate_dns_subdomain(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
-    let policy = ctx.namespaced_api::<NetworkPolicy>().get(&name).await?;
-    let mut info = NetworkPolicyInfo::from(&policy);
+    crate::client::clock::timed(&state.perf, "getNetworkPolicy", async {
+        let policy = ctx.namespaced_api::<NetworkPolicy>().get(&name).await?;
+        let mut info = NetworkPolicyInfo::from(&policy);
 
-    let selector = policy.spec.as_ref().and_then(|s| s.pod_selector.as_ref());
-    // A refused pod list leaves the count `None`, never zero. Zero is the
-    // finding this page exists for; a reader without `list pods` must not be
-    // handed it.
-    if let Ok(pods) = ctx
-        .namespaced_api::<Pod>()
-        .list_metadata(&ListParams::default())
-        .await
-    {
-        info.selected = selected_count(selector, &pods.items);
-    }
-    Ok(info)
+        let selector = policy.spec.as_ref().and_then(|s| s.pod_selector.as_ref());
+        // A refused pod list leaves the count `None`, never zero. Zero is the
+        // finding this page exists for; a reader without `list pods` must not be
+        // handed it.
+        if let Ok(pods) = ctx
+            .namespaced_api::<Pod>()
+            .list_metadata(&ListParams::default())
+            .await
+        {
+            info.selected = selected_count(selector, &pods.items);
+        }
+        Ok(info)
+    })
+    .await
 }
 
 /// Delete a `NetworkPolicy`
@@ -162,7 +175,10 @@ pub async fn list_service_endpoints(
     state: State<'_, AppState>,
 ) -> Result<Vec<ServicePublished>> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
-    Ok(published_in(&ctx).await?.1)
+    crate::client::clock::timed(&state.perf, "listServiceEndpoints", async {
+        Ok(published_in(&ctx).await?.1)
+    })
+    .await
 }
 
 /// Every Service in scope and what each publishes.
@@ -183,13 +199,16 @@ pub async fn list_service_backing(
     state: State<'_, AppState>,
 ) -> Result<ServiceBacking> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
-    let read_at = chrono::Utc::now();
-    let (services, published) = published_in(&ctx).await?;
-    Ok(ServiceBacking {
-        services: services.iter().map(ServiceInfo::from).collect(),
-        published,
-        read_at,
+    crate::client::clock::timed(&state.perf, "listServiceBacking", async {
+        let read_at = chrono::Utc::now();
+        let (services, published) = published_in(&ctx).await?;
+        Ok(ServiceBacking {
+            services: services.iter().map(ServiceInfo::from).collect(),
+            published,
+            read_at,
+        })
     })
+    .await
 }
 
 /// One namespace's Services as their health verdict reads them.
@@ -504,7 +523,12 @@ pub async fn get_ingress(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<IngressInfo> {
-    get_resource_info::<Ingress, IngressInfo>(name, namespace, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getIngress",
+        get_resource_info::<Ingress, IngressInfo>(name, namespace, state.clone()),
+    )
+    .await
 }
 
 /// Which controller will pick an Ingress up — including "none will".
@@ -596,9 +620,13 @@ pub async fn resolve_ingress_class(
 ) -> Result<IngressClassBinding> {
     use kube::ResourceExt;
 
-    let classes = crate::commands::helpers::list_cluster_resources::<
-        k8s_openapi::api::networking::v1::IngressClass,
-    >(state, None, None, None)
+    let classes = crate::client::clock::timed(
+        &state.perf,
+        "resolveIngressClass",
+        crate::commands::helpers::list_cluster_resources::<
+            k8s_openapi::api::networking::v1::IngressClass,
+        >(state.clone(), None, None, None),
+    )
     .await?;
 
     let available: Vec<IngressClassSummary> = classes.items.iter().map(summary_of).collect();
@@ -637,7 +665,12 @@ pub async fn get_endpoints(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<EndpointsInfo> {
-    get_resource_info::<Endpoints, EndpointsInfo>(name, namespace, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getEndpoints",
+        get_resource_info::<Endpoints, EndpointsInfo>(name, namespace, state.clone()),
+    )
+    .await
 }
 
 /// Delete an Endpoints resource

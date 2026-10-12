@@ -16,7 +16,12 @@ pub async fn get_pods_metrics(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<PodMetricsResponse> {
-    get_pod_metrics(namespace.as_deref(), &state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getPodsMetrics",
+        get_pod_metrics(namespace.as_deref(), &state),
+    )
+    .await
 }
 
 /// Pod metrics across a selection: `None` is the whole cluster, several
@@ -26,13 +31,18 @@ pub async fn get_pods_metrics_in(
     scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<PodMetricsResponse> {
-    get_pod_metrics_in(scope_of(scope)?.as_deref(), &state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getPodsMetricsIn",
+        get_pod_metrics_in(scope_of(scope)?.as_deref(), &state),
+    )
+    .await
 }
 
 /// Get node metrics from Metrics API
 #[tauri::command]
 pub async fn get_nodes_metrics(state: State<'_, AppState>) -> Result<NodeMetricsResponse> {
-    get_node_metrics(&state).await
+    crate::client::clock::timed(&state.perf, "getNodesMetrics", get_node_metrics(&state)).await
 }
 
 /// Check again: forget the current context's "not installed" and "refused"

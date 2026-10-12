@@ -16,8 +16,12 @@ pub async fn list_services(
     state: State<'_, AppState>,
 ) -> Result<Vec<ServiceInfo>> {
     let filters = filters.unwrap_or_default();
-    let mut services: Vec<ServiceInfo> =
-        list_resource_infos::<Service, ServiceInfo>(Some(filters.base.clone()), state).await?;
+    let mut services: Vec<ServiceInfo> = crate::client::clock::timed(
+        &state.perf,
+        "listServices",
+        list_resource_infos::<Service, ServiceInfo>(Some(filters.base.clone()), state.clone()),
+    )
+    .await?;
 
     // Apply type filter if specified
     if let Some(svc_type) = &filters.service_type {
@@ -36,7 +40,12 @@ pub async fn get_service(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ServiceInfo> {
-    get_resource_info::<Service, ServiceInfo>(name, namespace, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getService",
+        get_resource_info::<Service, ServiceInfo>(name, namespace, state.clone()),
+    )
+    .await
 }
 
 /// Delete a service

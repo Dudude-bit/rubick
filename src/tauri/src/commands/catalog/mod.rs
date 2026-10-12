@@ -60,7 +60,7 @@ pub struct ApiCatalog {
 /// fails is named in `unread`; the list of groups failing fails the whole.
 #[tauri::command]
 pub async fn list_api_catalog(state: State<'_, AppState>) -> Result<ApiCatalog> {
-    catalog(&state).await
+    crate::client::clock::timed(&state.perf, "listApiCatalog", catalog(&state)).await
 }
 
 pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
@@ -154,14 +154,17 @@ pub async fn list_resource_table(
     cursor: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ResourceTable> {
-    let served = served(&state, &group, &plural).await?;
-    let scope = if served.namespaced {
-        scope_of(scope)?
-    } else {
-        None
-    };
-    let client = ResourceContext::for_list(&state, None)?.client;
-    table::page(&client, &served, scope, cursor.as_deref()).await
+    crate::client::clock::timed(&state.perf, "listResourceTable", async {
+        let served = served(&state, &group, &plural).await?;
+        let scope = if served.namespaced {
+            scope_of(scope)?
+        } else {
+            None
+        };
+        let client = ResourceContext::for_list(&state, None)?.client;
+        table::page(&client, &served, scope, cursor.as_deref()).await
+    })
+    .await
 }
 
 /// One object of any served kind, whole, as the API server returned it.
@@ -173,7 +176,12 @@ pub async fn get_served_object(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value> {
-    let object = object(&state, &group, &plural, &name, namespace).await?;
+    let object = crate::client::clock::timed(
+        &state.perf,
+        "getServedObject",
+        object(&state, &group, &plural, &name, namespace),
+    )
+    .await?;
     serde_json::to_value(object).map_err(|e| Error::Serialization(e.to_string()))
 }
 
@@ -186,7 +194,12 @@ pub async fn get_served_object_yaml(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    let object = object(&state, &group, &plural, &name, namespace).await?;
+    let object = crate::client::clock::timed(
+        &state.perf,
+        "getServedObjectYaml",
+        object(&state, &group, &plural, &name, namespace),
+    )
+    .await?;
     let yaml = serde_yaml::to_string(&object).map_err(|e| Error::Serialization(e.to_string()))?;
     clean_yaml_for_editor(&yaml)
 }
@@ -213,12 +226,26 @@ pub async fn list_served_objects(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ServedObjects> {
-    let served = served(&state, &group, &plural).await?;
+    crate::client::clock::timed(
+        &state.perf,
+        "listServedObjects",
+        siblings_of(&state, group, plural, namespace),
+    )
+    .await
+}
+
+async fn siblings_of(
+    state: &AppState,
+    group: String,
+    plural: String,
+    namespace: Option<String>,
+) -> Result<ServedObjects> {
+    let served = served(state, &group, &plural).await?;
     let api = if served.namespaced {
-        ResourceContext::for_command(&state, namespace)?
+        ResourceContext::for_command(state, namespace)?
             .dynamic_api_for_resource(&served.resource, false)
     } else {
-        ResourceContext::for_list(&state, None)?.dynamic_api_for_resource(&served.resource, true)
+        ResourceContext::for_list(state, None)?.dynamic_api_for_resource(&served.resource, true)
     };
     let answer = api.list(&page_params(SIBLINGS, None)).await;
     let list = state.served_answer(&group, answer)?;

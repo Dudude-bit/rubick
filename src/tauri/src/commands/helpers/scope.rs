@@ -177,9 +177,13 @@ macro_rules! list_in_scope {
             state: tauri::State<'_, $crate::state::AppState>,
         ) -> $crate::error::Result<$crate::commands::helpers::Scoped<$info>> {
             let client = (*state.current_client()?).clone();
-            $crate::commands::helpers::across(scope, |reach| {
-                $crate::commands::helpers::infos_in::<$k8s, $info>(client.clone(), reach)
-            })
+            $crate::client::clock::timed(
+                &state.perf,
+                $crate::client::clock::command_name!($cmd),
+                $crate::commands::helpers::across(scope, |reach| {
+                    $crate::commands::helpers::infos_in::<$k8s, $info>(client.clone(), reach)
+                }),
+            )
             .await
         }
     };

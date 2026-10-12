@@ -146,7 +146,19 @@ pub async fn get_certificate_issuance(
 ) -> Result<Option<IssuanceStory>> {
     crate::validation::validate_dns_subdomain(&secret_name)?;
     let ctx = ResourceContext::for_command(&state, Some(namespace.clone()))?;
+    crate::client::clock::timed(
+        &state.perf,
+        "getCertificateIssuance",
+        Box::pin(issuance_story(ctx, namespace, secret_name)),
+    )
+    .await
+}
 
+async fn issuance_story(
+    ctx: ResourceContext,
+    namespace: String,
+    secret_name: String,
+) -> Result<Option<IssuanceStory>> {
     let certificates: Api<DynamicObject> =
         ctx.dynamic_api_for_resource(&resource("Certificate", "certificates", CERT_GROUP), false);
     let all = certificates.list(&ListParams::default()).await?;

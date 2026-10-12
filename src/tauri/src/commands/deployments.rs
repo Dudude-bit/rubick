@@ -17,7 +17,12 @@ pub async fn list_deployments(
     filters: Option<ResourceFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<DeploymentInfo>> {
-    list_resource_infos::<Deployment, DeploymentInfo>(filters, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listDeployments",
+        list_resource_infos::<Deployment, DeploymentInfo>(filters, state.clone()),
+    )
+    .await
 }
 
 list_in_scope!(list_deployments_in, Deployment, DeploymentInfo);

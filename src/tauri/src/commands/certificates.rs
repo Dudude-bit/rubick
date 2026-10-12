@@ -43,12 +43,15 @@ pub async fn get_tls_certificates(
     let ctx = ResourceContext::for_command(&state, Some(namespace))?;
     let api: kube::Api<Secret> = ctx.namespaced_api();
 
-    let mut out = Vec::with_capacity(secret_names.len());
-    for name in secret_names {
-        crate::validation::validate_dns_subdomain(&name)?;
-        out.push(certificate_in(&api, name).await);
-    }
-    Ok(out)
+    crate::client::clock::timed(&state.perf, "getTlsCertificates", async {
+        let mut out = Vec::with_capacity(secret_names.len());
+        for name in secret_names {
+            crate::validation::validate_dns_subdomain(&name)?;
+            out.push(certificate_in(&api, name).await);
+        }
+        Ok(out)
+    })
+    .await
 }
 
 pub(crate) async fn certificate_in(api: &kube::Api<Secret>, name: String) -> TlsCertificate {

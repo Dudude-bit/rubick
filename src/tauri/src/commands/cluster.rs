@@ -436,7 +436,12 @@ pub fn credential_renewal(
 /// Get cluster information
 #[tauri::command]
 pub async fn get_cluster_info(context: String, state: State<'_, AppState>) -> Result<ClusterInfo> {
-    state.client_manager.test_connection(&context).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getClusterInfo",
+        state.client_manager.test_connection(&context),
+    )
+    .await
 }
 
 // ============================================================================

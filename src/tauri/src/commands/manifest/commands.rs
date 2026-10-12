@@ -345,7 +345,12 @@ pub async fn get_manifest(
     state: State<'_, AppState>,
 ) -> Result<String> {
     crate::validation::validate_path_segment(&name)?;
-    manifest_of(&state, &kind, &api_version, &name, namespace).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getManifest",
+        manifest_of(&state, &kind, &api_version, &name, namespace),
+    )
+    .await
 }
 
 /// Where one object is read, for every reader of one by kind and version.
@@ -431,14 +436,17 @@ pub async fn get_object_metadata(
     state: State<'_, AppState>,
 ) -> Result<ObjectMetadata> {
     crate::validation::validate_dns_subdomain(&name)?;
-    let served = Served::at(&state, &kind, &api_version, namespace).await?;
-    let meta = served
-        .answered(&state, served.api.get_metadata(&name).await)?
-        .metadata;
-    Ok(ObjectMetadata {
-        labels: meta.labels.unwrap_or_default(),
-        annotations: meta.annotations.unwrap_or_default(),
+    crate::client::clock::timed(&state.perf, "getObjectMetadata", async {
+        let served = Served::at(&state, &kind, &api_version, namespace).await?;
+        let meta = served
+            .answered(&state, served.api.get_metadata(&name).await)?
+            .metadata;
+        Ok(ObjectMetadata {
+            labels: meta.labels.unwrap_or_default(),
+            annotations: meta.annotations.unwrap_or_default(),
+        })
     })
+    .await
 }
 
 #[cfg(test)]

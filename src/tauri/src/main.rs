@@ -660,30 +660,59 @@ mod tests {
                 }
             }
         }
+        for stamp in &stamps {
+            found.extend(stamped_by(sources, stamp));
+        }
+        found
+    }
+
+    /// The first argument of each call of the macro `stamp`, which is the
+    /// name of the command that call stamps out.
+    fn stamped_by(sources: &[String], stamp: &str) -> BTreeSet<String> {
+        let call = format!("{stamp}!(");
+        let mut named = BTreeSet::new();
         for source in sources {
             let mut lines = source.lines().map(str::trim);
             while let Some(line) = lines.next() {
                 if line.starts_with("//") {
                     continue;
                 }
-                for stamp in &stamps {
-                    let call = format!("{stamp}!(");
-                    let Some(at) = line.find(&call) else { continue };
-                    if line[..at].ends_with(|c: char| c.is_alphanumeric() || c == '_') {
-                        continue;
-                    }
-                    let mut rest = &line[at + call.len()..];
-                    // A call wrapped by rustfmt names the command on the next line.
-                    while rest.is_empty() {
-                        rest = lines.next().expect("the rest of a macro call");
-                    }
-                    if !ident(rest).is_empty() {
-                        found.insert(ident(rest));
-                    }
+                let Some(at) = line.find(&call) else { continue };
+                if line[..at].ends_with(|c: char| c.is_alphanumeric() || c == '_') {
+                    continue;
+                }
+                let mut rest = &line[at + call.len()..];
+                // A call wrapped by rustfmt names the command on the next line.
+                while rest.is_empty() {
+                    rest = lines.next().expect("the rest of a macro call");
+                }
+                if !ident(rest).is_empty() {
+                    named.insert(ident(rest));
                 }
             }
         }
-        found
+        named
+    }
+
+    /// Every command named in `generate_handler!`, as the fn is called.
+    fn registered_commands(root: &Path) -> BTreeSet<String> {
+        let main = fs::read_to_string(root.join("main.rs")).expect("read main.rs");
+        let list = main
+            .split_once("generate_handler![")
+            .expect("the handler list")
+            .1
+            .split_once("])")
+            .expect("the end of the handler list")
+            .0;
+        list.lines()
+            .filter_map(|line| {
+                let line = line.trim().trim_end_matches(',');
+                if line.is_empty() || line.starts_with("//") {
+                    return None;
+                }
+                line.rsplit("::").next().map(str::to_string)
+            })
+            .collect()
     }
 
     /// Would pass a command stamped out by a macro and registered nowhere:
@@ -728,24 +757,7 @@ mod tests {
             written.len()
         );
 
-        let main = fs::read_to_string(root.join("main.rs")).expect("read main.rs");
-        let list = main
-            .split_once("generate_handler![")
-            .expect("the handler list")
-            .1
-            .split_once("])")
-            .expect("the end of the handler list")
-            .0;
-        let registered: BTreeSet<String> = list
-            .lines()
-            .filter_map(|line| {
-                let line = line.trim().trim_end_matches(',');
-                if line.is_empty() || line.starts_with("//") {
-                    return None;
-                }
-                line.rsplit("::").next().map(str::to_string)
-            })
-            .collect();
+        let registered = registered_commands(&root);
 
         let missing: Vec<&String> = written.difference(&registered).collect();
         assert!(
@@ -813,5 +825,186 @@ mod tests {
             });
             assert!(runs, "{module} documents `{filter}`, which runs no test");
         }
+    }
+
+    /// `list_events` as the recorder files it: `listEvents`.
+    fn camel(snake: &str) -> String {
+        snake
+            .split('_')
+            .enumerate()
+            .map(|(at, word)| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    Some(first) if at > 0 => first.to_uppercase().chain(chars).collect(),
+                    _ => word.to_string(),
+                }
+            })
+            .collect()
+    }
+
+    /// The macros whose expansion times the command it stamps out.
+    fn timing_macros(sources: &[String]) -> BTreeSet<String> {
+        let mut found = BTreeSet::new();
+        for source in sources {
+            let mut lines = source.lines();
+            while let Some(line) = lines.next() {
+                let Some(rest) = line.trim().strip_prefix("macro_rules!") else {
+                    continue;
+                };
+                let name = ident(rest.trim_start());
+                if lines
+                    .by_ref()
+                    .take_while(|body| *body != "}")
+                    .any(|body| body.contains("command_name!("))
+                {
+                    found.insert(name);
+                }
+            }
+        }
+        found
+    }
+
+    /// Every command that is timed, by the name it is timed under: the
+    /// literal each call of `timed` passes, and each command a timing macro
+    /// stamps out.
+    fn timed_commands(sources: &[String]) -> BTreeSet<String> {
+        const CALL: &str = concat!("clock::", "timed(");
+        let mut timed = BTreeSet::new();
+        for source in sources {
+            for (at, _) in source.match_indices(CALL) {
+                if source[..at]
+                    .rsplit('\n')
+                    .next()
+                    .is_some_and(|line| line.trim_start().starts_with("//"))
+                {
+                    continue;
+                }
+                let rest = source[at + CALL.len()..].trim_start();
+                let rest = rest
+                    .strip_prefix("&state.perf,")
+                    .unwrap_or_else(|| panic!("a timed call the guard cannot read: {rest:.60}"))
+                    .trim_start();
+                if let Some(name) = rest.strip_prefix('"') {
+                    timed.insert(name.split('"').next().unwrap_or_default().to_string());
+                } else {
+                    assert!(
+                        rest.starts_with("$crate::client::clock::command_name!("),
+                        "a timed call names its command neither by literal nor by macro: {rest:.60}"
+                    );
+                }
+            }
+        }
+        for stamp in timing_macros(sources) {
+            timed.extend(stamped_by(sources, &stamp).iter().map(|name| camel(name)));
+        }
+        timed
+    }
+
+    fn command_sources() -> (std::path::PathBuf, Vec<String>) {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut sources = Vec::new();
+        sources_in(&root, &mut sources);
+        (root, sources)
+    }
+
+    /// Would let a timed call and a timing macro be missed, and with them a
+    /// command the guards below think is untimed, or timed under a typo.
+    #[test]
+    fn a_timed_call_and_a_timing_macro_are_both_read_as_timing() {
+        let times = "macro_rules! times {\n    ($cmd:ident) => {\n        pub async fn $cmd() {\n            \
+                     $crate::client::@timed(\n                &state.perf,\n                \
+                     $crate::client::clock::command_name!($cmd),\n                work,\n            \
+                     )\n        }\n    };\n}\n";
+        let plain = "macro_rules! plain {\n    ($cmd:ident) => {\n        pub async fn $cmd() {}\n    };\n}\n";
+        let calls = "times!(list_one_in, Pod);\nplain!(list_two_in, Pod);\n\
+                     // crate::client::@timed(&state.perf, \"commented\", x)\n\
+                     fn a() { crate::client::@timed(\n    &state.perf,\n    \"getThree\",\n    x) }\n";
+        assert_eq!(
+            timed_commands(&[times, plain, calls].map(|text| text.replace('@', "clock::"))),
+            BTreeSet::from(["listOneIn", "getThree"].map(String::from))
+        );
+    }
+
+    /// A name `timed` files numbers under that no command has is a row the
+    /// recorder shows and nothing invokes, and leaves the command it was
+    /// meant for reading "not timed".
+    #[test]
+    fn every_name_a_command_is_timed_under_belongs_to_a_registered_command() {
+        let (root, sources) = command_sources();
+        let registered: BTreeSet<String> = registered_commands(&root)
+            .iter()
+            .map(|name| camel(name))
+            .collect();
+        let timed = timed_commands(&sources);
+        assert!(
+            timed.len() > 60,
+            "the scan found only {} timed commands; it is not reading the tree",
+            timed.len()
+        );
+
+        let strangers: Vec<&String> = timed.difference(&registered).collect();
+        assert!(
+            strangers.is_empty(),
+            "timed under a name no registered command has: {strangers:?}"
+        );
+    }
+
+    /// A `list_*` or `get_*` command left out of `timed` reads "not timed" in
+    /// the performance panel, which is how thirteen of nineteen rows of one
+    /// recording read while the cluster reads among them took the time.
+    #[test]
+    fn every_list_and_get_command_that_reads_the_cluster_is_timed() {
+        const NOT_THE_CLUSTER: [&str; 25] = [
+            "get_app_info",
+            "get_cli_paths",
+            "get_cluster_preferences",
+            "get_context_binding",
+            "get_current_context",
+            "get_kubeconfig_path",
+            "get_kubeconfig_paths",
+            "get_kubeconfig_source",
+            "get_loki_connection",
+            "get_prometheus_connection",
+            "get_recent_items",
+            "get_theme_config",
+            "get_updater_settings",
+            "get_yaml_history",
+            "list_azure_profiles",
+            "list_container_files",
+            "list_context_bindings",
+            "list_contexts",
+            "list_gcp_profiles",
+            "list_helm_repos",
+            "list_pod_rows",
+            "list_port_forward_configs",
+            "list_port_forwards",
+            "list_share_targets",
+            "list_terminal_sessions",
+        ];
+        let (root, sources) = command_sources();
+        let registered = registered_commands(&root);
+        let timed = timed_commands(&sources);
+
+        for name in NOT_THE_CLUSTER {
+            assert!(
+                registered.contains(name),
+                "{name} is exempted and no longer a command"
+            );
+            assert!(
+                !timed.contains(&camel(name)),
+                "{name} is exempted and timed; drop the exemption"
+            );
+        }
+        let untimed: Vec<&String> = registered
+            .iter()
+            .filter(|name| name.starts_with("list_") || name.starts_with("get_"))
+            .filter(|name| !NOT_THE_CLUSTER.contains(&name.as_str()))
+            .filter(|name| !timed.contains(&camel(name)))
+            .collect();
+        assert!(
+            untimed.is_empty(),
+            "read the cluster and are not timed, or answer from this machine and belong in \
+             the exemptions: {untimed:?}"
+        );
     }
 }

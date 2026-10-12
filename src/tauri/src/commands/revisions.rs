@@ -60,8 +60,22 @@ pub async fn get_controller_revisions(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ControllerRevisionInfo>> {
+    crate::client::clock::timed(
+        &state.perf,
+        "getControllerRevisions",
+        controller_revisions(&state, kind, name, namespace),
+    )
+    .await
+}
+
+async fn controller_revisions(
+    state: &AppState,
+    kind: String,
+    name: String,
+    namespace: Option<String>,
+) -> Result<Vec<ControllerRevisionInfo>> {
     crate::validation::validate_dns_subdomain(&name)?;
-    let ctx = ResourceContext::for_command(&state, namespace)?;
+    let ctx = ResourceContext::for_command(state, namespace)?;
     let History {
         update_revision,
         owned,

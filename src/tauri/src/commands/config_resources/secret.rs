@@ -19,7 +19,12 @@ pub async fn get_secret(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<SecretInfo> {
-    get_resource_info::<Secret, SecretInfo>(name, namespace, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getSecret",
+        get_resource_info::<Secret, SecretInfo>(name, namespace, state.clone()),
+    )
+    .await
 }
 
 /// Get decoded Secret data.
@@ -34,7 +39,12 @@ pub async fn get_secret_data(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ConfigData> {
-    let secret: Secret = crate::commands::helpers::get_resource(name, namespace, state).await?;
+    let secret: Secret = crate::client::clock::timed(
+        &state.perf,
+        "getSecretData",
+        crate::commands::helpers::get_resource(name, namespace, state.clone()),
+    )
+    .await?;
     let secret_type = secret.type_.clone().unwrap_or_default();
 
     let mut out = ConfigData::default();

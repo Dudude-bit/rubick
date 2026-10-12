@@ -95,7 +95,12 @@ pub async fn list_helm_releases_in(
     state: State<'_, AppState>,
 ) -> Result<Scoped<HelmRelease>> {
     let client = (*state.current_client()?).clone();
-    across(scope, |reach| releases_in(client.clone(), reach)).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listHelmReleasesIn",
+        across(scope, |reach| releases_in(client.clone(), reach)),
+    )
+    .await
 }
 
 async fn releases_in(client: kube::Client, reach: Option<String>) -> Result<Vec<HelmRelease>> {
@@ -363,7 +368,21 @@ pub async fn get_helm_release_detail(
 ) -> Result<HelmReleaseDetail> {
     crate::validation::validate_dns_subdomain(&name)?;
     crate::validation::validate_namespace(&namespace)?;
-    let ctx = ResourceContext::for_command(&state, Some(namespace.clone()))?;
+    crate::client::clock::timed(
+        &state.perf,
+        "getHelmReleaseDetail",
+        release_detail(&state, name, namespace, revision),
+    )
+    .await
+}
+
+async fn release_detail(
+    state: &AppState,
+    name: String,
+    namespace: String,
+    revision: Option<i32>,
+) -> Result<HelmReleaseDetail> {
+    let ctx = ResourceContext::for_command(state, Some(namespace.clone()))?;
     let secrets: Api<Secret> = ctx.namespaced_api();
 
     // Find the specific revision or latest
@@ -464,7 +483,20 @@ pub async fn get_helm_history(
 ) -> Result<Vec<HelmRevision>> {
     crate::validation::validate_dns_subdomain(&name)?;
     crate::validation::validate_namespace(&namespace)?;
-    let ctx = ResourceContext::for_command(&state, Some(namespace.clone()))?;
+    crate::client::clock::timed(
+        &state.perf,
+        "getHelmHistory",
+        release_history(&state, name, namespace),
+    )
+    .await
+}
+
+async fn release_history(
+    state: &AppState,
+    name: String,
+    namespace: String,
+) -> Result<Vec<HelmRevision>> {
+    let ctx = ResourceContext::for_command(state, Some(namespace.clone()))?;
     let secrets: Api<Secret> = ctx.namespaced_api();
 
     let lp = ListParams::default().labels(&format!("owner=helm,name={name}"));
