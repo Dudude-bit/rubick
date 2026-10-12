@@ -130,6 +130,36 @@ describe("a verb beside a count", () => {
   });
 });
 
+describe("a count that names what it counts", () => {
+  const say = (key: string, n: number) =>
+    translate("ru", "count", key as never, { n });
+
+  /**
+   * Lena's Service read "готово 1" with no noun, and every Endpoints row and
+   * ingress backend shares the words. Fails if the count loses its noun or
+   * its form stops following the number.
+   */
+  it("says how many addresses are ready, in the number's form", () => {
+    expect(say("nReady", 1)).toBe("1 адрес готов");
+    expect(say("nReady", 3)).toBe("3 адреса готовы");
+    expect(say("nReady", 5)).toBe("5 адресов готово");
+    expect(say("nNotReady", 1)).toBe("1 адрес не готов");
+    expect(say("nPublished", 2)).toBe("2 адреса опубликованы");
+  });
+
+  /**
+   * Under a big 1 Lena's Replicas block read "реплика требуется". Fails if a
+   * wanted count goes back to a noun and a verb after its number.
+   */
+  it("labels a wanted count as the thing wanted, after its number", () => {
+    expect(say("replicasWanted", 1)).toBe("требуемая реплика");
+    expect(say("replicasWanted", 3)).toBe("требуемые реплики");
+    expect(say("replicasWanted", 5)).toBe("требуемых реплик");
+    expect(say("nodesWanted", 2)).toBe("требуемых узла");
+    expect(say("completionsWanted", 1)).toBe("требуемое завершение");
+  });
+});
+
 describe("the Russian word for a drain", () => {
   /**
    * "Слив ждёт" and "что должен учитывать слив" on Lena's cart Deployment

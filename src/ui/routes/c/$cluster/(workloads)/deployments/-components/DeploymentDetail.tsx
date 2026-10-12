@@ -35,7 +35,7 @@ import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { useWorkloadPods } from "../../-components/workload-pods";
-import { workloadRole } from "@/lib/workload-status";
+import { readyBesideBadge, workloadRole } from "@/lib/workload-status";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -617,12 +617,15 @@ export function DeploymentDetail() {
           deployment && <RolloutBadge rollout={deployment.rollout} />
         }
         badges={
+          deployment &&
           replicas && (
             <span className="text-[11px] text-fg-mut">
-              {t("count", "slashReady", {
-                n: replicas.ready,
-                total: replicas.desired,
-              })}
+              {readyBesideBadge(
+                replicas.ready,
+                replicas.desired,
+                deployment.rollout,
+                t
+              )}
             </span>
           )
         }

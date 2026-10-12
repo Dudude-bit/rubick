@@ -3,6 +3,7 @@ import type { T } from "@/i18n/useT";
 import type { Tone } from "@/lib/tone";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { rolloutWord } from "@/lib/status-words";
+import { formatCount } from "@/lib/count";
 
 /**
  * The one word a workload's rollout comes to, on every screen that draws it.
@@ -309,6 +310,18 @@ export function rowsWithStarts<
     );
     return rollout === row.rollout ? row : { ...row, rollout };
   });
+}
+
+/** The count beside a rollout's badge: a bare 1/1 where the badge already says Ready, so the word is not said twice. */
+export function readyBesideBadge(
+  ready: number,
+  desired: number,
+  rollout: Rollout,
+  t: T
+): string {
+  return workloadStatus(rollout) === "Ready"
+    ? `${formatCount(ready)}/${formatCount(desired)}`
+    : t("count", "slashReady", { n: ready, total: desired });
 }
 
 /** "Stalled · 2/2 ready" for a shared report: the badge's word and colour beside the count. */

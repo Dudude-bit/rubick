@@ -8,6 +8,7 @@ import {
 import {
   FORMAT_DESCRIPTIONS,
   formatLineRate,
+  lineRateValues,
   formatName,
   formatTimeRange,
   termLabel,
@@ -150,7 +151,7 @@ export function LogStatusBar({
                   twice; the segment beside it says both instead. */}
               {intakeKey === "" &&
                 rate !== null &&
-                ` · ${t("count", "linesPerSecond", { rate: formatLineRate(rate) })}`}
+                ` · ${t("count", "linesPerSecond", lineRateValues(rate))}`}
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">{formatInfo.description}</TooltipContent>

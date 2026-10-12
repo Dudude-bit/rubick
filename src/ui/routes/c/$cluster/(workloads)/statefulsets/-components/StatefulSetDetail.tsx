@@ -71,6 +71,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { PodInfo, StatefulSetDetailInfo } from "@/generated/types";
 import { controlledBy } from "@/lib/controlled-by";
+import { readyBesideBadge } from "@/lib/workload-status";
 import { useT } from "@/i18n/useT";
 
 export function StatefulSetDetail() {
@@ -486,7 +487,7 @@ export function StatefulSetDetail() {
         badges={
           statefulSet && (
             <span className="text-[11px] text-fg-mut">
-              {t("count", "slashReady", { n: ready, total: desired })}
+              {readyBesideBadge(ready, desired, statefulSet.rollout, t)}
             </span>
           )
         }

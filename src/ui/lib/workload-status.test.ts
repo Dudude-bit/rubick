@@ -11,6 +11,7 @@ import {
   ROLLOUT_CODES,
   attentionOf,
   lastRunOut,
+  readyBesideBadge,
   rolloutLine,
   rolloutStatusOf,
   rolloutVerdict,
@@ -138,6 +139,19 @@ describe("the word a workload's rollout comes to", () => {
       role: "err",
       unread: false,
     });
+  });
+
+  /**
+   * Lena's Deployment header read "Готов 1/1 готовы", the badge's word and
+   * then the count's. Fails if the count beside a Ready badge says ready
+   * again, or one beside any other verdict stops saying what it counts.
+   */
+  it("says ready once beside a Ready badge", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    expect(readyBesideBadge(1, 1, { state: "ready" }, ru)).toBe("1/1");
+    expect(readyBesideBadge(0, 2, EVERY[1], ru)).toBe("0/2 готовы");
+    expect(readyBesideBadge(0, 2, EVERY[1], t)).toBe("count.slashReady");
   });
 
   /**
