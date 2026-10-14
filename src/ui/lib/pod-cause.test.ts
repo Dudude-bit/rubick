@@ -157,6 +157,7 @@ describe("a pod that runs and is not Ready", () => {
     says: "notReady",
     containers: ["web"],
     since: new Date(Date.now() - 12 * 60_000).toISOString(),
+    countsFrom: new Date(Date.now() - 10 * 60_000).toISOString(),
     probe,
   });
 

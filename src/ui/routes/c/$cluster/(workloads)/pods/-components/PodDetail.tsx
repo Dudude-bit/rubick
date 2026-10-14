@@ -8,8 +8,8 @@ import {
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { CauseEvidence } from "../../../-object/CauseLine";
 import { useCauseEvidence } from "../../../-object/useCauseEvidence";
-import { causeWords } from "@/lib/pod-cause";
-import { troubleCause } from "@/lib/share/pod-status";
+import { causeWords, kubeletWarned } from "@/lib/pod-cause";
+import { settingUp, troubleCause } from "@/lib/share/pod-status";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -786,10 +786,12 @@ export function PodDetail() {
   ];
 
   const problem = useMemo(() => podProblem(pod, waiting, t), [pod, waiting, t]);
-  const cause = useCauseEvidence(
+  const trouble = pod ? troubleCause(pod) : null;
+  const evidence = useCauseEvidence(
     pod ?? { name: "", namespace: "" },
-    pod ? troubleCause(pod) : null
+    trouble ?? (pod ? settingUp(pod) : null)
   );
+  const cause = trouble ? evidence : kubeletWarned(evidence);
   const causeSaid = cause && causeWords(cause, t);
 
   // A shell the reader opened and left is invisible the moment they click

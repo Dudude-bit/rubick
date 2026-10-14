@@ -18,6 +18,7 @@ import {
   insideWait,
   podRole,
   podStatusTitle,
+  settingUp,
   troubleCause,
 } from "@/lib/share/pod-status";
 import { PodCauseLine } from "../-object/CauseLine";
@@ -109,7 +110,8 @@ export const WORKLOAD_SOURCES: PeekSources = {
   Pod: source(commands.getPod, (pod, _target, t) => {
     const readiness = podReadiness(pod);
     const notUp: KeyValueTone = insideWait(pod) ? "info" : "warn";
-    const cause = troubleCause(pod);
+    const trouble = troubleCause(pod);
+    const cause = trouble ?? settingUp(pod);
     return {
       status: pod.status.display,
       statusFrom: pod.nodeName,
@@ -117,7 +119,14 @@ export const WORKLOAD_SOURCES: PeekSources = {
       statusTitle: podStatusTitle(pod, null, t),
       createdAt: pod.createdAt,
       endedAt: pod.status.failedAt,
-      lead: cause && <PodCauseLine pod={pod} cause={cause} className="mt-3" />,
+      lead: cause && (
+        <PodCauseLine
+          pod={pod}
+          cause={cause}
+          warnedOnly={!trouble}
+          className="mt-3"
+        />
+      ),
       groups: [
         {
           title: t("columns", "placement"),

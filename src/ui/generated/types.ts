@@ -2570,6 +2570,7 @@ export type PodCause =
       says: "notReady";
       containers: string[];
       since: string | null;
+      countsFrom: string | null;
       probe: ProbeCheck | null;
     }
   | {

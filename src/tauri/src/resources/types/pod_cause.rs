@@ -66,6 +66,10 @@ pub enum PodCause {
         containers: Vec<String>,
         /// When the `Ready` condition last turned `False`.
         since: Option<DateTime<Utc>>,
+        /// From when it counts as trouble, past the first passes a probe fails
+        /// on every start; `None` where `since` is unknown, which counts now.
+        #[serde(rename = "countsFrom")]
+        counts_from: Option<DateTime<Utc>>,
         /// The first of them's readiness probe, as declared; `None` where it has none.
         probe: Option<ProbeCheck>,
     },
@@ -258,12 +262,24 @@ pub struct SharedCause {
     pub of: i32,
 }
 
+/// How long a running pod may stay not Ready before it counts as trouble:
+/// longer than a readiness probe's usual first passes.
+pub const NOT_READY_GRACE: chrono::Duration = chrono::Duration::minutes(2);
+
 /// Read once here for the Overview's rows and a workload's own page alike.
 #[must_use]
 pub fn shared_cause<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> Option<SharedCause> {
+    shared_cause_by(pods, pod_cause)
+}
+
+/// [`shared_cause`] over the cause each pod counts by, as `cause_of` reads it.
+pub fn shared_cause_by<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    cause_of: impl Fn(&Pod) -> Option<PodCause>,
+) -> Option<SharedCause> {
     share(
         pods.into_iter()
-            .map(|pod| (pod.metadata.deletion_timestamp.is_some(), pod_cause(pod))),
+            .map(|pod| (pod.metadata.deletion_timestamp.is_some(), cause_of(pod))),
     )
 }
 
@@ -693,6 +709,7 @@ fn not_ready(pod: &Pod) -> Option<PodCause> {
     Some(PodCause::NotReady {
         containers,
         since,
+        counts_from: since.map(|at| at + NOT_READY_GRACE),
         probe,
     })
 }
@@ -1039,6 +1056,7 @@ mod tests {
             Some(PodCause::NotReady {
                 containers: vec!["web".to_string()],
                 since: Some("2026-10-12T10:00:00Z".parse().unwrap()),
+                counts_from: Some("2026-10-12T10:02:00Z".parse().unwrap()),
                 probe: Some(ProbeCheck::Http {
                     scheme: "HTTP".to_string(),
                     path: "/ready".to_string(),

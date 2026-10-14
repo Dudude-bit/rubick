@@ -7278,7 +7278,7 @@ export const en = {
     pendingTooLong:
       "Pending past the wait a pod is given before it counts as a problem: a minute for a node to take it, ten minutes to start once one has.",
     pendingStarting:
-      "Starting: still inside the wait a pod is given before it counts as a problem, so not a fault yet.",
+      "Starting: still inside the wait a pod is given before its age alone makes it a problem.",
     containerStatusUnknown:
       "the container's state was lost, usually after the node restarted.",
     deadlineExceeded:

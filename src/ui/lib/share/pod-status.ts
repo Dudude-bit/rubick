@@ -5,8 +5,13 @@ import type { ReportValue } from "@/lib/report";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { podStatusMeaning } from "@/lib/status-meaning";
 import { loopState } from "@/lib/crash-loop";
-import { causeText, currentCause } from "@/lib/pod-cause";
-import type { PodCause, PodStart } from "@/generated/types";
+import {
+  causeText,
+  countsAt,
+  currentCause,
+  sharedCause,
+} from "@/lib/pod-cause";
+import type { PodCause, PodStart, SharedCause } from "@/generated/types";
 
 type LoopStatus = {
   display: string;
@@ -100,6 +105,54 @@ export function troubleCause(
   return role === "err" || role === "warn"
     ? currentCause(pod.status.cause, now)
     : null;
+}
+
+/** A pod its kubelet is setting up inside its wait: no trouble yet, unless the kubelet's warnings say so. */
+export function settingUp(
+  pod: PodBadgeInput,
+  now: number = Date.now()
+): Extract<PodCause, { says: "creating" }> | null {
+  const cause = pod.status.cause;
+  return cause?.says === "creating" && insideWait(pod, now) ? cause : null;
+}
+
+/** The moments a pod's cause starts or stops counting on the clock alone. */
+export function causeDeadlines(pod: PodBadgeInput): number[] {
+  const cause = pod.status.cause;
+  const turns =
+    cause?.says === "exits"
+      ? cause.until
+      : cause?.says === "notReady"
+        ? cause.countsFrom
+        : null;
+  return [...podDeadlines(pod), Date.parse(turns ?? "")].filter(
+    Number.isFinite
+  );
+}
+
+/**
+ * What a workload's pods share as trouble at `now`, or else what the pods it
+ * is setting up share, which only their kubelet's warnings make trouble:
+ * what every pod shows on its way up is no workload's cause.
+ */
+export function workloadCause(
+  pods: readonly (PodBadgeInput & { status: { deleting?: boolean } })[],
+  now: number
+): { shared: SharedCause; warnedOnly: boolean } | null {
+  const trouble = sharedCause(
+    pods.map((pod) => ({
+      deleting: pod.status.deleting,
+      cause: countsAt(troubleCause(pod, now), now),
+    }))
+  );
+  if (trouble) return { shared: trouble, warnedOnly: false };
+  const setup = sharedCause(
+    pods.map((pod) => ({
+      deleting: pod.status.deleting,
+      cause: settingUp(pod, now),
+    }))
+  );
+  return setup && { shared: setup, warnedOnly: true };
 }
 
 /** What a pod's word means on hover, the one sentence every screen that draws it gives: its cause first. */

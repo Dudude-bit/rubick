@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   ResourceConnections,
@@ -208,13 +208,10 @@ describe("StatefulSetDetail", () => {
     );
   });
 
-  /**
-   * Only the Deployment page led with its pods' cause: a StatefulSet whose
-   * pods waited on a missing ConfigMap said "0 of 2 ready" and nothing
-   * more. Fails if the cause they share does not lead, with the kubelet's
-   * warning it reads for the pod the cause names.
-   */
-  it("leads with the cause its pods share, in the kubelet's words", async () => {
+  /** Two pods of the set the kubelet is setting up, inside their wait, and what it warned of them. */
+  function mockSettingUp(
+    warnings: Awaited<ReturnType<typeof commands.getPodSetupWarnings>>
+  ) {
     mockDetail(
       buildSet({
         replicas: { desired: 2, ready: 0, current: 2, updated: 2 },
@@ -258,13 +255,27 @@ describe("StatefulSetDetail", () => {
       ],
       podIp: null,
       hostIp: null,
-      start: { state: "settled" },
+      start: {
+        state: "starting",
+        until: new Date(Date.now() + 5 * 60_000).toISOString(),
+      },
     });
     vi.mocked(commands.listPods).mockResolvedValue([
       pod("stateful-demo-0"),
       pod("stateful-demo-1"),
     ] as never);
-    vi.mocked(commands.getPodSetupWarnings).mockResolvedValue([
+    vi.mocked(commands.getPodSetupWarnings).mockResolvedValue(warnings);
+  }
+
+  /**
+   * Only the Deployment page led with its pods' cause: a StatefulSet whose
+   * pods waited on a missing ConfigMap said "0 of 2 ready" and nothing
+   * more. Fails if the cause they share does not lead, with the kubelet's
+   * warning it reads for the pod the cause names, while they are still
+   * inside the wait every pod gets.
+   */
+  it("leads with the cause its pods share, in the kubelet's words", async () => {
+    mockSettingUp([
       {
         reason: "FailedMount",
         said: 'MountVolume.SetUp failed for volume "cfg" : configmap "web-config" not found',
@@ -289,6 +300,26 @@ describe("StatefulSetDetail", () => {
       "k8s-gui-test",
       "stateful-demo-0"
     );
+  });
+
+  /**
+   * Every pod is set up for a second or two on every start, and a line put
+   * above the page for it moved everything under it, twice. Fails if a set
+   * whose pods are being set up inside their wait, with nothing from the
+   * kubelet, leads with them.
+   */
+  it("says nothing of pods being set up that the kubelet has no word against", async () => {
+    mockSettingUp([]);
+    await renderPage();
+
+    await waitFor(() =>
+      expect(commands.getPodSetupWarnings).toHaveBeenCalledWith(
+        "k8s-gui-test",
+        "stateful-demo-0"
+      )
+    );
+    await act(() => Promise.resolve());
+    expect(screen.queryByTestId("pods-cause")).toBeNull();
   });
 
   /**

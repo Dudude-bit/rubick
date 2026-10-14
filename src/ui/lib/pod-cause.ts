@@ -45,6 +45,29 @@ export function currentCause(
   return cause;
 }
 
+/** A cause past the first moments of a start, in which every probe has yet to pass. */
+export function countsAt(
+  cause: PodCause | null,
+  now: number = Date.now()
+): PodCause | null {
+  if (
+    cause?.says === "notReady" &&
+    cause.countsFrom &&
+    Date.parse(cause.countsFrom) > now
+  )
+    return null;
+  return cause;
+}
+
+/** A pod being set up, where its kubelet's warnings were read and there are some. */
+export function kubeletWarned(cause: PodCause | null): PodCause | null {
+  return cause?.says === "creating" &&
+    cause.kubelet.says === "read" &&
+    cause.kubelet.warnings.length > 0
+    ? cause
+    : null;
+}
+
 /** How long a run lasted, where the kubelet stamped both ends. */
 export function ranSeconds(run: EndedRun): number | null {
   if (!run.started || !run.ended) return null;

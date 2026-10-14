@@ -10,13 +10,15 @@ import { useMemo } from "react";
 
 import type { PodCause, PodInfo, SharedCause } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { useLastPassed } from "@/hooks/useNow";
 import {
   causeWords,
   currentCause,
+  kubeletWarned,
   podsShare,
-  sharedCause,
   type CauseWords,
 } from "@/lib/pod-cause";
+import { causeDeadlines, workloadCause } from "@/lib/share/pod-status";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import { useCauseEvidence, useCauseWarnings } from "./useCauseEvidence";
@@ -123,28 +125,36 @@ export function CauseLine({
 export function PodCauseLine({
   pod,
   cause,
+  warnedOnly = false,
   className,
 }: {
   pod: { name: string; namespace: string };
   cause: PodCause;
+  /** Told only if its kubelet's warnings say it is trouble. */
+  warnedOnly?: boolean;
   className?: string;
 }) {
   const read = useCauseEvidence(pod, cause) ?? cause;
-  return <CauseLine cause={read} className={className} />;
+  const told = warnedOnly ? kubeletWarned(read) : read;
+  return told && <CauseLine cause={told} className={className} />;
 }
 
 /** A workload's cause as its pods tell it: how many share it, then the cause. */
 export function PodsCauseLine({
   shared,
   namespace,
+  warnedOnly = false,
   className,
 }: {
   shared: SharedCause;
   namespace: string;
+  /** Told only if its kubelet's warnings say it is trouble. */
+  warnedOnly?: boolean;
   className?: string;
 }) {
   const t = useT();
-  const cause = useCauseWarnings(namespace, currentCause(shared.cause));
+  const read = useCauseWarnings(namespace, currentCause(shared.cause));
+  const cause = warnedOnly ? kubeletWarned(read) : read;
   if (!cause) return null;
   return (
     <p className={cn("text-xs", className)} data-testid="pods-cause">
@@ -172,15 +182,19 @@ export function WorkloadPodsCause({
   namespace: string;
   className?: string;
 }) {
-  const shared = useMemo(
-    () => (pods ? sharedCause(pods.map((pod) => pod.status)) : null),
-    [pods]
+  const passed = useLastPassed(
+    pods && !settled ? pods.flatMap(causeDeadlines) : []
   );
-  if (!shared || settled) return null;
+  const told = useMemo(
+    () => (pods ? workloadCause(pods, passed) : null),
+    [pods, passed]
+  );
+  if (!told || settled) return null;
   return (
     <PodsCauseLine
-      shared={shared}
+      shared={told.shared}
       namespace={namespace}
+      warnedOnly={told.warnedOnly}
       className={className}
     />
   );
