@@ -1,11 +1,26 @@
-import { CircleDashed, PackageX, RotateCcw, ServerOff } from "lucide-react";
+import {
+  CircleDashed,
+  PackageX,
+  RotateCcw,
+  ServerOff,
+  Unplug,
+} from "lucide-react";
 
-import type { PodCause, SharedCause } from "@/generated/types";
+import { useMemo } from "react";
+
+import type { PodCause, PodInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-import { causeWords, podsShare, type CauseWords } from "@/lib/pod-cause";
+import {
+  causeWords,
+  currentCause,
+  podsShare,
+  sharedCause,
+  type CauseWords,
+  type SharedCause,
+} from "@/lib/pod-cause";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
-import { useCauseLog } from "./useCauseLog";
+import { useCauseEvidence, useCauseWarnings } from "./useCauseEvidence";
 
 /** The mark a cause leads with, by what it is. */
 function CauseMark({
@@ -24,6 +39,8 @@ function CauseMark({
       return <PackageX className={className} aria-hidden="true" />;
     case "notReady":
       return <CircleDashed className={className} aria-hidden="true" />;
+    case "creating":
+      return <Unplug className={className} aria-hidden="true" />;
   }
 }
 
@@ -113,25 +130,59 @@ export function PodCauseLine({
   cause: PodCause;
   className?: string;
 }) {
-  const read = useCauseLog(pod, cause) ?? cause;
+  const read = useCauseEvidence(pod, cause) ?? cause;
   return <CauseLine cause={read} className={className} />;
 }
 
 /** A workload's cause as its pods tell it: how many share it, then the cause. */
 export function PodsCauseLine({
   shared,
+  namespace,
   className,
 }: {
   shared: SharedCause;
+  namespace: string;
   className?: string;
 }) {
   const t = useT();
+  const cause = useCauseWarnings(namespace, currentCause(shared.cause));
+  if (!cause) return null;
   return (
     <p className={cn("text-xs", className)} data-testid="pods-cause">
       <span className="text-fg-mut">
         {podsShare(shared.pods, shared.of, t)}{" "}
       </span>
-      <CauseLine cause={shared.cause} compact />
+      <CauseLine cause={cause} compact />
     </p>
+  );
+}
+
+/**
+ * The cause a workload's own pods share, read from the pods it holds, or
+ * nothing where it is settled or they are unread: the page and the peek of
+ * every workload kind tell it this way.
+ */
+export function WorkloadPodsCause({
+  pods,
+  settled,
+  namespace,
+  className,
+}: {
+  pods: readonly PodInfo[] | null | undefined;
+  settled: boolean;
+  namespace: string;
+  className?: string;
+}) {
+  const shared = useMemo(
+    () => (pods ? sharedCause(pods.map((pod) => pod.status)) : null),
+    [pods]
+  );
+  if (!shared || settled) return null;
+  return (
+    <PodsCauseLine
+      shared={shared}
+      namespace={namespace}
+      className={className}
+    />
   );
 }

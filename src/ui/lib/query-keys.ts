@@ -404,6 +404,12 @@ export const queryKeys = {
     previous,
     endedAt,
   ],
+  /** The kubelet's warnings about one pod a cause names. */
+  setupWarnings: (namespace: string, uid: string): (string | null)[] => [
+    "setup-warnings",
+    home(namespace),
+    uid,
+  ],
   /** The first `pages` pages of a kind's printed list, in one scope. */
   printedList: (
     group: string,

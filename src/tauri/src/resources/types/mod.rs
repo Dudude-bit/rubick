@@ -31,8 +31,8 @@ pub use pod::{
     VolumeMountInfo, VolumeObjectRef,
 };
 pub use pod_cause::{
-    pod_cause, shared_cause, EndedRun, Evidence, PodCause, ProbeCheck, PullFailure, SharedCause,
-    Unfit,
+    pod_cause, setup_warnings, shared_cause, EndedRun, Evidence, PodCause, ProbeCheck, PullFailure,
+    SetupFault, SetupWarning, SharedCause, Unfit, Warned,
 };
 pub use pod_display::{
     backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, failed_at,

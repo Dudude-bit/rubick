@@ -2,7 +2,7 @@
 
 use crate::commands::helpers::ResourceContext;
 use crate::error::Result;
-use crate::resources::EventInfo;
+use crate::resources::{EventInfo, SetupWarning};
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::Event;
 use kube::api::ListParams;
@@ -125,4 +125,26 @@ async fn events_in(state: &AppState, filters: Option<EventFilters>) -> Result<Ve
     }
 
     Ok(events)
+}
+
+/// The most warnings one pod's read asks for: the kubelet repeats one by its count.
+const POD_WARNINGS_PAGE: u32 = 100;
+
+/// The kubelet's warnings about one pod, for a cause that names it: what a
+/// pod the kubelet has not set up is waiting on.
+#[tauri::command]
+pub async fn get_pod_setup_warnings(
+    namespace: String,
+    uid: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<SetupWarning>> {
+    crate::validation::validate_namespace(&namespace)?;
+    crate::validation::validate_dns_label(&uid)?;
+    let ctx = ResourceContext::for_command(state.inner(), Some(namespace))?;
+    let api: kube::Api<Event> = ctx.namespaced_api();
+    let params = ListParams::default()
+        .fields(&format!("involvedObject.uid={uid},type=Warning"))
+        .limit(POD_WARNINGS_PAGE);
+    let events = api.list(&params).await?;
+    Ok(crate::resources::setup_warnings(&uid, &events.items))
 }

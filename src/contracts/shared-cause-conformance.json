@@ -1,0 +1,642 @@
+{
+  "about": "The cause most of a workload's pods share, as both halves read it: `share` in src/tauri/src/resources/types/pod_cause.rs (the Overview's rows, a Deployment's page and peek) and `sharedCause` in src/ui/lib/pod-cause.ts (the StatefulSet, DaemonSet and Job pages and peeks, which read their pods as a list). Each pod arrives as its `deleting` flag and the cause `pod_cause` read; `is` names the pod whose cause is told (`from`), how many share it and how many the workload runs, or null where none has a cause.",
+  "cases": [
+    {
+      "name": "two pods that exit the same way share it, the third has none",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 9,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:05:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": null
+        }
+      ],
+      "is": {
+        "from": 0,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "a pod being deleted is counted neither in the share nor in the whole",
+      "pods": [
+        {
+          "deleting": true,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 137,
+              "signal": null,
+              "reason": "OOMKilled",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        },
+        {
+          "deleting": true,
+          "cause": null
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        }
+      ],
+      "is": {
+        "from": 2,
+        "pods": 1,
+        "of": 1
+      }
+    },
+    {
+      "name": "pods with no cause share none",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": null
+        },
+        {
+          "deleting": false,
+          "cause": null
+        }
+      ],
+      "is": null
+    },
+    {
+      "name": "no pods share none",
+      "pods": [],
+      "is": null
+    },
+    {
+      "name": "of two causes as common, the later one is told",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "blocked",
+            "container": "api",
+            "reason": "ErrImagePull",
+            "said": null,
+            "image": "registry.example/api:1",
+            "pull": "notFound",
+            "secrets": []
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web"],
+            "since": null,
+            "probe": null
+          }
+        }
+      ],
+      "is": {
+        "from": 1,
+        "pods": 1,
+        "of": 2
+      }
+    },
+    {
+      "name": "the same exit in another container is another cause",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "sidecar",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "sidecar",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        }
+      ],
+      "is": {
+        "from": 1,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "another exit code in the same container is another cause",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 137,
+              "signal": null,
+              "reason": "OOMKilled",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 137,
+              "signal": null,
+              "reason": "OOMKilled",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        }
+      ],
+      "is": {
+        "from": 1,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "restarts with no exit reported share one cause",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": null,
+            "until": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 5,
+            "run": null,
+            "until": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": null
+          }
+        }
+      ],
+      "is": {
+        "from": 0,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "pulls the registry answered differently are different causes",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "blocked",
+            "container": "api",
+            "reason": "ErrImagePull",
+            "said": null,
+            "image": "registry.example/api:1",
+            "pull": "notFound",
+            "secrets": []
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "blocked",
+            "container": "api",
+            "reason": "ErrImagePull",
+            "said": null,
+            "image": "registry.example/api:1",
+            "pull": "denied",
+            "secrets": []
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "blocked",
+            "container": "api",
+            "reason": "ImagePullBackOff",
+            "said": null,
+            "image": "registry.example/api:1",
+            "pull": "notFound",
+            "secrets": []
+          }
+        }
+      ],
+      "is": {
+        "from": 2,
+        "pods": 1,
+        "of": 3
+      }
+    },
+    {
+      "name": "a pull refused for the same reason in the same container is one cause",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "blocked",
+            "container": "api",
+            "reason": "ErrImagePull",
+            "said": null,
+            "image": "registry.example/api:1",
+            "pull": "notFound",
+            "secrets": []
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "blocked",
+            "container": "api",
+            "reason": "ErrImagePull",
+            "said": null,
+            "image": "registry.example/api:1",
+            "pull": "denied",
+            "secrets": []
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "blocked",
+            "container": "api",
+            "reason": "ErrImagePull",
+            "said": null,
+            "image": "registry.example/api:1",
+            "pull": "notFound",
+            "secrets": []
+          }
+        }
+      ],
+      "is": {
+        "from": 0,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "pods the scheduler turned down for the same reasons share it, whatever its sentence",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "unplaced",
+            "said": "0/3 nodes are available: 3 Insufficient cpu.",
+            "since": null,
+            "nodes": 3,
+            "why": [
+              {
+                "says": "short",
+                "resource": "cpu",
+                "nodes": 3
+              }
+            ]
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "unplaced",
+            "said": "0/3 nodes are available: 3 Insufficient cpu. preemption: 0/3 nodes are available.",
+            "since": null,
+            "nodes": 3,
+            "why": [
+              {
+                "says": "short",
+                "resource": "cpu",
+                "nodes": 3
+              }
+            ]
+          }
+        }
+      ],
+      "is": {
+        "from": 0,
+        "pods": 2,
+        "of": 2
+      }
+    },
+    {
+      "name": "other scheduler reasons are another cause",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "unplaced",
+            "said": null,
+            "since": null,
+            "nodes": 3,
+            "why": [
+              {
+                "says": "short",
+                "resource": "cpu",
+                "nodes": 3
+              }
+            ]
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "unplaced",
+            "said": null,
+            "since": null,
+            "nodes": 3,
+            "why": [
+              {
+                "says": "short",
+                "resource": "memory",
+                "nodes": 3
+              }
+            ]
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "unplaced",
+            "said": null,
+            "since": null,
+            "nodes": 3,
+            "why": [
+              {
+                "says": "short",
+                "resource": "memory",
+                "nodes": 3
+              }
+            ]
+          }
+        }
+      ],
+      "is": {
+        "from": 1,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "pods not ready in other containers are other causes",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web"],
+            "since": null,
+            "probe": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web", "proxy"],
+            "since": null,
+            "probe": null
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web"],
+            "since": null,
+            "probe": null
+          }
+        }
+      ],
+      "is": {
+        "from": 0,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "pods the kubelet has not set up share it, whichever pod is named",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "creating",
+            "uid": "uid-web-1",
+            "since": null,
+            "sandbox": false,
+            "kubelet": {
+              "says": "notRead"
+            }
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "creating",
+            "uid": "uid-web-2",
+            "since": null,
+            "sandbox": null,
+            "kubelet": {
+              "says": "notRead"
+            }
+          }
+        },
+        {
+          "deleting": false,
+          "cause": null
+        }
+      ],
+      "is": {
+        "from": 0,
+        "pods": 2,
+        "of": 3
+      }
+    }
+  ]
+}

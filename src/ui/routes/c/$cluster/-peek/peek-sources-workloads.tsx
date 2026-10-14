@@ -1,5 +1,5 @@
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
-import { WorkloadDiagnosis } from "./peek-workload-diagnosis";
+import { PodsCause, WorkloadDiagnosis } from "./peek-workload-diagnosis";
 import { rolloutBadge } from "../-object/rollout-badge";
 
 import { CopyableAddress } from "@/components/ui/copyable-value";
@@ -212,6 +212,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
         name={deployment.name}
         namespace={deployment.namespace}
         rollout={deployment.rollout}
+        detail={deployment}
       />
     ),
     groups: [
@@ -259,6 +260,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
         name={set.name}
         namespace={set.namespace}
         rollout={set.rollout}
+        detail={set}
       />
     ),
     groups: [
@@ -308,6 +310,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
         name={set.name}
         namespace={set.namespace}
         rollout={set.rollout}
+        detail={set}
       />
     ),
     groups: [
@@ -347,6 +350,14 @@ export const WORKLOAD_SOURCES: PeekSources = {
     status: job.status,
     statusLabel: ownStatusWord(job.status, t),
     createdAt: job.createdAt,
+    lead: (
+      <PodsCause
+        target={{ kind: "Job", name: job.name, namespace: job.namespace }}
+        detail={job}
+        settled={job.status === "Complete"}
+        className="mt-3"
+      />
+    ),
     groups: [
       {
         title: t("columns", "progress"),

@@ -23,6 +23,7 @@ vi.mock("@/lib/commands", () => ({
     detectInClusterExtensions: vi.fn(async () => []),
     getPrometheusConnection: vi.fn(async () => null),
     getLokiConnection: vi.fn(async () => null),
+    getPodSetupWarnings: vi.fn(async () => []),
   },
 }));
 
@@ -204,6 +205,89 @@ describe("StatefulSetDetail", () => {
           queryKeys.ownedPods("StatefulSet", "k8s-gui-test", "stateful-demo")
         )
       ).toEqual([pod("stateful-demo-0")])
+    );
+  });
+
+  /**
+   * Only the Deployment page led with its pods' cause: a StatefulSet whose
+   * pods waited on a missing ConfigMap said "0 of 2 ready" and nothing
+   * more. Fails if the cause they share does not lead, with the kubelet's
+   * warning it reads for the pod the cause names.
+   */
+  it("leads with the cause its pods share, in the kubelet's words", async () => {
+    mockDetail(
+      buildSet({
+        replicas: { desired: 2, ready: 0, current: 2, updated: 2 },
+        rollout: { state: "short", available: 0, desired: 2 },
+      })
+    );
+    const pod = (name: string) => ({
+      name,
+      namespace: "k8s-gui-test",
+      uid: name,
+      status: {
+        phase: "Pending",
+        display: "ContainerCreating",
+        ready: false,
+        conditions: [],
+        message: null,
+        reason: null,
+        cause: {
+          says: "creating",
+          uid: name,
+          since: null,
+          sandbox: false,
+          kubelet: { says: "notRead" },
+        },
+      },
+      nodeName: "k3d-agent-0",
+      containers: [],
+      initContainers: [],
+      restartCount: 0,
+      createdAt: null,
+      labels: {},
+      annotations: {},
+      ownerReferences: [
+        {
+          apiVersion: "apps/v1",
+          kind: "StatefulSet",
+          name: "stateful-demo",
+          uid: "sts-uid",
+          controller: true,
+        },
+      ],
+      podIp: null,
+      hostIp: null,
+      start: { state: "settled" },
+    });
+    vi.mocked(commands.listPods).mockResolvedValue([
+      pod("stateful-demo-0"),
+      pod("stateful-demo-1"),
+    ] as never);
+    vi.mocked(commands.getPodSetupWarnings).mockResolvedValue([
+      {
+        reason: "FailedMount",
+        said: 'MountVolume.SetUp failed for volume "cfg" : configmap "web-config" not found',
+        count: 7,
+        at: null,
+        fault: {
+          says: "missing",
+          volume: "cfg",
+          kind: "ConfigMap",
+          name: "web-config",
+        },
+      },
+    ]);
+    await renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pods-cause")).toHaveTextContent(
+        "2 of 2 pods: ConfigMap web-config does not exist, so the kubelet cannot mount it"
+      )
+    );
+    expect(commands.getPodSetupWarnings).toHaveBeenCalledWith(
+      "k8s-gui-test",
+      "stateful-demo-0"
     );
   });
 

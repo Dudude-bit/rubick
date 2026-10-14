@@ -16,6 +16,7 @@ import { useAsk } from "../../../-object/useAsk";
 import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { RolloutBadge, RolloutSummary } from "../../../-object/RolloutSummary";
+import { WorkloadPodsCause } from "../../../-object/CauseLine";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
@@ -71,7 +72,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { PodInfo, StatefulSetDetailInfo } from "@/generated/types";
 import { controlledBy } from "@/lib/controlled-by";
-import { readyBesideBadge } from "@/lib/workload-status";
+import { readyBesideBadge, rolloutSettled } from "@/lib/workload-status";
 import { useT } from "@/i18n/useT";
 
 export function StatefulSetDetail() {
@@ -503,11 +504,19 @@ export function StatefulSetDetail() {
         }
         summary={
           statefulSet && (
-            <RolloutSummary
-              rollout={statefulSet.rollout}
-              subject={{ kind: ResourceType.StatefulSet, name, namespace }}
-              place="line"
-            />
+            <>
+              <WorkloadPodsCause
+                pods={splitPods}
+                settled={rolloutSettled(statefulSet.rollout)}
+                namespace={namespace ?? ""}
+                className="mb-1"
+              />
+              <RolloutSummary
+                rollout={statefulSet.rollout}
+                subject={{ kind: ResourceType.StatefulSet, name, namespace }}
+                place="line"
+              />
+            </>
           )
         }
         onBack={goBack}

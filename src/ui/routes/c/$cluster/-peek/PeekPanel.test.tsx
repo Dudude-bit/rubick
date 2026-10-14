@@ -79,6 +79,8 @@ vi.mock("@/lib/commands", () => ({
     getDeployment: vi.fn(),
     getStatefulset: vi.fn(),
     getDaemonset: vi.fn(),
+    getJob: vi.fn(),
+    getPodSetupWarnings: vi.fn(),
     getDeploymentPods: vi.fn(),
     getReplicaset: vi.fn(),
     getDeploymentReplicasets: vi.fn(),
@@ -554,6 +556,7 @@ describe("PeekPanel", () => {
           phase: "Running",
           display: "Running",
           exitUnreported: false,
+          deleting: false,
           ready: false,
           conditions: [],
           message: null,
@@ -1113,7 +1116,6 @@ describe("a workload's peek Pods tab", () => {
     } as never);
     vi.mocked(commands.getDeploymentPods).mockResolvedValue({
       uid: "checkout-uid",
-      cause: null,
       pods: [buildPod()],
     });
     await wrap("/c/prod/events?peek=deployments/shop/checkout");
@@ -1203,7 +1205,6 @@ describe("PeekPanel reads what the detail pages read", () => {
     } as never);
     vi.mocked(commands.getDeploymentPods).mockResolvedValue({
       uid: "deploy-uid",
-      cause: null,
       pods: [buildPod()],
     });
     await wrap("/c/prod/events?peek=deployments/shop/api");
@@ -1213,7 +1214,87 @@ describe("PeekPanel reads what the detail pages read", () => {
         wrap.client.getQueryData(
           queryKeys.ownedPods("Deployment", "shop", "api")
         )
-      ).toEqual({ uid: "deploy-uid", cause: null, pods: [buildPod()] })
+      ).toEqual({ uid: "deploy-uid", pods: [buildPod()] })
+    );
+  });
+
+  /**
+   * A Job whose pods all exited 1 said "Failed 2" in its peek and nothing
+   * of why. Fails if the cause its own pods share does not lead the peek as
+   * it leads the page, or a pod another Job of its name ran is counted.
+   */
+  it("leads a failed Job's peek with the cause its pods share", async () => {
+    vi.mocked(commands.getJob).mockResolvedValue({
+      name: "migrate",
+      namespace: "shop",
+      uid: "job-uid",
+      status: "Failed",
+      completions: 1,
+      parallelism: 1,
+      backoffLimit: 1,
+      succeeded: 0,
+      failed: 2,
+      active: 0,
+      failure: { reason: "BackoffLimitExceeded", message: null },
+      startTime: null,
+      completionTime: null,
+      conditions: [],
+      containers: [],
+      initContainers: [],
+      ownerReferences: [],
+      createdAt: null,
+    } as never);
+    const ran = (name: string, owner: string): PodInfo =>
+      buildPod({
+        name,
+        uid: name,
+        status: {
+          phase: "Failed",
+          display: "Error",
+          exitUnreported: false,
+          deleting: false,
+          ready: false,
+          conditions: [],
+          message: null,
+          reason: null,
+          cause: {
+            says: "exits",
+            container: "migrate",
+            restarts: 0,
+            run: {
+              code: 1,
+              signal: null,
+              reason: "Error",
+              started: null,
+              ended: null,
+              previous: false,
+              said: "Error: relation users does not exist",
+              log: { says: "notRead" },
+              limit: null,
+            },
+            until: null,
+          },
+        },
+        ownerReferences: [
+          {
+            api_version: "batch/v1",
+            kind: "Job",
+            name: "migrate",
+            uid: owner,
+            controller: true,
+          },
+        ],
+      });
+    vi.mocked(commands.listPods).mockResolvedValue([
+      ran("migrate-a", "job-uid"),
+      ran("migrate-b", "job-uid"),
+      ran("migrate-old", "the-job-before"),
+    ]);
+    await wrap("/c/prod/events?peek=jobs/shop/migrate");
+    await waitFor(() =>
+      expect(screen.getByTestId("pods-cause")).toHaveTextContent(
+        "2 of 2 pods: migrate exited (exit 1, Error). Its exit message: Error: relation users does not exist"
+      )
     );
   });
 
@@ -1393,6 +1474,7 @@ describe("PeekPanel tabs", () => {
           phase: "Pending",
           display: "Pending",
           exitUnreported: false,
+          deleting: false,
           ready: false,
           conditions: [],
           message: "0/3 nodes are available: insufficient cpu.",
@@ -1938,6 +2020,7 @@ const PENDING_POD = buildPod({
     phase: "Pending",
     display: "Pending",
     exitUnreported: false,
+    deleting: false,
     ready: false,
     conditions: [],
     message: "0/3 nodes are available: insufficient cpu.",
@@ -1968,6 +2051,7 @@ const RUNNING_POD = buildPod({
     phase: "Running",
     display: "Running",
     exitUnreported: false,
+    deleting: false,
     ready: true,
     conditions: [],
     message: null,

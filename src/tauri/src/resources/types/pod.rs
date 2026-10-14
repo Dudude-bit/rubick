@@ -430,6 +430,9 @@ pub struct PodStatusInfo {
     /// See [`super::pod_cause::pod_cause`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cause: Option<super::PodCause>,
+    /// Being deleted, which a workload's count of its pods leaves out.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub deleting: bool,
 }
 
 impl PodStatusInfo {
@@ -450,6 +453,7 @@ impl PodStatusInfo {
                 restarting_until: None,
                 rejected: None,
                 cause: None,
+                deleting: pod.metadata.deletion_timestamp.is_some(),
             };
         };
 
@@ -475,6 +479,7 @@ impl PodStatusInfo {
             restarting_until: restarting_until(pod),
             rejected: rejected_at_admission(pod),
             cause: super::pod_cause(pod),
+            deleting: pod.metadata.deletion_timestamp.is_some(),
         }
     }
 }

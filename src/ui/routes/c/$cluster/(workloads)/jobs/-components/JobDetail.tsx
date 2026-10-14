@@ -14,6 +14,7 @@ import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { PodListCard } from "../../../-object/PodListCard";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { WorkloadPodsCause } from "../../../-object/CauseLine";
 import {
   conditionsMark,
   kindGlyph,
@@ -355,6 +356,15 @@ export function JobDetail() {
               {t("count", "failedPods", { n: failed })}
             </span>
           )
+        )
+      }
+      summary={
+        job && (
+          <WorkloadPodsCause
+            pods={podsError || podsPending ? null : pods}
+            settled={job.status === "Complete"}
+            namespace={job.namespace}
+          />
         )
       }
       onBack={goBack}

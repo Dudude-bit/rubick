@@ -111,6 +111,7 @@ const CREATING = {
     phase: "Pending",
     display: "ContainerCreating",
     exitUnreported: false,
+    deleting: false,
     ready: false,
     loopingUntil: null,
     conditions: [],
@@ -420,13 +421,17 @@ describe("the cause its pods share", () => {
       ...vi.mocked(useResourceDetail)(
         {} as Parameters<typeof useResourceDetail>[0]
       ),
-      resource: { ...ledger, rollout },
+      resource: {
+        ...ledger,
+        replicas: { desired: 2, ready: 0, available: 0, updated: 2 },
+        rollout,
+      },
     });
 
   /**
    * The page said "Deployment does not have minimum availability", the
-   * symptom. Fails if the cause the backend found in its pods does not lead,
-   * with how many of them share it.
+   * symptom. Fails if the cause most of its pods share does not lead, with
+   * how many of them share it.
    */
   it("leads with the cause most of its pods share above the verdict", async () => {
     rolling({
@@ -436,28 +441,35 @@ describe("the cause its pods share", () => {
       available: 0,
       desired: 2,
     });
+    const blocked = {
+      says: "blocked",
+      container: "api",
+      reason: "ErrImagePull",
+      said: "docker.io/library/busybox:no-such-tag: not found",
+      image: "busybox:no-such-tag",
+      pull: "notFound",
+      secrets: [],
+    };
     answering(
       () => Promise.resolve(null),
       () =>
         Promise.resolve({
-          uid: "",
-          pods: [],
-          cause: {
-            cause: {
-              says: "blocked",
-              container: "api",
-              reason: "ErrImagePull",
-              said: "docker.io/library/busybox:no-such-tag: not found",
-              image: "busybox:no-such-tag",
-              pull: "notFound",
-              secrets: [],
+          uid: "uid",
+          pods: ["a", "b"].map((name) => ({
+            ...CREATING,
+            name: `ledger-6d9f7-${name}`,
+            uid: name,
+            status: {
+              ...CREATING.status,
+              display: "ErrImagePull",
+              cause: blocked,
             },
-            pods: 2,
-            of: 2,
-          },
+          })),
         })
     );
-    await open();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
 
     const lead = await screen.findByTestId("pods-cause");
     expect(lead).toHaveTextContent(

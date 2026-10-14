@@ -949,6 +949,14 @@ export interface AccessQuery {
   subresource?: string;
 }
 
+export interface SetupWarning {
+  reason: string;
+  said: string;
+  count: number;
+  at: string | null;
+  fault: SetupFault;
+}
+
 export interface EventInfo {
   name: string;
   namespace: string;
@@ -1567,6 +1575,7 @@ export interface PodStatusInfo {
   restartingUntil?: string;
   rejected?: string;
   cause?: PodCause;
+  deleting: boolean;
 }
 
 export interface EndedRun {
@@ -2270,13 +2279,6 @@ export interface LogLineEvent {
 export interface DeploymentPods {
   uid: string;
   pods: PodInfo[];
-  cause: SharedCause | null;
-}
-
-export interface SharedCause {
-  cause: PodCause;
-  pods: number;
-  of: number;
 }
 
 export interface DeploymentInfo {
@@ -2576,6 +2578,12 @@ export type DebugStatus =
   | { type: "failed"; error: string }
   | { type: "timeout" };
 
+export type SetupFault =
+  | { says: "missing"; volume: string | null; kind: string; name: string }
+  | { says: "volume"; volume: string | null }
+  | { says: "sandbox" }
+  | { says: "other" };
+
 export type LineageStop =
   | { says: "ownerGone"; kind: string; name: string }
   | {
@@ -2790,7 +2798,21 @@ export type PodCause =
       containers: string[];
       since: string | null;
       probe: ProbeCheck | null;
+    }
+  | {
+      says: "creating";
+      uid: string;
+      since: string | null;
+      sandbox: boolean | null;
+      kubelet: Warned;
     };
+
+export type Warned =
+  | { says: "notRead" }
+  | { says: "reading" }
+  | { says: "read"; warnings: SetupWarning[] }
+  | { says: "refused" }
+  | { says: "failed"; said: string };
 
 export type ProbeCheck =
   | { says: "http"; scheme: string; path: string; port: string }
@@ -2820,7 +2842,6 @@ export type Unfit =
 
 export type Evidence =
   | { says: "line"; text: string; last: boolean }
-  | { says: "event"; text: string; count: number; at: string | null }
   | { says: "notRead" }
   | { says: "reading" }
   | { says: "nothing" }

@@ -176,6 +176,34 @@ fn workload_detail<'a>(
     }
 }
 
+/// A pod the kubelet has not set up says why in its warnings, which this
+/// query holds already: each such cause, a workload's included, gets the
+/// warnings of the pod it names.
+fn with_kubelet_words<'a>(
+    mut problems: Vec<ClusterProblem>,
+    events: impl IntoIterator<Item = &'a Event> + Clone,
+    known: bool,
+) -> Vec<ClusterProblem> {
+    for problem in &mut problems {
+        let Some(ProblemDetail::Cause { cause, .. } | ProblemDetail::PodsCause { cause, .. }) =
+            problem.detail.as_mut()
+        else {
+            continue;
+        };
+        let crate::resources::PodCause::Creating { uid, .. } = &*cause else {
+            continue;
+        };
+        let warnings = crate::resources::setup_warnings(uid, events.clone());
+        let warned = if known || !warnings.is_empty() {
+            crate::resources::Warned::Read { warnings }
+        } else {
+            crate::resources::Warned::NotRead
+        };
+        *cause = cause.clone().warned(warned);
+    }
+    problems
+}
+
 /// One actionable row in the problems list. `kind` + `namespace` + `name`
 /// is enough for the frontend to build a deep link to the detail page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1992,6 +2020,11 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     problems.extend(job_problems(refs(input.jobs), &owned));
     problems.extend(node_problems(refs(nodes)));
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
+    let problems = with_kubelet_words(
+        problems,
+        input.events.iter().map(|event| event.as_ref()),
+        input.events_known,
+    );
     let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
     // One namespace's breakdown restates it; several are each the picker's.
     let namespaces = match input.scope {
@@ -3662,6 +3695,88 @@ mod tests {
         let names: Vec<_> = problems.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, vec!["stuck"]);
         assert_eq!(problems[0].reason, "Pending");
+    }
+
+    fn creating_pod(name: &str, uid: &str, now: DateTime<Utc>) -> Pod {
+        let mut p = pending_pod(name, now, START_GRACE_SECONDS + 60);
+        p.metadata.uid = Some(uid.to_string());
+        let status = p.status.as_mut().expect("a status");
+        let conditions = status.conditions.as_mut().expect("conditions");
+        conditions[0].status = "True".to_string();
+        conditions.push(PodCondition {
+            type_: "PodReadyToStartContainers".to_string(),
+            status: "False".to_string(),
+            ..Default::default()
+        });
+        status.container_statuses = Some(vec![ContainerStatus {
+            name: "web".to_string(),
+            state: Some(ContainerState {
+                waiting: Some(ContainerStateWaiting {
+                    reason: Some("ContainerCreating".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }]);
+        p
+    }
+
+    fn mount_warning(uid: &str) -> Event {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "web.1", "namespace": "default"},
+            "involvedObject": {"kind": "Pod", "name": "web", "namespace": "default", "uid": uid},
+            "type": "Warning", "reason": "FailedMount", "count": 4,
+            "message": "MountVolume.SetUp failed for volume \"cfg\" : configmap \"web-config\" not found"
+        }))
+        .expect("an event this test wrote itself")
+    }
+
+    fn warned(problems: &[ClusterProblem]) -> Vec<crate::resources::Warned> {
+        problems
+            .iter()
+            .filter_map(|p| match p.detail.as_ref()? {
+                ProblemDetail::Cause {
+                    cause: crate::resources::PodCause::Creating { kubelet, .. },
+                    ..
+                } => Some(kubelet.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A pod held by a missing ConfigMap: its row quotes the kubelet's
+    /// FailedMount from the warnings the Overview already read. Fails if the
+    /// row says only Pending, or takes another pod's warning as its own.
+    #[test]
+    fn a_pod_the_kubelet_cannot_set_up_quotes_its_warnings_on_its_row() {
+        let now = Utc::now();
+        let pods = [creating_pod("web", "u1", now)];
+        let rows = with_kubelet_words(pod_problems(&pods, now), &[mount_warning("u1")], true);
+        let read = warned(&rows);
+        let [crate::resources::Warned::Read { warnings }] = read.as_slice() else {
+            panic!("the row quotes its warnings: {rows:?}");
+        };
+        assert_eq!(warnings.len(), 1);
+        assert!(matches!(
+            &warnings[0].fault,
+            crate::resources::SetupFault::Missing { kind, name, .. } if kind == "ConfigMap" && name == "web-config"
+        ));
+        let theirs = with_kubelet_words(pod_problems(&pods, now), &[mount_warning("u0")], true);
+        assert_eq!(
+            warned(&theirs),
+            vec![crate::resources::Warned::Read { warnings: vec![] }]
+        );
+    }
+
+    /// An events list that failed or was cut is not a kubelet that warned
+    /// nothing. Fails if the unread case reads as an empty answer.
+    #[test]
+    fn a_pod_with_no_warning_in_an_unfinished_events_read_is_not_said_to_have_none() {
+        let now = Utc::now();
+        let pods = [creating_pod("web", "u1", now)];
+        let rows = with_kubelet_words(pod_problems(&pods, now), &[], false);
+        assert_eq!(warned(&rows), vec![crate::resources::Warned::NotRead]);
     }
 
     /// A fresh cluster pulls its images for minutes: eleven pods placed and

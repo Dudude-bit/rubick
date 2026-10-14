@@ -7,7 +7,7 @@ import {
 } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { CauseEvidence } from "../../../-object/CauseLine";
-import { useCauseLog } from "../../../-object/useCauseLog";
+import { useCauseEvidence } from "../../../-object/useCauseEvidence";
 import { causeWords } from "@/lib/pod-cause";
 import { troubleCause } from "@/lib/share/pod-status";
 import { useNavigate, useRouter } from "@tanstack/react-router";
@@ -786,7 +786,7 @@ export function PodDetail() {
   ];
 
   const problem = useMemo(() => podProblem(pod, waiting, t), [pod, waiting, t]);
-  const cause = useCauseLog(
+  const cause = useCauseEvidence(
     pod ?? { name: "", namespace: "" },
     pod ? troubleCause(pod) : null
   );

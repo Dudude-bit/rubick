@@ -431,3 +431,8 @@ export function rolloutStatusOf(
     unread: verdict.unread,
   };
 }
+
+const SETTLED: ReadonlySet<Rollout["state"]> = new Set(["ready", "idle"]);
+
+/** A rollout whose pods are where it wants them, so no cause of theirs leads. */
+export const rolloutSettled = (rollout: Rollout) => SETTLED.has(rollout.state);

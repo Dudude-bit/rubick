@@ -126,6 +126,7 @@ import type {
   ServiceHealthInputs,
   ServiceInfo,
   ServicePublished,
+  SetupWarning,
   ShareIdentity,
   ShareTargetInfo,
   ShareTargetInput,
@@ -1192,6 +1193,13 @@ export async function listEvents(
   filters: EventFilters | null
 ): Promise<EventInfo[]> {
   return invoke<EventInfo[]>("list_events", { filters });
+}
+
+export async function getPodSetupWarnings(
+  namespace: string,
+  uid: string
+): Promise<SetupWarning[]> {
+  return invoke<SetupWarning[]>("get_pod_setup_warnings", { namespace, uid });
 }
 
 export async function checkAccess(

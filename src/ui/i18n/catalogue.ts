@@ -7205,6 +7205,29 @@ export const en = {
     loggedLine: "Its log before the exit:",
     logRefused: "Its log is not readable with this access.",
     logFailed: "Its log could not be read: {said}",
+    creating:
+      "Placed on a node, and the kubelet has not started its containers",
+    creatingFor:
+      "Placed on a node {age} ago, and the kubelet has not started its containers",
+    creatingMissing: {
+      one: "{objects} does not exist, so the kubelet cannot mount it",
+      other: "{objects} do not exist, so the kubelet cannot mount them",
+    },
+    creatingVolume: "The kubelet cannot mount its volume {volume}",
+    creatingVolumes: "The kubelet cannot mount its volumes",
+    creatingSandbox:
+      "The kubelet cannot create its sandbox, which the network plugin sets up",
+    creatingOther: "The kubelet has not started its containers ({reason})",
+    creatingAsk:
+      "What it waits on is in the kubelet's warnings, among its events.",
+    creatingReading: "Reading the kubelet's warnings about it…",
+    creatingRefused:
+      "Its events are not readable with this access, so what it waits on is not known.",
+    creatingFailed: "Its events could not be read: {said}",
+    creatingQuiet:
+      "The kubelet keeps no warning about it. Probably a volume it mounts or the network plugin: its sandbox is not up.",
+    creatingQuietUnknown:
+      "The kubelet keeps no warning about it. Probably a volume it mounts, the network plugin, or a slow image pull.",
   },
   statusMeaning: {
     phasePending:

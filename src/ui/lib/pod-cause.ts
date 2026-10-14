@@ -4,7 +4,9 @@ import type {
   PodCause,
   ProbeCheck,
   PullFailure,
+  SetupWarning,
   Unfit,
+  Warned,
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
@@ -20,6 +22,13 @@ import { formatAge, formatDuration } from "@/lib/utils";
  */
 
 export type CauseTone = "err" | "warn";
+
+/** The cause most of a workload's pods share, how many share it and how many it runs. */
+export interface SharedCause {
+  cause: PodCause;
+  pods: number;
+  of: number;
+}
 
 export interface CauseWords {
   /** What happened, and how long it took, as one sentence. */
@@ -98,7 +107,6 @@ function logNote(log: Evidence, t: T): string | null {
     case "failed":
       return t("cause", "logFailed", { said: log.said });
     case "line":
-    case "event":
     case "notRead":
       return null;
   }
@@ -266,8 +274,103 @@ function unplacedWords(
   };
 }
 
+/** The objects missing volumes mount, each once, as kubectl names them. */
+function missingObjects(warnings: SetupWarning[]): string[] {
+  const named = warnings.flatMap(({ fault }) =>
+    fault.says === "missing" ? [`${fault.kind} ${fault.name}`] : []
+  );
+  return [...new Set(named)];
+}
+
+/** What the kubelet's warnings come to: the missing objects first, then the sandbox, a volume, anything else. */
+function setupSentence(
+  warnings: SetupWarning[],
+  t: T
+): { sentence: string; quoted: SetupWarning } | null {
+  const missing = missingObjects(warnings);
+  const first = (says: SetupWarning["fault"]["says"]) =>
+    warnings.find((warning) => warning.fault.says === says);
+  if (missing.length > 0)
+    return {
+      sentence: t("cause", "creatingMissing", {
+        n: missing.length,
+        objects: listWords(missing, t),
+      }),
+      quoted: first("missing")!,
+    };
+  const sandbox = first("sandbox");
+  if (sandbox)
+    return { sentence: t("cause", "creatingSandbox"), quoted: sandbox };
+  const volume = first("volume");
+  if (volume?.fault.says === "volume")
+    return {
+      sentence: volume.fault.volume
+        ? t("cause", "creatingVolume", { volume: volume.fault.volume })
+        : t("cause", "creatingVolumes"),
+      quoted: volume,
+    };
+  const other = warnings[0];
+  return other
+    ? {
+        sentence: t("cause", "creatingOther", { reason: other.reason }),
+        quoted: other,
+      }
+    : null;
+}
+
+function warnedNote(
+  kubelet: Warned,
+  sandbox: boolean | null,
+  t: T
+): string | null {
+  switch (kubelet.says) {
+    case "notRead":
+      return t("cause", "creatingAsk");
+    case "reading":
+      return t("cause", "creatingReading");
+    case "refused":
+      return t("cause", "creatingRefused");
+    case "failed":
+      return t("cause", "creatingFailed", { said: kubelet.said });
+    case "read":
+      return t(
+        "cause",
+        sandbox === false ? "creatingQuiet" : "creatingQuietUnknown"
+      );
+  }
+}
+
+function creatingWords(
+  cause: Extract<PodCause, { says: "creating" }>,
+  t: T
+): CauseWords {
+  const told =
+    cause.kubelet.says === "read"
+      ? setupSentence(cause.kubelet.warnings, t)
+      : null;
+  if (told)
+    return {
+      sentence: told.sentence,
+      quote: {
+        label: t("cause", "kubeletSaid"),
+        text: `${told.quoted.reason}: ${told.quoted.said}`,
+      },
+      note: null,
+      tone: "err",
+    };
+  return {
+    sentence: cause.since
+      ? t("cause", "creatingFor", { age: formatAge(cause.since, t) })
+      : t("cause", "creating"),
+    quote: null,
+    note: warnedNote(cause.kubelet, cause.sandbox, t),
+    tone: "warn",
+  };
+}
+
 /** The cause in words. */
 export function causeWords(cause: PodCause, t: T): CauseWords {
+  if (cause.says === "creating") return creatingWords(cause, t);
   if (cause.says === "unplaced") return unplacedWords(cause, t);
   if (cause.says === "notReady") return notReadyWords(cause, t);
   if (cause.says === "blocked") return blockedWords(cause, t);
@@ -310,4 +413,59 @@ export function causeText(cause: PodCause, t: T): string {
 /** "2 of 3 pods:", the share of a workload's pods its cause is told from. */
 export function podsShare(pods: number, of: number, t: T): string {
   return t("readings", "podsShareCause", { pods, n: of });
+}
+
+/** Two pods share a cause when it is the same mechanism in the same container. */
+function causeKey(cause: PodCause): string {
+  switch (cause.says) {
+    case "exits":
+      return JSON.stringify([
+        cause.says,
+        cause.container,
+        cause.run && [cause.run.code, cause.run.reason],
+      ]);
+    case "blocked":
+      return JSON.stringify([
+        cause.says,
+        cause.container,
+        cause.reason,
+        cause.pull,
+      ]);
+    case "notReady":
+      return JSON.stringify([cause.says, cause.containers]);
+    case "unplaced":
+      return JSON.stringify([
+        cause.says,
+        cause.why.map((unfit) =>
+          JSON.stringify(unfit, Object.keys(unfit).sort())
+        ),
+      ]);
+    case "creating":
+      return cause.says;
+  }
+}
+
+/**
+ * The cause most of a workload's pods share, how many share it and how many
+ * it runs. `share` in pod_cause.rs answers the Overview and a Deployment's
+ * read; src/contracts/shared-cause-conformance.json holds both to one answer.
+ */
+export function sharedCause(
+  pods: readonly { deleting?: boolean; cause?: PodCause | null }[]
+): SharedCause | null {
+  let of = 0;
+  const groups = new Map<string, { cause: PodCause; pods: number }>();
+  for (const { deleting, cause } of pods) {
+    if (deleting) continue;
+    of += 1;
+    if (!cause) continue;
+    const key = causeKey(cause);
+    const group = groups.get(key) ?? { cause, pods: 0 };
+    group.pods += 1;
+    groups.set(key, group);
+  }
+  let told: { cause: PodCause; pods: number } | null = null;
+  for (const group of groups.values())
+    if (!told || group.pods >= told.pods) told = group;
+  return told && { cause: told.cause, pods: told.pods, of };
 }

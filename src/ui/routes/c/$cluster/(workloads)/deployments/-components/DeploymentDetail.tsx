@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
-import { PodsCauseLine } from "../../../-object/CauseLine";
+import { WorkloadPodsCause } from "../../../-object/CauseLine";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import {
@@ -40,6 +40,7 @@ import {
   podCounts,
   podsAhead,
   readyBesideBadge,
+  rolloutSettled,
   watchedWorkload,
   workloadRole,
 } from "@/lib/workload-status";
@@ -119,7 +120,6 @@ function PodsAhead({ text, role }: { text: string; role: StatusRole }) {
 }
 
 /** States the pods' cause would only restate a healthy verdict beside. */
-const SETTLED: ReadonlySet<string> = new Set(["ready", "idle"]);
 
 export function DeploymentDetail() {
   const t = useT();
@@ -413,10 +413,6 @@ export function DeploymentDetail() {
     !!deployment && workloadRole(deployment.rollout) === "pending"
   );
   const rollout = deployment?.rollout;
-  const podsCause =
-    podsQuery.data && !Array.isArray(podsQuery.data)
-      ? podsQuery.data.cause
-      : null;
   const ahead =
     rollout &&
     podsAhead(
@@ -727,9 +723,12 @@ export function DeploymentDetail() {
         summary={
           rollout && (
             <>
-              {podsCause && !SETTLED.has(rollout.state) && (
-                <PodsCauseLine shared={podsCause} className="mb-1" />
-              )}
+              <WorkloadPodsCause
+                pods={splitPods}
+                settled={rolloutSettled(rollout)}
+                namespace={namespace ?? ""}
+                className="mb-1"
+              />
               <RolloutSummary
                 rollout={rollout}
                 subject={{ kind: ResourceType.Deployment, name, namespace }}

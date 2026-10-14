@@ -6,7 +6,7 @@
 //! slot that says `notRead` until the reader that fetched it fills it in.
 
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::core::v1::{ContainerStateTerminated, ContainerStatus, Pod, Probe};
+use k8s_openapi::api::core::v1::{ContainerStateTerminated, ContainerStatus, Event, Pod, Probe};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use serde::{Deserialize, Serialize};
 
@@ -14,10 +14,14 @@ use super::pod_display::{
     blocking_init, condition_is_true, container_restarting_until, counted, last_terminated,
     pod_verdict,
 };
+use super::EventInfo;
 use crate::utils::Moment;
 
 /// The most of a termination message carried: its end is what says why.
 const SAID_TAIL: usize = 1024;
+
+/// The most warnings a pod the kubelet has not set up carries.
+const MAX_WARNINGS: usize = 5;
 
 /// The cause a pod's surfaces lead with, one variant per mechanism.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +69,64 @@ pub enum PodCause {
         /// The first of them's readiness probe, as declared; `None` where it has none.
         probe: Option<ProbeCheck>,
     },
+    /// Placed on a node whose kubelet has not started a container: its
+    /// sandbox waits on the volumes it mounts and on the network plugin.
+    Creating {
+        /// The uid of the pod read, whose warnings say why; a workload's names one of its pods.
+        uid: String,
+        /// When the scheduler placed it.
+        since: Option<DateTime<Utc>>,
+        /// `PodReadyToStartContainers`, where the cluster reports it.
+        sandbox: Option<bool>,
+        kubelet: Warned,
+    },
+}
+
+/// What the kubelet warned about a pod it has not set up, once a reader asks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum Warned {
+    NotRead,
+    Reading,
+    /// Newest first; none where it warned nothing or the warnings expired.
+    Read {
+        warnings: Vec<SetupWarning>,
+    },
+    Refused,
+    Failed {
+        said: String,
+    },
+}
+
+/// One of the kubelet's warnings about a pod, and what it comes to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupWarning {
+    /// `FailedMount`, `FailedAttachVolume`, `FailedCreatePodSandBox`.
+    pub reason: String,
+    pub said: String,
+    pub count: i32,
+    pub at: Option<DateTime<Utc>>,
+    pub fault: SetupFault,
+}
+
+/// What a setup warning comes to, where this app knows the kubelet's words.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum SetupFault {
+    /// `configmap "web-config" not found`: the object a volume mounts does not exist.
+    Missing {
+        volume: Option<String>,
+        kind: String,
+        name: String,
+    },
+    /// A volume the kubelet cannot attach or mount for another reason.
+    Volume {
+        volume: Option<String>,
+    },
+    /// The sandbox, which the network plugin sets up.
+    Sandbox,
+    Other,
 }
 
 /// One reason the scheduler gave for a set of nodes, and how many it covers.
@@ -174,12 +236,6 @@ pub enum Evidence {
         text: String,
         last: bool,
     },
-    /// The kubelet's own event, quoted.
-    Event {
-        text: String,
-        count: i32,
-        at: Option<DateTime<Utc>>,
-    },
     /// Nobody asked for it yet.
     NotRead,
     Reading,
@@ -205,14 +261,25 @@ pub struct SharedCause {
 /// Read once here for the Overview's rows and a workload's own page alike.
 #[must_use]
 pub fn shared_cause<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> Option<SharedCause> {
+    share(
+        pods.into_iter()
+            .map(|pod| (pod.metadata.deletion_timestamp.is_some(), pod_cause(pod))),
+    )
+}
+
+/// The rule `shared_cause` applies, over each pod's deletion and cause.
+///
+/// `src/contracts/shared-cause-conformance.json` holds the answers, and
+/// `sharedCause` in `src/ui/lib/pod-cause.ts` owes the same ones.
+fn share(pods: impl IntoIterator<Item = (bool, Option<PodCause>)>) -> Option<SharedCause> {
     let mut of = 0;
     let mut groups: Vec<(String, PodCause, i32)> = Vec::new();
-    for pod in pods {
-        if pod.metadata.deletion_timestamp.is_some() {
+    for (deleting, cause) in pods {
+        if deleting {
             continue;
         }
         of += 1;
-        let Some(cause) = pod_cause(pod) else {
+        let Some(cause) = cause else {
             continue;
         };
         let key = cause_key(&cause);
@@ -240,7 +307,96 @@ fn cause_key(cause: &PodCause) -> String {
         } => format!("blocked/{container}/{reason}/{pull:?}"),
         PodCause::NotReady { containers, .. } => format!("notReady/{containers:?}"),
         PodCause::Unplaced { why, .. } => format!("unplaced/{why:?}"),
+        PodCause::Creating { .. } => "creating".to_string(),
     }
+}
+
+impl PodCause {
+    /// The cause with the kubelet's warnings a reader fetched beside it.
+    #[must_use]
+    pub fn warned(self, warned: Warned) -> Self {
+        match self {
+            Self::Creating {
+                uid,
+                since,
+                sandbox,
+                ..
+            } => Self::Creating {
+                uid,
+                since,
+                sandbox,
+                kubelet: warned,
+            },
+            other => other,
+        }
+    }
+}
+
+/// The kubelet's warnings about the pod with this uid, newest first. The
+/// scheduler's are left out: they are from before the pod had a node.
+#[must_use]
+pub fn setup_warnings<'a>(
+    uid: &str,
+    events: impl IntoIterator<Item = &'a Event>,
+) -> Vec<SetupWarning> {
+    let mut warnings: Vec<SetupWarning> = events
+        .into_iter()
+        .filter(|event| {
+            event.type_.as_deref() == Some("Warning")
+                && event.involved_object.uid.as_deref() == Some(uid)
+        })
+        .filter_map(|event| {
+            let info = EventInfo::from(event);
+            let reason = info.reason.filter(|r| r != "FailedScheduling")?;
+            let said = info.message.unwrap_or_default();
+            Some(SetupWarning {
+                fault: setup_fault(&reason, &said),
+                said: tail(said.trim()),
+                reason,
+                count: info.count.unwrap_or(1),
+                at: info.last_timestamp,
+            })
+        })
+        .collect();
+    warnings.sort_by(|a, b| b.at.cmp(&a.at));
+    warnings.truncate(MAX_WARNINGS);
+    warnings
+}
+
+/// The volume sources a mount names when it is missing, by the kubelet's word for each.
+const SOURCES: &[(&str, &str)] = &[
+    ("configmap", "ConfigMap"),
+    ("secret", "Secret"),
+    ("persistentvolumeclaim", "PersistentVolumeClaim"),
+];
+
+fn setup_fault(reason: &str, said: &str) -> SetupFault {
+    if matches!(reason, "FailedCreatePodSandBox" | "NetworkNotReady") {
+        return SetupFault::Sandbox;
+    }
+    if !matches!(
+        reason,
+        "FailedMount" | "FailedAttachVolume" | "FailedMapVolume"
+    ) {
+        return SetupFault::Other;
+    }
+    let volume = quoted_after(said, "for volume ");
+    let missing = SOURCES.iter().find_map(|(word, kind)| {
+        let name = quoted_after(said, &format!("{word} "))?;
+        said.contains(&format!("{word} \"{name}\" not found"))
+            .then(|| (kind.to_string(), name))
+    });
+    match missing {
+        Some((kind, name)) => SetupFault::Missing { volume, kind, name },
+        None => SetupFault::Volume { volume },
+    }
+}
+
+/// The `"..."` right after `prefix`: `for volume "cfg"` gives `cfg`.
+fn quoted_after(text: &str, prefix: &str) -> Option<String> {
+    let rest = &text[text.find(prefix)? + prefix.len()..];
+    let rest = rest.strip_prefix('"')?;
+    Some(rest[..rest.find('"')?].to_string())
 }
 
 /// What is wrong with this pod and why, or `None` where nothing this reads is.
@@ -271,7 +427,60 @@ pub fn pod_cause(pod: &Pod) -> Option<PodCause> {
         .or_else(|| candidates.iter().find_map(|cs| up_again(cs, running)))
         .map(|cause| with_limit(cause, pod))
         .or_else(|| candidates.iter().find_map(|cs| blocked(cs, pod)))
+        .or_else(|| creating(pod))
         .or_else(|| not_ready(pod))
+}
+
+/// What the kubelet calls a sandbox that is up, by the name each release gave it.
+const SANDBOX_CONDITIONS: &[&str] = &["PodReadyToStartContainers", "PodHasNetwork"];
+
+/// The waits a container is in before the kubelet has created it.
+const NOT_CREATED: &[&str] = &["ContainerCreating", "PodInitializing"];
+
+/// Placed and not started, with no sandbox, or no word on one and every
+/// container still waiting to be created. A sandbox that is up is a pull or a
+/// start the kubelet is still doing, which `blocked` reads once it fails.
+fn creating(pod: &Pod) -> Option<PodCause> {
+    let status = pod.status.as_ref()?;
+    if status.phase.as_deref() != Some("Pending") {
+        return None;
+    }
+    let conditions = status.conditions.as_deref().unwrap_or_default();
+    let placed = conditions
+        .iter()
+        .find(|c| c.type_ == "PodScheduled" && c.status == "True")?;
+    let sandbox = conditions
+        .iter()
+        .find(|c| SANDBOX_CONDITIONS.contains(&c.type_.as_str()))
+        .map(|c| c.status == "True");
+    if sandbox == Some(true) {
+        return None;
+    }
+    let states: Vec<_> = status
+        .init_container_statuses
+        .iter()
+        .chain(status.container_statuses.iter())
+        .flatten()
+        .filter_map(|cs| cs.state.as_ref())
+        .collect();
+    let started = states
+        .iter()
+        .any(|s| s.running.is_some() || s.terminated.is_some());
+    let waiting = states.iter().any(|s| {
+        s.waiting
+            .as_ref()
+            .and_then(|w| w.reason.as_deref())
+            .is_some_and(|r| NOT_CREATED.contains(&r))
+    });
+    if started || (sandbox.is_none() && !waiting) {
+        return None;
+    }
+    Some(PodCause::Creating {
+        uid: pod.metadata.uid.clone()?,
+        since: placed.last_transition_time.as_ref().map(Moment::moment),
+        sandbox,
+        kubelet: Warned::NotRead,
+    })
 }
 
 fn unplaced(pod: &Pod) -> Option<PodCause> {
@@ -1058,6 +1267,200 @@ mod tests {
             }
         }));
         assert_eq!(pod_cause(&healthy), None);
+    }
+
+    /// The corpus both halves answer. Fails if this side tells another pod's
+    /// cause, another share or another whole than the frontend's lists do.
+    #[test]
+    fn answers_every_case_in_the_shared_corpus_as_the_frontend_does() {
+        #[derive(Deserialize)]
+        struct Read {
+            deleting: bool,
+            cause: Option<PodCause>,
+        }
+        #[derive(Deserialize)]
+        struct Is {
+            from: usize,
+            pods: i32,
+            of: i32,
+        }
+        #[derive(Deserialize)]
+        struct Case {
+            name: String,
+            pods: Vec<Read>,
+            is: Option<Is>,
+        }
+        #[derive(Deserialize)]
+        struct Corpus {
+            cases: Vec<Case>,
+        }
+        let corpus: Corpus = serde_json::from_str(include_str!(
+            "../../../../contracts/shared-cause-conformance.json"
+        ))
+        .expect("the corpus parses");
+        for case in corpus.cases {
+            let want = case.is.map(|is| SharedCause {
+                cause: case.pods[is.from].cause.clone().expect("a told cause"),
+                pods: is.pods,
+                of: is.of,
+            });
+            let read = share(case.pods.into_iter().map(|p| (p.deleting, p.cause)));
+            assert_eq!(read, want, "{}", case.name);
+        }
+    }
+
+    fn placed(sandbox: Option<&str>, waiting: &str) -> Pod {
+        let mut conditions = vec![serde_json::json!({
+            "type": "PodScheduled", "status": "True",
+            "lastTransitionTime": "2026-10-14T22:58:15Z"
+        })];
+        if let Some(status) = sandbox {
+            conditions
+                .push(serde_json::json!({"type": "PodReadyToStartContainers", "status": status}));
+        }
+        pod(serde_json::json!({
+            "metadata": {"name": "init-no-secret", "uid": "u1"},
+            "spec": {"initContainers": [{"name": "migrate"}], "containers": [{"name": "app"}]},
+            "status": {
+                "phase": "Pending",
+                "conditions": conditions,
+                "initContainerStatuses": [{
+                    "name": "migrate", "image": "", "imageID": "", "ready": false, "restartCount": 0,
+                    "state": {"waiting": {"reason": waiting}}
+                }],
+                "containerStatuses": [{
+                    "name": "app", "image": "", "imageID": "", "ready": false, "restartCount": 0,
+                    "state": {"waiting": {"reason": waiting}}
+                }]
+            }
+        }))
+    }
+
+    /// A pod as k3s left it with a Secret volume that does not exist: placed,
+    /// no sandbox, every container waiting. Fails if it has no cause, or one
+    /// that is not the kubelet's setup.
+    #[test]
+    fn a_placed_pod_with_no_sandbox_is_creating() {
+        assert_eq!(
+            pod_cause(&placed(Some("False"), "PodInitializing")),
+            Some(PodCause::Creating {
+                uid: "u1".into(),
+                since: Some("2026-10-14T22:58:15Z".parse().unwrap()),
+                sandbox: Some(false),
+                kubelet: Warned::NotRead,
+            })
+        );
+    }
+
+    /// Sam's big pull: the sandbox is up and the kubelet is pulling. Fails if
+    /// a pull still in progress reads as a pod the kubelet cannot set up.
+    #[test]
+    fn a_pod_with_its_sandbox_up_is_not_creating() {
+        assert_eq!(pod_cause(&placed(Some("True"), "ContainerCreating")), None);
+    }
+
+    /// A cluster that does not report the sandbox: the containers' own wait
+    /// is the only word, and with none of it there is no cause to tell.
+    #[test]
+    fn with_no_word_on_the_sandbox_the_containers_wait_decides() {
+        let unsaid = pod_cause(&placed(None, "ContainerCreating"));
+        assert!(matches!(
+            unsaid,
+            Some(PodCause::Creating { sandbox: None, .. })
+        ));
+        assert_eq!(pod_cause(&placed(None, "Unknown")), None);
+    }
+
+    fn warning(uid: &str, reason: &str, message: &str, last: &str) -> Event {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {"name": format!("{reason}.{last}"), "namespace": "create-demo"},
+            "involvedObject": {"kind": "Pod", "name": "web", "uid": uid},
+            "type": "Warning", "reason": reason, "message": message, "count": 7,
+            "lastTimestamp": last
+        }))
+        .expect("an event this test wrote itself")
+    }
+
+    /// The kubelet's words as k3s wrote them. Fails if a missing ConfigMap or
+    /// Secret is not named with its kind, if the scheduler's or another pod's
+    /// warning is taken, or if the newest stops coming first.
+    #[test]
+    fn reads_the_kubelets_warnings_for_one_pod_newest_first() {
+        let events = [
+            warning(
+                "u1",
+                "FailedMount",
+                r#"MountVolume.SetUp failed for volume "cfg" : configmap "web-config" not found"#,
+                "2026-10-14T22:59:00Z",
+            ),
+            warning(
+                "u1",
+                "FailedMount",
+                r#"MountVolume.SetUp failed for volume "creds" : secret "web-creds" not found"#,
+                "2026-10-14T22:59:19Z",
+            ),
+            warning(
+                "u1",
+                "FailedScheduling",
+                "0/2 nodes are available",
+                "2026-10-14T22:59:30Z",
+            ),
+            warning(
+                "u0",
+                "FailedMount",
+                r#"MountVolume.SetUp failed for volume "old" : secret "gone" not found"#,
+                "2026-10-14T23:00:00Z",
+            ),
+        ];
+        let read = setup_warnings("u1", &events);
+        let faults: Vec<_> = read.iter().map(|w| w.fault.clone()).collect();
+        assert_eq!(
+            faults,
+            vec![
+                SetupFault::Missing {
+                    volume: Some("creds".into()),
+                    kind: "Secret".into(),
+                    name: "web-creds".into()
+                },
+                SetupFault::Missing {
+                    volume: Some("cfg".into()),
+                    kind: "ConfigMap".into(),
+                    name: "web-config".into()
+                },
+            ]
+        );
+        assert_eq!(read[0].count, 7);
+    }
+
+    /// Fails if a mount that names no missing object claims one, or a
+    /// sandbox the network plugin failed reads as a volume.
+    #[test]
+    fn a_warning_that_names_no_missing_object_says_only_what_it_is() {
+        let fault = |reason, said| setup_fault(reason, said);
+        assert_eq!(
+            fault("FailedMount", "Unable to attach or mount volumes: unmounted volumes=[cfg], unattached volumes=[]: timed out waiting for the condition"),
+            SetupFault::Volume { volume: None }
+        );
+        assert_eq!(
+            fault(
+                "FailedMount",
+                r#"MountVolume.SetUp failed for volume "cfg" : object "shop"/"cfg" not registered"#
+            ),
+            SetupFault::Volume {
+                volume: Some("cfg".into())
+            }
+        );
+        assert_eq!(
+            fault(
+                "FailedCreatePodSandBox",
+                r#"Failed to create pod sandbox: rpc error: plugin type="calico" failed (add): stat /var/lib/calico/nodename: no such file or directory"#
+            ),
+            SetupFault::Sandbox
+        );
+        assert_eq!(
+            fault("BackOff", "Back-off pulling image"),
+            SetupFault::Other
+        );
     }
 
     /// A termination message is the kubelet's to cap; the end is what says

@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { EndedRun, PodCause } from "@/generated/types";
+import type { EndedRun, PodCause, SetupWarning } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import {
@@ -8,6 +10,7 @@ import {
   causeWords,
   currentCause,
   exitMeaning,
+  sharedCause,
   tellingLine,
 } from "@/lib/pod-cause";
 
@@ -246,5 +249,143 @@ describe("a container the kubelet cannot start", () => {
       label: "The kubelet said:",
       text: "couldn't find key DB_PASSWORD in Secret team-checkout/checkout-db",
     });
+  });
+});
+
+const corpus = JSON.parse(
+  readFileSync(
+    resolve(process.cwd(), "src/contracts/shared-cause-conformance.json"),
+    "utf8"
+  )
+) as {
+  cases: {
+    name: string;
+    pods: { deleting: boolean; cause: PodCause | null }[];
+    is: { from: number; pods: number; of: number } | null;
+  }[];
+};
+
+describe("sharedCause", () => {
+  /**
+   * The StatefulSet, DaemonSet and Job pages read their pods here and the
+   * Overview's rows read them in Rust. Fails if this side answers any case
+   * of the shared corpus differently, which would put two causes on one
+   * workload.
+   */
+  it("answers every case in the shared corpus as the backend does", () => {
+    for (const { name, pods, is } of corpus.cases)
+      expect(sharedCause(pods), name).toEqual(
+        is && { cause: pods[is.from].cause, pods: is.pods, of: is.of }
+      );
+  });
+});
+
+describe("a pod the kubelet has not set up", () => {
+  const creating = (
+    kubelet: Extract<PodCause, { says: "creating" }>["kubelet"],
+    sandbox: boolean | null = false
+  ): PodCause => ({
+    says: "creating",
+    uid: "u1",
+    since: new Date(Date.now() - 4 * 60_000).toISOString(),
+    sandbox,
+    kubelet,
+  });
+  const mount = (
+    volume: string,
+    kind: string,
+    name: string,
+    at: string
+  ): SetupWarning => ({
+    reason: "FailedMount",
+    said: `MountVolume.SetUp failed for volume "${volume}" : ${kind.toLowerCase()} "${name}" not found`,
+    count: 7,
+    at,
+    fault: { says: "missing", volume, kind, name },
+  });
+
+  /**
+   * no-config's pods sat in ContainerCreating with nothing on the page
+   * saying why. Fails if the objects that do not exist stop leading, in
+   * either language, or the kubelet's own line stops being quoted.
+   */
+  it("names every object its volumes mount that does not exist", () => {
+    const warned = creating({
+      says: "read",
+      warnings: [
+        mount("creds", "Secret", "web-creds", "2026-10-14T22:59:19Z"),
+        mount("cfg", "ConfigMap", "web-config", "2026-10-14T22:59:00Z"),
+        mount("creds", "Secret", "web-creds", "2026-10-14T22:58:00Z"),
+      ],
+    });
+    const words = causeWords(warned, t);
+    expect(words.sentence).toBe(
+      "Secret web-creds and ConfigMap web-config do not exist, so the kubelet cannot mount them"
+    );
+    expect(words.quote?.text).toBe(
+      'FailedMount: MountVolume.SetUp failed for volume "creds" : secret "web-creds" not found'
+    );
+    expect(words.tone).toBe("err");
+    expect(causeWords(warned, ru).sentence).toContain(
+      "Secret web-creds и ConfigMap web-config не существуют"
+    );
+  });
+
+  /** Fails if a sandbox the network plugin failed reads as a volume. */
+  it("says the sandbox where the network plugin failed it", () => {
+    const words = causeWords(
+      creating({
+        says: "read",
+        warnings: [
+          {
+            reason: "FailedCreatePodSandBox",
+            said: "Failed to create pod sandbox: plugin type=calico failed (add)",
+            count: 3,
+            at: null,
+            fault: { says: "sandbox" },
+          },
+        ],
+      }),
+      t
+    );
+    expect(words.sentence).toContain("cannot create its sandbox");
+  });
+
+  /**
+   * Warnings expire after an hour, and an unread events list is not one
+   * that holds none. Fails if a guess stops being labelled as one, or if
+   * any state of the read is said like another.
+   */
+  it("labels a guess as one and keeps every state of the read apart", () => {
+    const quiet = causeWords(creating({ says: "read", warnings: [] }), t);
+    expect(quiet.note).toContain(
+      "Probably a volume it mounts or the network plugin"
+    );
+    expect(quiet.tone).toBe("warn");
+    const unknown = causeWords(
+      creating({ says: "read", warnings: [] }, null),
+      t
+    );
+    expect(unknown.note).toContain("a slow image pull");
+    const states: Extract<PodCause, { says: "creating" }>["kubelet"][] = [
+      { says: "notRead" },
+      { says: "reading" },
+      { says: "refused" },
+      { says: "failed", said: "the server is unavailable" },
+      { says: "read", warnings: [] },
+    ];
+    const notes = states.map(
+      (kubelet) => causeWords(creating(kubelet), t).note
+    );
+    expect(new Set(notes).size).toBe(notes.length);
+    expect(causeWords(creating({ says: "notRead" }), t).sentence).toBe(
+      "Placed on a node 4m ago, and the kubelet has not started its containers"
+    );
+  });
+
+  /** Nothing expires a wait for the kubelet; only the pod's next state does. */
+  it("stays current whatever the time", () => {
+    const cause = creating({ says: "notRead" });
+    expect(currentCause(cause, Date.now() + 86_400_000)).toBe(cause);
   });
 });

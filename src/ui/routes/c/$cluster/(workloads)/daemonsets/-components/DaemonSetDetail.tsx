@@ -8,13 +8,18 @@ import { LogViewer } from "../../../-logs/LogViewer";
 import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { RolloutBadge, RolloutSummary } from "../../../-object/RolloutSummary";
+import { WorkloadPodsCause } from "../../../-object/CauseLine";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { useWorkloadPods } from "../../-components/workload-pods";
-import { readyBesideBadge, workloadRole } from "@/lib/workload-status";
+import {
+  readyBesideBadge,
+  rolloutSettled,
+  workloadRole,
+} from "@/lib/workload-status";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -493,11 +498,19 @@ export function DaemonSetDetail() {
         }
         summary={
           daemonSet && (
-            <RolloutSummary
-              rollout={daemonSet.rollout}
-              subject={{ kind: ResourceType.DaemonSet, name, namespace }}
-              place="line"
-            />
+            <>
+              <WorkloadPodsCause
+                pods={splitPods}
+                settled={rolloutSettled(daemonSet.rollout)}
+                namespace={namespace ?? ""}
+                className="mb-1"
+              />
+              <RolloutSummary
+                rollout={daemonSet.rollout}
+                subject={{ kind: ResourceType.DaemonSet, name, namespace }}
+                place="line"
+              />
+            </>
           )
         }
         onBack={goBack}
