@@ -1,4 +1,5 @@
 import { EyeOff } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useT } from "@/i18n/useT";
@@ -21,12 +22,37 @@ const TONE_ICON: Record<RolloutLine["tone"], (typeof ROLE_ICON)["ok"]> = {
 /** A state a rollout passes through on every drain, restart or scale, with nothing of the controller's to quote. */
 const passing = (line: RolloutLine) => line.tone === "info" && !line.said;
 
+/** How long a verdict that arrived on this page stays in the header row before it takes its own line. */
+const SETTLE_MS = 1000;
+
+/**
+ * Whether `key` has stood for `ms`, or stood already when the page opened: a
+ * drain's 0.3 s of Unavailable came and went as a line that pushed the page
+ * down and back.
+ */
+function useStood(key: string | null, ms: number): boolean {
+  const [held, setHeld] = useState({ key, stood: true });
+  if (held.key !== key) setHeld({ key, stood: false });
+  const pending = held.key === key && !held.stood && key !== null;
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setTimeout(
+      () => setHeld((now) => (now.key === key ? { key, stood: true } : now)),
+      ms
+    );
+    return () => clearTimeout(timer);
+  }, [pending, key, ms]);
+  return held.key === key && held.stood;
+}
+
 /**
  * The rollout verdict in a sentence, with the controller's own words after it.
  * The page header and the peek draw this one line, so the two cannot disagree.
  *
  * A page puts a passing state in its header row (`header`) and the rest
- * above the strip (`line`), so what is under them does not move on a drain.
+ * above the strip (`line`), so what is under them does not move on a drain;
+ * a verdict that arrives while the page is open waits in the header row
+ * until it has lasted.
  */
 export function RolloutSummary({
   rollout,
@@ -41,11 +67,16 @@ export function RolloutSummary({
 }) {
   const t = useT();
   const line = rolloutLine(rollout, t);
+  const stood = useStood(
+    place && line && !passing(line) ? rollout.state : null,
+    SETTLE_MS
+  );
   if (!line) return null;
   const Icon = TONE_ICON[line.tone];
-  if (place === "line" && passing(line)) return null;
+  const header = passing(line) || !stood;
+  if (place === "line" && header) return null;
   if (place === "header")
-    return passing(line) ? (
+    return header ? (
       <p
         className={cn(
           "flex min-w-0 items-center gap-1.5 text-[11px]",
