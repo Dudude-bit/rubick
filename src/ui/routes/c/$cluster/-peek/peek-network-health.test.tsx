@@ -248,6 +248,7 @@ describe("the peek draws a network object's verdict as its page does", () => {
                 selector: "app=web",
                 pods: 1,
                 why,
+                cause: null,
               },
             },
           ])

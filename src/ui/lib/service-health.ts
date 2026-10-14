@@ -19,7 +19,13 @@ import type {
   ResourceConnections,
   ServicePublished,
 } from "@/generated/types";
-import { askedPorts, describeStop, stopMood } from "@/lib/connections";
+import {
+  askedPorts,
+  describeStop,
+  stopCause,
+  stopMood,
+} from "@/lib/connections";
+import { sharedText } from "@/lib/pod-cause";
 import { errorToShow } from "@/lib/error-utils";
 import { endpointCount, publishedFor, servingCount } from "@/lib/published";
 import type { StatusRole } from "@/lib/status-role";
@@ -169,6 +175,8 @@ function stopReason(published: PublishedCounts, t: T): string | null {
       asked: askedPorts(stop.unnamedPorts, t),
     });
   const title = describeStop(stop, t).title;
+  const cause = stopCause(stop);
+  if (cause) return `${title}: ${sharedText(cause, t)}`;
   const why =
     stop.reason === "noneReady"
       ? stop.why

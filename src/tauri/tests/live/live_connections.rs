@@ -444,6 +444,7 @@ async fn the_three_stops_are_different_stops() {
             selector,
             pods,
             why,
+            ..
         } => {
             assert_eq!(*why, NotServing::FailingReadiness);
             assert_eq!(service.name, "unready-demo");

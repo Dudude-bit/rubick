@@ -109,6 +109,7 @@ const COMING_UP = (more: Partial<ResourceConnections>) =>
       selector: "app=big-pull",
       pods: 1,
       why: "comingUp",
+      cause: null,
     },
     more
   );

@@ -863,6 +863,7 @@ describe("the traffic chain", () => {
             selector: "app=unready-demo",
             pods: 2,
             why: "failingReadiness",
+            cause: null,
           },
         ]
       ),
@@ -900,6 +901,7 @@ describe("the traffic chain", () => {
           selector: "app=x",
           pods: 2,
           why: "failingReadiness",
+          cause: null,
         },
       ] satisfies ChainStop[]
     ).map((stop) => describeStop(stop, t).title);
@@ -1038,6 +1040,7 @@ describe("the traffic chain", () => {
               selector: "app=ledger",
               pods: 1,
               why,
+              cause: null,
             },
           ]
         ),
@@ -1114,6 +1117,7 @@ describe("the traffic chain", () => {
               selector: "app=big-pull",
               pods: 3,
               why: "comingUp",
+              cause: null,
             },
           ]
         ),
@@ -1923,6 +1927,7 @@ describe("what the Service publishes", () => {
       selector: "app=topology-demo",
       pods: 2,
       why,
+      cause: null,
     });
     const pending = describeStop(stop("unscheduled"), t).note;
     expect(pending).toContain("Pending with no node");
@@ -1962,6 +1967,7 @@ describe("what the Service publishes", () => {
         selector: "app=unready-demo",
         pods: 2,
         why: "failingReadiness",
+        cause: null,
       },
       ru
     ).note;

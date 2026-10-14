@@ -357,6 +357,24 @@ export interface ServiceHealthGroup {
   stop?: ChainStop;
 }
 
+export interface SharedCause {
+  cause: PodCause;
+  pods: number;
+  of: number;
+}
+
+export interface EndedRun {
+  code: number;
+  signal: number | null;
+  reason: string | null;
+  started: string | null;
+  ended: string | null;
+  previous: boolean;
+  said: string | null;
+  log: Evidence;
+  limit: string | null;
+}
+
 export interface NearMiss {
   pods: ObjectRef[];
   carries: string;
@@ -1578,18 +1596,6 @@ export interface PodStatusInfo {
   deleting: boolean;
 }
 
-export interface EndedRun {
-  code: number;
-  signal: number | null;
-  reason: string | null;
-  started: string | null;
-  ended: string | null;
-  previous: boolean;
-  said: string | null;
-  log: Evidence;
-  limit: string | null;
-}
-
 export type PodFilters = {
   statusFilter: string | null;
   selector: Record<string, string> | null;
@@ -2525,6 +2531,7 @@ export type ChainStop =
       selector: string;
       pods: number;
       why: NotServing;
+      cause: SharedCause | null;
     }
   | {
       reason: "publishesNothing";
@@ -2534,6 +2541,86 @@ export type ChainStop =
       readyPods: number;
       unnamedPorts: string[];
     };
+
+export type PodCause =
+  | {
+      says: "exits";
+      container: string;
+      restarts: number;
+      run: EndedRun | null;
+      until: string | null;
+    }
+  | {
+      says: "unplaced";
+      said: string | null;
+      since: string | null;
+      nodes: number | null;
+      why: Unfit[];
+    }
+  | {
+      says: "blocked";
+      container: string;
+      reason: string;
+      said: string | null;
+      image: string;
+      pull: PullFailure | null;
+      secrets: string[];
+    }
+  | {
+      says: "notReady";
+      containers: string[];
+      since: string | null;
+      probe: ProbeCheck | null;
+    }
+  | {
+      says: "creating";
+      uid: string;
+      since: string | null;
+      sandbox: boolean | null;
+      kubelet: Warned;
+    };
+
+export type Warned =
+  | { says: "notRead" }
+  | { says: "reading" }
+  | { says: "read"; warnings: SetupWarning[] }
+  | { says: "refused" }
+  | { says: "failed"; said: string };
+
+export type ProbeCheck =
+  | { says: "http"; scheme: string; path: string; port: string }
+  | { says: "tcp"; port: string }
+  | { says: "grpc"; port: number }
+  | { says: "exec"; command: string[] };
+
+export type PullFailure =
+  | "notFound"
+  | "denied"
+  | "rateLimited"
+  | "unreachable"
+  | "backingOff"
+  | "other";
+
+export type Unfit =
+  | { says: "short"; resource: string; nodes: number }
+  | { says: "taint"; taint: string; nodes: number }
+  | { says: "selector"; nodes: number }
+  | { says: "podAffinity"; nodes: number }
+  | { says: "cordoned"; nodes: number }
+  | { says: "tooManyPods"; nodes: number }
+  | { says: "volumeZone"; nodes: number }
+  | { says: "topology"; nodes: number }
+  | { says: "claimsUnbound" }
+  | { says: "other"; text: string; nodes: number | null };
+
+export type Evidence =
+  | { says: "line"; text: string; last: boolean }
+  | { says: "notRead" }
+  | { says: "reading" }
+  | { says: "nothing" }
+  | { says: "gone" }
+  | { says: "refused" }
+  | { says: "failed"; said: string };
 
 export type NotServing =
   | "unscheduled"
@@ -2768,86 +2855,6 @@ export type ContainerState =
   | { type: "waiting"; reason: string | null; message: string | null }
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
-
-export type PodCause =
-  | {
-      says: "exits";
-      container: string;
-      restarts: number;
-      run: EndedRun | null;
-      until: string | null;
-    }
-  | {
-      says: "unplaced";
-      said: string | null;
-      since: string | null;
-      nodes: number | null;
-      why: Unfit[];
-    }
-  | {
-      says: "blocked";
-      container: string;
-      reason: string;
-      said: string | null;
-      image: string;
-      pull: PullFailure | null;
-      secrets: string[];
-    }
-  | {
-      says: "notReady";
-      containers: string[];
-      since: string | null;
-      probe: ProbeCheck | null;
-    }
-  | {
-      says: "creating";
-      uid: string;
-      since: string | null;
-      sandbox: boolean | null;
-      kubelet: Warned;
-    };
-
-export type Warned =
-  | { says: "notRead" }
-  | { says: "reading" }
-  | { says: "read"; warnings: SetupWarning[] }
-  | { says: "refused" }
-  | { says: "failed"; said: string };
-
-export type ProbeCheck =
-  | { says: "http"; scheme: string; path: string; port: string }
-  | { says: "tcp"; port: string }
-  | { says: "grpc"; port: number }
-  | { says: "exec"; command: string[] };
-
-export type PullFailure =
-  | "notFound"
-  | "denied"
-  | "rateLimited"
-  | "unreachable"
-  | "backingOff"
-  | "other";
-
-export type Unfit =
-  | { says: "short"; resource: string; nodes: number }
-  | { says: "taint"; taint: string; nodes: number }
-  | { says: "selector"; nodes: number }
-  | { says: "podAffinity"; nodes: number }
-  | { says: "cordoned"; nodes: number }
-  | { says: "tooManyPods"; nodes: number }
-  | { says: "volumeZone"; nodes: number }
-  | { says: "topology"; nodes: number }
-  | { says: "claimsUnbound" }
-  | { says: "other"; text: string; nodes: number | null };
-
-export type Evidence =
-  | { says: "line"; text: string; last: boolean }
-  | { says: "notRead" }
-  | { says: "reading" }
-  | { says: "nothing" }
-  | { says: "gone" }
-  | { says: "refused" }
-  | { says: "failed"; said: string };
 
 export type Severity = "blocking" | "misconfigured" | "unverified" | "optional";
 

@@ -3,8 +3,13 @@ import { EyeOff } from "lucide-react";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import type { ObjectRef, ServicePublished } from "@/generated/types";
-import { chainStopHop } from "./connections";
+import type {
+  NotServing,
+  ObjectRef,
+  ServicePublished,
+  SharedCause,
+} from "@/generated/types";
+import { chainStopHop, describeStop } from "./connections";
 import {
   healthFromConnections,
   serviceHealthOf,
@@ -57,6 +62,7 @@ describe("one verdict for a Service on every surface", () => {
           selector: "app=topology-demo",
           pods: 2,
           why: "unscheduled",
+          cause: null,
         },
       }),
       null
@@ -202,6 +208,7 @@ describe("one verdict for a Service on every surface", () => {
             selector: "app=unready-demo",
             pods: 2,
             why,
+            cause: null,
           },
         }),
         null
@@ -442,6 +449,7 @@ describe("a Service whose workloads wait on their pods", () => {
           selector: "app=ledger",
           pods: 1,
           why,
+          cause: null,
         },
       }),
       null
@@ -520,6 +528,7 @@ describe("a Service whose workloads wait on their pods", () => {
       selector: "app=big-pull",
       pods: 1,
       why: "comingUp",
+      cause: null,
     });
     expect(coming.state).toBe("comingUp");
     const comingWords = serviceHealthWords(coming, t);
@@ -549,5 +558,76 @@ describe("a Service whose workloads wait on their pods", () => {
     });
     expect(nobody.state).toBe("noEndpoints");
     expect(serviceHealthWords(nobody, t).role).toBe("err");
+  });
+});
+
+describe("a Service none of whose pods is ready", () => {
+  const exits: SharedCause = {
+    cause: {
+      says: "exits",
+      container: "web",
+      restarts: 6,
+      run: {
+        code: 1,
+        signal: null,
+        reason: "Error",
+        started: null,
+        ended: null,
+        previous: true,
+        said: "Error: DATABASE_URL is not set",
+        log: { says: "notRead" },
+        limit: null,
+      },
+      until: null,
+    },
+    pods: 2,
+    of: 2,
+  };
+  const failing = (why: NotServing) =>
+    serviceHealthWords(
+      serviceHealthOf(
+        SELECTING,
+        published({
+          notReady: 2,
+          stop: {
+            reason: "noneReady",
+            service: SERVICE,
+            selector: "app=web",
+            pods: 2,
+            why,
+            cause: exits,
+          },
+        }),
+        null
+      ),
+      t
+    );
+
+  /**
+   * crash-demo's Service said "none ready: the pods are crash looping" and
+   * sent the reader to their logs. Fails if the cause its pods share stops
+   * following the verdict, here and in the chain's note.
+   */
+  it("follows its verdict with the cause its pods share", () => {
+    expect(failing("crashLooping").reason).toContain(
+      "2 of 2 pods: web exited (exit 1, Error). Its exit message: Error: DATABASE_URL is not set"
+    );
+    const stop = published({
+      stop: {
+        reason: "noneReady",
+        service: SERVICE,
+        selector: "app=web",
+        pods: 2,
+        why: "crashLooping",
+        cause: exits,
+      },
+    }).stop!;
+    expect(describeStop(stop, t).note).toContain("2 of 2 pods: web exited");
+  });
+
+  /** Fails if pods still coming up, or never read, are said to have a cause. */
+  it("tells no cause for pods still coming up or not read", () => {
+    expect(failing("comingUp").reason).not.toContain("web exited");
+    expect(failing("podsUnread").reason).not.toContain("web exited");
   });
 });

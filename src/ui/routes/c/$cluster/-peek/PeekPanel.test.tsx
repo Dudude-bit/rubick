@@ -2786,6 +2786,7 @@ describe("PeekPanel traffic chain", () => {
             selector: "app=frontend",
             pods: 1,
             why: "podsUnread",
+            cause: null,
           },
         },
       ],

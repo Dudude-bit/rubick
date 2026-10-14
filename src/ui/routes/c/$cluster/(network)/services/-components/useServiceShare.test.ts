@@ -144,6 +144,7 @@ describe("what the Service report leads with", () => {
         selector: "app=checkout",
         pods: 1,
         why: "comingUp",
+        cause: null,
       })
     ).toMatchObject({
       value: "0/0",
@@ -283,6 +284,7 @@ describe("an address not ready in what the Service publishes", () => {
               selector: "app=checkout",
               pods: 1,
               why,
+              cause: null,
             },
             endpoints: [
               {

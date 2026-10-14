@@ -5,6 +5,7 @@ import type {
   ProbeCheck,
   PullFailure,
   SetupWarning,
+  SharedCause,
   Unfit,
   Warned,
 } from "@/generated/types";
@@ -22,13 +23,6 @@ import { formatAge, formatDuration } from "@/lib/utils";
  */
 
 export type CauseTone = "err" | "warn";
-
-/** The cause most of a workload's pods share, how many share it and how many it runs. */
-export interface SharedCause {
-  cause: PodCause;
-  pods: number;
-  of: number;
-}
 
 export interface CauseWords {
   /** What happened, and how long it took, as one sentence. */
@@ -413,6 +407,11 @@ export function causeText(cause: PodCause, t: T): string {
 /** "2 of 3 pods:", the share of a workload's pods its cause is told from. */
 export function podsShare(pods: number, of: number, t: T): string {
   return t("readings", "podsShareCause", { pods, n: of });
+}
+
+/** A shared cause as plain text: how many pods share it, then the cause. */
+export function sharedText(shared: SharedCause, t: T): string {
+  return `${podsShare(shared.pods, shared.of, t)} ${causeText(shared.cause, t)}`;
 }
 
 /** Two pods share a cause when it is the same mechanism in the same container. */

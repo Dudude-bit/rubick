@@ -48,12 +48,14 @@ import type {
   PublishedEndpoint,
   ResourceConnections,
   ServicePublished,
+  SharedCause,
   TlsCertificate,
   Unread,
   UnexploredKind,
   Usage,
 } from "@/generated/types";
 import { declaredQuantity } from "./metric-format";
+import { currentCause, sharedText } from "./pod-cause";
 
 type Named = Pick<ObjectRef, "kind" | "name" | "namespace">;
 
@@ -392,6 +394,20 @@ const NONE_READY_NOTE: Record<NotServing, keyof typeof en.nav> = {
   podsUnread: "stopPodsUnreadNote",
 };
 
+/** Pods that are still coming up, or were not read, have no cause to tell yet. */
+const UNTOLD: ReadonlySet<NotServing> = new Set([
+  "comingUp",
+  "podsUnread",
+  "inSlices",
+]);
+
+/** The cause the pods behind a stop share, where none of them is ready for one. */
+export function stopCause(stop: ChainStop): SharedCause | null {
+  if (stop.reason !== "noneReady" || !stop.cause || UNTOLD.has(stop.why))
+    return null;
+  return currentCause(stop.cause.cause) ? stop.cause : null;
+}
+
 /** Where a none-ready count comes from: the slices' addresses, or the pods the selector picked. */
 const SLICES_COUNTED: ReadonlySet<NotServing> = new Set([
   "inSlices",
@@ -495,7 +511,8 @@ export function describeStop(
             : "connectionRefusedNothingBehind"
         ),
       };
-    case "noneReady":
+    case "noneReady": {
+      const cause = stopCause(stop);
       return {
         title: t(
           "count",
@@ -504,8 +521,11 @@ export function describeStop(
             : "podsCarryNotReady",
           { n: stop.pods, selector: stop.selector }
         ),
-        note: t("nav", NONE_READY_NOTE[stop.why]),
+        note: cause
+          ? sharedText(cause, t)
+          : t("nav", NONE_READY_NOTE[stop.why]),
       };
+    }
     case "routeNotAccepted":
       return {
         title: t("nav", "stopRouteNotAcceptedTitle", {

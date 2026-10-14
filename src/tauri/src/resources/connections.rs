@@ -455,6 +455,9 @@ pub enum ChainStop {
         selector: String,
         pods: i32,
         why: NotServing,
+        /// The cause most of its pods share, where they were read.
+        #[serde(default)]
+        cause: Option<crate::resources::SharedCause>,
     },
     /// Ready pods match the selector and the Service publishes not one
     /// address:port pair — the case with a healthy selector, healthy pods, a

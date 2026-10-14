@@ -148,6 +148,7 @@ describe("TrafficChain", () => {
       selector: "app=unready-demo",
       pods: 2,
       why: "failingReadiness",
+      cause: null,
     });
 
     expect(missing).toContain("No Service named demo in this namespace");
@@ -180,6 +181,7 @@ describe("TrafficChain", () => {
                 selector: "app=ledger",
                 pods: 1,
                 why,
+                cause: null,
               },
             ])
           )}

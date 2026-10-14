@@ -8,7 +8,7 @@ import {
 
 import { useMemo } from "react";
 
-import type { PodCause, PodInfo } from "@/generated/types";
+import type { PodCause, PodInfo, SharedCause } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import {
   causeWords,
@@ -16,7 +16,6 @@ import {
   podsShare,
   sharedCause,
   type CauseWords,
-  type SharedCause,
 } from "@/lib/pod-cause";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";

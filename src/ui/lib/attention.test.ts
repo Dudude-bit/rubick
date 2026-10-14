@@ -342,6 +342,7 @@ describe("what Needs attention lists beyond pods", () => {
         selector: `app=${name}`,
         pods: 1,
         why,
+        cause: null,
       },
     });
     const groups = [
@@ -431,6 +432,7 @@ describe("what Needs attention lists beyond pods", () => {
         selector: "app=big-pull",
         pods: 1,
         why: "comingUp",
+        cause: null,
       }),
       empty("ledger", nothingYet("ledger", true)),
       empty("orphan", nothingYet("orphan", false)),

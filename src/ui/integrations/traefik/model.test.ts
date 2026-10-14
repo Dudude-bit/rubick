@@ -288,6 +288,7 @@ describe("the findings", () => {
               selector: "app=promo",
               pods: 2,
               why: "failingReadiness",
+              cause: null,
             },
           }),
         ],

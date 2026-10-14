@@ -101,6 +101,7 @@ describe("the Endpoints list's Endpoints column", () => {
       selector: "app=unready-demo",
       pods: 2,
       why,
+      cause: null,
     },
   });
   const listed = (why: "podsUnread" | "failingReadiness") =>
@@ -163,6 +164,7 @@ describe("the Endpoints list's IPs column and shared words, beside the Service's
         selector: "app=unready-demo",
         pods: 2,
         why,
+        cause: null,
       },
     }),
     why: () => null,

@@ -740,6 +740,7 @@ pub fn service_stop(
                 selector: text,
                 pods: published.not_ready,
                 why: NotServing::InSlices,
+                cause: None,
             });
         }
         return Some(ChainStop::PublishesNothingYet {
@@ -768,6 +769,7 @@ pub fn service_stop(
                 count(selected.len())
             },
             why,
+            cause: crate::resources::shared_cause(selected.iter().copied()),
         });
     }
     Some(ChainStop::PublishesNothing {
@@ -2203,6 +2205,50 @@ mod tests {
             ..Default::default()
         }]);
         assert_eq!(why_of(&svc, &[up]), Some(NotServing::CrashLooping));
+    }
+
+    /// A Service whose pods all exit said "none ready: the pods are crash
+    /// looping" and sent the reader to find out why. Fails if the cause they
+    /// share does not travel with the stop, or one is invented where only the
+    /// slices were read.
+    #[test]
+    fn a_service_with_none_ready_carries_the_cause_its_pods_share() {
+        let svc = selecting("web");
+        let looping = |name: &str| {
+            let mut pod = in_state(name, Some("n1"), "Running", Some("CrashLoopBackOff"));
+            let statuses = pod
+                .status
+                .as_mut()
+                .and_then(|s| s.container_statuses.as_mut())
+                .expect("the container's status");
+            statuses[0].last_state = Some(ContainerState {
+                terminated: Some(k8s_openapi::api::core::v1::ContainerStateTerminated {
+                    exit_code: 1,
+                    reason: Some("Error".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            });
+            pod
+        };
+        let pods = [looping("a"), looping("b")];
+        let refs: Vec<&Pod> = pods.iter().collect();
+        let Some(ChainStop::NoneReady {
+            cause: Some(shared),
+            ..
+        }) = stop_of(&svc, &[], Some(&refs))
+        else {
+            panic!("a stop with the pods' cause");
+        };
+        assert_eq!((shared.pods, shared.of), (2, 2));
+        assert!(matches!(
+            shared.cause,
+            crate::resources::PodCause::Exits { run: Some(ref run), .. } if run.code == 1
+        ));
+        assert!(matches!(
+            stop_of(&svc, &[not_ready_slice()], None),
+            Some(ChainStop::NoneReady { cause: None, .. })
+        ));
     }
 
     #[test]

@@ -76,6 +76,7 @@ describe("a Service's verdict whose pods were not read", () => {
             selector: "app=ledger",
             pods: 1,
             why: "podsUnread",
+            cause: null,
           },
         },
       },

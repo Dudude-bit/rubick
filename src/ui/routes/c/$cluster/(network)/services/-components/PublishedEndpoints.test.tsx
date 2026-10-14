@@ -40,6 +40,7 @@ const ledger = (why: "podsUnread" | "failingReadiness"): ConnectionsRead =>
             selector: "app=ledger",
             pods: 1,
             why,
+            cause: null,
           },
           endpoints: [
             {
