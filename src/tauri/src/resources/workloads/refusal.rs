@@ -3,7 +3,7 @@
 //! pod is there to tell why the workload is short.
 
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::apps::v1::DeploymentCondition;
+use k8s_openapi::api::apps::v1::{DeploymentCondition, ReplicaSetCondition};
 use k8s_openapi::api::core::v1::Event;
 
 use crate::resources::EventInfo;
@@ -14,18 +14,44 @@ const FAILED_CREATE: &str = "FailedCreate";
 /// several similar events into.
 const COMBINED: &str = "(combined from similar events): ";
 
-/// The refusal a Deployment's `ReplicaSet` reported up as `ReplicaFailure`,
-/// which both controllers clear once a create gets through.
+/// A condition a `ReplicaSet` sets and its Deployment copies.
+pub trait ReplicaCondition {
+    fn parts(&self) -> (&str, &str, Option<&str>, Option<&str>);
+}
+
+impl ReplicaCondition for DeploymentCondition {
+    fn parts(&self) -> (&str, &str, Option<&str>, Option<&str>) {
+        (
+            &self.type_,
+            &self.status,
+            self.reason.as_deref(),
+            self.message.as_deref(),
+        )
+    }
+}
+
+impl ReplicaCondition for ReplicaSetCondition {
+    fn parts(&self) -> (&str, &str, Option<&str>, Option<&str>) {
+        (
+            &self.type_,
+            &self.status,
+            self.reason.as_deref(),
+            self.message.as_deref(),
+        )
+    }
+}
+
+/// The refusal a `ReplicaSet` sets as `ReplicaFailure` and reports up to its
+/// Deployment, which both controllers clear once a create gets through.
 #[must_use]
-pub fn replica_failure(conditions: &[DeploymentCondition]) -> Option<String> {
+pub fn replica_failure<C: ReplicaCondition>(conditions: &[C]) -> Option<String> {
     conditions
         .iter()
-        .find(|c| {
-            c.type_ == "ReplicaFailure"
-                && c.status == "True"
-                && c.reason.as_deref() == Some(FAILED_CREATE)
+        .map(ReplicaCondition::parts)
+        .find_map(|(type_, status, reason, said)| {
+            (type_ == "ReplicaFailure" && status == "True" && reason == Some(FAILED_CREATE))
+                .then(|| said.unwrap_or_default().to_string())
         })
-        .map(|c| c.message.clone().unwrap_or_default())
 }
 
 /// The newest refusal the controller `uid` was given, unless a pod of its
@@ -127,5 +153,22 @@ mod tests {
             Some("pods \"web-1\" is forbidden: exceeded quota: two-pods")
         );
         assert_eq!(replica_failure(&[condition("FailedDelete")]), None);
+    }
+
+    /// Fails if a `ReplicaSet`'s own page cannot tell the refusal the
+    /// Deployment above it copied from it.
+    #[test]
+    fn a_replica_set_says_what_it_was_refused() {
+        let refused = ReplicaSetCondition {
+            type_: "ReplicaFailure".to_string(),
+            status: "True".to_string(),
+            reason: Some(FAILED_CREATE.to_string()),
+            message: Some("pods \"web-1\" is forbidden: exceeded quota: two-pods".to_string()),
+            ..ReplicaSetCondition::default()
+        };
+        assert_eq!(
+            replica_failure(&[refused]).as_deref(),
+            Some("pods \"web-1\" is forbidden: exceeded quota: two-pods")
+        );
     }
 }

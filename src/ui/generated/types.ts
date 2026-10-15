@@ -1335,6 +1335,7 @@ export interface ReplicaSetInfo {
   templateAnnotations: Record<string, string>;
   template: unknown | null;
   conditions: ConditionInfo[];
+  podsRefused: string | null;
   ownerReferences: OwnerReference[];
   createdAt: string | null;
 }

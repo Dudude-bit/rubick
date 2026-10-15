@@ -79,6 +79,9 @@ pub struct ReplicaSetInfo {
     /// the fields the rows above do not carry.
     pub template: Option<serde_json::Value>,
     pub conditions: Vec<ConditionInfo>,
+    /// The API server's words refusing the pods it asks for, while it
+    /// refuses them.
+    pub pods_refused: Option<String>,
     pub owner_references: Vec<OwnerReference>,
     pub created_at: Option<String>,
 }
@@ -128,6 +131,9 @@ impl ReplicaSetInfo {
                 .and_then(|s| s.template.as_ref())
                 .and_then(|t| serde_json::to_value(deployment_template_of(t)).ok()),
             conditions,
+            pods_refused: status
+                .and_then(|s| s.conditions.as_deref())
+                .and_then(crate::resources::replica_failure),
             owner_references: extract_owner_references(rs.metadata.owner_references.as_ref()),
             created_at: rs.creation_timestamp().to_rfc3339_opt(),
         }

@@ -27,6 +27,7 @@ import {
 import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { useWorkloadPods } from "../../-components/workload-pods";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
+import { WorkloadPodsCause } from "../../../-object/CauseLine";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
@@ -390,6 +391,16 @@ export function ReplicaSetDetail() {
               ? t("empty", "scaledToZero")
               : t("count", "slashReady", { n: ready, total: desired })}
           </span>
+        )
+      }
+      summary={
+        replicaSet && (
+          <WorkloadPodsCause
+            pods={splitPods}
+            settled={ready >= desired && current >= desired}
+            namespace={replicaSet.namespace}
+            refused={replicaSet.podsRefused}
+          />
         )
       }
       onBack={goBack}
