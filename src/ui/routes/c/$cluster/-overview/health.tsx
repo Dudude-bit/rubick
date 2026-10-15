@@ -171,8 +171,7 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
     );
   }
   if (detail.says === "stopCause") return <StopCauseLine cause={detail} />;
-  if (detail.says === "podsRefused")
-    return <RefusedLine said={detail.said} compact />;
+  if (detail.says === "podsRefused") return <RefusedLine said={detail.said} />;
   if (detail.says === "said")
     return (
       <ResourceMessage

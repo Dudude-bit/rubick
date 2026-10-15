@@ -110,25 +110,56 @@ describe("how a refusal is said", () => {
 
   /**
    * Live, a PodSecurity refusal filled four lines of every Overview row and
-   * a list cell cut it at "violates PodSecurity "re...", the checks it failed
-   * pushed out by how to pass each. Fails if the short form keeps the how,
-   * drops a check, or strips the parentheses of any other refusal.
+   * a list cell cut it at "violates PodSecurity "re...". Fails if a row stops
+   * naming who refused, or a shape falls back to quoting the answer.
    */
-  it("keeps the checks a PodSecurity refusal failed and leaves out how to pass them", () => {
-    expect(
-      refusalGist(
-        'Error creating: pods "root-job-dw9qj" is forbidden: violates PodSecurity "restricted:latest": allowPrivilegeEscalation != false (container "sleeper" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "sleeper" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "sleeper" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "sleeper" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")'
-      )
-    ).toBe(
-      'violates PodSecurity "restricted:latest": allowPrivilegeEscalation != false, unrestricted capabilities, runAsNonRoot != true, seccompProfile'
-    );
-    expect(
-      refusalGist(
-        'pods "web-1" is forbidden: admission webhook "policy.example" denied the request: image (latest tag) is not allowed'
-      )
-    ).toBe(
-      'admission webhook "policy.example" denied the request: image (latest tag) is not allowed'
-    );
+  it.each([
+    [
+      'Error creating: pods "root-job-dw9qj" is forbidden: violates PodSecurity "restricted:latest": allowPrivilegeEscalation != false (container "sleeper" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "sleeper" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "sleeper" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "sleeper" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")',
+      "Pod Security restricted refuses its pods: 4 checks fail",
+    ],
+    [
+      'pods "node-peek-5649c97885-zqqdt" is forbidden: violates PodSecurity "baseline:v1.33": host namespaces (hostNetwork=true)',
+      "Pod Security baseline:v1.33 refuses its pods: 1 check fails",
+    ],
+    [
+      'pods "capped-6d67bcbdbc-bl2gn" is forbidden: exceeded quota: two-pods, requested: pods=1, used: pods=2, limited: pods=2',
+      "ResourceQuota two-pods refuses its pods: no room for pods",
+    ],
+    [
+      'pods "unbounded-8f8bd5d6-bcrk9" is forbidden: failed quota: compute: must specify limits.cpu for: app; limits.memory for: app,sidecar',
+      "ResourceQuota compute refuses its pods: limits.cpu, limits.memory not set",
+    ],
+    [
+      'pods "greedy-ddc468465-hdsd6" is forbidden: [maximum cpu usage per Container is 500m, but limit is 1, maximum memory usage per Container is 256Mi, but limit is 512Mi]',
+      "A LimitRange refuses its pods: cpu, memory out of bounds",
+    ],
+    [
+      'pods "lost-sa-5d659d7bd7-" is forbidden: error looking up service account refused-sa/ghost: serviceaccount "ghost" not found',
+      "Its pods are refused: ServiceAccount ghost does not exist",
+    ],
+    [
+      "pods \"unlabeled-cbbf4cf64-fndqd\" is forbidden: ValidatingAdmissionPolicy 'require-team-label' with binding 'require-team-label-binding' denied request: every pod needs a team label",
+      "ValidatingAdmissionPolicy require-team-label refuses its pods: every pod needs a team label",
+    ],
+    [
+      'Internal error occurred: failed calling webhook "pods.guard.example.com": failed to call webhook: Post "https://guard.refused-hook.svc:443/validate?timeout=10s": service "guard" not found',
+      "Its pods are refused: admission webhook pods.guard.example.com cannot be reached",
+    ],
+    [
+      'pods "web-1" is forbidden: admission webhook "policy.example" denied the request without explanation',
+      "Admission webhook policy.example refuses its pods",
+    ],
+    [
+      'pods "web-1" is forbidden: unable to create new content in namespace shop because it is being terminated',
+      "Its pods are refused: namespace shop is being deleted",
+    ],
+    [
+      'pods "web-1" is forbidden: node "a" not ready',
+      'The API server refuses to create its pods: node "a" not ready',
+    ],
+  ])("says who refused %j in a row's few words", (said, text) => {
+    expect(refusalText(said, t)).toBe(text);
   });
 
   /** Fails if a Job with pods running, retrying or done is relabelled, or a refused Pending one is not. */

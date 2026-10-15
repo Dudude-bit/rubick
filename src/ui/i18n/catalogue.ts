@@ -7271,6 +7271,88 @@ export const en = {
     podsRefused: "The API server refuses to create its pods",
     podsRefusedSaid: "The API server refuses to create its pods: {said}",
     refusalSaid: "The API server answered:",
+    refusalRaw: "What the API server said",
+    refusedBySecurityLabel: {
+      one: "The namespace {namespace} enforces the Pod Security level {level} through its label {label}, and this template fails {n} of its checks:",
+      other:
+        "The namespace {namespace} enforces the Pod Security level {level} through its label {label}, and this template fails {n} of its checks:",
+    },
+    refusedBySecurityDefault: {
+      one: "The namespace {namespace} sets no Pod Security level, so the cluster's default {level} applies, and this template fails {n} of its checks:",
+      other:
+        "The namespace {namespace} sets no Pod Security level, so the cluster's default {level} applies, and this template fails {n} of its checks:",
+    },
+    refusedBySecurity: {
+      one: "Pod Security admission enforces the level {level} on the namespace {namespace}, and this template fails {n} of its checks:",
+      other:
+        "Pod Security admission enforces the level {level} on the namespace {namespace}, and this template fails {n} of its checks:",
+    },
+    refusedSecurityWayOut:
+      "Set these in the pod template, or have the namespace's Pod Security level lowered.",
+    refusedByQuota:
+      "The ResourceQuota {quota} has no room left in this namespace for another pod:",
+    refusedQuotaRow:
+      "{used} of {limited} in use, one more pod needs {requested}",
+    refusedQuotaAsks: "one more pod needs {requested}",
+    refusedQuotaWayOut:
+      "Free room by removing or scaling down something in the namespace, lower what each pod asks for, or raise the quota.",
+    refusedByQuotaUnset:
+      "The ResourceQuota {quota} limits these resources in this namespace, so every container has to set them, and this template leaves them unset:",
+    refusedUnsetIn: "not set in {containers}",
+    refusedUnset: "not set",
+    refusedQuotaUnsetWayOut:
+      "Set them under resources in the pod template, or add a LimitRange that gives every container defaults.",
+    refusedByLimitRange:
+      "A LimitRange in this namespace bounds what each container or pod may ask for, and this template is outside it:",
+    refusedRangeMaximum:
+      "at most {allowed} per {per}, the template asks for {asked}",
+    refusedRangeMinimum:
+      "at least {allowed} per {per}, the template asks for {asked}",
+    refusedRangeMaximumUnset:
+      "at most {allowed} per {per}, and the template sets no limit",
+    refusedRangeMinimumUnset:
+      "at least {allowed} per {per}, and the template sets no request",
+    refusedRangeWayOut:
+      "Change the resources in the pod template, or have the LimitRange changed.",
+    refusedByServiceAccount:
+      "Its pods run as the ServiceAccount {name}, which does not exist in the namespace {namespace}.",
+    refusedServiceAccountWayOut:
+      "Create it, or set serviceAccountName in the pod template to one that exists.",
+    refusedByPolicy:
+      "The ValidatingAdmissionPolicy {policy} denies these pods through its binding {binding}. It says:",
+    refusedByWebhook:
+      "The admission webhook {webhook} denies these pods. It says:",
+    refusedByWebhookSilent:
+      "The admission webhook {webhook} denies these pods and gives no reason.",
+    refusedRuleWayOut:
+      "Change the pod template to meet it, or ask whoever owns the rule.",
+    refusedByWebhookDown:
+      "Every new pod here has to be approved by the admission webhook {webhook}, and the API server cannot reach it, so it refuses them. It answered:",
+    refusedWebhookService: "The webhook is served by {service}.",
+    refusedWebhookDownWayOut:
+      "Bring the webhook's backend back, or have its configuration changed so it no longer has to approve these pods.",
+    refusedByTerminating:
+      "The namespace {namespace} is being deleted, so nothing new can be created in it.",
+    refusedShortSecurity: {
+      one: "Pod Security {level} refuses its pods: {n} check fails",
+      other: "Pod Security {level} refuses its pods: {n} checks fail",
+    },
+    refusedShortQuota:
+      "ResourceQuota {quota} refuses its pods: no room for {resources}",
+    refusedShortQuotaUnset:
+      "ResourceQuota {quota} refuses its pods: {resources} not set",
+    refusedShortRange:
+      "A LimitRange refuses its pods: {resources} out of bounds",
+    refusedShortServiceAccount:
+      "Its pods are refused: ServiceAccount {name} does not exist",
+    refusedShortPolicy:
+      "ValidatingAdmissionPolicy {policy} refuses its pods: {said}",
+    refusedShortWebhook: "Admission webhook {webhook} refuses its pods: {said}",
+    refusedShortWebhookSilent: "Admission webhook {webhook} refuses its pods",
+    refusedShortWebhookDown:
+      "Its pods are refused: admission webhook {webhook} cannot be reached",
+    refusedShortTerminating:
+      "Its pods are refused: namespace {namespace} is being deleted",
   },
   statusMeaning: {
     replaced:

@@ -8046,6 +8046,95 @@ export const ru: Catalogue = {
     podsRefused: "API-сервер отказывается создавать его поды",
     podsRefusedSaid: "API-сервер отказывается создавать его поды: {said}",
     refusalSaid: "Ответ API-сервера:",
+    refusalRaw: "Что ответил API-сервер",
+    refusedBySecurityLabel: {
+      one: "Неймспейс {namespace} требует уровень Pod Security {level} своей меткой {label}, а этот шаблон не проходит {n} его проверку:",
+      few: "Неймспейс {namespace} требует уровень Pod Security {level} своей меткой {label}, а этот шаблон не проходит {n} его проверки:",
+      many: "Неймспейс {namespace} требует уровень Pod Security {level} своей меткой {label}, а этот шаблон не проходит {n} его проверок:",
+      other:
+        "Неймспейс {namespace} требует уровень Pod Security {level} своей меткой {label}, а этот шаблон не проходит {n} его проверки:",
+    },
+    refusedBySecurityDefault: {
+      one: "Неймспейс {namespace} не задаёт свой уровень Pod Security, поэтому действует уровень кластера по умолчанию {level}, а этот шаблон не проходит {n} его проверку:",
+      few: "Неймспейс {namespace} не задаёт свой уровень Pod Security, поэтому действует уровень кластера по умолчанию {level}, а этот шаблон не проходит {n} его проверки:",
+      many: "Неймспейс {namespace} не задаёт свой уровень Pod Security, поэтому действует уровень кластера по умолчанию {level}, а этот шаблон не проходит {n} его проверок:",
+      other:
+        "Неймспейс {namespace} не задаёт свой уровень Pod Security, поэтому действует уровень кластера по умолчанию {level}, а этот шаблон не проходит {n} его проверки:",
+    },
+    refusedBySecurity: {
+      one: "Pod Security требует от неймспейса {namespace} уровень {level}, а этот шаблон не проходит {n} его проверку:",
+      few: "Pod Security требует от неймспейса {namespace} уровень {level}, а этот шаблон не проходит {n} его проверки:",
+      many: "Pod Security требует от неймспейса {namespace} уровень {level}, а этот шаблон не проходит {n} его проверок:",
+      other:
+        "Pod Security требует от неймспейса {namespace} уровень {level}, а этот шаблон не проходит {n} его проверки:",
+    },
+    refusedSecurityWayOut:
+      "Задайте это в шаблоне пода или попросите понизить уровень Pod Security неймспейса.",
+    refusedByQuota:
+      "В ResourceQuota {quota} не осталось места в этом неймспейсе для ещё одного пода:",
+    refusedQuotaRow:
+      "занято {used} из {limited}, ещё одному поду нужно {requested}",
+    refusedQuotaAsks: "ещё одному поду нужно {requested}",
+    refusedQuotaWayOut:
+      "Освободите место: удалите или уменьшите что-то в неймспейсе, снизьте запросы каждого пода или поднимите квоту.",
+    refusedByQuotaUnset:
+      "ResourceQuota {quota} ограничивает эти ресурсы в неймспейсе, поэтому каждый контейнер обязан их задать, а этот шаблон их не задаёт:",
+    refusedUnsetIn: "не задано в {containers}",
+    refusedUnset: "не задано",
+    refusedQuotaUnsetWayOut:
+      "Задайте их в resources шаблона пода или добавьте LimitRange, который даст каждому контейнеру значения по умолчанию.",
+    refusedByLimitRange:
+      "LimitRange в этом неймспейсе ограничивает, сколько может просить каждый контейнер или под, и этот шаблон за границами:",
+    refusedRangeMaximum: "не больше {allowed} на {per}, шаблон просит {asked}",
+    refusedRangeMinimum: "не меньше {allowed} на {per}, шаблон просит {asked}",
+    refusedRangeMaximumUnset:
+      "не больше {allowed} на {per}, а шаблон не задаёт limit",
+    refusedRangeMinimumUnset:
+      "не меньше {allowed} на {per}, а шаблон не задаёт request",
+    refusedRangeWayOut:
+      "Измените resources в шаблоне пода или попросите изменить LimitRange.",
+    refusedByServiceAccount:
+      "Его поды запускаются от ServiceAccount {name}, а такого нет в неймспейсе {namespace}.",
+    refusedServiceAccountWayOut:
+      "Создайте его или укажите в serviceAccountName шаблона существующий.",
+    refusedByPolicy:
+      "ValidatingAdmissionPolicy {policy} не пускает эти поды через свою привязку {binding}. Она говорит:",
+    refusedByWebhook:
+      "Admission-вебхук {webhook} не пускает эти поды. Он говорит:",
+    refusedByWebhookSilent:
+      "Admission-вебхук {webhook} не пускает эти поды и не объясняет почему.",
+    refusedRuleWayOut:
+      "Измените шаблон пода, чтобы он прошёл, или обратитесь к владельцу правила.",
+    refusedByWebhookDown:
+      "Каждый новый под здесь должен одобрить admission-вебхук {webhook}, а API-сервер не может до него достучаться и поэтому отказывает. Ответ:",
+    refusedWebhookService: "Вебхук обслуживает {service}.",
+    refusedWebhookDownWayOut:
+      "Поднимите бэкенд вебхука или попросите изменить его конфигурацию, чтобы он не проверял эти поды.",
+    refusedByTerminating:
+      "Неймспейс {namespace} удаляется, поэтому в нём нельзя создать ничего нового.",
+    refusedShortSecurity: {
+      one: "Pod Security {level} отклоняет его поды: не пройдена {n} проверка",
+      few: "Pod Security {level} отклоняет его поды: не пройдены {n} проверки",
+      many: "Pod Security {level} отклоняет его поды: не пройдено {n} проверок",
+      other:
+        "Pod Security {level} отклоняет его поды: не пройдены {n} проверки",
+    },
+    refusedShortQuota:
+      "ResourceQuota {quota} отклоняет его поды: нет места для {resources}",
+    refusedShortQuotaUnset:
+      "ResourceQuota {quota} отклоняет его поды: не заданы {resources}",
+    refusedShortRange: "LimitRange отклоняет его поды: {resources} вне границ",
+    refusedShortServiceAccount:
+      "Его поды отклонены: ServiceAccount {name} не существует",
+    refusedShortPolicy:
+      "ValidatingAdmissionPolicy {policy} отклоняет его поды: {said}",
+    refusedShortWebhook:
+      "Admission-вебхук {webhook} отклоняет его поды: {said}",
+    refusedShortWebhookSilent: "Admission-вебхук {webhook} отклоняет его поды",
+    refusedShortWebhookDown:
+      "Его поды отклонены: admission-вебхук {webhook} недоступен",
+    refusedShortTerminating:
+      "Его поды отклонены: неймспейс {namespace} удаляется",
   },
   statusMeaning: {
     replaced:

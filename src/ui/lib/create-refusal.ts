@@ -1,5 +1,6 @@
 import type { EventInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { refusalReason, securityLevel } from "@/lib/refusal-reason";
 
 const FAILED_CREATE = "FailedCreate";
 
@@ -74,22 +75,61 @@ export function refusedUid(
 
 const FORBIDDEN = / is forbidden: ([\s\S]+)$/;
 
-/** The `(container "x" must set ...)` after each check PodSecurity names: how to pass it, which a row has no room for. */
-const POD_SECURITY_HOW = / \([^()]*\)/g;
+/** The part of a refusal that says why, without the name of a pod that never existed; the whole of it where it has no such part. */
+export const refusalGist = (said: string): string =>
+  FORBIDDEN.exec(said)?.[1] ?? said;
 
-/** The part of a refusal that says why, without the name of a pod that never existed; the whole of it where it has no such part. A PodSecurity refusal keeps the checks it failed and leaves how to pass them to the page. */
-export function refusalGist(said: string): string {
-  const why = FORBIDDEN.exec(said)?.[1] ?? said;
-  return why.startsWith("violates PodSecurity ")
-    ? why.replace(POD_SECURITY_HOW, "")
-    : why;
+const named = (names: readonly string[]) => [...new Set(names)].join(", ");
+
+/** A refusal as a row, the Overview and a shared report say it: who refused, and the gist of why. */
+export function refusalText(said: string, t: T): string {
+  const reason = refusalReason(said);
+  switch (reason.by) {
+    case "podSecurity":
+      return t("cause", "refusedShortSecurity", {
+        level: securityLevel(reason),
+        n: reason.checks.length,
+      });
+    case "quotaExceeded":
+      return t("cause", "refusedShortQuota", {
+        quota: reason.quota,
+        resources: named(reason.over.map((over) => over.resource)),
+      });
+    case "quotaUnset":
+      return t("cause", "refusedShortQuotaUnset", {
+        quota: reason.quota,
+        resources: named(reason.unset.map((unset) => unset.resource)),
+      });
+    case "limitRange":
+      return t("cause", "refusedShortRange", {
+        resources: named(reason.bounds.map((bound) => bound.resource)),
+      });
+    case "serviceAccount":
+      return t("cause", "refusedShortServiceAccount", { name: reason.name });
+    case "policy":
+      return t("cause", "refusedShortPolicy", {
+        policy: reason.policy,
+        said: reason.said,
+      });
+    case "webhookDenied":
+      return reason.said
+        ? t("cause", "refusedShortWebhook", {
+            webhook: reason.webhook,
+            said: reason.said,
+          })
+        : t("cause", "refusedShortWebhookSilent", { webhook: reason.webhook });
+    case "webhookFailed":
+      return t("cause", "refusedShortWebhookDown", { webhook: reason.webhook });
+    case "terminating":
+      return t("cause", "refusedShortTerminating", {
+        namespace: reason.namespace,
+      });
+    case "unknown":
+      return said
+        ? t("cause", "podsRefusedSaid", { said: refusalGist(said) })
+        : t("cause", "podsRefused");
+  }
 }
-
-/** A refusal as a row, the Overview and a shared report say it. */
-export const refusalText = (said: string, t: T) =>
-  said
-    ? t("cause", "podsRefusedSaid", { said: refusalGist(said) })
-    : t("cause", "podsRefused");
 
 /** A Job's word with its pods' refusal read beside it; `JobState::refused` answers the same in Rust. */
 export const jobWord = (status: string, refused: string | null) =>

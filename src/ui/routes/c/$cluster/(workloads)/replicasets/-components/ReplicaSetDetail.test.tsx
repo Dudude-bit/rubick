@@ -79,13 +79,13 @@ describe("ReplicaSetDetail", () => {
   /**
    * The refusal happens to the ReplicaSet, and its Deployment's page said it
    * while the ReplicaSet's own page said nothing. Fails if the page does not
-   * lead with the API server's words, or the missing pods are not counted.
+   * lead with who refused its pods, or the missing pods are not counted.
    */
-  it("leads with the API server's refusal of its pods", async () => {
+  it("leads with the quota that refuses its pods", async () => {
     mockDetail(buildReplicaSet({ podsRefused: SAID }));
     await renderPage();
     expect(await screen.findByTestId("refused-line")).toHaveTextContent(
-      `The API server refuses to create its pods. The API server answered: ${SAID}`
+      "The API server refuses to create its pods. The ResourceQuota ResourceQuota two-pods has no room left in this namespace for another pod:"
     );
     expect(screen.getByText("2 not created")).toBeInTheDocument();
   });

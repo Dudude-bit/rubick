@@ -24,6 +24,7 @@ import { refusalText } from "@/lib/create-refusal";
 import type { StopCause } from "@/lib/service-health";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
+import { RefusalExplained } from "./RefusalExplained";
 import { useCauseEvidence, useCauseWarnings } from "./useCauseEvidence";
 
 /** The mark a cause leads with, by what it is. */
@@ -155,51 +156,23 @@ export function PodCauseLine({
   return told && <CauseLine cause={told} className={className} />;
 }
 
-/**
- * The API server's refusal of a workload's pods, which no pod exists to
- * tell: the sentence, then its words quoted, or in a row the reason alone
- * with the whole answer on hover.
- */
+/** The API server's refusal of a workload's pods in a row: who refused and why, with the whole answer on hover. */
 export function RefusedLine({
   said,
-  compact = false,
-  lead,
   className,
 }: {
   said: string;
-  /** One run of text, for a row that clamps it. */
-  compact?: boolean;
-  /** Whose pods these are, where the page is not theirs. */
-  lead?: ReactNode;
   className?: string;
 }) {
   const t = useT();
-  const mark = (
-    <Ban
-      className="mr-1 inline h-2.5 w-2.5 align-[-1px] text-err"
-      aria-hidden="true"
-    />
-  );
-  if (compact)
-    return (
-      <span className={className} title={said} data-testid="refused-line">
-        {mark}
-        <span className="text-err">{refusalText(said, t)}.</span>
-      </span>
-    );
   return (
-    <p className={cn("text-xs", className)} data-testid="refused-line">
-      {lead && <span className="text-fg-mut">{lead} </span>}
-      {mark}
-      <span className="text-err">{t("cause", "podsRefused")}.</span>
-      <CauseEvidence
-        words={{
-          quote: said ? { label: t("cause", "refusalSaid"), text: said } : null,
-          note: null,
-        }}
-        inline
+    <span className={className} title={said} data-testid="refused-line">
+      <Ban
+        className="mr-1 inline h-2.5 w-2.5 align-[-1px] text-err"
+        aria-hidden="true"
       />
-    </p>
+      <span className="text-err">{refusalText(said, t)}.</span>
+    </span>
   );
 }
 
@@ -264,7 +237,14 @@ export function WorkloadPodsCause({
   );
   if (settled) return null;
   if (refused !== null)
-    return <RefusedLine said={refused} lead={lead} className={className} />;
+    return (
+      <RefusalExplained
+        said={refused}
+        namespace={namespace}
+        lead={lead}
+        className={className}
+      />
+    );
   if (!told) return null;
   return (
     <PodsCauseLine
