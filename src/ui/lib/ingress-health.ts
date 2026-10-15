@@ -54,7 +54,7 @@ export type IngressProblem =
   /** None ready, and every workload behind the backend is still starting its pods. */
   | { kind: "backendStarting"; service: string }
   /** None ready, and the pods the workloads behind the backend wait on were not read. */
-  | { kind: "backendUnconfirmed"; service: string }
+  | { kind: "backendUnconfirmed"; service: string; health: ServiceHealth }
   /** Every workload behind the backend is scaled to zero, on purpose. */
   | { kind: "backendIdle"; service: string };
 
@@ -120,7 +120,7 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
       }
       const health = serviceHealthOf(service, service, null);
       const problem = BACKEND_PROBLEM[health.state];
-      if (problem === "backendDown")
+      if (problem === "backendDown" || problem === "backendUnconfirmed")
         problems.push({ kind: problem, service: name, health });
       else if (problem) problems.push({ kind: problem, service: name });
     }
@@ -229,21 +229,27 @@ function problemSentence(problem: IngressProblem, t: T): string {
       return t("nav", "stopNoServiceNamed", { name: problem.service });
     case "tlsSecretMissing":
       return t("readings", "healthNoTlsSecret", { name: problem.secret });
-    case "backendDown": {
-      const why = serviceHealthWords(problem.health, t).reason;
-      return why
-        ? t("readings", "healthBackendDownWhy", { name: problem.service, why })
-        : t("readings", "healthBackendDown", { name: problem.service });
-    }
+    case "backendDown":
+      return backendWhy(problem, "healthBackendDown", t);
     case "backendStarting":
       return t("readings", "healthBackendStarting", { name: problem.service });
     case "backendUnconfirmed":
-      return t("readings", "healthBackendUnconfirmed", {
-        name: problem.service,
-      });
+      return backendWhy(problem, "healthBackendUnconfirmed", t);
     case "backendIdle":
       return t("readings", "healthBackendIdle", { name: problem.service });
   }
+}
+
+/** A backend's trouble in its Service's own words, where its verdict has any. */
+function backendWhy(
+  problem: { service: string; health: ServiceHealth },
+  plain: "healthBackendDown" | "healthBackendUnconfirmed",
+  t: T
+): string {
+  const why = serviceHealthWords(problem.health, t).reason;
+  return why
+    ? t("readings", "healthBackendWhy", { name: problem.service, why })
+    : t("readings", plain, { name: problem.service });
 }
 
 const PROBLEM_LABEL: Record<

@@ -213,6 +213,48 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     );
   });
 
+  /**
+   * Marco, who may list pods and not Deployments, read idle-web's Ingress as
+   * "its pods could not be read" beside a trace that had read them and could
+   * not read the workloads. Fails if an unconfirmed backend stops saying
+   * which read is missing in its Service's words.
+   */
+  it("says which read an unconfirmed backend is missing, in its Service's words", () => {
+    const said = verdict({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([
+          [
+            "web",
+            {
+              ...serving(0),
+              stop: {
+                reason: "selectsNothing",
+                service: {
+                  kind: "Service",
+                  name: "web",
+                  namespace: "net",
+                  existence: "present",
+                  facts: null,
+                },
+                selector: "app=web",
+                near: null,
+                makersRead: false,
+              },
+            },
+          ],
+        ]),
+      },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendUnconfirmed");
+    expect(said.reason).toBe(
+      "web: No pod carries app=web: workloads not read, so whether one is scaled to zero is not known."
+    );
+  });
+
   /** One dead path out of two degrades the Ingress; it does not kill it. */
   it("warns when one backend of several publishes nothing", () => {
     const said = verdict({
