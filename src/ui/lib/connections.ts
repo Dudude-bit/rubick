@@ -25,6 +25,12 @@ import type { RouteTls } from "./ingress-tls";
 import { clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
 import { makersUnread, stopMood, type StopMood } from "./stop-mood";
+import {
+  doorVerdict,
+  type DoorAsk,
+  type DoorUnsure,
+  type DoorVerdict,
+} from "./policy-door";
 
 export { stopMood, type StopMood };
 import {
@@ -559,6 +565,18 @@ export function describeStop(
     case "policyRefuses": {
       const names = stop.policies.join(", ");
       const n = stop.policies.length;
+      if (stop.client)
+        return {
+          title: t("count", "policyRefusesClient", {
+            n,
+            names,
+            client: stop.client.name,
+          }),
+          note: t("nav", "stopPolicyClientNote", {
+            client: stop.client.name,
+            namespaces: stop.client.namespaces.join(", "),
+          }),
+        };
       if (stop.noRules)
         return {
           title: t("count", "policyShutsPods", { n, names }),
@@ -675,6 +693,8 @@ export interface ChainHopStop {
   mood: StopMood;
   /** The objects the title names, to open from the stop. */
   objects?: ObjectRef[];
+  /** A NetworkPolicy refuses the connection: there are pods behind it. */
+  shut?: boolean;
 }
 
 /** Three names at most, and how many more. */
@@ -747,14 +767,56 @@ export function chainStopHop(
     mood: stopMood(stop),
     ...said,
     ...(stop.reason === "policyRefuses" && {
-      objects: stop.policies.map((name): ObjectRef => ({
-        kind: "NetworkPolicy",
-        name,
-        namespace: stop.service.namespace,
-        existence: "present",
-        facts: null,
-      })),
+      objects: policyRefs(stop.policies, stop.service.namespace),
+      shut: true,
     }),
+  };
+}
+
+const policyRefs = (names: string[], namespace: string | null): ObjectRef[] =>
+  names.map((name) => ({
+    kind: "NetworkPolicy",
+    name,
+    namespace,
+    existence: "present",
+    facts: null,
+  }));
+
+const DOOR_WHY: Record<DoorUnsure, keyof typeof en.nav> = {
+  policiesUnread: "doorWhyPoliciesUnread",
+  noPort: "doorWhyNoPort",
+  noIntegration: "doorWhyNoIntegration",
+  clientsReading: "doorWhyClientsReading",
+  clientsUnread: "doorWhyClientsUnread",
+  noClients: "doorWhyNoClients",
+  namespacesUnread: "doorWhyNamespacesUnread",
+  hostNetwork: "doorWhyHostNetwork",
+  byName: "doorWhyByName",
+  unsettled: "doorWhyUnsettled",
+  someClients: "doorWhySomeClients",
+  ipBlock: "doorWhyIpBlock",
+  unevaluable: "doorWhyUnevaluable",
+};
+
+/** Policies over the pods that may or may not admit this controller, said as the stop they might be. */
+export function doorDoubtHop(
+  service: ObjectRef,
+  verdict: Extract<DoorVerdict, { state: "unsure" }>,
+  client: string,
+  t: T
+): ChainHopStop {
+  return {
+    at: "stop",
+    mood: "unchecked",
+    title: t("count", "doorDecides", {
+      n: verdict.policies.length,
+      names: verdict.policies.join(", "),
+    }),
+    note: t("nav", "doorUnsureNote", {
+      client,
+      why: t("nav", DOOR_WHY[verdict.why]),
+    }),
+    objects: policyRefs(verdict.policies, service.namespace),
   };
 }
 
@@ -1121,6 +1183,41 @@ function servedUnder(
   );
 }
 
+interface DoorWay {
+  controller: string | null;
+  port: string | null;
+}
+
+/** Each controller's verdict at the pods' door, once per controller and port, where there is one to say. */
+function doorHops(
+  ways: DoorWay[],
+  published: ServicePublished,
+  ask: DoorAsk,
+  subject: ObjectRef,
+  t: T,
+  own: ReadonlySet<string> | null
+): ChainHopStop[] {
+  const said = new Map<string, ChainHopStop>();
+  for (const { controller, port } of ways) {
+    if (controller === null) continue;
+    const read = ask(controller);
+    const verdict = doorVerdict(published, port, read);
+    const hop =
+      verdict.state === "refused"
+        ? chainStopHop(verdict.stop, subject, t, own)
+        : verdict.state === "unsure" && verdict.policies.length > 0
+          ? doorDoubtHop(
+              published.service,
+              verdict,
+              read?.name ?? controller,
+              t
+            )
+          : null;
+    if (hop) said.set(`${hop.title}\n${hop.note}`, hop);
+  }
+  return [...said.values()];
+}
+
 /**
  * How traffic gets in, one path per Service that fronts the subject.
  *
@@ -1157,6 +1254,8 @@ export function trafficChains(
      * in an annotation and a Traefik router both contradict.
      */
     tlsOf?: RouteTls;
+    /** Who each Ingress's controller connects from, to judge the NetworkPolicies over the pods. */
+    door?: DoorAsk;
   } = {}
 ): ChainPath[] {
   const subject = conns.subject;
@@ -1191,9 +1290,16 @@ export function trafficChains(
       const published = publishedFor(conns, service);
 
       const hops: ChainHop[] = [];
+      const ways: DoorWay[] = [];
       if (subject.kind === "Ingress") {
         const mine = routes.filter((edge) => sameObject(edge.to, service));
         const hosts = mine.map((edge) => edge.relation.host ?? "");
+        for (const edge of mine) {
+          ways.push({
+            controller: extra.controller?.controller ?? null,
+            port: edge.relation.port,
+          });
+        }
         for (const entry of tls.filter(
           (cert) =>
             servesAny(cert.hosts, hosts) &&
@@ -1242,6 +1348,10 @@ export function trafficChains(
         )) {
           const known = extra.routing?.get(refKey(edge.from));
           const host = edge.relation.host ?? "";
+          ways.push({
+            controller: known?.binding?.controller ?? null,
+            port: edge.relation.port,
+          });
           for (const entry of known?.tls ?? []) {
             if (!servesAny(entry.hosts, [host])) continue;
             if (!servedUnder(edge.from, entry.hosts, [host], extra.tlsOf))
@@ -1347,11 +1457,19 @@ export function trafficChains(
       )
         hops.push(publishedHop(published, t, own));
       if (said && shut) hops.push(said);
+      const doors =
+        extra.door && published && !stop
+          ? doorHops(ways, published, extra.door, subject, t, own)
+          : [];
+      hops.push(...doors);
 
       return {
         key: refKey(service),
         hops,
-        broken: said?.mood === "fault" || routeBroken,
+        broken:
+          said?.mood === "fault" ||
+          routeBroken ||
+          doors.some((hop) => hop.mood === "fault"),
       };
     })
     .filter((path) => path.hops.length > 1);

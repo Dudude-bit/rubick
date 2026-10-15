@@ -123,6 +123,28 @@ export const en = {
       "The pods are ready and published, and no ingress rule admits anyone, so every connection to them is refused or dropped, and a proxy in front answers with a 502, 503 or 504. Admit the client in an ingress rule (for an Ingress, the controller's namespace), or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
     stopPolicyPortNote:
       "The pods are ready and published, and the rules admit other ports only, so every connection to {ports} is refused or dropped, and a proxy in front answers with a 502, 503 or 504. Add {ports} to the rule that admits the client. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
+    stopPolicyClientNote:
+      "The pods are ready and published, and {client} connects from namespace {namespaces}, which no ingress rule admits, so its connections are refused or dropped and every request through it gets a 502, 503 or 504. Admit that namespace in an ingress rule's from, with a namespaceSelector on kubernetes.io/metadata.name, or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
+    doorUnsureNote: "Whether {client} may connect is not checked: {why}.",
+    doorWhyPoliciesUnread: "the NetworkPolicies could not be read",
+    doorWhyNoPort:
+      "which of the Service's ports the route sends to is not known",
+    doorWhyNoIntegration:
+      "no integration here knows which pods this controller connects from",
+    doorWhyClientsReading: "its pods are still being read",
+    doorWhyClientsUnread: "its pods could not be read",
+    doorWhyNoClients: "it has no running pod to connect from",
+    doorWhyNamespacesUnread:
+      "the namespaces a rule picks by label could not be read",
+    doorWhyHostNetwork:
+      "it runs on the node's network, and what a policy sees of it is the network plugin's choice",
+    doorWhyByName:
+      "the rule that would admit it names the port by a container port's name",
+    doorWhyUnsettled: "a policy that admits it may not select these pods",
+    doorWhySomeClients: "some of its pods are admitted and some are not",
+    doorWhyIpBlock:
+      "an ipBlock holds its address, and whether an ipBlock applies to pod traffic is the network plugin's choice",
+    doorWhyUnevaluable: "a rule's selector could not be evaluated",
     portNumbered: "port {n}",
     stopNoSliceNote:
       "{matched}, and not one of them is in anything this Service publishes. These objects do not say why: a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.",
@@ -7832,6 +7854,14 @@ export const en = {
     policyShutsPort: {
       one: "NetworkPolicy {names} admits nothing on {ports}",
       other: "NetworkPolicies {names} admit nothing on {ports}",
+    },
+    policyRefusesClient: {
+      one: "NetworkPolicy {names} admits no connection from {client}",
+      other: "NetworkPolicies {names} admit no connection from {client}",
+    },
+    doorDecides: {
+      one: "NetworkPolicy {names} decides who may connect to these pods",
+      other: "NetworkPolicies {names} decide who may connect to these pods",
     },
     podsMatchAllReady: {
       one: "{n} pod matches its selector and it is Ready",

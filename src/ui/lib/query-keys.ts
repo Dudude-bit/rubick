@@ -550,6 +550,11 @@ export const queryKeys = {
     "ingress-class",
     className ?? null,
   ],
+  /** The running pods one IngressClass controller connects to its backends from. */
+  ingressClients: (controller: string): string[] => [
+    "ingress-clients",
+    controller,
+  ],
   /** Sorted and deduplicated here, so every reader asks the same question. */
   tlsCertificates: (
     namespace: string | undefined,

@@ -12,6 +12,7 @@
  * line: a Deployment with no Service in front of it must not cost a diagram.
  */
 
+import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { joinSayings, sayWords } from "@/i18n/say";
 import { Link } from "@tanstack/react-router";
 import {
@@ -591,6 +592,7 @@ export function TrafficChain({
   // without five detail pages each wiring up four queries.
   const routed = useIngressRouting(data);
   const tlsOf = useRouteTls(data);
+  const door = useDoorAsk();
 
   // Built before the early returns rather than after them, because the hop
   // notes below are fetched with a hook and a hook may not sit behind a
@@ -602,6 +604,7 @@ export function TrafficChain({
         controller,
         routing: routed.routing,
         tlsOf,
+        door,
       })
     : [];
   const serviceHops = paths.flatMap((path) =>

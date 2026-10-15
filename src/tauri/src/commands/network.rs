@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use crate::error::Result;
 use crate::resources::{
     published, selected_count, ChainStop, EndpointsInfo, Existence, IngressDefaultBackend,
-    IngressInfo, IngressRule, IngressTlsConfig, NetworkPolicyInfo, NotServing, ObjectRef, Selector,
-    ServiceInfo, ServicePublished,
+    IngressInfo, IngressRule, IngressTlsConfig, NetworkPolicyInfo, NotServing, ObjectRef,
+    PolicyDoor, Selector, ServiceInfo, ServicePublished,
 };
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet, StatefulSet};
@@ -233,13 +233,18 @@ pub struct ServiceHealthGroup {
     pub unrouted: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<ChainStop>,
+    /// Only a guarded door: an open one and an unread one refuse nobody.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub door: Option<PolicyDoor>,
 }
 
 impl ServiceHealthGroup {
-    /// A stop names its Service, so a Service with one stands alone.
+    /// A stop or a door belongs to its Service, so a Service with one stands alone.
     fn reads_like(&self, other: &Self) -> bool {
         self.stop.is_none()
             && other.stop.is_none()
+            && self.door.is_none()
+            && other.door.is_none()
             && self.type_ == other.type_
             && self.selectorless == other.selectorless
             && (self.ready, self.draining, self.not_ready, self.unrouted)
@@ -445,6 +450,9 @@ fn health_inputs_of(
             not_ready: published.not_ready,
             unrouted: published.unrouted,
             stop: published.stop,
+            door: published
+                .door
+                .filter(|door| matches!(door, PolicyDoor::Guarded { .. })),
         };
         let groups = by_namespace
             .entry(service.namespace().unwrap_or_default())
@@ -925,6 +933,41 @@ mod tests {
         let stop = serde_json::to_value(&inputs[0].groups[0].stop).expect("json");
         assert_eq!(stop["reason"], "publishesNothing");
         assert_eq!(stop["unnamedPorts"], serde_json::json!(["http"]));
+    }
+
+    /// The Ingresses list judges a controller at the policies over a
+    /// backend's pods from this answer. Fails if a guarded door is dropped,
+    /// if an open one is sent for every Service, or if a Service with a door
+    /// shares a group, and so a door, with one that has none.
+    #[test]
+    fn the_compact_answer_keeps_a_guarded_door_and_stands_it_alone() {
+        let (services, slices) = synthetic(51, |_| false);
+        let mut published = published_from_slices(&services, &slices);
+        published[50] = ServicePublished {
+            service: published[50].service.clone(),
+            ..published[0].clone()
+        };
+        let team = |door: PolicyDoor| {
+            let mut published = published.clone();
+            published[0].door = Some(door);
+            health_inputs_of(&services, published)
+                .into_iter()
+                .find(|ns| ns.namespace == "team-00")
+                .expect("team-00")
+                .groups
+        };
+        let guarded = team(PolicyDoor::Guarded {
+            isolating: vec!["allow-nginx".into()],
+            unsettled: vec![],
+            ports: vec![],
+        });
+        assert_eq!(guarded.len(), 2);
+        assert!(guarded
+            .iter()
+            .any(|group| group.names.len() == 1 && group.door.is_some()));
+        let open = team(PolicyDoor::Open);
+        assert_eq!(open.len(), 1);
+        assert!(open[0].door.is_none());
     }
 
     /// The Ingress the attention count reads is its row cut down, not a

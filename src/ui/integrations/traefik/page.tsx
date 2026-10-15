@@ -85,6 +85,7 @@ import {
 } from "./data";
 import {
   allRoutes,
+  CONTROLLER,
   PROXY_LABEL,
   backingOf,
   boundEntryPoints,
@@ -104,6 +105,7 @@ import {
 import { describePath, fullyRead } from "./rule";
 import { describeFinding, findingDetail } from "./finding-words";
 import { entryPointsSection, routesTableSection } from "./share";
+import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
@@ -117,6 +119,7 @@ export default function TraefikPage() {
 
   const routeSources = useRouteSources();
   const backing = useBacking();
+  const door = useDoorAsk()(CONTROLLER);
   const controller = useController();
 
   const routes = useMemo(
@@ -155,7 +158,7 @@ export default function TraefikPage() {
         ? {
             ...sourcesFrom(
               routeSources.data,
-              backingFrom(backing.data, backing.error),
+              backingFrom(backing.data, backing.error, door),
               controller.data,
               certificates
             ),
@@ -166,6 +169,7 @@ export default function TraefikPage() {
       routeSources.data,
       backing.data,
       backing.error,
+      door,
       controller.data,
       certificates,
       upstreamTls,

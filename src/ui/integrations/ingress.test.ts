@@ -15,9 +15,11 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
+  PolicyDoor,
   ServiceInfo,
   ServicePublished,
 } from "@/generated/types";
+import type { DoorRead } from "@/lib/policy-door";
 
 const service = (overrides: Partial<ServiceInfo> = {}): ServiceInfo =>
   ({
@@ -97,6 +99,61 @@ describe("what a route's backend is doing", () => {
         from,
         sources({ published: [published({ draining: 1 })] })
       ).stop
+    ).toBeNull();
+  });
+
+  /**
+   * The Traefik page drew a host over pods allow-nginx shuts to Traefik as
+   * served. Fails if the page's controller stops being judged at the door of
+   * the port the route names, or is judged on another port.
+   */
+  it("stops a route whose backend's policies refuse the page's controller", () => {
+    const door: PolicyDoor = {
+      state: "guarded",
+      isolating: ["allow-nginx"],
+      unsettled: [],
+      ports: [
+        {
+          name: "http",
+          servicePort: 80,
+          port: 8080,
+          protocol: "TCP",
+          rules: [],
+        },
+      ],
+    };
+    const traefik: DoorRead = {
+      name: "Traefik",
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "traefik-7d9",
+            namespace: "traefik",
+            labels: {},
+            ip: "10.42.1.7",
+            hostNetwork: false,
+          },
+        ],
+      },
+      namespaces: { known: true, value: [] },
+    };
+    const read = sources({
+      published: [published({ ready: 2, door })],
+      door: traefik,
+    });
+    const backend = { name: "app", namespace: "shop" };
+    expect(
+      backingOf({ ...backend, port: "80" }, from, read).stop
+    ).toMatchObject({
+      reason: "policyRefuses",
+      ports: [8080],
+      client: { name: "Traefik", namespaces: ["traefik"] },
+    });
+    expect(backingOf({ ...backend, port: "9090" }, from, read).stop).toBeNull();
+    expect(
+      backingOf({ ...backend, port: "80" }, from, { ...read, door: undefined })
+        .stop
     ).toBeNull();
   });
 
@@ -278,6 +335,7 @@ describe("how much a stopped backend weighs", () => {
       policies: ["deny-all"],
       ports: [],
       noRules: true,
+      client: null,
     } satisfies ChainStop;
     expect(stopsRowState([shut, stops.idle], t)).toEqual({
       text: "shut by NetworkPolicy",

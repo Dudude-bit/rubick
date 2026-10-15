@@ -12,6 +12,7 @@ import { EyeOff } from "lucide-react";
 
 import type { T } from "@/i18n/useT";
 import type { Known } from "@/lib/known";
+import { refusedStop, type DoorAsk } from "@/lib/policy-door";
 import type {
   IngressClassBinding,
   IngressInfo,
@@ -49,6 +50,8 @@ export interface IngressInputs {
    * Traefik does without `router.tls`. Absent, `spec.tls` stands.
    */
   servedPlain?: (host: string) => boolean;
+  /** Who the class's controller connects from; absent, no backend's NetworkPolicies are asked about it. */
+  door?: DoorAsk;
 }
 
 export type IngressProblem =
@@ -81,6 +84,24 @@ export function backendNames(ingress: IngressInputs["ingress"]): string[] {
     ingress.defaultBackend?.backendService ?? "",
   ];
   return [...new Set(names.filter((name) => name !== ""))];
+}
+
+/** The Service ports an Ingress sends to on that Service. */
+function backendPorts(
+  ingress: IngressInputs["ingress"],
+  service: string
+): string[] {
+  const paths = [
+    ...ingress.rules.flatMap((rule) => rule.paths),
+    ...(ingress.defaultBackend ? [ingress.defaultBackend] : []),
+  ];
+  return [
+    ...new Set(
+      paths
+        .filter((path) => path.backendService === service)
+        .map((path) => path.backendPort)
+    ),
+  ];
 }
 
 /** What each verdict of a backend Service says about the Ingress in front of it. */
@@ -116,6 +137,8 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
     problems.push({ kind: "noController", className: ingress.className });
   }
 
+  const controller = binding.known ? binding.value.controller : null;
+  const read = controller ? inputs.door?.(controller) : undefined;
   const names = backendNames(ingress);
   if (names.length > 0 && !backing.known) unread.push(backing.why);
   if (backing.known) {
@@ -125,7 +148,25 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
         problems.push({ kind: "backendMissing", service: name });
         continue;
       }
-      const health = serviceHealthOf(service, service, null);
+      const subject = {
+        service: {
+          kind: "Service",
+          name,
+          namespace: ingress.namespace,
+          existence: "present" as const,
+          facts: null,
+        },
+        stop: service.stop,
+        door: service.door,
+      };
+      const refused = backendPorts(ingress, name)
+        .map((port) => refusedStop(subject, port, read))
+        .find((stop) => stop !== null);
+      const health = serviceHealthOf(
+        service,
+        refused ? { ...service, stop: refused } : service,
+        null
+      );
       const problem = BACKEND_PROBLEM[health.state];
       if (problem === "backendDown" || problem === "backendUnconfirmed")
         problems.push({ kind: problem, service: name, health });

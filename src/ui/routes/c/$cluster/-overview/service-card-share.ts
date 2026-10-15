@@ -20,6 +20,7 @@ import type { UnexploredKind } from "@/generated/types";
 /** The card and its Share say the same word beside a way in. */
 export const WAY_WORDS: Record<WayState, (t: T) => string> = {
   unread: (t) => t("services", "notReadYet"),
+  unsure: (t) => t("nav", "notChecked"),
   shut: (t) => t("empty", "stopPolicyShutUnder"),
   empty: (t) => t("services", "nothingBehind"),
 };

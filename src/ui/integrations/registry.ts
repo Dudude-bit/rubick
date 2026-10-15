@@ -43,6 +43,7 @@
 
 import type { Saying } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
+import type { DoorClaim } from "@/lib/policy-door";
 import type { ReportSection } from "@/lib/report";
 
 import type { LucideIcon } from "lucide-react";
@@ -648,6 +649,12 @@ export interface Capabilities {
   "ingress.tls": (
     ingresses: Array<{ namespace: string; name: string; hosts: string[] }>
   ) => Promise<IngressTls[][]>;
+  /**
+   * The controller an IngressClass's `controller` names, if it is this
+   * vendor's, and how to read the pods it connects to its backends from:
+   * what the NetworkPolicies over a backend's pods are asked about.
+   */
+  "ingress.clients": (controller: string) => DoorClaim | null;
   /**
    * What one custom resource is connected to, as its own controller states it.
    *

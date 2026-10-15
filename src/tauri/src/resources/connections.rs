@@ -505,7 +505,19 @@ pub enum ChainStop {
         /// Not one ingress rule among them, so no port is open to anyone.
         #[serde(rename = "noRules")]
         no_rules: bool,
+        /// The one client refused, where the door admits others; `None` is
+        /// every client. Only the frontend knows a controller's pods to say it.
+        #[serde(default)]
+        client: Option<RefusedClient>,
     },
+}
+
+/// A controller a door is shut to, and the namespaces its pods connect from.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefusedClient {
+    pub name: String,
+    pub namespaces: Vec<String>,
 }
 
 /// Pods that carry part of a selector matching none, and the part they lack.

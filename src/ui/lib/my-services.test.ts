@@ -11,6 +11,7 @@ import {
   pinsOf,
   stateOf,
   waitingFor,
+  wayState,
 } from "./my-services";
 import { REFRESH_INTERVALS } from "./refresh";
 import type { ChainHop, ChainPath } from "./connections";
@@ -639,6 +640,7 @@ describe("more ways in", () => {
             policies: ["deny-all"],
             ports: [8080],
             noRules: true,
+            client: null,
           },
         }),
       ])
@@ -648,6 +650,44 @@ describe("more ways in", () => {
       servingKnown: true,
       shut: true,
     });
+  });
+
+  /**
+   * A NetworkPolicy refusing Traefik left the host's address reading "not
+   * read yet" for good beside a chain that ended in red. Fails if an address
+   * stops reading its chain's far end, or calls an unsettled door unread.
+   */
+  it("says of an address what the far end of its chain says", () => {
+    const url = {
+      at: "object" as const,
+      object: ref("Ingress", "shop"),
+      self: false,
+      detail: null,
+      via: null,
+      urls: ["http://shop.local"],
+      address: null,
+    };
+    const stop = (mood: "fault" | "unchecked", shut: boolean): ChainHop => ({
+      at: "stop",
+      mood,
+      shut,
+      title: "",
+      note: "",
+    });
+    const way = (hops: ChainHop[]) =>
+      entryPointsOf(conns(), chain(hops)).entries[0];
+    expect(way([url, publishedHop({ ready: 2 })])).toMatchObject({
+      url: "http://shop.local",
+      serving: true,
+      servingKnown: true,
+    });
+    expect(
+      wayState(way([url, publishedHop({ ready: 2 }), stop("fault", true)]))
+    ).toBe("shut");
+    expect(
+      wayState(way([url, publishedHop({ ready: 2 }), stop("unchecked", false)]))
+    ).toBe("unsure");
+    expect(wayState(way([url]))).toBe("unread");
   });
 
   /** Neither the endpoints nor the pods answered: the zeros are nobody's. */

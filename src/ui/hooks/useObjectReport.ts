@@ -14,6 +14,7 @@ import {
   useObjectEvents,
 } from "@/hooks/useObjectEvents";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
+import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useRouteTls } from "@/hooks/useRouteTls";
 import { uidIn } from "@/hooks/useReadUid";
 import { useLocationHref } from "@/hooks/useLocationHref";
@@ -145,6 +146,7 @@ export function useObjectReport(
   // chain reads them; nothing until Share is pressed, like the graph itself.
   const routed = useIngressRouting(capturing ? connections.data : undefined);
   const tlsOf = useRouteTls(capturing ? connections.data : undefined);
+  const door = useDoorAsk(capturing);
   const events = useObjectEvents(
     subject?.kind ?? "",
     subject?.name,
@@ -207,6 +209,7 @@ export function useObjectReport(
           controller: own.chain?.controller,
           routing: routed.routing,
           tlsOf,
+          door,
         }
       );
       sections.push(...graph.sections);
@@ -288,6 +291,7 @@ export function useObjectReport(
     routed.certificates,
     routed.routing,
     tlsOf,
+    door,
     vendors,
     capturedAt,
     colouring,

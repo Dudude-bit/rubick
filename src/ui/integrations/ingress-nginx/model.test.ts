@@ -412,6 +412,7 @@ describe("the findings", () => {
       policies: ["deny-all"],
       ports: [80],
       noRules: true,
+      client: null,
     };
     const [group] = hostGroups(
       {

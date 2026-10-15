@@ -906,6 +906,7 @@ describe("what Traefik answers for a route with nothing behind it", () => {
       policies: ["deny-all"],
       ports: [80],
       noRules: true,
+      client: null,
     } satisfies ChainStop;
     expect(
       answer({ emptyServices: { Ingress: false, IngressRoute: false } }, shut)

@@ -392,6 +392,7 @@ describe("one verdict for a Service on every surface", () => {
       policies: ["deny-all-ingress"],
       ports: [8080],
       noRules: true,
+      client: null,
     };
     const health = serviceHealthOf(
       SELECTING,

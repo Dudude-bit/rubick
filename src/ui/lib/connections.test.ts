@@ -21,8 +21,10 @@ import {
   type ChainHopCertificate,
   type RoutedIngress,
 } from "./connections";
+import type { DoorRead } from "./policy-door";
 import type {
   ChainStop,
+  PolicyDoor,
   NotServing,
   PublishedEndpoint,
   ServicePublished,
@@ -965,6 +967,7 @@ describe("the traffic chain", () => {
       policies: ["deny-all-ingress"],
       ports: [8080],
       noRules: true,
+      client: null,
     };
     const path = trafficChains(
       connections(
@@ -1004,6 +1007,177 @@ describe("the traffic chain", () => {
     expect(path.hops[2].at === "stop" && path.hops[2].note).toContain(
       "refused or dropped"
     );
+  });
+
+  describe("a controller at the door of the pods", () => {
+    const deployment = ref("Deployment", "shop");
+    const svc = service("shop", "app=shop");
+    const ingress = ref("Ingress", "shop", {
+      kind: "ingress",
+      className: null,
+    });
+    const door: PolicyDoor = {
+      state: "guarded",
+      isolating: ["allow-nginx"],
+      unsettled: [],
+      ports: [
+        {
+          name: null,
+          servicePort: 80,
+          port: 8080,
+          protocol: "TCP",
+          rules: [
+            {
+              policy: "allow-nginx",
+              byName: false,
+              peers: [
+                {
+                  pods: { kind: "notSaid" },
+                  namespaces: {
+                    kind: "written",
+                    query: "kubernetes.io/metadata.name=ingress-nginx",
+                  },
+                  ipBlock: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const traefik = (hostNetwork = false): DoorRead => ({
+      name: "Traefik",
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "traefik-7d9",
+            namespace: "traefik",
+            labels: {},
+            ip: "10.42.1.7",
+            hostNetwork,
+          },
+        ],
+      },
+      namespaces: {
+        known: true,
+        value: ["traefik", "ingress-nginx"].map((name) => ({
+          name,
+          labels: { "kubernetes.io/metadata.name": name },
+        })),
+      },
+    });
+    const chainOf = (read?: DoorRead, stop: ChainStop | null = null) =>
+      trafficChains(
+        connections(
+          deployment,
+          [
+            {
+              from: svc,
+              to: deployment,
+              relation: { verb: "selects", selector: "app=shop" },
+            },
+            {
+              from: ingress,
+              to: svc,
+              relation: {
+                verb: "routes",
+                host: "shop.local",
+                path: "/",
+                pathType: "Prefix",
+                port: "80",
+                tls: false,
+              },
+            },
+          ],
+          stop ? [stop] : [],
+          [],
+          [
+            publishes(
+              "shop",
+              { ready: 2 },
+              { endpoints: [endpointOf("shop-a")], door, stop }
+            ),
+          ]
+        ),
+        t,
+        {
+          routing: new Map([
+            [
+              "Ingress/k8s-gui-test/shop",
+              {
+                tls: [],
+                addresses: [],
+                binding: {
+                  requested: null,
+                  resolved: "traefik",
+                  controller: "traefik.io/ingress-controller",
+                  viaDefault: true,
+                  available: [],
+                },
+              },
+            ],
+          ]),
+          ...(read && {
+            door: (controller: string) =>
+              controller === "traefik.io/ingress-controller" ? read : null,
+          }),
+        }
+      )[0];
+
+    /**
+     * allow-nginx admitted only ingress-nginx while Traefik served the host,
+     * and the chain ended on "2 published" in green over a 502. Fails if the
+     * refusal is not the last hop, leaves the path whole, or does not name
+     * the controller, its namespace and the policy to open.
+     */
+    it("stops after the published pods where no rule admits the controller", () => {
+      const path = chainOf(traefik());
+      const last = path.hops.at(-1);
+      expect(path.hops.at(-2)?.at).toBe("published");
+      expect(path.broken).toBe(true);
+      expect(last).toMatchObject({
+        at: "stop",
+        mood: "fault",
+        shut: true,
+        title: "NetworkPolicy allow-nginx admits no connection from Traefik",
+        objects: [{ kind: "NetworkPolicy", name: "allow-nginx" }],
+      });
+      expect(last?.at === "stop" && last.note).toContain("namespace traefik");
+    });
+
+    /** A door the app could not settle is said as not checked, never as open or shut. */
+    it("says the policies decide where the controller cannot be judged", () => {
+      const path = chainOf(traefik(true));
+      expect(path.broken).toBe(false);
+      expect(path.hops.at(-1)).toMatchObject({
+        at: "stop",
+        mood: "unchecked",
+        title:
+          "NetworkPolicy allow-nginx decides who may connect to these pods",
+      });
+      const note = path.hops.at(-1);
+      expect(note?.at === "stop" && note.note).toContain("node's network");
+    });
+
+    /** Nobody asked about the controller, or a stop already said, adds nothing. */
+    it("judges no door it was not given a controller for, nor behind another stop", () => {
+      expect(chainOf().hops.some((hop) => hop.at === "stop")).toBe(false);
+      const stop: ChainStop = {
+        reason: "noneReady",
+        service: svc,
+        selector: "app=shop",
+        pods: 2,
+        why: "failingReadiness",
+        cause: null,
+      };
+      const stops = chainOf(traefik(), stop).hops.filter(
+        (hop) => hop.at === "stop"
+      );
+      expect(stops).toHaveLength(1);
+      expect(stops[0]).toMatchObject({ mood: "fault" });
+      expect(stops[0].at === "stop" && stops[0].title).not.toContain("Traefik");
+    });
   });
 
   it("says the three stops differently", () => {

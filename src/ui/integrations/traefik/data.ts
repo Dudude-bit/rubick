@@ -36,10 +36,12 @@ import {
   workloadArgs,
   type BackingSources,
   findControllerWorkload,
+  controllerClients,
   type ControllerWorkload,
 } from "../ingress";
 import {
   allRoutes,
+  CONTROLLER as TRAEFIK_CONTROLLER,
   readEmptyServices,
   readEntryPoints,
   type EmptyServices,
@@ -56,6 +58,11 @@ export const GROUPS: readonly string[] = ["traefik.io", "traefik.containo.us"];
 
 /** The label every Traefik chart puts on its own workload. */
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=traefik";
+
+export const ingressClients = (controller: string) =>
+  controller === TRAEFIK_CONTROLLER
+    ? controllerClients("Traefik", CONTROLLER_SELECTOR)
+    : null;
 
 /**
  * The API group each cluster answers for, remembered by context.

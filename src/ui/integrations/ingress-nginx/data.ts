@@ -38,12 +38,21 @@ import {
   workloadEnv,
   type BackingSources,
   findControllerWorkload,
+  controllerClients,
   type ControllerWorkload,
 } from "../ingress";
-import { allRoutes, type NginxSources } from "./model";
+import { allRoutes, CONTROLLER, type NginxSources } from "./model";
 
 /** The label every ingress-nginx release puts on its own workload. */
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=ingress-nginx";
+
+export const ingressClients = (controller: string) =>
+  controller === CONTROLLER
+    ? controllerClients(
+        "ingress-nginx",
+        `${CONTROLLER_SELECTOR},app.kubernetes.io/component=controller`
+      )
+    : null;
 
 export interface RouteSources {
   ingresses: IngressInfo[];

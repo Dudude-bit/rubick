@@ -223,6 +223,7 @@ describe("the routing map", () => {
       policies: ["deny-all-ingress"],
       ports: [8080],
       noRules: true,
+      client: null,
     }));
     const map = mapOf({
       ingresses: [

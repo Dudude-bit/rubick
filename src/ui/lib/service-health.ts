@@ -79,7 +79,7 @@ export type PublishedCounts = Pick<
   ServicePublished,
   "ready" | "draining" | "notReady" | "unrouted"
 > &
-  Partial<Pick<ServicePublished, "unroutedReady">> & {
+  Partial<Pick<ServicePublished, "unroutedReady" | "door">> & {
     stop?: ChainStop | null;
   };
 

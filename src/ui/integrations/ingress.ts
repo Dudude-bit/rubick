@@ -25,6 +25,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import type { Saying } from "@/i18n/say";
+import { refusedStop, type DoorClaim, type DoorRead } from "@/lib/policy-door";
 import type { T } from "@/i18n/useT";
 import type { AppLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -103,6 +104,8 @@ export function tlsSecretFor(
 export interface BackendRef {
   name: string;
   namespace: string;
+  /** The Service port it names, a number or a name, where the route says. */
+  port?: string | null;
 }
 
 /**
@@ -148,6 +151,8 @@ export interface BackingSources {
   backingKnown: boolean;
   /** Why they were not read, where they could not be; null while reading. */
   backingError: string | null;
+  /** The page's own controller, judged at each backend's NetworkPolicies; absent, nobody is. */
+  door?: DoorRead | null;
 }
 
 /** For a caller that counts routes and never reads what is behind them. */
@@ -164,13 +169,15 @@ export const BACKING_NOT_READ: BackingSources = {
  */
 export function backingFrom(
   data: BackingLists | undefined,
-  error: unknown
+  error: unknown,
+  door?: DoorRead | null
 ): BackingSources {
   return {
     services: data?.services ?? [],
     published: data?.published ?? [],
     backingKnown: data !== undefined,
     backingError: data === undefined && error ? errorToShow(error) : null,
+    door,
   };
 }
 
@@ -256,7 +263,9 @@ export function backingOf(
       candidate.service.name === service.name &&
       candidate.service.namespace === service.namespace
   );
-  const stop = published?.stop ?? null;
+  const stop =
+    published?.stop ??
+    refusedStop(published, backend.port ?? null, sources.door);
   return {
     service,
     ready: published?.ready ?? 0,
@@ -828,6 +837,34 @@ export interface ControllerWorkload {
   ready: number;
   desired: number;
 }
+
+/** A controller's claim, reading its running pods by its label selector. */
+export const controllerClients = (
+  name: string,
+  labelSelector: string
+): DoorClaim => ({
+  name,
+  read: async () => {
+    const pods = await commands.listPods({
+      namespace: null,
+      labelSelector,
+      fieldSelector: null,
+      limit: null,
+      statusFilter: null,
+      selector: null,
+      nodeName: null,
+    });
+    return pods
+      .filter((pod) => pod.status.phase === "Running" && pod.podIp !== null)
+      .map((pod) => ({
+        name: pod.name,
+        namespace: pod.namespace,
+        labels: pod.labels,
+        ip: pod.podIp,
+        hostNetwork: pod.podIp === pod.hostIp,
+      }));
+  },
+});
 
 /**
  * The controller's workload, whichever kind it runs as, or why none was

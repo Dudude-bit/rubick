@@ -637,7 +637,11 @@ export function backingOf(
   // has no endpoints by design, and the app cannot see inside it.
   const backend =
     route.service && route.service.kubernetes
-      ? { name: route.service.name, namespace: route.service.namespace }
+      ? {
+          name: route.service.name,
+          namespace: route.service.namespace,
+          port: route.service.port,
+        }
       : null;
   return backingOfBackend(backend, route.source, sources);
 }

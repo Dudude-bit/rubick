@@ -2,7 +2,12 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import type { IngressClassBinding, TlsCertificate } from "@/generated/types";
+import type {
+  IngressClassBinding,
+  PolicyDoor,
+  TlsCertificate,
+} from "@/generated/types";
+import type { DoorRead } from "./policy-door";
 import type { ServiceHealthInput } from "./service-health";
 import {
   ingressHealthOf,
@@ -269,6 +274,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
                 policies: ["deny-all-ingress"],
                 ports: [8080],
                 noRules: true,
+                client: null,
               },
             },
           ],
@@ -280,6 +286,87 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     expect(said.reason).toBe(
       "web: NetworkPolicy deny-all-ingress admits no connection to these pods."
     );
+  });
+
+  /**
+   * The list called shop "served" while allow-traefik admitted only Traefik
+   * and nginx served the class, so every request got a 502. Fails if the
+   * class's controller stops being judged at the backend's policies, or a
+   * controller nobody asked about is refused.
+   */
+  it("calls a backend whose policies refuse the class's controller down", () => {
+    const door: PolicyDoor = {
+      state: "guarded",
+      isolating: ["allow-traefik"],
+      unsettled: [],
+      ports: [
+        {
+          name: "http",
+          servicePort: 80,
+          port: 8080,
+          protocol: "TCP",
+          rules: [
+            {
+              policy: "allow-traefik",
+              byName: false,
+              peers: [
+                {
+                  pods: { kind: "notSaid" },
+                  namespaces: {
+                    kind: "written",
+                    query: "kubernetes.io/metadata.name=traefik",
+                  },
+                  ipBlock: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const nginx: DoorRead = {
+      name: "ingress-nginx",
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "ingress-nginx-controller-5f",
+            namespace: "ingress-nginx",
+            labels: {},
+            ip: "10.42.0.12",
+            hostNetwork: false,
+          },
+        ],
+      },
+      namespaces: {
+        known: true,
+        value: ["traefik", "ingress-nginx"].map((name) => ({
+          name,
+          labels: { "kubernetes.io/metadata.name": name },
+        })),
+      },
+    };
+    const inputs = (ask?: IngressInputs["door"]): IngressInputs => ({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([["web", { ...serving(2), door }]]),
+      },
+      certificates: undefined,
+      door: ask,
+    });
+    const said = verdict(
+      inputs((controller) =>
+        controller === "k8s.io/ingress-nginx" ? nginx : null
+      )
+    );
+    expect(said.code).toBe("backendDown");
+    expect(said.reason).toBe(
+      "web: NetworkPolicy allow-traefik admits no connection from ingress-nginx."
+    );
+    expect(verdict(inputs()).code).not.toBe("backendDown");
+    expect(verdict(inputs(() => null)).code).not.toBe("backendDown");
   });
 
   /**

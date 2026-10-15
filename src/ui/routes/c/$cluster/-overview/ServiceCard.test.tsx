@@ -231,6 +231,7 @@ describe("what a card says about a way in", () => {
                 policies: ["deny-all"],
                 ports: [8080],
                 noRules: true,
+                client: null,
               },
             },
             first: null,
@@ -278,7 +279,7 @@ describe("what a card offers Share", () => {
   /** The Share listed every way in bare, beside a card that said one was
    *  shut and another had nothing behind it. */
   it("says beside each way in what the card says beside it", () => {
-    const way = { url: null, detail: null, servingKnown: true };
+    const way = { url: null, detail: null, servingKnown: true, unsure: false };
     const section = pinShare(
       pin,
       { state: "ready", ready: 2, total: 2 },
@@ -287,6 +288,15 @@ describe("what a card offers Share", () => {
           { ...way, key: "a", label: "web", serving: false, shut: true },
           { ...way, key: "b", label: "api", serving: false, shut: false },
           { ...way, key: "c", label: "shop", serving: true, shut: false },
+          {
+            ...way,
+            key: "d",
+            label: "edge",
+            serving: false,
+            servingKnown: false,
+            shut: false,
+            unsure: true,
+          },
         ],
         known: true,
       },
@@ -299,7 +309,7 @@ describe("what a card offers Share", () => {
     expect(rows[2]).toMatchObject({
       values: [
         {
-          text: "web (shut by NetworkPolicy), api (nothing behind it), shop",
+          text: "web (shut by NetworkPolicy), api (nothing behind it), shop, edge (not checked)",
         },
       ],
     });

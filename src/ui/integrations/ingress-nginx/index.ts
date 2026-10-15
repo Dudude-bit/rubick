@@ -2,7 +2,12 @@ import { Network } from "lucide-react";
 
 import { defineVendor, pageCount } from "../registry";
 import { ROUTING_STALE } from "../ingress";
-import { countHosts, fetchRouteSources, ROUTE_SOURCES_KEY } from "./data";
+import {
+  countHosts,
+  fetchRouteSources,
+  ingressClients,
+  ROUTE_SOURCES_KEY,
+} from "./data";
 import { facts } from "./facts";
 
 /**
@@ -30,6 +35,9 @@ export default defineVendor({
     gives: "ingressNginxGives",
     icon: Network,
     facts,
+  },
+  provides: {
+    "ingress.clients": ingressClients,
   },
   page: {
     count: pageCount({

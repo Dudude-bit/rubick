@@ -356,6 +356,37 @@ export interface ServiceHealthGroup {
   notReady: number;
   unrouted: number;
   stop?: ChainStop;
+  door?: PolicyDoor;
+}
+
+export interface DoorPort {
+  name: string | null;
+  servicePort: number | null;
+  port: number | null;
+  protocol: string;
+  rules: DoorRule[];
+}
+
+export interface DoorRule {
+  policy: string;
+  peers: PolicyPeer[];
+  byName: boolean;
+}
+
+export interface PolicyPeer {
+  pods: PolicySelects;
+  namespaces: PolicySelects;
+  ipBlock: PolicyIpBlock | null;
+}
+
+export interface PolicyIpBlock {
+  cidr: string;
+  except: string[];
+}
+
+export interface RefusedClient {
+  name: string;
+  namespaces: string[];
 }
 
 export interface SharedCause {
@@ -402,6 +433,7 @@ export interface ServicePublished {
   whole: boolean;
   unpublished: UnpublishedPod[];
   stop: ChainStop | null;
+  door?: PolicyDoor;
 }
 
 export interface UnpublishedPod {
@@ -457,17 +489,6 @@ export interface PolicyPort {
   protocol: string;
   port: string | null;
   endPort: number | null;
-}
-
-export interface PolicyPeer {
-  pods: PolicySelects;
-  namespaces: PolicySelects;
-  ipBlock: PolicyIpBlock | null;
-}
-
-export interface PolicyIpBlock {
-  cidr: string;
-  except: string[];
 }
 
 export interface IngressInfo {
@@ -2496,6 +2517,20 @@ export type Stalled =
   | { says: "challengePending"; kind: string; domain: string }
   | { says: "orderNotCompleted" };
 
+export type PolicyDoor =
+  | { state: "open" }
+  | {
+      state: "guarded";
+      isolating: string[];
+      unsettled: string[];
+      ports: DoorPort[];
+    };
+
+export type PolicySelects =
+  | { kind: "everything" }
+  | { kind: "written"; query: string }
+  | { kind: "notSaid" };
+
 export type ChainStop =
   | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
   | {
@@ -2566,6 +2601,7 @@ export type ChainStop =
       policies: string[];
       ports: number[];
       noRules: boolean;
+      client: RefusedClient | null;
     };
 
 export type PodCause =
@@ -2664,11 +2700,6 @@ export type NotServing =
   | "podsUnread";
 
 export type EndpointSource = "slices" | "legacyEndpoints" | "podReadiness";
-
-export type PolicySelects =
-  | { kind: "everything" }
-  | { kind: "written"; query: string }
-  | { kind: "notSaid" };
 
 export type BudgetUnit = "cpu" | "memory" | "count";
 

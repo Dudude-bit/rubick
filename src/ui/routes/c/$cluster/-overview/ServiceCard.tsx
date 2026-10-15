@@ -6,6 +6,8 @@ import { Journal } from "../-changes/ChangesTimeline";
 import { useShareSection } from "@/components/share/screen-share";
 import { pinShare, WAY_WORDS } from "./service-card-share";
 import { useConnections } from "@/hooks/useConnections";
+import { useDoorAsk } from "@/hooks/useDoorAsk";
+import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useRouteTls } from "@/hooks/useRouteTls";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { cn } from "@/lib/utils";
@@ -32,6 +34,7 @@ import { useT, type T } from "@/i18n/useT";
 
 const WAY_TONE: Record<WayState, string> = {
   unread: "text-fg-fnt",
+  unsure: "text-fg-fnt",
   shut: "text-err",
   empty: "text-warn",
 };
@@ -82,10 +85,18 @@ export function ServiceCard({
     connections.isPending
   );
   const tlsOf = useRouteTls(connections.data);
+  const routed = useIngressRouting(connections.data);
+  const door = useDoorAsk();
   const chains = useMemo(
     () =>
-      connections.data ? trafficChains(connections.data, t, { tlsOf }) : [],
-    [connections.data, t, tlsOf]
+      connections.data
+        ? trafficChains(connections.data, t, {
+            tlsOf,
+            routing: routed.routing,
+            door,
+          })
+        : [],
+    [connections.data, t, tlsOf, routed.routing, door]
   );
   const ways = entryPointsOf(connections.data, chains);
   const unread = openQuestionsOf(connections.data);

@@ -5,6 +5,7 @@ import { crd } from "./crd";
 import {
   countHosts,
   fetchRouteSources,
+  ingressClients,
   ROUTE_SOURCES,
   ROUTE_STALE,
 } from "./data";
@@ -42,6 +43,7 @@ export default defineVendor({
     "service.routes": serviceRoutes,
     "proxy.behind": proxyBehind,
     "ingress.tls": ingressTls,
+    "ingress.clients": ingressClients,
     "object.report": reportOf,
   },
   page: {

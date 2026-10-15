@@ -198,13 +198,15 @@ export interface EntryPoint {
   servingKnown: boolean;
   /** Ready pods are behind it and a NetworkPolicy admits nobody to them. */
   shut: boolean;
+  /** Its chain reaches a door nobody could settle, rather than one unread. */
+  unsure: boolean;
 }
 
-export type WayState = "unread" | "shut" | "empty";
+export type WayState = "unread" | "unsure" | "shut" | "empty";
 
 /** What a way in says beside its name; null where something serves it. */
 export function wayState(way: EntryPoint): WayState | null {
-  if (!way.servingKnown) return "unread";
+  if (!way.servingKnown) return way.unsure ? "unsure" : "unread";
   if (way.shut) return "shut";
   return way.serving ? null : "empty";
 }
@@ -231,9 +233,11 @@ export function entryPointsOf(
   );
   const byKey = new Map<string, EntryPoint>();
   for (const chain of chains) {
+    const end = chainEnd(chain);
     for (const hop of chain.hops) {
-      const entry = entryOf(hop);
-      if (!entry) continue;
+      const found = entryOf(hop);
+      if (!found) continue;
+      const entry = found.url === null ? found : { ...found, ...end };
       const seen = byKey.get(entry.key);
       // The object hop and the published hop are the same Service under the
       // same key, and only the published one knows whether anything is
@@ -245,6 +249,30 @@ export function entryPointsOf(
     }
   }
   return { entries: [...byKey.values()], known: !unread };
+}
+
+/**
+ * Whether a request on an address reaches anything: what the far end of its
+ * chain says, a stop before the pods first, and nothing known without either.
+ */
+function chainEnd(
+  chain: ChainPath
+): Pick<EntryPoint, "serving" | "servingKnown" | "shut" | "unsure"> {
+  const unknown = { serving: false, servingKnown: false, shut: false };
+  const stops = chain.hops.flatMap((hop) => (hop.at === "stop" ? [hop] : []));
+  if (stops.some((hop) => hop.mood === "unchecked"))
+    return { ...unknown, unsure: true };
+  if (stops.length > 0)
+    return {
+      serving: false,
+      servingKnown: true,
+      shut: stops.some((hop) => hop.shut === true),
+      unsure: false,
+    };
+  const published = chain.hops.find((hop) => hop.at === "published");
+  if (published?.at !== "published") return { ...unknown, unsure: false };
+  const { serving, servingKnown, shut } = publishedEntry(published.published);
+  return { serving, servingKnown, shut, unsure: false };
 }
 
 function entryOf(hop: ChainHop): EntryPoint | null {
@@ -260,6 +288,7 @@ function entryOf(hop: ChainHop): EntryPoint | null {
         // published hop's answer, not this one's.
         servingKnown: false,
         shut: false,
+        unsure: false,
       };
     }
     if (hop.object.kind !== "Service") return null;
@@ -271,6 +300,7 @@ function entryOf(hop: ChainHop): EntryPoint | null {
       serving: false,
       servingKnown: false,
       shut: false,
+      unsure: false,
     };
   }
   if (hop.at === "published") return publishedEntry(hop.published);
@@ -293,6 +323,7 @@ function publishedEntry(published: ServicePublished): EntryPoint {
     servingKnown:
       published.source !== "podReadiness" || endpointCount(published) > 0,
     shut,
+    unsure: false,
   };
 }
 

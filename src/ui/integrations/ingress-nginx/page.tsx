@@ -81,6 +81,7 @@ import {
 } from "./data";
 import {
   allRoutes,
+  CONTROLLER,
   PROXY_LABEL,
   backingOf,
   hostGroups,
@@ -96,6 +97,7 @@ import { problemWords } from "@/lib/certificates";
 import { T } from "@/i18n/T";
 import { parts } from "@/i18n/parts";
 import { useSearchParam } from "@/hooks/useSearchParam";
+import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useT } from "@/i18n/useT";
 import { troubleMark } from "../kit";
 
@@ -108,6 +110,7 @@ export default function IngressNginxPage() {
 
   const routeSources = useRouteSources();
   const backing = useBacking();
+  const door = useDoorAsk()(CONTROLLER);
   const controller = useController();
 
   const routes = useMemo(
@@ -138,13 +141,20 @@ export default function IngressNginxPage() {
         ? {
             ...sourcesFrom(
               routeSources.data,
-              backingFrom(backing.data, backing.error),
+              backingFrom(backing.data, backing.error, door),
               certificates
             ),
             upstreamTls,
           }
         : null,
-    [routeSources.data, backing.data, backing.error, certificates, upstreamTls]
+    [
+      routeSources.data,
+      backing.data,
+      backing.error,
+      door,
+      certificates,
+      upstreamTls,
+    ]
   );
 
   // `t` too: the groups carry sentences, and a memo without it kept the

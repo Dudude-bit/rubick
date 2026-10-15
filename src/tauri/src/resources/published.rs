@@ -28,7 +28,7 @@ use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 
 use super::connections::{ChainStop, Existence, NearMiss, NotServing, ObjectFacts, ObjectRef};
-use super::network::{picks_selected, NetworkPolicyInfo};
+use super::network::{picks_selected, NetworkPolicyInfo, PolicyPeer, PolicyRule};
 use super::selector::Selector;
 use super::types::pod_display::display_status;
 use super::types::{condition_is_true, counts_ready, crash_looping};
@@ -166,6 +166,49 @@ pub struct ServicePublished {
     /// Where a path into this Service stops, by [`service_stop`]; `None`
     /// where it reaches something.
     pub stop: Option<ChainStop>,
+    /// Who the policies over its pods let in, by [`policy_door`]; absent
+    /// where the policies were not read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub door: Option<PolicyDoor>,
+}
+
+/// Who the `NetworkPolicy` objects over a Service's pods let in, port by
+/// port: what a verdict about one client is read from.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum PolicyDoor {
+    /// No policy governing ingress may select these pods.
+    Open,
+    /// Policies select them, and each port carries the rules that may take it.
+    Guarded {
+        /// Policies selecting every pod behind the Service.
+        isolating: Vec<String>,
+        /// Policies picking some of them by a label the Service does not name.
+        unsettled: Vec<String>,
+        ports: Vec<DoorPort>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DoorPort {
+    /// The Service port's name, as the slices carry it.
+    pub name: Option<String>,
+    /// The Service port's own number, which an Ingress backend may name.
+    pub service_port: Option<i32>,
+    pub port: Option<i32>,
+    pub protocol: String,
+    pub rules: Vec<DoorRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DoorRule {
+    pub policy: String,
+    /// Empty means every source.
+    pub peers: Vec<PolicyPeer>,
+    /// It names the port by a container port's name, so it may not take it.
+    pub by_name: bool,
 }
 
 impl ServicePublished {
@@ -190,11 +233,16 @@ impl ServicePublished {
         self
     }
 
-    /// [`policy_stop`] where nothing earlier stopped the path. `None` is a
-    /// policy list that was not read, which leaves the answer as it was.
+    /// [`policy_door`], and [`policy_stop`] where nothing earlier stopped the
+    /// path. `None` is a policy list that was not read, which leaves the
+    /// answer as it was.
     #[must_use]
     pub fn with_policies(mut self, service: &Service, policies: Option<&[NetworkPolicy]>) -> Self {
-        if let Some(policies) = policies.filter(|_| self.stop.is_none() && self.serving() > 0) {
+        let Some(policies) = policies else {
+            return self;
+        };
+        self.door = policy_door(service, &self, policies);
+        if self.stop.is_none() && self.serving() > 0 {
             self.stop = policy_stop(service, &self, policies);
         }
         self
@@ -553,6 +601,7 @@ pub fn from_slices(
         whole: true,
         unpublished,
         stop: None,
+        door: None,
     }
 }
 
@@ -640,6 +689,7 @@ pub fn from_legacy(
         whole: true,
         unpublished: Vec::new(),
         stop: None,
+        door: None,
     }
 }
 
@@ -693,6 +743,7 @@ pub fn from_pod_readiness(
         whole: true,
         unpublished: Vec::new(),
         stop: None,
+        door: None,
     }
 }
 
@@ -813,16 +864,14 @@ pub fn service_stop(
     })
 }
 
-/// Where the `NetworkPolicy` objects that select every pod behind a Service admit no
-/// connection to any port it publishes. Settled from the Service's selector
-/// alone, so every reader says the same: a policy picking some of its pods
-/// by a label the Service does not name leaves it unsaid.
-#[must_use]
-pub fn policy_stop(
-    service: &Service,
-    published: &ServicePublished,
-    policies: &[NetworkPolicy],
-) -> Option<ChainStop> {
+/// The ingress policies over a Service's pods, settled from its selector.
+struct Guard {
+    isolating: Vec<String>,
+    unsettled: Vec<String>,
+    rules: Vec<(String, PolicyRule)>,
+}
+
+fn guard(service: &Service, policies: &[NetworkPolicy]) -> Option<Guard> {
     let selector = service
         .spec
         .as_ref()?
@@ -830,8 +879,11 @@ pub fn policy_stop(
         .as_ref()
         .filter(|selector| !selector.is_empty())?;
     let namespace = service.namespace();
-    let mut isolating = Vec::new();
-    let mut rules = Vec::new();
+    let mut found = Guard {
+        isolating: Vec::new(),
+        unsettled: Vec::new(),
+        rules: Vec::new(),
+    };
     for policy in policies
         .iter()
         .filter(|policy| policy.namespace() == namespace)
@@ -845,19 +897,40 @@ pub fn policy_stop(
             selector,
         ) {
             Some(false) => continue,
-            Some(true) => isolating.push(info.name),
+            Some(true) => found.isolating.push(info.name.clone()),
             // Some pods may be under it, and its rules may let them be reached.
-            None => {}
+            None => found.unsettled.push(info.name.clone()),
         }
-        rules.extend(info.ingress.rules);
+        found.rules.extend(
+            info.ingress
+                .rules
+                .into_iter()
+                .map(|rule| (info.name.clone(), rule)),
+        );
     }
+    Some(found)
+}
+
+/// Where the `NetworkPolicy` objects that select every pod behind a Service admit no
+/// connection to any port it publishes. Settled from the Service's selector
+/// alone, so every reader says the same: a policy picking some of its pods
+/// by a label the Service does not name leaves it unsaid.
+#[must_use]
+pub fn policy_stop(
+    service: &Service,
+    published: &ServicePublished,
+    policies: &[NetworkPolicy],
+) -> Option<ChainStop> {
+    let Guard {
+        isolating, rules, ..
+    } = guard(service, policies)?;
     if isolating.is_empty() || published.ports.is_empty() {
         return None;
     }
     let refused = published.ports.iter().all(|port| {
         rules
             .iter()
-            .all(|rule| rule.takes(&port.protocol, port.port) == Some(false))
+            .all(|(_, rule)| rule.takes(&port.protocol, port.port) == Some(false))
     });
     refused.then(|| ChainStop::PolicyRefuses {
         service: published.service.clone(),
@@ -868,6 +941,62 @@ pub fn policy_stop(
             .filter_map(|port| port.port)
             .collect(),
         no_rules: rules.is_empty(),
+        client: None,
+    })
+}
+
+/// Each published port with the rules that may take it, from the same
+/// reading as [`policy_stop`]. `None` where the Service names no selector,
+/// so which pods the policies fall on cannot be settled.
+#[must_use]
+pub fn policy_door(
+    service: &Service,
+    published: &ServicePublished,
+    policies: &[NetworkPolicy],
+) -> Option<PolicyDoor> {
+    let Guard {
+        isolating,
+        unsettled,
+        rules,
+    } = guard(service, policies)?;
+    if isolating.is_empty() && unsettled.is_empty() {
+        return Some(PolicyDoor::Open);
+    }
+    let declared = service
+        .spec
+        .as_ref()
+        .and_then(|spec| spec.ports.as_deref())
+        .unwrap_or_default();
+    let ports = published
+        .ports
+        .iter()
+        .map(|port| DoorPort {
+            name: port.name.clone(),
+            service_port: declared
+                .iter()
+                .find(|entry| {
+                    entry.name.as_deref().filter(|name| !name.is_empty()) == port.name.as_deref()
+                })
+                .map(|entry| entry.port),
+            port: port.port,
+            protocol: port.protocol.clone(),
+            rules: rules
+                .iter()
+                .filter_map(|(policy, rule)| {
+                    let takes = rule.takes(&port.protocol, port.port);
+                    (takes != Some(false)).then(|| DoorRule {
+                        policy: policy.clone(),
+                        peers: rule.peers.clone(),
+                        by_name: takes.is_none(),
+                    })
+                })
+                .collect(),
+        })
+        .collect();
+    Some(PolicyDoor::Guarded {
+        isolating,
+        unsettled,
+        ports,
     })
 }
 
@@ -3028,5 +3157,80 @@ mod tests {
         let before = format!("{:?}", empty.stop);
         let after = empty.with_policies(&svc, Some(&[deny_all()])).stop;
         assert_eq!(format!("{after:?}"), before);
+    }
+
+    fn door_of(policies: Option<&[NetworkPolicy]>) -> Option<PolicyDoor> {
+        let (svc, published) = serving_web();
+        published.with_policies(&svc, policies).door
+    }
+
+    /// The door is what a verdict about the controller is read from: each
+    /// published port keeps the rules that may take it with their peers, and
+    /// drops the ones that cannot. Fails if a rule for another port is kept,
+    /// a named port is taken as sure, or the peers are lost on the way.
+    #[test]
+    fn a_door_keeps_per_port_the_rules_that_may_take_it() {
+        let from_traefik = network_policy(
+            "allow-traefik",
+            "k8s-gui-test",
+            &serde_json::json!({
+                "podSelector": {},
+                "ingress": [
+                    { "from": [{ "namespaceSelector": { "matchLabels": { "name": "traefik" } } }],
+                      "ports": [{ "port": 80 }] },
+                    { "ports": [{ "port": 9090 }] },
+                    { "ports": [{ "port": "web" }] }
+                ]
+            }),
+        );
+        let Some(PolicyDoor::Guarded {
+            isolating,
+            unsettled,
+            ports,
+        }) = door_of(Some(&[from_traefik]))
+        else {
+            panic!("the policy selects every pod");
+        };
+        assert_eq!(isolating, vec!["allow-traefik"]);
+        assert!(unsettled.is_empty());
+        let [port] = ports.as_slice() else {
+            panic!("one published port");
+        };
+        assert_eq!(
+            (port.name.as_deref(), port.service_port, port.port),
+            (Some("http"), Some(80), Some(80))
+        );
+        let kept: Vec<(usize, bool)> = port
+            .rules
+            .iter()
+            .map(|rule| (rule.peers.len(), rule.by_name))
+            .collect();
+        assert_eq!(kept, vec![(1, false), (0, true)]);
+    }
+
+    /// No policy over the pods is an open door, a policy the Service's labels
+    /// cannot settle is named apart, and an unread list says nothing at all.
+    #[test]
+    fn a_door_is_open_unsettled_or_unsaid_as_the_policies_read() {
+        assert_eq!(door_of(Some(&[])), Some(PolicyDoor::Open));
+        assert_eq!(door_of(None), None);
+        let edge = network_policy(
+            "edge",
+            "k8s-gui-test",
+            &serde_json::json!({
+                "podSelector": { "matchLabels": { "tier": "edge" } },
+                "policyTypes": ["Ingress"]
+            }),
+        );
+        let Some(PolicyDoor::Guarded {
+            isolating,
+            unsettled,
+            ..
+        }) = door_of(Some(&[edge]))
+        else {
+            panic!("the policy may select some pods");
+        };
+        assert!(isolating.is_empty());
+        assert_eq!(unsettled, vec!["edge"]);
     }
 }

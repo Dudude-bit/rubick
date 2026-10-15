@@ -268,6 +268,7 @@ describe("what Needs attention lists beyond pods", () => {
         policies: ["deny-all-ingress"],
         ports: [8080],
         noRules: true,
+        client: null,
       },
     };
     const listed = attention({
