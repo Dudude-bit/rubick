@@ -13,7 +13,7 @@ import { useResourceList } from "@/hooks/useResource";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { useIngressHealth } from "@/hooks/useIngressHealth";
 import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
-import { ingressHealthWords } from "@/lib/ingress-health";
+import { ingressHealthWords, ingressVerdictLabels } from "@/lib/ingress-health";
 import { openExternal } from "@/lib/open-external";
 import type { Verdict } from "@/lib/service-health";
 import { VerdictBesideReason } from "../../../-object/health-views";
@@ -29,6 +29,7 @@ import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
+  badgeCellPx,
   causeTextPx,
   yielding,
 } from "../../../-list/columns";
@@ -142,8 +143,8 @@ function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
 /** A cell's own padding on both sides. */
 const CELL_PAD_PX = 20;
 
-/** `promo.nginx.example.com`, 24 glyphs of mono; a longer host ends in an ellipsis, whole on hover. */
-const HOST_PX = Math.ceil(24 * 7.2);
+/** `checkout.example.com`, 20 glyphs of mono; a longer host ends in an ellipsis, whole on hover. */
+const HOST_PX = Math.ceil(20 * 7.2);
 
 // A floor is also asked with another list's rows, which carry no rules.
 const firstHosts = (rows: readonly IngressInfo[]) =>
@@ -168,6 +169,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     size: 185,
     id: "health",
     header: columnHeader("columns", "status"),
+    meta: { floor: (t) => badgeCellPx(ingressVerdictLabels(t)) },
     cell: ({ row }) => <HealthCell ingress={row.original} />,
   },
   {

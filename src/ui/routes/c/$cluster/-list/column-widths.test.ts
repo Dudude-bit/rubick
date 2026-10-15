@@ -881,36 +881,59 @@ describe("the Ingresses list beside a cause", () => {
   /**
    * Live at 1040px, Status took every pixel above the floors for "No
    * IngressClass named nginx in this cluster" and left Hosts "checko" and
-   * TLS "no TL". Fails if a host or the TLS words stop fitting beside it.
+   * TLS "no TL"; given floors for those, it then cut its own badge to "no
+   * controll". Fails if a host, the class or the badge stop fitting beside
+   * the widest cause in one namespace, or TLS is drawn cut rather than hidden.
    */
-  it("keeps a host and the TLS words whole while a cause widens Status", () => {
+  it("keeps a host, the TLS words and the badge whole while a cause widens Status", () => {
     const rows = [
       ingress("checkout", "checkout.k8s-gui.test"),
       ingress("promo-nginx", "promo.nginx.k8s-gui.test"),
     ];
     // The page adds the cause to the column's ideal; the widest it allows.
     const columns = [
-      ...(ingresses as Column[]).map((column) =>
-        nameOf(column) === "health"
-          ? { ...column, meta: { ...column.meta, ideal: () => 185 + 366 } }
-          : column
-      ),
+      ...(ingresses as Column[])
+        .filter((column) => nameOf(column) !== "namespace")
+        .map((column) =>
+          nameOf(column) === "health"
+            ? { ...column, meta: { ...column.meta, ideal: () => 185 + 366 } }
+            : column
+        ),
       ACTIONS,
     ] as Column[];
-    const layout = tableLayout(
-      columns.map((c) => ({
+    const widths = (port: number) => {
+      const ids = columns.map((c, index) =>
+        index < columns.length - 1 ? nameOf(c) : "actions"
+      );
+      const specs = columns.map((c, index) => ({
+        id: ids[index],
         size: c.size ?? 150,
         floor: columnFloor(c, en, rows),
         ideal: columnIdeal(c, en, rows),
-      })),
-      1040
-    );
-    const px = layout.shares.map((share) => (share / 100) * layout.span);
-    const at = (id: string) => px[columns.findIndex((c) => nameOf(c) === id)];
-    expect(at("hosts")).toBeGreaterThanOrEqual(24 * 7.2 + 20);
-    expect(at("tlsHosts")).toBeGreaterThanOrEqual(
+        yields: c.meta?.yields,
+      }));
+      const hidden = yieldedColumns(specs, port);
+      const kept = specs.filter((spec) => !hidden.includes(spec.id));
+      const layout = tableLayout(kept, port);
+      expect(layout.scrolls).toBe(false);
+      return (id: string) => {
+        const at = kept.findIndex((spec) => spec.id === id);
+        return at < 0 ? null : (layout.shares[at] / 100) * layout.span;
+      };
+    };
+    const badge = "backend not checked".length * 6.6 + 34;
+    for (const port of [1040, 1200]) {
+      const at = widths(port);
+      expect(at("hosts"), `${port}`).toBeGreaterThanOrEqual(20 * 7.2 + 20);
+      expect(at("className"), `${port}`).toBeGreaterThanOrEqual(
+        "traefik".length * 7 + 20
+      );
+      expect(at("health"), `${port}`).toBeGreaterThanOrEqual(badge);
+    }
+    // At 1040 the TLS column is the first to give way, whole or not at all.
+    expect(widths(1200)("tlsHosts")).toBeGreaterThanOrEqual(
       "TLS not checked".length * 7 + 20
     );
-    expect(at("className")).toBeGreaterThanOrEqual("traefik".length * 7 + 20);
+    expect(widths(1040)("tlsHosts")).toBeNull();
   });
 });

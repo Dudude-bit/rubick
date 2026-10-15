@@ -295,6 +295,15 @@ const PROBLEM_ROLE: Record<IngressProblem["kind"], StatusRole> = {
   backendIdle: "neutral",
 };
 
+/** Every label `ingressHealthWords` can draw, for the column that has to hold the widest. */
+export const ingressVerdictLabels = (t: T) => [
+  ...Object.values(PROBLEM_LABEL).map((key) => t("readings", key)),
+  t("nav", "notChecked"),
+  t("readings", "healthStillReading"),
+  t("readings", "healthNoAddressYet"),
+  t("readings", "healthServed"),
+];
+
 export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
   const problems = [...health.problems].sort(
     (a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind)
