@@ -9392,6 +9392,12 @@ export const ru: Catalogue = {
       many: "не созданы",
       other: "не созданы",
     },
+    podNotCreatedSegment: {
+      one: "не создан",
+      few: "не созданы",
+      many: "не созданы",
+      other: "не созданы",
+    },
     fromEndpoint: "из {endpoint}",
     watchingFromNow: "наблюдаем с этого момента",
     watchedSincePageOpen: "наблюдаем с момента открытия страницы · пока {span}",

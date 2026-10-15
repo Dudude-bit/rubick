@@ -82,4 +82,27 @@ describe("when a Job ended", () => {
     );
     expect(jobEndRow(job({ status: "Suspended" }), t)).toBe(null);
   });
+
+  /**
+   * A Job whose every pod the API server refused said "Finished: still
+   * running" and "Ran for 1h 2m" with no pod ever made. Fails if a started
+   * Job with no pod running or retrying is said to run or timed.
+   */
+  it.each(["Pending", "FailedCreate", "Suspended"])(
+    "neither says nor times a run for a started %s Job",
+    (status) => {
+      expect(jobEndRow(job({ status }), t)).toBe(null);
+      expect(jobRanFor(job({ status }), LATER)).toBe(null);
+    }
+  );
+
+  /** A Job retrying a failed pod is still at work, and its clock still runs. */
+  it("still times a Job that retries", () => {
+    expect(jobEndRow(job({ status: "Retrying" }), t)).toMatchObject({
+      value: "action.stillRunning",
+    });
+    expect(jobRanFor(job({ status: "Retrying" }), LATER)).toBe(
+      formatDuration(3600)
+    );
+  });
 });

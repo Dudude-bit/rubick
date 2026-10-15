@@ -110,6 +110,21 @@
       ],
       "podsCreated": [],
       "refused": ""
+    },
+    {
+      "name": "the words an event recorder puts before a combined event are not the API server's",
+      "uid": "set",
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "FailedCreate",
+          "uid": "set",
+          "message": "(combined from similar events): Error creating: pods \"job-y\" is forbidden: exceeded quota: two-pods",
+          "lastTimestamp": "2026-10-15T08:00:00Z"
+        }
+      ],
+      "podsCreated": [],
+      "refused": "Error creating: pods \"job-y\" is forbidden: exceeded quota: two-pods"
     }
   ]
 }

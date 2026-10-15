@@ -126,8 +126,9 @@ describe("JobDetail", () => {
 
   /**
    * A quota refused every pod the Job asked for, and its page said Pending in
-   * grey with no pod to say why. Fails if the header does not say
-   * FailedCreate or the page does not quote the refusal.
+   * grey with no pod to say why, over "nothing scheduled". Fails if the header
+   * does not say FailedCreate, the page does not quote the refusal, or the
+   * run does not count the pod never made.
    */
   it("says FailedCreate and quotes the refusal when the API server refuses its pods", async () => {
     const said =
@@ -160,6 +161,9 @@ describe("JobDetail", () => {
     );
     expect(screen.getAllByText("FailedCreate").length).toBeGreaterThan(0);
     expect(screen.queryByText("Pending")).toBeNull();
+    expect(screen.getByText("1 not created")).toBeInTheDocument();
+    expect(screen.queryByText("nothing scheduled")).toBeNull();
+    expect(screen.queryByText("still running")).toBeNull();
     vi.mocked(commands.listEvents).mockResolvedValue([]);
   });
 });

@@ -10,6 +10,10 @@ use crate::resources::EventInfo;
 
 const FAILED_CREATE: &str = "FailedCreate";
 
+/// What client-go's event correlator writes before a message it folded
+/// several similar events into.
+const COMBINED: &str = "(combined from similar events): ";
+
 /// The refusal a Deployment's `ReplicaSet` reported up as `ReplicaFailure`,
 /// which both controllers clear once a create gets through.
 #[must_use]
@@ -46,7 +50,14 @@ pub fn create_refusal<'a>(
     let since = newest
         .last_timestamp
         .is_some_and(|at| created.into_iter().flatten().any(|pod| pod > at));
-    (!since).then(|| newest.message.unwrap_or_default())
+    (!since).then(|| {
+        let said = newest.message.unwrap_or_default();
+        if let Some(rest) = said.strip_prefix(COMBINED) {
+            rest.to_string()
+        } else {
+            said
+        }
+    })
 }
 
 #[cfg(test)]

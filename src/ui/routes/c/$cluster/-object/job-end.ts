@@ -27,10 +27,14 @@ export function jobEndedAt(job: JobTimes): string | null | undefined {
   );
 }
 
+/** The words of a Job that has a pod running or retrying, as opposed to one that started none. */
+const RUNNING = new Set(["Running", "Retrying"]);
+
 /** Start to end, or to `now` while it runs; `null` where either end is unknown. */
 export function jobRanFor(job: JobTimes, now: number): string | null {
   const end = jobEndedAt(job);
   if (!job.startTime || end === null) return null;
+  if (end === undefined && !RUNNING.has(job.status)) return null;
   const from = Date.parse(job.startTime);
   const to = end === undefined ? now : Date.parse(end);
   if (Number.isNaN(from) || Number.isNaN(to)) return null;
@@ -41,7 +45,7 @@ export function jobRanFor(job: JobTimes, now: number): string | null {
 export function jobEndRow(job: JobTimes, t: T): KeyValue | null {
   const end = jobEndedAt(job);
   if (end === undefined) {
-    return job.startTime && job.status !== "Suspended"
+    return job.startTime && RUNNING.has(job.status)
       ? { label: t("action", "finished"), value: t("action", "stillRunning") }
       : null;
   }

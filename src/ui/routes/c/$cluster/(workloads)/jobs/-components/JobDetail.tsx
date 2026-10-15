@@ -129,6 +129,10 @@ export function JobDetail() {
   const succeeded = job?.succeeded ?? 0;
   const failed = job?.failed ?? 0;
   const active = job?.active ?? 0;
+  const unmade =
+    refused === null
+      ? 0
+      : Math.max(0, Math.min(parallelism, completions - succeeded) - active);
 
   const events = useObjectEvents(ResourceType.Job, name, namespace, {
     refresh: "slow",
@@ -183,6 +187,13 @@ export function JobDetail() {
                       {
                         label: t("count", "failedSegment", { n: failed }),
                         count: failed,
+                        tone: "err",
+                      },
+                      {
+                        label: t("count", "podNotCreatedSegment", {
+                          n: unmade,
+                        }),
+                        count: unmade,
                         tone: "err",
                       },
                     ]}
@@ -336,6 +347,7 @@ export function JobDetail() {
       succeeded,
       failed,
       active,
+      unmade,
     ]
   );
 

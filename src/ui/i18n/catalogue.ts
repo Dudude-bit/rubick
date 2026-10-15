@@ -8079,6 +8079,7 @@ export const en = {
     startingSegment: { one: "starting", other: "starting" },
     failingSegment: { one: "failing", other: "failing" },
     notCreatedSegment: { one: "not created", other: "not created" },
+    podNotCreatedSegment: { one: "not created", other: "not created" },
     fromEndpoint: "from {endpoint}",
     watchingFromNow: "watching from now",
     watchedSincePageOpen: "watched since you opened this page · {span} so far",

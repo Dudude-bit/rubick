@@ -3,6 +3,9 @@ import type { T } from "@/i18n/useT";
 
 const FAILED_CREATE = "FailedCreate";
 
+/** What client-go's event correlator writes before a message it folded several similar events into. */
+const COMBINED = "(combined from similar events): ";
+
 const refusedCreate = (event: EventInfo) =>
   event.type === "Warning" && event.reason === FAILED_CREATE;
 
@@ -47,7 +50,9 @@ export function createRefusal(
   );
   if (!newest) return null;
   const since = at(newest.lastTimestamp);
-  return created.some((pod) => at(pod) > since) ? null : (newest.message ?? "");
+  if (created.some((pod) => at(pod) > since)) return null;
+  const said = newest.message ?? "";
+  return said.startsWith(COMBINED) ? said.slice(COMBINED.length) : said;
 }
 
 /** The uid of the newest controller of this kind and name a refusal names, for a row that does not carry its own. */
