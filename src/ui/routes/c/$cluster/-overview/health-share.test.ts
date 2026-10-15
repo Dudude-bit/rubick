@@ -97,3 +97,45 @@ describe("a restarting pod's row", () => {
     );
   });
 });
+
+describe("a workload's row that leads with its pods' cause", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+
+  /**
+   * no-config's Deployment row read `secret "web-creds" not found The
+   * controller says: ...`, the kubelet's unpunctuated words running into
+   * ours. Fails if the controller's words lose their separator.
+   */
+  it("sets the controller's words apart from the quote before them", () => {
+    expect(
+      composedDetail(
+        {
+          says: "podsCause",
+          cause: {
+            says: "exits",
+            container: "web",
+            restarts: 6,
+            run: {
+              code: 1,
+              signal: null,
+              reason: "Error",
+              started: null,
+              ended: null,
+              previous: true,
+              said: "Error: DATABASE_URL is not set",
+              log: { says: "notRead" },
+              limit: null,
+            },
+            until: null,
+          },
+          pods: 2,
+          of: 2,
+          said: "Deployment does not have minimum availability.",
+        },
+        t
+      )
+    ).toContain(
+      "Error: DATABASE_URL is not set · The controller says: Deployment does not have minimum availability."
+    );
+  });
+});

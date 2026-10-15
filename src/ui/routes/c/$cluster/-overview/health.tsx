@@ -163,7 +163,7 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
         <CauseLine cause={detail.cause} compact />
         {detail.said && (
           <span className="text-fg-fnt">
-            {" "}
+            {" · "}
             {t("readings", "controllerSaid", { said: detail.said })}
           </span>
         )}

@@ -92,7 +92,7 @@ export function composedDetail(
         detail.said && t("readings", "controllerSaid", { said: detail.said }),
       ]
         .filter(Boolean)
-        .join(" ");
+        .join(" · ");
   }
 }
 
