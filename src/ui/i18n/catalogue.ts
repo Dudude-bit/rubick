@@ -5797,7 +5797,7 @@ export const en = {
     },
     notFoundInThisCluster: "not found in this cluster",
     traefikRouteDropped:
-      "Traefik drops this route, so a request gets a 404 or whatever other route matches it: {reason}",
+      "Traefik drops this route, so a request gets a 404, or goes to whichever other route matches it: {reason}",
     traefikRouteDroppedOr503:
       "Traefik drops this route or answers it with a 503, depending on allowEmptyServices, which could not be read: {reason}",
     traefikClearNote: {

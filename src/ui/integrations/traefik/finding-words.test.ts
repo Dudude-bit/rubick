@@ -108,7 +108,7 @@ describe("a Traefik finding on the page", () => {
         t
       ).title;
     expect(title("dropped")).toBe(
-      "Traefik drops this route, so a request gets a 404 or whatever other route matches it: No pod carries app=web"
+      "Traefik drops this route, so a request gets a 404, or goes to whichever other route matches it: No pod carries app=web"
     );
     expect(title("unavailable")).toBe(
       "This host answers, and every request gets a 503: No pod carries app=web"
