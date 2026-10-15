@@ -147,6 +147,27 @@ describe("tableLayout", () => {
     expect((layout.shares[1] / 100) * layout.span).toBeCloseTo(250);
     expect((layout.shares[0] / 100) * layout.span).toBeCloseTo(150);
   });
+
+  /**
+   * Live at 1037px a Deployment read "Stalled 1 of ..." while Name held
+   * 200px past its longest name: ideals that did not all fit were dropped
+   * whole, and the room went by size. Fails if a column short of its ideal
+   * leaves the room above the floors to the others.
+   */
+  it("raises a column toward its ideal with the room the floors leave, before any column grows past its own", () => {
+    const layout = tableLayout(
+      [
+        { size: 320, floor: 150 },
+        { size: 120, floor: 127, ideal: 493 },
+        { size: 100, floor: 80 },
+      ],
+      600
+    );
+    const px = layout.shares.map((share) => (share / 100) * layout.span);
+    expect(px[1]).toBeCloseTo(370);
+    expect(px[0]).toBeCloseTo(150);
+    expect(px[2]).toBeCloseTo(80);
+  });
 });
 
 describe("yieldedColumns", () => {

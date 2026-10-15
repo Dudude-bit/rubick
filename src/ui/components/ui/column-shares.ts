@@ -18,7 +18,7 @@ export const actionsColumnSize = (count: number, gutter = SCROLLBAR_REACH) =>
 export interface ColumnSpec {
   size: number;
   floor?: number;
-  /** A higher floor it keeps while every column's fits the port. */
+  /** A higher floor it rises to with the room the floors leave, before any column grows past its own. */
   ideal?: number;
   /** Holds controls, not text: drawn at its floor while the table scrolls. */
   fixed?: boolean;
@@ -69,22 +69,27 @@ export function columnShares(columns: ColumnSpec[], width: number): number[] {
  */
 export function tableLayout(columns: ColumnSpec[], port: number) {
   const floors = columns.reduce((sum, column) => sum + (column.floor ?? 0), 0);
-  const ideal = columns.map((column) =>
-    Math.max(column.floor ?? 0, column.ideal ?? 0)
-  );
-  const roomy = ideal.reduce((sum, px) => sum + px, 0) <= port;
   const span = port > 0 ? Math.max(port, floors) : 0;
   if (span > port) return scrolledToEnd(columns, port);
   return {
     span,
     scrolls: false,
-    shares: columnShares(
-      roomy
-        ? columns.map((column, index) => ({ ...column, floor: ideal[index] }))
-        : columns,
-      span
-    ),
+    shares: columnShares(towardIdeals(columns, port - floors), span),
   };
+}
+
+/** Every floor raised toward its ideal by the same part of the way, as far as `room` takes them all. */
+function towardIdeals(columns: ColumnSpec[], room: number): ColumnSpec[] {
+  const rise = columns.map((column) =>
+    Math.max(0, (column.ideal ?? 0) - (column.floor ?? 0))
+  );
+  const wanted = rise.reduce((sum, px) => sum + px, 0);
+  if (wanted === 0 || room <= 0) return columns;
+  const part = Math.min(1, room / wanted);
+  return columns.map((column, index) => ({
+    ...column,
+    floor: (column.floor ?? 0) + rise[index] * part,
+  }));
 }
 
 /** What a column shows of itself beside the pinned one, past which it reads as text and not as a stray glyph. */
