@@ -12,7 +12,7 @@ use crate::resources::{
 };
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet, StatefulSet};
-use k8s_openapi::api::core::v1::{Endpoints, Pod, Service};
+use k8s_openapi::api::core::v1::{Endpoints, Event, Pod, Service};
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
 use kube::api::ListParams;
@@ -280,8 +280,8 @@ async fn health_inputs_in(
 /// none, never why; the pods it selects do, and its page reads them. Asked
 /// only in a namespace with such a Service, so a scope of healthy ones costs
 /// no more than before, and in one round beside the workloads that say
-/// whether those pods are only waiting, or scaled to zero where the selector
-/// matches none: one read of each kind per namespace, whatever the number of
+/// whether those pods are only waiting, or scaled to zero or refused them
+/// where the selector matches none: one read of each kind per namespace, whatever the number of
 /// Services in it. A list that fails leaves the answer it would have
 /// sharpened as it was.
 async fn with_unready_cause(
@@ -299,17 +299,21 @@ async fn with_unready_cause(
         let deployments: kube::Api<Deployment> = kube::Api::namespaced(client.clone(), &ns);
         let sets: kube::Api<StatefulSet> = kube::Api::namespaced(client.clone(), &ns);
         let replica_sets: kube::Api<ReplicaSet> = kube::Api::namespaced(client.clone(), &ns);
-        let (pods, deployments, sets, replica_sets) = tokio::join!(
+        let events: kube::Api<Event> = kube::Api::namespaced(client.clone(), &ns);
+        let refused = ListParams::default().fields("type=Warning,reason=FailedCreate");
+        let (pods, deployments, sets, replica_sets, refusals) = tokio::join!(
             pods.list(&params),
             deployments.list(&params),
             sets.list(&params),
-            replica_sets.list(&params)
+            replica_sets.list(&params),
+            events.list(&refused)
         );
         let read = Behind {
             pods: pods.ok().map(|list| list.items),
             deployments: items(deployments),
             sets: items(sets),
             replica_sets: replica_sets.ok().map(|list| list.items),
+            refusals: refusals.ok().map(|list| list.items),
         };
         (ns, read)
     });
@@ -346,6 +350,7 @@ struct Behind {
     deployments: Vec<Deployment>,
     sets: Vec<StatefulSet>,
     replica_sets: Option<Vec<ReplicaSet>>,
+    refusals: Option<Vec<Event>>,
 }
 
 fn unexplained(published: &ServicePublished) -> bool {
@@ -396,10 +401,16 @@ fn explained(
         Some(selected) => published.with_stop(svc, Some(selected)),
         None => published,
     };
+    let refusals = behind
+        .refusals
+        .as_deref()
+        .zip(behind.pods.as_deref())
+        .map(|(events, pods)| published::Refusals { events, pods });
     let waiting = published::makers(
         &behind.deployments,
         &behind.sets,
         behind.replica_sets.as_deref(),
+        refusals,
     );
     let published = published.with_workloads(svc, &waiting, selected.as_deref(), now);
     if !matches!(published.stop, Some(ChainStop::SelectsNothing { .. })) {
@@ -408,7 +419,7 @@ fn explained(
     published
         .with_makers(
             svc,
-            &published::makers(&behind.deployments, &behind.sets, None),
+            &published::makers(&behind.deployments, &behind.sets, None, refusals),
         )
         .with_near_miss(svc, behind.pods.as_deref().unwrap_or_default())
 }
@@ -1231,6 +1242,91 @@ mod tests {
             "/apis/apps/v1/namespaces/lena-sandbox/statefulsets" => (200, sets.clone()),
             _ => (404, "{}".to_string()),
         }
+    }
+
+    /// `root-db`'s headless Service read "No pod carries app=root-db" on the
+    /// Services list and the Overview while Pod Security refused its only
+    /// pod, which only a `FailedCreate` event says. Fails if the list reader
+    /// stops reading the refusals, or claims one it could not read.
+    #[tokio::test]
+    async fn a_service_behind_a_stateful_set_refused_its_pods_says_so_in_the_shells_count() {
+        use crate::client::served::test_server::{answering, failure};
+        const SAID: &str = "create Pod root-db-0 in StatefulSet root-db failed error: pods \"root-db-0\" is forbidden: violates PodSecurity \"restricted:latest\": runAsNonRoot != true";
+        let list = |kind: &str, items: serde_json::Value| {
+            serde_json::json!({ "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items })
+                .to_string()
+        };
+        let services = list(
+            "ServiceList",
+            serde_json::json!([{
+                "metadata": { "name": "root-db", "namespace": "refused-demo" },
+                "spec": { "clusterIP": "None", "selector": { "app": "root-db" }, "ports": [{ "port": 5432 }] }
+            }]),
+        );
+        let sets = list(
+            "StatefulSetList",
+            serde_json::json!([{
+                "metadata": { "name": "root-db", "namespace": "refused-demo", "uid": "db" },
+                "spec": {
+                    "replicas": 1,
+                    "serviceName": "root-db",
+                    "selector": { "matchLabels": { "app": "root-db" } },
+                    "template": { "metadata": { "labels": { "app": "root-db" } }, "spec": { "containers": [] } }
+                }
+            }]),
+        );
+        let events = list(
+            "EventList",
+            serde_json::json!([{
+                "metadata": { "name": "root-db.1", "namespace": "refused-demo" },
+                "type": "Warning", "reason": "FailedCreate", "message": SAID,
+                "lastTimestamp": "2026-10-15T10:00:00Z",
+                "involvedObject": { "kind": "StatefulSet", "name": "root-db", "uid": "db" }
+            }]),
+        );
+        let stop_with = |refusals: (u16, String)| {
+            let (services, sets) = (services.clone(), sets.clone());
+            let empty = |kind: &str| list(kind, serde_json::json!([]));
+            let (slices, pods, deployments) = (
+                empty("EndpointSliceList"),
+                empty("PodList"),
+                empty("DeploymentList"),
+            );
+            async move {
+                let (client, _) = answering(move |path, _| match path {
+                    "/api/v1/namespaces/refused-demo/services" => (200, services.clone()),
+                    "/apis/discovery.k8s.io/v1/namespaces/refused-demo/endpointslices" => {
+                        (200, slices.clone())
+                    }
+                    "/api/v1/namespaces/refused-demo/pods" => (200, pods.clone()),
+                    "/apis/apps/v1/namespaces/refused-demo/deployments" => {
+                        (200, deployments.clone())
+                    }
+                    "/apis/apps/v1/namespaces/refused-demo/statefulsets" => (200, sets.clone()),
+                    "/api/v1/namespaces/refused-demo/events" => refusals.clone(),
+                    _ => (404, "{}".to_string()),
+                })
+                .await;
+                health_inputs_in(client, Some("refused-demo".to_string()))
+                    .await
+                    .expect("inputs")[0]
+                    .groups[0]
+                    .stop
+                    .clone()
+            }
+        };
+
+        let refused = stop_with((200, events.clone())).await;
+        assert!(
+            matches!(&refused, Some(ChainStop::PodsRefused { workloads, said, .. })
+                if workloads[0].kind == "StatefulSet" && said == SAID),
+            "{refused:?}"
+        );
+        let unread = stop_with(failure(403, "Forbidden")).await;
+        assert!(
+            !matches!(unread, Some(ChainStop::PodsRefused { .. })),
+            "{unread:?}"
+        );
     }
 
     /// The Overview, the sidebar badge and the status bar counted hello-web

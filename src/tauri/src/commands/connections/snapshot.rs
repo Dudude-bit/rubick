@@ -31,6 +31,9 @@ pub(super) struct Snapshot {
     /// Which pods are a Deployment's own: those its `ReplicaSets` control, by
     /// uid. A refusal reads them off the `ReplicaSets`' names instead.
     pub(super) replica_sets: Read<ReplicaSet>,
+    /// The namespace's `FailedCreate` warnings: a `StatefulSet` refused its
+    /// pods says so nowhere else.
+    pub(super) refusals: Read<k8s_openapi::api::core::v1::Event>,
     /// What every Service in the namespace publishes, in one list keyed by
     /// the `kubernetes.io/service-name` label — the same shape the Services
     /// and the Ingresses are read under.
@@ -330,6 +333,8 @@ impl Snapshot {
         let deployments_api = ctx.namespaced_api::<Deployment>();
         let sets_api = ctx.namespaced_api::<StatefulSet>();
         let replica_sets_api = ctx.namespaced_api::<ReplicaSet>();
+        let events_api = ctx.namespaced_api::<k8s_openapi::api::core::v1::Event>();
+        let refused = ListParams::default().fields("type=Warning,reason=FailedCreate");
         let (
             pods,
             services,
@@ -341,6 +346,7 @@ impl Snapshot {
             deployments,
             stateful_sets,
             replica_sets,
+            refusals,
         ) = tokio::join!(
             pods_api.list(&params),
             services_api.list(&params),
@@ -352,6 +358,7 @@ impl Snapshot {
             deployments_api.list(&params),
             sets_api.list(&params),
             replica_sets_api.list(&params),
+            events_api.list(&refused),
         );
         let slices = read_live(slices)?;
         // The one read that is not in the join, and deliberately: it is the
@@ -373,6 +380,7 @@ impl Snapshot {
             deployments: read_live(deployments)?,
             stateful_sets: read_live(stateful_sets)?,
             replica_sets: read_live(replica_sets)?,
+            refusals: read_live(refusals)?,
             slices,
             legacy,
             taken_at,
@@ -420,6 +428,11 @@ impl Snapshot {
             self.deployments.as_deref().unwrap_or_default(),
             self.stateful_sets.as_deref().unwrap_or_default(),
             self.replica_sets.as_deref().ok(),
+            self.refusals
+                .as_deref()
+                .ok()
+                .zip(self.pods.as_deref().ok())
+                .map(|(events, pods)| published::Refusals { events, pods }),
         )
     }
 
@@ -692,6 +705,7 @@ mod refused_list_tests {
             deployments: Err(REFUSED.to_string()),
             stateful_sets: Err(REFUSED.to_string()),
             replica_sets: Err(REFUSED.to_string()),
+            refusals: Ok(Vec::new()),
             slices: Err(REFUSED.to_string()),
             legacy: Err(REFUSED.to_string()),
             taken_at: chrono::Utc::now(),
@@ -838,6 +852,50 @@ mod refused_list_tests {
         assert_eq!(svc.name_any(), "shop");
     }
 
+    /// `root-db`'s Service page said no pod carries app=root-db while Pod
+    /// Security refused its only pod. Fails if the page's snapshot stops
+    /// handing the namespace's refusals to the workloads behind a Service.
+    #[test]
+    fn a_stateful_set_behind_a_service_carries_the_refusal_its_events_hold() {
+        let set: StatefulSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "root-db", "namespace": "shop", "uid": "db" },
+            "spec": {
+                "selector": { "matchLabels": { "app": "db" } },
+                "serviceName": "root-db",
+                "template": { "metadata": { "labels": { "app": "db" } } },
+            },
+        }))
+        .expect("set parses");
+        let refusal: k8s_openapi::api::core::v1::Event = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "root-db.1", "namespace": "shop" },
+            "type": "Warning", "reason": "FailedCreate", "message": "pods \"root-db-0\" is forbidden",
+            "involvedObject": { "kind": "StatefulSet", "name": "root-db", "uid": "db" },
+        }))
+        .expect("event parses");
+        let snapshot = Snapshot {
+            pods: Ok(Vec::new()),
+            services: Ok(Vec::new()),
+            ingresses: Ok(Vec::new()),
+            claims: Ok(Vec::new()),
+            autoscalers: Ok(Vec::new()),
+            budgets: Ok(Vec::new()),
+            deployments: Ok(Vec::new()),
+            stateful_sets: Ok(vec![set]),
+            replica_sets: Ok(Vec::new()),
+            refusals: Ok(vec![refusal]),
+            slices: Ok(Vec::new()),
+            legacy: Err("the slices answered".to_string()),
+            taken_at: chrono::Utc::now(),
+            gateway_routes: Vec::new(),
+            gateways: None,
+            gateway_unread: Vec::new(),
+        };
+        assert_eq!(
+            snapshot.makers()[0].refused.as_deref(),
+            Some("pods \"root-db-0\" is forbidden")
+        );
+    }
+
     /// Every refused list reaches the one place the page collects them, so a
     /// group that goes quiet has a reason beside it rather than reading as
     /// "there are none".
@@ -853,6 +911,7 @@ mod refused_list_tests {
             deployments: Ok(Vec::new()),
             stateful_sets: Ok(Vec::new()),
             replica_sets: Ok(Vec::new()),
+            refusals: Ok(Vec::new()),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),

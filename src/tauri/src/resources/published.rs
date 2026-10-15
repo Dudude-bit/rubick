@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{DateTime, Utc};
 
 use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet, StatefulSet};
-use k8s_openapi::api::core::v1::{Endpoints, Pod, Service, ServicePort};
+use k8s_openapi::api::core::v1::{Endpoints, Event, Pod, Service, ServicePort};
 use k8s_openapi::api::discovery::v1::{Endpoint, EndpointSlice};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::ResourceExt;
@@ -31,6 +31,7 @@ use super::selector::Selector;
 use super::types::pod_display::display_status;
 use super::types::{condition_is_true, counts_ready, crash_looping};
 use super::{Owners, PodStart, Rollout};
+use crate::utils::Moment;
 
 /// The label the endpoint controllers put on every slice they write, and the
 /// only stated link from a slice back to its Service.
@@ -836,11 +837,13 @@ impl<'a> PodMaker<'a> {
         })
     }
 
+    /// `refusals` say its refusal, which no status of a `StatefulSet` reports.
     #[must_use]
-    pub fn stateful_set(set: &'a StatefulSet) -> Option<Self> {
+    pub fn stateful_set(set: &'a StatefulSet, refusals: Option<Refusals<'_>>) -> Option<Self> {
         let spec = set.spec.as_ref()?;
         let status = set.status.as_ref();
         let rollout = super::statefulset_rollout(set);
+        let refused = refusals.and_then(|read| read.of(set.metadata.uid.as_deref()?));
         Some(Self {
             workload: maker_ref(
                 "StatefulSet",
@@ -849,29 +852,61 @@ impl<'a> PodMaker<'a> {
                 status.map_or(0, |s| s.replicas),
                 status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 rollout.clone(),
-                None,
+                refused.clone(),
             ),
             labels: spec.template.metadata.as_ref()?.labels.as_ref()?,
             replicas: spec.replicas.unwrap_or(1),
             rollout,
             owners: Owners::of(set.metadata.uid.as_deref()),
-            refused: None,
+            refused,
         })
     }
 }
 
+/// The namespace's `FailedCreate` warnings and its pods, read together: a
+/// refusal stands until a pod of the controller is created after it.
+#[derive(Clone, Copy)]
+pub struct Refusals<'a> {
+    pub events: &'a [Event],
+    pub pods: &'a [Pod],
+}
+
+impl Refusals<'_> {
+    /// The refusal the controller `uid` was given, where it stands.
+    #[must_use]
+    pub fn of(&self, uid: &str) -> Option<String> {
+        super::create_refusal(
+            uid,
+            self.events,
+            self.pods
+                .iter()
+                .filter(|pod| {
+                    pod.owner_references()
+                        .iter()
+                        .any(|owner| owner.uid == uid && owner.controller == Some(true))
+                })
+                .map(|pod| pod.metadata.creation_timestamp.as_ref().map(Moment::moment)),
+        )
+    }
+}
+
 /// Every Deployment and `StatefulSet` here, as the rule reads them, with the
-/// `ReplicaSets` read beside them, `None` where they were not.
+/// `ReplicaSets` read beside them and the refusals, each `None` where it was
+/// not read.
 #[must_use]
 pub fn makers<'a>(
     deployments: &'a [Deployment],
     sets: &'a [StatefulSet],
     replica_sets: Option<&'a [ReplicaSet]>,
+    refusals: Option<Refusals<'_>>,
 ) -> Vec<PodMaker<'a>> {
     deployments
         .iter()
         .filter_map(|deployment| PodMaker::deployment(deployment, replica_sets))
-        .chain(sets.iter().filter_map(PodMaker::stateful_set))
+        .chain(
+            sets.iter()
+                .filter_map(|set| PodMaker::stateful_set(set, refusals)),
+        )
         .collect()
 }
 
@@ -2078,6 +2113,81 @@ mod tests {
         assert!(
             !matches!(cleared, Some(ChainStop::PodsRefused { .. })),
             "{cleared:?}"
+        );
+    }
+
+    /// `root-db`, a `StatefulSet` whose pods Pod Security refuses, reports
+    /// the refusal only in a `FailedCreate` event. Fails if a Service in front
+    /// of it blames its labels, or keeps a refusal a later pod got past.
+    #[test]
+    fn a_service_whose_stateful_set_is_refused_its_pods_reads_the_refusal_from_its_events() {
+        const SAID: &str = "create Pod root-db-0 in StatefulSet root-db failed error: pods \"root-db-0\" is forbidden: violates PodSecurity \"restricted:latest\": runAsNonRoot != true";
+        let svc = selecting("web");
+        let set: StatefulSet = serde_json::from_value(serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "StatefulSet",
+            "metadata": {"name": "root-db", "namespace": "k8s-gui-test", "uid": "db"},
+            "spec": {
+                "replicas": 1,
+                "serviceName": "web",
+                "selector": {"matchLabels": {"app": "web"}},
+                "template": {"metadata": {"labels": {"app": "web"}}, "spec": {"containers": []}}
+            },
+        }))
+        .expect("set parses");
+        let refusal: Event = serde_json::from_value(serde_json::json!({
+            "apiVersion": "v1", "kind": "Event",
+            "metadata": {"name": "root-db.1", "namespace": "k8s-gui-test"},
+            "type": "Warning", "reason": "FailedCreate", "message": SAID,
+            "lastTimestamp": "2026-10-15T10:00:00Z",
+            "involvedObject": {"kind": "StatefulSet", "name": "root-db", "uid": "db"},
+        }))
+        .expect("event parses");
+        let stop = |pods: &[Pod]| {
+            let events = [refusal.clone()];
+            let makers = makers(
+                &[],
+                std::slice::from_ref(&set),
+                None,
+                Some(Refusals {
+                    events: &events,
+                    pods,
+                }),
+            );
+            from_slices(&svc, svc_ref("web"), &[], &[])
+                .with_stop(&svc, Some(&[]))
+                .with_makers(&svc, &makers)
+                .stop
+        };
+
+        let refused = stop(&[]);
+        let Some(ChainStop::PodsRefused {
+            workloads, said, ..
+        }) = refused
+        else {
+            panic!(
+                "a StatefulSet refused its pods is why none carries the selector, got {refused:?}"
+            );
+        };
+        assert_eq!(said, SAID);
+        assert_eq!(
+            workloads
+                .iter()
+                .map(|w| (w.kind.as_str(), w.name.as_str()))
+                .collect::<Vec<_>>(),
+            [("StatefulSet", "root-db")]
+        );
+
+        let mut later = pod("root-db-0", None);
+        later.metadata.creation_timestamp =
+            Some(serde_json::from_value(serde_json::json!("2026-10-15T10:05:00Z")).expect("time"));
+        later.metadata.owner_references = Some(vec![serde_json::from_value(serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "StatefulSet", "name": "root-db", "uid": "db", "controller": true,
+        }))
+        .expect("owner")]);
+        let past = stop(&[later]);
+        assert!(
+            !matches!(past, Some(ChainStop::PodsRefused { .. })),
+            "{past:?}"
         );
     }
 
