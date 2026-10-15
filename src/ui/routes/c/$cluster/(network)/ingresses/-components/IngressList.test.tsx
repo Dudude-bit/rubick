@@ -2,7 +2,10 @@ import { waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vite-plus/test";
 
 import type { QuickAction } from "@/components/ui/quick-actions";
+import type { ColumnDef } from "@/components/ui/table-features";
 import type { IngressInfo } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { ResourceList } from "../../../-list/ResourceList";
@@ -105,4 +108,27 @@ it("refuses to open an Ingress no controller serves, and says why", async () => 
       "No IngressClass named nginx in this cluster, so nothing picks this Ingress up."
     )
   );
+});
+
+/**
+ * A shared Ingresses list carried no status, and the row hid its reason
+ * behind a hover. Fails if the health column stops sharing the verdict and
+ * the reason it draws beside the badge.
+ */
+it("shares each row's status with the reason it draws beside it", async () => {
+  useClusterStore.setState({ isConnected: true });
+  await renderWithRouter(<IngressList />, {
+    at: "/c/prod/ingresses",
+    route: "/c/$cluster/ingresses",
+  });
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  await waitFor(() => {
+    const columns = vi.mocked(ResourceList).mock.calls.at(-1)![0]
+      .columns as ColumnDef<IngressInfo>[];
+    const health = columns.find((column) => column.id === "health");
+    expect(health?.meta?.share?.(plain as never, t)).toMatchObject({
+      text: "no controller · No IngressClass named nginx in this cluster, so nothing picks this Ingress up.",
+      role: "err",
+    });
+  });
 });

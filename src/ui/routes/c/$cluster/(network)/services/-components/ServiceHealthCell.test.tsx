@@ -85,6 +85,44 @@ describe("the Services list's health column", () => {
     expect(commands.listServiceHealthInputs).not.toHaveBeenCalled();
   });
 
+  /**
+   * root-web's row read only "no endpoints", its cause behind a hover, while
+   * the Deployments list beside it led with the refusal. Fails if a row's
+   * reason is not drawn beside its badge.
+   */
+  it("says why beside the badge rather than only on hover", async () => {
+    commands.listServiceBacking.mockResolvedValue({
+      services: [],
+      published: [
+        {
+          ...published(0),
+          slices: 0,
+          stop: {
+            reason: "podsRefused",
+            service: published(0).service,
+            selector: "app=web",
+            workloads: [
+              {
+                kind: "Deployment",
+                name: "web",
+                namespace: "net",
+                existence: "present",
+                facts: null,
+              },
+            ],
+            said: 'pods "web-7d9-x" is forbidden: violates PodSecurity "restricted:latest": runAsNonRoot != true (pod or container "app" must set securityContext.runAsNonRoot=true)',
+          },
+        },
+      ],
+    });
+
+    render(page(<HealthCell service={WEB} />));
+
+    expect(await screen.findByTestId("verdict-reason")).toHaveTextContent(
+      "Deployment web: Pod Security restricted refuses its pods: 1 check fails"
+    );
+  });
+
   /** A refused namespace is not checked, never a Service with no endpoints. */
   it("reads a refused namespace as not checked", async () => {
     commands.listServiceBacking.mockRejectedValue(

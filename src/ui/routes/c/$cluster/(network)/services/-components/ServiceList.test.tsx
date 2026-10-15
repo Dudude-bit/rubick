@@ -2,7 +2,9 @@ import { screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { DataTable } from "@/components/ui/data-table";
-import type { ServiceInfo } from "@/generated/types";
+import type { ServiceInfo, ServicePublished } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { renderWithRouter } from "@/test/render";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { columns } from "./ServiceList";
@@ -90,5 +92,66 @@ describe("the Services list's External IPs column", () => {
     expect(cellOf("external-demo", "Type")).toHaveTextContent(
       "ExternalNameexample.com"
     );
+  });
+});
+
+describe("the Services list's Endpoints column", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const refused: ServicePublished = {
+    service: {
+      kind: "Service",
+      name: "headless-demo",
+      namespace: "k8s-gui-test",
+      existence: "present",
+      facts: null,
+    },
+    source: "slices",
+    slices: 0,
+    ready: 0,
+    draining: 0,
+    notReady: 0,
+    unrouted: 0,
+    unroutedReady: 0,
+    ports: [],
+    endpoints: [],
+    whole: true,
+    unpublished: [],
+    stop: {
+      reason: "podsRefused",
+      service: {
+        kind: "Service",
+        name: "headless-demo",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: null,
+      },
+      selector: "app=headless-demo",
+      workloads: [
+        {
+          kind: "StatefulSet",
+          name: "headless-demo",
+          namespace: "k8s-gui-test",
+          existence: "present",
+          facts: null,
+        },
+      ],
+      said: 'pods "headless-demo-0" is forbidden: violates PodSecurity "restricted:latest": runAsNonRoot != true (pod or container "app" must set securityContext.runAsNonRoot=true)',
+    },
+  };
+
+  /**
+   * A shared Services list carried no word about which Services serve: the
+   * column was left out as one the page reads beside the list. Fails if a
+   * shared row loses its verdict or the reason the list draws beside it.
+   */
+  it("shares each row's verdict with the reason it draws beside it", () => {
+    const health = columns({
+      read: { published: () => refused, why: () => null },
+    }).find((column) => column.id === "health");
+    expect(health?.meta?.share?.(headlessDemo as never, t)).toEqual({
+      text: "no endpoints · StatefulSet headless-demo: Pod Security restricted refuses its pods: 1 check fails",
+      role: "err",
+      unread: false,
+    });
   });
 });

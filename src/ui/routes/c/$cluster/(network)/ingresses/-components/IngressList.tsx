@@ -16,7 +16,7 @@ import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
 import { ingressHealthWords } from "@/lib/ingress-health";
 import { openExternal } from "@/lib/open-external";
 import type { Verdict } from "@/lib/service-health";
-import { VerdictBadge } from "../../../-object/health-views";
+import { VerdictBesideReason } from "../../../-object/health-views";
 import { hrefOf, objectLink } from "@/lib/links";
 import {
   Tooltip,
@@ -29,6 +29,7 @@ import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
+  causeTextPx,
   yielding,
 } from "../../../-list/columns";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -43,7 +44,7 @@ import { useWatchedList } from "@/hooks/useWatchedList";
 import type { IngressInfo, Scoped } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
-import { useT } from "@/i18n/useT";
+import { useT, type T as Translate } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
 
 /**
@@ -79,7 +80,40 @@ const Health = createContext<((ingress: IngressInfo) => Verdict) | null>(null);
 
 function HealthCell({ ingress }: { ingress: IngressInfo }) {
   const of = useContext(Health);
-  return of ? <VerdictBadge verdict={of(ingress)} compact /> : null;
+  return of ? <VerdictBesideReason verdict={of(ingress)} /> : null;
+}
+
+/** Verdicts nobody could confirm, which a shared file marks as not read. */
+const UNCONFIRMED = new Set(["unknown", "reading", "backendUnconfirmed"]);
+
+/** The health column as wide as the reasons beside its badges, and saying them in a shared file. */
+function withHealthOf(
+  columns: ColumnDef<IngressInfo>[],
+  healthOf: (ingress: IngressInfo, t: Translate) => Verdict
+): ColumnDef<IngressInfo>[] {
+  return columns.map((column) =>
+    column.id === "health"
+      ? {
+          ...column,
+          meta: {
+            ...column.meta,
+            ideal: (t: Translate, rows: readonly IngressInfo[]) =>
+              (column.size ?? 0) +
+              causeTextPx(rows.flatMap((row) => healthOf(row, t).reason ?? [])),
+            share: (row: IngressInfo, t: Translate) => {
+              const verdict = healthOf(row, t);
+              return {
+                text: verdict.reason
+                  ? `${verdict.label} · ${verdict.reason}`
+                  : verdict.label,
+                role: verdict.role,
+                unread: UNCONFIRMED.has(verdict.code),
+              };
+            },
+          },
+        }
+      : column
+  );
 }
 
 /** The copy label is a word, so the cell needs the hook the array cannot use. */
@@ -283,6 +317,13 @@ export function IngressList() {
   const healthOfRow = useIngressHealth(listed.data?.rows, backing);
   const healthOf = (ingress: IngressInfo): Verdict =>
     ingressHealthWords(healthOfRow(ingress), t);
+  const columns = useMemo(
+    () =>
+      withHealthOf(baseColumns, (ingress, words) =>
+        ingressHealthWords(healthOfRow(ingress), words)
+      ),
+    [healthOfRow]
+  );
   // Nothing answers at an Ingress no controller serves, so nothing to open.
   const unservedWhy = useCallback(
     (ingress: IngressInfo): string | undefined => {
@@ -335,7 +376,7 @@ export function IngressList() {
           queryKey={queryKey}
           getRowId={getResourceRowId}
           queryFn={listIngresses}
-          columns={baseColumns}
+          columns={columns}
           quickActions={quickActions}
           emptyStateLabel={toPlural(ResourceType.Ingress)}
           deleteConfig={{

@@ -14,8 +14,15 @@ import {
   createNamespaceColumn,
   createAgeColumn,
   badgeCellPx,
+  causeTextPx,
   yielding,
 } from "../../../-list/columns";
+import type { ServiceBackingRead } from "@/hooks/useServiceBacking";
+import type { T } from "@/i18n/useT";
+import {
+  serviceVerdictOf,
+  useScopeBacking,
+} from "../../-components/service-backing";
 import { serviceVerdictLabels } from "@/lib/service-health";
 import { widestText } from "@/lib/text-width";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
@@ -29,11 +36,16 @@ import { None } from "@/components/ui/none";
  */
 const EXTERNALLY_REACHABLE = new Set(["NodePort", "LoadBalancer"]);
 
+/** Verdicts nobody could confirm, which a shared file marks as not read. */
+const UNCONFIRMED = new Set(["unknown", "podsUnread"]);
+
 /** The most of an ExternalName's target the column keeps whole; a longer one ends in an ellipsis, whole on hover. */
 const TARGET_GLYPHS = 24;
 const COPY_MARK_PX = 14;
 
-export const columns = (): ColumnDef<ServiceInfo>[] => [
+export const columns = ({
+  read,
+}: { read?: ServiceBackingRead } = {}): ColumnDef<ServiceInfo>[] => [
   createNameColumn<ServiceInfo>(ResourceType.Service),
   createNamespaceColumn<ServiceInfo>(),
   {
@@ -85,7 +97,28 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     size: 165,
     id: "health",
     header: columnHeader("columns", "endpoints"),
-    meta: { floor: (t) => badgeCellPx(serviceVerdictLabels(t)) },
+    meta: {
+      floor: (t) => badgeCellPx(serviceVerdictLabels(t)),
+      ideal: (t, rows: readonly ServiceInfo[]) =>
+        badgeCellPx(serviceVerdictLabels(t)) +
+        causeTextPx(
+          read
+            ? rows.flatMap((row) => serviceVerdictOf(row, read, t).reason ?? [])
+            : []
+        ),
+      ...(read && {
+        share: (row: ServiceInfo, t: T) => {
+          const verdict = serviceVerdictOf(row, read, t);
+          return {
+            text: verdict.reason
+              ? `${verdict.label} · ${verdict.reason}`
+              : verdict.label,
+            role: verdict.role,
+            unread: UNCONFIRMED.has(verdict.code),
+          };
+        },
+      }),
+    },
     cell: ({ row }) => <HealthCell service={row.original} />,
   },
   {
@@ -146,12 +179,16 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
   yielding(createAgeColumn<ServiceInfo>(), 1),
 ];
 
-export const ServiceList = createResourceListPage<ServiceInfo>({
+export const ServiceList = createResourceListPage<
+  ServiceInfo,
+  ServiceBackingRead
+>({
   resourceType: ResourceType.Service,
   title: "Services",
   fetcher: ({ scope }) => commands.listServicesIn(scope),
   watch: ({ scope }) => commands.subscribeServiceWatch(scope),
   deleter: (item) => commands.deleteService(item.name, item.namespace),
   columns,
+  useRead: useScopeBacking,
   around: BackingAround,
 });

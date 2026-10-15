@@ -72,6 +72,29 @@ export function VerdictBadge({
   );
 }
 
+/** A row's verdict with its reason beside it, cut at the column's edge and whole on hover. */
+export function VerdictBesideReason({ verdict }: { verdict: Verdict }) {
+  if (!verdict.reason) return <VerdictBadge verdict={verdict} compact />;
+  return (
+    <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
+      <span className="flex-none">
+        <VerdictBadge verdict={{ ...verdict, reason: null }} compact />
+      </span>
+      <span
+        className="min-w-0 truncate text-xs text-fg-mut"
+        title={verdict.reason}
+        data-testid="verdict-reason"
+      >
+        {verdict.cause ? (
+          <StopCauseLine cause={verdict.cause} />
+        ) : (
+          verdict.reason
+        )}
+      </span>
+    </span>
+  );
+}
+
 /**
  * The Service named here, in its peek and on its Endpoints object. Its pods
  * and slices are followed live while it is on screen, and a read that cannot
