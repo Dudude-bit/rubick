@@ -5711,11 +5711,13 @@ export const en = {
     thisPodFailed: "This pod failed",
     certificateExpired: "certificate expired",
     certificateRunningOut: "certificate running out",
+    certificateMissing: "certificate missing",
     canaryShadowingNothing: "canary shadowing nothing",
     servedInTheClear: "served in the clear",
     splitShares: "split {shares}",
     tlsFrom: "TLS from {name}",
     tlsControllerCertificate: "TLS, certificate picked by the controller",
+    tlsDefaultCertificate: "TLS, default certificate: {name} does not exist",
     noTls: "no TLS",
     tlsEveryHost: "every host",
     tlsNotChecked: "TLS not checked",
@@ -5767,6 +5769,9 @@ export const en = {
     canaryShadowingNothingNote:
       "A canary Ingress is merged into the server block of a host another Ingress already serves. No other Ingress serves this host, so there is nothing to merge it into and nginx never routes a request to it. The object is correct YAML that does nothing at all.",
     secretNotACertificate: "{name} could not be read as a certificate",
+    tlsSecretMissingTitle: "Secret {name} does not exist",
+    tlsSecretMissingNote:
+      '{controller} answers HTTPS for this host with its own default certificate instead. Unless someone configured one, that is the self-signed "{certificate}", which every browser refuses. Create {secret}, or point the route at a Secret that exists.',
     secretNotParsable:
       "The Secret is there and what is in it is not a certificate this app could parse.",
     certExpiryBrowserNote:
@@ -6471,6 +6476,8 @@ export const en = {
     endpointsUnread: "endpoints not read",
     behindUnread: "what is behind them could not be read: {why}",
     servedUnder: "served under",
+    servedUnderDefault:
+      "served under the controller's default certificate: {secret} does not exist",
     rawNginxConfig: "Raw nginx configuration, injected verbatim",
     shownAsWritten: "Shown as written",
     andMoreOpenRow: "and {n} more: open the row",

@@ -26,6 +26,8 @@ import {
   hostTlsWords,
   hostRole,
   hostSeverity,
+  missingSecretWords,
+  secretMissing,
   useRouteCertificates,
   stopCellLook,
 } from "../ingress";
@@ -60,6 +62,7 @@ import {
   Chain,
   Cell,
   Column,
+  ServedUnder,
   Finding as FindingBlock,
   TroubleRow,
   VendorReadFailure,
@@ -762,15 +765,14 @@ function HostChain({
         </Column>
       </Chain>
       {route.tlsSecret && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "servedUnder")}{" "}
-          <ResourceRef
-            kind="Secret"
-            name={route.tlsSecret}
-            namespace={route.source.namespace}
-            showKind={false}
-          />
-        </span>
+        <ServedUnder
+          secret={route.tlsSecret}
+          namespace={route.source.namespace}
+          missing={secretMissing(
+            { namespace: route.source.namespace, secretName: route.tlsSecret },
+            sources.certificates
+          )}
+        />
       )}
       <Annotations readings={route.annotations} />
     </div>
@@ -896,6 +898,12 @@ function Findings({
 const saysMoreThanTheRow = (finding: NginxHostGroup["findings"][number]) =>
   finding.kind !== "clear";
 
+/** What ingress-nginx answers with when the Secret an Ingress names is not there. */
+const DEFAULT_CERTIFICATE = {
+  name: "ingress-nginx",
+  certificate: "Kubernetes Ingress Controller Fake Certificate",
+};
+
 function describeFinding(
   finding: Finding,
   t: ReturnType<typeof useT>
@@ -934,6 +942,9 @@ function describeFinding(
         note: t("empty", "canaryShadowingNothingNote"),
       };
     case "certificate": {
+      if (finding.read?.problem?.says === "noSecret") {
+        return missingSecretWords(finding, DEFAULT_CERTIFICATE, t);
+      }
       if (!finding.expiry) {
         return {
           title: t("empty", "secretNotACertificate", {

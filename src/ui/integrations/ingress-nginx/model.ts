@@ -28,6 +28,7 @@ import type { Expiry } from "@/lib/certificates";
 import {
   backingOf as backingOfBackend,
   certificateProblems,
+  certificateStateWords,
   claimsIngress,
   classesOf,
   SEVERITY_RANK as RANK,
@@ -39,6 +40,7 @@ import {
   edgeTlsOf,
   type HostTls,
   frontingIngressesOf,
+  ownTls,
   proxyServicesBy,
   terminatedUpstreamOf,
   type EdgeTls,
@@ -525,7 +527,7 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
       backendsKnown:
         sources.backingKnown || !own.some((route) => route.service !== null),
       tls: tlsSecrets[0]
-        ? { at: "own" as const, secret: tlsSecrets[0].secretName }
+        ? ownTls(tlsSecrets, sources.certificates)
         : clear === "tlsUnknown"
           ? { at: "unknown" as const }
           : edgeTls(host === "" ? null : host, sources),
@@ -551,14 +553,8 @@ export function hostState(
   const certificate = group.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
-  if (certificate) {
-    return {
-      text:
-        certificate.kind === "certificate" && certificate.expiry?.expired
-          ? t("empty", "certificateExpired")
-          : t("empty", "certificateRunningOut"),
-      tone: "err",
-    };
+  if (certificate?.kind === "certificate") {
+    return { text: certificateStateWords(certificate, t), tone: "err" };
   }
   if (stopped) return { text: t("empty", "nothingBehindIt"), tone: stopped };
   if (group.findings.some((finding) => finding.kind === "orphanCanary")) {

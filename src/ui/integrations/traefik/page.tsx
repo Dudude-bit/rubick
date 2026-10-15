@@ -32,6 +32,7 @@ import {
   hostTlsWords,
   hostRole,
   hostSeverity,
+  secretMissing,
   useRouteCertificates,
   stopCellLook,
 } from "../ingress";
@@ -58,6 +59,7 @@ import {
   TroubleList,
   Chain,
   Cell,
+  ServedUnder,
   Column,
   Finding as FindingBlock,
   TroubleRow,
@@ -841,15 +843,14 @@ function HostChain({
         </Column>
       </Chain>
       {tls && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "servedUnder")}{" "}
-          <ResourceRef
-            kind="Secret"
-            name={tls}
-            namespace={route.source.namespace}
-            showKind={false}
-          />
-        </span>
+        <ServedUnder
+          secret={tls}
+          namespace={route.source.namespace}
+          missing={secretMissing(
+            { namespace: route.source.namespace, secretName: tls },
+            sources.certificates
+          )}
+        />
       )}
       {/* A rule this app could not read in full is printed as written and
           said to be as written. A wrong paraphrase of a routing rule is

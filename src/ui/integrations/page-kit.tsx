@@ -31,10 +31,11 @@ import { Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
 import { cn } from "@/lib/utils";
 import { CopyableValue } from "@/components/ui/copyable-value";
-import { ObjectLink } from "@/components/object/ResourceRef";
+import { ObjectLink, ResourceRef } from "@/components/object/ResourceRef";
 import { useShareSection } from "@/components/share/screen-share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT, type T as Translator } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import { iconSvg } from "@/lib/icon-svg";
 import { objectLink } from "@/lib/links";
 import type { ReportFinding } from "@/lib/report";
@@ -597,6 +598,43 @@ export function BackingUnread({ error }: { error: string | null }) {
   return (
     <span className="text-[11px] text-warn" title={error}>
       {t("empty", "behindUnread", { why: error })}
+    </span>
+  );
+}
+
+/**
+ * The Secret a router serves its host under, below the chain. Where the API
+ * server says there is no such Secret the controller presents its own default
+ * certificate instead, and the line says that rather than naming one that is
+ * not what a client gets.
+ */
+export function ServedUnder({
+  secret,
+  namespace,
+  missing,
+}: {
+  secret: string;
+  namespace: string;
+  missing: boolean;
+}) {
+  const t = useT();
+  const ref = (
+    <ResourceRef
+      kind="Secret"
+      name={secret}
+      namespace={namespace}
+      showKind={false}
+    />
+  );
+  return (
+    <span className={cn("text-[11px]", missing ? "text-err" : "text-fg-fnt")}>
+      {missing ? (
+        parts(t("empty", "servedUnderDefault"), { secret: ref })
+      ) : (
+        <>
+          {t("empty", "servedUnder")} {ref}
+        </>
+      )}
     </span>
   );
 }

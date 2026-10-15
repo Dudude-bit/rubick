@@ -156,3 +156,31 @@ describe("a Traefik finding on the page", () => {
     );
   });
 });
+
+describe("a missing TLS Secret in words", () => {
+  /**
+   * The finding said the Secret "could not be read as a certificate", which
+   * reads as a broken file, not as a name that points at nothing, and never
+   * said what a client is then given instead.
+   */
+  it("says the Secret does not exist and that Traefik serves its own certificate", () => {
+    const said = describeFinding(
+      {
+        kind: "certificate",
+        severity: "err",
+        namespace: "shop",
+        secretName: "checkout-tls",
+        read: {
+          secretName: "checkout-tls",
+          certificate: null,
+          problem: { says: "noSecret" },
+        },
+        expiry: null,
+      },
+      t
+    );
+    expect(said.title).toBe("Secret checkout-tls does not exist");
+    expect(said.note).toContain("TRAEFIK DEFAULT CERT");
+    expect(said.note).toContain("shop/checkout-tls");
+  });
+});

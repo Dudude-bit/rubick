@@ -6,10 +6,11 @@ import type {
   IngressClassSummary,
   IngressInfo,
   ServiceInfo,
+  TlsCertificate,
 } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { backingFrom, hostSeverity } from "../ingress";
+import { backingFrom, hostSeverity, hostTlsWords } from "../ingress";
 import {
   allRoutes,
   duplicatedServiceNames,
@@ -1366,7 +1367,11 @@ describe("which routers Traefik serves over TLS", () => {
     );
 
     expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
-    expect(group.tls).toEqual({ at: "own", secret: "promo-tls" });
+    expect(group.tls).toEqual({
+      at: "own",
+      secret: "promo-tls",
+      missing: false,
+    });
   });
 
   it("does not read router.tls set to false as TLS", () => {
@@ -1391,7 +1396,11 @@ describe("which routers Traefik serves over TLS", () => {
       sources({ ingresses: [promo()], entryPoints: [WEB, WEBSECURE] })
     );
 
-    expect(group.tls).toEqual({ at: "own", secret: "promo-tls" });
+    expect(group.tls).toEqual({
+      at: "own",
+      secret: "promo-tls",
+      missing: false,
+    });
     expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
   });
 
@@ -1405,7 +1414,7 @@ describe("which routers Traefik serves over TLS", () => {
     );
 
     expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
-    expect(group.tls).toEqual({ at: "own", secret: null });
+    expect(group.tls).toEqual({ at: "own", secret: null, missing: false });
   });
 });
 
@@ -1457,5 +1466,69 @@ describe("a path whose backend is an API object", () => {
     expect(group.findings.map((finding) => finding.kind)).toContain(
       "resourceBackend"
     );
+  });
+});
+
+describe("a TLS Secret the API server says is not there", () => {
+  const checkout = () =>
+    ingress("checkout", "checkout.example.com", {
+      secretName: "checkout-tls",
+      annotations: { "traefik.ingress.kubernetes.io/router.tls": "true" },
+    });
+  const certificates = (problem: TlsCertificate["problem"]) =>
+    new Map<string, TlsCertificate>([
+      [
+        "shop/checkout-tls",
+        { secretName: "checkout-tls", certificate: null, problem },
+      ],
+    ]);
+
+  /**
+   * Traefik answers such a router with TRAEFIK DEFAULT CERT, which a browser
+   * refuses. The page said "TLS from checkout-tls" and, in amber, that it
+   * "could not be read as a certificate", as if the Secret were there.
+   */
+  it("is an error that says the controller's default certificate is served", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [checkout()],
+        services: [service("web", { app: "web" })],
+        published: [published("web", 1)],
+        certificates: certificates({ says: "noSecret" }),
+      })
+    );
+
+    expect(group.tls).toEqual({
+      at: "own",
+      secret: "checkout-tls",
+      missing: true,
+    });
+    expect(group.worst).toBe("err");
+    expect(hostTlsWords(group.tls, t)).toBe(
+      "TLS, default certificate: checkout-tls does not exist"
+    );
+    expect(hostState(group, null, t)).toEqual({
+      text: "certificate missing",
+      tone: "err",
+    });
+  });
+
+  /** A Secret the app could not read is not one that is missing. */
+  it("keeps a Secret that could not be read apart from a missing one", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [checkout()],
+        services: [service("web", { app: "web" })],
+        published: [published("web", 1)],
+        certificates: certificates({ says: "secretUnreadable", said: "403" }),
+      })
+    );
+
+    expect(group.tls).toEqual({
+      at: "own",
+      secret: "checkout-tls",
+      missing: false,
+    });
+    expect(group.worst).toBe("warn");
   });
 });

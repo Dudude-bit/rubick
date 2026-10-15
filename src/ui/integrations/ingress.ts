@@ -408,7 +408,7 @@ export interface SecretRef {
 export interface CertificateProblem extends SecretRef {
   severity: "err" | "warn";
   read: TlsCertificate | undefined;
-  /** `null` where the Secret is there and is not a certificate we could read. */
+  /** `null` where there is no certificate we could read, the Secret absent included. */
   expiry: Expiry | null;
 }
 
@@ -431,7 +431,10 @@ export function certificateProblems(
     if (!read) return [];
 
     if (!read.certificate) {
-      return [{ ...secret, severity: "warn", read, expiry: null }];
+      const missing = read.problem?.says === "noSecret";
+      return [
+        { ...secret, severity: missing ? "err" : "warn", read, expiry: null },
+      ];
     }
 
     const expiry = expiryOf(read.certificate);
@@ -539,13 +542,66 @@ export function edgeTlsOf(
  * Each used to ask its own question, and one row said "no TLS" on the left
  * and "TLS not checked" on the right.
  */
-export type HostTls = { at: "own"; secret: string | null } | EdgeTls;
+export type HostTls =
+  | { at: "own"; secret: string | null; missing: boolean }
+  | EdgeTls;
+
+/** TLS a host's own routes terminate, under the first Secret they name. */
+export function ownTls(
+  secrets: readonly SecretRef[],
+  certificates: Map<string, TlsCertificate> | undefined
+): HostTls {
+  const first = secrets[0];
+  return {
+    at: "own",
+    secret: first?.secretName ?? null,
+    missing: first ? secretMissing(first, certificates) : false,
+  };
+}
+
+/** The API server said there is no such Secret, which is not "could not read". */
+export const secretMissing = (
+  secret: SecretRef,
+  certificates: Map<string, TlsCertificate> | undefined
+) =>
+  certificates?.get(`${secret.namespace}/${secret.secretName}`)?.problem
+    ?.says === "noSecret";
 
 export function hostTlsWords(tls: HostTls, t: T): string {
   if (tls.at !== "own") return edgeTlsWords(tls, t);
+  if (tls.secret && tls.missing)
+    return t("empty", "tlsDefaultCertificate", { name: tls.secret });
   return tls.secret
     ? t("empty", "tlsFrom", { name: tls.secret })
     : t("empty", "tlsControllerCertificate");
+}
+
+/**
+ * A missing TLS Secret, said as what the client gets: the controller does not
+ * refuse the host, it answers with a certificate no browser trusts.
+ */
+export function missingSecretWords(
+  secret: SecretRef,
+  controller: { name: string; certificate: string },
+  t: T
+): { title: string; note: string } {
+  return {
+    title: t("empty", "tlsSecretMissingTitle", { name: secret.secretName }),
+    note: t("empty", "tlsSecretMissingNote", {
+      controller: controller.name,
+      certificate: controller.certificate,
+      secret: `${secret.namespace}/${secret.secretName}`,
+    }),
+  };
+}
+
+/** The word at a host's right end for a certificate finding that is an error. */
+export function certificateStateWords(problem: CertificateProblem, t: T) {
+  if (problem.read?.problem?.says === "noSecret")
+    return t("empty", "certificateMissing");
+  return problem.expiry?.expired
+    ? t("empty", "certificateExpired")
+    : t("empty", "certificateRunningOut");
 }
 
 export function hostTlsTag(

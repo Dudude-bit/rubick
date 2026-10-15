@@ -6342,11 +6342,13 @@ export const ru: Catalogue = {
     thisPodFailed: "Этот под завершился с ошибкой",
     certificateExpired: "сертификат истёк",
     certificateRunningOut: "сертификат заканчивается",
+    certificateMissing: "сертификата нет",
     canaryShadowingNothing: "canary ничего не перекрывает",
     servedInTheClear: "обслуживается без шифрования",
     splitShares: "делится {shares}",
     tlsFrom: "TLS из {name}",
     tlsControllerCertificate: "TLS, сертификат выбирает контроллер",
+    tlsDefaultCertificate: "TLS, сертификат по умолчанию: {name} не существует",
     noTls: "без TLS",
     tlsEveryHost: "все хосты",
     tlsNotChecked: "TLS не проверен",
@@ -6400,6 +6402,9 @@ export const ru: Catalogue = {
     canaryShadowingNothingNote:
       "Canary-Ingress вливается в server-блок хоста, который уже обслуживает другой Ingress. Этот хост не обслуживает никакой другой Ingress, поэтому вливать его некуда, и nginx не направит к нему ни одного запроса. Объект остаётся корректным YAML, который не делает ничего.",
     secretNotACertificate: "{name} не удалось прочитать как сертификат",
+    tlsSecretMissingTitle: "Secret {name} не существует",
+    tlsSecretMissingNote:
+      "{controller} отвечает по HTTPS для этого хоста своим сертификатом по умолчанию. Если его никто не настроил, это самоподписанный «{certificate}», который отвергает любой браузер. Создайте {secret} или укажите в маршруте существующий Secret.",
     secretNotParsable:
       "Secret на месте, но то, что в нём лежит, приложение не смогло разобрать как сертификат.",
     certExpiryBrowserNote:
@@ -7156,6 +7161,8 @@ export const ru: Catalogue = {
     endpointsUnread: "Endpoints не прочитаны",
     behindUnread: "что за ними, прочитать не удалось: {why}",
     servedUnder: "сертификат из",
+    servedUnderDefault:
+      "сертификат контроллера по умолчанию: {secret} не существует",
     rawNginxConfig: "Сырая конфигурация nginx, вставляется как есть",
     shownAsWritten: "Показано как написано",
     andMoreOpenRow: "и ещё {n}: откройте строку",

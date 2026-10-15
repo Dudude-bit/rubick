@@ -2,8 +2,15 @@ import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { problemWords } from "@/lib/certificates";
 import { describeStop } from "@/lib/connections";
+import { missingSecretWords } from "../ingress";
 import type { Finding, StopAnswer, TraefikRoute } from "./model";
 import { describePath } from "./rule";
+
+/** What Traefik answers with when the Secret a router names is not there. */
+const DEFAULT_CERTIFICATE = {
+  name: "Traefik",
+  certificate: "TRAEFIK DEFAULT CERT",
+};
 
 const STOP_ANSWER: Record<StopAnswer, keyof typeof en.empty> = {
   dropped: "traefikRouteDropped",
@@ -85,6 +92,12 @@ export function describeFinding(
             }),
       };
     case "certificate": {
+      if (finding.read?.problem?.says === "noSecret") {
+        return {
+          ...missingSecretWords(finding, DEFAULT_CERTIFICATE, t),
+          objects: [],
+        };
+      }
       if (!finding.expiry) {
         return {
           title: t("empty", "secretNotACertificate", {

@@ -531,3 +531,43 @@ describe("a host whose TLS ends in front of nginx", () => {
     });
   });
 });
+
+describe("a TLS Secret the API server says is not there", () => {
+  /**
+   * ingress-nginx answers the host with its Fake Certificate, which a browser
+   * refuses. The host line said "TLS from checkout-tls" and its state was
+   * amber "worth a look", as if a file had merely failed to parse.
+   */
+  it("marks the host red with the certificate missing", () => {
+    const [group] = hostGroups(
+      {
+        ...sources([
+          ingress("checkout", "checkout.example.com", {
+            secretName: "checkout-tls",
+          }),
+        ]),
+        certificates: new Map([
+          [
+            "shop/checkout-tls",
+            {
+              secretName: "checkout-tls",
+              certificate: null,
+              problem: { says: "noSecret" },
+            },
+          ],
+        ]),
+      },
+      t
+    );
+
+    expect(group.tls).toEqual({
+      at: "own",
+      secret: "checkout-tls",
+      missing: true,
+    });
+    expect(hostState(group, null, t)).toEqual({
+      text: "certificate missing",
+      tone: "err",
+    });
+  });
+});
