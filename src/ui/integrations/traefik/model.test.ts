@@ -468,6 +468,8 @@ describe("the findings", () => {
             },
           }),
         ],
+        services: [service("web", { app: "web" })],
+        published: [published("web", 1)],
         entryPoints: [
           { name: "web", address: ":8000", tls: false, redirectTo: null },
           { name: "websecure", address: ":8443", tls: true, redirectTo: null },
@@ -1218,8 +1220,8 @@ describe("a host whose TLS ends in front of the proxy", () => {
     ],
     middlewares: [],
     classes: [TRAEFIK_CLASS],
-    services: [proxyService()],
-    published: [],
+    services: [proxyService(), service("storefront", { app: "storefront" })],
+    published: [published("storefront", 1)],
     backingKnown: true,
     backingError: null,
     entryPoints: [
@@ -1344,7 +1346,12 @@ describe("which routers Traefik serves over TLS", () => {
    */
   it("calls a host whose Ingress only names a Secret in spec.tls served in the clear", () => {
     const [group] = hostGroups(
-      sources({ ingresses: [promo()], entryPoints: [WEB] })
+      sources({
+        ingresses: [promo()],
+        services: [service("web", { app: "web" })],
+        published: [published("web", 1)],
+        entryPoints: [WEB],
+      })
     );
 
     const clear = group.findings.find((finding) => finding.kind === "clear");
@@ -1455,6 +1462,24 @@ describe("a path whose backend is an API object", () => {
    * encrypted way to reach it" under "a path is dropped" described a host
    * that answers 404 as one that answers in plain HTTP.
    */
+  /**
+   * Traefik drops a route whose Service is missing or publishes nothing, so
+   * ghost.k8s-gui.test read "drops this route, a request gets a 404" and,
+   * under it, "no encrypted way to reach it".
+   */
+  it("does not call a host served in the clear when its only route is dropped for its Service", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [ingress("ghost", "ghost.example.com", { service: "gone" })],
+        entryPoints: [
+          { name: "web", address: ":8000", tls: false, redirectTo: null },
+        ],
+      })
+    );
+
+    expect(group.findings.map((finding) => finding.kind)).toEqual(["stop"]);
+  });
+
   it("does not call a host served in the clear when Traefik drops its only path", () => {
     const [group] = hostGroups(
       sources({

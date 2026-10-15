@@ -866,11 +866,10 @@ export function edgeTls(host: string | null, sources: TraefikSources): EdgeTls {
 function clearFinding(
   routes: TraefikRoute[],
   sources: TraefikSources,
-  host: string | null
+  host: string | null,
+  dropped: ReadonlySet<string>
 ): Finding | "tlsUnknown" | null {
-  // A path Traefik drops serves nothing, in the clear or otherwise.
-  const served = routes.filter((route) => !route.resourceBackend);
-  if (served.length === 0) return null;
+  const served = routes.filter((route) => !dropped.has(route.key));
   if (served.some((route) => route.declaresTls)) return null;
   // Something in front holds the certificate, and the inside hop is plaintext
   // by design; or what is in front could not be read and cannot be ruled out.
@@ -879,6 +878,8 @@ function clearFinding(
   // An empty list is entry points that could not be read, not a controller
   // listening on nothing: whether this host is in the clear is unknown.
   if (sources.entryPoints.length === 0) return "tlsUnknown";
+  // A path Traefik drops serves nothing, in the clear or otherwise.
+  if (served.length === 0) return null;
 
   const bound = new Map<string, EntryPoint>();
   for (const route of served) {
@@ -953,8 +954,20 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
     // pointing at the same missing Service is one repair, and printing the
     // same sentence three times spends the reader's attention on nothing.
     const seenStops = new Set<string>();
+    const stopOf = new Map(
+      own.map((route) => [route.key, backingOf(route, sources).stop])
+    );
+    const dropped = new Set(
+      own.flatMap((route) => {
+        const stop = stopOf.get(route.key);
+        return route.resourceBackend ||
+          (stop && stopAnswer(stop, route, sources.emptyServices) === "dropped")
+          ? [route.key]
+          : [];
+      })
+    );
     const stops = own.flatMap((route): Finding[] => {
-      const stop = backingOf(route, sources).stop;
+      const stop = stopOf.get(route.key);
       if (!stop) return [];
       const key = `${stop.reason}/${stop.service.namespace}/${stop.service.name}`;
       if (seenStops.has(key)) return [];
@@ -997,7 +1010,12 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
       ).values(),
     ];
 
-    const clear = clearFinding(own, sources, host === "" ? null : host);
+    const clear = clearFinding(
+      own,
+      sources,
+      host === "" ? null : host,
+      dropped
+    );
     const findings = [
       ...stops,
       ...resourceBackends,
