@@ -124,13 +124,11 @@ describe("a claim's summary", () => {
         "StorageClass fast-ssd-missing does not exist, so nothing will provision a volume for it."
       )
     ).toBeTruthy();
-    expect(
-      await screen.findByText(
-        'storageclass.storage.k8s.io "fast-ssd-missing" not found'
-      )
-    ).toBeTruthy();
-    expect(
-      screen.getByText("Its newest warning, ProvisioningFailed:")
-    ).toBeTruthy();
+    const label = await screen.findByText(
+      "Its newest warning, ProvisioningFailed:"
+    );
+    expect(label.parentElement).toHaveTextContent(
+      'storageclass.storage.k8s.io "fast-ssd-missing" not found'
+    );
   });
 });

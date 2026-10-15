@@ -112,6 +112,17 @@ describe("the YAML syntax palette", () => {
  * selector written for the outer one can reach the inner. Nothing about the
  * colours says which way the nesting goes; only `Prec.highest` does.
  */
+/** Code quoted outside the editor is painted from tokens of its own; fails if they drift off the editor's hues. */
+it("gives code quoted outside the editor the editor's hues", () => {
+  const [scalar, constant] = SYNTAX_HUES;
+  expect(css).toContain(
+    `--color-syn-scalar: hsl(${scalar} var(--syn-s) var(--syn-l));`
+  );
+  expect(css).toContain(
+    `--color-syn-constant: hsl(${constant} var(--syn-s) var(--syn-l));`
+  );
+});
+
 describe("a constant against the scalar colour on the same text", () => {
   it("renders inside the highlighter's span, not around it", () => {
     const parent = document.createElement("div");

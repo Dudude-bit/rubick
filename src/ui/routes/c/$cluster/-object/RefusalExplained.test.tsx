@@ -43,7 +43,7 @@ describe("RefusalExplained", () => {
   /**
    * Live, root-web's page quoted four lines of PodSecurity at its reader.
    * Fails if the page stops naming the label that sets the level, or a check
-   * loses how to pass it.
+   * loses how to pass it or the paint on the code in it.
    */
   it("names the namespace label that enforces the level and lists each failed check with how to pass it", async () => {
     vi.mocked(commands.getNamespace).mockResolvedValue(
@@ -57,12 +57,15 @@ describe("RefusalExplained", () => {
       )
     );
     const rows = within(screen.getByTestId("refusal-rows"));
-    expect(rows.getByText("unrestricted capabilities")).toBeInTheDocument();
-    expect(
-      rows.getByText(
-        'container "sleeper" must set securityContext.capabilities.drop=["ALL"]'
-      )
-    ).toBeInTheDocument();
+    const how = rows.getByText("unrestricted capabilities").nextElementSibling;
+    expect(how).toHaveTextContent(
+      'container "sleeper" must set securityContext.capabilities.drop=["ALL"]'
+    );
+    const code = within(how as HTMLElement);
+    expect(code.getByText("securityContext.capabilities.drop")).toHaveClass(
+      "font-medium"
+    );
+    expect(code.getByText('"ALL"')).toHaveClass("text-syn-scalar");
     expect(line).toHaveTextContent(
       "Set these in the pod template, or have the namespace's Pod Security level lowered."
     );

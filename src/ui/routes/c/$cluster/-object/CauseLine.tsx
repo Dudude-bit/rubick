@@ -24,6 +24,7 @@ import { refusalText } from "@/lib/create-refusal";
 import type { StopCause } from "@/lib/service-health";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
+import { ClusterWords } from "./ClusterWords";
 import { RefusalExplained } from "./RefusalExplained";
 import { useCauseEvidence, useCauseWarnings } from "./useCauseEvidence";
 
@@ -64,9 +65,7 @@ export function CauseEvidence({
         <Line className={inline ? undefined : "mt-0.5 min-w-0"}>
           {inline && " "}
           <span className="text-fg-mut">{words.quote.label}</span>{" "}
-          <span className="font-mono wrap-break-word text-fg">
-            {words.quote.text}
-          </span>
+          <ClusterWords text={words.quote.text} />
         </Line>
       )}
       {words.note && (

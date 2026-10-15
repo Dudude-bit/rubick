@@ -15,12 +15,13 @@ import {
 } from "@/lib/refusal-reason";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
+import { ClusterWords } from "./ClusterWords";
 
 const ENFORCE_LABEL = "pod-security.kubernetes.io/enforce";
 const ADMISSION = "admissionregistration.k8s.io";
 
-const Mono = ({ children }: { children: ReactNode }) => (
-  <span className="font-mono text-fg">{children}</span>
+const Value = ({ children }: { children: ReactNode }) => (
+  <span className="font-mono text-syn-scalar">{children}</span>
 );
 
 interface Row {
@@ -82,7 +83,7 @@ function rangeHow(bound: RangeBound, t: T): string {
 const said = (text: string) => (
   <>
     {" "}
-    <span className="font-mono wrap-break-word text-fg">{text}</span>
+    <ClusterWords text={text} className="text-fg" />
   </>
 );
 
@@ -103,13 +104,17 @@ function told(
             namespace: (
               <ResourceRef kind="Namespace" name={namespace} showKind={false} />
             ),
-            level: <Mono>{securityLevel(reason)}</Mono>,
-            label: <Mono>{ENFORCE_LABEL}</Mono>,
+            level: <Value>{securityLevel(reason)}</Value>,
+            label: (
+              <span className="font-mono font-medium text-fg">
+                {ENFORCE_LABEL}
+              </span>
+            ),
           }
         ),
         rows: reason.checks.map((check) => ({
           what: check.check,
-          how: check.how && <Mono>{check.how}</Mono>,
+          how: check.how && <ClusterWords text={check.how} />,
         })),
         wayOut: t("cause", "refusedSecurityWayOut"),
       };
@@ -175,7 +180,7 @@ function told(
     case "serviceAccount":
       return {
         why: parts(t("cause", "refusedByServiceAccount"), {
-          name: <Mono>{reason.name}</Mono>,
+          name: <Value>{reason.name}</Value>,
           namespace: (
             <ResourceRef
               kind="Namespace"
@@ -220,13 +225,13 @@ function told(
         why: reason.said ? (
           <>
             {parts(t("cause", "refusedByWebhook"), {
-              webhook: <Mono>{reason.webhook}</Mono>,
+              webhook: <Value>{reason.webhook}</Value>,
             })}
             {said(reason.said)}
           </>
         ) : (
           parts(t("cause", "refusedByWebhookSilent"), {
-            webhook: <Mono>{reason.webhook}</Mono>,
+            webhook: <Value>{reason.webhook}</Value>,
           })
         ),
         rows: [],
@@ -237,7 +242,7 @@ function told(
         why: (
           <>
             {parts(t("cause", "refusedByWebhookDown"), {
-              webhook: <Mono>{reason.webhook}</Mono>,
+              webhook: <Value>{reason.webhook}</Value>,
             })}
             {said(reason.said)}
           </>
@@ -318,7 +323,7 @@ export function RefusalExplained({
             <span className="text-fg-mut">
               {t("cause", "refusalSaid")}
             </span>{" "}
-            <span className="font-mono wrap-break-word text-fg">{answer}</span>
+            <ClusterWords text={answer} />
           </>
         )}
       </p>
@@ -360,7 +365,9 @@ export function RefusalExplained({
             aria-hidden="true"
           />
         </summary>
-        <p className="mt-1 font-mono wrap-break-word text-fg-mut">{answer}</p>
+        <p className="mt-1">
+          <ClusterWords text={answer} className="text-fg-mut" />
+        </p>
       </details>
     </div>
   );

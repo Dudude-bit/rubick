@@ -32,6 +32,10 @@
   --color-err: hsl(var(--err));
   --color-info: hsl(var(--info));
 
+  /* The YAML editor's hues, for code quoted outside it. */
+  --color-syn-scalar: hsl(258 var(--syn-s) var(--syn-l));
+  --color-syn-constant: hsl(316 var(--syn-s) var(--syn-l));
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
