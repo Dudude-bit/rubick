@@ -74,9 +74,15 @@ export function refusedUid(
 
 const FORBIDDEN = / is forbidden: ([\s\S]+)$/;
 
-/** The part of a refusal that says why, without the name of a pod that never existed; the whole of it where it has no such part. */
+/** The `(container "x" must set ...)` after each check PodSecurity names: how to pass it, which a row has no room for. */
+const POD_SECURITY_HOW = / \([^()]*\)/g;
+
+/** The part of a refusal that says why, without the name of a pod that never existed; the whole of it where it has no such part. A PodSecurity refusal keeps the checks it failed and leaves how to pass them to the page. */
 export function refusalGist(said: string): string {
-  return FORBIDDEN.exec(said)?.[1] ?? said;
+  const why = FORBIDDEN.exec(said)?.[1] ?? said;
+  return why.startsWith("violates PodSecurity ")
+    ? why.replace(POD_SECURITY_HOW, "")
+    : why;
 }
 
 /** A refusal as a row, the Overview and a shared report say it. */

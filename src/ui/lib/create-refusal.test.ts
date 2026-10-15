@@ -108,6 +108,29 @@ describe("how a refusal is said", () => {
     );
   });
 
+  /**
+   * Live, a PodSecurity refusal filled four lines of every Overview row and
+   * a list cell cut it at "violates PodSecurity "re...", the checks it failed
+   * pushed out by how to pass each. Fails if the short form keeps the how,
+   * drops a check, or strips the parentheses of any other refusal.
+   */
+  it("keeps the checks a PodSecurity refusal failed and leaves out how to pass them", () => {
+    expect(
+      refusalGist(
+        'Error creating: pods "root-job-dw9qj" is forbidden: violates PodSecurity "restricted:latest": allowPrivilegeEscalation != false (container "sleeper" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "sleeper" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "sleeper" must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "sleeper" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")'
+      )
+    ).toBe(
+      'violates PodSecurity "restricted:latest": allowPrivilegeEscalation != false, unrestricted capabilities, runAsNonRoot != true, seccompProfile'
+    );
+    expect(
+      refusalGist(
+        'pods "web-1" is forbidden: admission webhook "policy.example" denied the request: image (latest tag) is not allowed'
+      )
+    ).toBe(
+      'admission webhook "policy.example" denied the request: image (latest tag) is not allowed'
+    );
+  });
+
   /** Fails if a Job with pods running, retrying or done is relabelled, or a refused Pending one is not. */
   it("calls a Pending Job whose pods are refused FailedCreate, and no other", () => {
     expect(jobWord("Pending", "exceeded quota")).toBe("FailedCreate");
