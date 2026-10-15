@@ -16,6 +16,7 @@ import {
 } from "@/lib/report-parts";
 import { statusRole } from "@/lib/status-role";
 import { cronOutcome, outcomeWords, TONE_ROLE } from "@/lib/cron-outcome";
+import { lastRunRefused } from "../../../-peek/cron-runs";
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
 import { formatSince } from "@/lib/utils";
 import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
@@ -31,7 +32,8 @@ export function cronJobStatusOf(cronJob: CronJobDetailInfo, t: T) {
 export function cronJobStatsOf(
   cronJob: CronJobDetailInfo,
   capturedAt: string,
-  t: T
+  t: T,
+  refused = false
 ): ReportStat[] {
   const stats: ReportStat[] = [
     {
@@ -39,7 +41,7 @@ export function cronJobStatsOf(
       value: cronJob.schedule || t("empty", "noneLower"),
     },
     { label: t("columns", "active"), value: String(cronJob.active) },
-    lastRunStat(cronJob, capturedAt, t),
+    lastRunStat(cronJob, capturedAt, t, refused),
   ];
   stats.push(
     cronJob.lastSuccessfulTime
@@ -63,9 +65,10 @@ export function cronJobStatsOf(
 function lastRunStat(
   cronJob: CronJobDetailInfo,
   capturedAt: string,
-  t: T
+  t: T,
+  refused: boolean
 ): ReportStat {
-  const { word, tone } = outcomeWords(cronOutcome(cronJob), t);
+  const { word, tone } = outcomeWords(cronOutcome(cronJob, refused), t);
   return {
     label: t("columns", "lastRun"),
     value: cronJob.lastSchedule
@@ -125,7 +128,8 @@ export function jobsSection(
 
 /**
  * What the CronJob page adds to the shared report: when it last ran, its
- * template and the recent runs the Jobs tab already read.
+ * template and the recent runs the Jobs tab already read, each told with
+ * its pods' refusal.
  */
 export function useCronJobShare(
   cronJob: CronJobDetailInfo | undefined,
@@ -140,7 +144,7 @@ export function useCronJobShare(
       const jobs_ = jobsSection(jobs, jobsError, capturedAt, t);
       return {
         status: cronJobStatusOf(cronJob, t),
-        stats: cronJobStatsOf(cronJob, capturedAt, t),
+        stats: cronJobStatsOf(cronJob, capturedAt, t, lastRunRefused(jobs)),
         sections: [templateContainersSection(cronJob, t), jobs_],
       };
     },

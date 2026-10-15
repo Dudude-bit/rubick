@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import type {
+  CronJobDetailInfo,
   DeploymentInfo,
+  JobInfo,
   ObjectRef,
   PodInfo,
   ResourceConnections,
@@ -29,7 +31,17 @@ vi.mock("@/hooks/useConnections", () => ({
   useObjectConnections: () => ({ data: neighbourhood.current }),
 }));
 
+vi.mock("@/lib/commands", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/commands")>();
+  return {
+    commands: { ...real.commands, listJobs: vi.fn(), listEvents: vi.fn() },
+  };
+});
+
+import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import { WORKLOAD_SOURCES } from "./peek-sources-workloads";
+import { LastRunValue } from "./peek-workload-diagnosis";
 
 const blind: ResourceConnections = {
   subject,
@@ -221,5 +233,61 @@ describe("the peek of a pod the node evicted", () => {
       "Evicted: The node was low on resource: ephemeral-storage."
     );
     expect(first?.tone).toBe("err");
+  });
+});
+
+describe("the peek's Last run row", () => {
+  /**
+   * Live, root-cron's peek said "running" in blue while its lead quoted the
+   * refusal of that run's pods. Fails if the row does not read the run's
+   * refusal, or calls the refused run running.
+   */
+  it("says a run whose pods are refused has not started, in red", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    vi.mocked(commands.listJobs).mockResolvedValue([
+      {
+        name: "nightly-29000000",
+        namespace: "ops",
+        uid: "run",
+        status: "Pending",
+        createdAt: "2026-10-15T05:00:00Z",
+      } as JobInfo,
+    ]);
+    vi.mocked(commands.listEvents).mockResolvedValue([
+      {
+        name: "e",
+        namespace: "ops",
+        uid: "e",
+        type: "Warning",
+        reason: "FailedCreate",
+        message:
+          'Error creating: pods "nightly-29000000-x" is forbidden: exceeded quota: two-pods',
+        source: "job-controller",
+        involvedObject: {
+          kind: "Job",
+          name: "nightly-29000000",
+          namespace: "ops",
+          uid: "run",
+        },
+        count: 3,
+        firstTimestamp: null,
+        lastTimestamp: "2026-10-15T05:01:00Z",
+      },
+    ]);
+    await renderWithRouter(
+      <LastRunValue
+        cron={
+          {
+            name: "nightly",
+            namespace: "ops",
+            active: 1,
+            lastSchedule: null,
+            lastSuccessfulTime: null,
+          } as CronJobDetailInfo
+        }
+      />
+    );
+    expect(await screen.findByText("not started")).toHaveClass("text-err");
+    expect(screen.queryByText("running")).toBeNull();
   });
 });

@@ -84,6 +84,38 @@ describe("what the CronJob list says about schedules", () => {
   });
 
   /**
+   * Live, root-cron's row said a blue "running" before the red refusal of
+   * its run's pods. Fails if a refused run in flight is not said, in red, to
+   * have not started, on the row and in a shared file.
+   */
+  it("says a run in flight whose pods are refused has not started", () => {
+    const refused = {
+      active: 1,
+      lastSchedule: new Date(Date.now() - 60_000).toISOString(),
+      lastSuccessfulTime: null,
+      podsCause: {
+        says: "refused",
+        said: 'pods "nightly-1-x" is forbidden: exceeded quota: two-pods, requested: pods=1, used: pods=2, limited: pods=2',
+      },
+    };
+    const cell = cellOf("last_run", refused);
+    expect(within(cell).getByText("not started")).toHaveClass("text-err");
+    expect(cell).toHaveTextContent(
+      "ResourceQuota two-pods refuses its pods: no room for pods"
+    );
+    const column = (columns() as ColumnDef<never>[]).find(
+      (c) => c.id === "last_run"
+    );
+    const share = (column?.meta as AppColumnMeta | undefined)?.share;
+    const t = ((section: string, key: string, values?: never) =>
+      translate("en", section as never, key as never, values)) as never;
+    expect(share?.(refused as never, t)).toEqual({
+      text: "not started · ResourceQuota two-pods refuses its pods: no room for pods",
+      role: "err",
+    });
+  });
+
+  /**
    * The list said a run did not succeed and nothing of why, while the page
    * led with it. Fails if the row does not tell the cause its last run's
    * pods share after the outcome, in the cell and in a shared file, or

@@ -17,7 +17,11 @@ import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { CronStatusBadge } from "./CronStatusBadge";
 import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
-import { cronJobRunsKey, useCronJobRuns } from "../../../-peek/cron-runs";
+import {
+  cronJobRunsKey,
+  lastRunRefused,
+  useCronJobRuns,
+} from "../../../-peek/cron-runs";
 import { LastRunCause } from "../../../-peek/peek-workload-diagnosis";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
@@ -80,12 +84,15 @@ function ScheduleHeadlines({
   cronJob,
   lastRun,
   running,
+  refused,
 }: {
   cronJob: CronJobDetailInfo;
   /** When it last fired, by its own status or by the newest run it holds, whichever is later. */
   lastRun: string | null;
   /** A run it holds is in flight, whatever its status has caught up with. */
   running: boolean;
+  /** The API server refuses its newest run's pods. */
+  refused: boolean;
 }) {
   const t = useT();
   const lastAge = useRealtimeAge(lastRun);
@@ -132,11 +139,14 @@ function ScheduleHeadlines({
         }
         tone={
           outcomeWords(
-            cronOutcome({
-              active: running ? 1 : cronJob.active,
-              lastSchedule: lastRun,
-              lastSuccessfulTime: cronJob.lastSuccessfulTime,
-            }),
+            cronOutcome(
+              {
+                active: running ? 1 : cronJob.active,
+                lastSchedule: lastRun,
+                lastSuccessfulTime: cronJob.lastSuccessfulTime,
+              },
+              refused
+            ),
             t
           ).tone ?? undefined
         }
@@ -366,7 +376,7 @@ export function CronJobDetail() {
     refresh: "slow",
   });
 
-  const share = useCronJobShare(cronJob, jobs, jobsError);
+  const share = useCronJobShare(cronJob, told, jobsError);
 
   const tabs = useMemo(
     () => [
@@ -381,6 +391,7 @@ export function CronJobDetail() {
                 cronJob={cronJob}
                 lastRun={lastRunOf(cronJob.name, cronJob.lastSchedule, jobs)}
                 running={inFlight}
+                refused={lastRunRefused(told)}
               />
             )}
 

@@ -827,6 +827,7 @@ export const en = {
     never: "never",
     lastSuccessAt: "last success {when}",
     cronRunning: "running",
+    cronRefused: "not started",
     cronSucceeded: "succeeded",
     cronNotSucceeded: "did not succeed",
     noRunSucceededYet: "no run has succeeded yet",

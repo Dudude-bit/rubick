@@ -5,12 +5,15 @@ import { parts } from "@/i18n/parts";
 import { useObjectConnections } from "@/hooks/useConnections";
 import { useT } from "@/i18n/useT";
 import { governanceFindings } from "@/lib/governance-findings";
-import type { Rollout } from "@/generated/types";
+import type { CronJobDetailInfo, Rollout } from "@/generated/types";
+import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
+import { TONE_TEXT } from "@/lib/tone";
+import { formatDate } from "@/lib/utils";
 import { rolloutSettled } from "@/lib/workload-status";
 import { WorkloadPodsCause } from "../-object/CauseLine";
 import { FindingLine } from "../-object/FindingLine";
 import { RolloutSummary } from "../-object/RolloutSummary";
-import { newestRun, useCronJobRuns } from "./cron-runs";
+import { newestRun, useCronJobRuns, useLastRunRefused } from "./cron-runs";
 import { usePeekOwnedPods } from "./peek-owned-pods";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useRefusal } from "@/hooks/useRefusals";
@@ -166,5 +169,18 @@ export function LastRunCause({
         ),
       })}
     />
+  );
+}
+
+/** A CronJob's last run as its row says it, red where the API server refuses that run's pods. */
+export function LastRunValue({ cron }: { cron: CronJobDetailInfo }) {
+  const t = useT();
+  const refused = useLastRunRefused(cron.namespace, cron.name, cron.active > 0);
+  const { word, tone } = outcomeWords(cronOutcome(cron, refused), t);
+  const at = formatDate(cron.lastSchedule);
+  return (
+    <span className={tone ? TONE_TEXT[tone] : undefined}>
+      {at ? `${at} · ${word}` : word}
+    </span>
   );
 }

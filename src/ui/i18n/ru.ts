@@ -805,6 +805,7 @@ export const ru: Catalogue = {
     never: "никогда",
     lastSuccessAt: "последний успешный запуск {when}",
     cronRunning: "идёт",
+    cronRefused: "не запустился",
     cronSucceeded: "успешно",
     cronNotSucceeded: "не удался",
     noRunSucceededYet: "ни один запуск ещё не завершился успешно",

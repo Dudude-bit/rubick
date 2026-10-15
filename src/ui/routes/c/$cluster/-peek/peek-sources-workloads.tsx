@@ -1,8 +1,8 @@
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
-import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
 import {
   JobBadge,
   LastRunCause,
+  LastRunValue,
   PodsCause,
   WorkloadDiagnosis,
 } from "./peek-workload-diagnosis";
@@ -476,12 +476,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   })),
 };
 
-function lastRunRow(cron: CronJobDetailInfo, t: Translate) {
-  const { word, tone } = outcomeWords(cronOutcome(cron), t);
-  const at = formatDate(cron.lastSchedule);
-  return {
-    label: t("columns", "lastRun"),
-    value: at ? `${at} · ${word}` : word,
-    tone: tone ?? undefined,
-  };
-}
+const lastRunRow = (cron: CronJobDetailInfo, t: Translate) => ({
+  label: t("columns", "lastRun"),
+  value: <LastRunValue cron={cron} />,
+});

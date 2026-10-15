@@ -40,6 +40,21 @@ describe("how a CronJob's newest run went", () => {
     ).toBe("running");
   });
 
+  /**
+   * Live, root-cron's run sat in a blue "running" beside the red refusal of
+   * its pods. Fails if a refused run in flight still reads as running, or a
+   * refusal is laid on a run that has ended.
+   */
+  it("says a run in flight whose pods are refused has not started", () => {
+    const inFlight = {
+      active: 1,
+      lastSchedule: at(1),
+      lastSuccessfulTime: null,
+    };
+    expect(cronOutcome(inFlight, true)).toBe("refused");
+    expect(cronOutcome({ ...inFlight, active: 0 }, true)).toBe("notSucceeded");
+  });
+
   /** Fails if a CronJob that never fired reads as one that failed, or one run only by hand as never run. */
   it("tells never fired from run only by hand", () => {
     expect(

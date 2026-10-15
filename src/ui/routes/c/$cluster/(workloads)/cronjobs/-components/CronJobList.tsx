@@ -45,8 +45,13 @@ const CRON_VERDICT: Record<CronOutcome, RowVerdict> = {
   never: "settled",
   succeeded: "settled",
   running: "open",
+  refused: "trouble",
   notSucceeded: "trouble",
 };
+
+/** A row's last run, told with the refusal of its run's pods its cause read. */
+const outcomeOf = (row: CronJobInfoWithMetrics) =>
+  cronOutcome(row, row.podsCause.says === "refused");
 
 const LAST_RUN_FLOOR = widestText(["did not succeed"], "sans", 6.6) + 20;
 
@@ -122,12 +127,12 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
         causeCellPx(
           rows.map((row) => ({
             podsCause: row.podsCause,
-            verdict: CRON_VERDICT[cronOutcome(row)],
+            verdict: CRON_VERDICT[outcomeOf(row)],
           })),
           t
         ),
       share: (row: CronJobInfoWithMetrics, t) => {
-        const outcome = cronOutcome(row);
+        const outcome = outcomeOf(row);
         const { word, tone } = outcomeWords(outcome, t);
         const cause = rowCauseText(row.podsCause, CRON_VERDICT[outcome], t);
         const text = cause ? `${word} · ${cause}` : word;
@@ -158,7 +163,7 @@ function LastSchedule({ at }: { at: string | null }) {
 // oxlint-disable-next-line react-refresh/only-export-components
 function LastRun({ cron }: { cron: CronJobInfoWithMetrics }) {
   const t = useT();
-  const outcome = cronOutcome(cron);
+  const outcome = outcomeOf(cron);
   const { word, tone } = outcomeWords(outcome, t);
   return (
     <VerdictWithCause cause={cron.podsCause} verdict={CRON_VERDICT[outcome]}>

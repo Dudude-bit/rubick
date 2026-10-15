@@ -232,6 +232,9 @@ describe("CronJobDetail", () => {
     expect(
       await screen.findByText("1 with its pods refused")
     ).toBeInTheDocument();
+    expect(
+      (await screen.findByText("Last run")).nextElementSibling
+    ).toHaveClass("text-err");
     vi.mocked(commands.listEvents).mockResolvedValue([]);
   });
 

@@ -1,7 +1,10 @@
 import { keepPreviousData } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 import type { JobInfo } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useRefusals } from "@/hooks/useRefusals";
+import { toldRuns } from "@/lib/create-refusal";
 import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 
@@ -45,3 +48,24 @@ export const newestRun = (jobs: readonly JobInfo[]): JobInfo | null =>
       !newest || createdOf(job) > createdOf(newest) ? job : newest,
     null
   );
+
+/** Whether the newest run is one whose pods the API server refuses, as its row says it. */
+export const lastRunRefused = (told: readonly JobInfo[]) =>
+  newestRun(told)?.status === "FailedCreate";
+
+/** Whether a CronJob's newest run is refused its pods, read through the runs and refusals its page shares. */
+export function useLastRunRefused(
+  namespace: string,
+  name: string,
+  enabled: boolean
+): boolean {
+  const runs = useCronJobRuns(namespace, name);
+  const refusals = useRefusals(
+    namespace,
+    enabled && !!runs.data?.some((job) => job.status === "Pending")
+  );
+  return useMemo(
+    () => lastRunRefused(toldRuns(runs.data ?? [], refusals)),
+    [runs.data, refusals]
+  );
+}
