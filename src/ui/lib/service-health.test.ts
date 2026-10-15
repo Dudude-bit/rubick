@@ -515,13 +515,12 @@ describe("a Service whose workloads wait on their pods", () => {
     const words = serviceHealthWords(health, t);
     expect(words.role).toBe("err");
     expect(words.reason).toBe(
-      "Deployment root-web: Pod Security restricted refuses its pods: 2 checks fail"
+      "Pod Security restricted refuses its pods: 2 checks fail"
     );
     expect(chainStopHop(stop, SERVICE, t)).toMatchObject({
       mood: "fault",
-      title:
-        "Deployment root-web: Pod Security restricted refuses its pods: 2 checks fail",
-      note: "No pod carries app=root-web: the API server will not create one, so connections to this address are refused. The page of root-web says why and what to change.",
+      title: "Pod Security restricted refuses its pods: 2 checks fail",
+      note: "No pod carries app=root-web: the API server will not create the pods of Deployment root-web, so connections to this address are refused. Open Deployment root-web for why and what to change.",
     });
   });
 

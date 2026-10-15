@@ -97,7 +97,7 @@ describe("the Endpoints list's empty row", () => {
     });
     expect(screen.getByText("no endpoints")).toHaveClass("text-err");
     expect(screen.getByTestId("verdict-reason")).toHaveTextContent(
-      "Deployment hello-web: ResourceQuota two-pods refuses its pods: no room for pods"
+      "ResourceQuota two-pods refuses its pods: no room for pods"
     );
   });
 });

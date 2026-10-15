@@ -119,7 +119,7 @@ describe("the Services list's health column", () => {
     render(page(<HealthCell service={WEB} />));
 
     expect(await screen.findByTestId("verdict-reason")).toHaveTextContent(
-      "Deployment web: Pod Security restricted refuses its pods: 1 check fails"
+      "Pod Security restricted refuses its pods: 1 check fails"
     );
   });
 

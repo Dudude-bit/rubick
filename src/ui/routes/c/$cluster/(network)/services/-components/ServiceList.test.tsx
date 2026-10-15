@@ -149,7 +149,7 @@ describe("the Services list's Endpoints column", () => {
       read: { published: () => refused, why: () => null },
     }).find((column) => column.id === "health");
     expect(health?.meta?.share?.(headlessDemo as never, t)).toEqual({
-      text: "no endpoints · StatefulSet headless-demo: Pod Security restricted refuses its pods: 1 check fails",
+      text: "no endpoints · Pod Security restricted refuses its pods: 1 check fails",
       role: "err",
       unread: false,
     });

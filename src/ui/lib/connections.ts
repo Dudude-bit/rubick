@@ -504,15 +504,12 @@ export function describeStop(
     }
     case "podsRefused":
       return {
-        title: t("nav", "stopPodsRefused", {
+        title: refusalText(stop.said, t),
+        note: t("nav", "stopPodsRefusedNote", {
+          selector: stop.selector,
           workloads: stop.workloads
             .map((workload) => `${workload.kind} ${workload.name}`)
             .join(", "),
-          reason: refusalText(stop.said, t),
-        }),
-        note: t("nav", "stopPodsRefusedNote", {
-          selector: stop.selector,
-          name: stop.workloads[0]?.name ?? "",
         }),
       };
     // Said by a reader holding the endpoints and no pod list: it knows
