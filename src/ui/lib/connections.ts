@@ -321,6 +321,8 @@ const STOP_TONE: Record<StopMood, HopTone> = {
   unchecked: "unknown",
 };
 
+export const stopTone = (stop: ChainStop): HopTone => STOP_TONE[stopMood(stop)];
+
 /** How the chain draws a hop, on the page and in a shared file alike. */
 export function hopTone(hop: ChainHop): HopTone {
   if (hop.at === "stop") return STOP_TONE[hop.mood];

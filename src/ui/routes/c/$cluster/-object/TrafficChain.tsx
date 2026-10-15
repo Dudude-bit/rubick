@@ -38,6 +38,8 @@ import {
   nearMissWords,
   describeExistence,
   hopTone,
+  stopMood,
+  stopUnder,
   trafficChains,
   unservedIngresses,
   type ChainHop,
@@ -114,6 +116,23 @@ const STOP_LOOK: Record<
   coming: { title: "text-info", note: "text-fg-mut", icon: Clock },
   unchecked: { title: "text-fg-mid", note: "text-fg-mut", icon: EyeOff },
 };
+
+/** A stopped path in four words or fewer, in the look its full sentence has. */
+export function StopUnderWords({
+  stop,
+}: {
+  stop: Parameters<typeof stopUnder>[0];
+}) {
+  const t = useT();
+  const look = STOP_LOOK[stopMood(stop)];
+  const Icon = look.icon;
+  return (
+    <span className={cn("inline-flex items-center gap-1", look.title)}>
+      {Icon && <Icon className="h-3 w-3 flex-none" aria-hidden="true" />}
+      {t("empty", stopUnder(stop))}
+    </span>
+  );
+}
 
 function StopWords({ hop }: { hop: ChainHopStop }) {
   const look = STOP_LOOK[hop.mood];

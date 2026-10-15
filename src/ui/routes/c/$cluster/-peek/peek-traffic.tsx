@@ -12,8 +12,9 @@ import {
   Rail,
   routeAddress,
   RouteSource,
+  StopUnderWords,
 } from "../-object/TrafficChain";
-import { closestSelector } from "@/lib/connections";
+import { closestSelector, stopTone, type HopTone } from "@/lib/connections";
 import { publishedFor } from "@/lib/published";
 import { parts } from "@/i18n/parts";
 import type { NearMiss } from "@/generated/types";
@@ -191,7 +192,7 @@ function TrafficPath({
       : null;
   const nearMiss = stop?.reason === "selectsNothing" ? stop.near : null;
 
-  const levels: { key: string; entries: ReactNode[] }[] = [];
+  const levels: { key: string; entries: ReactNode[]; tone?: HopTone }[] = [];
   // Each entry — a Gateway with its address, an Ingress — is a level of its
   // own, its doors stacked under it, each door wearing its verdict.
   for (const entry of doors.entries) {
@@ -360,6 +361,7 @@ function TrafficPath({
   if (target.kind === "Service") {
     levels.push({
       key: "behind",
+      tone: stop ? stopTone(stop) : undefined,
       entries: [
         <p key="endpoints" className="text-[11px] text-fg-fnt">
           <ResourceRef
@@ -368,7 +370,11 @@ function TrafficPath({
             namespace={namespace}
             showKind={false}
           />{" "}
-          ({t("empty", "addressesAnswering")})
+          {stop && "service" in stop ? (
+            <StopUnderWords stop={stop} />
+          ) : (
+            `(${t("empty", "addressesAnswering")})`
+          )}
         </p>,
         ...(nearMiss ? [<ClosestPods key="near" near={nearMiss} />] : []),
         ...(behind
@@ -436,8 +442,8 @@ function TrafficPath({
               className="grid grid-cols-[7px_minmax(0,1fr)] gap-x-2.5"
             >
               <Rail
-                tone="on"
-                into={last ? null : "on"}
+                tone={level.tone ?? "on"}
+                into={last ? null : (levels[index + 1].tone ?? "on")}
                 here={level.key === "self"}
               />
               <div

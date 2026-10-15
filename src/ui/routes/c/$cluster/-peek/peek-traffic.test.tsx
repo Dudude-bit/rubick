@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
-import type { ObjectRef, ResourceConnections } from "@/generated/types";
+import type {
+  ChainStop,
+  ObjectRef,
+  ResourceConnections,
+} from "@/generated/types";
 
 const answer = vi.hoisted(() => ({
   connections: (): Promise<ResourceConnections> =>
@@ -109,5 +113,65 @@ describe("the peek names what is one label short", () => {
     expect(document.body.textContent).toContain(
       "carries app=checkout-api but not track=stable"
     );
+  });
+});
+
+describe("the peek says where a Service's path stops", () => {
+  const stoppedAt = (stop: (service: ObjectRef) => ChainStop) => {
+    const service = at("Service", "checkout-api");
+    answer.connections = () =>
+      Promise.resolve({
+        subject: service,
+        edges: [],
+        stops: [],
+        notLookedAt: [],
+        published: [
+          {
+            service,
+            source: "slices",
+            slices: 0,
+            ready: 0,
+            draining: 0,
+            notReady: 0,
+            unrouted: 0,
+            unroutedReady: 0,
+            ports: [],
+            endpoints: [],
+            whole: true,
+            unpublished: [],
+            stop: stop(service),
+          },
+        ],
+      });
+    return draw("Service", "checkout-api");
+  };
+
+  /** The peek drew the step behind a Service whose pods the API server
+   *  refuses as "the addresses actually answering", grey, beside a red
+   *  Status row. Fails if the step stops saying the stop. */
+  it("draws the step behind a refused Service red, in the stop's words", async () => {
+    await stoppedAt((service) => ({
+      reason: "podsRefused",
+      service,
+      selector: "app=checkout-api",
+      workloads: [at("Deployment", "checkout-api")],
+      said: 'pods "checkout-api-7d9" is forbidden: exceeded quota: two-pods',
+    }));
+    const words = await screen.findByText("pods refused");
+    expect(words).toHaveClass("text-err");
+    expect(document.body.textContent).not.toContain("actually answering");
+    expect(document.querySelectorAll(".border-err")).toHaveLength(1);
+  });
+
+  /** A Service scaled to zero is idle, not down: the trace draws it grey. */
+  it("draws the step behind a Service scaled to zero quiet", async () => {
+    await stoppedAt((service) => ({
+      reason: "scaledToZero",
+      service,
+      selector: "app=checkout-api",
+      workloads: [at("Deployment", "checkout-api")],
+    }));
+    expect(await screen.findByText("scaled to zero")).toBeInTheDocument();
+    expect(document.querySelectorAll(".border-err, .text-err")).toHaveLength(0);
   });
 });
