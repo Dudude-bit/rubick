@@ -7,6 +7,8 @@ const answer = vi.hoisted(() => ({
   events: [] as unknown[],
   setEvents: [] as unknown[],
   sets: [] as unknown[] | Error,
+  jobEvents: [] as unknown[],
+  jobs: [] as unknown[],
 }));
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -14,8 +16,11 @@ vi.mock("@/lib/commands", () => ({
       Promise.resolve(
         filters.involved_object_kind === "ReplicaSet"
           ? answer.setEvents
-          : answer.events
+          : filters.involved_object_kind === "Job"
+            ? answer.jobEvents
+            : answer.events
       ),
+    listJobs: () => Promise.resolve(answer.jobs),
     getDeploymentReplicasets: () =>
       answer.sets instanceof Error
         ? Promise.reject(answer.sets)
@@ -186,11 +191,11 @@ const onObject = (
   lastTimestamp: at(second),
 });
 
-function mountDeployment() {
+function mountDeployment(kind = "Deployment", name = "web") {
   const client = testQueryClient();
   const { result } = renderHook(
     () =>
-      useObjectEvents("Deployment", "web", "lena-sandbox", {
+      useObjectEvents(kind, name, "lena-sandbox", {
         refresh: "slow",
       }),
     {
@@ -240,4 +245,17 @@ it("says its ReplicaSets' warnings could not be read rather than that there are 
     "ScalingReplicaSet",
   ]);
   answer.sets = [];
+});
+
+/** A CronJob's refused run is a FailedCreate on the Job; fails if its Events leave out its runs' warnings or take another CronJob's. */
+it("carries the warnings of a CronJob's own runs", async () => {
+  answer.events = [];
+  answer.jobs = [{ uid: "run", name: "nightly-29000000" }];
+  answer.jobEvents = [
+    onObject("Job", "nightly-29000000", "run", "FailedCreate", 4),
+    onObject("Job", "hourly-29000000", "hourly", "FailedCreate", 6),
+  ];
+  const result = mountDeployment("CronJob", "nightly");
+  await waitFor(() => expect(result.current.data).toHaveLength(1));
+  expect(result.current.data?.[0].involvedObject.name).toBe("nightly-29000000");
 });

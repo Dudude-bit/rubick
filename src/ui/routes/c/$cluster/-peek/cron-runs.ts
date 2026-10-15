@@ -5,13 +5,8 @@ import type { JobInfo } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useRefusals } from "@/hooks/useRefusals";
 import { toldRuns } from "@/lib/create-refusal";
-import { commands } from "@/lib/commands";
+import { cronJobRunsKey, readCronJobRuns } from "@/lib/cron-runs";
 import { STALE_TIMES } from "@/lib/refresh";
-
-export const cronJobRunsKey = (
-  namespace: string | undefined,
-  name: string | undefined
-) => ["cronjob-jobs", namespace, name] as const;
 
 /** The Jobs a CronJob still holds, as its page and its peek read them. */
 export function useCronJobRuns(
@@ -20,18 +15,10 @@ export function useCronJobRuns(
 ) {
   return useLiveQuery({
     queryKey: cronJobRunsKey(namespace, name),
-    queryFn: async () => {
-      if (!name || !namespace) return [];
-      const all = await commands.listJobs({
-        namespace,
-        labelSelector: null,
-        fieldSelector: null,
-        limit: null,
-      });
-      // The list command carries no owner references, so the naming
-      // convention the controller uses is the only link available.
-      return all.filter((job) => job.name.startsWith(`${name}-`));
-    },
+    queryFn: () =>
+      name && namespace
+        ? readCronJobRuns(name, namespace)
+        : Promise.resolve([]),
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,

@@ -10,6 +10,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { isRefusal } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { involvedUid } from "@/lib/event-incarnation";
+import { cronJobRunsKey, readCronJobRuns } from "@/lib/cron-runs";
 
 /** Enough of one object's events that a short list shown from them has a true total behind it. */
 export const OBJECT_EVENTS_READ = 200;
@@ -39,7 +40,8 @@ export function ofIncarnation(
 /**
  * Where a kind's controller writes the news about it on objects it owns:
  * a Deployment's refused pods are a FailedCreate on its ReplicaSet, and
- * live its own Events said none beside a page explaining the refusal.
+ * live its own Events said none beside a page explaining the refusal. Each
+ * reads its owned objects through the cache entry its page reads them by.
  */
 const WARNINGS_OF_OWNED: Partial<
   Record<
@@ -51,13 +53,12 @@ const WARNINGS_OF_OWNED: Partial<
         name: string,
         namespace: string
       ) => Promise<{ uid: string; name: string }[]>;
-      unread: "replicaSetWarningsUnread";
+      unread: "replicaSetWarningsUnread" | "jobWarningsUnread";
     }
   >
 > = {
   [ResourceType.Deployment]: {
     kind: ResourceType.ReplicaSet,
-    // The Revisions tab's own read, so the page asks for them once.
     owned: (client, name, namespace) =>
       client.fetchQuery({
         queryKey: queryKeys.deploymentReplicaSets(namespace, name),
@@ -65,6 +66,16 @@ const WARNINGS_OF_OWNED: Partial<
         staleTime: STALE_TIMES.resourceList,
       }),
     unread: "replicaSetWarningsUnread",
+  },
+  [ResourceType.CronJob]: {
+    kind: ResourceType.Job,
+    owned: (client, name, namespace) =>
+      client.fetchQuery({
+        queryKey: cronJobRunsKey(namespace, name),
+        queryFn: () => readCronJobRuns(name, namespace),
+        staleTime: STALE_TIMES.resourceList,
+      }),
+    unread: "jobWarningsUnread",
   },
 };
 

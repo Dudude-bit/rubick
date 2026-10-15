@@ -6348,6 +6348,8 @@ export const en = {
     couldNotReadEvents: "Could not read events.",
     replicaSetWarningsUnread:
       "The warnings on its ReplicaSets could not be read, so a refusal written there is not shown:",
+    jobWarningsUnread:
+      "The warnings on its Jobs could not be read, so a refusal written there is not shown:",
     eventsRefusedHere: "You do not have permission to read these events.",
     eventsNoneReadAt:
       "Read at {time}: none yet. The cluster keeps events for about an hour.",

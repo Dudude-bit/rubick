@@ -19,8 +19,8 @@ import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { CronStatusBadge } from "./CronStatusBadge";
 import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
+import { cronJobRunsKey } from "@/lib/cron-runs";
 import {
-  cronJobRunsKey,
   lastRunRefused,
   newestRun,
   useCronJobRuns,
