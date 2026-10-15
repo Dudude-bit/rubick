@@ -2003,6 +2003,8 @@ export const en = {
     notReadYet: "not read yet",
     nothingPublishes: "nothing publishes it",
     nothingBehind: "nothing behind it",
+    everyWayShut: "every way in shut by NetworkPolicy",
+    noWayServes: "no way in serves",
     moreWays: "{n} more",
     lastChange: "Last change",
     nothingSeen: "nothing seen while this app was watching",

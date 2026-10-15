@@ -6,6 +6,7 @@ import {
   entryPointsOf,
   MAX_PINNED_PER_CONTEXT,
   isPinned,
+  noWayServes,
   openQuestionsOf,
   pinKey,
   pinsOf,
@@ -688,6 +689,34 @@ describe("more ways in", () => {
       wayState(way([url, publishedHop({ ready: 2 }), stop("unchecked", false)]))
     ).toBe("unsure");
     expect(wayState(way([url]))).toBe("unread");
+  });
+
+  /**
+   * The card's header read "2/2 ready" in green over two ways in a policy
+   * shut. Fails if the header is told nothing serves while one does, or
+   * while one was never read.
+   */
+  it("says no way in serves only where every one was read and none does", () => {
+    const entry = (state: "serving" | "shut" | "empty" | "unread") => ({
+      key: state,
+      url: null,
+      label: state,
+      detail: null,
+      serving: state === "serving",
+      servingKnown: state !== "unread",
+      shut: state === "shut",
+      unsure: false,
+    });
+    const ways = (...states: Parameters<typeof entry>[0][]) => ({
+      entries: states.map(entry),
+      known: true,
+    });
+    expect(noWayServes(ways("shut", "shut"))).toBe("shut");
+    expect(noWayServes(ways("shut", "empty"))).toBe("empty");
+    expect(noWayServes(ways("shut", "serving"))).toBeNull();
+    expect(noWayServes(ways("shut", "unread"))).toBeNull();
+    expect(noWayServes(ways())).toBeNull();
+    expect(noWayServes({ ...ways("shut"), known: false })).toBeNull();
   });
 
   /** Neither the endpoints nor the pods answered: the zeros are nobody's. */

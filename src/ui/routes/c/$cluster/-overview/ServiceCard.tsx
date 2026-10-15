@@ -4,7 +4,7 @@ import { ExternalLink, PinOff } from "lucide-react";
 import { ObjectLink } from "@/components/object/ResourceRef";
 import { Journal } from "../-changes/ChangesTimeline";
 import { useShareSection } from "@/components/share/screen-share";
-import { pinShare, WAY_WORDS } from "./service-card-share";
+import { CUT_WORDS, pinShare, WAY_WORDS } from "./service-card-share";
 import { useConnections } from "@/hooks/useConnections";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
@@ -17,6 +17,7 @@ import {
   CARD_REFRESH,
   changesFor,
   entryPointsOf,
+  noWayServes,
   openQuestionsOf,
   pinKey,
   stateOf,
@@ -125,7 +126,7 @@ export function ServiceCard({
         <span className="truncate font-mono text-[11px] text-fg-fnt">
           {pin.namespace}
         </span>
-        <StateWords state={state} t={t} />
+        <StateWords state={state} cut={noWayServes(ways)} t={t} />
         <button
           type="button"
           aria-label={t("services", "unpin")}
@@ -235,7 +236,15 @@ export function ServiceCard({
  * no numbers, and drawing either as "0 ready" tells a person their service is
  * down when it is not there, or when nobody looked.
  */
-function StateWords({ state, t }: { state: ServiceState; t: T }) {
+function StateWords({
+  state,
+  cut,
+  t,
+}: {
+  state: ServiceState;
+  cut: ReturnType<typeof noWayServes>;
+  t: T;
+}) {
   if (state.state === "gone") {
     return (
       <span className="flex-none font-mono text-[11px] text-err">
@@ -264,19 +273,23 @@ function StateWords({ state, t }: { state: ServiceState; t: T }) {
     <span
       className={cn(
         "flex-none font-mono text-[11px] tabular-nums",
-        state.state === "ready" ? "text-ok" : "text-warn"
+        cut ? "text-fg-mut" : state.state === "ready" ? "text-ok" : "text-warn"
       )}
     >
       {t("services", "readyOf", { ready: state.ready, total: state.total })}
     </span>
   );
-  if (state.state === "short" && state.rollout) {
-    return (
-      <span className="flex flex-none items-baseline gap-1.5">
+  return (
+    <span className="flex min-w-0 items-baseline gap-1.5">
+      {state.state === "short" && state.rollout ? (
         <RolloutBadge rollout={state.rollout} />
-        {count}
-      </span>
-    );
-  }
-  return count;
+      ) : null}
+      {count}
+      {cut ? (
+        <span className="truncate text-[11px] text-err">
+          {CUT_WORDS[cut](t)}
+        </span>
+      ) : null}
+    </span>
+  );
 }

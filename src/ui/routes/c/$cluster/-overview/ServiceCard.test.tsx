@@ -196,8 +196,7 @@ describe("what a card says about a way in", () => {
     expect(screen.getByText(/nothing behind|ничего нет/i)).toBeVisible();
   });
 
-  /** Ready pods behind a policy that admits nobody drew the way in as live. */
-  it("says a way in a policy shuts is shut, in red", async () => {
+  const shutChain = (): ChainPath[] => {
     const service = {
       kind: "Service",
       name: "payments",
@@ -205,7 +204,7 @@ describe("what a card says about a way in", () => {
       existence: "present",
       facts: null,
     };
-    chain.paths = [
+    return [
       {
         key: "c",
         broken: true,
@@ -242,14 +241,31 @@ describe("what a card says about a way in", () => {
         ],
       },
     ] as unknown as ChainPath[];
+  };
+
+  /** Ready pods behind a policy that admits nobody drew the way in as live. */
+  it("says a way in a policy shuts is shut, in red", async () => {
+    chain.paths = shutChain();
 
     await mount();
 
     const word = screen.getByText(
-      /shut by NetworkPolicy|закрыто NetworkPolicy/
+      /^(shut by NetworkPolicy|закрыто NetworkPolicy)$/
     );
     expect(word).toHaveClass("text-err");
     expect(screen.queryByText(/nothing behind|ничего нет/i)).toBeNull();
+  });
+
+  /** The header read "1/1 ready" in green over the only way in, shut. */
+  it("says in the header that every way in is shut, and stops calling the count green", async () => {
+    chain.paths = shutChain();
+    await mount();
+    expect(
+      screen.getByText(
+        /^(every way in shut by NetworkPolicy|все входы закрыты NetworkPolicy)$/
+      )
+    ).toHaveClass("text-err");
+    expect(screen.getByText("1/1 ready")).not.toHaveClass("text-ok");
   });
 });
 
@@ -311,6 +327,39 @@ describe("what a card offers Share", () => {
         {
           text: "web (shut by NetworkPolicy), api (nothing behind it), shop, edge (not checked)",
         },
+      ],
+    });
+  });
+
+  /** The Share filed a service whose every way in was shut as ready, in green. */
+  it("says in the status that every way in is shut, as the header does", () => {
+    const way = {
+      url: null,
+      detail: null,
+      serving: false,
+      servingKnown: true,
+      shut: true,
+      unsure: false,
+    };
+    const section = pinShare(
+      pin,
+      { state: "ready", ready: 2, total: 2 },
+      {
+        entries: [
+          { ...way, key: "a", label: "web" },
+          { ...way, key: "b", label: "api" },
+        ],
+        known: true,
+      },
+      [],
+      null,
+      [],
+      t
+    );
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    expect(rows[1]).toMatchObject({
+      values: [
+        { text: "2/2 ready · every way in shut by NetworkPolicy", role: "err" },
       ],
     });
   });

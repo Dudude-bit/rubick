@@ -211,6 +211,18 @@ export function wayState(way: EntryPoint): WayState | null {
   return way.serving ? null : "empty";
 }
 
+/** Every way in read and none serving; null where one serves or one was not read. */
+export function noWayServes(ways: {
+  entries: EntryPoint[];
+  known: boolean;
+}): "shut" | "empty" | null {
+  if (!ways.known || ways.entries.length === 0) return null;
+  const states = ways.entries.map(wayState);
+  if (!states.every((state) => state === "shut" || state === "empty"))
+    return null;
+  return states.every((state) => state === "shut") ? "shut" : "empty";
+}
+
 /**
  * The ways in, read off the same chain the detail page draws.
  *

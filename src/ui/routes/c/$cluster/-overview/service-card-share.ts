@@ -6,6 +6,7 @@ import { rolloutVerdict } from "@/lib/workload-status";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import {
+  noWayServes,
   pinKey,
   wayState,
   type EntryPoint,
@@ -25,30 +26,47 @@ export const WAY_WORDS: Record<WayState, (t: T) => string> = {
   empty: (t) => t("services", "nothingBehind"),
 };
 
+/** What the header says beside the count where no way in serves. */
+export const CUT_WORDS: Record<
+  NonNullable<ReturnType<typeof noWayServes>>,
+  (t: T) => string
+> = {
+  shut: (t) => t("services", "everyWayShut"),
+  empty: (t) => t("services", "noWayServes"),
+};
+
 function wayWords(way: EntryPoint, t: T): string {
   const name = way.url ?? way.label;
   const state = wayState(way);
   return state ? `${name} (${WAY_WORDS[state](t)})` : name;
 }
 
-function stateValue(state: ServiceState, t: T): ReportValue {
+function stateValue(
+  state: ServiceState,
+  cut: ReturnType<typeof noWayServes>,
+  t: T
+): ReportValue {
+  const cutOff = (value: ReportValue): ReportValue =>
+    cut
+      ? { ...value, text: `${value.text} · ${CUT_WORDS[cut](t)}`, role: "err" }
+      : value;
   switch (state.state) {
     case "ready":
-      return {
+      return cutOff({
         text: t("services", "readyOf", {
           ready: state.ready,
           total: state.total,
         }),
         role: "ok",
-      };
+      });
     case "short": {
       const count = t("services", "readyOf", {
         ready: state.ready,
         total: state.total,
       });
-      if (!state.rollout) return { text: count, role: "warn" };
+      if (!state.rollout) return cutOff({ text: count, role: "warn" });
       const verdict = rolloutVerdict(state.rollout, t);
-      return { ...verdict, text: `${verdict.text} · ${count}` };
+      return cutOff({ ...verdict, text: `${verdict.text} · ${count}` });
     }
     case "gone":
       return { text: t("services", "gone"), role: "err" };
@@ -79,7 +97,10 @@ export function pinShare(
       label: t("columns", "name"),
       values: [{ text: pin.name, ref: refOf(pin) }],
     },
-    { label: t("columns", "status"), values: [stateValue(state, t)] },
+    {
+      label: t("columns", "status"),
+      values: [stateValue(state, noWayServes(ways), t)],
+    },
     {
       label: t("services", "wayIn"),
       values: [

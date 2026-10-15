@@ -2088,6 +2088,8 @@ export const ru: Catalogue = {
     notReadYet: "ещё не прочитано",
     nothingPublishes: "ничто его не публикует",
     nothingBehind: "за ним ничего нет",
+    everyWayShut: "все входы закрыты NetworkPolicy",
+    noWayServes: "ни один вход не обслуживается",
     moreWays: "ещё {n}",
     lastChange: "Последнее изменение",
     nothingSeen: "приложение ничего не видело, пока смотрело",
