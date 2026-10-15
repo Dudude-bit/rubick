@@ -37,6 +37,7 @@ import { refOf } from "@/lib/report-parts";
 import { podStatusValue } from "@/lib/share/pod-status";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT, type T as Translate } from "@/i18n/useT";
+import { T } from "@/i18n/T";
 import { narrowPods } from "@/lib/pod-filter";
 import { usePodFilter } from "@/hooks/usePodFilter";
 import { PodSelectorBanner } from "./PodSelectorBanner";
@@ -126,6 +127,19 @@ export const columns: ColumnDef<PodRow>[] = [
         rows.length === 0
           ? 224
           : badgeCellPx(rows.map((pod) => pod.status.display)),
+      // Room for "already replaced" beside the badge while the port has it.
+      ideal: (t, rows: readonly PodRow[]) => {
+        const replaced = rows.filter((pod) => pod.status.gone === "replaced");
+        return replaced.length === 0
+          ? 0
+          : badgeCellPx(replaced.map((pod) => pod.status.display)) +
+              6 +
+              widestText(
+                [t("cluster", "attentionReplacedPod")],
+                "caption",
+                6.2
+              );
+      },
       label: { section: "columns", key: "status" },
       share: (pod: PodRow, t) =>
         podStatusValue(pod, pod.nodeSilence ?? null, t),
@@ -135,10 +149,19 @@ export const columns: ColumnDef<PodRow>[] = [
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
     cell: ({ row }) => (
-      <PodStatusBadge
-        pod={row.original}
-        silence={row.original.nodeSilence ?? null}
-      />
+      <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
+        <span className="flex-none">
+          <PodStatusBadge
+            pod={row.original}
+            silence={row.original.nodeSilence ?? null}
+          />
+        </span>
+        {row.original.status.gone === "replaced" && (
+          <span className="truncate text-[11px] text-fg-mut">
+            <T section="cluster" k="attentionReplacedPod" />
+          </span>
+        )}
+      </span>
     ),
   },
   // kubectl's own columns stay; what it prints only with -o wide, and the

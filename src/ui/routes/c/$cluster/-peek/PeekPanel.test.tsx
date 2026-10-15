@@ -577,6 +577,48 @@ describe("PeekPanel", () => {
     );
   });
 
+  /**
+   * payments' evicted pod read red Evicted on the peek, the page and the
+   * list with nothing saying its ReplicaSet had already started another,
+   * while the Overview called it "already replaced". Fails if the peek does
+   * not lead with that, naming the controller, or says it of a pod still run.
+   */
+  it("says a pod its controller replaced was replaced, and by whom", async () => {
+    const evicted = buildPod({
+      status: {
+        phase: "Failed",
+        display: "Evicted",
+        exitUnreported: false,
+        ready: false,
+        conditions: [],
+        message: "The node was low on resource: ephemeral-storage.",
+        reason: "Evicted",
+        gone: "replaced",
+      },
+      ownerReferences: [
+        {
+          api_version: "apps/v1",
+          kind: "ReplicaSet",
+          name: "payments-578dcb4559",
+          uid: "rs-uid",
+          controller: true,
+        },
+      ],
+    });
+    vi.mocked(commands.getPod).mockResolvedValue(evicted);
+    await wrap(POD_PEEK);
+    const note = await screen.findByTestId("replaced-note");
+    expect(note).toHaveTextContent(
+      /^Already replaced: ReplicaSet payments-578dcb4559 started another pod in its place/
+    );
+    expect(
+      within(screen.getByRole("dialog"))
+        .getByText("Evicted", { selector: "header span" })
+        .closest("[title]")
+        ?.getAttribute("title")
+    ).toMatch(/Already replaced: its controller started another pod/);
+  });
+
   it("shows the summary and this object's events once they arrive", async () => {
     await wrap(POD_PEEK);
     expect(await screen.findByText("CrashLoopBackOff")).toBeInTheDocument();

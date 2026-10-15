@@ -896,6 +896,46 @@ describe("a pod the node evicted while an init container ran", () => {
   });
 
   /**
+   * payments' evicted pod led with the node's words and nothing else, while
+   * the Overview said "already replaced" and its ReplicaSet had long since
+   * started another. Fails if the header or the summary stops saying so and
+   * naming the controller, or says it of an evicted pod nothing replaced.
+   */
+  it("says its controller already replaced it, in the header and under the eviction", async () => {
+    let pod: unknown = {
+      ...EVICTED,
+      status: { ...EVICTED.status, gone: "replaced" },
+    };
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod") return pod;
+      if (command === "get_replicaset") return REPLICA_SET;
+      if (command === "list_events") return [];
+      return undefined;
+    });
+    const { unmount } = await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+    expect(screen.getByText("already replaced")).toBeInTheDocument();
+    expect(screen.getByTestId("replaced-note")).toHaveTextContent(
+      /^Already replaced: ReplicaSet cart-9df89489c started another pod in its place/
+    );
+    unmount();
+    pod = EVICTED;
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+    expect(screen.getAllByText("Evicted").length).toBeGreaterThan(0);
+    expect(screen.queryByText("already replaced")).toBeNull();
+    expect(screen.queryByTestId("replaced-note")).toBeNull();
+  });
+
+  /**
    * Marco's header read "Evicted 3d old" for an eviction thirteen hours
    * before: the age beside the word was the pod's. Fails if the header stops
    * dating the failure, or drops the pod's age to do it.

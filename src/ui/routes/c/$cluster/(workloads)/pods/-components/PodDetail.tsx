@@ -73,6 +73,7 @@ import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { MostLikelyPanel } from "./MostLikelyPanel";
 import { PodStatusBadge } from "./PodStatusBadge";
 import { EndedAgo } from "../../../-object/EndedAgo";
+import { ReplacedNote } from "../../../-object/ReplacedNote";
 import { usePodShare } from "./usePodShare";
 import { usePodWaiting } from "./usePodWaiting";
 import { VolumeRows } from "./volume-rows";
@@ -848,6 +849,11 @@ export function PodDetail() {
                 </span>
               )}
             {pod?.status.failedAt && <EndedAgo at={pod.status.failedAt} />}
+            {pod?.status.gone === "replaced" && (
+              <span className="text-[11px] text-fg-mut">
+                {t("cluster", "attentionReplacedPod")}
+              </span>
+            )}
           </>
         }
         onFindReplacement={handleFindReplacement}
@@ -861,30 +867,35 @@ export function PodDetail() {
           )
         }
         summary={
-          (problem || causeSaid) && (
-            <ProblemSummary
-              headline={causeSaid?.sentence ?? problem?.headline}
-              detail={
-                causeSaid ? (
-                  <CauseEvidence words={causeSaid} inline />
-                ) : (
-                  problem?.detail
-                )
-              }
-              tone={causeSaid?.tone ?? problem?.tone}
-              action={
-                <DetailAction
-                  label={t(
-                    "action",
-                    (problem?.tab ?? "conditions") === "containers"
-                      ? "seeContainers"
-                      : "seeConditions"
-                  )}
-                  icon={ArrowRight}
-                  onClick={() => setActiveTab(problem?.tab ?? "conditions")}
+          (problem || causeSaid || pod?.status.gone === "replaced") && (
+            <>
+              {(problem || causeSaid) && (
+                <ProblemSummary
+                  headline={causeSaid?.sentence ?? problem?.headline}
+                  detail={
+                    causeSaid ? (
+                      <CauseEvidence words={causeSaid} inline />
+                    ) : (
+                      problem?.detail
+                    )
+                  }
+                  tone={causeSaid?.tone ?? problem?.tone}
+                  action={
+                    <DetailAction
+                      label={t(
+                        "action",
+                        (problem?.tab ?? "conditions") === "containers"
+                          ? "seeContainers"
+                          : "seeConditions"
+                      )}
+                      icon={ArrowRight}
+                      onClick={() => setActiveTab(problem?.tab ?? "conditions")}
+                    />
+                  }
                 />
-              }
-            />
+              )}
+              {pod && <ReplacedNote pod={pod} className="mt-2" />}
+            </>
           )
         }
         actions={

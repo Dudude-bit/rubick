@@ -24,7 +24,7 @@ const t: T = (section, key, values) => translate("en", section, key, values);
  * cluster store, three queries and a table just to read one badge.
  */
 type Row = {
-  status: { display: string; phase: string };
+  status: { display: string; phase: string; gone?: "replaced" | "deleting" };
   containers?: RowContainer[];
   initContainers?: RowContainer[];
   nodeSilence?: unknown;
@@ -43,6 +43,43 @@ function statusCell(original: Row) {
 }
 
 const RUNNING = { display: "Running", phase: "Running" };
+
+describe("a pod its controller replaced", () => {
+  /**
+   * shop's list drew 25 evicted recommendations pods in the same red as the
+   * ones crash-looping now, with nothing saying their ReplicaSet had already
+   * started others, while the Overview said "already replaced". Fails if the
+   * row, its hover or a shared file stops saying so, or says it of a pod
+   * still run.
+   */
+  it("says already replaced beside the badge, on hover and in a shared file", () => {
+    const evicted = {
+      status: {
+        display: "Evicted",
+        phase: "Failed",
+        gone: "replaced" as const,
+      },
+    };
+    render(<>{statusCell(evicted)}</>);
+    const badge = screen.getByText("Evicted");
+    expect(badge.closest(".flex-none")).not.toBeNull();
+    expect(screen.getByText("already replaced")).toHaveClass("truncate");
+    expect(badge.closest("[title]")?.getAttribute("title")).toMatch(
+      /Already replaced: its controller started another pod/
+    );
+    expect(
+      podStatusValue(
+        { containers: [], initContainers: [], ...evicted } as never,
+        null,
+        t
+      ).text
+    ).toBe("Evicted · already replaced");
+    render(
+      <>{statusCell({ status: { display: "Evicted", phase: "Failed" } })}</>
+    );
+    expect(screen.getAllByText("already replaced")).toHaveLength(1);
+  });
+});
 
 describe("a pod whose node stopped reporting", () => {
   /**

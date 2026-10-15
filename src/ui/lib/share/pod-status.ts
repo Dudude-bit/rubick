@@ -26,6 +26,7 @@ type LoopStatus = {
   rejected?: string;
   /** Why it is red or amber, as every surface reads it. */
   cause?: PodCause;
+  gone?: PodGone;
 };
 
 export type PodBadgeInput = ReadinessLists & {
@@ -204,6 +205,7 @@ export function podStatusTitle(
             t,
             podReadiness(pod)
           ),
+      pod.status.gone === "replaced" && t("statusMeaning", "replaced"),
       upBetweenCrashes(pod) && t("statusMeaning", "betweenCrashes"),
       exitUnreported(pod) && t("statusMeaning", "exitUnreported"),
       statusRole(pod.status.display) === "pending" &&
@@ -232,7 +234,16 @@ export function podStatusValue(
 ): ReportValue {
   const display = pod.status.display;
   const now = capturedAt ? new Date(capturedAt) : undefined;
-  return silence
-    ? { text: `${display} · ${silenceNote(silence, t, now)}`, role: "neutral" }
-    : { text: display, role: podRole(pod, null) };
+  if (silence)
+    return {
+      text: `${display} · ${silenceNote(silence, t, now)}`,
+      role: "neutral",
+    };
+  return {
+    text:
+      pod.status.gone === "replaced"
+        ? `${display} · ${t("cluster", "attentionReplacedPod")}`
+        : display,
+    role: podRole(pod, null),
+  };
 }

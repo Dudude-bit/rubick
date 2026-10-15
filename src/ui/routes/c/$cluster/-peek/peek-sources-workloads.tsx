@@ -27,6 +27,7 @@ import {
   troubleCause,
 } from "@/lib/share/pod-status";
 import { PodCauseLine } from "../-object/CauseLine";
+import { ReplacedNote } from "../-object/ReplacedNote";
 import { formatDate } from "@/lib/utils";
 import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
@@ -129,13 +130,18 @@ export const WORKLOAD_SOURCES: PeekSources = {
       statusTitle: podStatusTitle(pod, null, t),
       createdAt: pod.createdAt,
       endedAt: pod.status.failedAt,
-      lead: cause && (
-        <PodCauseLine
-          pod={pod}
-          cause={cause}
-          warnedOnly={!trouble}
-          className="mt-3"
-        />
+      lead: (cause || pod.status.gone === "replaced") && (
+        <>
+          {cause && (
+            <PodCauseLine
+              pod={pod}
+              cause={cause}
+              warnedOnly={!trouble}
+              className="mt-3"
+            />
+          )}
+          <ReplacedNote pod={pod} className="mt-3" />
+        </>
       ),
       groups: [
         {

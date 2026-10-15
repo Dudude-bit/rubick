@@ -3895,6 +3895,8 @@ export const en = {
     lastRunCause: "In its last run, {run},",
     rowCauseReading: "reading its pods",
     rowCauseUnread: "pods not read, so why is not known",
+    podReplaced:
+      "Already replaced: {owner} started another pod in its place. The cluster keeps this one as a record until someone deletes it.",
     controllerSaid: "The controller says: {said}",
     rolloutMoving: {
       one: "Rolling out: {updated} of {n} pod on the new template",
@@ -7256,6 +7258,8 @@ export const en = {
       "The kubelet keeps no warning about it. Probably a volume it mounts, the network plugin, or a slow image pull.",
   },
   statusMeaning: {
+    replaced:
+      "Already replaced: its controller started another pod in its place, and the cluster keeps this one as a record.",
     phasePending:
       "accepted by the cluster, but not every container is running yet; usually waiting for a node or an image.",
     phaseRunning:
