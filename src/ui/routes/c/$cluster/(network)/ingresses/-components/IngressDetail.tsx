@@ -188,6 +188,12 @@ export function IngressDetail() {
     // expiring today all tie on `days`, and this picks the one to show.
     .sort((a, b) => a.left - b.left)[0];
 
+  // Served over TLS under a name that points at nothing, "1 host" read as
+  // fine beside a red Status and a red certificate step.
+  const missing = tlsSecretNames.find(
+    (secret) => certificates?.get(secret)?.problem?.says === "noSecret"
+  );
+
   // Once the certificate has been read, how long it has left is a more useful
   // answer than how many hosts it covers — the host count is a shape, and the
   // expiry is a date somebody has to act on. Said once, for the page and the
@@ -200,11 +206,19 @@ export function IngressDetail() {
         }
       : tls === "unknown"
         ? { text: t("empty", "tlsNotChecked"), tone: null }
-        : soonest
-          ? { text: expiryText(soonest, t), tone: soonest.tone ?? null }
-          : hasCatchAllTls
-            ? { text: t("empty", "catchAllCertificate"), tone: "warn" }
-            : { text: t("count", "hosts", { n: tlsHosts.length }), tone: null };
+        : missing
+          ? {
+              text: t("empty", "tlsSecretMissingTitle", { name: missing }),
+              tone: "err",
+            }
+          : soonest
+            ? { text: expiryText(soonest, t), tone: soonest.tone ?? null }
+            : hasCatchAllTls
+              ? { text: t("empty", "catchAllCertificate"), tone: "warn" }
+              : {
+                  text: t("count", "hosts", { n: tlsHosts.length }),
+                  tone: null,
+                };
 
   const share = useIngressShare(ingress, controller, {
     tls: { ...tlsFact, known: tls !== "unknown" },

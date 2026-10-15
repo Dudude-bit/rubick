@@ -380,6 +380,23 @@ describe("the Access tab of an Ingress the page calls unserved", () => {
   });
 });
 
+describe("the TLS fact of an Ingress whose Secret does not exist", () => {
+  /**
+   * The fact said "1 host" in plain text beside a red Status and a red
+   * certificate step in the trace. Fails if it stops naming the Secret, in red.
+   */
+  it("names the missing Secret in red rather than counting hosts", async () => {
+    shopCluster("traefik");
+    await open("overview", shopTls);
+
+    const fact = await screen.findByText("Secret shop-tls does not exist", {
+      selector: "dd *, dd",
+    });
+    expect(colourOf(fact)).toBe("text-err");
+    expect(screen.queryByText("1 host", { selector: "dd *, dd" })).toBeNull();
+  });
+});
+
 describe("an Ingress whose class does not exist, on its Overview", () => {
   /**
    * Lena read "IngressClass traefik is served by no controller" in the state
