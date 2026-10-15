@@ -147,6 +147,8 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "unavailable",
     // A rollout past its progress deadline, whatever is still serving.
     "stalled",
+    // A Job whose pods the API server refuses to create.
+    "failedcreate",
     "false",
     // Gateway API: a controller looked and said no.
     "refused",

@@ -2553,3 +2553,52 @@ describe("the overall line as a job's pod starts and settles", () => {
     }
   });
 });
+
+describe("a workload whose pods the API server refuses", () => {
+  /**
+   * Live, root-web read "Stalled: ReplicaSet has timed out progressing" and
+   * root-job was missing, while the API server refused their pods under
+   * PodSecurity. Fails if the row or its Share line stops leading with the
+   * refusal, or names the pod that never existed instead of the reason.
+   */
+  it("says the API server refuses its pods, on the panel and in Share", async () => {
+    const said =
+      'pods "root-web-d786dc494-2vntp" is forbidden: violates PodSecurity "restricted:latest"';
+    const read = attentionFrom([
+      {
+        severity: "critical",
+        kind: "Deployment",
+        name: "root-web",
+        namespace: "refused-demo",
+        reason: "Stalled",
+        detail: { says: "podsRefused", said },
+        since: null,
+        restarts: null,
+        foldedPods: null,
+        replaced: false,
+      },
+    ]);
+    await wrap(
+      <AttentionPanel
+        attention={read}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    const line = screen.getByTestId("refused-line");
+    expect(line.textContent).toBe(
+      'The API server refuses to create its pods: violates PodSecurity "restricted:latest".'
+    );
+    expect(line.getAttribute("title")).toBe(said);
+    const shared = attentionShare(read, t);
+    const details =
+      shared.body.type === "findings"
+        ? shared.body.items.map((item) => item.detail)
+        : [];
+    expect(details[0]).toBe(
+      'The API server refuses to create its pods: violates PodSecurity "restricted:latest"'
+    );
+  });
+});

@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useRefusal } from "@/hooks/useRefusals";
 import { AlignLeft, BadgeCheck, History, Info, Layers2 } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
@@ -187,6 +188,7 @@ export function DaemonSetDetail() {
     (delivered && delivered.uid === read?.uid ? delivered : read)?.ready
   );
   const startsNow = useStartsClock(splitPods);
+  const refused = useRefusal(namespace, read?.uid, splitPods);
   const daemonSet = useMemo(
     () =>
       watchedWorkload(
@@ -517,6 +519,7 @@ export function DaemonSetDetail() {
                 pods={splitPods}
                 settled={rolloutSettled(daemonSet.rollout)}
                 namespace={namespace ?? ""}
+                refused={refused}
                 className="mb-1"
               />
               <RolloutSummary

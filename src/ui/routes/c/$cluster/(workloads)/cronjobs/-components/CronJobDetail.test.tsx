@@ -37,6 +37,7 @@ vi.mock("@/lib/commands", () => ({
     deleteCronjob: vi.fn(),
     listJobs: vi.fn(async () => []),
     listPods: vi.fn(async () => []),
+    listEvents: vi.fn(async () => []),
     triggerCronjob: vi.fn(async () => "nightly-backup-1"),
     checkAccess: vi.fn(),
     subscribeJobWatch: vi.fn(async () => "jobs-1"),
@@ -112,6 +113,7 @@ function run(name: string, status: string): JobInfo {
   return {
     name,
     namespace: "ops",
+    uid: "run",
     completions: 1,
     succeeded: status === "Complete" ? 1 : 0,
     failed: 0,
@@ -121,6 +123,14 @@ function run(name: string, status: string): JobInfo {
     createdAt: new Date().toISOString(),
   };
 }
+
+const ownedByRun = {
+  apiVersion: "batch/v1",
+  kind: "Job",
+  name: "nightly-backup-29000000",
+  uid: "run",
+  controller: true,
+};
 
 const usageSection = async () =>
   (await screen.findByText("Usage")).closest("section") as HTMLElement;
@@ -172,7 +182,7 @@ describe("CronJobDetail", () => {
           },
         },
         containers: [],
-        ownerReferences: [],
+        ownerReferences: [ownedByRun],
       } as never,
     ]);
     await renderPage();
@@ -180,6 +190,45 @@ describe("CronJobDetail", () => {
       "In its last run, Job nightly-backup-29000000, 1 of 1 pod: backup exited (exit 2, Error)."
     );
     vi.mocked(commands.listPods).mockResolvedValue([]);
+  });
+
+  /**
+   * A quota refused every pod its run asked for, so no pod was there to say
+   * why and the page said nothing. Fails if the last run's cause does not
+   * quote the API server's refusal of that run's pods.
+   */
+  it("leads with the API server's refusal of its newest run's pods", async () => {
+    const said =
+      'Error creating: pods "nightly-backup-29000000-x" is forbidden: exceeded quota: two-pods';
+    vi.mocked(commands.listJobs).mockResolvedValueOnce([
+      run("nightly-backup-29000000", "Pending"),
+    ]);
+    vi.mocked(commands.listEvents).mockResolvedValue([
+      {
+        name: "e",
+        namespace: "ops",
+        uid: "e",
+        type: "Warning",
+        reason: "FailedCreate",
+        message: said,
+        source: "job-controller",
+        involvedObject: {
+          kind: "Job",
+          name: "nightly-backup-29000000",
+          namespace: "ops",
+          uid: "run",
+        },
+        count: 3,
+        firstTimestamp: null,
+        lastTimestamp: new Date().toISOString(),
+      },
+    ]);
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    await renderPage();
+    expect(await screen.findByTestId("refused-line")).toHaveTextContent(
+      `In its last run, Job nightly-backup-29000000, The API server refuses to create its pods. The API server answered: ${said}`
+    );
+    vi.mocked(commands.listEvents).mockResolvedValue([]);
   });
 
   /**

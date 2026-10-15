@@ -1,13 +1,20 @@
-import type { PodRow, SharedCause, UnreadNamespace } from "@/generated/types";
+import type {
+  EventInfo,
+  PodRow,
+  SharedCause,
+  UnreadNamespace,
+} from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { ResourceMetrics } from "@/lib/metrics";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { kubeletWarned, sharedText } from "@/lib/pod-cause";
 import { causeDeadlines, workloadCause } from "@/lib/share/pod-status";
+import { createRefusal, refusalText, refusedUid } from "@/lib/create-refusal";
 import { causeTextPx } from "../../-list/columns";
 
-/** What a list row says of the cause its pods share: still reading them, could not read them, or what they told. */
+/** What a list row says of the cause its pods share: still reading them, could not read them, or what they told; first, that the API server refuses them. */
 export type RowCause =
+  | { says: "refused"; said: string }
   | { says: "reading" }
   | { says: "unread" }
   | { says: "read"; shared: SharedCause | null };
@@ -32,8 +39,8 @@ export const verdictByRole = (
 export const jobVerdict = (status: string) =>
   verdictByRole(statusRole(status), status === "Complete");
 
-/** The workload whose pods tell a row's cause: its own, or a CronJob's run. */
-export type CauseOwner = { kind: string; name: string };
+/** The workload whose pods tell a row's cause: its own, or a CronJob's run, whose uid the row does not carry. */
+export type CauseOwner = { kind: string; name: string; uid?: string };
 
 type ListedPod = PodRow & { kubeletWarned?: boolean };
 
@@ -68,6 +75,31 @@ export function rowPods(
   };
 }
 
+/**
+ * What the API server refuses the controller behind a row, read beside the
+ * pods it has: a Deployment carries its `ReplicaSet`'s refusal, the rest are
+ * told by their events. Nothing is claimed while either is unread.
+ */
+export function rowRefusal(
+  row: { namespace: string; podsRefused?: string | null },
+  owner: CauseOwner | null,
+  pods: RowPods | null,
+  refusals: readonly EventInfo[] | null
+): string | null {
+  if (row.podsRefused !== undefined) return row.podsRefused;
+  if (!owner || !pods || !refusals || pods.unread.has(row.namespace))
+    return null;
+  const uid =
+    owner.uid ?? refusedUid(refusals, owner.kind, row.namespace, owner.name);
+  if (!uid) return null;
+  const own = pods.byOwner.get(ownerKey(owner.kind, row.namespace, owner.name));
+  return createRefusal(
+    uid,
+    refusals,
+    (own ?? []).map((pod) => pod.createdAt)
+  );
+}
+
 const READING: RowCause = { says: "reading" };
 const UNREAD: RowCause = { says: "unread" };
 const NONE: RowCause = { says: "read", shared: null };
@@ -81,8 +113,10 @@ export function rowCause(
   namespace: string,
   owner: CauseOwner | null,
   pods: RowPods | null,
-  now: number
+  now: number,
+  refused: string | null = null
 ): RowCause {
+  if (refused !== null) return { says: "refused", said: refused };
   if (!pods) return READING;
   if (pods.unread.has(namespace)) return UNREAD;
   if (!owner) return NONE;
@@ -104,6 +138,7 @@ export function rowCauseText(
   t: T
 ): string | null {
   if (verdict === "settled") return null;
+  if (cause.says === "refused") return refusalText(cause.said, t);
   if (cause.says === "read") return cause.shared && sharedText(cause.shared, t);
   if (verdict === "open") return null;
   return t(

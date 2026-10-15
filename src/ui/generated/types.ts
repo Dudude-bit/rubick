@@ -1214,6 +1214,7 @@ export interface JobFailure {
 export interface JobInfo {
   name: string;
   namespace: string;
+  uid: string;
   completions: number | null;
   succeeded: number;
   failed: number;
@@ -1253,6 +1254,7 @@ export interface DaemonSetDetailInfo {
 export interface DaemonSetInfo {
   name: string;
   namespace: string;
+  uid: string;
   desired: number;
   current: number;
   ready: number;
@@ -1307,6 +1309,7 @@ export interface StatefulSetReplicaInfo {
 export interface StatefulSetInfo {
   name: string;
   namespace: string;
+  uid: string;
   replicas: StatefulSetReplicaInfo;
   rollout: Rollout;
   rolloutPlan: RolloutPlan;
@@ -2299,6 +2302,7 @@ export interface DeploymentInfo {
   replicas: ReplicaInfo;
   rollout: Rollout;
   rolloutPlan: RolloutPlan;
+  podsRefused: string | null;
   strategy: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
@@ -2968,7 +2972,8 @@ export type ProblemDetail =
       of: number;
       said: string | null;
     }
-  | { says: "cause"; cause: PodCause; by: ContainerRestarts[] | null };
+  | { says: "cause"; cause: PodCause; by: ContainerRestarts[] | null }
+  | { says: "podsRefused"; said: string };
 
 export type ProblemSeverity = "critical" | "warning";
 

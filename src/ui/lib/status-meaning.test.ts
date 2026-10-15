@@ -125,6 +125,7 @@ describe("what a Job's word means", () => {
       "warn",
       "ok",
       "pending",
+      "err",
     ]);
   });
 });

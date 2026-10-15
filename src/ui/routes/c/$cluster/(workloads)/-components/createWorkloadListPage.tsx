@@ -25,12 +25,17 @@ import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
 import type { Scoped } from "@/generated/types";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
+import { useRefusals } from "@/hooks/useRefusals";
 import { attachAggregatedPodMetrics, type PodMatcher } from "@/lib/metrics";
 import { MetricsStatusBanner } from "../../-metrics";
 import { queryKeys } from "@/lib/query-keys";
 import { hrefOf, objectLink } from "@/lib/links";
 import { getResourceRowId } from "@/lib/table-utils";
-import { toPlural, type ResourceKind } from "@/lib/resource-registry";
+import {
+  ResourceType,
+  toPlural,
+  type ResourceKind,
+} from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { useLastPassed } from "@/hooks/useNow";
@@ -40,11 +45,12 @@ import { rowsWithStarts, startsOf } from "@/lib/workload-status";
 import {
   rowCause,
   rowPods,
+  rowRefusal,
   type CauseOwner,
   type WorkloadRow,
 } from "./row-cause";
 
-type Workload = { name: string; namespace: string };
+type Workload = { name: string; namespace: string; uid?: string };
 
 export interface WorkloadListPageConfig<T extends Workload> {
   /** Kubernetes resource type — used for query keys + detail URLs. */
@@ -65,6 +71,8 @@ export interface WorkloadListPageConfig<T extends Workload> {
   columns: () => ColumnDef<WorkloadRow<T>>[];
   /** Whose pods tell a row's cause, where it is not the row's own: a CronJob's run. */
   causeOwner?: (row: T) => CauseOwner | null;
+  /** The row with the API server's refusal of its pods read into its own word: a Job's. */
+  refused?: (row: T, refused: string | null) => T;
   /** Override the empty-state label (defaults to plural of `resourceType`). */
   emptyStateLabel?: string;
   /**
@@ -94,7 +102,11 @@ export function createWorkloadListPage<T extends Workload>(
   const detail = queryKeys.rowDetail(config.resourceType);
   const ownerOf =
     config.causeOwner ??
-    ((row: Workload) => ({ kind: config.resourceType, name: row.name }));
+    ((row: Workload) => ({
+      kind: config.resourceType,
+      name: row.name,
+      uid: row.uid,
+    }));
 
   const ListPage = function WorkloadListPage() {
     const t = useT();
@@ -169,20 +181,30 @@ export function createWorkloadListPage<T extends Workload>(
       [pods, podsRead, podsUnread]
     );
     const causeAt = useLastPassed(causePods?.deadlines ?? []);
+    const refusals = useRefusals(
+      scope.wire?.length === 1 ? scope.wire[0] : null,
+      config.resourceType !== ResourceType.Deployment
+    );
     const dataWithMetrics = useMemo(
       () =>
         attachAggregatedPodMetrics<T>(rows, pods, config.matchPods).map(
-          (row): WorkloadRow<T> => ({
-            ...row,
-            podsCause: rowCause(
-              row.namespace,
-              ownerOf(row),
-              causePods,
-              causeAt
-            ),
-          })
+          (row): WorkloadRow<T> => {
+            const owner = ownerOf(row);
+            const refused = rowRefusal(row, owner, causePods, refusals);
+            return {
+              ...row,
+              ...(config.refused?.(row, refused) ?? {}),
+              podsCause: rowCause(
+                row.namespace,
+                owner,
+                causePods,
+                causeAt,
+                refused
+              ),
+            };
+          }
         ),
-      [rows, pods, causePods, causeAt]
+      [rows, pods, causePods, causeAt, refusals]
     );
 
     const columns = useMemo(() => config.columns(), []);

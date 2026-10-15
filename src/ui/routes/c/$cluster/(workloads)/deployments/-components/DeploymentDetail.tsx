@@ -405,8 +405,13 @@ export function DeploymentDetail() {
 
   const replicas = deployment?.replicas;
   const desired = replicas?.desired ?? 0;
+  // A pod the API server refused was never made, which is not "not ready".
+  const created =
+    deployment?.podsRefused != null && splitPods
+      ? Math.min(desired, splitPods.length)
+      : desired;
   const split = replicaSplit(
-    desired,
+    created,
     replicas?.ready ?? 0,
     splitPods,
     startsNow,
@@ -468,6 +473,13 @@ export function DeploymentDetail() {
                       tone: "ok",
                     },
                     ...split.gap,
+                    {
+                      label: t("count", "notCreatedSegment", {
+                        n: desired - created,
+                      }),
+                      count: desired - created,
+                      tone: "err",
+                    },
                   ]}
                   emptyMessage={t("empty", "scaledToZero")}
                   note={t("count", "upToDateAvailable", {
@@ -728,6 +740,7 @@ export function DeploymentDetail() {
                 pods={splitPods}
                 settled={rolloutSettled(rollout)}
                 namespace={namespace ?? ""}
+                refused={deployment?.podsRefused ?? null}
                 className="mb-1"
               />
               <RolloutSummary

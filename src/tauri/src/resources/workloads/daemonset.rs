@@ -21,6 +21,7 @@ use crate::utils::Moment;
 pub struct DaemonSetInfo {
     pub name: String,
     pub namespace: String,
+    pub uid: String,
     pub desired: i32,
     pub current: i32,
     pub ready: i32,
@@ -46,6 +47,7 @@ impl From<&DaemonSet> for DaemonSetInfo {
         Self {
             name: meta.name.clone().unwrap_or_default(),
             namespace: meta.namespace.clone().unwrap_or_default(),
+            uid: meta.uid.clone().unwrap_or_default(),
             desired: status.map_or(0, |s| s.desired_number_scheduled),
             current: status.map_or(0, |s| s.current_number_scheduled),
             ready: status.map_or(0, |s| s.number_ready),

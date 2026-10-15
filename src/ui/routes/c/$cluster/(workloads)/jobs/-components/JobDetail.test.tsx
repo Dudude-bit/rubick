@@ -12,6 +12,7 @@ vi.mock("@/lib/commands", () => ({
     getJob: vi.fn(),
     deleteJob: vi.fn(),
     listPods: vi.fn(async () => []),
+    listEvents: vi.fn(async () => []),
     getResourceConnections: vi.fn(async () => ({
       subject: {
         kind: "Job",
@@ -33,6 +34,8 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { JobDetail } from "./JobDetail";
 
@@ -119,5 +122,44 @@ describe("JobDetail", () => {
     await renderPage();
     expect(await screen.findByText("Running")).toBeInTheDocument();
     expect(screen.queryByText("Complete")).toBeNull();
+  });
+
+  /**
+   * A quota refused every pod the Job asked for, and its page said Pending in
+   * grey with no pod to say why. Fails if the header does not say
+   * FailedCreate or the page does not quote the refusal.
+   */
+  it("says FailedCreate and quotes the refusal when the API server refuses its pods", async () => {
+    const said =
+      'Error creating: pods "nightly-report-x" is forbidden: exceeded quota: two-pods';
+    vi.mocked(commands.listEvents).mockResolvedValue([
+      {
+        name: "e",
+        namespace: "k8s-gui-test",
+        uid: "e",
+        type: "Warning",
+        reason: "FailedCreate",
+        message: said,
+        source: "job-controller",
+        involvedObject: {
+          kind: "Job",
+          name: "nightly-report",
+          namespace: "k8s-gui-test",
+          uid: "job-uid",
+        },
+        count: 4,
+        firstTimestamp: null,
+        lastTimestamp: "2026-01-01T00:01:00Z",
+      },
+    ]);
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    mockDetail(buildJob({ status: "Pending", active: 0, startTime: null }));
+    await renderPage();
+    expect(await screen.findByTestId("refused-line")).toHaveTextContent(
+      `The API server refuses to create its pods. The API server answered: ${said}`
+    );
+    expect(screen.getAllByText("FailedCreate").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Pending")).toBeNull();
+    vi.mocked(commands.listEvents).mockResolvedValue([]);
   });
 });

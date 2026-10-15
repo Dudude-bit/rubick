@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { useT } from "@/i18n/useT";
 import { podsShare } from "@/lib/pod-cause";
-import { CauseLine } from "../../-object/CauseLine";
+import { CauseLine, RefusedLine } from "../../-object/CauseLine";
 import { rowCauseText, type RowCause, type RowVerdict } from "./row-cause";
 
 /** The cause a row's pods share, after its verdict, drawn as the Overview and the page draw it. */
@@ -16,6 +16,14 @@ export function RowCauseText({
   const t = useT();
   const text = rowCauseText(cause, verdict, t);
   if (!text) return null;
+  if (cause.says === "refused")
+    return (
+      <RefusedLine
+        said={cause.said}
+        compact
+        className="min-w-0 truncate text-xs"
+      />
+    );
   if (cause.says !== "read" || !cause.shared)
     return <span className="min-w-0 truncate text-xs text-fg-fnt">{text}</span>;
   const { shared } = cause;

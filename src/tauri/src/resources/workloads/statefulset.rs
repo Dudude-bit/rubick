@@ -36,6 +36,7 @@ pub struct StatefulSetReplicaInfo {
 pub struct StatefulSetInfo {
     pub name: String,
     pub namespace: String,
+    pub uid: String,
     pub replicas: StatefulSetReplicaInfo,
     pub rollout: Rollout,
     pub rollout_plan: RolloutPlan,
@@ -56,6 +57,7 @@ impl From<&StatefulSet> for StatefulSetInfo {
         Self {
             name: meta.name.clone().unwrap_or_default(),
             namespace: meta.namespace.clone().unwrap_or_default(),
+            uid: meta.uid.clone().unwrap_or_default(),
             replicas: StatefulSetReplicaInfo {
                 desired: spec.and_then(|s| s.replicas).unwrap_or(0),
                 ready: status.and_then(|s| s.ready_replicas).unwrap_or(0),

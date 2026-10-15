@@ -7268,6 +7268,9 @@ export const en = {
     claimStaticOnly:
       "It asks for no StorageClass, so nothing will provision a volume for it; it waits for a PersistentVolume without a class",
     claimWarned: "Its newest warning, {reason}:",
+    podsRefused: "The API server refuses to create its pods",
+    podsRefusedSaid: "The API server refuses to create its pods: {said}",
+    refusalSaid: "The API server answered:",
   },
   statusMeaning: {
     replaced:
@@ -7358,6 +7361,8 @@ export const en = {
       "a Pod failed and the Job is trying again, within its backoffLimit.",
     jobRunning: "Pods are running and none has failed.",
     jobPending: "no Pod has started yet.",
+    jobFailedCreate:
+      "the API server refuses to create its Pods, so it has not started and will not on its own.",
   },
   kindAbout: {
     Pod: "A Pod is one running copy of an app, one or more containers sharing a network address; look here to see which copies are up, restarting or stuck.",

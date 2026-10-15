@@ -7,6 +7,7 @@
 mod cronjob;
 mod daemonset;
 mod job;
+mod refusal;
 mod replicaset;
 mod rollout;
 mod rollout_plan;
@@ -15,6 +16,7 @@ mod statefulset;
 pub use cronjob::{CronJobDetailInfo, CronJobInfo};
 pub use daemonset::{DaemonSetDetailInfo, DaemonSetInfo};
 pub use job::{job_state, JobDetailInfo, JobFailure, JobInfo, JobState};
+pub use refusal::{create_refusal, replica_failure};
 pub use replicaset::{
     deployment_template_of, ReplicaSetInfo, ReplicaSetReplicaInfo, POD_TEMPLATE_HASH,
     REVISION_ANNOTATION,

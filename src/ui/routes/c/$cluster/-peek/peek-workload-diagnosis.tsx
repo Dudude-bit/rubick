@@ -12,6 +12,10 @@ import { FindingLine } from "../-object/FindingLine";
 import { RolloutSummary } from "../-object/RolloutSummary";
 import { newestRun, useCronJobRuns } from "./cron-runs";
 import { usePeekOwnedPods } from "./peek-owned-pods";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { useRefusal } from "@/hooks/useRefusals";
+import { jobWord } from "@/lib/create-refusal";
+import { ownStatusWord } from "@/lib/status-words";
 
 /**
  * What the workload's page says first, said first here too: the cause its
@@ -68,14 +72,62 @@ export function PodsCause({
   className?: string;
 }) {
   const pods = usePeekOwnedPods(target, detail, !settled);
+  const read = pods.error ? null : pods.data;
+  const refused = usePodsRefused(target, detail, read, !settled);
   return (
     <WorkloadPodsCause
-      pods={pods.error ? null : pods.data}
+      pods={read}
       settled={settled}
       namespace={target.namespace}
+      refused={refused}
       lead={lead}
       className={className}
     />
+  );
+}
+
+/** What the API server refuses a peeked controller: a Deployment's own word for it, or what its events and pods say. */
+function usePodsRefused(
+  target: { kind: string; namespace: string },
+  detail: unknown,
+  pods: readonly { createdAt: string | null }[] | null | undefined,
+  enabled: boolean
+): string | null {
+  const carried = (detail as { podsRefused?: string | null } | undefined)
+    ?.podsRefused;
+  const read = useRefusal(
+    target.namespace,
+    (detail as { uid?: string } | undefined)?.uid,
+    pods,
+    enabled && carried === undefined
+  );
+  return carried === undefined ? read : carried;
+}
+
+/** A Job's badge with its pods' refusal read beside it, as its row and page draw it. */
+export function JobBadge({
+  job,
+}: {
+  job: { name: string; namespace: string; uid: string; status: string };
+}) {
+  const t = useT();
+  const pending = job.status === "Pending";
+  const pods = usePeekOwnedPods(
+    { kind: "Job", name: job.name, namespace: job.namespace },
+    job,
+    pending
+  );
+  const refused = useRefusal(
+    job.namespace,
+    job.uid,
+    pods.error ? null : pods.data,
+    pending
+  );
+  const status = jobWord(job.status, refused);
+  return (
+    <StatusBadge status={status}>
+      {ownStatusWord(status, t) ?? status}
+    </StatusBadge>
   );
 }
 
@@ -100,7 +152,7 @@ export function LastRunCause({
   return (
     <PodsCause
       target={{ kind: "Job", name: run.name, namespace }}
-      detail={undefined}
+      detail={run}
       settled={run.status === "Complete"}
       className={className}
       lead={parts(t("readings", "lastRunCause"), {

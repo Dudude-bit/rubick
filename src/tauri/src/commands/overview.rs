@@ -18,7 +18,7 @@ use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
     backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, job_state,
     looping_until, pending_since, pod_start, restarting_until, stuck_reason, stuck_since,
-    within_pending_grace, PodStart, Rollout,
+    within_pending_grace, JobState, PodStart, Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -130,6 +130,8 @@ pub enum ProblemDetail {
         #[serde(default)]
         by: Option<Vec<crate::resources::ContainerRestarts>>,
     },
+    /// A workload whose pods the API server refuses to create, in its words.
+    PodsRefused { said: String },
 }
 
 impl ProblemDetail {
@@ -1183,13 +1185,19 @@ fn deployments_saying<'a>(
                 name: d.metadata.name.clone().unwrap_or_default(),
                 namespace: d.metadata.namespace.clone(),
                 reason: rollout.code().to_string(),
-                detail: workload_detail(
-                    owned.get(&key_of(d)).into_iter().flatten().copied(),
-                    condition.as_ref().and_then(|c| c.message.clone()),
-                    warned,
-                    now,
-                )
-                .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
+                detail: status
+                    .and_then(|s| s.conditions.as_deref())
+                    .and_then(crate::resources::replica_failure)
+                    .map(|said| ProblemDetail::PodsRefused { said })
+                    .or_else(|| {
+                        workload_detail(
+                            owned.get(&key_of(d)).into_iter().flatten().copied(),
+                            condition.as_ref().and_then(|c| c.message.clone()),
+                            warned,
+                            now,
+                        )
+                    })
+                    .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
                 since: condition
                     .as_ref()
                     .and_then(|c| c.last_transition_time.as_ref())
@@ -1211,6 +1219,37 @@ fn rollout_severity(rollout: &Rollout) -> ProblemSeverity {
     }
 }
 
+/// What the overview read beside a controller to say why it is in trouble.
+#[derive(Clone, Copy)]
+struct Beside<'a> {
+    owned: &'a HashMap<&'a str, Vec<&'a Pod>>,
+    warned: &'a HashSet<&'a str>,
+    events: &'a [&'a Event],
+    now: DateTime<Utc>,
+}
+
+impl Beside<'_> {
+    fn pods_of(&self, meta: &kube::core::ObjectMeta) -> impl Iterator<Item = &Pod> + Clone {
+        meta.uid
+            .as_deref()
+            .and_then(|uid| self.owned.get(uid))
+            .into_iter()
+            .flatten()
+            .copied()
+    }
+
+    /// The API server's refusal of the pods the controller `meta` asks for,
+    /// where it holds.
+    fn refused(&self, meta: &kube::core::ObjectMeta) -> Option<String> {
+        crate::resources::create_refusal(
+            meta.uid.as_deref()?,
+            self.events.iter().copied(),
+            self.pods_of(meta)
+                .map(|pod| pod.metadata.creation_timestamp.as_ref().map(Moment::moment)),
+        )
+    }
+}
+
 /// A `StatefulSet` or `DaemonSet` the rollout reader flags. Neither kind
 /// writes conditions, so the counts are the detail and nothing dates it.
 fn set_problem(
@@ -1218,18 +1257,18 @@ fn set_problem(
     meta: &kube::core::ObjectMeta,
     rollout: &Rollout,
     counts: ProblemDetail,
-    owned: &HashMap<&str, Vec<&Pod>>,
-    warned: &HashSet<&str>,
-    now: DateTime<Utc>,
+    beside: Beside<'_>,
 ) -> Option<ClusterProblem> {
-    let pods = meta.uid.as_deref().and_then(|uid| owned.get(uid));
     rollout.is_problem().then(|| ClusterProblem {
         severity: rollout_severity(rollout),
         kind: kind.to_string(),
         name: meta.name.clone().unwrap_or_default(),
         namespace: meta.namespace.clone(),
         reason: rollout.code().to_string(),
-        detail: workload_detail(pods.into_iter().flatten().copied(), None, warned, now)
+        detail: beside
+            .refused(meta)
+            .map(|said| ProblemDetail::PodsRefused { said })
+            .or_else(|| workload_detail(beside.pods_of(meta), None, beside.warned, beside.now))
             .or(Some(counts)),
         since: None,
         restarts: None,
@@ -1280,10 +1319,8 @@ fn with_own_pods(
 
 fn stateful_set_problems<'a>(
     sets: impl IntoIterator<Item = &'a StatefulSet>,
-    owned: &HashMap<&str, Vec<&Pod>>,
     unread: &[OverviewUnread],
-    warned: &HashSet<&str>,
-    now: DateTime<Utc>,
+    beside: Beside<'_>,
     pick: fn(&Rollout) -> Option<&Rollout>,
 ) -> Vec<ClusterProblem> {
     sets.into_iter()
@@ -1294,10 +1331,10 @@ fn stateful_set_problems<'a>(
                 pick(&with_own_pods(
                     crate::resources::statefulset_rollout(set),
                     &set.metadata,
-                    owned,
+                    beside.owned,
                     unread,
-                    warned,
-                    now,
+                    beside.warned,
+                    beside.now,
                 ))?,
                 ProblemDetail::ReplicasReady {
                     ready: set
@@ -1307,9 +1344,7 @@ fn stateful_set_problems<'a>(
                         .unwrap_or(0),
                     desired: set.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
                 },
-                owned,
-                warned,
-                now,
+                beside,
             )
         })
         .collect()
@@ -1317,10 +1352,8 @@ fn stateful_set_problems<'a>(
 
 fn daemon_set_problems<'a>(
     sets: impl IntoIterator<Item = &'a DaemonSet>,
-    owned: &HashMap<&str, Vec<&Pod>>,
     unread: &[OverviewUnread],
-    warned: &HashSet<&str>,
-    now: DateTime<Utc>,
+    beside: Beside<'_>,
     pick: fn(&Rollout) -> Option<&Rollout>,
 ) -> Vec<ClusterProblem> {
     sets.into_iter()
@@ -1332,18 +1365,16 @@ fn daemon_set_problems<'a>(
                 pick(&with_own_pods(
                     crate::resources::daemonset_rollout(set),
                     &set.metadata,
-                    owned,
+                    beside.owned,
                     unread,
-                    warned,
-                    now,
+                    beside.warned,
+                    beside.now,
                 ))?,
                 ProblemDetail::ReplicasReady {
                     ready: status.map_or(0, |s| s.number_ready),
                     desired: status.map_or(0, |s| s.desired_number_scheduled),
                 },
-                owned,
-                warned,
-                now,
+                beside,
             )
         })
         .collect()
@@ -1361,29 +1392,53 @@ fn failed_since(job: &Job) -> Option<String> {
         .map(|t| t.moment().to_rfc3339())
 }
 
+/// A Job's state with the refusal of its pods read beside it.
+fn job_state_beside(job: &Job, beside: Beside<'_>) -> (JobState, Option<String>) {
+    let state = job_state(job);
+    let refused = (state == JobState::Pending)
+        .then(|| beside.refused(&job.metadata))
+        .flatten();
+    (state.refused(refused.is_some()), refused)
+}
+
 fn job_problems<'a>(
     jobs: impl IntoIterator<Item = &'a Job>,
-    owned: &HashMap<&str, Vec<&Pod>>,
-    warned: &HashSet<&str>,
-    now: DateTime<Utc>,
+    beside: Beside<'_>,
 ) -> Vec<ClusterProblem> {
     jobs.into_iter()
         .filter_map(|job| {
-            let failure = job_state(job).failure()?;
-            let pods = job.metadata.uid.as_deref().and_then(|uid| owned.get(uid));
+            let (state, refused) = job_state_beside(job, beside);
+            let (reason, detail, since) = match (state, refused) {
+                (JobState::FailedCreate, Some(said)) => (
+                    JobState::FailedCreate.code().to_string(),
+                    Some(ProblemDetail::PodsRefused { said }),
+                    job.metadata
+                        .creation_timestamp
+                        .as_ref()
+                        .map(|t| t.moment().to_rfc3339()),
+                ),
+                (state, _) => {
+                    let failure = state.failure()?;
+                    (
+                        failure.reason.unwrap_or_else(|| "Failed".to_string()),
+                        workload_detail(
+                            beside.pods_of(&job.metadata),
+                            failure.message,
+                            beside.warned,
+                            beside.now,
+                        ),
+                        failed_since(job),
+                    )
+                }
+            };
             Some(ClusterProblem {
                 severity: ProblemSeverity::Critical,
                 kind: "Job".to_string(),
                 name: job.metadata.name.clone().unwrap_or_default(),
                 namespace: job.metadata.namespace.clone(),
-                reason: failure.reason.unwrap_or_else(|| "Failed".to_string()),
-                detail: workload_detail(
-                    pods.into_iter().flatten().copied(),
-                    failure.message,
-                    warned,
-                    now,
-                ),
-                since: failed_since(job),
+                reason,
+                detail,
+                since,
                 restarts: None,
                 folded_pods: None,
                 replaced: false,
@@ -1851,8 +1906,14 @@ fn count_rollouts(rollouts: &[Rollout]) -> Vec<RolloutCount> {
     counts
 }
 
-fn job_composition<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> Vec<ReasonCount> {
-    count_codes(jobs.into_iter().map(|job| job_state(job).code()))
+fn job_composition<'a>(
+    jobs: impl IntoIterator<Item = &'a Job>,
+    beside: Beside<'_>,
+) -> Vec<ReasonCount> {
+    count_codes(
+        jobs.into_iter()
+            .map(|job| job_state_beside(job, beside).0.code()),
+    )
 }
 
 /// What one page of a limited list says about the size of the whole
@@ -2204,20 +2265,22 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         .map(|d| rollout_with_pods(d, &by_deployment, unread, &warned, input.now))
         .collect();
     let owned = pods_by_controller(refs(input.scoped_pods));
+    let beside = Beside {
+        owned: &owned,
+        warned: &warned,
+        events: &events,
+        now: input.now,
+    };
     problems.extend(stateful_set_problems(
         refs(input.stateful_sets),
-        &owned,
         unread,
-        &warned,
-        input.now,
+        beside,
         as_problem,
     ));
     problems.extend(daemon_set_problems(
         refs(input.daemon_sets),
-        &owned,
         unread,
-        &warned,
-        input.now,
+        beside,
         as_problem,
     ));
     let mut said = deployments_saying(
@@ -2230,22 +2293,18 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     );
     said.extend(stateful_set_problems(
         refs(input.stateful_sets),
-        &owned,
         unread,
-        &warned,
-        input.now,
+        beside,
         unconfirmed,
     ));
     said.extend(daemon_set_problems(
         refs(input.daemon_sets),
-        &owned,
         unread,
-        &warned,
-        input.now,
+        beside,
         unconfirmed,
     ));
     let (unconfirmed, _) = rank_and_cap(said);
-    problems.extend(job_problems(refs(input.jobs), &owned, &warned, input.now));
+    problems.extend(job_problems(refs(input.jobs), beside));
     problems.extend(node_problems(refs(nodes)));
     problems.extend(warned_while_starting(&warned_rows));
     let pods_warned: Vec<String> = warned_rows
@@ -2300,7 +2359,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         }),
         pods_warned,
         jobs: census("Job").map(|complete| Census {
-            read: job_composition(refs(input.jobs)),
+            read: job_composition(refs(input.jobs), beside),
             complete,
         }),
         deployments: census("Deployment").map(|complete| Census {
@@ -6564,13 +6623,22 @@ mod tests {
             ..Default::default()
         };
 
-        let composition = job_composition(&[
-            job(Some(("Complete", "True"))),
-            job(Some(("Failed", "True"))),
-            // A condition that has flipped back to False says nothing happened.
-            job(Some(("Failed", "False"))),
-            job(None),
-        ]);
+        let (owned, warned) = (HashMap::new(), HashSet::new());
+        let composition = job_composition(
+            &[
+                job(Some(("Complete", "True"))),
+                job(Some(("Failed", "True"))),
+                // A condition that has flipped back to False says nothing happened.
+                job(Some(("Failed", "False"))),
+                job(None),
+            ],
+            Beside {
+                owned: &owned,
+                warned: &warned,
+                events: &[],
+                now: Utc::now(),
+            },
+        );
 
         let count = |code: &str| {
             composition
@@ -7470,6 +7538,74 @@ mod across_namespaces {
         assert_eq!(count(PROD), Some(Some(2)));
         assert_eq!(count(STAGING), Some(None));
         assert_eq!(overview.counts.pods, None);
+    }
+
+    /// A namespace whose `PodSecurity` level forbade every pod showed root-db
+    /// "Unavailable 0/1", root-web "Stalled: timed out progressing" and
+    /// root-job a blue Pending left out of Needs attention; the API
+    /// server's words were only in Conditions and Events. Fails if a row
+    /// does not lead with the refusal, or the Job is counted Pending.
+    #[tokio::test]
+    async fn a_controller_whose_pods_the_api_server_refuses_says_so() {
+        const SAID: &str = r#"pods "db-0" is forbidden: violates PodSecurity "restricted:latest""#;
+        let refusal = |kind: &str, uid: &str| {
+            let mut event = warning(PROD, "FailedCreate", 3);
+            event["metadata"]["name"] = json!(uid);
+            event["message"] = json!(SAID);
+            event["involvedObject"] =
+                json!({ "kind": kind, "name": uid, "namespace": PROD, "uid": uid });
+            event
+        };
+        let set = json!({
+            "apiVersion": "apps/v1",
+            "kind": "StatefulSet",
+            "metadata": { "name": "db", "namespace": PROD, "uid": "db", "generation": 1 },
+            "spec": { "replicas": 1, "selector": {}, "template": {}, "serviceName": "db" },
+            "status": { "observedGeneration": 1, "replicas": 0 },
+        });
+        let mut web = unavailable("web", PROD);
+        web["status"]["conditions"] = json!([
+            { "type": "Available", "status": "False" },
+            { "type": "ReplicaFailure", "status": "True", "reason": "FailedCreate", "message": SAID },
+        ]);
+        let mut run = job("run", PROD, None);
+        run["metadata"]["uid"] = json!("run");
+
+        let overview = Cluster::new()
+            .items("/apis/apps/v1/namespaces/prod/statefulsets", vec![set])
+            .items("/apis/apps/v1/namespaces/prod/deployments", vec![web])
+            .items("/apis/batch/v1/namespaces/prod/jobs", vec![run])
+            .items(
+                "/api/v1/namespaces/prod/events",
+                vec![refusal("StatefulSet", "db"), refusal("Job", "run")],
+            )
+            .listed()
+            .await;
+
+        let row = |name: &str| {
+            overview
+                .problems
+                .iter()
+                .find(|problem| problem.name == name)
+                .unwrap_or_else(|| panic!("{name} needs attention"))
+        };
+        for name in ["db", "web", "run"] {
+            assert_eq!(
+                row(name).detail,
+                Some(ProblemDetail::PodsRefused {
+                    said: SAID.to_string()
+                }),
+                "{name}"
+            );
+        }
+        assert_eq!(row("run").reason, "FailedCreate");
+        assert_eq!(
+            overview.jobs.expect("jobs read").read,
+            [ReasonCount {
+                reason: "FailedCreate".to_string(),
+                count: 1
+            }]
+        );
     }
 
     /// Would break the warnings panel, which keys its rows by reason: two

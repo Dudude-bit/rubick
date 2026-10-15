@@ -30,6 +30,7 @@ const onDeployment = {
 const job: JobInfo = {
   name: "nightly-1",
   namespace: "default",
+  uid: "nightly-1",
   completions: 1,
   succeeded: 0,
   failed: 2,

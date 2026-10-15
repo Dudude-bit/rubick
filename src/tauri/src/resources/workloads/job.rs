@@ -34,6 +34,9 @@ pub enum JobState {
     Retrying,
     Running,
     Pending,
+    /// Pending because the API server refuses the pods it asks for, which
+    /// only its events tell: see [`JobState::refused`].
+    FailedCreate,
 }
 
 impl JobState {
@@ -47,6 +50,19 @@ impl JobState {
             Self::Retrying => "Retrying",
             Self::Running => "Running",
             Self::Pending => "Pending",
+            Self::FailedCreate => "FailedCreate",
+        }
+    }
+
+    /// The state with its pods' refusal read beside it: a Job with none
+    /// running that the API server will not give one is not on its way.
+    /// `jobWord` on the frontend answers the same.
+    #[must_use]
+    pub fn refused(self, refused: bool) -> Self {
+        if refused && self == Self::Pending {
+            Self::FailedCreate
+        } else {
+            self
         }
     }
 
@@ -94,6 +110,7 @@ pub fn job_state(job: &Job) -> JobState {
 pub struct JobInfo {
     pub name: String,
     pub namespace: String,
+    pub uid: String,
     pub completions: Option<i32>,
     pub succeeded: i32,
     pub failed: i32,
@@ -113,6 +130,7 @@ impl From<&Job> for JobInfo {
         Self {
             name: meta.name.clone().unwrap_or_default(),
             namespace: meta.namespace.clone().unwrap_or_default(),
+            uid: meta.uid.clone().unwrap_or_default(),
             completions: spec.and_then(|s| s.completions),
             succeeded: status.and_then(|s| s.succeeded).unwrap_or(0),
             failed: status.and_then(|s| s.failed).unwrap_or(0),
@@ -282,6 +300,17 @@ mod tests {
         assert_eq!(job_state(&job(0, 0, vec![], false)), JobState::Pending);
     }
 
+    /// Fails if a Job the API server will not give a pod reads as on its
+    /// way, or if one that has pods running, retrying or done is relabelled.
+    #[test]
+    fn a_pending_job_whose_pods_are_refused_says_failed_create() {
+        assert_eq!(JobState::Pending.refused(true), JobState::FailedCreate);
+        assert_eq!(JobState::Pending.refused(false), JobState::Pending);
+        for state in [JobState::Running, JobState::Retrying, JobState::Complete] {
+            assert_eq!(state.clone().refused(true), state);
+        }
+    }
+
     /// The frontend colours and explains each word from the shared file.
     #[test]
     fn every_state_prints_a_word_the_shared_file_lists() {
@@ -302,6 +331,7 @@ mod tests {
             JobState::Retrying,
             JobState::Running,
             JobState::Pending,
+            JobState::FailedCreate,
         ];
         assert_eq!(
             every.iter().map(JobState::code).collect::<Vec<_>>(),

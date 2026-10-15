@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { PodCause, PodRow } from "@/generated/types";
+import type { EventInfo, PodCause, PodRow } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { scheduledRun } from "@/lib/cron-outcome";
-import { rowCause, rowCauseText, rowPods, type RowCause } from "./row-cause";
+import {
+  rowCause,
+  rowCauseText,
+  rowPods,
+  rowRefusal,
+  type RowCause,
+} from "./row-cause";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -169,5 +175,82 @@ describe("scheduledRun", () => {
       scheduledRun({ name: "reports", lastSchedule: "2026-10-15T05:28:00Z" })
     ).toBe("reports-29867368");
     expect(scheduledRun({ name: "reports", lastSchedule: null })).toBeNull();
+  });
+});
+
+describe("a row whose pods the API server refuses", () => {
+  const SAID =
+    'pods "db-0" is forbidden: violates PodSecurity "restricted:latest"';
+  const refusal = (lastTimestamp: string): EventInfo =>
+    ({
+      type: "Warning",
+      reason: "FailedCreate",
+      message: SAID,
+      involvedObject: {
+        kind: "StatefulSet",
+        name: "db",
+        namespace: "shop",
+        uid: "db-uid",
+      },
+      lastTimestamp,
+    }) as EventInfo;
+  const db = { kind: "StatefulSet", name: "db", uid: "db-uid" };
+  const made = (createdAt: string) =>
+    ({
+      ...healthy("db-0", "db"),
+      workload: { kind: "StatefulSet", name: "db" },
+      createdAt,
+    }) as PodRow;
+
+  /**
+   * root-db read "Unavailable 0/1" with nothing after it while the API
+   * server refused its pod under PodSecurity. Fails if the refusal is not
+   * the row's cause, or outlives a pod created after it.
+   */
+  it("leads with the refusal while no pod was made since", () => {
+    const pods = rowPods([], []);
+    const refused = rowRefusal({ namespace: "shop" }, db, pods, [
+      refusal("2026-10-15T08:00:00Z"),
+    ]);
+    expect(refused).toBe(SAID);
+    const cause = rowCause("shop", db, pods, NOW, refused);
+    expect(rowCauseText(cause, "trouble", t)).toBe(
+      'The API server refuses to create its pods: violates PodSecurity "restricted:latest"'
+    );
+    expect(
+      rowRefusal(
+        { namespace: "shop" },
+        db,
+        rowPods([made("2026-10-15T08:01:00Z")], []),
+        [refusal("2026-10-15T08:00:00Z")]
+      )
+    ).toBeNull();
+  });
+
+  /** Fails if a row claims a refusal while its pods or the refusals are unread, or loses the one a Deployment carries. */
+  it("claims nothing it could not read, and takes a Deployment's own word", () => {
+    const events = [refusal("2026-10-15T08:00:00Z")];
+    expect(rowRefusal({ namespace: "shop" }, db, null, events)).toBeNull();
+    expect(
+      rowRefusal({ namespace: "shop" }, db, rowPods([], []), null)
+    ).toBeNull();
+    expect(
+      rowRefusal(
+        { namespace: "shop" },
+        db,
+        rowPods(
+          [],
+          [{ namespace: "shop", code: "PERMISSION_DENIED", message: "" }]
+        ),
+        events
+      )
+    ).toBeNull();
+    expect(
+      rowRefusal({ namespace: "shop", podsRefused: SAID }, web, null, null)
+    ).toBe(SAID);
+    expect(rowCause("shop", web, null, NOW, SAID)).toEqual({
+      says: "refused",
+      said: SAID,
+    });
   });
 });

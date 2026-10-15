@@ -69,7 +69,8 @@ export type JobStatus =
   | "Suspended"
   | "Retrying"
   | "Running"
-  | "Pending";
+  | "Pending"
+  | "FailedCreate";
 
 export const JOB: Record<JobStatus, Meaning> = {
   Complete: "jobComplete",
@@ -78,6 +79,7 @@ export const JOB: Record<JobStatus, Meaning> = {
   Retrying: "jobRetrying",
   Running: "jobRunning",
   Pending: "jobPending",
+  FailedCreate: "jobFailedCreate",
 };
 
 const WORKLOAD_KINDS = new Set(["Deployment", "StatefulSet", "DaemonSet"]);

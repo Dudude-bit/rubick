@@ -1,0 +1,115 @@
+{
+  "cases": [
+    {
+      "name": "the newest refusal stands while no pod was created after it",
+      "uid": "set",
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "FailedCreate",
+          "uid": "set",
+          "message": "pods \"db-0\" is forbidden: exceeded quota: two-pods",
+          "lastTimestamp": "2026-10-15T08:00:00Z"
+        },
+        {
+          "type": "Warning",
+          "reason": "FailedCreate",
+          "uid": "set",
+          "message": "pods \"db-0\" is forbidden: violates PodSecurity \"restricted:latest\"",
+          "lastTimestamp": "2026-10-15T08:05:00Z"
+        }
+      ],
+      "podsCreated": ["2026-10-15T07:59:00Z"],
+      "refused": "pods \"db-0\" is forbidden: violates PodSecurity \"restricted:latest\""
+    },
+    {
+      "name": "a pod created after the refusal makes it history",
+      "uid": "set",
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "FailedCreate",
+          "uid": "set",
+          "message": "pods \"db-1\" is forbidden: exceeded quota: two-pods",
+          "lastTimestamp": "2026-10-15T08:00:00Z"
+        }
+      ],
+      "podsCreated": ["2026-10-15T07:00:00Z", "2026-10-15T08:00:01Z"],
+      "refused": null
+    },
+    {
+      "name": "a pod created in the same second as the refusal does not clear it",
+      "uid": "set",
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "FailedCreate",
+          "uid": "set",
+          "message": "pods \"db-1\" is forbidden: exceeded quota: two-pods",
+          "lastTimestamp": "2026-10-15T08:00:00Z"
+        }
+      ],
+      "podsCreated": ["2026-10-15T08:00:00Z"],
+      "refused": "pods \"db-1\" is forbidden: exceeded quota: two-pods"
+    },
+    {
+      "name": "another object's refusal, a Normal event and another reason are not this one's",
+      "uid": "set",
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "FailedCreate",
+          "uid": "other",
+          "message": "pods \"web-0\" is forbidden: exceeded quota: two-pods",
+          "lastTimestamp": "2026-10-15T08:00:00Z"
+        },
+        {
+          "type": "Normal",
+          "reason": "FailedCreate",
+          "uid": "set",
+          "message": "not a warning",
+          "lastTimestamp": "2026-10-15T08:00:00Z"
+        },
+        {
+          "type": "Warning",
+          "reason": "FailedDelete",
+          "uid": "set",
+          "message": "pods \"db-0\" not found",
+          "lastTimestamp": "2026-10-15T08:00:00Z"
+        }
+      ],
+      "podsCreated": [],
+      "refused": null
+    },
+    {
+      "name": "an undated refusal stands, since nothing says a pod came after it",
+      "uid": "set",
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "FailedCreate",
+          "uid": "set",
+          "message": "Error creating: pods \"job-x\" is forbidden: exceeded quota: two-pods",
+          "lastTimestamp": null
+        }
+      ],
+      "podsCreated": ["2026-10-15T08:00:00Z", null],
+      "refused": "Error creating: pods \"job-x\" is forbidden: exceeded quota: two-pods"
+    },
+    {
+      "name": "a refusal with no words still says it was refused",
+      "uid": "set",
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "FailedCreate",
+          "uid": "set",
+          "message": null,
+          "lastTimestamp": "2026-10-15T08:00:00Z"
+        }
+      ],
+      "podsCreated": [],
+      "refused": ""
+    }
+  ]
+}

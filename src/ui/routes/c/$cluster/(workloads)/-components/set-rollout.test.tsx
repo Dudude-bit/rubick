@@ -121,6 +121,7 @@ const SETS = [
       createdAt: "2026-10-01T00:00:00Z",
       conditions: [],
       ownerReferences: [],
+      podsRefused: null,
     } satisfies DeploymentInfo,
     serving: "cart-9df89489c-x7k2p",
     coming: "cart-9df89489c-q9w4z",
@@ -133,6 +134,7 @@ const SETS = [
     row: {
       name: "web",
       namespace: "shop",
+      uid: "web",
       replicas: { desired: 2, ready: 1, current: 2, updated: 2 },
       rollout: SHORT,
       rolloutPlan: {
@@ -159,6 +161,7 @@ const SETS = [
     row: {
       name: "agent",
       namespace: "shop",
+      uid: "agent",
       desired: 2,
       current: 2,
       ready: 1,

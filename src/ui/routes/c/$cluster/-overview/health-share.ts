@@ -56,6 +56,7 @@ import { formatAge, formatDecimal } from "@/lib/utils";
 import { formatCount } from "@/lib/count";
 import { withRestartsBy } from "@/lib/pod-status";
 import { causeText, podsShare, sharedText } from "@/lib/pod-cause";
+import { refusalText } from "@/lib/create-refusal";
 
 /**
  * The detail line, for the rows this app writes itself.
@@ -96,6 +97,8 @@ export function composedDetail(
       ]
         .filter(Boolean)
         .join(" · ");
+    case "podsRefused":
+      return refusalText(detail.said, t);
   }
 }
 
@@ -390,6 +393,7 @@ const JOB_ORDER: Record<JobStatus, number> = {
   Suspended: 3,
   Complete: 4,
   Failed: 5,
+  FailedCreate: 6,
 };
 
 /** One segment per word the kind's list prints, in the list's colour and in `order`. */

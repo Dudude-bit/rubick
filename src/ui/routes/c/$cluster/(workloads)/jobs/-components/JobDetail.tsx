@@ -8,6 +8,8 @@ import { LogViewer } from "../../../-logs/LogViewer";
 import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useRefusal } from "@/hooks/useRefusals";
+import { jobWord } from "@/lib/create-refusal";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
@@ -72,7 +74,7 @@ export function JobDetail() {
     defaultTab: "overview",
   });
   const delivered = watched as JobDetailInfo | undefined;
-  const job = delivered && delivered.uid === read?.uid ? delivered : read;
+  const held = delivered && delivered.uid === read?.uid ? delivered : read;
 
   const podsKey = queryKeys.ownedPods(ResourceType.Job, namespace, name);
   // The refusal is carried rather than swallowed: an empty list from a 403
@@ -101,11 +103,21 @@ export function JobDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
     select: useCallback(
-      (pods: PodInfo[]) => controlledBy(pods, job?.uid),
-      [job?.uid]
+      (pods: PodInfo[]) => controlledBy(pods, held?.uid),
+      [held?.uid]
     ),
   });
-  useOwnedPodsWatch(ResourceType.Job, namespace, name, [podsKey], !!job);
+  useOwnedPodsWatch(ResourceType.Job, namespace, name, [podsKey], !!held);
+  const refused = useRefusal(
+    namespace,
+    held?.uid,
+    podsError || podsPending ? null : pods
+  );
+  const job = useMemo(() => {
+    if (!held) return held;
+    const status = jobWord(held.status, refused);
+    return status === held.status ? held : { ...held, status };
+  }, [held, refused]);
 
   const deliveryQuery = deliveryOfKind(ResourceType.Job, job);
   const intercept = useDeliveryIntercept(deliveryQuery);
@@ -367,6 +379,7 @@ export function JobDetail() {
             pods={podsError || podsPending ? null : pods}
             settled={job.status === "Complete"}
             namespace={job.namespace}
+            refused={refused}
           />
         )
       }

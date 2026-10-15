@@ -22,6 +22,7 @@ import {
   type WorkloadRow,
 } from "../../-components/row-cause";
 import { ownStatusWord } from "@/lib/status-words";
+import { jobWord } from "@/lib/create-refusal";
 import { widestText } from "@/lib/text-width";
 import type { T as Translate } from "@/i18n/useT";
 import { JobStatusCell } from "./JobStatusCell";
@@ -117,4 +118,8 @@ export const JobList = createWorkloadListPage<JobInfo>({
   watch: ({ scope }) => commands.subscribeJobWatch(scope),
   deleter: (item) => commands.deleteJob(item.name, item.namespace),
   columns,
+  refused: (job, refused) => {
+    const status = jobWord(job.status, refused);
+    return status === job.status ? job : { ...job, status };
+  },
 });

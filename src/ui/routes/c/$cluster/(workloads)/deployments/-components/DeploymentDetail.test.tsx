@@ -477,6 +477,49 @@ describe("the cause its pods share", () => {
   });
 });
 
+describe("a Deployment whose pods the API server refuses", () => {
+  /**
+   * Live, root-web read "Rollout stalled: the controller stopped waiting for
+   * the new pods" over a strip saying "1 not ready", with no pod at all:
+   * PodSecurity refused every one. Fails if the refusal does not lead with
+   * the API server's words, or the pod never made is counted not ready.
+   */
+  it("leads with the refusal and counts the pod never made as not created", async () => {
+    const said =
+      'pods "ledger-6d9f7-x2" is forbidden: violates PodSecurity "restricted:latest"';
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      resource: {
+        ...ledger,
+        replicas: { desired: 1, ready: 0, available: 0, updated: 0 },
+        rollout: {
+          state: "stalled",
+          message: 'ReplicaSet "ledger-6d9f7" has timed out progressing.',
+          serving: 0,
+        },
+        podsRefused: said,
+      },
+      activeTab: "overview",
+    });
+    answering(
+      () => Promise.resolve(null),
+      () => Promise.resolve({ uid: "uid", pods: [] })
+    );
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    const lead = await screen.findByTestId("refused-line");
+    expect(lead).toHaveTextContent(
+      `The API server refuses to create its pods. The API server answered: ${said}`
+    );
+    expect(await screen.findByText("1 not created")).toBeInTheDocument();
+    expect(screen.queryByText("1 not ready")).toBeNull();
+  });
+});
+
 describe("the Pods tab", () => {
   /**
    * Sam deleted big-pull and applied it again: the new Deployment's Pods tab

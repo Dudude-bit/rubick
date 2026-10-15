@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useRefusal } from "@/hooks/useRefusals";
 import {
   AlignLeft,
   BadgeCheck,
@@ -169,6 +170,7 @@ export function StatefulSetDetail() {
       .ready
   );
   const startsNow = useStartsClock(splitPods);
+  const refused = useRefusal(namespace, read?.uid, splitPods);
   const statefulSet = useMemo(
     () =>
       watchedWorkload(
@@ -527,6 +529,7 @@ export function StatefulSetDetail() {
                 pods={splitPods}
                 settled={rolloutSettled(statefulSet.rollout)}
                 namespace={namespace ?? ""}
+                refused={refused}
                 className="mb-1"
               />
               <RolloutSummary

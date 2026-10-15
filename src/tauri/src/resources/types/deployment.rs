@@ -28,6 +28,9 @@ pub struct DeploymentInfo {
     pub replicas: ReplicaInfo,
     pub rollout: crate::resources::Rollout,
     pub rollout_plan: crate::resources::RolloutPlan,
+    /// The API server's words refusing the pods its `ReplicaSet` asks for,
+    /// while it refuses them.
+    pub pods_refused: Option<String>,
     pub strategy: Option<String>,
     pub containers: Vec<DeploymentContainerInfo>,
     /// The template's `initContainers`, in the order the kubelet would run
@@ -271,6 +274,9 @@ impl From<&Deployment> for DeploymentInfo {
             replicas,
             rollout: crate::resources::deployment_rollout(deployment),
             rollout_plan: crate::resources::deployment_plan(deployment),
+            pods_refused: status
+                .and_then(|s| s.conditions.as_deref())
+                .and_then(crate::resources::replica_failure),
             strategy: spec
                 .and_then(|s| s.strategy.as_ref())
                 .and_then(|s| s.type_.clone()),

@@ -525,11 +525,13 @@ describe.each([...KINDS, ...OWN_READ])(
       for (const reason of ["BackOff", "Scheduled", "Created"])
         expect(await screen.findByText(reason)).toBeInTheDocument();
       expect(screen.getByText("3 events")).toBeInTheDocument();
-      expect(listed.at(-1)).toMatchObject({
-        involved_object_kind: target.kind,
-        involved_object_name: target.name,
-        limit: 200,
-      });
+      expect(listed).toContainEqual(
+        expect.objectContaining({
+          involved_object_kind: target.kind,
+          involved_object_name: target.name,
+          limit: 200,
+        })
+      );
     });
 
     /**

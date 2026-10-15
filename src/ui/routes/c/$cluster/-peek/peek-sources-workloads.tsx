@@ -1,6 +1,7 @@
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
 import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
 import {
+  JobBadge,
   LastRunCause,
   PodsCause,
   WorkloadDiagnosis,
@@ -374,6 +375,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   Job: source(commands.getJob, (job, _target, t) => ({
     status: job.status,
     statusLabel: ownStatusWord(job.status, t),
+    badge: <JobBadge job={job} />,
     createdAt: job.createdAt,
     lead: (
       <PodsCause
