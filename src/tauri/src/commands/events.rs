@@ -2,11 +2,12 @@
 
 use crate::commands::helpers::ResourceContext;
 use crate::error::Result;
-use crate::resources::{EventInfo, SetupWarning};
+use crate::resources::{ChainStop, EventInfo, PodCause, SetupWarning, SharedCause, Warned};
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::Event;
 use kube::api::ListParams;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeSet, HashMap};
 use tauri::State;
 
 /// Server-side page size for the event walk. Big enough that the common
@@ -142,10 +143,169 @@ pub async fn get_pod_setup_warnings(
     crate::validation::validate_dns_label(&uid)?;
     let ctx = ResourceContext::for_command(state.inner(), Some(namespace))?;
     let api: kube::Api<Event> = ctx.namespaced_api();
+    crate::client::clock::timed(&state.perf, "getPodSetupWarnings", warnings_of(&api, &uid)).await
+}
+
+async fn warnings_of(api: &kube::Api<Event>, uid: &str) -> Result<Vec<SetupWarning>> {
     let params = ListParams::default()
         .fields(&format!("involvedObject.uid={uid},type=Warning"))
         .limit(POD_WARNINGS_PAGE);
-    let events =
-        crate::client::clock::timed(&state.perf, "getPodSetupWarnings", api.list(&params)).await?;
-    Ok(crate::resources::setup_warnings(&uid, &events.items))
+    let events = api.list(&params).await?;
+    Ok(crate::resources::setup_warnings(uid, &events.items))
+}
+
+/// The pod a stop's cause names, where the kubelet has not set it up and
+/// nobody has read its warnings yet.
+fn unwarned(stop: &ChainStop) -> Option<&str> {
+    match stop {
+        ChainStop::NoneReady {
+            cause:
+                Some(SharedCause {
+                    cause:
+                        PodCause::Creating {
+                            uid,
+                            kubelet: Warned::NotRead,
+                            ..
+                        },
+                    ..
+                }),
+            ..
+        } => Some(uid),
+        _ => None,
+    }
+}
+
+/// Each stop that names a pod the kubelet has not set up, with the warnings
+/// it wrote about that pod in `namespace`: the chain, the Service rows and
+/// the workload's own line then quote the same words. One read per pod.
+pub(crate) async fn with_kubelet_words<'a>(
+    client: &kube::Client,
+    stops: impl IntoIterator<Item = (&'a str, &'a mut ChainStop)>,
+) {
+    let stops: Vec<_> = stops.into_iter().collect();
+    let wanted: BTreeSet<(String, String)> = stops
+        .iter()
+        .filter_map(|(ns, stop)| unwarned(stop).map(|uid| ((*ns).to_string(), uid.to_string())))
+        .collect();
+    if wanted.is_empty() {
+        return;
+    }
+    let reads = wanted.into_iter().map(|(ns, uid)| async move {
+        let api: kube::Api<Event> = kube::Api::namespaced(client.clone(), &ns);
+        let warned = match warnings_of(&api, &uid).await {
+            Ok(warnings) => Warned::Read { warnings },
+            Err(error) if error.is_refusal() => Warned::Refused,
+            Err(error) => Warned::Failed {
+                said: error.to_string(),
+            },
+        };
+        ((ns, uid), warned)
+    });
+    let read: HashMap<(String, String), Warned> =
+        futures::future::join_all(reads).await.into_iter().collect();
+    fill_warned(stops, &read);
+}
+
+/// Each unwarned stop with the warnings read for its pod, where they were.
+fn fill_warned(stops: Vec<(&str, &mut ChainStop)>, read: &HashMap<(String, String), Warned>) {
+    for (ns, stop) in stops {
+        let Some(uid) = unwarned(stop).map(str::to_string) else {
+            continue;
+        };
+        let Some(warned) = read.get(&(ns.to_string(), uid)) else {
+            continue;
+        };
+        if let ChainStop::NoneReady {
+            cause: Some(shared),
+            ..
+        } = stop
+        {
+            shared.cause = shared.cause.clone().warned(warned.clone());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::{Existence, NotServing, ObjectRef, SetupFault};
+
+    fn none_ready(cause: PodCause) -> ChainStop {
+        ChainStop::NoneReady {
+            service: ObjectRef::new(
+                "Service",
+                "web",
+                Some("shop".to_string()),
+                Existence::Present,
+            ),
+            selector: "app=web".to_string(),
+            pods: 2,
+            why: NotServing::Starting,
+            cause: Some(SharedCause {
+                cause,
+                pods: 2,
+                of: 2,
+            }),
+        }
+    }
+
+    fn creating(uid: &str) -> PodCause {
+        PodCause::Creating {
+            uid: uid.to_string(),
+            since: None,
+            sandbox: Some(false),
+            kubelet: Warned::NotRead,
+        }
+    }
+
+    fn kubelet_of(stop: &ChainStop) -> Option<&Warned> {
+        match stop {
+            ChainStop::NoneReady {
+                cause:
+                    Some(SharedCause {
+                        cause: PodCause::Creating { kubelet, .. },
+                        ..
+                    }),
+                ..
+            } => Some(kubelet),
+            _ => None,
+        }
+    }
+
+    /// The Service's chain said "what it waits on is in the kubelet's
+    /// warnings" under a headline that quoted them. Fails if a stop naming a
+    /// pod the kubelet has not set up keeps `NotRead` after its read, or one
+    /// takes another pod's warnings.
+    #[test]
+    fn a_stop_naming_a_pod_being_set_up_carries_the_warnings_read_for_it() {
+        let warning = SetupWarning {
+            reason: "FailedMount".to_string(),
+            said: "secret \"web-creds\" not found".to_string(),
+            count: 3,
+            at: None,
+            fault: SetupFault::Missing {
+                volume: Some("creds".to_string()),
+                kind: "Secret".to_string(),
+                name: "web-creds".to_string(),
+            },
+        };
+        let read = HashMap::from([(
+            ("shop".to_string(), "u1".to_string()),
+            Warned::Read {
+                warnings: vec![warning.clone()],
+            },
+        )]);
+        let mut named = none_ready(creating("u1"));
+        let mut unread = none_ready(creating("u2"));
+        fill_warned(vec![("shop", &mut named), ("shop", &mut unread)], &read);
+        assert_eq!(
+            kubelet_of(&named),
+            Some(&Warned::Read {
+                warnings: vec![warning]
+            })
+        );
+        assert_eq!(kubelet_of(&unread), Some(&Warned::NotRead));
+        assert_eq!(unwarned(&named), None);
+        assert_eq!(unwarned(&unread), Some("u2"));
+    }
 }

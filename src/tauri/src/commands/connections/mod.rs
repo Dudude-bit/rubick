@@ -166,6 +166,18 @@ async fn connections_through(
             )))
         }
     }
+    crate::commands::events::with_kubelet_words(
+        &ctx.client,
+        out.stops
+            .iter_mut()
+            .chain(
+                out.published
+                    .iter_mut()
+                    .filter_map(|entry| entry.stop.as_mut()),
+            )
+            .map(|stop| (ns.as_str(), stop)),
+    )
+    .await;
     out.finish()
 }
 

@@ -316,7 +316,7 @@ async fn with_unready_cause(
     let read: HashMap<String, Behind> =
         futures::future::join_all(reads).await.into_iter().collect();
     let now = chrono::Utc::now();
-    services
+    let mut published: Vec<ServicePublished> = services
         .iter()
         .zip(published)
         .map(
@@ -325,7 +325,18 @@ async fn with_unready_cause(
                 _ => published,
             },
         )
-        .collect()
+        .collect();
+    crate::commands::events::with_kubelet_words(
+        client,
+        services
+            .iter()
+            .zip(published.iter_mut())
+            .filter_map(|(svc, entry)| {
+                Some((svc.metadata.namespace.as_deref()?, entry.stop.as_mut()?))
+            }),
+    )
+    .await;
+    published
 }
 
 /// What one namespace answered for the Services in it the slices left
