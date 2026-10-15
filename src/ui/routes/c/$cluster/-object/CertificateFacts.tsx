@@ -53,7 +53,12 @@ export function CertificateLine({
   }
   if (!read.certificate) {
     return (
-      <span className="block text-[11px] text-warn">
+      <span
+        className={cn(
+          "block text-[11px]",
+          read.problem?.says === "noSecret" ? "text-err" : "text-warn"
+        )}
+      >
         {read.problem && problemWords(read.problem, t)}
       </span>
     );

@@ -18,6 +18,7 @@ import {
   hopTone,
   stopUnder,
   trafficChains,
+  type ChainHopCertificate,
   type RoutedIngress,
 } from "./connections";
 import type {
@@ -30,6 +31,7 @@ import type {
   ObjectRef,
   ResourceConnections,
   Rollout,
+  TlsCertificate,
   Usage,
 } from "@/generated/types";
 
@@ -2840,5 +2842,30 @@ describe("the scheme a route hop prints once its controller has spoken", () => {
 
     expect(routeOf(path).urls).toEqual([]);
     expect(routeOf(path).via).toContain("TLS not checked");
+  });
+});
+
+describe("the certificate hop's tone", () => {
+  const hop = (problem: TlsCertificate["problem"]): ChainHopCertificate => ({
+    at: "certificate",
+    secret: {
+      kind: "Secret",
+      name: "checkout-tls",
+      namespace: "shop",
+    } as ChainHopCertificate["secret"],
+    hosts: ["checkout.example.com"],
+    read: { secretName: "checkout-tls", certificate: null, problem },
+  });
+
+  /**
+   * The trace drew a host served over HTTPS under a Secret that does not
+   * exist in amber, beside an Ingress status that said the same in red.
+   */
+  it("is a failure where the Secret does not exist", () => {
+    expect(hopTone(hop({ says: "noSecret" }))).toBe("bad");
+  });
+
+  it("is a warning where the Secret is there and could not be read as one", () => {
+    expect(hopTone(hop({ says: "noTlsCrt" }))).toBe("warn");
   });
 });

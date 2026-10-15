@@ -342,7 +342,10 @@ export function hopTone(hop: ChainHop): HopTone {
   if (hop.at === "certificate") {
     // Not read back yet is not a finding; read back and unreadable is.
     if (!hop.read) return "on";
-    if (!hop.read.certificate) return "warn";
+    // A host served over TLS under a Secret that is not there gets the
+    // controller's default certificate, or no HTTPS at all: a browser refuses.
+    if (!hop.read.certificate)
+      return hop.read.problem?.says === "noSecret" ? "bad" : "warn";
     const tone = expiryOf(hop.read.certificate).tone;
     return tone === "err" ? "bad" : (tone ?? "on");
   }
