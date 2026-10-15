@@ -49,6 +49,39 @@ describe("what the CronJob list says about schedules", () => {
   });
 
   /**
+   * The list promises "whether that run succeeded" and had no column that
+   * said it: reports looked like every other row while each run failed.
+   * Fails if the row or the shared file does not say a run did not succeed,
+   * in red, or paints a succeeded one as news.
+   */
+  it("says whether its newest run succeeded, on the row and in a shared file", () => {
+    const failed = {
+      active: 0,
+      lastSchedule: new Date(Date.now() - 60_000).toISOString(),
+      lastSuccessfulTime: null,
+    };
+    const cell = cellOf("last_run", failed);
+    expect(cell).toHaveTextContent(/^did not succeed$/);
+    expect(cell.firstElementChild).toHaveClass("text-err");
+    expect(
+      cellOf("last_run", {
+        ...failed,
+        lastSuccessfulTime: new Date().toISOString(),
+      }).firstElementChild
+    ).not.toHaveClass("text-err");
+    const column = (columns() as ColumnDef<never>[]).find(
+      (c) => c.id === "last_run"
+    );
+    const share = (column?.meta as AppColumnMeta | undefined)?.share;
+    const t = ((section: string, key: string) =>
+      translate("ru", section as never, key as never)) as never;
+    expect(share?.(failed as never, t)).toEqual({
+      text: "не удался",
+      role: "err",
+    });
+  });
+
+  /**
    * The shared file is the second reader of this column: it left the cell
    * empty for a cronjob the screen called "Нет".
    */

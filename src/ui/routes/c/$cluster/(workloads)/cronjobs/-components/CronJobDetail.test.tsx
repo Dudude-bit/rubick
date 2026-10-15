@@ -182,6 +182,34 @@ describe("CronJobDetail", () => {
     vi.mocked(commands.listPods).mockResolvedValue([]);
   });
 
+  /**
+   * The headline was amber only while no run had ever succeeded, so a CronJob
+   * that succeeded once and then failed every run read as fine. Fails if a
+   * success older than its last run keeps the headline neutral, or a success
+   * of its own last run paints it.
+   */
+  it("reds its last run when that run did not succeed, whatever succeeded before", async () => {
+    const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
+    mockDetail(
+      buildCronJob({
+        lastSchedule: hourAgo,
+        lastSuccessfulTime: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      })
+    );
+    const failing = await renderPage();
+    const value = (await screen.findByText("Last run")).nextElementSibling;
+    expect(value).toHaveClass("text-err");
+    failing.unmount();
+
+    mockDetail(
+      buildCronJob({ lastSchedule: hourAgo, lastSuccessfulTime: hourAgo })
+    );
+    await renderPage();
+    expect(
+      (await screen.findByText("Last run")).nextElementSibling
+    ).not.toHaveClass("text-err");
+  });
+
   it("leads with the schedule, in cron and in words", async () => {
     await renderPage();
     expect(screen.getByText("0 3 * * *")).toBeInTheDocument();

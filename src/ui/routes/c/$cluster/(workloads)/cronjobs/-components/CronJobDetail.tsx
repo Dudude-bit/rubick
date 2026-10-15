@@ -16,6 +16,7 @@ import { LogViewer } from "../../../-logs/LogViewer";
 import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { CronStatusBadge } from "./CronStatusBadge";
+import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
 import { cronJobRunsKey, useCronJobRuns } from "../../../-peek/cron-runs";
 import { LastRunCause } from "../../../-peek/peek-workload-diagnosis";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -74,10 +75,13 @@ import { None } from "@/components/ui/none";
 function ScheduleHeadlines({
   cronJob,
   lastRun,
+  running,
 }: {
   cronJob: CronJobDetailInfo;
   /** When it last fired, by its own status or by the newest run it holds, whichever is later. */
   lastRun: string | null;
+  /** A run it holds is in flight, whatever its status has caught up with. */
+  running: boolean;
 }) {
   const t = useT();
   const lastAge = useRealtimeAge(lastRun);
@@ -122,7 +126,16 @@ function ScheduleHeadlines({
               ? t("action", "noRunSucceededYet")
               : t("action", "cronJobNeverFired")
         }
-        tone={lastRun && !cronJob.lastSuccessfulTime ? "warn" : undefined}
+        tone={
+          outcomeWords(
+            cronOutcome({
+              active: running ? 1 : cronJob.active,
+              lastSchedule: lastRun,
+              lastSuccessfulTime: cronJob.lastSuccessfulTime,
+            }),
+            t
+          ).tone ?? undefined
+        }
       />
       <Headline
         label={t("columns", "nextRun")}
@@ -336,6 +349,7 @@ export function CronJobDetail() {
               <ScheduleHeadlines
                 cronJob={cronJob}
                 lastRun={lastRunOf(cronJob.name, cronJob.lastSchedule, jobs)}
+                running={inFlight}
               />
             )}
 

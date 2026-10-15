@@ -8,6 +8,8 @@ import type { CronJobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { cronStatusWord } from "@/lib/status-words";
+import { cronOutcome, outcomeWords, TONE_ROLE } from "@/lib/cron-outcome";
+import { TONE_TEXT } from "@/lib/tone";
 import { matchCronJobPods, type ResourceMetrics } from "@/lib/metrics";
 import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
 import { widestText } from "@/lib/text-width";
@@ -86,6 +88,21 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     },
     cell: ({ row }) => <LastSchedule at={row.original.lastSchedule} />,
   },
+  {
+    size: 130,
+    id: "last_run",
+    header: columnHeader("columns", "lastRun"),
+    meta: {
+      floor: () => widestText(["did not succeed"], "sans", 6.6) + 20,
+      share: (row: CronJobInfoWithMetrics, t) => {
+        const { word, tone } = outcomeWords(cronOutcome(row), t);
+        return tone
+          ? { text: word, role: TONE_ROLE[tone] }
+          : { text: word, quiet: true };
+      },
+    },
+    cell: ({ row }) => <LastRun cron={row.original} />,
+  },
   yielding(createAgeColumn<CronJobInfoWithMetrics>(), 3),
 ];
 
@@ -103,6 +120,13 @@ function LastSchedule({ at }: { at: string | null }) {
         : t("action", "never")}
     </span>
   );
+}
+
+// oxlint-disable-next-line react-refresh/only-export-components
+function LastRun({ cron }: { cron: CronJobInfo }) {
+  const t = useT();
+  const { word, tone } = outcomeWords(cronOutcome(cron), t);
+  return <span className={tone ? TONE_TEXT[tone] : "text-fg-fnt"}>{word}</span>;
 }
 
 export const CronJobList = createWorkloadListPage<CronJobInfo>({

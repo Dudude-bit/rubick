@@ -1,4 +1,5 @@
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
+import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
 import {
   LastRunCause,
   PodsCause,
@@ -30,7 +31,11 @@ import { formatDate } from "@/lib/utils";
 import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
 import type { T as Translate } from "@/i18n/useT";
-import type { ContainerPhase, Rollout } from "@/generated/types";
+import type {
+  ContainerPhase,
+  CronJobDetailInfo,
+  Rollout,
+} from "@/generated/types";
 import type { KeyValueTone } from "@/components/object/key-values";
 import { workloadRole } from "@/lib/workload-status";
 import {
@@ -446,10 +451,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
             label: t("columns", "timeZone"),
             value: cron.timezone || t("empty", "clusterLocal"),
           },
-          {
-            label: t("columns", "lastRun"),
-            value: formatDate(cron.lastSchedule) ?? t("action", "never"),
-          },
+          lastRunRow(cron, t),
           {
             label: t("columns", "lastSuccess"),
             value: formatDate(cron.lastSuccessfulTime) ?? t("action", "never"),
@@ -465,3 +467,13 @@ export const WORKLOAD_SOURCES: PeekSources = {
     ],
   })),
 };
+
+function lastRunRow(cron: CronJobDetailInfo, t: Translate) {
+  const { word, tone } = outcomeWords(cronOutcome(cron), t);
+  const at = formatDate(cron.lastSchedule);
+  return {
+    label: t("columns", "lastRun"),
+    value: at ? `${at} · ${word}` : word,
+    tone: tone ?? undefined,
+  };
+}

@@ -24,6 +24,7 @@ pub struct CronJobInfo {
     pub suspend: bool,
     pub active: i32,
     pub last_schedule: Option<String>,
+    pub last_successful_time: Option<String>,
     pub created_at: Option<String>,
 }
 
@@ -43,6 +44,9 @@ impl From<&CronJob> for CronJobInfo {
                 .map_or(0, |a| a.len() as i32),
             last_schedule: status
                 .and_then(|s| s.last_schedule_time.as_ref())
+                .to_rfc3339_opt(),
+            last_successful_time: status
+                .and_then(|s| s.last_successful_time.as_ref())
                 .to_rfc3339_opt(),
             created_at: meta.creation_timestamp.as_ref().to_rfc3339_opt(),
         }
@@ -121,5 +125,38 @@ impl From<&CronJob> for CronJobDetailInfo {
             owner_references: extract_owner_references(cj.metadata.owner_references.as_ref()),
             created_at: cj.creation_timestamp().to_rfc3339_opt(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The list judges a `CronJob`'s newest run by its last success against its
+    /// last schedule. Fails if a row stops carrying the success, which would
+    /// read every `CronJob` as one whose runs never succeeded.
+    #[test]
+    fn a_list_row_carries_when_a_run_last_succeeded() {
+        let cron: CronJob = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "reports", "namespace": "shop" },
+            "spec": {
+                "schedule": "*/2 * * * *",
+                "jobTemplate": { "spec": { "template": { "spec": { "containers": [] } } } }
+            },
+            "status": {
+                "lastScheduleTime": "2026-10-15T05:00:00Z",
+                "lastSuccessfulTime": "2026-10-09T05:01:00Z"
+            }
+        }))
+        .expect("a CronJob");
+        let row = CronJobInfo::from(&cron);
+        assert_eq!(
+            row.last_schedule.as_deref(),
+            Some("2026-10-15T05:00:00+00:00")
+        );
+        assert_eq!(
+            row.last_successful_time.as_deref(),
+            Some("2026-10-09T05:01:00+00:00")
+        );
     }
 }

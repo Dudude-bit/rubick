@@ -8,6 +8,7 @@ export interface CronJobInfo {
   suspend: boolean;
   active: number;
   lastSchedule: string | null;
+  lastSuccessfulTime: string | null;
   createdAt: string | null;
 }
 

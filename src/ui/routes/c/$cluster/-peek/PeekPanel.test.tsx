@@ -1315,8 +1315,8 @@ describe("PeekPanel reads what the detail pages read", () => {
       suspend: false,
       concurrencyPolicy: "Allow",
       active: 0,
-      lastSchedule: null,
-      lastSuccessfulTime: null,
+      lastSchedule: "2026-10-15T04:10:00Z",
+      lastSuccessfulTime: "2026-10-09T04:00:00Z",
       containers: [],
       initContainers: [],
       ownerReferences: [],
@@ -1382,6 +1382,7 @@ describe("PeekPanel reads what the detail pages read", () => {
     expect(commands.listPods).toHaveBeenCalledWith(
       expect.objectContaining({ labelSelector: "job-name=reports-0-adhoc" })
     );
+    expect(screen.getByText(/· did not succeed$/)).toHaveClass("text-err");
     failing.unmount();
 
     vi.mocked(commands.listPods).mockClear();

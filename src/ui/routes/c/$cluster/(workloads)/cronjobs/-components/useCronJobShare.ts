@@ -15,6 +15,7 @@ import {
   utcMoment,
 } from "@/lib/report-parts";
 import { statusRole } from "@/lib/status-role";
+import { cronOutcome, outcomeWords, TONE_ROLE } from "@/lib/cron-outcome";
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
 import { formatSince } from "@/lib/utils";
 import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
@@ -38,12 +39,7 @@ export function cronJobStatsOf(
       value: cronJob.schedule || t("empty", "noneLower"),
     },
     { label: t("columns", "active"), value: String(cronJob.active) },
-    {
-      label: t("columns", "lastRun"),
-      value: cronJob.lastSchedule
-        ? formatSince(Date.parse(cronJob.lastSchedule), Date.parse(capturedAt))
-        : t("action", "never"),
-    },
+    lastRunStat(cronJob, capturedAt, t),
   ];
   stats.push(
     cronJob.lastSuccessfulTime
@@ -62,6 +58,21 @@ export function cronJobStatsOf(
         }
   );
   return stats;
+}
+
+function lastRunStat(
+  cronJob: CronJobDetailInfo,
+  capturedAt: string,
+  t: T
+): ReportStat {
+  const { word, tone } = outcomeWords(cronOutcome(cronJob), t);
+  return {
+    label: t("columns", "lastRun"),
+    value: cronJob.lastSchedule
+      ? `${formatSince(Date.parse(cronJob.lastSchedule), Date.parse(capturedAt))} · ${word}`
+      : word,
+    role: tone ? TONE_ROLE[tone] : undefined,
+  };
 }
 
 /** The runs the Jobs tab already read, newest first, with each one's own outcome. */

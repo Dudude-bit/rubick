@@ -1,0 +1,50 @@
+import type { T } from "@/i18n/useT";
+import type { StatusRole } from "@/lib/status-role";
+import type { Tone } from "@/lib/tone";
+
+export type CronOutcome = "never" | "running" | "succeeded" | "notSucceeded";
+
+/**
+ * How a CronJob's newest run went, by its own status: `lastSuccessfulTime`
+ * moves only when a run succeeds, so one older than the last schedule with
+ * nothing active is a run that ended without succeeding. Live, reports had
+ * failed every run for six days under a list that never said so.
+ */
+export function cronOutcome(cron: {
+  active: number;
+  lastSchedule: string | null;
+  lastSuccessfulTime: string | null;
+}): CronOutcome {
+  if (cron.active > 0) return "running";
+  if (!cron.lastSchedule)
+    return cron.lastSuccessfulTime ? "succeeded" : "never";
+  return Date.parse(cron.lastSuccessfulTime ?? "") >=
+    Date.parse(cron.lastSchedule)
+    ? "succeeded"
+    : "notSucceeded";
+}
+
+const OUTCOME: Record<
+  CronOutcome,
+  {
+    key: "never" | "cronRunning" | "cronSucceeded" | "cronNotSucceeded";
+    tone: Extract<Tone, "info" | "err"> | null;
+  }
+> = {
+  never: { key: "never", tone: null },
+  running: { key: "cronRunning", tone: "info" },
+  succeeded: { key: "cronSucceeded", tone: null },
+  notSucceeded: { key: "cronNotSucceeded", tone: "err" },
+};
+
+/** The outcome in the reader's words, and the tone only where it is news. */
+export const outcomeWords = (outcome: CronOutcome, t: T) => ({
+  word: t("action", OUTCOME[outcome].key),
+  tone: OUTCOME[outcome].tone,
+});
+
+/** The outcome's tone as a Share report colours a cell. */
+export const TONE_ROLE: Record<"info" | "err", StatusRole> = {
+  info: "pending",
+  err: "err",
+};
