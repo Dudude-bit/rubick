@@ -65,6 +65,18 @@ export function vendorTlsAnswer(
 }
 
 /**
+ * The `spec.tls` names still served over TLS: one that covers a host its
+ * controller serves in the clear is not, wildcard or not.
+ */
+export const namedTlsHosts = (
+  tlsHosts: string[],
+  vendor: VendorTlsAnswer | null | undefined
+): string[] =>
+  tlsHosts.filter(
+    (name) => !vendor?.plain.some((host) => covers([name], host))
+  );
+
+/**
  * Whether one host is served over TLS, as every Ingress surface says it:
  * `spec.tls` and what the controllers said, or `null` where it is not known.
  */

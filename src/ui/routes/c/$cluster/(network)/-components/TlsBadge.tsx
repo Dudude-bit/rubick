@@ -1,6 +1,6 @@
 import { useT } from "@/i18n/useT";
-import { covers } from "@/lib/certificates";
 import {
+  namedTlsHosts,
   TLS_NOT_CHECKED_TONE,
   type VendorTlsAnswer,
 } from "../../-object/vendor-tls";
@@ -45,11 +45,8 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
   const t = useT();
   const vendorHosts = vendor?.hosts ?? [];
   const unchecked = vendor?.unchecked ?? [];
-  // What `spec.tls` names and the controller does not serve is not TLS.
   const plain = vendor?.plain ?? [];
-  const named = tlsHosts.filter(
-    (name) => !plain.some((host) => covers([name], host))
-  );
+  const named = namedTlsHosts(tlsHosts, vendor);
   const catchAll = hasCatchAllTls && plain.length === 0;
   const explicitCount = named.length;
 
@@ -100,7 +97,7 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
   // A catch-all certificate covers every host, whatever spec.tls also names.
   const label = catchAll
     ? t("empty", "tlsEveryHost")
-    : t("count", "hosts", { n: explicitCount });
+    : t("count", "hosts", { n: explicitCount + vendorHosts.length });
 
   const hosts = [
     ...named,

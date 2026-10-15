@@ -5,7 +5,7 @@ import { useIngressTls } from "@/hooks/useIngressTls";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { useT } from "@/i18n/useT";
 import { expiryOf, expiryText } from "@/lib/certificates";
-import { hostTlsOf, vendorTlsAnswer } from "./vendor-tls";
+import { hostTlsOf, namedTlsHosts, vendorTlsAnswer } from "./vendor-tls";
 
 /** An Ingress's TLS in one line: words, tone, and whether it could tell. */
 export interface IngressTlsFact {
@@ -78,12 +78,9 @@ export function useIngressTlsFact(ingress: IngressInfo | undefined) {
     (secret) => certificates?.get(secret)?.problem?.says === "noSecret"
   );
 
-  // A `spec.tls` host its controller serves in the clear is not one, and a
-  // host the load balancer holds the certificate for is one `spec.tls` omits.
+  // A host the load balancer holds the certificate for is one `spec.tls` omits.
   const hosts = [
-    ...(ingress?.tlsHosts ?? []).filter(
-      (host) => !vendor?.plain.includes(host)
-    ),
+    ...namedTlsHosts(ingress?.tlsHosts ?? [], vendor),
     ...(vendor?.hosts ?? []),
   ];
 

@@ -87,6 +87,29 @@ describe("the Ingress list's TLS cell", () => {
     expect(tip).not.toContain("shop.example.com · TLS not checked");
   });
 
+  /**
+   * The cell counted `spec.tls` alone beside a tooltip naming the host the
+   * load balancer holds a certificate for too, while the page counted both.
+   */
+  it("counts a host the load balancer holds beside the ones spec.tls names", () => {
+    render(
+      <TooltipProvider>
+        <TlsBadge
+          tlsHosts={["shop.example.com"]}
+          hasCatchAllTls={false}
+          vendor={{
+            hosts: ["api.example.com"],
+            by: "the load balancer",
+            unchecked: [],
+            plain: [],
+            plainWhy: null,
+          }}
+        />
+      </TooltipProvider>
+    );
+    expect(screen.getByText("2 hosts")).toBeTruthy();
+  });
+
   /** A catch-all certificate serves every host, so none is left unchecked. */
   it("leaves no host unchecked under a catch-all certificate", async () => {
     badge(["www.example.com"], ["api.other.io"], true);
