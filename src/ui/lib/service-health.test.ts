@@ -380,6 +380,36 @@ describe("one verdict for a Service on every surface", () => {
     expect(words.reason).toBe("1 draining");
   });
 
+  /**
+   * deny-all-ingress over two ready pods: the slices count them whole and
+   * Traefik answers 502. Fails if the counts win over the shut door, which
+   * paints the Services list, the peek and the Overview green.
+   */
+  it("calls a Service whose ready pods a policy shuts shut, in red, naming the policy", () => {
+    const stop: ChainStop = {
+      reason: "policyRefuses",
+      service: SERVICE,
+      policies: ["deny-all-ingress"],
+      ports: [8080],
+      noRules: true,
+    };
+    const health = serviceHealthOf(
+      SELECTING,
+      published({ ready: 2, stop }),
+      null
+    );
+    expect(health.state).toBe("shut");
+    expect(serviceHealthWords(health, t)).toMatchObject({
+      role: "err",
+      label: "shut by NetworkPolicy",
+      reason:
+        "NetworkPolicy deny-all-ingress admits no connection to these pods",
+    });
+    expect(
+      describeStop({ ...stop, noRules: false, policies: ["a", "b"] }, t).title
+    ).toBe("NetworkPolicies a, b admit nothing on port 8080");
+  });
+
   it("calls a Service ready when every address serves", () => {
     const health = serviceHealthOf(SELECTING, published({ ready: 2 }), null);
     expect(serviceHealthWords(health, t)).toMatchObject({

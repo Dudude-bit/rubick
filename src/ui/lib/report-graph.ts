@@ -106,6 +106,7 @@ function stopSubject(stop: ChainStop) {
     case "publishesNothingYet":
     case "noneReady":
     case "publishesNothing":
+    case "policyRefuses":
       return stop.service;
   }
 }

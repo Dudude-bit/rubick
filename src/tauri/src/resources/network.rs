@@ -477,6 +477,32 @@ pub struct PolicyRule {
     pub ports: Vec<PolicyPort>,
 }
 
+impl PolicyRule {
+    /// Whether this rule lets a connection to `port` through from anyone:
+    /// `None` where that turns on a container port's name, or on a port the
+    /// caller could not number.
+    #[must_use]
+    pub fn takes(&self, protocol: &str, port: Option<i32>) -> Option<bool> {
+        if self.ports.is_empty() {
+            return Some(true);
+        }
+        let mut unsure = false;
+        for entry in self.ports.iter().filter(|entry| entry.protocol == protocol) {
+            let Some(written) = &entry.port else {
+                return Some(true);
+            };
+            let (Ok(first), Some(port)) = (written.parse::<i32>(), port) else {
+                unsure = true;
+                continue;
+            };
+            if (first..=entry.end_port.unwrap_or(first)).contains(&port) {
+                return Some(true);
+            }
+        }
+        (!unsure).then_some(false)
+    }
+}
+
 /// What a policy does in one direction.
 ///
 /// Three states, not two, and the one people are caught by is the third.
@@ -672,6 +698,48 @@ pub fn selected_count<'a, P: kube::Resource + 'a>(
     })
 }
 
+/// Whether a `podSelector` picks every pod that carries a Service's selector
+/// (`Some(true)`), none of them (`Some(false)`), or some the selector alone
+/// cannot tell apart (`None`): a key the Service does not name may sit on
+/// some of its pods and not on others.
+#[must_use]
+pub fn picks_selected(
+    pod_selector: Option<&LabelSelector>,
+    service: &std::collections::BTreeMap<String, String>,
+) -> Option<bool> {
+    let selector = pod_selector?;
+    Selector::Query(Some(selector)).matches(service)?;
+    let pairs = selector
+        .match_labels
+        .iter()
+        .flatten()
+        .map(|(key, value)| (key, "In", std::slice::from_ref(value)));
+    let expressions = selector.match_expressions.iter().flatten().map(|req| {
+        (
+            &req.key,
+            req.operator.as_str(),
+            req.values.as_deref().unwrap_or_default(),
+        )
+    });
+    let mut unsure = false;
+    for (key, operator, values) in pairs.chain(expressions) {
+        let Some(carried) = service.get(key) else {
+            unsure = true;
+            continue;
+        };
+        let holds = match operator {
+            "In" => values.contains(carried),
+            "NotIn" => !values.contains(carried),
+            "Exists" => true,
+            _ => false,
+        };
+        if !holds {
+            return Some(false);
+        }
+    }
+    (!unsure).then_some(true)
+}
+
 #[cfg(test)]
 mod network_policy_tests {
     use super::*;
@@ -851,6 +919,94 @@ mod network_policy_tests {
             .into();
         // Straight off the object, before any pod list is joined to it.
         assert_eq!(info.selected, None);
+    }
+
+    /// A pod a Service selects carries its selector and whatever else: a
+    /// requirement on another key may hold on some of them and not others.
+    /// Fails if a missing key reads as a match, or a contradiction as unsure.
+    #[test]
+    fn a_pod_selector_is_settled_against_a_services_selector_only_where_its_keys_are_named() {
+        let service: std::collections::BTreeMap<String, String> =
+            [("app".to_string(), "web".to_string())].into();
+        let picks = |selector: serde_json::Value| {
+            let selector: LabelSelector = serde_json::from_value(selector).expect("a selector");
+            picks_selected(Some(&selector), &service)
+        };
+        assert_eq!(picks(serde_json::json!({})), Some(true));
+        assert_eq!(
+            picks(serde_json::json!({ "matchLabels": { "app": "web" } })),
+            Some(true)
+        );
+        assert_eq!(
+            picks(serde_json::json!({ "matchLabels": { "app": "api" } })),
+            Some(false)
+        );
+        assert_eq!(
+            picks(serde_json::json!({ "matchLabels": { "tier": "edge" } })),
+            None
+        );
+        let expression = |key: &str, operator: &str, values: &[&str]| {
+            picks(serde_json::json!({
+                "matchExpressions": [{ "key": key, "operator": operator, "values": values }]
+            }))
+        };
+        assert_eq!(expression("app", "In", &["web", "api"]), Some(true));
+        assert_eq!(expression("app", "NotIn", &["web"]), Some(false));
+        assert_eq!(expression("tier", "NotIn", &["edge"]), None);
+        assert_eq!(expression("app", "DoesNotExist", &[]), Some(false));
+        assert_eq!(expression("tier", "DoesNotExist", &[]), None);
+        assert_eq!(
+            picks(serde_json::json!({ "matchLabels": { "tier": "edge", "app": "api" } })),
+            Some(false),
+            "a contradiction settles it whatever else is unsure"
+        );
+        assert_eq!(picks_selected(None, &service), None);
+    }
+
+    /// Which ports a rule opens, from anyone. A named port turns on the
+    /// container, and is not read as shut.
+    #[test]
+    fn a_rule_opens_the_ports_it_names_and_every_port_when_it_names_none() {
+        let rule = |ports: serde_json::Value| -> PolicyRule {
+            let info: NetworkPolicyInfo = (&policy(&serde_json::json!({
+                "podSelector": {},
+                "ingress": [{ "ports": ports }],
+            })))
+                .into();
+            info.ingress.rules[0].clone()
+        };
+        assert_eq!(
+            rule(serde_json::json!([])).takes("TCP", Some(80)),
+            Some(true)
+        );
+        assert_eq!(
+            rule(serde_json::json!([{ "port": 80 }])).takes("TCP", Some(80)),
+            Some(true)
+        );
+        assert_eq!(
+            rule(serde_json::json!([{ "port": 81 }])).takes("TCP", Some(80)),
+            Some(false)
+        );
+        assert_eq!(
+            rule(serde_json::json!([{ "port": 70, "endPort": 90 }])).takes("TCP", Some(80)),
+            Some(true)
+        );
+        assert_eq!(
+            rule(serde_json::json!([{ "port": 80 }])).takes("UDP", Some(80)),
+            Some(false)
+        );
+        assert_eq!(
+            rule(serde_json::json!([{ "protocol": "TCP" }])).takes("TCP", Some(80)),
+            Some(true)
+        );
+        assert_eq!(
+            rule(serde_json::json!([{ "port": "http" }])).takes("TCP", Some(80)),
+            None
+        );
+        assert_eq!(
+            rule(serde_json::json!([{ "port": 80 }])).takes("TCP", None),
+            None
+        );
     }
 }
 

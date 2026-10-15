@@ -389,6 +389,8 @@ export function stopUnder(
       return NONE_READY_UNDER[stop.why];
     case "publishesNothing":
       return "stopNoPortToSendTo";
+    case "policyRefuses":
+      return "stopPolicyShutUnder";
   }
 }
 
@@ -554,6 +556,22 @@ export function describeStop(
           : t("nav", NONE_READY_NOTE[stop.why]),
       };
     }
+    case "policyRefuses": {
+      const names = stop.policies.join(", ");
+      const n = stop.policies.length;
+      if (stop.noRules)
+        return {
+          title: t("count", "policyShutsPods", { n, names }),
+          note: t("nav", "stopPolicyNoRulesNote"),
+        };
+      const ports = stop.ports
+        .map((port) => t("nav", "portNumbered", { n: port }))
+        .join(", ");
+      return {
+        title: t("count", "policyShutsPort", { n, names, ports }),
+        note: t("nav", "stopPolicyPortNote", { ports }),
+      };
+    }
     case "routeNotAccepted":
       return {
         title: t("nav", "stopRouteNotAcceptedTitle", {
@@ -655,6 +673,8 @@ export interface ChainHopStop {
   title: string;
   note: string;
   mood: StopMood;
+  /** The objects the title names, to open from the stop. */
+  objects?: ObjectRef[];
 }
 
 /** Three names at most, and how many more. */
@@ -722,7 +742,20 @@ export function chainStopHop(
             kind: subject.kind,
           });
   }
-  return { at: "stop", mood: stopMood(stop), ...said };
+  return {
+    at: "stop",
+    mood: stopMood(stop),
+    ...said,
+    ...(stop.reason === "policyRefuses" && {
+      objects: stop.policies.map((name): ObjectRef => ({
+        kind: "NetworkPolicy",
+        name,
+        namespace: stop.service.namespace,
+        existence: "present",
+        facts: null,
+      })),
+    }),
+  };
 }
 
 /**
@@ -1304,13 +1337,16 @@ export function trafficChains(
           ? unpublishedHop(service, published, subject, t)
           : null);
 
-      if (said) hops.push(said);
+      // A shut door stands after the pods it shuts, which are published.
+      const shut = stop?.reason === "policyRefuses";
+      if (said && !shut) hops.push(said);
       else if (
         subject.kind !== "Pod" &&
         published &&
         endpointCount(published) > 0
       )
         hops.push(publishedHop(published, t, own));
+      if (said && shut) hops.push(said);
 
       return {
         key: refKey(service),

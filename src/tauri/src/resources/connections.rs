@@ -493,6 +493,19 @@ pub enum ChainStop {
         #[serde(rename = "unnamedPorts")]
         unnamed_ports: Vec<String>,
     },
+    /// Ready pods are published, and the `NetworkPolicy` objects isolating every one
+    /// of them admit no connection to any port the Service sends to: the path
+    /// is whole up to the pods' door, and the door is shut for every client.
+    PolicyRefuses {
+        service: ObjectRef,
+        /// The policies that select every pod behind the Service.
+        policies: Vec<String>,
+        /// The target ports refused, where the slices number them.
+        ports: Vec<i32>,
+        /// Not one ingress rule among them, so no port is open to anyone.
+        #[serde(rename = "noRules")]
+        no_rules: bool,
+    },
 }
 
 /// Pods that carry part of a selector matching none, and the part they lack.

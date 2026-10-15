@@ -96,6 +96,7 @@ const BACKEND_PROBLEM: Record<
   draining: null,
   noneReady: "backendDown",
   noEndpoints: "backendDown",
+  shut: "backendDown",
   comingUp: "backendStarting",
   podsUnread: "backendUnconfirmed",
   idle: "backendIdle",

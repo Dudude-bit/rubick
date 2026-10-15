@@ -15,6 +15,7 @@
  * request.
  */
 
+import { servingCount } from "@/lib/published";
 import { useMemo } from "react";
 import { hostsNeedAttention } from "@/lib/two-counts";
 
@@ -621,7 +622,7 @@ function HostChain({
               {...stopCellLook(backing.stop)}
               under={t("empty", stopUnder(backing.stop))}
             >
-              {t("count", "nPublished", { n: 0 })}
+              {t("count", "nPublished", { n: servingCount(backing) })}
             </Cell>
           ) : (
             <Cell

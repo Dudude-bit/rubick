@@ -34,6 +34,9 @@ pub(super) struct Snapshot {
     /// The namespace's `FailedCreate` warnings: a `StatefulSet` refused its
     /// pods says so nowhere else.
     pub(super) refusals: Read<k8s_openapi::api::core::v1::Event>,
+    /// Read for one question: whether the policies on a Service's pods shut
+    /// them to every client. A refusal leaves that unsaid and nothing else.
+    pub(super) policies: Read<k8s_openapi::api::networking::v1::NetworkPolicy>,
     /// What every Service in the namespace publishes, in one list keyed by
     /// the `kubernetes.io/service-name` label — the same shape the Services
     /// and the Ingresses are read under.
@@ -334,6 +337,7 @@ impl Snapshot {
         let sets_api = ctx.namespaced_api::<StatefulSet>();
         let replica_sets_api = ctx.namespaced_api::<ReplicaSet>();
         let events_api = ctx.namespaced_api::<k8s_openapi::api::core::v1::Event>();
+        let policies_api = ctx.namespaced_api::<k8s_openapi::api::networking::v1::NetworkPolicy>();
         let refused = ListParams::default().fields("type=Warning,reason=FailedCreate");
         let (
             pods,
@@ -347,6 +351,7 @@ impl Snapshot {
             stateful_sets,
             replica_sets,
             refusals,
+            policies,
         ) = tokio::join!(
             pods_api.list(&params),
             services_api.list(&params),
@@ -359,6 +364,7 @@ impl Snapshot {
             sets_api.list(&params),
             replica_sets_api.list(&params),
             events_api.list(&refused),
+            policies_api.list(&params),
         );
         let slices = read_live(slices)?;
         // The one read that is not in the join, and deliberately: it is the
@@ -381,6 +387,7 @@ impl Snapshot {
             stateful_sets: read_live(stateful_sets)?,
             replica_sets: read_live(replica_sets)?,
             refusals: read_live(refusals)?,
+            policies: read_live(policies)?,
             slices,
             legacy,
             taken_at,
@@ -711,6 +718,7 @@ mod refused_list_tests {
             stateful_sets: Err(REFUSED.to_string()),
             replica_sets: Err(REFUSED.to_string()),
             refusals: Ok(Vec::new()),
+            policies: Ok(Vec::new()),
             slices: Err(REFUSED.to_string()),
             legacy: Err(REFUSED.to_string()),
             taken_at: chrono::Utc::now(),
@@ -923,6 +931,7 @@ mod refused_list_tests {
             stateful_sets: Ok(vec![set]),
             replica_sets: Ok(Vec::new()),
             refusals: Ok(vec![refusal]),
+            policies: Ok(Vec::new()),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),
@@ -952,6 +961,7 @@ mod refused_list_tests {
             stateful_sets: Ok(Vec::new()),
             replica_sets: Ok(Vec::new()),
             refusals: Ok(Vec::new()),
+            policies: Ok(Vec::new()),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),

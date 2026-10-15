@@ -243,6 +243,51 @@ describe("what Needs attention lists beyond pods", () => {
   });
 
   /**
+   * log-demo's two ready pods behind deny-all-ingress: every client gets
+   * nothing, and nothing in Needs attention said so. Fails if a shut
+   * Service is left out for its whole-looking counts.
+   */
+  it("lists a Service whose ready pods a policy shuts, with the policy as the reason", () => {
+    const shut: ServiceHealthGroup = {
+      names: ["log-demo"],
+      type: "ClusterIP",
+      selectorless: false,
+      ready: 2,
+      draining: 0,
+      notReady: 0,
+      unrouted: 0,
+      stop: {
+        reason: "policyRefuses",
+        service: {
+          kind: "Service",
+          name: "log-demo",
+          namespace: "net",
+          existence: "present",
+          facts: null,
+        },
+        policies: ["deny-all-ingress"],
+        ports: [8080],
+        noRules: true,
+      },
+    };
+    const listed = attention({
+      services: {
+        answered: [{ namespace: "net", groups: [shut] }],
+        unread: [],
+      },
+    });
+
+    expect(listed.items.map((item) => [item.name, item.tone])).toEqual([
+      ["log-demo", "err"],
+    ]);
+    expect(listed.items[0].reason).toBe("shut by NetworkPolicy");
+    expect(listed.items[0].detail).toEqual({
+      says: "ours",
+      text: "NetworkPolicy deny-all-ingress admits no connection to these pods",
+    });
+  });
+
+  /**
    * Lena's hello-web at zero: Needs attention, the sidebar badge and the
    * status bar each counted its Service as one problem while the Deployment
    * read Idle. Fails if an idle Service, or an Ingress whose only backend is

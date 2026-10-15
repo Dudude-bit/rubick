@@ -52,6 +52,12 @@ export type ServiceHealth =
   /** None ready or none listed, and the pods every workload behind it waits on, or the workloads that could be at zero, were not read. */
   | { state: "podsUnread"; published: PublishedCounts }
   | { state: "noEndpoints"; published: PublishedCounts }
+  /** Its pods are ready and a NetworkPolicy admits nobody to them. */
+  | {
+      state: "shut";
+      ready: number;
+      stop: Extract<ChainStop, { reason: "policyRefuses" }>;
+    }
   /** No pods by intent: every workload behind it is scaled to zero. */
   | { state: "idle"; stop: Extract<ChainStop, { reason: "scaledToZero" }> }
   /** A DNS alias: no endpoints, by design. */
@@ -95,6 +101,8 @@ export function serviceHealthOf(
     return { state: "byHand", ready: published.ready, total };
   if (serving > 0) {
     const { ready, draining } = published;
+    if (published.stop?.reason === "policyRefuses")
+      return { state: "shut", ready, stop: published.stop };
     if (ready === total) return { state: "ready", ready };
     return ready > 0
       ? {
@@ -289,6 +297,13 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         label: t("readings", "healthNoEndpoints"),
         role: "err",
         ...stopWords(health.published, t),
+      };
+    case "shut":
+      return {
+        code: health.state,
+        label: t("empty", "stopPolicyShutUnder"),
+        role: "err",
+        reason: describeStop(health.stop, t).title,
       };
     case "idle":
       return {

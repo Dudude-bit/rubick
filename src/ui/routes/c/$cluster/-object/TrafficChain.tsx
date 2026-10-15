@@ -144,6 +144,13 @@ function StopWords({ hop }: { hop: ChainHopStop }) {
         {Icon && <Icon className="h-3 w-3 flex-none" aria-hidden="true" />}
         {hop.title}
       </p>
+      {hop.objects && (
+        <span className="flex flex-wrap items-baseline gap-x-2">
+          {hop.objects.map((object) => (
+            <HopName key={object.name} object={object} />
+          ))}
+        </span>
+      )}
       {/* A repair is a paragraph, and a paragraph set to the width of a
           1600px window is one nobody finishes reading. */}
       <p className={cn("max-w-[92ch] text-[11px]", look.note)}>{hop.note}</p>

@@ -37,6 +37,7 @@ import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
 import {
   serviceHealthOf,
   serviceHealthWords,
+  type ServiceHealth,
   type StopCause,
 } from "@/lib/service-health";
 
@@ -239,6 +240,12 @@ function toneOf(role: string): AttentionTone | null {
   return role === "err" || role === "warn" ? role : null;
 }
 
+const SERVES_NOBODY: ReadonlySet<ServiceHealth["state"]> = new Set([
+  "noEndpoints",
+  "noneReady",
+  "shut",
+]);
+
 const serviceItems = remember(
   (answered: ServiceHealthInputs[], t: T): AttentionItem[] =>
     answered.flatMap(({ namespace, groups }) =>
@@ -246,8 +253,7 @@ const serviceItems = remember(
         const health = serviceHealthOf(group, group, null);
         // Some addresses not ready is the workload's verdict to give; a
         // Service with none serving is a fact no other reader reports.
-        if (health.state !== "noEndpoints" && health.state !== "noneReady")
-          return [];
+        if (!SERVES_NOBODY.has(health.state)) return [];
         const words = serviceHealthWords(health, t);
         const tone = toneOf(words.role);
         if (!tone) return [];

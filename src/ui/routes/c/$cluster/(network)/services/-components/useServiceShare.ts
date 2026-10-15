@@ -50,9 +50,12 @@ export function serviceStats(
       published,
       null
     );
-    // Waiting on its workload's pods is the page's verdict, not a fault.
-    const waiting =
-      health.state === "comingUp" || health.state === "podsUnread"
+    // Waiting on its workload's pods is the page's verdict, not a fault, and
+    // a shut door is the page's red verdict over counts that look whole.
+    const told =
+      health.state === "comingUp" ||
+      health.state === "podsUnread" ||
+      health.state === "shut"
         ? serviceHealthWords(health, t)
         : null;
     stats.push({
@@ -63,8 +66,8 @@ export function serviceStats(
       // because neither list could be read, is not one the controller wrote.
       role: idle
         ? "neutral"
-        : waiting
-          ? waiting.role
+        : told
+          ? told.role
           : total === 0
             ? "warn"
             : published.source === "podReadiness"
@@ -76,8 +79,8 @@ export function serviceStats(
       note:
         idle && published.stop
           ? describeStop(published.stop, t).title
-          : waiting
-            ? waiting.reason
+          : told
+            ? told.reason
             : total === 0
               ? t("empty", "servicePublishesNothing")
               : sourceNote(published, t),

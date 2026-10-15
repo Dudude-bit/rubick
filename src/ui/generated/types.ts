@@ -2559,6 +2559,13 @@ export type ChainStop =
       pods: number;
       readyPods: number;
       unnamedPorts: string[];
+    }
+  | {
+      reason: "policyRefuses";
+      service: ObjectRef;
+      policies: string[];
+      ports: number[];
+      noRules: boolean;
     };
 
 export type PodCause =

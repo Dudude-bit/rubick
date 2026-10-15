@@ -7,6 +7,7 @@
  * the same hostname served twice, not a second place a request goes.
  */
 
+import { servingCount } from "@/lib/published";
 import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
@@ -74,7 +75,7 @@ export function routingMap(
               : undefined
             : backing.stop
               ? {
-                  text: t("count", "nReady", { n: 0 }),
+                  text: t("count", "nReady", { n: servingCount(backing) }),
                   tone: stopWeight(backing.stop).tone,
                 }
               : {

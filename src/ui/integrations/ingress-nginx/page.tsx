@@ -16,6 +16,7 @@
  * own voice rather than going quiet.
  */
 
+import { servingCount } from "@/lib/published";
 import { sayWords } from "@/i18n/say";
 import { useMemo } from "react";
 import { hostsNeedAttention } from "@/lib/two-counts";
@@ -570,7 +571,7 @@ function PathRow({
               ? t("empty", "unknownLower")
               : "…"
             : backing?.stop
-              ? t("count", "nPublished", { n: 0 })
+              ? t("count", "nPublished", { n: servingCount(backing) })
               : backing
                 ? t("count", "nReady", { n: backing.ready })
                 : ""}
@@ -744,7 +745,7 @@ function HostChain({
               {...stopCellLook(backing.stop)}
               under={t("empty", stopUnder(backing.stop))}
             >
-              {t("count", "nPublished", { n: 0 })}
+              {t("count", "nPublished", { n: servingCount(backing) })}
             </Cell>
           ) : (
             <Cell

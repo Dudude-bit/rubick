@@ -211,6 +211,33 @@ describe("the routing map", () => {
   });
 
   /**
+   * deny-all-ingress shut log-demo's two ready pods. The map tagged the
+   * Service "0 ready" beside a red node, a count the slices contradict.
+   * Fails if a stop still implies nothing is published, or the shut door
+   * is drawn in any tone but a fault's.
+   */
+  it("counts the ready pods a policy shuts, and draws the Service red", () => {
+    const shut = stopped("log-demo", (behind) => ({
+      reason: "policyRefuses",
+      service: behind,
+      policies: ["deny-all-ingress"],
+      ports: [8080],
+      noRules: true,
+    }));
+    const map = mapOf({
+      ingresses: [
+        ingress("checkout", "checkout.example.com", { service: "log-demo" }),
+      ],
+      services: [service("log-demo")],
+      published: [{ ...shut, ready: 2 }],
+    });
+
+    const node = map.columns[2].nodes[0];
+    expect(node.tone).toBe("err");
+    expect(node.tag).toEqual({ text: "2 ready", tone: "err" });
+  });
+
+  /**
    * #246 greyed the Service node and left the host in front of it green, so
    * the map still said the host was fine on the strength of an unread list.
    */

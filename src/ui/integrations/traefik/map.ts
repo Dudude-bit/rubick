@@ -13,6 +13,7 @@
  * rides on the Service node as its tag.
  */
 
+import { servingCount } from "@/lib/published";
 import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
@@ -130,7 +131,7 @@ export function routingMap(
               : undefined
             : backing.stop
               ? {
-                  text: t("count", "nReady", { n: 0 }),
+                  text: t("count", "nReady", { n: servingCount(backing) }),
                   tone: stopWeight(backing.stop).tone,
                 }
               : {

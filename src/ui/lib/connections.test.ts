@@ -951,6 +951,61 @@ describe("the traffic chain", () => {
     );
   });
 
+  /**
+   * deny-all-ingress shut log-demo's pods and the chain ended on "2
+   * published" in green while Traefik answered 502. Fails if the shut door
+   * replaces the published pods, is not the last hop, leaves the path
+   * whole, or names no policy to open.
+   */
+  it("stops after the published pods where a policy admits nobody to them", () => {
+    const svc = service("log-demo", "app=log-demo");
+    const stop: ChainStop = {
+      reason: "policyRefuses",
+      service: svc,
+      policies: ["deny-all-ingress"],
+      ports: [8080],
+      noRules: true,
+    };
+    const path = trafficChains(
+      connections(
+        svc,
+        [],
+        [stop],
+        [],
+        [
+          publishes(
+            "log-demo",
+            { ready: 2 },
+            { endpoints: [endpointOf("log-demo-a")], stop }
+          ),
+        ]
+      ),
+      t
+    )[0];
+
+    expect(path.hops.map((hop) => hop.at)).toEqual([
+      "object",
+      "published",
+      "stop",
+    ]);
+    expect(path.broken).toBe(true);
+    expect(path.hops[2]).toMatchObject({
+      title:
+        "NetworkPolicy deny-all-ingress admits no connection to these pods",
+      mood: "fault",
+      objects: [
+        {
+          kind: "NetworkPolicy",
+          name: "deny-all-ingress",
+          namespace: "k8s-gui-test",
+        },
+      ],
+    });
+    expect(path.hops[2].at === "stop" && path.hops[2].note).toContain(
+      "502 or 504"
+    );
+  });
+
   it("says the three stops differently", () => {
     /** Three stops, three repairs. Collapsing them into one sentence is the
      *  difference between a tool and a red dot. */

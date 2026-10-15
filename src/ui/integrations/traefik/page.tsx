@@ -24,6 +24,7 @@ import { hostsNeedAttention } from "@/lib/two-counts";
  * worse than no button.
  */
 
+import { servingCount } from "@/lib/published";
 import { sayWords } from "@/i18n/say";
 import { Fragment, useMemo, type ReactNode } from "react";
 import {
@@ -626,7 +627,7 @@ function PathRow({
             "…"
           )
         ) : backing?.stop ? (
-          t("count", "nPublished", { n: 0 })
+          t("count", "nPublished", { n: servingCount(backing) })
         ) : backing ? (
           t("count", "nReady", { n: backing.ready })
         ) : (
@@ -820,7 +821,7 @@ function HostChain({
               {...stopCellLook(backing.stop)}
               under={t("empty", stopUnder(backing.stop))}
             >
-              {t("count", "nPublished", { n: 0 })}
+              {t("count", "nPublished", { n: servingCount(backing) })}
             </Cell>
           ) : (
             <Cell

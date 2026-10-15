@@ -242,6 +242,47 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
   });
 
   /**
+   * checkout's Ingress was "served" while deny-all-ingress shut the pods
+   * behind it and Traefik answered 502. Fails if two ready addresses read
+   * as a live backend over a policy that admits nobody.
+   */
+  it("calls a backend a policy shuts down, naming the policy", () => {
+    const said = verdict({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([
+          [
+            "web",
+            {
+              ...serving(2),
+              stop: {
+                reason: "policyRefuses",
+                service: {
+                  kind: "Service",
+                  name: "web",
+                  namespace: "net",
+                  existence: "present",
+                  facts: null,
+                },
+                policies: ["deny-all-ingress"],
+                ports: [8080],
+                noRules: true,
+              },
+            },
+          ],
+        ]),
+      },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendDown");
+    expect(said.reason).toBe(
+      "web: NetworkPolicy deny-all-ingress admits no connection to these pods."
+    );
+  });
+
+  /**
    * Marco, who may list pods and not Deployments, read idle-web's Ingress as
    * "its pods could not be read" beside a trace that had read them and could
    * not read the workloads. Fails if an unconfirmed backend stops saying

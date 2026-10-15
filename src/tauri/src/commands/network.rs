@@ -464,8 +464,18 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
     let params = ListParams::default();
     let services_api = ctx.namespaced_or_cluster_api::<Service>();
     let slices_api = ctx.namespaced_or_cluster_api::<EndpointSlice>();
-    let (services, slices) = tokio::join!(services_api.list(&params), slices_api.list(&params));
+    let policies_api = ctx.namespaced_or_cluster_api::<NetworkPolicy>();
+    let (services, slices, policies) = Box::pin(async {
+        tokio::join!(
+            services_api.list(&params),
+            slices_api.list(&params),
+            policies_api.list(&params)
+        )
+    })
+    .await;
     let services = services?.items;
+    // A refused list says nothing about the policies, so nothing is said.
+    let policies = policies.ok().map(|list| list.items);
 
     // A cluster below 1.21 serves no `discovery.k8s.io/v1` at all, so the
     // legacy object answers and the reader is told which one did.
@@ -486,6 +496,7 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
                     }),
                 )
                 .with_stop(svc, None)
+                .with_policies(svc, policies.as_deref())
                 .summary()
             })
             .collect();
@@ -493,7 +504,11 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
         return Ok((services, published));
     };
 
-    let published = published_from_slices(&services, &slices.items);
+    let published = published_from_slices(&services, &slices.items)
+        .into_iter()
+        .zip(&services)
+        .map(|(published, svc)| published.with_policies(svc, policies.as_deref()))
+        .collect();
     let published = with_unready_cause(&ctx.client, &services, published).await;
     Ok((services, published))
 }
@@ -1543,5 +1558,85 @@ mod tests {
         ] {
             assert_eq!(hits.get(kind), Some(&1), "{kind} in {hits:?}");
         }
+    }
+
+    /// The routing pages, the Overview and the Services list read stops from
+    /// here, and the chain from the neighbourhood: both say the same shut
+    /// door. A policy list the reader is refused says nothing, rather than
+    /// that no policy exists. Fails if this reader skips the policies, or
+    /// turns a 403 into a finding.
+    #[tokio::test]
+    async fn a_service_behind_a_policy_that_admits_nothing_stops_at_the_pods_door() {
+        use crate::client::served::test_server::answering;
+        let list = |kind: &str, items: serde_json::Value| {
+            serde_json::json!({ "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items })
+                .to_string()
+        };
+        let services = list(
+            "ServiceList",
+            serde_json::json!([{
+                "metadata": { "name": "log-demo", "namespace": "team-checkout" },
+                "spec": {
+                    "selector": { "app": "log-demo" },
+                    "ports": [{ "port": 80, "targetPort": 8080, "protocol": "TCP" }]
+                }
+            }]),
+        );
+        let slices = list(
+            "EndpointSliceList",
+            serde_json::json!([{
+                "metadata": {
+                    "name": "log-demo-x",
+                    "namespace": "team-checkout",
+                    "labels": { "kubernetes.io/service-name": "log-demo" }
+                },
+                "addressType": "IPv4",
+                "ports": [{ "port": 8080, "protocol": "TCP" }],
+                "endpoints": [{ "addresses": ["10.0.0.1"], "conditions": { "ready": true } }]
+            }]),
+        );
+        let policies = list(
+            "NetworkPolicyList",
+            serde_json::json!([{
+                "metadata": { "name": "deny-all-ingress", "namespace": "team-checkout" },
+                "spec": { "podSelector": {}, "policyTypes": ["Ingress"] }
+            }]),
+        );
+        let stop_with = |policies: (u16, String)| {
+            let (services, slices) = (services.clone(), slices.clone());
+            async move {
+                let (client, _) = answering(move |path, _| match path {
+                    "/api/v1/namespaces/team-checkout/services" => (200, services.clone()),
+                    "/apis/discovery.k8s.io/v1/namespaces/team-checkout/endpointslices" => {
+                        (200, slices.clone())
+                    }
+                    "/apis/networking.k8s.io/v1/namespaces/team-checkout/networkpolicies" => {
+                        policies.clone()
+                    }
+                    _ => (404, "{}".to_string()),
+                })
+                .await;
+                published_in(&ResourceContext {
+                    client,
+                    namespace: Some("team-checkout".to_string()),
+                })
+                .await
+                .expect("published")
+                .1
+                .remove(0)
+                .stop
+            }
+        };
+        let shut = stop_with((200, policies)).await;
+        assert!(
+            matches!(
+                &shut,
+                Some(ChainStop::PolicyRefuses { policies, ports, no_rules: true, .. })
+                    if policies == &["deny-all-ingress"] && ports == &[8080]
+            ),
+            "{shut:?}"
+        );
+        let refused = stop_with((403, r#"{"kind":"Status","code":403}"#.to_string())).await;
+        assert!(refused.is_none(), "{refused:?}");
     }
 }

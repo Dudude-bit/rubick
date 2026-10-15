@@ -97,6 +97,11 @@ export const ru: Catalogue = {
     ownerNotController: "владелец, но не контроллер",
     noNamespaceValue: "без пространства имён",
     servicePublishesNoEndpoint: "Этот Service не публикует ни одного эндпоинта",
+    stopPolicyNoRulesNote:
+      "Поды готовы и опубликованы, но ни одно правило ingress никого не пускает, поэтому каждое подключение к ним отбрасывается, а контроллер перед ними отвечает 502 или 504. Разрешите клиента в правиле ingress (для Ingress это пространство имён контроллера) или удалите политику. Если сетевой плагин не применяет NetworkPolicy, она ни на что не влияет.",
+    stopPolicyPortNote:
+      "Поды готовы и опубликованы, но правила пускают только на другие порты, поэтому каждое подключение на {ports} отбрасывается, а контроллер перед ними отвечает 502 или 504. Добавьте {ports} в правило, которое пускает клиента. Если сетевой плагин не применяет NetworkPolicy, она ни на что не влияет.",
+    portNumbered: "порт {n}",
     stopNoSliceNote:
       "{matched}, и ни один из них не попал ни в один эндпоинт этого Service. Причину эти объекты не сообщают: под попадает в срез через мгновение после того, как становится Ready, и не попадает вовсе, пока не работает контроллер эндпоинтов.",
     stopUnnamedPortNote:
@@ -6384,6 +6389,7 @@ export const ru: Catalogue = {
     stopComingUp: "запускаются",
     causeOnServicePage: "причину покажет страница Service",
     stopNoPortToSendTo: "нет порта, куда отправлять",
+    stopPolicyShutUnder: "закрыто NetworkPolicy",
     everyRequest503:
       "Этот хост отвечает, но на каждый запрос отдаёт 503: {reason}",
     servedInClearTitle:
@@ -8718,6 +8724,17 @@ export const ru: Catalogue = {
       few: "{n} перезапуска, о последнем завершении не сообщено",
       many: "{n} перезапусков, о последнем завершении не сообщено",
       other: "{n} перезапуска, о последнем завершении не сообщено",
+    },
+    policyShutsPods: {
+      one: "NetworkPolicy {names} не пускает к этим подам ни одного подключения",
+      few: "NetworkPolicy {names} не пускают к этим подам ни одного подключения",
+      other:
+        "NetworkPolicy {names} не пускают к этим подам ни одного подключения",
+    },
+    policyShutsPort: {
+      one: "NetworkPolicy {names} ничего не пускает на {ports}",
+      few: "NetworkPolicy {names} ничего не пускают на {ports}",
+      other: "NetworkPolicy {names} ничего не пускают на {ports}",
     },
     podsMatchAllReady: {
       one: "{n} под подходит под его селектор, и он Ready",

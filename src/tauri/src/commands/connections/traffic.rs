@@ -323,6 +323,7 @@ pub(super) fn note_reach(
     let published = snapshot
         .published_of(svc, svc_ref.clone(), &selected)
         .with_stop(svc, pods)
+        .with_policies(svc, snapshot.policies.as_deref().ok())
         .with_makers(svc, &makers, snapshot.makers_read())
         .with_workloads(svc, &makers, pods, chrono::Utc::now())
         .with_near_miss(svc, snapshot.pods());
@@ -882,6 +883,7 @@ mod tests {
             stateful_sets: Ok(Vec::new()),
             replica_sets: Ok(Vec::new()),
             refusals: Ok(Vec::new()),
+            policies: Ok(Vec::new()),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),
@@ -960,5 +962,61 @@ mod tests {
         assert!(near_of(selecting, &canary).is_empty());
 
         assert!(near_of(services(), &[("app", "other")]).is_empty());
+    }
+
+    /// The chain reads its stops from here, and the routing pages from the
+    /// backing lists: a policy admitting nothing has to stop both, or the
+    /// Ingress page and the Traefik page disagree about the same pods.
+    /// Fails if the neighbourhood skips the policies, or reads a refused
+    /// policy list as a shut door.
+    #[test]
+    fn a_policy_that_admits_nothing_stops_the_chain_at_the_pods() {
+        let svc = service("log-demo", &[("app", "log-demo")]);
+        let svc_ref = service_ref(&svc, "team-checkout");
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "log-demo-a", "namespace": "team-checkout", "labels": { "app": "log-demo" } },
+            "status": { "conditions": [{ "type": "Ready", "status": "True" }] }
+        }))
+        .expect("a Pod");
+        let slice: EndpointSlice = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "log-demo-x",
+                "namespace": "team-checkout",
+                "labels": { "kubernetes.io/service-name": "log-demo" }
+            },
+            "addressType": "IPv4",
+            "ports": [{ "port": 8080, "protocol": "TCP" }],
+            "endpoints": [{
+                "addresses": ["10.0.0.1"],
+                "conditions": { "ready": true },
+                "targetRef": { "kind": "Pod", "name": "log-demo-a", "namespace": "team-checkout" }
+            }]
+        }))
+        .expect("an EndpointSlice");
+        let deny: k8s_openapi::api::networking::v1::NetworkPolicy =
+            serde_json::from_value(serde_json::json!({
+                "metadata": { "name": "deny-all-ingress", "namespace": "team-checkout" },
+                "spec": { "podSelector": {}, "policyTypes": ["Ingress"] }
+            }))
+            .expect("a NetworkPolicy");
+        let stops = |policies: Read<k8s_openapi::api::networking::v1::NetworkPolicy>| {
+            let snapshot = Snapshot {
+                pods: Ok(vec![pod.clone()]),
+                slices: Ok(vec![slice.clone()]),
+                policies,
+                ..snapshot(vec![svc.clone()])
+            };
+            let mut out = Neighbourhood::new();
+            note_reach(&svc, &svc_ref, &snapshot, &mut out, Carry::Whole);
+            out.stops
+        };
+        assert!(
+            matches!(
+                stops(Ok(vec![deny])).as_slice(),
+                [ChainStop::PolicyRefuses { no_rules: true, .. }]
+            ),
+            "the pods are shut to every client"
+        );
+        assert!(stops(Err("forbidden".to_string())).is_empty());
     }
 }

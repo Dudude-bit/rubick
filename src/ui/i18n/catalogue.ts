@@ -119,6 +119,11 @@ export const en = {
     ownerNotController: "an owner, not the controller",
     noNamespaceValue: "no namespace",
     servicePublishesNoEndpoint: "This Service publishes no endpoint",
+    stopPolicyNoRulesNote:
+      "The pods are ready and published, and no ingress rule admits anyone, so every connection to them is dropped and the controller in front answers 502 or 504. Admit the client in an ingress rule (for an Ingress, the controller's namespace), or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
+    stopPolicyPortNote:
+      "The pods are ready and published, and the rules admit other ports only, so every connection to {ports} is dropped and the controller in front answers 502 or 504. Add {ports} to the rule that admits the client. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
+    portNumbered: "port {n}",
     stopNoSliceNote:
       "{matched}, and not one of them is in anything this Service publishes. These objects do not say why: a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.",
     stopUnnamedPortNote:
@@ -5752,6 +5757,7 @@ export const en = {
     stopComingUp: "coming up",
     causeOnServicePage: "the Service's page says why",
     stopNoPortToSendTo: "no port to send to",
+    stopPolicyShutUnder: "shut by NetworkPolicy",
     everyRequest503:
       "This host answers, and every request gets a 503: {reason}",
     servedInClearTitle:
@@ -7814,6 +7820,14 @@ export const en = {
     restartsExitUnreported: {
       one: "{n} restart, last exit not reported",
       other: "{n} restarts, last exit not reported",
+    },
+    policyShutsPods: {
+      one: "NetworkPolicy {names} admits no connection to these pods",
+      other: "NetworkPolicies {names} admit no connection to these pods",
+    },
+    policyShutsPort: {
+      one: "NetworkPolicy {names} admits nothing on {ports}",
+      other: "NetworkPolicies {names} admit nothing on {ports}",
     },
     podsMatchAllReady: {
       one: "{n} pod matches its selector and it is Ready",

@@ -22,11 +22,13 @@ use chrono::{DateTime, Utc};
 use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet, StatefulSet};
 use k8s_openapi::api::core::v1::{Endpoints, Event, Pod, Service, ServicePort};
 use k8s_openapi::api::discovery::v1::{Endpoint, EndpointSlice};
+use k8s_openapi::api::networking::v1::NetworkPolicy;
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 
 use super::connections::{ChainStop, Existence, NearMiss, NotServing, ObjectFacts, ObjectRef};
+use super::network::{picks_selected, NetworkPolicyInfo};
 use super::selector::Selector;
 use super::types::pod_display::display_status;
 use super::types::{condition_is_true, counts_ready, crash_looping};
@@ -185,6 +187,16 @@ impl ServicePublished {
     #[must_use]
     pub fn with_stop(mut self, service: &Service, pods: Option<&[&Pod]>) -> Self {
         self.stop = service_stop(service, &self, pods);
+        self
+    }
+
+    /// [`policy_stop`] where nothing earlier stopped the path. `None` is a
+    /// policy list that was not read, which leaves the answer as it was.
+    #[must_use]
+    pub fn with_policies(mut self, service: &Service, policies: Option<&[NetworkPolicy]>) -> Self {
+        if let Some(policies) = policies.filter(|_| self.stop.is_none() && self.serving() > 0) {
+            self.stop = policy_stop(service, &self, policies);
+        }
         self
     }
 
@@ -798,6 +810,64 @@ pub fn service_stop(
         pods: count(selected.len()),
         ready_pods: count(ready_pods),
         unnamed_ports: unresolved_target_ports(service, selected),
+    })
+}
+
+/// Where the `NetworkPolicy` objects that select every pod behind a Service admit no
+/// connection to any port it publishes. Settled from the Service's selector
+/// alone, so every reader says the same: a policy picking some of its pods
+/// by a label the Service does not name leaves it unsaid.
+#[must_use]
+pub fn policy_stop(
+    service: &Service,
+    published: &ServicePublished,
+    policies: &[NetworkPolicy],
+) -> Option<ChainStop> {
+    let selector = service
+        .spec
+        .as_ref()?
+        .selector
+        .as_ref()
+        .filter(|selector| !selector.is_empty())?;
+    let namespace = service.namespace();
+    let mut isolating = Vec::new();
+    let mut rules = Vec::new();
+    for policy in policies
+        .iter()
+        .filter(|policy| policy.namespace() == namespace)
+    {
+        let info = NetworkPolicyInfo::from(policy);
+        if !info.ingress.governed {
+            continue;
+        }
+        match picks_selected(
+            policy.spec.as_ref().and_then(|s| s.pod_selector.as_ref()),
+            selector,
+        ) {
+            Some(false) => continue,
+            Some(true) => isolating.push(info.name),
+            // Some pods may be under it, and its rules may let them be reached.
+            None => {}
+        }
+        rules.extend(info.ingress.rules);
+    }
+    if isolating.is_empty() || published.ports.is_empty() {
+        return None;
+    }
+    let refused = published.ports.iter().all(|port| {
+        rules
+            .iter()
+            .all(|rule| rule.takes(&port.protocol, port.port) == Some(false))
+    });
+    refused.then(|| ChainStop::PolicyRefuses {
+        service: published.service.clone(),
+        policies: isolating,
+        ports: published
+            .ports
+            .iter()
+            .filter_map(|port| port.port)
+            .collect(),
+        no_rules: rules.is_empty(),
     })
 }
 
@@ -2798,5 +2868,165 @@ mod tests {
             (first.ready, first.serving, first.terminating),
             (false, true, true)
         );
+    }
+
+    /// `web` selecting `app=web`, one ready pod published on port 80.
+    fn serving_web() -> (Service, ServicePublished) {
+        let svc = selecting("web");
+        let slices = [slice(
+            "web-x",
+            "web",
+            Some(vec![http_port()]),
+            vec![endpoint(
+                "10.0.0.1",
+                "a",
+                EndpointConditions {
+                    ready: Some(true),
+                    serving: Some(true),
+                    terminating: Some(false),
+                },
+            )],
+        )];
+        let published = from_slices(
+            &svc,
+            svc_ref("web"),
+            &slices.iter().collect::<Vec<_>>(),
+            &[],
+        );
+        (svc, published)
+    }
+
+    fn network_policy(name: &str, namespace: &str, spec: serde_json::Value) -> NetworkPolicy {
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": name, "namespace": namespace },
+            "spec": spec
+        }))
+        .expect("a NetworkPolicy")
+    }
+
+    fn deny_all() -> NetworkPolicy {
+        network_policy(
+            "deny-all-ingress",
+            "k8s-gui-test",
+            serde_json::json!({ "podSelector": {}, "policyTypes": ["Ingress"] }),
+        )
+    }
+
+    fn policy_stop_of(policies: &[NetworkPolicy]) -> Option<ChainStop> {
+        let (svc, published) = serving_web();
+        published.with_policies(&svc, Some(policies)).stop
+    }
+
+    /// The live specimen: ready pods, published, and a policy selecting every
+    /// pod with no ingress rule. Traefik answered 502 while the chain ended
+    /// on "1 published" in green. Fails if the stop is not said, or not
+    /// named for the policy.
+    #[test]
+    fn a_policy_with_no_ingress_rule_shuts_ready_pods_to_every_client() {
+        let Some(ChainStop::PolicyRefuses {
+            policies,
+            ports,
+            no_rules,
+            ..
+        }) = policy_stop_of(&[deny_all()])
+        else {
+            panic!("the pods are shut to every client");
+        };
+        assert_eq!(policies, ["deny-all-ingress"]);
+        assert_eq!(ports, [80]);
+        assert!(no_rules);
+    }
+
+    /// A rule beside the deny admits somebody, and who depends on the client,
+    /// which this reader does not know: nothing is said.
+    #[test]
+    fn a_rule_that_admits_anyone_on_the_port_leaves_the_door_unsaid() {
+        let allow = network_policy(
+            "allow-traefik",
+            "k8s-gui-test",
+            serde_json::json!({
+                "podSelector": { "matchLabels": { "app": "web" } },
+                "ingress": [{ "from": [{ "namespaceSelector": { "matchLabels": { "name": "traefik" } } }] }]
+            }),
+        );
+        assert!(policy_stop_of(&[deny_all(), allow]).is_none());
+    }
+
+    /// Rules that only open another port shut the one the Service sends to,
+    /// for every client. A range covering it opens it, and a named port
+    /// turns on a container this reader does not hold, so it is not shut.
+    #[test]
+    fn rules_on_other_ports_shut_the_port_the_service_sends_to() {
+        let only = |ports: serde_json::Value| {
+            network_policy(
+                "metrics-only",
+                "k8s-gui-test",
+                serde_json::json!({ "podSelector": {}, "ingress": [{ "ports": ports }] }),
+            )
+        };
+        let Some(ChainStop::PolicyRefuses {
+            ports, no_rules, ..
+        }) = policy_stop_of(&[only(serde_json::json!([{ "port": 9090 }]))])
+        else {
+            panic!("port 80 is open to nobody");
+        };
+        assert_eq!((ports, no_rules), (vec![80], false));
+        assert!(
+            policy_stop_of(&[only(serde_json::json!([{ "port": 70, "endPort": 90 }]))]).is_none()
+        );
+        assert!(policy_stop_of(&[only(serde_json::json!([{ "port": "http" }]))]).is_none());
+        assert!(policy_stop_of(&[only(serde_json::json!([{ "protocol": "UDP" }]))]).is_some());
+    }
+
+    /// A policy picking pods by a label the Service does not name may hold
+    /// some of them and not others: alone it shuts nothing, and its rule
+    /// beside a deny may admit the pods it holds.
+    #[test]
+    fn a_label_the_service_does_not_name_leaves_the_door_unsaid() {
+        let edge = |spec: serde_json::Value| network_policy("edge", "k8s-gui-test", spec);
+        assert!(policy_stop_of(&[edge(serde_json::json!({
+            "podSelector": { "matchLabels": { "tier": "edge" } },
+            "policyTypes": ["Ingress"]
+        }))])
+        .is_none());
+        assert!(policy_stop_of(&[
+            deny_all(),
+            edge(serde_json::json!({
+                "podSelector": { "matchLabels": { "tier": "edge" } },
+                "ingress": [{}]
+            }))
+        ])
+        .is_none());
+    }
+
+    /// Egress says nothing about who may connect in, and a policy acts only
+    /// in its own namespace.
+    #[test]
+    fn egress_and_another_namespace_shut_nothing() {
+        assert!(policy_stop_of(&[network_policy(
+            "deny-egress",
+            "k8s-gui-test",
+            serde_json::json!({ "podSelector": {}, "policyTypes": ["Egress"] }),
+        )])
+        .is_none());
+        assert!(policy_stop_of(&[network_policy(
+            "deny-all-ingress",
+            "elsewhere",
+            serde_json::json!({ "podSelector": {}, "policyTypes": ["Ingress"] }),
+        )])
+        .is_none());
+    }
+
+    /// A policy list nobody could read is not one with no policy in it, and
+    /// a path already stopped keeps the stop that came first.
+    #[test]
+    fn unread_policies_and_an_earlier_stop_are_left_as_they_were() {
+        let (svc, published) = serving_web();
+        assert!(published.with_policies(&svc, None).stop.is_none());
+        let svc = selecting("web");
+        let empty = from_slices(&svc, svc_ref("web"), &[], &[]).with_stop(&svc, Some(&[]));
+        let before = format!("{:?}", empty.stop);
+        let after = empty.with_policies(&svc, Some(&[deny_all()])).stop;
+        assert_eq!(format!("{after:?}"), before);
     }
 }
