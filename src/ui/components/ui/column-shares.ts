@@ -78,17 +78,29 @@ export function tableLayout(columns: ColumnSpec[], port: number) {
   };
 }
 
-/** Every floor raised toward its ideal by the same part of the way, as far as `room` takes them all. */
+/**
+ * Every floor raised toward its ideal as far as `room` takes them, the
+ * smallest rises met whole first: by the same part of the way, a host 29px
+ * short stayed cut so a cause 366px short could show 26px more of itself.
+ */
 function towardIdeals(columns: ColumnSpec[], room: number): ColumnSpec[] {
   const rise = columns.map((column) =>
     Math.max(0, (column.ideal ?? 0) - (column.floor ?? 0))
   );
-  const wanted = rise.reduce((sum, px) => sum + px, 0);
-  if (wanted === 0 || room <= 0) return columns;
-  const part = Math.min(1, room / wanted);
+  const order = rise
+    .map((_, index) => index)
+    .filter((index) => rise[index] > 0)
+    .sort((a, b) => rise[a] - rise[b]);
+  if (order.length === 0 || room <= 0) return columns;
+  const given = rise.map(() => 0);
+  let left = room;
+  order.forEach((index, at) => {
+    given[index] = Math.min(rise[index], left / (order.length - at));
+    left -= given[index];
+  });
   return columns.map((column, index) => ({
     ...column,
-    floor: (column.floor ?? 0) + rise[index] * part,
+    floor: (column.floor ?? 0) + given[index],
   }));
 }
 

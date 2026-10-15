@@ -168,6 +168,24 @@ describe("tableLayout", () => {
     expect(px[0]).toBeCloseTo(150);
     expect(px[2]).toBeCloseTo(80);
   });
+
+  /**
+   * Live at 1280 the Ingresses list cut a host 29px short of whole while the
+   * cause beside it, 366px short, took the same part of its way. Fails if a
+   * small rise the room can meet is left short to feed a large one.
+   */
+  it("meets a small rise whole before sharing the rest with a large one", () => {
+    const layout = tableLayout(
+      [
+        { size: 100, floor: 100, ideal: 466 },
+        { size: 100, floor: 100, ideal: 129 },
+      ],
+      300
+    );
+    const px = layout.shares.map((share) => (share / 100) * layout.span);
+    expect(px[1]).toBeCloseTo(129);
+    expect(px[0]).toBeCloseTo(171);
+  });
 });
 
 describe("yieldedColumns", () => {
