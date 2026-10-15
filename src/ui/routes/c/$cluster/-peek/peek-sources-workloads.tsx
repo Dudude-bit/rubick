@@ -1,6 +1,7 @@
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
 import {
   JobBadge,
+  CronBadge,
   LastRunCause,
   LastRunValue,
   PodsCause,
@@ -442,6 +443,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   CronJob: source(commands.getCronjob, (cron, _target, t) => ({
     status: cron.suspend ? "Suspended" : "Active",
     statusLabel: cronStatusWord(cron.suspend, t),
+    badge: <CronBadge cron={cron} />,
     createdAt: cron.createdAt,
     lead: (
       <LastRunCause

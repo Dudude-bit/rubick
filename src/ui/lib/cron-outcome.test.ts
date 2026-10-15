@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { cronOutcome } from "./cron-outcome";
+import { cronBadge, cronOutcome } from "./cron-outcome";
+import type { T } from "@/i18n/useT";
 
 const at = (minutesAgo: number) =>
   new Date(
@@ -63,5 +64,33 @@ describe("how a CronJob's newest run went", () => {
     expect(
       cronOutcome({ active: 0, lastSchedule: null, lastSuccessfulTime: at(5) })
     ).toBe("succeeded");
+  });
+});
+
+describe("cronBadge", () => {
+  const t = ((section: string, key: string) => `${section}.${key}`) as T;
+  const at = (minute: number) =>
+    new Date(Date.UTC(2026, 9, 15, 10, minute)).toISOString();
+  const cron = {
+    suspend: false,
+    active: 0,
+    lastSchedule: at(5),
+    lastSuccessfulTime: at(6),
+  };
+
+  /** Live, a green "Active" headed root-cron while every run was refused; fails if a last run in trouble is badged Active, or suspended loses to it. */
+  it("badges a last run in trouble in its own code, and suspended over all", () => {
+    expect(cronBadge({ ...cron, active: 1 }, true, t)).toEqual({
+      status: "FailedCreate",
+      label: "statusWords.lastRunNotStarted",
+    });
+    expect(cronBadge({ ...cron, lastSuccessfulTime: at(1) }, false, t)).toEqual(
+      { status: "Failed", label: "statusWords.lastRunNotSucceeded" }
+    );
+    expect(cronBadge({ ...cron, active: 1 }, false, t).status).toBe("Active");
+    expect(cronBadge(cron, false, t).status).toBe("Active");
+    expect(
+      cronBadge({ ...cron, suspend: true, active: 1 }, true, t).status
+    ).toBe("Suspended");
   });
 });

@@ -86,6 +86,26 @@ describe("what the CronJob page adds to Share", () => {
   });
 
   /**
+   * Live, root-cron's page was headed by a green "Active" while every run was
+   * refused its pods. Fails if the file's status says Active over a last run
+   * that did not start or did not succeed.
+   */
+  it("says the last run's trouble rather than active", () => {
+    const inFlight = { ...cronJob, active: 1 };
+    expect(cronJobStatusOf(inFlight, t, true)).toEqual({
+      text: "statusWords.lastRunNotStarted",
+      role: "err",
+    });
+    expect(
+      cronJobStatusOf({ ...cronJob, lastSuccessfulTime: null }, t)
+    ).toEqual({ text: "statusWords.lastRunNotSucceeded", role: "err" });
+    expect(cronJobStatusOf(cronJob, t)).toEqual({
+      text: "statusWords.active",
+      role: "ok",
+    });
+  });
+
+  /**
    * The file's header says it was captured in UTC; the last success was in
    * the sender's zone with no zone marked, so a reader elsewhere read it
    * hours wrong.

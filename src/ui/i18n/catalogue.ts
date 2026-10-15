@@ -7106,6 +7106,8 @@ export const en = {
     suspended: "Suspended",
     waiting: "Waiting",
     active: "Active",
+    lastRunNotStarted: "Last run not started",
+    lastRunNotSucceeded: "Last run did not succeed",
     idle: "Idle",
     stalled: "Stalled",
     degraded: "Degraded",

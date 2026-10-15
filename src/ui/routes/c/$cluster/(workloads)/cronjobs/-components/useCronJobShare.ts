@@ -15,18 +15,25 @@ import {
   utcMoment,
 } from "@/lib/report-parts";
 import { statusRole } from "@/lib/status-role";
-import { cronOutcome, outcomeWords, TONE_ROLE } from "@/lib/cron-outcome";
+import {
+  cronBadge,
+  cronOutcome,
+  outcomeWords,
+  TONE_ROLE,
+} from "@/lib/cron-outcome";
 import { lastRunRefused } from "../../../-peek/cron-runs";
-import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
+import { ownStatusWord } from "@/lib/status-words";
 import { formatSince } from "@/lib/utils";
 import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 
-export function cronJobStatusOf(cronJob: CronJobDetailInfo, t: T) {
-  return {
-    text: cronStatusWord(cronJob.suspend, t),
-    role: statusRole(cronJob.suspend ? "Suspended" : "Active"),
-  };
+export function cronJobStatusOf(
+  cronJob: CronJobDetailInfo,
+  t: T,
+  refused = false
+) {
+  const { status, label } = cronBadge(cronJob, refused, t);
+  return { text: label, role: statusRole(status) };
 }
 
 export function cronJobStatsOf(
@@ -143,7 +150,7 @@ export function useCronJobShare(
       const { capturedAt } = frame;
       const jobs_ = jobsSection(jobs, jobsError, capturedAt, t);
       return {
-        status: cronJobStatusOf(cronJob, t),
+        status: cronJobStatusOf(cronJob, t, lastRunRefused(jobs)),
         stats: cronJobStatsOf(cronJob, capturedAt, t, lastRunRefused(jobs)),
         sections: [templateContainersSection(cronJob, t), jobs_],
       };

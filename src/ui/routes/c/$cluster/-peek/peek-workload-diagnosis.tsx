@@ -6,7 +6,7 @@ import { useObjectConnections } from "@/hooks/useConnections";
 import { useT } from "@/i18n/useT";
 import { governanceFindings } from "@/lib/governance-findings";
 import type { CronJobDetailInfo, Rollout } from "@/generated/types";
-import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
+import { cronBadge, cronOutcome, outcomeWords } from "@/lib/cron-outcome";
 import { TONE_TEXT } from "@/lib/tone";
 import { formatDate } from "@/lib/utils";
 import { rolloutSettled } from "@/lib/workload-status";
@@ -170,6 +170,14 @@ export function LastRunCause({
       })}
     />
   );
+}
+
+/** A CronJob's badge, red where its last run did not start or did not succeed. */
+export function CronBadge({ cron }: { cron: CronJobDetailInfo }) {
+  const t = useT();
+  const refused = useLastRunRefused(cron.namespace, cron.name, cron.active > 0);
+  const { status, label } = cronBadge(cron, refused, t);
+  return <StatusBadge status={status}>{label}</StatusBadge>;
 }
 
 /** A CronJob's last run as its row says it, red where the API server refuses that run's pods. */

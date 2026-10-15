@@ -70,6 +70,41 @@ export const outcomeWords = (outcome: CronOutcome, t: T) => ({
   tone: OUTCOME[outcome].tone,
 });
 
+const BADGE: Record<
+  CronOutcome,
+  {
+    status: "Active" | "FailedCreate" | "Failed";
+    key: "active" | "lastRunNotStarted" | "lastRunNotSucceeded";
+  }
+> = {
+  never: { status: "Active", key: "active" },
+  running: { status: "Active", key: "active" },
+  refused: { status: "FailedCreate", key: "lastRunNotStarted" },
+  succeeded: { status: "Active", key: "active" },
+  notSucceeded: { status: "Failed", key: "lastRunNotSucceeded" },
+};
+
+/**
+ * A CronJob's badge, as the code `statusRole` reads and its label: suspended,
+ * its last run's trouble, or active. Live, a green "Active" headed a page
+ * whose every run was refused its pods.
+ */
+export function cronBadge(
+  cron: {
+    suspend: boolean;
+    active: number;
+    lastSchedule: string | null;
+    lastSuccessfulTime: string | null;
+  },
+  refused: boolean,
+  t: T
+): { status: string; label: string } {
+  if (cron.suspend)
+    return { status: "Suspended", label: t("statusWords", "suspended") };
+  const badge = BADGE[cronOutcome(cron, refused)];
+  return { status: badge.status, label: t("statusWords", badge.key) };
+}
+
 /** The outcome's tone as a Share report colours a cell. */
 export const TONE_ROLE: Record<"info" | "err", StatusRole> = {
   info: "pending",

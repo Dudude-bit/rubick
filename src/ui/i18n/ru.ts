@@ -7789,6 +7789,8 @@ export const ru: Catalogue = {
     suspended: "Приостановлен",
     waiting: "Ожидает",
     active: "Активен",
+    lastRunNotStarted: "Последний запуск не начался",
+    lastRunNotSucceeded: "Последний запуск не удался",
     idle: "Простаивает",
     stalled: "Застрял",
     degraded: "Деградировал",

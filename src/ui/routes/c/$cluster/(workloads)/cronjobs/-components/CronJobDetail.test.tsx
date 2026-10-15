@@ -195,8 +195,8 @@ describe("CronJobDetail", () => {
   /**
    * A quota refused every pod its run asked for, so no pod was there to say
    * why and the page said nothing. Fails if the last run's cause does not
-   * quote the API server's refusal of that run's pods, or the runs bar does
-   * not count the run as refused.
+   * quote the API server's refusal of that run's pods, the runs bar does
+   * not count the run as refused, or the badge still says Active.
    */
   it("leads with the API server's refusal of its newest run's pods", async () => {
     const said =
@@ -234,6 +234,8 @@ describe("CronJobDetail", () => {
     ).toBeInTheDocument();
     const lastRun = (await screen.findByText("Last run")).nextElementSibling;
     expect(lastRun).toHaveClass("text-err");
+    expect(await screen.findByText("Last run not started")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).toBeNull();
     expect(lastRun).toHaveTextContent(/ago · not started$/);
     expect(await usageSection()).toHaveTextContent(
       "Its run in flight, nightly-backup-29000000, has no pod: the API server refuses to create them."

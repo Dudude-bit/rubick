@@ -17,8 +17,8 @@ import { AlignLeft, Info, Layers2, Play } from "lucide-react";
 import { LogViewer } from "../../../-logs/LogViewer";
 import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
-import { CronStatusBadge } from "./CronStatusBadge";
-import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { cronBadge, cronOutcome, outcomeWords } from "@/lib/cron-outcome";
 import { cronJobRunsKey } from "@/lib/cron-runs";
 import {
   lastRunRefused,
@@ -420,6 +420,18 @@ export function CronJobDetail() {
   const inFlight =
     (cronJob?.active ?? 0) > 0 ||
     jobs.some((job) => RUNS_IN_FLIGHT.has(job.status));
+  // From what "Last run" reads, so the badge cannot say Active over it.
+  const badge =
+    cronJob &&
+    cronBadge(
+      {
+        ...cronJob,
+        active: inFlight ? Math.max(cronJob.active, 1) : cronJob.active,
+        lastSchedule: lastRunOf(cronJob.name, cronJob.lastSchedule, jobs),
+      },
+      lastRunRefused(told),
+      t
+    );
 
   // The refusal is carried rather than swallowed: an empty list from a 403
   // reads as "this CronJob has run nothing", which is the one thing the pane
@@ -675,7 +687,11 @@ export function CronJobDetail() {
         title={cronJob?.name || name || ""}
         namespace={cronJob?.namespace || namespace}
         createdAt={cronJob?.createdAt}
-        statusBadge={cronJob && <CronStatusBadge suspend={cronJob.suspend} />}
+        statusBadge={
+          badge && (
+            <StatusBadge status={badge.status}>{badge.label}</StatusBadge>
+          )
+        }
         summary={
           cronJob && (
             <LastRunCause namespace={cronJob.namespace} name={cronJob.name} />
