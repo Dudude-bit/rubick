@@ -7449,6 +7449,11 @@ export const ru: Catalogue = {
     cronJobSuspended: "Этот CronJob приостановлен, поэтому запусков не будет.",
     cronJobNoRunInFlight:
       "Сейчас не выполняется ни одного запуска этого CronJob.",
+    cronJobRunRefused:
+      "У текущего запуска {run} нет подов: API-сервер отказывается их создавать.",
+    cronJobRunNoPod: "У текущего запуска {run} пока нет работающего пода.",
+    cronJobRunsNoPod:
+      "Запуск этого CronJob идёт, но ни один его под не работает.",
     jobFinished: "Этот Job завершён.",
     jobNoPodRunningFailed:
       "Ни один под этого Job не запущен, а последний завершился с ошибкой.",

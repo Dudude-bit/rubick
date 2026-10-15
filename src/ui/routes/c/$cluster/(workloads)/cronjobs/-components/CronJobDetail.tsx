@@ -77,7 +77,7 @@ import type { CompositionTone } from "@/components/object/detail-blocks";
 import { useRefusals } from "@/hooks/useRefusals";
 import { toldRuns } from "@/lib/create-refusal";
 import type { JobStatus } from "@/lib/status-meaning";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
 
@@ -107,6 +107,17 @@ function ScheduleHeadlines({
 }) {
   const t = useT();
   const lastAge = useRealtimeAge(lastRun);
+  const outcome = outcomeWords(
+    cronOutcome(
+      {
+        active: running ? 1 : cronJob.active,
+        lastSchedule: lastRun,
+        lastSuccessfulTime: cronJob.lastSuccessfulTime,
+      },
+      refused
+    ),
+    t
+  );
   // Every render, deliberately, where this was a `useMemo` keyed on the
   // schedule string. The countdown below re-renders this component once a
   // second; a next-run computed once at mount counts down to zero and stays
@@ -137,7 +148,7 @@ function ScheduleHeadlines({
         label={t("columns", "lastRun")}
         value={
           lastRun
-            ? t("action", "agoSuffix", { age: lastAge })
+            ? `${t("action", "agoSuffix", { age: lastAge })} · ${outcome.word}`
             : t("action", "never")
         }
         note={
@@ -149,19 +160,7 @@ function ScheduleHeadlines({
               ? t("action", "noRunSucceededYet")
               : t("action", "cronJobNeverFired")
         }
-        tone={
-          outcomeWords(
-            cronOutcome(
-              {
-                active: running ? 1 : cronJob.active,
-                lastSchedule: lastRun,
-                lastSuccessfulTime: cronJob.lastSuccessfulTime,
-              },
-              refused
-            ),
-            t
-          ).tone ?? undefined
-        }
+        tone={outcome.tone ?? undefined}
       />
       <Headline
         label={t("columns", "nextRun")}
@@ -247,6 +246,28 @@ function lastRunOf(
   const newest = Math.max(0, ...minutes) * 60_000;
   const said = lastSchedule ? Date.parse(lastSchedule) : 0;
   return newest > said ? new Date(newest).toISOString() : lastSchedule;
+}
+
+/**
+ * Why Usage and Logs have no pod to show. A run in flight with no pod is
+ * not "no run in flight": live, that sat beside Active jobs 1.
+ */
+function idleOf(
+  cronJob: CronJobDetailInfo | undefined,
+  runInFlight: JobInfo | null,
+  t: T
+): string {
+  if (runInFlight)
+    return t(
+      "empty",
+      runInFlight.status === "FailedCreate"
+        ? "cronJobRunRefused"
+        : "cronJobRunNoPod",
+      { run: runInFlight.name }
+    );
+  if (cronJob?.suspend) return t("empty", "cronJobSuspended");
+  if ((cronJob?.active ?? 0) > 0) return t("empty", "cronJobRunsNoPod");
+  return t("empty", "cronJobNoRunInFlight");
 }
 
 const NO_JOBS: JobInfo[] = [];
@@ -379,6 +400,11 @@ export function CronJobDetail() {
     jobs.some((job) => job.status === "Pending")
   );
   const told = useMemo(() => toldRuns(jobs, refusals), [jobs, refusals]);
+  const runInFlight = useMemo(
+    () => newestRun(told.filter((job) => TOLD_IN_FLIGHT.has(job.status))),
+    [told]
+  );
+  const idle = idleOf(cronJob, runInFlight, t);
   const tally = useMemo(
     () =>
       (Object.keys(RUN_SEGMENT) as JobStatus[]).map((status) => ({
@@ -446,9 +472,7 @@ export function CronJobDetail() {
                 lastRun={lastRunOf(cronJob.name, cronJob.lastSchedule, jobs)}
                 running={inFlight}
                 refused={lastRunRefused(told)}
-                inFlightRun={newestRun(
-                  told.filter((job) => TOLD_IN_FLIGHT.has(job.status))
-                )}
+                inFlightRun={runInFlight}
               />
             )}
 
@@ -516,11 +540,7 @@ export function CronJobDetail() {
                   pods={pods}
                   podsError={podsError}
                   podsPending={inFlight ? podsPending : !cronJob}
-                  idle={
-                    cronJob?.suspend
-                      ? t("empty", "cronJobSuspended")
-                      : t("empty", "cronJobNoRunInFlight")
-                  }
+                  idle={idle}
                 />
               }
               declared={
@@ -603,13 +623,7 @@ export function CronJobDetail() {
                 podsError={podsError}
                 laneRule="run"
                 workload={name ? { owner: name, ownerKind: "CronJob" } : null}
-                idle={
-                  cronJob
-                    ? cronJob.suspend
-                      ? t("empty", "cronJobSuspended")
-                      : t("empty", "cronJobNoRunInFlight")
-                    : null
-                }
+                idle={cronJob ? idle : null}
               />
             </div>
           </div>
@@ -638,6 +652,8 @@ export function CronJobDetail() {
       podsError,
       podsPending,
       inFlight,
+      runInFlight,
+      idle,
       yaml,
       copyYaml,
       namespace,
@@ -719,10 +735,7 @@ export function CronJobDetail() {
 
 /** How it is declared: the settings that decide what a missed or overlapping
  *  run does, which nobody reads until one has happened. */
-function policy(
-  cronJob: CronJobDetailInfo | undefined,
-  t: ReturnType<typeof useT>
-): KeyValue[] {
+function policy(cronJob: CronJobDetailInfo | undefined, t: T): KeyValue[] {
   return [
     {
       label: t("action", "concurrency"),

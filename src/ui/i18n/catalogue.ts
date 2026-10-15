@@ -6764,6 +6764,11 @@ export const en = {
       "No node matches this DaemonSet, so it has placed no pods.",
     cronJobSuspended: "This CronJob is suspended, so no run will start.",
     cronJobNoRunInFlight: "No run of this CronJob is in flight.",
+    cronJobRunRefused:
+      "Its run in flight, {run}, has no pod: the API server refuses to create them.",
+    cronJobRunNoPod: "Its run in flight, {run}, has no pod running yet.",
+    cronJobRunsNoPod:
+      "A run of this CronJob is in flight, and none of its pods is running.",
     jobFinished: "This Job has finished.",
     jobNoPodRunningFailed:
       "No pod of this Job is running, and the last one failed.",

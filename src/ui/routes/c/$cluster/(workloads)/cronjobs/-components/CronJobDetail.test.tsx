@@ -232,9 +232,12 @@ describe("CronJobDetail", () => {
     expect(
       await screen.findByText("1 with its pods refused")
     ).toBeInTheDocument();
-    expect(
-      (await screen.findByText("Last run")).nextElementSibling
-    ).toHaveClass("text-err");
+    const lastRun = (await screen.findByText("Last run")).nextElementSibling;
+    expect(lastRun).toHaveClass("text-err");
+    expect(lastRun).toHaveTextContent(/ago · not started$/);
+    expect(await usageSection()).toHaveTextContent(
+      "Its run in flight, nightly-backup-29000000, has no pod: the API server refuses to create them."
+    );
     expect(screen.getByText("Next run").parentElement).toHaveTextContent(
       "skipped: Job nightly-backup-29000000 cannot end while its pods are refused, and the concurrency policy is Forbid"
     );
@@ -296,7 +299,7 @@ describe("CronJobDetail", () => {
   it("answers when it last ran and when it runs next", async () => {
     await renderPage();
     expect(screen.getByText("Last run")).toBeInTheDocument();
-    expect(screen.getByText("1h ago")).toBeInTheDocument();
+    expect(screen.getByText("1h ago · succeeded")).toBeInTheDocument();
     expect(screen.getByText("Next run")).toBeInTheDocument();
     expect(screen.getByText(/^in /)).toBeInTheDocument();
   });
@@ -457,6 +460,25 @@ describe("CronJobDetail", () => {
     expect(usage).toHaveTextContent("still reading");
     expect(usage).not.toHaveTextContent("nothing running");
     vi.mocked(commands.listPods).mockResolvedValue([]);
+  });
+
+  /**
+   * Live, root-cron's Usage said "No run of this CronJob is in flight" beside
+   * Active jobs 1. Fails if a run in flight with no pod is called no run.
+   */
+  it("says its run in flight has no pod yet rather than that no run is in flight", async () => {
+    vi.mocked(commands.listJobs).mockResolvedValueOnce([
+      run("nightly-backup-29863560", "Running"),
+    ]);
+    await renderPage();
+    await waitFor(async () =>
+      expect(await usageSection()).toHaveTextContent(
+        "Its run in flight, nightly-backup-29863560, has no pod running yet."
+      )
+    );
+    expect(await usageSection()).not.toHaveTextContent(
+      "No run of this CronJob is in flight."
+    );
   });
 
   /**
