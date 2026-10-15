@@ -13,6 +13,7 @@ import type {
 import {
   attentionOf,
   checkSaid,
+  foldedWords,
   reasonWord,
   type AttentionInputs,
 } from "./attention";
@@ -598,6 +599,7 @@ describe("what Needs attention lists beyond pods", () => {
       since: "2026-10-05T10:00:00Z",
       restarts: 7,
       foldedPods: null,
+      replaced: false,
     };
     const listed = attention({
       overview: overview({ problems: [warning], problemsTruncated: 3 }),
@@ -607,6 +609,46 @@ describe("what Needs attention lists beyond pods", () => {
     expect(listed.items.map((item) => item.name)).toEqual(["web", "flappy"]);
     expect(listed.total).toBe(5);
     expect(listed.worst).toBe("err");
+  });
+
+  /**
+   * Live, 25 pods its ReplicaSet had replaced three days earlier sat above the
+   * pods crash-looping now, oldest first. Fails if a replaced row ranks above
+   * what is down now in its tone, or is worded as a failed Job's runs.
+   */
+  it("ranks pods already replaced after what is down now, and words them so", () => {
+    const row = (
+      name: string,
+      since: string,
+      replaced: boolean
+    ): ClusterProblem => ({
+      severity: "critical",
+      kind: replaced ? "Deployment" : "Pod",
+      name,
+      namespace: "shop",
+      reason: replaced ? "Evicted" : "CrashLoopBackOff",
+      detail: null,
+      since,
+      restarts: null,
+      foldedPods: replaced ? 25 : null,
+      replaced,
+    });
+    const listed = attention({
+      overview: overview({
+        problems: [
+          row("recommendations", "2026-10-02T10:00:00Z", true),
+          row("checkout-1", "2026-10-05T11:00:00Z", false),
+        ],
+      }),
+    });
+
+    expect(listed.items.map((item) => item.name)).toEqual([
+      "checkout-1",
+      "recommendations",
+    ]);
+    expect(foldedWords(listed.items[1], t)).toBe(
+      "25 pods already replaced, the newest"
+    );
   });
 
   /**
@@ -625,6 +667,7 @@ describe("what Needs attention lists beyond pods", () => {
       since: "2026-10-05T02:00:00Z",
       restarts: null,
       foldedPods: null,
+      replaced: false,
     };
     const listed = attention({
       overview: overview({ unconfirmed: [ledger] }),

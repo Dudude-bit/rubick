@@ -770,7 +770,9 @@ export function AttentionPanel({
                         .map(({ reason, count }) =>
                           reason === "Failed"
                             ? t("count", "failedInJobRows", { n: count })
-                            : `${count} ${reason}`
+                            : reason === "Replaced"
+                              ? t("count", "replacedInRows", { n: count })
+                              : `${count} ${reason}`
                         )
                         .join(" · "),
                     })}

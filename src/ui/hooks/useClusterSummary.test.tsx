@@ -418,6 +418,7 @@ describe("the count beside a namespace and the count on its Overview", () => {
     since: "2026-10-06T21:00:00Z",
     restarts: null,
     foldedPods: null,
+    replaced: false,
   });
   const backend = [
     problem(

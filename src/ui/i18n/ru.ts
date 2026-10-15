@@ -9277,6 +9277,12 @@ export const ru: Catalogue = {
       many: "{n} упавших подов",
       other: "{n} упавших пода",
     },
+    replacedPodsFolded: {
+      one: "{n} под уже заменён новым, последний",
+      few: "{n} пода уже заменены новыми, последний",
+      many: "{n} подов уже заменены новыми, последний",
+      other: "{n} пода уже заменены новыми, последний",
+    },
     restartNoun: {
       one: "перезапуск",
       few: "перезапуска",
@@ -9289,6 +9295,12 @@ export const ru: Catalogue = {
       few: "{n} Failed, в строках своих Job",
       many: "{n} Failed, в строках своих Job",
       other: "{n} Failed, в строках своих Job",
+    },
+    replacedInRows: {
+      one: "{n} Failed и заменён, в строке своей нагрузки",
+      few: "{n} Failed и заменены, в строках своих нагрузок",
+      many: "{n} Failed и заменены, в строках своих нагрузок",
+      other: "{n} Failed и заменены, в строках своих нагрузок",
     },
     worstFirst: "{n} · сначала худшие",
     worstFirstPartial: "{n}+ · сначала худшие · проверено не всё",

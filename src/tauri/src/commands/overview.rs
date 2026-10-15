@@ -222,8 +222,13 @@ pub struct ClusterProblem {
     /// RFC3339 timestamp the condition started, for "N minutes ago".
     pub since: Option<String>,
     pub restarts: Option<i32>,
-    /// The failed pods a failed Job's row stands for instead of listing them.
+    /// The failed pods a failed Job's row stands for instead of listing them,
+    /// or the replaced pods of one workload a [`fold_replaced`] row stands for.
     pub folded_pods: Option<i32>,
+    /// The pods the row stands for failed and their controller replaced them:
+    /// a record of what happened, ranked after what is down now.
+    #[serde(default)]
+    pub replaced: bool,
 }
 
 /// Requested vs allocatable for one resource dimension, plus live usage.
@@ -620,8 +625,8 @@ pub struct ClusterOverview {
     pub counts: ResourceCounts,
     /// The pods `pods` counts short of serving that no row in `problems`
     /// names, by the word it gives them: a failed Job's failed pods are in its
-    /// row, a pod not ready is its workload's to answer for, and one being
-    /// deleted is on its way out.
+    /// row, `Replaced` ones in their workload's, a pod not ready is its
+    /// workload's to answer for, and one being deleted is on its way out.
     pub pods_unlisted: Vec<ReasonCount>,
     /// Phase breakdown of the pods read in the requested scope; `None` when
     /// no pod list in it answered.
@@ -765,7 +770,12 @@ fn pod_problems<'a>(
     now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
     pods.into_iter()
-        .filter_map(|pod| pod_problem(pod, now))
+        .filter_map(|pod| {
+            pod_problem(pod, now).map(|problem| ClusterProblem {
+                replaced: crate::resources::replaced(pod),
+                ..problem
+            })
+        })
         .collect()
 }
 
@@ -808,6 +818,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
             restarts: Some(restarts),
             folded_pods: None,
+            replaced: false,
         });
     }
 
@@ -833,6 +844,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             },
             restarts: Some(restarts),
             folded_pods: None,
+            replaced: false,
         });
     }
 
@@ -854,6 +866,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             since: crate::resources::failed_at(pod).map(|t| t.to_rfc3339()),
             restarts: (restarts > 0).then_some(restarts),
             folded_pods: None,
+            replaced: false,
         });
     }
 
@@ -884,6 +897,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             since: pending_since(pod).map(|t| t.to_rfc3339()),
             restarts: None,
             folded_pods: None,
+            replaced: false,
         });
     }
 
@@ -904,6 +918,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
             restarts: Some(restarts),
             folded_pods: None,
+            replaced: false,
         });
     }
 
@@ -926,6 +941,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 detail: Some(ProblemDetail::Cause { cause, by: None }),
                 restarts: (restarts > 0).then_some(restarts),
                 folded_pods: None,
+                replaced: false,
             });
         }
     }
@@ -1008,6 +1024,7 @@ fn warned_while_starting(warned: &[(&Pod, crate::resources::PodCause)]) -> Vec<C
             since: pending_since(pod).map(|t| t.to_rfc3339()),
             restarts: None,
             folded_pods: None,
+            replaced: false,
         })
         .collect()
 }
@@ -1168,6 +1185,7 @@ fn deployments_saying<'a>(
                     .map(|t| t.moment().to_rfc3339()),
                 restarts: None,
                 folded_pods: None,
+                replaced: false,
             })
         })
         .collect()
@@ -1204,6 +1222,7 @@ fn set_problem(
         since: None,
         restarts: None,
         folded_pods: None,
+        replaced: false,
     })
 }
 
@@ -1354,6 +1373,7 @@ fn job_problems<'a>(
                 since: failed_since(job),
                 restarts: None,
                 folded_pods: None,
+                replaced: false,
             })
         })
         .collect()
@@ -1397,6 +1417,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                         .map(|t| t.moment().to_rfc3339()),
                     restarts: None,
                     folded_pods: None,
+                    replaced: false,
                 });
             }
             if let Some(pressure) = node_pressure(n) {
@@ -1413,6 +1434,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                         .map(|t| t.moment().to_rfc3339()),
                     restarts: None,
                     folded_pods: None,
+                    replaced: false,
                 });
             }
             // Cordoned nodes are usually intentional, but a node left
@@ -1432,6 +1454,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     since: None,
                     restarts: None,
                     folded_pods: None,
+                    replaced: false,
                 });
             }
             None
@@ -1725,7 +1748,7 @@ fn pod_composition<'a>(
 }
 
 /// The words the census gives a pod short of serving that need no row of its own, in the order it prints them.
-const UNLISTED: [&str; 4] = ["NotReady", "Terminating", "Failed", "Unknown"];
+const UNLISTED: [&str; 5] = ["NotReady", "Terminating", "Failed", "Replaced", "Unknown"];
 
 /// See [`ClusterOverview::pods_unlisted`]. Branches as [`pod_composition`] does, so each word counts what its segment counts.
 fn unlisted_pods<'a>(
@@ -1753,6 +1776,7 @@ fn unlisted_pods<'a>(
             "Running" if crash_looping(pod, now) || stuck_reason(pod).is_some() => continue,
             "Running" if !condition_is_true(status, "Ready") => "NotReady",
             "Running" | "Pending" | "Succeeded" => continue,
+            "Failed" if crate::resources::replaced(pod) => "Replaced",
             "Failed" => "Failed",
             _ => "Unknown",
         };
@@ -1977,13 +2001,77 @@ fn fold_job_runs<'a>(
     kept
 }
 
+/// Pods their controller replaced are a record, not news: two or more of one
+/// workload that failed for the same reason become one row with their count,
+/// told in the newest one's words, so a node's pressure is not a row per pod.
+fn fold_replaced<'a>(
+    problems: Vec<ClusterProblem>,
+    pods: impl IntoIterator<Item = &'a Pod>,
+) -> Vec<ClusterProblem> {
+    type Key = (Option<String>, String, String, String);
+    let workloads: HashMap<(Option<&str>, &str), (&str, &str)> = pods
+        .into_iter()
+        .filter(|pod| crate::resources::replaced(pod))
+        .filter_map(|pod| {
+            Some((
+                (
+                    pod.metadata.namespace.as_deref(),
+                    pod.metadata.name.as_deref()?,
+                ),
+                crate::resources::workload_of(pod)?,
+            ))
+        })
+        .collect();
+    let mut groups: HashMap<Key, Vec<ClusterProblem>> = HashMap::new();
+    let mut kept = Vec::new();
+    for problem in problems {
+        let workload = (problem.kind == "Pod" && problem.replaced)
+            .then(|| workloads.get(&(problem.namespace.as_deref(), problem.name.as_str())))
+            .flatten();
+        match workload {
+            Some((kind, name)) => groups
+                .entry((
+                    problem.namespace.clone(),
+                    (*kind).to_string(),
+                    (*name).to_string(),
+                    problem.reason.clone(),
+                ))
+                .or_default()
+                .push(problem),
+            None => kept.push(problem),
+        }
+    }
+    for ((namespace, kind, name, reason), mut rows) in groups {
+        if rows.len() < 2 {
+            kept.append(&mut rows);
+            continue;
+        }
+        let pods = i32::try_from(rows.len()).unwrap_or(i32::MAX);
+        let Some(newest) = rows.into_iter().max_by(|a, b| a.since.cmp(&b.since)) else {
+            continue;
+        };
+        kept.push(ClusterProblem {
+            kind,
+            name,
+            namespace,
+            reason,
+            restarts: None,
+            folded_pods: Some(pods),
+            ..newest
+        });
+    }
+    kept
+}
+
 /// Worst first, then oldest first — the top row is both the most severe and
-/// the one that has been broken longest — then cut to `MAX_PROBLEMS`.
-/// Returns the list and how many rows the cut dropped.
+/// the one that has been broken longest — then cut to `MAX_PROBLEMS`. Pods
+/// their controller already replaced come after what is down now, however
+/// long ago they failed. Returns the list and how many rows the cut dropped.
 fn rank_and_cap(mut problems: Vec<ClusterProblem>) -> (Vec<ClusterProblem>, usize) {
     problems.sort_by(|a, b| {
         (a.severity == ProblemSeverity::Warning)
             .cmp(&(b.severity == ProblemSeverity::Warning))
+            .then_with(|| a.replaced.cmp(&b.replaced))
             .then_with(|| a.since.cmp(&b.since))
     });
     let truncated = problems.len().saturating_sub(MAX_PROBLEMS);
@@ -2144,6 +2232,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         .filter_map(|(pod, _)| pod.metadata.uid.clone())
         .collect();
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
+    let problems = fold_replaced(problems, refs(input.scoped_pods));
     let problems = with_kubelet_words(problems, events.iter().copied(), input.events_known);
     let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
     // One namespace's breakdown restates it; several are each the picker's.
@@ -3436,6 +3525,7 @@ mod tests {
             since: since.map(str::to_string),
             restarts: None,
             folded_pods: None,
+            replaced: false,
         }
     }
 
@@ -6066,6 +6156,135 @@ mod tests {
         assert_eq!(failed.folded_pods, Some(2));
     }
 
+    /// Live, `recommendations` had 25 pods the node evicted three days ago and
+    /// its `ReplicaSet` replaced, and Needs attention was 25 rows of them above
+    /// the pods failing now. Fails if two replaced pods of one workload keep a
+    /// row each, if a lone one loses its own, if the folded row is not told by
+    /// the newest of them, or if it ranks above what is down now.
+    #[test]
+    fn pods_a_controller_replaced_fold_into_one_row_after_what_is_down_now() {
+        let now: DateTime<Utc> = "2026-10-15T06:00:00Z".parse().expect("a time");
+        let ago = |minutes: i64| (now - chrono::Duration::minutes(minutes)).to_rfc3339();
+        let pod = |name: &str, owner: Option<(&str, &str)>, status: serde_json::Value| -> Pod {
+            let owners = owner.map_or_else(Vec::new, |(kind, name)| {
+                vec![serde_json::json!({
+                    "apiVersion": "apps/v1", "kind": kind, "name": name,
+                    "uid": name, "controller": true
+                })]
+            });
+            serde_json::from_value(serde_json::json!({
+                "metadata": {
+                    "name": name, "namespace": "shop",
+                    "labels": {"pod-template-hash": "abc"},
+                    "ownerReferences": owners,
+                    "creationTimestamp": ago(5 * 24 * 60),
+                },
+                "status": status,
+            }))
+            .expect("a Pod")
+        };
+        let failed = |minutes: i64, said: &str| {
+            serde_json::json!({
+                "phase": "Failed", "reason": "Evicted", "message": said,
+                "conditions": [{
+                    "type": "Ready", "status": "False", "lastTransitionTime": ago(minutes)
+                }]
+            })
+        };
+        let rs = Some(("ReplicaSet", "recs-abc"));
+        let pods = arcs(vec![
+            pod(
+                "recs-abc-1",
+                rs,
+                failed(3 * 24 * 60, "The node had condition: [DiskPressure]."),
+            ),
+            pod(
+                "recs-abc-2",
+                rs,
+                failed(3 * 24 * 60 - 5, "The node had condition: [DiskPressure]."),
+            ),
+            pod(
+                "recs-abc-3",
+                rs,
+                failed(24 * 60, "The node was low on resource: ephemeral-storage."),
+            ),
+            pod(
+                "db-0",
+                Some(("StatefulSet", "db")),
+                failed(4 * 24 * 60, "The node had condition: [DiskPressure]."),
+            ),
+            pod(
+                "lonely",
+                None,
+                failed(2 * 24 * 60, "The node had condition: [DiskPressure]."),
+            ),
+            pod(
+                "recs-abc-4",
+                rs,
+                serde_json::json!({
+                    "phase": "Pending",
+                    "conditions": [{
+                        "type": "PodScheduled", "status": "False", "reason": "Unschedulable",
+                        "message": "0/2 nodes are available", "lastTransitionTime": ago(20)
+                    }]
+                }),
+            ),
+        ]);
+
+        let overview = build_overview(&OverviewInputs {
+            scoped_pods: &pods,
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            looked: &Looked::new(),
+            now,
+        });
+
+        let rows: Vec<_> = overview
+            .problems
+            .iter()
+            .map(|p| (p.kind.as_str(), p.name.as_str(), p.replaced))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("Pod", "lonely", false),
+                ("Pod", "recs-abc-4", false),
+                ("Pod", "db-0", true),
+                ("Deployment", "recs", true),
+            ]
+        );
+        let folded = &overview.problems[3];
+        assert_eq!(folded.reason, "Evicted");
+        assert_eq!(folded.folded_pods, Some(3));
+        assert_eq!(folded.since, Some(ago(24 * 60)));
+        assert_eq!(
+            folded.detail,
+            Some(ProblemDetail::Said {
+                text: "The node was low on resource: ephemeral-storage.".to_string()
+            })
+        );
+        assert_eq!(overview.problems[2].folded_pods, None);
+        assert_eq!(
+            overview.pods_unlisted,
+            vec![ReasonCount {
+                reason: "Replaced".to_string(),
+                count: 3
+            }]
+        );
+    }
+
     /// Dana's Overview chip said "38 Pods" beside a census counting 2 `NotReady`,
     /// 2 Terminating and 34 Failed, and nothing said which of those the list
     /// named. Fails if a pod short of serving with no row of its own is not
@@ -7335,6 +7554,7 @@ mod across_namespaces {
             since: since.map(str::to_string),
             restarts: None,
             folded_pods: None,
+            replaced: false,
         }
     }
 

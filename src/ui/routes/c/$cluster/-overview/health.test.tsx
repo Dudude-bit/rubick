@@ -122,6 +122,7 @@ const problem: ClusterProblem = {
   since: new Date().toISOString(),
   restarts: null,
   foldedPods: null,
+  replaced: false,
 };
 
 describe("the overview's two event panels", () => {
@@ -373,18 +374,20 @@ describe("the pods the list does not name", () => {
    * Dana's chip said "38 Pods" under an overall line counting 2 NotReady, 2
    * Terminating and 34 Failed, and nothing said which of those the list
    * named. Fails if the census's pods with no row of their own go unsaid
-   * beside it, or the failed Job pods are not pointed at their Jobs' rows.
+   * beside it, or the failed Job pods and the replaced ones are not pointed
+   * at the rows that count them.
    */
   it("says which of the overall line's pods the list does not name, and where they are counted", async () => {
     await panel([
       { reason: "NotReady", count: 2 },
       { reason: "Terminating", count: 2 },
       { reason: "Failed", count: 4 },
+      { reason: "Replaced", count: 25 },
     ]);
 
     const line = screen.getByTestId("attention-unlisted");
     expect(line).toHaveTextContent(
-      "Not listed on their own: 2 NotReady · 2 Terminating · 4 Failed, in their Jobs' rows"
+      "Not listed on their own: 2 NotReady · 2 Terminating · 4 Failed, in their Jobs' rows · 25 Failed and replaced, in their workloads' rows"
     );
     expect(line).toHaveAttribute(
       "title",
@@ -507,6 +510,7 @@ describe("the detail line on a problem row", () => {
       since: null,
       restarts: null,
       foldedPods: null,
+      replaced: false,
     };
 
     useLocaleStore.setState({ choice: "en" });
@@ -542,6 +546,7 @@ describe("the reason on a problem row", () => {
     since: null,
     restarts: null,
     foldedPods: null,
+    replaced: false,
   };
 
   /**
@@ -866,6 +871,7 @@ describe("a scope one namespace of which refused its pods", () => {
           since: null,
           restarts: null,
           foldedPods: null,
+          replaced: false,
         },
       ],
     } as unknown as ClusterOverview;
@@ -926,6 +932,7 @@ describe("a scope one namespace of which refused its pods", () => {
           since: new Date(Date.now() - 3 * 3_600_000).toISOString(),
           restarts: null,
           foldedPods: null,
+          replaced: false,
         },
       ],
     } as unknown as ClusterOverview;
@@ -972,6 +979,7 @@ describe("a scope one namespace of which refused its pods", () => {
             since: new Date(Date.now() - 20_000).toISOString(),
             restarts: null,
             foldedPods: null,
+            replaced: false,
           },
         ],
       } as unknown as ClusterOverview;
@@ -1997,6 +2005,7 @@ describe("what Needs attention says it checked", () => {
         reason: "BackoffLimitExceeded",
         severity: "critical",
         foldedPods: 2,
+        replaced: false,
       },
     ]);
     await panel(attention);

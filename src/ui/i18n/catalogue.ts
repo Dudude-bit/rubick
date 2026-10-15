@@ -8015,10 +8015,18 @@ export const en = {
     },
     restartNoun: { one: "restart", other: "restarts" },
     failedPodsFolded: { one: "{n} failed pod", other: "{n} failed pods" },
+    replacedPodsFolded: {
+      one: "{n} pod already replaced, the newest",
+      other: "{n} pods already replaced, the newest",
+    },
     podNoun: { one: "pod", other: "pods" },
     failedInJobRows: {
       one: "{n} Failed, in its Job's row",
       other: "{n} Failed, in their Jobs' rows",
+    },
+    replacedInRows: {
+      one: "{n} Failed and replaced, in its workload's row",
+      other: "{n} Failed and replaced, in their workloads' rows",
     },
     worstFirst: "{n} · worst first",
     worstFirstPartial: "{n}+ · worst first · not all checked",

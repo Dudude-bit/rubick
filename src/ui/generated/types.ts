@@ -2158,6 +2158,7 @@ export interface ClusterProblem {
   since: string | null;
   restarts: number | null;
   foldedPods: number | null;
+  replaced: boolean;
 }
 
 export interface TlsCertificate {

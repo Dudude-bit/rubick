@@ -51,8 +51,10 @@ export interface AttentionItem {
   detail: AttentionDetail | null;
   since: string | null;
   restarts: number | null;
-  /** The failed pods a failed Job's row stands for instead of listing them. */
+  /** The failed pods a failed Job's row stands for instead of listing them, or the replaced pods of one workload. */
   foldedPods: number | null;
+  /** Pods their controller already replaced: a record, ranked after what is down now. */
+  replaced: boolean;
   /** Where the row opens: the object itself, or what an autoscaler scales. */
   opens: { kind: string; name: string; namespace: string | null };
   /** The IngressClass it asks for that nothing serves, and what else is wrong with it. */
@@ -120,7 +122,7 @@ export function checkSaid(check: AttentionCheck, t: T): string {
 }
 
 export interface Attention {
-  /** Worst first, then the longest broken (undated first, as the backend ranks). */
+  /** Worst first, then what is down now before pods already replaced, then the longest broken (undated first, as the backend ranks). */
   items: AttentionItem[];
   /** Every problem, counting the rows the backend's ranked list cut. */
   total: number;
@@ -210,6 +212,7 @@ const itemOf = (problem: ClusterProblem): AttentionItem =>
     since: problem.since,
     restarts: problem.restarts,
     foldedPods: problem.foldedPods,
+    replaced: problem.replaced,
     opens: {
       kind: problem.kind,
       name: problem.name,
@@ -256,6 +259,7 @@ const serviceItems = remember(
             since: null,
             restarts: null,
             foldedPods: null,
+            replaced: false,
             opens: subject,
           });
         });
@@ -326,6 +330,7 @@ const ingressItems = remember(
           since: null,
           restarts: null,
           foldedPods: null,
+          replaced: false,
           opens: subject,
           unservedClass: unservedClassOf(health, t),
         })
@@ -357,6 +362,7 @@ const autoscalerItems = remember((rows: AutoscalerInfo[]): AttentionItem[] =>
         since: decided?.lastTransitionTime ?? null,
         restarts: null,
         foldedPods: null,
+        replaced: false,
         opens: {
           kind: target.kind,
           name: target.name,
@@ -424,6 +430,7 @@ const claimItems = remember(
           since: claim.createdAt,
           restarts: null,
           foldedPods: null,
+          replaced: false,
           opens: subject,
         }),
       ];
@@ -476,7 +483,9 @@ const dated = (since: string | null) =>
 function ranked(items: AttentionItem[]): AttentionItem[] {
   return [...items].sort(
     (a, b) =>
-      SEVERITY[a.tone] - SEVERITY[b.tone] || dated(a.since) - dated(b.since)
+      SEVERITY[a.tone] - SEVERITY[b.tone] ||
+      Number(a.replaced) - Number(b.replaced) ||
+      dated(a.since) - dated(b.since)
   );
 }
 
@@ -512,10 +521,12 @@ export function attentionLines(items: AttentionItem[]): AttentionLine[] {
   return lines;
 }
 
-/** "2 failed pods", where a row stands for runs it folded. */
+/** "2 failed pods" where a row stands for runs it folded, or the replaced pods it stands for. */
 export const foldedWords = (item: AttentionItem, t: T): string | null =>
   item.foldedPods
-    ? t("count", "failedPodsFolded", { n: item.foldedPods })
+    ? t("count", item.replaced ? "replacedPodsFolded" : "failedPodsFolded", {
+        n: item.foldedPods,
+      })
     : null;
 
 function countByNamespace(
