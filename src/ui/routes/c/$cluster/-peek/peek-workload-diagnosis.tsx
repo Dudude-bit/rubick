@@ -1,3 +1,7 @@
+import type { ReactNode } from "react";
+
+import { ResourceRef } from "@/components/object/ResourceRef";
+import { parts } from "@/i18n/parts";
 import { useObjectConnections } from "@/hooks/useConnections";
 import { useT } from "@/i18n/useT";
 import { governanceFindings } from "@/lib/governance-findings";
@@ -6,6 +10,7 @@ import { rolloutSettled } from "@/lib/workload-status";
 import { WorkloadPodsCause } from "../-object/CauseLine";
 import { FindingLine } from "../-object/FindingLine";
 import { RolloutSummary } from "../-object/RolloutSummary";
+import { newestRun, useCronJobRuns } from "./cron-runs";
 import { usePeekOwnedPods } from "./peek-owned-pods";
 
 /**
@@ -53,11 +58,13 @@ export function PodsCause({
   target,
   detail,
   settled,
+  lead,
   className = "mb-1",
 }: {
   target: { kind: string; name: string; namespace: string };
   detail: unknown;
   settled: boolean;
+  lead?: ReactNode;
   className?: string;
 }) {
   const pods = usePeekOwnedPods(target, detail, !settled);
@@ -66,7 +73,46 @@ export function PodsCause({
       pods={pods.error ? null : pods.data}
       settled={settled}
       namespace={target.namespace}
+      lead={lead}
       className={className}
+    />
+  );
+}
+
+/**
+ * The cause the pods of a CronJob's newest run share, named by that run,
+ * until a run completes: every run of reports failed for six days under a
+ * page that never said why.
+ */
+export function LastRunCause({
+  namespace,
+  name,
+  className,
+}: {
+  namespace: string;
+  name: string;
+  className?: string;
+}) {
+  const t = useT();
+  const runs = useCronJobRuns(namespace, name);
+  const run = runs.data ? newestRun(runs.data) : null;
+  if (!run) return null;
+  return (
+    <PodsCause
+      target={{ kind: "Job", name: run.name, namespace }}
+      detail={undefined}
+      settled={run.status === "Complete"}
+      className={className}
+      lead={parts(t("readings", "lastRunCause"), {
+        run: (
+          <ResourceRef
+            kind="Job"
+            name={run.name}
+            namespace={namespace}
+            showKind={false}
+          />
+        ),
+      })}
     />
   );
 }

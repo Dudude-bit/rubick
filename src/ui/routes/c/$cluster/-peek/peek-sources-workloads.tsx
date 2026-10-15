@@ -1,5 +1,9 @@
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
-import { PodsCause, WorkloadDiagnosis } from "./peek-workload-diagnosis";
+import {
+  LastRunCause,
+  PodsCause,
+  WorkloadDiagnosis,
+} from "./peek-workload-diagnosis";
 import { rolloutBadge } from "../-object/rollout-badge";
 
 import { CopyableAddress } from "@/components/ui/copyable-value";
@@ -426,6 +430,13 @@ export const WORKLOAD_SOURCES: PeekSources = {
     status: cron.suspend ? "Suspended" : "Active",
     statusLabel: cronStatusWord(cron.suspend, t),
     createdAt: cron.createdAt,
+    lead: (
+      <LastRunCause
+        namespace={cron.namespace}
+        name={cron.name}
+        className="mt-3"
+      />
+    ),
     groups: [
       {
         title: t("columns", "schedule"),

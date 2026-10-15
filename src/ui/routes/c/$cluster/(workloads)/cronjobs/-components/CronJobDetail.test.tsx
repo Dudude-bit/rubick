@@ -135,6 +135,53 @@ function renderPage() {
 describe("CronJobDetail", () => {
   beforeEach(() => mockDetail(buildCronJob()));
 
+  /**
+   * Live, reports' page said "Last run 1m ago" and "no run has succeeded yet"
+   * for six days and never why. Fails if the page does not lead with the
+   * cause its newest run's pods share.
+   */
+  it("leads with the cause its newest run's pods share", async () => {
+    vi.mocked(commands.listJobs).mockResolvedValueOnce([
+      run("nightly-backup-29000000", "Failed"),
+    ]);
+    vi.mocked(commands.listPods).mockResolvedValue([
+      {
+        name: "nightly-backup-29000000-x",
+        namespace: "ops",
+        uid: "pod-x",
+        status: {
+          phase: "Failed",
+          display: "Error",
+          ready: false,
+          cause: {
+            says: "exits",
+            container: "backup",
+            restarts: 0,
+            run: {
+              code: 2,
+              signal: null,
+              reason: "Error",
+              started: null,
+              ended: null,
+              previous: false,
+              said: null,
+              log: { says: "notRead" },
+              limit: null,
+            },
+            until: null,
+          },
+        },
+        containers: [],
+        ownerReferences: [],
+      } as never,
+    ]);
+    await renderPage();
+    expect(await screen.findByTestId("pods-cause")).toHaveTextContent(
+      "In its last run, Job nightly-backup-29000000, 1 of 1 pod: backup exited (exit 2, Error)."
+    );
+    vi.mocked(commands.listPods).mockResolvedValue([]);
+  });
+
   it("leads with the schedule, in cron and in words", async () => {
     await renderPage();
     expect(screen.getByText("0 3 * * *")).toBeInTheDocument();
@@ -291,14 +338,20 @@ describe("CronJobDetail", () => {
     vi.mocked(commands.listJobs).mockResolvedValueOnce([
       run("nightly-backup-29863560", "Running"),
     ]);
-    vi.mocked(commands.listPods).mockImplementationOnce(
-      () => new Promise(() => {})
+    // The newest run's own pods are read apart, for its cause.
+    vi.mocked(commands.listPods).mockImplementation(async (filters) =>
+      filters?.labelSelector ? [] : new Promise(() => {})
     );
     await renderPage();
-    await waitFor(() => expect(commands.listPods).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(commands.listPods).toHaveBeenCalledWith(
+        expect.objectContaining({ labelSelector: null })
+      )
+    );
     const usage = await usageSection();
     expect(usage).toHaveTextContent("still reading");
     expect(usage).not.toHaveTextContent("nothing running");
+    vi.mocked(commands.listPods).mockResolvedValue([]);
   });
 
   /**

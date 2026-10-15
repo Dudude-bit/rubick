@@ -16,6 +16,8 @@ import { LogViewer } from "../../../-logs/LogViewer";
 import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { CronStatusBadge } from "./CronStatusBadge";
+import { cronJobRunsKey, useCronJobRuns } from "../../../-peek/cron-runs";
+import { LastRunCause } from "../../../-peek/peek-workload-diagnosis";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Unknown } from "@/components/ui/unknown";
@@ -190,7 +192,7 @@ function useRunsWatch(namespace: string | undefined, name: string | undefined) {
   );
   const reads = useMemo(
     () => [
-      ["cronjob-jobs", namespace, name],
+      cronJobRunsKey(namespace, name),
       ["cronjob-pods", namespace, name],
       queryKeys.detail(ResourceType.CronJob, namespace, name),
     ],
@@ -248,7 +250,7 @@ export function CronJobDetail() {
         description: t("action", "cronRunStartedName", { name: created }),
       });
       void queryClient.invalidateQueries({
-        queryKey: ["cronjob-jobs", namespace, name],
+        queryKey: cronJobRunsKey(namespace, name),
       });
       setRunOpen(false);
     },
@@ -264,25 +266,7 @@ export function CronJobDetail() {
     data: jobsRead,
     error: jobsError,
     refetch: refetchJobs,
-  } = useLiveQuery({
-    queryKey: ["cronjob-jobs", namespace, name],
-    queryFn: async () => {
-      if (!name || !namespace) return [];
-      const all = await commands.listJobs({
-        namespace,
-        labelSelector: null,
-        fieldSelector: null,
-        limit: null,
-      });
-      // The list command carries no owner references, so the naming
-      // convention the controller uses is the only link available.
-      return all.filter((job) => job.name.startsWith(`${name}-`));
-    },
-    enabled: !!namespace && !!name,
-    placeholderData: keepPreviousData,
-    staleTime: STALE_TIMES.resourceList,
-    refresh: "resourceList",
-  });
+  } = useCronJobRuns(namespace, name);
   const jobs = jobsRead ?? NO_JOBS;
   useRunsWatch(namespace, name);
   const tally = useMemo(() => {
@@ -585,6 +569,11 @@ export function CronJobDetail() {
         namespace={cronJob?.namespace || namespace}
         createdAt={cronJob?.createdAt}
         statusBadge={cronJob && <CronStatusBadge suspend={cronJob.suspend} />}
+        summary={
+          cronJob && (
+            <LastRunCause namespace={cronJob.namespace} name={cronJob.name} />
+          )
+        }
         onBack={goBack}
         actions={
           <>

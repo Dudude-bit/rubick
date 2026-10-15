@@ -3889,6 +3889,7 @@ export const en = {
       "Rollout paused: changes to the template wait until it is resumed",
     rolloutUnobserved:
       "The controller has not read the latest change yet, so these counts are from before it",
+    lastRunCause: "In its last run, {run},",
     controllerSaid: "The controller says: {said}",
     rolloutMoving: {
       one: "Rolling out: {updated} of {n} pod on the new template",

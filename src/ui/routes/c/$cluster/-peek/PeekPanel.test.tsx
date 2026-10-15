@@ -80,6 +80,8 @@ vi.mock("@/lib/commands", () => ({
     getStatefulset: vi.fn(),
     getDaemonset: vi.fn(),
     getJob: vi.fn(),
+    getCronjob: vi.fn(),
+    listJobs: vi.fn(),
     getPodSetupWarnings: vi.fn(),
     getDeploymentPods: vi.fn(),
     getReplicaset: vi.fn(),
@@ -1294,6 +1296,104 @@ describe("PeekPanel reads what the detail pages read", () => {
         "2 of 2 pods: migrate exited (exit 1, Error). Its exit message: Error: relation users does not exist"
       )
     );
+  });
+
+  /**
+   * Live, every run of reports failed for six days while its peek and page
+   * said only "Last run 1m ago". Fails if a CronJob does not lead with the
+   * cause its newest run's pods share, picks the newest by name rather than
+   * by when it was created (a run started by hand has no minute in its
+   * name), or still tells a cause once a newer run completed.
+   */
+  it("leads a CronJob's peek with the cause its newest run's pods share", async () => {
+    vi.mocked(commands.getCronjob).mockResolvedValue({
+      name: "reports",
+      namespace: "shop",
+      uid: "cron-uid",
+      schedule: "*/2 * * * *",
+      timezone: null,
+      suspend: false,
+      concurrencyPolicy: "Allow",
+      active: 0,
+      lastSchedule: null,
+      lastSuccessfulTime: null,
+      containers: [],
+      initContainers: [],
+      ownerReferences: [],
+      createdAt: null,
+    } as never);
+    const job = (name: string, status: string, createdAt: string) => ({
+      name,
+      namespace: "shop",
+      completions: 1,
+      succeeded: status === "Complete" ? 1 : 0,
+      failed: status === "Failed" ? 2 : 0,
+      active: 0,
+      status,
+      failure: null,
+      createdAt,
+    });
+    const failed = (name: string): PodInfo =>
+      buildPod({
+        name,
+        uid: name,
+        status: {
+          phase: "Failed",
+          display: "Error",
+          exitUnreported: false,
+          ready: false,
+          conditions: [],
+          message: null,
+          reason: null,
+          cause: {
+            says: "exits",
+            container: "report",
+            restarts: 0,
+            run: {
+              code: 2,
+              signal: null,
+              reason: "Error",
+              started: null,
+              ended: null,
+              previous: false,
+              said: null,
+              log: { says: "notRead" },
+              limit: null,
+            },
+            until: null,
+          },
+        },
+        ownerReferences: [],
+      });
+    vi.mocked(commands.listPods).mockResolvedValue([
+      failed("reports-0-adhoc-a"),
+      failed("reports-0-adhoc-b"),
+    ]);
+    vi.mocked(commands.listJobs).mockResolvedValue([
+      job("reports-0-adhoc", "Failed", "2026-10-15T04:10:00Z"),
+      job("reports-29867334", "Failed", "2026-10-15T04:00:00Z"),
+    ] as never);
+    const failing = await wrap("/c/prod/events?peek=cronjobs/shop/reports");
+    await waitFor(() =>
+      expect(screen.getByTestId("pods-cause")).toHaveTextContent(
+        "In its last run, Job reports-0-adhoc, 2 of 2 pods: report exited (exit 2, Error)."
+      )
+    );
+    expect(commands.listPods).toHaveBeenCalledWith(
+      expect.objectContaining({ labelSelector: "job-name=reports-0-adhoc" })
+    );
+    failing.unmount();
+
+    vi.mocked(commands.listPods).mockClear();
+    vi.mocked(commands.listJobs).mockResolvedValue([
+      job("reports-29867334", "Failed", "2026-10-15T04:00:00Z"),
+      job("reports-29867336", "Complete", "2026-10-15T04:02:00Z"),
+    ] as never);
+    await wrap("/c/prod/events?peek=cronjobs/shop/reports");
+    await waitFor(() => expect(commands.listJobs).toHaveBeenCalled());
+    await screen.findByText("*/2 * * * *");
+    expect(screen.queryByTestId("pods-cause")).toBeNull();
+    expect(commands.listPods).not.toHaveBeenCalled();
   });
 
   /** The diagnosis a workload's page leads with; a source's `lead` the panel drops says nothing. */

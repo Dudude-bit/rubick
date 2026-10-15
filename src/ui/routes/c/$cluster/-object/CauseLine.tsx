@@ -6,7 +6,7 @@ import {
   Unplug,
 } from "lucide-react";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import type { PodCause, PodInfo, SharedCause } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -158,12 +158,15 @@ export function PodsCauseLine({
   shared,
   namespace,
   warnedOnly = false,
+  lead,
   className,
 }: {
   shared: SharedCause;
   namespace: string;
   /** Told only if its kubelet's warnings say it is trouble. */
   warnedOnly?: boolean;
+  /** Whose pods these are, where the page is not theirs. */
+  lead?: ReactNode;
   className?: string;
 }) {
   const t = useT();
@@ -172,6 +175,7 @@ export function PodsCauseLine({
   if (!cause) return null;
   return (
     <p className={cn("text-xs", className)} data-testid="pods-cause">
+      {lead && <span className="text-fg-mut">{lead} </span>}
       <span className="text-fg-mut">
         {podsShare(shared.pods, shared.of, t)}{" "}
       </span>
@@ -189,11 +193,13 @@ export function WorkloadPodsCause({
   pods,
   settled,
   namespace,
+  lead,
   className,
 }: {
   pods: readonly PodInfo[] | null | undefined;
   settled: boolean;
   namespace: string;
+  lead?: ReactNode;
   className?: string;
 }) {
   const passed = useLastPassed(
@@ -209,6 +215,7 @@ export function WorkloadPodsCause({
       shared={told.shared}
       namespace={namespace}
       warnedOnly={told.warnedOnly}
+      lead={lead}
       className={className}
     />
   );
