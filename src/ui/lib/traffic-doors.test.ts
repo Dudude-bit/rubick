@@ -8,6 +8,7 @@ const t = ((section, key, values) =>
   translate("en", section, key, values)) as T;
 
 import { trafficDoors } from "./traffic-doors";
+import type { RouteTls } from "./ingress-tls";
 import type {
   GatewayInfo,
   ObjectRef,
@@ -554,6 +555,34 @@ describe("trafficDoors", () => {
       route: null,
       note: "/ · TLS",
     });
+  });
+
+  /**
+   * The edge's own `tls` is spec.tls alone. A Traefik Ingress that only loads
+   * its certificate wore "TLS" on its door while it served plain HTTP.
+   */
+  it("marks an Ingress door by what its controller serves, not spec.tls alone", () => {
+    const doorsWith = (tlsOf: RouteTls) =>
+      trafficDoors(
+        conns({
+          edges: [
+            edge(ref("Ingress", "front"), ref("Service", "app"), {
+              verb: "routes",
+              host: "shop.example.com",
+              path: "/",
+              pathType: "Prefix",
+              port: "3000",
+              tls: true,
+            }),
+          ],
+        }),
+        [],
+        t,
+        tlsOf
+      ).entries[0].doors[0].note;
+
+    expect(doorsWith(() => false)).toBe("/");
+    expect(doorsWith(() => null)).toBe("/ · TLS not checked");
   });
 
   it("caps the doors and counts the rest", () => {

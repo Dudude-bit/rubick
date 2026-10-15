@@ -11,6 +11,7 @@
 
 import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
 import type { T } from "@/i18n/useT";
+import type { RouteTls } from "@/lib/ingress-tls";
 import type {
   ChainStop,
   GatewayInfo,
@@ -107,7 +108,9 @@ function brokenWord(stop: ChainStop, t: T): string | null {
 export function trafficDoors(
   conns: ResourceConnections,
   gateways: GatewayInfo[],
-  t: T
+  t: T,
+  /** Whether an Ingress host is served over TLS once its controller spoke. */
+  tlsOf?: RouteTls
 ): TrafficDoors {
   // What broke, and under which gateway. A refusal is a verdict about ONE
   // (route, gateway) pair — a route refused by one gateway may be serving
@@ -249,6 +252,11 @@ export function trafficDoors(
 
     if (edge.relation.verb === "routes" && edge.from.kind === "Ingress") {
       const entry = entryFor(edge.from, "Ingress");
+      const host = edge.relation.host;
+      const secure =
+        host && tlsOf
+          ? tlsOf(edge.from, host, edge.relation.tls)
+          : edge.relation.tls;
       entry.doors.push({
         host: edge.relation.host ?? t("empty", "gwAllHosts"),
         copy: edge.relation.host,
@@ -258,7 +266,14 @@ export function trafficDoors(
         checked: false,
         route: null,
         note:
-          [edge.relation.path || null, edge.relation.tls ? "TLS" : null]
+          [
+            edge.relation.path || null,
+            secure
+              ? "TLS"
+              : secure === null
+                ? t("empty", "tlsNotChecked")
+                : null,
+          ]
             .filter(Boolean)
             .join(" · ") || null,
       });

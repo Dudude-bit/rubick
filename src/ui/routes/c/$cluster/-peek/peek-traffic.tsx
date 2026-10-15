@@ -23,6 +23,7 @@ import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { trafficDoors } from "@/lib/traffic-doors";
+import { useRouteTls } from "@/hooks/useRouteTls";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   ResourceName,
@@ -109,12 +110,13 @@ function TrafficPath({
   });
   // The doors under their entries: Gateway API and Ingress ways in, each
   // door wearing its verdict — see `lib/traffic-doors`.
+  const tlsOf = useRouteTls(conns.data);
   const doors = useMemo(
     () =>
       conns.data
-        ? trafficDoors(conns.data, gatewaysQuery.data ?? [], t)
+        ? trafficDoors(conns.data, gatewaysQuery.data ?? [], t, tlsOf)
         : { entries: [], mesh: [], unresolved: [] },
-    [conns.data, gatewaysQuery.data, t]
+    [conns.data, gatewaysQuery.data, t, tlsOf]
   );
   // For a Pod or a workload, the level above is whichever Services stand in
   // front of it — the graph names them from either end of an edge.

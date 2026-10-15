@@ -3,6 +3,7 @@ import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vite-plus/test";
 import { CRASH_LOOP_WINDOW_MS } from "@/lib/crash-loop";
 import { useLocaleStore } from "@/stores/localeStore";
+import type { RouteTls } from "@/lib/ingress-tls";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -2755,5 +2756,89 @@ describe("what a pod's Connections never reads", () => {
           "Connections does not read the policies that select this pod; its NetworkPolicies tab does",
       },
     ]);
+  });
+});
+
+describe("the scheme a route hop prints once its controller has spoken", () => {
+  const deployment = ref("Deployment", "promo");
+  const svc = service("promo", "app=promo");
+  const ingress = ref("Ingress", "promo", {
+    kind: "ingress",
+    className: "traefik",
+  });
+  const chain = (tlsOf: RouteTls, tls = true) =>
+    trafficChains(
+      connections(deployment, [
+        {
+          from: svc,
+          to: deployment,
+          relation: { verb: "selects", selector: "app=promo" },
+        },
+        {
+          from: ingress,
+          to: svc,
+          relation: {
+            verb: "routes",
+            host: "promo.example.com",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls,
+          },
+        },
+      ]),
+      t,
+      {
+        tlsOf,
+        routing: new Map([
+          [
+            "Ingress/k8s-gui-test/promo",
+            {
+              tls: [{ secretName: "promo-tls", hosts: ["promo.example.com"] }],
+              addresses: [],
+              binding: null,
+            },
+          ],
+        ]),
+      }
+    )[0];
+  const routeOf = (path: ReturnType<typeof chain>) => {
+    const hop = path.hops.find(
+      (entry) => entry.at === "object" && entry.object.kind === "Ingress"
+    );
+    if (hop?.at !== "object") throw new Error("expected the Ingress hop");
+    return hop;
+  };
+
+  /**
+   * Traefik loads promo-tls and serves the router as plain HTTP. The trace
+   * drew the certificate above the route and handed out https:// for it.
+   */
+  it("prints http and no certificate where the controller serves spec.tls plain", () => {
+    const path = chain(() => false);
+
+    // The same chain served over TLS draws the certificate, so its absence
+    // below is the verdict and not a fixture that never had one.
+    expect(chain(() => true).hops.some((hop) => hop.at === "certificate")).toBe(
+      true
+    );
+    expect(path.hops.some((hop) => hop.at === "certificate")).toBe(false);
+    expect(routeOf(path).urls).toEqual(["http://promo.example.com/"]);
+    expect(routeOf(path).via).toContain("over plain HTTP");
+  });
+
+  /** An ALB certificate lives in an annotation; spec.tls alone said plain HTTP. */
+  it("prints https where the controller terminates a host spec.tls never names", () => {
+    const path = chain(() => true, false);
+
+    expect(routeOf(path).urls).toEqual(["https://promo.example.com/"]);
+  });
+
+  /** A scheme nobody could settle is no address, and not "plain" either. */
+  it("prints no address and says TLS was not checked where nobody could tell", () => {
+    const path = chain(() => null);
+
+    expect(routeOf(path).urls).toEqual([]);
+    expect(routeOf(path).via).toContain("TLS not checked");
   });
 });

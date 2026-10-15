@@ -31,6 +31,7 @@ import {
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
+import { useRouteTls } from "@/hooks/useRouteTls";
 import { cn } from "@/lib/utils";
 import {
   chainSilence,
@@ -582,6 +583,7 @@ export function TrafficChain({
   // Deployment says which controller serves it and under what certificate
   // without five detail pages each wiring up four queries.
   const routed = useIngressRouting(data);
+  const tlsOf = useRouteTls(data);
 
   // Built before the early returns rather than after them, because the hop
   // notes below are fetched with a hook and a hook may not sit behind a
@@ -592,6 +594,7 @@ export function TrafficChain({
         certificates: certificates ?? routed.certificates,
         controller,
         routing: routed.routing,
+        tlsOf,
       })
     : [];
   const serviceHops = paths.flatMap((path) =>

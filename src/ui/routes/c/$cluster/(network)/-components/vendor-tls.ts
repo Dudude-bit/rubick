@@ -1,6 +1,7 @@
 import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import { covers } from "@/lib/certificates";
+import { hostTls } from "@/lib/ingress-tls";
 import type { IngressInfo } from "@/generated/types";
 import type { IngressTlsAnswers } from "@/hooks/useIngressTls";
 
@@ -45,20 +46,14 @@ export function vendorTlsAnswer(
     if (!rule.host || seen.has(rule.host)) continue;
     seen.add(rule.host);
     const said = vendorTls.of(ingress, rule.host);
-    if (said?.replacesSpec) {
-      const spec = specCovers(ingress, rule.host);
-      if (said.terminated === null) unchecked.push(rule.host);
-      else if (said.terminated && !spec) hosts.push(rule.host);
-      else if (!said.terminated && spec) {
-        plain.push(rule.host);
-        plainWhy ??= sayWords(said.by, t);
-      }
-      continue;
+    const spec = specCovers(ingress, rule.host);
+    const verdict = hostTls(spec, said, unread);
+    if (verdict === null) unchecked.push(rule.host);
+    else if (verdict && !spec) hosts.push(rule.host);
+    else if (!verdict && spec && said) {
+      plain.push(rule.host);
+      plainWhy ??= sayWords(said.by, t);
     }
-    if (said?.terminated === true) hosts.push(rule.host);
-    else if (specCovers(ingress, rule.host)) continue;
-    else if (said?.terminated === null || (!said && unread))
-      unchecked.push(rule.host);
   }
   if (hosts.length === 0 && unchecked.length === 0 && plain.length === 0)
     return null;

@@ -14,6 +14,7 @@ import {
   useObjectEvents,
 } from "@/hooks/useObjectEvents";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
+import { useRouteTls } from "@/hooks/useRouteTls";
 import { uidIn } from "@/hooks/useReadUid";
 import { useLocationHref } from "@/hooks/useLocationHref";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
@@ -143,6 +144,7 @@ export function useObjectReport(
   // The certificates and controllers in front of the object, as the page's
   // chain reads them; nothing until Share is pressed, like the graph itself.
   const routed = useIngressRouting(capturing ? connections.data : undefined);
+  const tlsOf = useRouteTls(capturing ? connections.data : undefined);
   const events = useObjectEvents(
     subject?.kind ?? "",
     subject?.name,
@@ -204,6 +206,7 @@ export function useObjectReport(
           certificates: own.chain?.certificates ?? routed.certificates,
           controller: own.chain?.controller,
           routing: routed.routing,
+          tlsOf,
         }
       );
       sections.push(...graph.sections);
@@ -284,6 +287,7 @@ export function useObjectReport(
     connections,
     routed.certificates,
     routed.routing,
+    tlsOf,
     vendors,
     capturedAt,
     colouring,

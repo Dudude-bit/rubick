@@ -6,6 +6,7 @@ import { Journal } from "../-changes/ChangesTimeline";
 import { useShareSection } from "@/components/share/screen-share";
 import { pinShare } from "./service-card-share";
 import { useConnections } from "@/hooks/useConnections";
+import { useRouteTls } from "@/hooks/useRouteTls";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
@@ -61,9 +62,11 @@ export function ServiceCard({
     pin,
     connections.isPending
   );
+  const tlsOf = useRouteTls(connections.data);
   const chains = useMemo(
-    () => (connections.data ? trafficChains(connections.data, t) : []),
-    [connections.data, t]
+    () =>
+      connections.data ? trafficChains(connections.data, t, { tlsOf }) : [],
+    [connections.data, t, tlsOf]
   );
   const ways = entryPointsOf(connections.data, chains);
   const unread = openQuestionsOf(connections.data);

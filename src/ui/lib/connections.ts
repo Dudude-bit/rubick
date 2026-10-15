@@ -21,6 +21,7 @@ import { exitUnreported, upBetweenCrashes } from "./share/pod-status";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
+import type { RouteTls } from "./ingress-tls";
 import { clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
 import { makersUnread, stopMood, type StopMood } from "./stop-mood";
@@ -879,10 +880,14 @@ function routeHop(
   edges: ConnectionEdge[],
   object: ObjectRef,
   t: T,
-  known?: RoutedIngress
+  known?: RoutedIngress,
+  tlsOf?: RouteTls
 ): ChainHopObject {
   const relations = edges.map(
     (edge) => edge.relation as Extract<Relation, { verb: "routes" }>
+  );
+  const schemes = relations.map((rule) =>
+    rule.host && tlsOf ? tlsOf(object, rule.host, rule.tls) : rule.tls
   );
   const detail = [
     ...new Set(
@@ -897,16 +902,21 @@ function routeHop(
     self: false,
     detail,
     via: join(
-      relations.some((rule) => rule.tls)
+      schemes.includes(true)
         ? t("nav", "overHttps")
-        : t("nav", "overHttpPlain"),
+        : schemes.includes(null)
+          ? t("empty", "tlsNotChecked")
+          : t("nav", "overHttpPlain"),
       describeFacts(object.facts, t)
     ),
+    // A scheme nobody could settle is no address to hand anybody.
     urls: [
       ...new Set(
-        relations.flatMap((rule) =>
-          rule.host
-            ? [`${rule.tls ? "https" : "http"}://${rule.host}${rule.path}`]
+        relations.flatMap((rule, index) =>
+          rule.host && schemes[index] !== null
+            ? [
+                `${schemes[index] ? "https" : "http"}://${rule.host}${rule.path}`,
+              ]
             : []
         )
       ),
@@ -1056,6 +1066,26 @@ function servesAny(tlsHosts: string[], pathHosts: string[]): boolean {
 }
 
 /**
+ * Whether a `spec.tls` entry is a certificate any of these hosts is served
+ * under, not one its controller only loads. Traefik loads every Secret the
+ * field names and serves the router as plain HTTP unless it asks for TLS.
+ */
+function servedUnder(
+  ingress: ObjectRef,
+  tlsHosts: string[],
+  pathHosts: string[],
+  tlsOf: RouteTls | undefined
+): boolean {
+  if (!tlsOf) return true;
+  return pathHosts.some(
+    (host) =>
+      host === "" ||
+      ((tlsHosts.length === 0 || covers(tlsHosts, host)) &&
+        tlsOf(ingress, host, true) !== false)
+  );
+}
+
+/**
  * How traffic gets in, one path per Service that fronts the subject.
  *
  * A path with a single hop is not a path — a Service nothing routes to and
@@ -1085,6 +1115,12 @@ export function trafficChains(
      * hostname reaches it and never whether that hostname is served over TLS.
      */
     routing?: Map<string, RoutedIngress>;
+    /**
+     * Whether a host is served over TLS once the controllers have spoken.
+     * Without it a route reads `spec.tls` alone, which a cloud certificate
+     * in an annotation and a Traefik router both contradict.
+     */
+    tlsOf?: RouteTls;
   } = {}
 ): ChainPath[] {
   const subject = conns.subject;
@@ -1122,8 +1158,10 @@ export function trafficChains(
       if (subject.kind === "Ingress") {
         const mine = routes.filter((edge) => sameObject(edge.to, service));
         const hosts = mine.map((edge) => edge.relation.host ?? "");
-        for (const entry of tls.filter((cert) =>
-          servesAny(cert.hosts, hosts)
+        for (const entry of tls.filter(
+          (cert) =>
+            servesAny(cert.hosts, hosts) &&
+            servedUnder(subject, cert.hosts, hosts, extra.tlsOf)
         )) {
           hops.push({
             at: "certificate",
@@ -1136,7 +1174,13 @@ export function trafficChains(
           hops.push({ at: "controller", binding: extra.controller });
         }
         hops.push({
-          ...routeHop(mine, subject, t, extra.routing?.get(refKey(subject))),
+          ...routeHop(
+            mine,
+            subject,
+            t,
+            extra.routing?.get(refKey(subject)),
+            extra.tlsOf
+          ),
           self: true,
         });
         hops.push(
@@ -1164,6 +1208,8 @@ export function trafficChains(
           const host = edge.relation.host ?? "";
           for (const entry of known?.tls ?? []) {
             if (!servesAny(entry.hosts, [host])) continue;
+            if (!servedUnder(edge.from, entry.hosts, [host], extra.tlsOf))
+              continue;
             hops.push({
               at: "certificate",
               secret: {
@@ -1180,7 +1226,7 @@ export function trafficChains(
           if (known?.binding) {
             hops.push({ at: "controller", binding: known.binding });
           }
-          hops.push(routeHop([edge], edge.from, t, known));
+          hops.push(routeHop([edge], edge.from, t, known, extra.tlsOf));
         }
         // One Gateway API route at a time, its Gateway above it, and its own
         // stops right where they happen — a refusal written by the
