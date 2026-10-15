@@ -16,6 +16,7 @@ import {
   hostGroups,
   hostState,
   middlewareUses,
+  readEmptyServices,
   readEntryPoints,
   type TraefikSources,
 } from "./model";
@@ -302,7 +303,7 @@ describe("the findings", () => {
   });
 
   /**
-   * Every request to a Service scaled to zero gets a 503, so it is worth a
+   * Traefik drops a route to a Service scaled to zero, so it is worth a
    * look; it is not an outage, and the host line said one in red.
    */
   it("files a route at a Service scaled to zero as a warning, not an error", () => {
@@ -819,6 +820,108 @@ describe("the findings", () => {
     expect(
       catchAll?.findings.filter((finding) => finding.kind === "clear")
     ).toEqual([]);
+  });
+});
+
+describe("what Traefik answers for a route with nothing behind it", () => {
+  const behind = (stop: ServicePublished["stop"]) =>
+    sources({
+      ingresses: [
+        ingress("promo", "promo.example.com", { service: "promo-web" }),
+      ],
+      services: [service("promo-web", { app: "promo" })],
+      published: [published("promo-web", 0, 0, { stop })],
+    });
+  const at = published("promo-web", 0).service;
+  const empty = {
+    reason: "selectsNothing",
+    service: at,
+    selector: "app=promo",
+    near: null,
+    makersRead: true,
+  } as const;
+  const answer = (
+    over: Partial<TraefikSources>,
+    stop: ServicePublished["stop"] = empty
+  ) => {
+    const [group] = hostGroups({ ...behind(stop), ...over });
+    const found = group.findings.find((finding) => finding.kind === "stop");
+    return found?.kind === "stop" ? found.answer : null;
+  };
+
+  /**
+   * The page said "every request gets a 502" for every stopped route.
+   * Traefik skips the router instead, unless allowEmptyServices keeps it to
+   * answer 503, and only for the provider it is set on. Fails if the flag
+   * stops being read per provider or an unread one is taken as off.
+   */
+  it("answers by allowEmptyServices on the provider that reads the object", () => {
+    expect(
+      answer({ emptyServices: { Ingress: false, IngressRoute: true } })
+    ).toBe("dropped");
+    expect(
+      answer({ emptyServices: { Ingress: true, IngressRoute: false } })
+    ).toBe("unavailable");
+    expect(answer({})).toBe("unknown");
+    const viaCrd = {
+      ingresses: [],
+      ingressRoutes: [
+        ingressRoute("promo", {
+          routes: [
+            {
+              match: "Host(`promo.example.com`)",
+              services: [{ name: "promo-web", port: 80 }],
+            },
+          ],
+        }),
+      ],
+    };
+    expect(
+      answer({
+        ...viaCrd,
+        emptyServices: { Ingress: true, IngressRoute: false },
+      })
+    ).toBe("dropped");
+    expect(
+      answer({
+        ...viaCrd,
+        emptyServices: { Ingress: false, IngressRoute: true },
+      })
+    ).toBe("unavailable");
+  });
+
+  /** A Service that does not exist is skipped whatever the flag says; fails if the flag is asked about it. */
+  it("drops a route whose Service does not exist even where empty Services are kept", () => {
+    const missing = {
+      reason: "backendMissing",
+      service: { ...at, existence: "missing" },
+      ingress: {
+        kind: "Ingress",
+        name: "promo",
+        namespace: "shop",
+        existence: "present",
+        facts: null,
+      },
+    } as unknown as ServicePublished["stop"];
+    expect(
+      answer({ emptyServices: { Ingress: true, IngressRoute: true } }, missing)
+    ).toBe("dropped");
+  });
+
+  /** Fails if a flag's case, its bare form, or a config file that may hold it is misread. */
+  it("reads allowEmptyServices from the flags, and nothing from a config file", () => {
+    expect(
+      readEmptyServices([
+        "--entryPoints.web.address=:8000/tcp",
+        "--providers.kubernetesingress.allowEmptyServices=true",
+        "--providers.kubernetescrd.allowemptyservices",
+        "--providers.kubernetescrd.allowEmptyServices=false",
+      ])
+    ).toEqual({ Ingress: true, IngressRoute: false });
+    expect(
+      readEmptyServices(["--configFile=/etc/traefik/traefik.yml"])
+    ).toBeNull();
+    expect(readEmptyServices([])).toBeNull();
   });
 });
 

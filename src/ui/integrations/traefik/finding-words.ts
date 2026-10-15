@@ -1,7 +1,14 @@
+import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { problemWords } from "@/lib/certificates";
 import { describeStop } from "@/lib/connections";
-import type { Finding, TraefikRoute } from "./model";
+import type { Finding, StopAnswer, TraefikRoute } from "./model";
+
+const STOP_ANSWER: Record<StopAnswer, keyof typeof en.empty> = {
+  dropped: "traefikRouteDropped",
+  unavailable: "everyRequest503",
+  unknown: "traefikRouteDroppedOr503",
+};
 
 /**
  * A finding in words, with the objects it is about kept apart from the
@@ -23,7 +30,7 @@ export function describeFinding(
       // Deployment or from a hostname.
       const said = describeStop(finding.stop, t);
       return {
-        title: t("empty", "everyRequest502", {
+        title: t("empty", STOP_ANSWER[finding.answer], {
           reason: said.title,
         }),
         objects: [],

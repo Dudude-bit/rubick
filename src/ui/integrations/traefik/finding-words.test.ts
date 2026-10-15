@@ -74,11 +74,47 @@ describe("a Traefik finding on the page", () => {
           workloads: [],
           said: 'pods "web-1" is forbidden: exceeded quota: two-pods, requested: pods=1, used: pods=2, limited: pods=2',
         },
+        answer: "dropped",
       } as unknown as Finding,
       t
     );
     expect(said.title).toContain(
-      "502: ResourceQuota two-pods refuses its pods"
+      "matches it: ResourceQuota two-pods refuses its pods"
+    );
+  });
+
+  /**
+   * Every stopped route read "every request gets a 502", a status Traefik
+   * never answers for it: it drops the router, or answers 503 where
+   * allowEmptyServices keeps it. Fails if any answer names a 502 again or
+   * the three stop being told apart.
+   */
+  it("says what Traefik answers for a stopped route, and when it cannot tell", () => {
+    const title = (answer: string) =>
+      describeFinding(
+        {
+          kind: "stop",
+          severity: "err",
+          route: route("web"),
+          stop: {
+            reason: "selectsNothing",
+            service: { kind: "Service", name: "web", namespace: "shop" },
+            selector: "app=web",
+            near: null,
+            makersRead: true,
+          },
+          answer,
+        } as unknown as Finding,
+        t
+      ).title;
+    expect(title("dropped")).toBe(
+      "Traefik drops this route, so a request gets a 404 or whatever other route matches it: No pod carries app=web"
+    );
+    expect(title("unavailable")).toBe(
+      "This host answers, and every request gets a 503: No pod carries app=web"
+    );
+    expect(title("unknown")).toContain(
+      "depending on allowEmptyServices, which could not be read"
     );
   });
 });

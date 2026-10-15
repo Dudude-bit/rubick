@@ -5796,8 +5796,10 @@ export const en = {
       other: "Shown exactly as written: {list} are not interpreted here.",
     },
     notFoundInThisCluster: "not found in this cluster",
-    everyRequest502:
-      "This host answers, and every request gets a 502: {reason}",
+    traefikRouteDropped:
+      "Traefik drops this route, so a request gets a 404 or whatever other route matches it: {reason}",
+    traefikRouteDroppedOr503:
+      "Traefik drops this route or answers it with a 503, depending on allowEmptyServices, which could not be read: {reason}",
     traefikClearNote: {
       one: "No route under this host carries a certificate, and it is bound to {list}, which terminates no TLS and carries no redirection. There is no encrypted way to reach it, even for a client that asks for one.",
       other:

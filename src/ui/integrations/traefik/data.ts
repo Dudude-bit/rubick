@@ -40,7 +40,9 @@ import {
 } from "../ingress";
 import {
   allRoutes,
+  readEmptyServices,
   readEntryPoints,
+  type EmptyServices,
   type EntryPoint,
   type TraefikSources,
 } from "./model";
@@ -174,6 +176,7 @@ export interface ControllerInfo {
   workload: ControllerWorkload | null;
   args: string[];
   entryPoints: EntryPoint[];
+  emptyServices: EmptyServices | null;
   /** Why there is nothing above, in words rather than an empty object. */
   problem: Saying | null;
 }
@@ -192,6 +195,7 @@ export async function fetchController(): Promise<ControllerInfo> {
     workload: null,
     args: [],
     entryPoints: [],
+    emptyServices: null,
     problem,
   });
 
@@ -214,6 +218,7 @@ export async function fetchController(): Promise<ControllerInfo> {
       workload,
       args: [],
       entryPoints: [],
+      emptyServices: null,
       problem: {
         key: "traefikManifestUnreadable",
         values: {
@@ -227,6 +232,7 @@ export async function fetchController(): Promise<ControllerInfo> {
     workload,
     args,
     entryPoints: readEntryPoints(args),
+    emptyServices: readEmptyServices(args),
     problem: args.length === 0 ? { key: "traefikNoArgs" } : null,
   };
 }
@@ -251,6 +257,7 @@ export function sourcesFrom(
     ...routeSources,
     ...backing,
     entryPoints: controller?.entryPoints ?? [],
+    emptyServices: controller?.emptyServices ?? undefined,
     certificates,
   };
 }

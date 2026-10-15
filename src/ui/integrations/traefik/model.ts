@@ -148,6 +148,7 @@ export type Finding =
       severity: "err" | "warn";
       route: TraefikRoute;
       stop: ChainStop;
+      answer: StopAnswer;
     }
   /** Reachable unencrypted, and nothing upgrades the connection. */
   | {
@@ -204,6 +205,8 @@ export interface TraefikSources extends BackingSources {
   middlewares: CustomResourceInfo[];
   /** Empty where the controller's own configuration could not be read. */
   entryPoints: EntryPoint[];
+  /** Absent where the controller's own configuration could not be read. */
+  emptyServices?: EmptyServices;
   /** Certificates already read off the TLS Secrets, by `namespace/name`. */
   certificates?: Map<string, TlsCertificate>;
   /**
@@ -476,6 +479,45 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
  * says it in the reader's language.
  */
 export const UNNAMED_TARGET = "\u0000unnamed";
+
+/** Whether each provider keeps a route to a Service with no endpoint, `allowEmptyServices`, by the kind it reads. */
+export type EmptyServices = Record<TraefikRoute["source"]["kind"], boolean>;
+
+const EMPTY_SERVICES_FLAG: Record<string, keyof EmptyServices> = {
+  "providers.kubernetesingress.allowemptyservices": "Ingress",
+  "providers.kubernetescrd.allowemptyservices": "IngressRoute",
+};
+
+/** `null` where the flags are not the whole configuration: none, or a file. */
+export function readEmptyServices(args: string[]): EmptyServices | null {
+  if (args.length === 0) return null;
+  const kept: EmptyServices = { Ingress: false, IngressRoute: false };
+  for (const arg of args) {
+    const [rawKey, value = "true"] = arg.replace(/^-+/, "").split("=", 2);
+    const key = rawKey.toLowerCase();
+    if (key === "configfile") return null;
+    const kind = EMPTY_SERVICES_FLAG[key];
+    if (kind) kept[kind] = value.toLowerCase() !== "false";
+  }
+  return kept;
+}
+
+/**
+ * What a request to a route stopped behind gets. Traefik drops the router of
+ * a Service that does not exist, and of one with no endpoint unless
+ * allowEmptyServices keeps it to answer 503; there is no 502 either way.
+ */
+export type StopAnswer = "dropped" | "unavailable" | "unknown";
+
+export function stopAnswer(
+  stop: ChainStop,
+  route: TraefikRoute,
+  kept: EmptyServices | undefined
+): StopAnswer {
+  if (stop.reason === "backendMissing") return "dropped";
+  if (!kept) return "unknown";
+  return kept[route.source.kind] ? "unavailable" : "dropped";
+}
 
 export function readEntryPoints(args: string[]): EntryPoint[] {
   const found = new Map<string, EntryPoint>();
@@ -859,7 +901,13 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
       if (seenStops.has(key)) return [];
       seenStops.add(key);
       return [
-        { kind: "stop", severity: stopWeight(stop).severity, route, stop },
+        {
+          kind: "stop",
+          severity: stopWeight(stop).severity,
+          route,
+          stop,
+          answer: stopAnswer(stop, route, sources.emptyServices),
+        },
       ];
     });
 
