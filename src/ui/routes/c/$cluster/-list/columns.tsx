@@ -94,14 +94,18 @@ export const nameCellPx = (_t: unknown, rows: readonly { name: string }[]) =>
         longestText(rows, (row) => row.name, 31) * 7.2 + NAME_CHROME_PX
       );
 
+/** A column of references as wide as the longest name in it, up to `glyphs`, with the kind's glyph a node's has. */
+export const refCellPx = <Row,>(
+  rows: readonly Row[],
+  name: (row: Row) => string | null | undefined,
+  glyphs: number
+) => Math.ceil(longestText(rows, name, glyphs) * 7.2 + NODE_CHROME_PX);
+
 /** A Node column as wide as the longest node name in it, up to {@link NODE_GLYPHS}. */
 export const nodeCellPx = <Row,>(
   rows: readonly Row[],
   node: (row: Row) => string | null | undefined
-) =>
-  rows.length === 0
-    ? NODE_CELL_PX
-    : Math.ceil(longestText(rows, node, NODE_GLYPHS) * 7.2 + NODE_CHROME_PX);
+) => (rows.length === 0 ? NODE_CELL_PX : refCellPx(rows, node, NODE_GLYPHS));
 
 /** `ingress-nginx` and `cert-manager` whole: 14 glyphs at 7.2px and a cell's padding. */
 export const NAMESPACE_CELL_PX = Math.ceil(14 * 7.2 + 20);

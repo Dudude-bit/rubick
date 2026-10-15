@@ -16,7 +16,7 @@ import type {
 } from "@/generated/types";
 import { useWindowActivity } from "@/lib/window-activity";
 import { renderWithProviders } from "@/test/render";
-import { ClaimStatusCell, ClaimSummary } from "./ClaimStatus";
+import { ClaimClassCell, ClaimStatusCell, ClaimSummary } from "./ClaimStatus";
 
 const claim: PersistentVolumeClaimInfo = {
   uid: "u1",
@@ -75,6 +75,14 @@ describe("a claim's row in the list", () => {
       />
     );
     expect(screen.getByTestId("claim-cause").className).toContain("text-info");
+  });
+
+  /** Fails if the row's Storage class cell links a class the cluster lacks, as if it could be opened. */
+  it("marks a class the cluster lacks rather than linking it", () => {
+    renderWithProviders(<ClaimClassCell claim={claim} classes={[localPath]} />);
+    const named = screen.getByText("fast-ssd-missing");
+    expect(named.closest("a")).toBeNull();
+    expect(named.parentElement?.className).toContain("text-err");
   });
 
   /** Fails if a row whose classes are still being read guesses a cause. */

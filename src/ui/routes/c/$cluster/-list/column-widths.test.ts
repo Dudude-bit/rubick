@@ -6,8 +6,9 @@ import {
   yieldedColumns,
 } from "@/components/ui/column-shares";
 import { translate } from "@/i18n";
+import type { PersistentVolumeClaimInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { columnFloor } from "@/lib/column-label";
+import { columnFloor, columnIdeal } from "@/lib/column-label";
 import { serviceVerdictLabels } from "@/lib/service-health";
 import {
   cronStatusWord,
@@ -18,7 +19,12 @@ import {
 
 import { useLocaleStore } from "@/stores/localeStore";
 
-import { AGE_CELL_PX, NAME_CELL_PX, NODE_CELL_PX } from "./columns";
+import {
+  AGE_CELL_PX,
+  NAME_CELL_PX,
+  NODE_CELL_PX,
+  statusCellPx,
+} from "./columns";
 
 import { configMapColumns } from "../(config)/configmaps/-components/ConfigMapList";
 import { columns as cronJobs } from "../(workloads)/cronjobs/-components/CronJobList";
@@ -810,5 +816,54 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
     expect(columnFloor(name, ru, [{ name: "x".repeat(60) }, ...short])).toBe(
       NAME_CELL_PX
     );
+  });
+});
+
+describe("the claims list beside a claim's cause", () => {
+  const claim = (over: Partial<PersistentVolumeClaimInfo>) => ({
+    uid: "",
+    name: "data-orders-db-0",
+    namespace: "shop",
+    status: "Bound",
+    volume: "pvc-88dc9f30-e660-4859-8adf-9e0d3cd274d8",
+    capacity: "1Gi",
+    accessModes: ["ReadWriteOnce"],
+    storageClass: "local-path",
+    labels: {},
+    annotations: {},
+    createdAt: "2026-10-13T12:00:00Z",
+    ...over,
+  });
+
+  /**
+   * Live at 1037px, Status took every pixel above the floors for
+   * orphan-claim's cause and left Volume "pv-." and Storage class "local-...".
+   * Fails if a volume or a class stops keeping a readable name beside it.
+   */
+  it("keeps the volume and the class readable while a cause widens Status", () => {
+    const rows = [
+      claim({}),
+      claim({
+        name: "orphan-claim",
+        status: "Pending",
+        volume: null,
+        capacity: null,
+        storageClass: "fast-ssd-missing",
+      }),
+    ];
+    const columns = [...persistentVolumeClaims([]), ACTIONS] as Column[];
+    const layout = tableLayout(
+      columns.map((c) => ({
+        size: c.size ?? 150,
+        floor: columnFloor(c, en, rows),
+        ideal: columnIdeal(c, en, rows),
+      })),
+      1037
+    );
+    const px = layout.shares.map((share) => (share / 100) * layout.span);
+    const at = (id: string) => px[columns.findIndex((c) => nameOf(c) === id)];
+    expect(at("volume")).toBeGreaterThanOrEqual(12 * 7.2 + 38);
+    expect(at("storageClass")).toBeGreaterThanOrEqual(16 * 7.2 + 38);
+    expect(at("status")).toBeGreaterThan(statusCellPx(7));
   });
 });

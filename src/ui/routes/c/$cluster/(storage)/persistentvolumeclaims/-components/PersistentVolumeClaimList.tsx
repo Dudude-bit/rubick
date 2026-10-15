@@ -7,8 +7,7 @@ import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
 import { ResourceList } from "../../../-list/ResourceList";
-import { StorageClassRef } from "../../../-object/storage-refs";
-import { ClaimStatusCell } from "../../../-object/ClaimStatus";
+import { ClaimClassCell, ClaimStatusCell } from "../../../-object/ClaimStatus";
 import {
   createAccessModesColumn,
   createCapacityColumn,
@@ -16,6 +15,7 @@ import {
   createNameColumn,
   createNamespaceColumn,
   causeTextPx,
+  refCellPx,
   statusCellPx,
   yielding,
 } from "../../../-list/columns";
@@ -41,6 +41,11 @@ import { None } from "@/components/ui/none";
 
 /** `Pending`, the widest phase a claim has, as its badge draws it. */
 const STATUS_PX = statusCellPx(7);
+
+/** Enough of a generated `pvc-3f2c1e0a-…` to tell two apart; the rest is on hover. */
+const VOLUME_GLYPHS = 12;
+/** `standard-rwo` and `k8s-gui-hostpath` whole. */
+const CLASS_GLYPHS = 16;
 
 /** The words each row says after its badge, for the column's width and the shared file. */
 const causesSaid = (
@@ -85,6 +90,10 @@ export const columns = (
     size: 300,
     accessorKey: "volume",
     header: columnHeader("columns", "volume"),
+    meta: {
+      floor: (_t, rows: readonly PersistentVolumeClaimInfo[]) =>
+        refCellPx(rows, (row) => row.volume, VOLUME_GLYPHS),
+    },
     cell: ({ row }) =>
       row.original.volume ? (
         <ResourceRef
@@ -103,9 +112,13 @@ export const columns = (
     accessorKey: "storageClass",
     header: columnHeader("columns", "storageClass"),
     cell: ({ row }) => (
-      <StorageClassRef name={row.original.storageClass} fallback="default" />
+      <ClaimClassCell claim={row.original} classes={classes} />
     ),
-    meta: { yields: 2 },
+    meta: {
+      yields: 2,
+      floor: (_t, rows: readonly PersistentVolumeClaimInfo[]) =>
+        refCellPx(rows, (row) => row.storageClass || "default", CLASS_GLYPHS),
+    },
   },
   yielding(createAgeColumn<PersistentVolumeClaimInfo>(), 3),
 ];

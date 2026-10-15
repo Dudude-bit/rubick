@@ -23,6 +23,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { ROLE_TEXT } from "@/lib/status-role";
 import { cn } from "@/lib/utils";
 import { CauseEvidence } from "./CauseLine";
+import { StorageClassRef } from "./storage-refs";
 
 /** The cause a caller holds, or the one read here where it holds none: the peek has no hooks of its own to read it with. */
 function useCauseOf(
@@ -81,6 +82,29 @@ export function ClaimStatusCell({
       >
         {text}.
       </span>
+    </span>
+  );
+}
+
+/** The class a list row's claim names, a missing one marked rather than linked. */
+export function ClaimClassCell({
+  claim,
+  classes,
+}: {
+  claim: PersistentVolumeClaimInfo;
+  classes: ClassesRead;
+}) {
+  const t = useT();
+  const cause = claimCause(claim, classes);
+  if (cause?.says !== "classMissing")
+    return <StorageClassRef name={claim.storageClass} fallback="default" />;
+  return (
+    <span
+      className="inline-flex min-w-0 max-w-full items-center gap-1 text-err"
+      title={claimCauseText(cause, t)}
+    >
+      <Unlink className="h-3 w-3 flex-none" aria-hidden="true" />
+      <span className="truncate font-mono">{cause.name}</span>
     </span>
   );
 }
