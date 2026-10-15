@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
-import { Clock, EyeOff, type LucideIcon } from "lucide-react";
+import { EyeOff, type LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
 import {
@@ -16,7 +16,7 @@ import { sayWords } from "@/i18n/say";
 import type { MessageSubject } from "@/lib/message-refs";
 import { formatQuantity, usageRole } from "@/lib/metric-format";
 import { allocatedPercent } from "@/lib/node-amount";
-import { ROLE_ICON, ROLE_TEXT } from "@/lib/status-role";
+import { ROLE_ICON, ROLE_TEXT, type StatusRole } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
@@ -279,6 +279,15 @@ export interface ProblemSummaryProps {
   tone?: "err" | "warn" | "info";
 }
 
+const SUMMARY_ROLE: Record<
+  NonNullable<ProblemSummaryProps["tone"]>,
+  StatusRole
+> = {
+  err: "err",
+  warn: "warn",
+  info: "pending",
+};
+
 /**
  * Why this object is not doing its job, at the top of the page.
  *
@@ -296,18 +305,13 @@ export function ProblemSummary({
   tone = "err",
 }: ProblemSummaryProps) {
   const color = TONE_TEXT[tone];
+  const Icon = ROLE_ICON[SUMMARY_ROLE[tone]];
   return (
     <div className="flex items-start gap-2">
-      {tone === "info" ? (
-        <Clock
-          className={cn("mt-[3px] h-3 w-3 flex-none", color)}
-          aria-hidden="true"
-        />
-      ) : (
-        <span className={cn("mt-[3px] text-[9px]", color)} aria-hidden="true">
-          ▲
-        </span>
-      )}
+      <Icon
+        className={cn("mt-[3px] h-3 w-3 flex-none", color)}
+        aria-hidden="true"
+      />
       <div className="min-w-0 flex-1">
         <p className={cn("text-[13px] font-semibold tracking-tight", color)}>
           {headline}

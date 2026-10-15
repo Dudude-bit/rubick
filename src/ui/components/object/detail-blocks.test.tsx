@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { render, screen, within } from "@testing-library/react";
 
 import { renderWithRouter } from "@/test/render";
-import { ConditionRows, EventRows, UsageRow } from "./detail-blocks";
+import {
+  ConditionRows,
+  EventRows,
+  ProblemSummary,
+  UsageRow,
+} from "./detail-blocks";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 import * as eventReason from "@/lib/event-reason";
 import { MetricsAbsenceContext } from "@/lib/metrics-absence";
@@ -331,5 +336,22 @@ describe("an event feed polled again", () => {
 
     expect(marked).toHaveBeenCalledTimes(1);
     marked.mockRestore();
+  });
+});
+
+describe("the problem summary's mark", () => {
+  /**
+   * A crash loop and a pod still waiting both drew a ▲, told apart by hue
+   * alone, where every other surface draws a failure as a cross. Fails if
+   * the summary's mark stops being the role's own shape.
+   */
+  it("draws a failure, a warning and a wait in the shapes of their roles", () => {
+    const mark = (tone: "err" | "warn" | "info") =>
+      render(
+        <ProblemSummary headline={tone} tone={tone} />
+      ).container.querySelector("svg");
+    expect(mark("err")).toHaveClass("lucide-x");
+    expect(mark("warn")).toHaveClass("lucide-triangle-alert");
+    expect(mark("info")).toHaveClass("lucide-clock");
   });
 });
