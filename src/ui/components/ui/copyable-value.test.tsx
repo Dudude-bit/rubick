@@ -30,12 +30,21 @@ describe("CopyableValue", () => {
 
   /**
    * A 13-character ClusterIP overflowed its cell and the cell's ellipsis drew
-   * after the hidden copy mark as a stray "..". Fails if the button may grow
-   * past the cell again.
+   * after the hidden copy mark as a stray "..". Capped at the cell's width,
+   * the box under `-mx-1` then cut the trace's URL short of its last three
+   * letters. Fails if the margin box may grow past the cell, or stops fitting it.
    */
-  it("never grows past the cell it sits in", () => {
-    render(<CopyableValue value="10.111.217.67" />);
-    expect(screen.getByRole("button")).toHaveClass("max-w-full", "min-w-0");
+  it("ends its margin box at the cell's edge", () => {
+    render(
+      <>
+        <CopyableValue value="10.111.217.67" />
+        <CopyableValue value="10.111.217.68" quietMark />
+      </>
+    );
+    const [marked, quiet] = screen.getAllByRole("button");
+    expect(marked).toHaveClass("-mx-1", "max-w-[calc(100%+0.5rem)]", "min-w-0");
+    expect(quiet).toHaveClass("max-w-full", "min-w-0");
+    expect(quiet).not.toHaveClass("-mx-1");
   });
 
   /**

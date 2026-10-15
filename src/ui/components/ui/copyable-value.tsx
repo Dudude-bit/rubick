@@ -102,9 +102,12 @@ export function CopyableValue({
     className: cn(
       cut
         ? "group rounded-sm font-mono"
-        : // Never wider than its cell: past the edge the cell's own ellipsis
-          // draws after the hidden mark and reads as "..".
-          "group inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm font-mono",
+        : "group inline-flex min-w-0 items-center gap-1 rounded-sm font-mono",
+      // Never wider than its cell: past the edge the cell's own ellipsis
+      // draws after the hidden mark and reads as "..". The cap is on the
+      // margin box, which `-mx-1` makes 0.5rem narrower than this one; on
+      // this one it cut a URL that had the room by its last three letters.
+      !cut && (quietMark ? "max-w-full" : "max-w-[calc(100%+0.5rem)]"),
       // In prose WebKit undersized the box by this margin and broke the image at a hyphen.
       !quietMark && "-mx-1 px-1",
       "hover:underline hover:decoration-dotted hover:underline-offset-2",
