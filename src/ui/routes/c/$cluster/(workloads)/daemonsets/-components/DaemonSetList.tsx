@@ -4,7 +4,7 @@ import { columnHeader } from "@/i18n/column-header";
 import type { DaemonSetInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { matchDaemonSetPods, type ResourceMetrics } from "@/lib/metrics";
+import { matchDaemonSetPods } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 import {
   createNameColumn,
@@ -15,9 +15,10 @@ import {
   yielding,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import type { WorkloadRow } from "../../-components/row-cause";
 import { createRolloutColumn } from "../../-components/rollout-column";
 
-type DaemonSetInfoWithMetrics = DaemonSetInfo & ResourceMetrics;
+type DaemonSetInfoWithMetrics = WorkloadRow<DaemonSetInfo>;
 
 export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
   createNameColumn<DaemonSetInfoWithMetrics>(ResourceType.DaemonSet),

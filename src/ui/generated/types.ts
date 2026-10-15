@@ -2218,6 +2218,7 @@ export interface PodRowStatus {
   restartingUntil?: string;
   rejected?: string;
   cause?: PodCause;
+  gone?: PodGone;
 }
 
 export interface FileEntry {

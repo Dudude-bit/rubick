@@ -8,9 +8,15 @@ import type { CronJobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { cronStatusWord } from "@/lib/status-words";
-import { cronOutcome, outcomeWords, TONE_ROLE } from "@/lib/cron-outcome";
+import {
+  cronOutcome,
+  outcomeWords,
+  scheduledRun,
+  TONE_ROLE,
+  type CronOutcome,
+} from "@/lib/cron-outcome";
 import { TONE_TEXT } from "@/lib/tone";
-import { matchCronJobPods, type ResourceMetrics } from "@/lib/metrics";
+import { matchCronJobPods } from "@/lib/metrics";
 import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
 import { widestText } from "@/lib/text-width";
 import {
@@ -23,9 +29,26 @@ import {
   yielding,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import {
+  causeCellPx,
+  rowCauseText,
+  type RowVerdict,
+  type WorkloadRow,
+} from "../../-components/row-cause";
+import { VerdictWithCause } from "../../-components/RowCauseText";
 import { CronStatusBadge } from "./CronStatusBadge";
 
-type CronJobInfoWithMetrics = CronJobInfo & ResourceMetrics;
+type CronJobInfoWithMetrics = WorkloadRow<CronJobInfo>;
+
+/** Where a run's outcome leaves its pods' cause: a run that succeeded, or none, has none to tell. */
+const CRON_VERDICT: Record<CronOutcome, RowVerdict> = {
+  never: "settled",
+  succeeded: "settled",
+  running: "open",
+  notSucceeded: "trouble",
+};
+
+const LAST_RUN_FLOOR = widestText(["did not succeed"], "sans", 6.6) + 20;
 
 export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
   createNameColumn<CronJobInfoWithMetrics>(ResourceType.CronJob),
@@ -93,12 +116,22 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     id: "last_run",
     header: columnHeader("columns", "lastRun"),
     meta: {
-      floor: () => widestText(["did not succeed"], "sans", 6.6) + 20,
+      floor: () => LAST_RUN_FLOOR,
+      ideal: (t, rows: readonly CronJobInfoWithMetrics[]) =>
+        LAST_RUN_FLOOR +
+        causeCellPx(
+          rows.map((row) => ({
+            podsCause: row.podsCause,
+            verdict: CRON_VERDICT[cronOutcome(row)],
+          })),
+          t
+        ),
       share: (row: CronJobInfoWithMetrics, t) => {
-        const { word, tone } = outcomeWords(cronOutcome(row), t);
-        return tone
-          ? { text: word, role: TONE_ROLE[tone] }
-          : { text: word, quiet: true };
+        const outcome = cronOutcome(row);
+        const { word, tone } = outcomeWords(outcome, t);
+        const cause = rowCauseText(row.podsCause, CRON_VERDICT[outcome], t);
+        const text = cause ? `${word} · ${cause}` : word;
+        return tone ? { text, role: TONE_ROLE[tone] } : { text, quiet: true };
       },
     },
     cell: ({ row }) => <LastRun cron={row.original} />,
@@ -123,10 +156,15 @@ function LastSchedule({ at }: { at: string | null }) {
 }
 
 // oxlint-disable-next-line react-refresh/only-export-components
-function LastRun({ cron }: { cron: CronJobInfo }) {
+function LastRun({ cron }: { cron: CronJobInfoWithMetrics }) {
   const t = useT();
-  const { word, tone } = outcomeWords(cronOutcome(cron), t);
-  return <span className={tone ? TONE_TEXT[tone] : "text-fg-fnt"}>{word}</span>;
+  const outcome = cronOutcome(cron);
+  const { word, tone } = outcomeWords(outcome, t);
+  return (
+    <VerdictWithCause cause={cron.podsCause} verdict={CRON_VERDICT[outcome]}>
+      <span className={tone ? TONE_TEXT[tone] : "text-fg-fnt"}>{word}</span>
+    </VerdictWithCause>
+  );
 }
 
 export const CronJobList = createWorkloadListPage<CronJobInfo>({
@@ -134,6 +172,10 @@ export const CronJobList = createWorkloadListPage<CronJobInfo>({
   title: "CronJobs",
   fetchList: ({ scope }) => commands.listCronjobsIn(scope),
   matchPods: matchCronJobPods,
+  causeOwner: (cron) => {
+    const run = scheduledRun(cron);
+    return run === null ? null : { kind: "Job", name: run };
+  },
   watch: ({ scope }) => commands.subscribeCronjobWatch(scope),
   deleter: (item) => commands.deleteCronjob(item.name, item.namespace),
   columns,

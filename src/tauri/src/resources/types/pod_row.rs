@@ -15,8 +15,8 @@ use std::collections::BTreeMap;
 use super::common::{init_phase, state_of, ContainerPhase, ContainerState};
 use super::pod::{phase_of, resource_totals};
 use super::pod_display::{
-    display_status, exit_unreported, kubectl_status, looping_until, rejected_at_admission,
-    restarting_until, restarts,
+    display_status, exit_unreported, gone, kubectl_status, looping_until, rejected_at_admission,
+    restarting_until, restarts, PodGone,
 };
 use crate::utils::Moment;
 
@@ -88,6 +88,9 @@ pub struct PodRowStatus {
     /// See `PodStatusInfo::cause`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cause: Option<super::PodCause>,
+    /// See `PodStatusInfo::gone`: a workload list's count of a row's pods leaves it out too.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gone: Option<PodGone>,
 }
 
 /// What the Ready column is decided from, per container.
@@ -158,6 +161,7 @@ impl From<&Pod> for PodRow {
                 restarting_until: restarting_until(pod),
                 rejected: rejected_at_admission(pod),
                 cause: super::pod_cause(pod),
+                gone: gone(pod),
             },
             node_name: spec.and_then(|s| s.node_name.clone()),
             pod_ip: status.and_then(|s| s.pod_ip.clone()),
@@ -185,7 +189,7 @@ mod tests {
         ContainerState as K8sContainerState, ContainerStateTerminated, ContainerStateWaiting,
         EnvVar, PodSpec, PodStatus, Volume,
     };
-    use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 
     /// A pod the way a Helm chart leaves it: labels, a last-applied
     /// annotation, env, a volume, one crashing container and one sidecar.
@@ -348,5 +352,26 @@ mod tests {
             row_bytes * 3 < info_bytes,
             "row {row_bytes} bytes, info {info_bytes} bytes"
         );
+    }
+
+    /// A workload list counts a row's pods by this, as a page counts the
+    /// info's: without it a pod its `ReplicaSet` already replaced was one of
+    /// the pods a Deployment's row blamed.
+    #[test]
+    fn a_row_says_a_replaced_pod_is_gone_as_the_info_does() {
+        let mut pod = helm_pod();
+        pod.metadata.owner_references = Some(vec![OwnerReference {
+            api_version: "apps/v1".into(),
+            kind: "ReplicaSet".into(),
+            name: "web-5d4c".into(),
+            uid: "rs".into(),
+            controller: Some(true),
+            ..Default::default()
+        }]);
+        pod.status.as_mut().unwrap().phase = Some("Failed".into());
+        let row = PodRow::from(&pod);
+        assert_eq!(row.status.gone, Some(PodGone::Replaced));
+        assert_eq!(row.status.gone, PodInfo::from(&pod).status.gone);
+        assert_eq!(PodRow::from(&helm_pod()).status.gone, None);
     }
 }

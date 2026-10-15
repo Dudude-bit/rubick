@@ -73,7 +73,10 @@ const row = (name: string, start: PodStart, kind: string, owner: string) =>
     labels: {},
     start,
     workload: { kind, name: owner },
-  }) as PodRow;
+    status: { phase: "Running", display: "Running" },
+    containers: [],
+    initContainers: [],
+  }) as unknown as PodRow;
 
 const startingFor = (ms: number): PodStart => ({
   state: "starting",

@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { useLocaleStore } from "@/stores/localeStore";
+import type { RowCause } from "../../-components/row-cause";
 import { JobStatusCell } from "./JobStatusCell";
+
+const NONE: RowCause = { says: "read", shared: null };
 
 afterEach(() => useLocaleStore.setState({ choice: "en" }));
 
@@ -13,7 +16,9 @@ describe("a Job's status in the list", () => {
    */
   it("says a Job with failed pods and retries left is retrying, with how many failed", () => {
     render(
-      <JobStatusCell job={{ status: "Retrying", failed: 2, failure: null }} />
+      <JobStatusCell
+        job={{ status: "Retrying", failed: 2, failure: null, podsCause: NONE }}
+      />
     );
     expect(screen.getByText("Retrying")).toHaveClass("text-warn");
     expect(screen.getByText("2 failed pods")).toHaveClass("text-warn");
@@ -27,6 +32,7 @@ describe("a Job's status in the list", () => {
           status: "Failed",
           failed: 7,
           failure: { reason: "DeadlineExceeded", message: null },
+          podsCause: NONE,
         }}
       />
     );
@@ -42,6 +48,7 @@ describe("a Job's status in the list", () => {
           status: "Failed",
           failed: 7,
           failure: { reason: "BackoffLimitExceeded", message: null },
+          podsCause: NONE,
         }}
       />
     );
@@ -50,12 +57,74 @@ describe("a Job's status in the list", () => {
   });
 });
 
+describe("the cause a Job's pods share, in its row", () => {
+  /**
+   * The Jobs list said "Failed BackoffLimitExceeded" for a report whose
+   * every run exited 2, and only the page said so. Fails if the row does
+   * not tell its pods' cause after the controller's reason, or tells one
+   * for a Job that completed.
+   */
+  it("tells it after the reason, and not once the Job is complete", () => {
+    const podsCause: RowCause = {
+      says: "read",
+      shared: {
+        pods: 2,
+        of: 2,
+        cause: {
+          says: "exits",
+          container: "report",
+          restarts: 0,
+          run: null,
+          until: null,
+        },
+      },
+    };
+    const failure = { reason: "BackoffLimitExceeded", message: null };
+    const { rerender } = render(
+      <JobStatusCell
+        job={{ status: "Failed", failed: 2, failure, podsCause }}
+      />
+    );
+    const cause = screen.getByTestId("row-cause");
+    expect(cause).toHaveTextContent(/^2 of 2 pods: report/);
+    expect(
+      screen.getByText("BackoffLimitExceeded").compareDocumentPosition(cause) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    rerender(
+      <JobStatusCell
+        job={{ status: "Complete", failed: 0, failure: null, podsCause }}
+      />
+    );
+    expect(screen.queryByTestId("row-cause")).toBeNull();
+  });
+
+  /** Fails if a failed Job whose pods were refused reads like one with nothing to tell. */
+  it("says its pods were not read where it failed", () => {
+    render(
+      <JobStatusCell
+        job={{
+          status: "Failed",
+          failed: 1,
+          failure: null,
+          podsCause: { says: "unread" },
+        }}
+      />
+    );
+    expect(
+      screen.getByText("pods not read, so why is not known")
+    ).toBeInTheDocument();
+  });
+});
+
 describe("a Job's status word in Russian", () => {
   /** "Suspended" is our reading of spec.suspend; fails if it stays English beside a Russian row. */
   it("words Suspended, which the app composes, and keeps its colour", () => {
     useLocaleStore.setState({ choice: "ru" });
     render(
-      <JobStatusCell job={{ status: "Suspended", failed: 0, failure: null }} />
+      <JobStatusCell
+        job={{ status: "Suspended", failed: 0, failure: null, podsCause: NONE }}
+      />
     );
     expect(screen.getByText("Приостановлен")).toBeInTheDocument();
     expect(screen.queryByText("Suspended")).toBeNull();
@@ -65,7 +134,9 @@ describe("a Job's status word in Russian", () => {
   it("keeps Failed as the cluster wrote it", () => {
     useLocaleStore.setState({ choice: "ru" });
     render(
-      <JobStatusCell job={{ status: "Failed", failed: 1, failure: null }} />
+      <JobStatusCell
+        job={{ status: "Failed", failed: 1, failure: null, podsCause: NONE }}
+      />
     );
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });

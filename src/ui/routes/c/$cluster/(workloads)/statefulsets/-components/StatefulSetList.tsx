@@ -3,7 +3,7 @@ import type { ColumnDef } from "@/components/ui/table-features";
 import type { StatefulSetInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { matchStatefulSetPods, type ResourceMetrics } from "@/lib/metrics";
+import { matchStatefulSetPods } from "@/lib/metrics";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -14,9 +14,10 @@ import {
   yielding,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import type { WorkloadRow } from "../../-components/row-cause";
 import { createRolloutColumn } from "../../-components/rollout-column";
 
-type StatefulSetInfoWithMetrics = StatefulSetInfo & ResourceMetrics;
+type StatefulSetInfoWithMetrics = WorkloadRow<StatefulSetInfo>;
 
 export const columns = (): ColumnDef<StatefulSetInfoWithMetrics>[] => [
   createNameColumn<StatefulSetInfoWithMetrics>(ResourceType.StatefulSet),

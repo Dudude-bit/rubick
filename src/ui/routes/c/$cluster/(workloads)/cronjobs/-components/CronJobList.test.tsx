@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import type { AppColumnMeta, ColumnDef } from "@/components/ui/table-features";
@@ -59,16 +59,18 @@ describe("what the CronJob list says about schedules", () => {
       active: 0,
       lastSchedule: new Date(Date.now() - 60_000).toISOString(),
       lastSuccessfulTime: null,
+      podsCause: { says: "read", shared: null },
     };
     const cell = cellOf("last_run", failed);
     expect(cell).toHaveTextContent(/^did not succeed$/);
-    expect(cell.firstElementChild).toHaveClass("text-err");
-    expect(
-      cellOf("last_run", {
-        ...failed,
-        lastSuccessfulTime: new Date().toISOString(),
-      }).firstElementChild
-    ).not.toHaveClass("text-err");
+    expect(within(cell).getByText("did not succeed")).toHaveClass("text-err");
+    const succeeded = cellOf("last_run", {
+      ...failed,
+      lastSuccessfulTime: new Date().toISOString(),
+    });
+    expect(within(succeeded).getByText("succeeded")).not.toHaveClass(
+      "text-err"
+    );
     const column = (columns() as ColumnDef<never>[]).find(
       (c) => c.id === "last_run"
     );
@@ -79,6 +81,53 @@ describe("what the CronJob list says about schedules", () => {
       text: "не удался",
       role: "err",
     });
+  });
+
+  /**
+   * The list said a run did not succeed and nothing of why, while the page
+   * led with it. Fails if the row does not tell the cause its last run's
+   * pods share after the outcome, in the cell and in a shared file, or
+   * tells one beside a run that succeeded.
+   */
+  it("tells the cause its last run's pods share after the outcome", () => {
+    const failed = {
+      active: 0,
+      lastSchedule: new Date(Date.now() - 60_000).toISOString(),
+      lastSuccessfulTime: null,
+      podsCause: {
+        says: "read",
+        shared: {
+          pods: 2,
+          of: 2,
+          cause: {
+            says: "exits",
+            container: "report",
+            restarts: 0,
+            run: null,
+            until: null,
+          },
+        },
+      },
+    };
+    expect(cellOf("last_run", failed)).toHaveTextContent(
+      /^did not succeed2 of 2 pods: report/
+    );
+    const column = (columns() as ColumnDef<never>[]).find(
+      (c) => c.id === "last_run"
+    );
+    const share = (column?.meta as AppColumnMeta | undefined)?.share;
+    const t = ((section: string, key: string, values?: never) =>
+      translate("en", section as never, key as never, values)) as never;
+    expect(share?.(failed as never, t)).toMatchObject({
+      text: expect.stringMatching(/^did not succeed · 2 of 2 pods: report/),
+      role: "err",
+    });
+    expect(
+      cellOf("last_run", {
+        ...failed,
+        lastSuccessfulTime: new Date().toISOString(),
+      }).textContent
+    ).toBe("succeeded");
   });
 
   /**

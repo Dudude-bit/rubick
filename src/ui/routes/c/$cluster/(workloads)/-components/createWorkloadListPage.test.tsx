@@ -26,9 +26,14 @@ vi.mock("@/stores/clusterStore", () => ({
   ),
 }));
 
+const podRead = vi.hoisted(() => ({
+  data: [] as unknown[],
+  read: false,
+  unread: [] as unknown[],
+}));
 vi.mock("@/hooks/usePodsWithMetrics", () => ({
   usePodsWithMetrics: () => ({
-    data: [],
+    ...podRead,
     podStatus: null,
     podUnread: [],
     refetchPodMetrics: vi.fn(),
@@ -49,6 +54,7 @@ import { matchDeploymentPods } from "@/lib/metrics";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { createWorkloadListPage } from "./createWorkloadListPage";
+import { RowCauseText } from "./RowCauseText";
 
 interface Item {
   name: string;
@@ -84,6 +90,9 @@ async function mount(client: QueryClient, List: ComponentType) {
 
 beforeEach(() => {
   watch.live = true;
+  podRead.data = [];
+  podRead.read = false;
+  podRead.unread = [];
   store.state.namespaceScope = ["prod", "staging"];
 });
 
@@ -149,6 +158,86 @@ describe("a workload list while a new scope is read", () => {
     expect(screen.queryByText("1 Deployment")).toBeNull();
     expect(
       screen.getByText("1 Deployment, from the namespaces that answered")
+    ).toBeVisible();
+  });
+});
+
+describe("the cause a workload list's row tells", () => {
+  /**
+   * The Deployments list said "Stalled" while the Overview and the page
+   * said why. Fails if a row does not tell the cause its own pods share, or
+   * a row whose namespace's pods were refused says nothing, which reads
+   * exactly like pods with nothing wrong.
+   */
+  it("tells each row the cause its own pods share, and where they were not read", async () => {
+    watch.live = false;
+    podRead.read = true;
+    podRead.unread = [{ ...deadline, code: "FORBIDDEN" }];
+    podRead.data = [
+      {
+        name: "api-5d4c-x9",
+        namespace: "prod",
+        labels: {},
+        workload: { kind: "Deployment", name: "api" },
+        status: {
+          phase: "Running",
+          display: "CrashLoopBackOff",
+          cause: {
+            says: "exits",
+            container: "app",
+            restarts: 7,
+            run: null,
+            until: null,
+          },
+        },
+        containers: [
+          {
+            name: "app",
+            ready: false,
+            started: false,
+            phase: "app",
+            state: {
+              type: "waiting",
+              reason: "CrashLoopBackOff",
+              message: null,
+            },
+          },
+        ],
+        initContainers: [],
+      },
+    ];
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const List = createWorkloadListPage<Item>({
+      resourceType: ResourceType.Deployment,
+      title: "Deployments",
+      fetchList: async () => ({
+        rows: [
+          { name: "api", namespace: "prod" },
+          { name: "worker", namespace: "staging" },
+        ],
+        unread: [],
+      }),
+      matchPods: matchDeploymentPods,
+      deleter: async () => undefined,
+      columns: () => [
+        { accessorKey: "name", header: "Name" },
+        {
+          id: "cause",
+          header: "Cause",
+          cell: ({ row }) => (
+            <RowCauseText cause={row.original.podsCause} verdict="trouble" />
+          ),
+        },
+      ],
+    });
+    await mount(client, List);
+    expect(await screen.findByTestId("row-cause")).toHaveTextContent(
+      /^1 of 1 pod: app/
+    );
+    expect(
+      screen.getByText("pods not read, so why is not known")
     ).toBeVisible();
   });
 });

@@ -25,11 +25,7 @@ import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
 import type { Scoped } from "@/generated/types";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
-import {
-  attachAggregatedPodMetrics,
-  type PodMatcher,
-  type ResourceMetrics,
-} from "@/lib/metrics";
+import { attachAggregatedPodMetrics, type PodMatcher } from "@/lib/metrics";
 import { MetricsStatusBanner } from "../../-metrics";
 import { queryKeys } from "@/lib/query-keys";
 import { hrefOf, objectLink } from "@/lib/links";
@@ -41,6 +37,12 @@ import { useLastPassed } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
 import type { Rollout } from "@/generated/types";
 import { rowsWithStarts, startsOf } from "@/lib/workload-status";
+import {
+  rowCause,
+  rowPods,
+  type CauseOwner,
+  type WorkloadRow,
+} from "./row-cause";
 
 type Workload = { name: string; namespace: string };
 
@@ -59,8 +61,10 @@ export interface WorkloadListPageConfig<T extends Workload> {
   matchPods: PodMatcher;
   /** Delete this workload. */
   deleter: (item: T) => Promise<unknown>;
-  /** Build columns. T includes the attached `cpuMillicores` and `memoryBytes`. */
-  columns: () => ColumnDef<T & ResourceMetrics>[];
+  /** Build columns. T includes the attached `cpuMillicores`, `memoryBytes` and `podsCause`. */
+  columns: () => ColumnDef<WorkloadRow<T>>[];
+  /** Whose pods tell a row's cause, where it is not the row's own: a CronJob's run. */
+  causeOwner?: (row: T) => CauseOwner | null;
   /** Override the empty-state label (defaults to plural of `resourceType`). */
   emptyStateLabel?: string;
   /**
@@ -88,6 +92,9 @@ export function createWorkloadListPage<T extends Workload>(
       namespace: row.namespace,
     })!;
   const detail = queryKeys.rowDetail(config.resourceType);
+  const ownerOf =
+    config.causeOwner ??
+    ((row: Workload) => ({ kind: config.resourceType, name: row.name }));
 
   const ListPage = function WorkloadListPage() {
     const t = useT();
@@ -157,9 +164,25 @@ export function createWorkloadListPage<T extends Workload>(
         : read;
     }, [listQuery.data, starts, ranOut]);
 
+    const causePods = useMemo(
+      () => (podsRead ? rowPods(pods, podsUnread) : null),
+      [pods, podsRead, podsUnread]
+    );
+    const causeAt = useLastPassed(causePods?.deadlines ?? []);
     const dataWithMetrics = useMemo(
-      () => attachAggregatedPodMetrics<T>(rows, pods, config.matchPods),
-      [rows, pods]
+      () =>
+        attachAggregatedPodMetrics<T>(rows, pods, config.matchPods).map(
+          (row): WorkloadRow<T> => ({
+            ...row,
+            podsCause: rowCause(
+              row.namespace,
+              ownerOf(row),
+              causePods,
+              causeAt
+            ),
+          })
+        ),
+      [rows, pods, causePods, causeAt]
     );
 
     const columns = useMemo(() => config.columns(), []);
@@ -167,8 +190,8 @@ export function createWorkloadListPage<T extends Workload>(
     const quickActions = useMemo(
       () =>
         (
-          setDeleteTarget: (item: T & ResourceMetrics) => void
-        ): QuickAction<T & ResourceMetrics>[] => [
+          setDeleteTarget: (item: WorkloadRow<T>) => void
+        ): QuickAction<WorkloadRow<T>>[] => [
           {
             icon: Eye,
             label: t("action", "viewDetails"),
@@ -185,7 +208,7 @@ export function createWorkloadListPage<T extends Workload>(
     );
 
     const list = (
-      <ResourceList<T & ResourceMetrics>
+      <ResourceList<WorkloadRow<T>>
         title={config.title}
         data={dataWithMetrics}
         unread={listQuery.data?.unread}

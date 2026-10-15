@@ -4,7 +4,7 @@ import { columnHeader } from "@/i18n/column-header";
 import type { DeploymentInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { matchDeploymentPods, type ResourceMetrics } from "@/lib/metrics";
+import { matchDeploymentPods } from "@/lib/metrics";
 import { widestText } from "@/lib/text-width";
 import {
   createNameColumn,
@@ -16,9 +16,10 @@ import {
   yielding,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import type { WorkloadRow } from "../../-components/row-cause";
 import { createRolloutColumn } from "../../-components/rollout-column";
 
-type DeploymentInfoWithMetrics = DeploymentInfo & ResourceMetrics;
+type DeploymentInfoWithMetrics = WorkloadRow<DeploymentInfo>;
 
 export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
   createNameColumn<DeploymentInfoWithMetrics>(ResourceType.Deployment),

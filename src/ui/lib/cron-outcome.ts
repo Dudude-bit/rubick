@@ -24,6 +24,18 @@ export function cronOutcome(cron: {
     : "notSucceeded";
 }
 
+/**
+ * The Job its last schedule started, by the name the controller gives it:
+ * the CronJob's name and the scheduled minute since the epoch.
+ */
+export function scheduledRun(cron: {
+  name: string;
+  lastSchedule: string | null;
+}): string | null {
+  const at = Date.parse(cron.lastSchedule ?? "");
+  return Number.isFinite(at) ? `${cron.name}-${Math.floor(at / 60_000)}` : null;
+}
+
 const OUTCOME: Record<
   CronOutcome,
   {

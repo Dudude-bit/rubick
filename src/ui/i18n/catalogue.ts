@@ -3893,6 +3893,8 @@ export const en = {
     rolloutUnobserved:
       "The controller has not read the latest change yet, so these counts are from before it",
     lastRunCause: "In its last run, {run},",
+    rowCauseReading: "reading its pods",
+    rowCauseUnread: "pods not read, so why is not known",
     controllerSaid: "The controller says: {said}",
     rolloutMoving: {
       one: "Rolling out: {updated} of {n} pod on the new template",

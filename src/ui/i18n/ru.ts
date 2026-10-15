@@ -4366,6 +4366,8 @@ export const ru: Catalogue = {
     rolloutUnobserved:
       "Контроллер ещё не прочитал последнее изменение, поэтому счётчики относятся к предыдущему",
     lastRunCause: "В последнем запуске, {run},",
+    rowCauseReading: "читаю его поды",
+    rowCauseUnread: "поды не прочитаны, причина неизвестна",
     controllerSaid: "Сообщение контроллера: {said}",
     rolloutMoving: {
       one: "Идёт развёртывание: {updated} из {n} пода на новом шаблоне",

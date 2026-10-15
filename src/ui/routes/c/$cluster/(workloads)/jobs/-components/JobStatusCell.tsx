@@ -2,12 +2,16 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import type { JobInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { ownStatusWord } from "@/lib/status-words";
+import { RowCauseText } from "../../-components/RowCauseText";
+import { jobVerdict, type RowCause } from "../../-components/row-cause";
 
-/** The Job's word, with what it rests on: the pods a retry follows, or the controller's reason for giving up. */
+/** The Job's word, with what it rests on: the pods a retry follows, or the controller's reason for giving up, then the cause its pods share. */
 export function JobStatusCell({
   job,
 }: {
-  job: Pick<JobInfo, "status" | "failed" | "failure">;
+  job: Pick<JobInfo, "status" | "failed" | "failure"> & {
+    podsCause: RowCause;
+  };
 }) {
   const t = useT();
   return (
@@ -28,6 +32,7 @@ export function JobStatusCell({
           {job.failure.reason}
         </span>
       )}
+      <RowCauseText cause={job.podsCause} verdict={jobVerdict(job.status)} />
     </span>
   );
 }

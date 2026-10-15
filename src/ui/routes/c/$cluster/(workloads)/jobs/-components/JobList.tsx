@@ -4,7 +4,7 @@ import { columnHeader } from "@/i18n/column-header";
 import type { JobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { matchJobPods, type ResourceMetrics } from "@/lib/metrics";
+import { matchJobPods } from "@/lib/metrics";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -15,12 +15,18 @@ import {
   yielding,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import {
+  causeCellPx,
+  jobVerdict,
+  rowCauseText,
+  type WorkloadRow,
+} from "../../-components/row-cause";
 import { ownStatusWord } from "@/lib/status-words";
 import { widestText } from "@/lib/text-width";
 import type { T as Translate } from "@/i18n/useT";
 import { JobStatusCell } from "./JobStatusCell";
 
-type JobInfoWithMetrics = JobInfo & ResourceMetrics;
+type JobInfoWithMetrics = WorkloadRow<JobInfo>;
 
 /** The most of a controller's reason a cell keeps whole: `BackoffLimitExceeded` and its like; a longer one ends in an ellipsis. */
 const REASON_GLYPHS = 24;
@@ -80,9 +86,22 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
     header: columnHeader("columns", "status"),
     meta: {
       floor: statusFloor,
+      ideal: (t, rows: readonly JobInfoWithMetrics[]) =>
+        statusFloor(t, rows) +
+        causeCellPx(
+          rows.map((row) => ({
+            podsCause: row.podsCause,
+            verdict: jobVerdict(row.status),
+          })),
+          t
+        ),
       share: (row: JobInfoWithMetrics, t) => {
         const word = ownStatusWord(row.status, t) ?? row.status;
-        return row.failure?.reason ? `${word} ${row.failure.reason}` : word;
+        const said = row.failure?.reason
+          ? `${word} ${row.failure.reason}`
+          : word;
+        const cause = rowCauseText(row.podsCause, jobVerdict(row.status), t);
+        return cause ? `${said} · ${cause}` : said;
       },
     },
     cell: ({ row }) => <JobStatusCell job={row.original} />,
