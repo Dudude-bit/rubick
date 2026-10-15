@@ -19,6 +19,7 @@ import type {
   ProblemDetail,
   Scoped,
   ServiceHealthInputs,
+  SharedCause,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
@@ -27,11 +28,18 @@ import { namespacesWhere } from "@/lib/namespace-scope";
 import { parseRefusal } from "@/lib/refusal";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
 import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
-import { serviceHealthOf, serviceHealthWords } from "@/lib/service-health";
+import {
+  causedStop,
+  serviceHealthOf,
+  serviceHealthWords,
+} from "@/lib/service-health";
 
 export type AttentionTone = "err" | "warn";
 
-export type AttentionDetail = ProblemDetail | { says: "ours"; text: string };
+export type AttentionDetail =
+  | ProblemDetail
+  | { says: "ours"; text: string }
+  | { says: "stopCause"; lead: string; shared: SharedCause };
 
 export interface AttentionItem {
   key: string;
@@ -234,13 +242,19 @@ const serviceItems = remember(
         const words = serviceHealthWords(health, t);
         const tone = toneOf(words.role);
         if (!tone) return [];
+        const caused = causedStop(health.published, t);
+        const detail: AttentionDetail | null = caused
+          ? { says: "stopCause", ...caused }
+          : words.reason
+            ? { says: "ours", text: words.reason }
+            : null;
         return group.names.map((name) => {
           const subject = { kind: "Service", name, namespace };
           return withKey({
             ...subject,
             tone,
             reason: words.label,
-            detail: words.reason ? { says: "ours", text: words.reason } : null,
+            detail,
             since: null,
             restarts: null,
             foldedPods: null,

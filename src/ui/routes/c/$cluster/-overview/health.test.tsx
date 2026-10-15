@@ -37,6 +37,7 @@ import type {
   IngressHealthInput,
   NodeSummary,
   PodComposition,
+  ServiceHealthGroup,
   WarningGroup,
 } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
@@ -395,6 +396,87 @@ describe("the pods the list does not name", () => {
   it("says nothing when every pod short of serving has its own row", async () => {
     await panel([]);
     expect(screen.queryByTestId("attention-unlisted")).toBeNull();
+  });
+});
+
+describe("a Service row whose pods share a cause", () => {
+  const group: ServiceHealthGroup = {
+    names: ["no-config"],
+    type: "ClusterIP",
+    selectorless: false,
+    ready: 0,
+    draining: 0,
+    notReady: 2,
+    unrouted: 0,
+    stop: {
+      reason: "noneReady",
+      service: {
+        kind: "Service",
+        name: "no-config",
+        namespace: "create-demo",
+        existence: "present",
+        facts: null,
+      },
+      selector: "app=no-config",
+      pods: 2,
+      why: "starting",
+      cause: {
+        pods: 2,
+        of: 2,
+        cause: {
+          says: "creating",
+          uid: "u1",
+          since: null,
+          sandbox: false,
+          kubelet: {
+            says: "read",
+            warnings: [
+              {
+                reason: "FailedMount",
+                said: 'secret "web-creds" not found',
+                count: 3,
+                at: null,
+                fault: {
+                  says: "missing",
+                  volume: "creds",
+                  kind: "Secret",
+                  name: "web-creds",
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  /**
+   * no-config's row on the Overview carried its pods' cause as one grey
+   * sentence while every pod and workload row beside it led with the same
+   * cause in red. Fails if the Service row stops drawing the cause as a
+   * cause, or Share stops saying it.
+   */
+  it("draws the cause in red like the rows of its pods, and Share says it", async () => {
+    const attention = attentionFrom([], {
+      services: {
+        answered: [{ namespace: "create-demo", groups: [group] }],
+        unread: [],
+      },
+    });
+    await wrap(
+      <AttentionPanel
+        attention={attention}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    const cause = screen.getByText(/Secret web-creds does not exist/);
+    expect(cause.className).toContain("text-err");
+    const share = attentionShare(attention, t);
+    const items = share.body.type === "findings" ? share.body.items : [];
+    expect(JSON.stringify(items)).toContain("Secret web-creds does not exist");
   });
 });
 

@@ -55,7 +55,7 @@ import { splitUnit } from "@/lib/metric-format";
 import { formatAge, formatDecimal } from "@/lib/utils";
 import { formatCount } from "@/lib/count";
 import { withRestartsBy } from "@/lib/pod-status";
-import { causeText, podsShare } from "@/lib/pod-cause";
+import { causeText, podsShare, sharedText } from "@/lib/pod-cause";
 
 /**
  * The detail line, for the rows this app writes itself.
@@ -112,6 +112,8 @@ export function detailWords(
   t: T
 ): string | null {
   if (detail === null) return null;
+  if (detail.says === "stopCause")
+    return `${detail.lead}: ${sharedText(detail.shared, t)}`;
   return detail.says === "said" || detail.says === "ours"
     ? detail.text
     : composedDetail(detail, t);

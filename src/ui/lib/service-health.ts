@@ -18,6 +18,7 @@ import type {
   ObjectRef,
   ResourceConnections,
   ServicePublished,
+  SharedCause,
 } from "@/generated/types";
 import {
   askedPorts,
@@ -165,6 +166,17 @@ const NONE_READY_CAUSE: Record<NotServing, keyof typeof en.empty> = {
   podsUnread: "causePodsUnread",
 };
 
+/** A stop whose pods share a cause, as the stop's words and the cause they lead to. */
+export function causedStop(
+  published: PublishedCounts,
+  t: T
+): { lead: string; shared: SharedCause } | null {
+  const stop = published.stop;
+  if (!stop || !("service" in stop)) return null;
+  const shared = stopCause(stop);
+  return shared && { lead: describeStop(stop, t).title, shared };
+}
+
 function stopReason(published: PublishedCounts, t: T): string | null {
   const stop = published.stop;
   if (!stop || !("service" in stop)) return null;
@@ -174,9 +186,9 @@ function stopReason(published: PublishedCounts, t: T): string | null {
     return t("nav", "stopUnnamedPortCause", {
       asked: askedPorts(stop.unnamedPorts, t),
     });
+  const caused = causedStop(published, t);
+  if (caused) return `${caused.lead}: ${sharedText(caused.shared, t)}`;
   const title = describeStop(stop, t).title;
-  const cause = stopCause(stop);
-  if (cause) return `${title}: ${sharedText(cause, t)}`;
   const why =
     stop.reason === "noneReady"
       ? stop.why

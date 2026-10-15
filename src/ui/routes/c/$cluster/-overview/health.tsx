@@ -169,6 +169,16 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
         )}
       </>
     );
+  if (detail.says === "stopCause")
+    return (
+      <>
+        <span className="text-fg-mut">
+          {detail.lead}:{" "}
+          {podsShare(detail.shared.pods, detail.shared.of, t)}{" "}
+        </span>
+        <CauseLine cause={detail.shared.cause} compact />
+      </>
+    );
   if (detail.says === "said")
     return (
       <ResourceMessage
