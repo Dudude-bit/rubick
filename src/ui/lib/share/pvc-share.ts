@@ -2,21 +2,40 @@ import { Database } from "lucide-react";
 
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { causeRole, claimRole, type ClaimCause } from "@/lib/claim-cause";
 import { iconSvg } from "@/lib/icon-svg";
 import { declaredQuantity } from "@/lib/metric-format";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
-import { statusRole, type StatusRole } from "@/lib/status-role";
+import type { StatusRole } from "@/lib/status-role";
 
 export function pvcStatusOf(
-  pvc: PersistentVolumeClaimInfo
+  pvc: PersistentVolumeClaimInfo,
+  cause: ClaimCause | null,
+  now: number
 ): { text: string; role: StatusRole } | null {
-  return pvc.status ? { text: pvc.status, role: statusRole(pvc.status) } : null;
+  return pvc.status
+    ? { text: pvc.status, role: claimRole(pvc, cause, now) }
+    : null;
+}
+
+/** The volume row of a claim with none bound: a wait by design said as one, not as a fault. */
+function unboundValue(
+  pvc: PersistentVolumeClaimInfo,
+  cause: ClaimCause | null,
+  now: number,
+  t: T
+): ReportValue {
+  return cause && causeRole(pvc, cause, now) === "pending"
+    ? { text: t("empty", "notBoundYet"), role: "pending" }
+    : { text: t("empty", "notBoundNothingSatisfied"), role: "warn" };
 }
 
 export function pvcFactsSection(
   pvc: PersistentVolumeClaimInfo,
-  t: T
+  t: T,
+  cause: ClaimCause | null,
+  now: number
 ): PlacedSection {
   const rows: { label: string; values: ReportValue[] }[] = [
     {
@@ -50,22 +69,27 @@ export function pvcFactsSection(
                 namespace: null,
               }),
             }
-          : { text: t("empty", "notBoundNothingSatisfied"), role: "warn" },
+          : unboundValue(pvc, cause, now, t),
       ],
     },
     {
       label: t("columns", "storageClass"),
       values: [
-        pvc.storageClass
+        cause?.says === "classMissing"
           ? {
-              text: pvc.storageClass,
-              ref: refOf({
-                kind: "StorageClass",
-                name: pvc.storageClass,
-                namespace: null,
-              }),
+              text: t("readings", "envObjectNotThere", { object: cause.name }),
+              role: "err",
             }
-          : { text: t("empty", "clusterDefault") },
+          : pvc.storageClass
+            ? {
+                text: pvc.storageClass,
+                ref: refOf({
+                  kind: "StorageClass",
+                  name: pvc.storageClass,
+                  namespace: null,
+                }),
+              }
+            : { text: t("empty", "clusterDefault") },
       ],
     },
   ];

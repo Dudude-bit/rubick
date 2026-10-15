@@ -5,6 +5,7 @@ import { useIngressHealth } from "@/hooks/useIngressHealth";
 import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
+import { useStorageClasses } from "@/hooks/useStorageClasses";
 import { useT } from "@/i18n/useT";
 import { attentionOf, type Attention } from "@/lib/attention";
 import { commands } from "@/lib/commands";
@@ -94,13 +95,7 @@ export function useAttention({
   const anyPending = !!claims.data?.rows.some(
     (claim) => claim.status === "Pending"
   );
-  const classes = useLiveQuery({
-    queryKey: ["attention", "storage-classes"],
-    queryFn: () => commands.listStorageClasses(null),
-    enabled: reading && anyPending,
-    refresh: "steady",
-  });
-  const classData = classes.data;
+  const classes = useStorageClasses(reading && anyPending);
 
   const answered =
     enabled && overview.data !== undefined && !overview.isPlaceholderData
@@ -143,7 +138,7 @@ export function useAttention({
             overdue: autoscalerLate,
           },
           claims: { data: claimData, error: claimError, overdue: claimLate },
-          classes: classData,
+          classes,
           now,
         },
         t
@@ -163,7 +158,7 @@ export function useAttention({
       claimData,
       claimError,
       claimLate,
-      classData,
+      classes,
       now,
       t,
     ]

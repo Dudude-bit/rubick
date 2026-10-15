@@ -62,6 +62,8 @@ export interface PeekSummary {
    * read with a hook, which this function has none of.
    */
   verdictOfService?: string;
+  /** A badge drawn by a component that reads with hooks what the word alone does not decide, in place of the one drawn from `status`. */
+  badge?: ReactNode;
   createdAt?: string | null;
   /** When a failed pod failed, said beside its badge so its age is not read as that. */
   endedAt?: string | null;

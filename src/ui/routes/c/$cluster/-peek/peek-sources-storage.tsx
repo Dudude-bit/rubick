@@ -1,6 +1,12 @@
 import { None } from "@/components/ui/none";
 import { commands } from "@/lib/commands";
 import { ClaimRef } from "../-object/storage-refs";
+import {
+  ClaimBadge,
+  ClaimClass,
+  ClaimSummary,
+  ClaimVolume,
+} from "../-object/ClaimStatus";
 import { list, ref, source, type PeekSources } from "./peek-sources-kit";
 import { declaredQuantity } from "@/lib/metric-format";
 
@@ -49,7 +55,9 @@ export const CONFIG_STORAGE_SOURCES: PeekSources = {
     commands.getPersistentVolumeClaim,
     (claim, _target, t) => ({
       status: claim.status,
+      badge: <ClaimBadge claim={claim} />,
       createdAt: claim.createdAt,
+      lead: <ClaimSummary claim={claim} className="mt-3" />,
       groups: [
         {
           title: t("nav", "storage"),
@@ -64,16 +72,11 @@ export const CONFIG_STORAGE_SOURCES: PeekSources = {
             },
             {
               label: t("columns", "volume"),
-              value: claim.volume
-                ? ref("PersistentVolume", claim.volume)
-                : t("empty", "notBoundYet"),
-              tone: claim.volume ? undefined : "warn",
+              value: <ClaimVolume claim={claim} />,
             },
             {
               label: t("columns", "storageClass"),
-              value: claim.storageClass
-                ? ref("StorageClass", claim.storageClass)
-                : t("empty", "clusterDefault"),
+              value: <ClaimClass claim={claim} />,
             },
             {
               label: t("columns", "accessModes"),

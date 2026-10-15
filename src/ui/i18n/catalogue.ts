@@ -4653,14 +4653,6 @@ export const en = {
     podsUnlistedHint:
       "Needs attention names a pod when the pod itself is at fault. A pod that is not ready counts against its workload or Service, a failed Job's failed pods are counted in the Job's row, and a pod being deleted is on its way out.",
     attentionPartly: "partly checked",
-    claimClassMissing:
-      "It names StorageClass {name}, which does not exist, so nothing will provision a volume for it.",
-    claimNoDefaultClass:
-      "It names no StorageClass and the cluster has no default one, so nothing will provision a volume for it.",
-    claimClassUnread:
-      "Its StorageClass could not be read, so whether it waits for a pod by design is unknown.",
-    claimPendingDetail:
-      "No volume is bound to it yet, so a pod that mounts it cannot start.",
   },
   settings: {
     installationFailed: "Installation failed",
@@ -7256,6 +7248,23 @@ export const en = {
       "The kubelet keeps no warning about it. Probably a volume it mounts or the network plugin: its sandbox is not up.",
     creatingQuietUnknown:
       "The kubelet keeps no warning about it. Probably a volume it mounts, the network plugin, or a slow image pull.",
+    claimClassMissing:
+      "StorageClass {name} does not exist, so nothing will provision a volume for it",
+    claimNoDefaultClass:
+      "It names no StorageClass and the cluster has no default one, so nothing will provision a volume for it",
+    claimClassUnread:
+      "Its StorageClass could not be read, so whether it waits for a pod by design is not known",
+    claimNamesVolume:
+      "It asks for PersistentVolume {volume}, which has not bound to it",
+    claimWaitsForPod:
+      "StorageClass {name} binds a volume only once a pod that mounts it is scheduled",
+    claimNoProvisioner:
+      "StorageClass {name} provisions nothing, so it waits for a PersistentVolume someone makes by hand",
+    claimUnprovisioned:
+      "{provisioner}, the provisioner of StorageClass {name}, has not made a volume for it yet",
+    claimBlocksPods:
+      "A pod that mounts it cannot start until a volume is bound.",
+    claimWarned: "Its newest warning, {reason}:",
   },
   statusMeaning: {
     replaced:

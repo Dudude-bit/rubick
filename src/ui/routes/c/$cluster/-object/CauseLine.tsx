@@ -51,7 +51,7 @@ export function CauseEvidence({
   words,
   inline = false,
 }: {
-  words: CauseWords;
+  words: Pick<CauseWords, "quote" | "note">;
   inline?: boolean;
 }) {
   const Line = inline ? "span" : "p";

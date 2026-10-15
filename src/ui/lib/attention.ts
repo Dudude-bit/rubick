@@ -15,13 +15,18 @@ import type {
   ClusterProblem,
   IngressHealthInput,
   PersistentVolumeClaimInfo,
-  StorageClassInfo,
   PodWorkload,
   ProblemDetail,
   Scoped,
   ServiceHealthInputs,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import {
+  claimCause,
+  claimCauseText,
+  causeRole,
+  type ClassesRead,
+} from "@/lib/claim-cause";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { autoscalerVerdict } from "@/lib/governance";
 import { namespacesWhere } from "@/lib/namespace-scope";
@@ -155,9 +160,6 @@ export interface Answer<V> {
   /** Older than the rate it is read at allows: a re-read is due or under way. */
   overdue?: boolean;
 }
-
-/** Longest a claim may sit Pending before it counts: provisioning takes seconds. */
-const CLAIM_GRACE_MS = 60_000;
 
 /** The kinds the backend's answer covers, in the order they are named. */
 const BACKEND_KINDS = [
@@ -378,49 +380,19 @@ const autoscalerItems = remember((rows: AutoscalerInfo[]): AttentionItem[] =>
   })
 );
 
-/** The class a claim names, the cluster's default for an empty name; `undefined` where the classes were not read. */
-function classOf(
-  claim: PersistentVolumeClaimInfo,
-  classes: readonly StorageClassInfo[] | undefined
-): StorageClassInfo | null | undefined {
-  if (!classes) return undefined;
-  return (
-    classes.find((each) =>
-      claim.storageClass ? each.name === claim.storageClass : each.isDefault
-    ) ?? null
-  );
-}
-
-function claimDetail(
-  claim: PersistentVolumeClaimInfo,
-  cls: StorageClassInfo | null | undefined,
-  t: T
-): string {
-  if (cls === null)
-    return claim.storageClass
-      ? t("cluster", "claimClassMissing", { name: claim.storageClass })
-      : t("cluster", "claimNoDefaultClass");
-  const pending = t("cluster", "claimPendingDetail");
-  return cls === undefined
-    ? `${pending} ${t("cluster", "claimClassUnread")}`
-    : pending;
-}
-
 const claimItems = remember(
   (
     rows: PersistentVolumeClaimInfo[],
-    classes: readonly StorageClassInfo[] | undefined,
+    classes: ClassesRead,
     now: number,
     t: T
   ): AttentionItem[] =>
     rows.flatMap((claim) => {
-      if (claim.status !== "Pending") return [];
-      const created = claim.createdAt ? Date.parse(claim.createdAt) : NaN;
-      // Undated claims still report: an unknown age is not evidence of a young one.
-      if (now - created < CLAIM_GRACE_MS) return [];
-      const cls = classOf(claim, classes);
-      // Pending by design until a pod mounts it; that pod's row says so if it cannot start.
-      if (cls?.volumeBindingMode === "WaitForFirstConsumer") return [];
+      const cause = claimCause(claim, classes);
+      if (!cause) return [];
+      const role = causeRole(claim, cause, now);
+      // Pending by design until a pod mounts it, or still inside the seconds provisioning takes.
+      if (role === "pending") return [];
       const subject = {
         kind: "PersistentVolumeClaim",
         name: claim.name,
@@ -429,9 +401,9 @@ const claimItems = remember(
       return [
         withKey({
           ...subject,
-          tone: cls === null ? "err" : "warn",
+          tone: role,
           reason: "Pending",
-          detail: { says: "ours", text: claimDetail(claim, cls, t) },
+          detail: { says: "ours", text: claimCauseText(cause, t) },
           since: claim.createdAt,
           restarts: null,
           foldedPods: null,
@@ -476,7 +448,7 @@ export interface AttentionInputs {
   autoscalers: Answer<Scoped<AutoscalerInfo>>;
   claims: Answer<Scoped<PersistentVolumeClaimInfo>>;
   /** The StorageClasses, read only while a claim is Pending: a class's binding mode decides whether that is news. */
-  classes?: readonly StorageClassInfo[];
+  classes?: ClassesRead;
   now: number;
 }
 
@@ -657,7 +629,12 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     ...serviceItems(services.answered, t),
     ...ingress.items,
     ...autoscalerItems(input.autoscalers.data?.rows ?? []),
-    ...claimItems(input.claims.data?.rows ?? [], input.classes, input.now, t),
+    ...claimItems(
+      input.claims.data?.rows ?? [],
+      input.classes ?? "unread",
+      input.now,
+      t
+    ),
   ];
   const items = ranked([...backend, ...ours]);
 

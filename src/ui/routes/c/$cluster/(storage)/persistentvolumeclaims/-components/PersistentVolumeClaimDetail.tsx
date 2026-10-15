@@ -4,13 +4,11 @@ import { Info } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import { pvcFactsSection, pvcStatusOf } from "@/lib/share/pvc-share";
-import { PhaseBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { viewGlyph } from "@/components/object/detail-tab";
-import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useResourceDetail } from "@/hooks";
@@ -22,6 +20,17 @@ import { ResourceType } from "@/lib/resource-registry";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { declaredQuantity } from "@/lib/metric-format";
+import { useNow } from "@/hooks/useNow";
+import { causeRole, claimCauseText } from "@/lib/claim-cause";
+import { ROLE_TEXT } from "@/lib/status-role";
+import { cn } from "@/lib/utils";
+import { useClaimCause } from "@/hooks/useStorageClasses";
+import {
+  ClaimBadge,
+  ClaimClass,
+  ClaimSummary,
+  ClaimVolume,
+} from "../../../-object/ClaimStatus";
 
 export function PersistentVolumeClaimDetail() {
   const t = useT();
@@ -55,6 +64,8 @@ export function PersistentVolumeClaimDetail() {
   // A claim with no volume behind it is a pod that will never start, and the
   // provisioner says why in the events rather than on the object.
   const pending = !!pvc && !pvc.volume;
+  const cause = useClaimCause(pvc);
+  const now = useNow();
 
   const events = useObjectEvents(
     ResourceType.PersistentVolumeClaim,
@@ -81,28 +92,11 @@ export function PersistentVolumeClaimDetail() {
     },
     {
       label: t("columns", "volume"),
-      value: pvc?.volume ? (
-        <ResourceRef
-          kind={ResourceType.PersistentVolume}
-          name={pvc.volume}
-          showKind={false}
-        />
-      ) : (
-        t("empty", "notBoundNothingSatisfied")
-      ),
-      tone: pvc?.volume ? undefined : "warn",
+      value: pvc && <ClaimVolume claim={pvc} cause={cause} />,
     },
     {
       label: t("columns", "storageClass"),
-      value: pvc?.storageClass ? (
-        <ResourceRef
-          kind={ResourceType.StorageClass}
-          name={pvc.storageClass}
-          showKind={false}
-        />
-      ) : (
-        t("empty", "clusterDefault")
-      ),
+      value: pvc && <ClaimClass claim={pvc} cause={cause} />,
     },
   ];
 
@@ -112,10 +106,11 @@ export function PersistentVolumeClaimDetail() {
   const share = useCallback((): ShareContribution => {
     if (!pvc) return {};
     return {
-      status: pvcStatusOf(pvc),
-      sections: [pvcFactsSection(pvc, t)],
+      status: pvcStatusOf(pvc, cause, now),
+      verdict: cause && `${claimCauseText(cause, t)}.`,
+      sections: [pvcFactsSection(pvc, t, cause, now)],
     };
-  }, [pvc, t]);
+  }, [pvc, cause, now, t]);
 
   const tabs = [
     {
@@ -159,7 +154,8 @@ export function PersistentVolumeClaimDetail() {
       resourceKind={ResourceType.PersistentVolumeClaim}
       title={pvc?.name || name || ""}
       namespace={pvc?.namespace || namespace}
-      statusBadge={pvc && <PhaseBadge phase={pvc.status} />}
+      statusBadge={pvc && <ClaimBadge claim={pvc} cause={cause} />}
+      summary={pvc && cause && <ClaimSummary claim={pvc} cause={cause} />}
       badges={
         pvc && (
           <>
@@ -172,7 +168,12 @@ export function PersistentVolumeClaimDetail() {
               {pvc.accessModes.join(" · ") || t("empty", "noAccessModes")}
             </span>
             {pending && (
-              <span className="text-[11px] text-warn">
+              <span
+                className={cn(
+                  "text-[11px]",
+                  ROLE_TEXT[cause ? causeRole(pvc, cause, now) : "warn"]
+                )}
+              >
                 {t("empty", "noVolumeBound")}
               </span>
             )}

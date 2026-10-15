@@ -114,6 +114,13 @@ export const statusCellPx = (glyphs: number) =>
 export const badgeCellPx = (words: readonly string[]) =>
   widestText(words, "badge", 6.6) + 14 + 20;
 
+/** The most of a cause a status column widens for while the table has room; the rest is on hover. */
+const CAUSE_PX = 360;
+
+/** What the widest cause said after a badge adds to its column: the 6px gap and its words, up to `CAUSE_PX`. */
+export const causeTextPx = (said: readonly string[]) =>
+  said.length === 0 ? 0 : 6 + Math.min(widestText(said, "sans", 6.2), CAUSE_PX);
+
 /** `1.81Gi` (6 glyphs at 7.2px) and a cell's padding; the bar beside a limit is the part that goes first. */
 export const METRIC_CELL_PX = Math.ceil(6 * 7.2 + 20);
 

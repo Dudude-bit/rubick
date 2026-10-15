@@ -579,7 +579,7 @@ describe("what Needs attention lists beyond pods", () => {
       tone: "err",
       detail: {
         says: "ours",
-        text: "It names StorageClass fast-ssd, which does not exist, so nothing will provision a volume for it.",
+        text: "StorageClass fast-ssd does not exist, so nothing will provision a volume for it",
       },
     });
     const unread = attention({ claims });

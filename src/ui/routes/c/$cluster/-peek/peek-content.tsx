@@ -301,6 +301,8 @@ export function PeekContent({
               <Ghost className="h-3 w-3" aria-hidden="true" />
               {t("empty", "goneMark")}
             </span>
+          ) : summary?.badge ? (
+            summary.badge
           ) : summary?.verdictOfService ? (
             <ServiceHealthView
               name={summary.verdictOfService}

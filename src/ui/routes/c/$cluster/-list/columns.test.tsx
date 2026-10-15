@@ -32,7 +32,10 @@ const ageColumnOf = (cols: ColumnDef<never>[]) => {
 
 const lists: [string, ColumnDef<never>[]][] = [
   ["PersistentVolume", persistentVolumeColumns() as ColumnDef<never>[]],
-  ["PersistentVolumeClaim", persistentVolumeClaimColumns as ColumnDef<never>[]],
+  [
+    "PersistentVolumeClaim",
+    persistentVolumeClaimColumns([]) as ColumnDef<never>[],
+  ],
   ["StorageClass", storageClassColumns() as ColumnDef<never>[]],
   ["Namespace", namespaceColumns as ColumnDef<never>[]],
   ["Node", nodeColumns(new Map()) as ColumnDef<never>[]],

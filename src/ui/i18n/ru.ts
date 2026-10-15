@@ -5220,14 +5220,6 @@ export const ru: Catalogue = {
     podsUnlistedHint:
       "«Требует внимания» называет под отдельно, когда неисправен он сам. Неготовый под засчитывается своей нагрузке или Service, упавшие поды упавшего Job считаются в строке этого Job, а удаляемый под уже уходит.",
     attentionPartly: "проверено не всё",
-    claimClassMissing:
-      "Он указывает StorageClass {name}, которого нет, так что том для него никто не создаст.",
-    claimNoDefaultClass:
-      "Он не указывает StorageClass, а класса по умолчанию в кластере нет, так что том для него никто не создаст.",
-    claimClassUnread:
-      "Его StorageClass прочитать не удалось, поэтому неизвестно, ждёт ли он под по замыслу.",
-    claimPendingDetail:
-      "К нему ещё не привязан том, поэтому под, который его монтирует, не запустится.",
   },
   settings: {
     installationFailed: "Установка не удалась",
@@ -8031,6 +8023,23 @@ export const ru: Catalogue = {
       "kubelet не хранит предупреждений о нём. Вероятно, дело в томе, который он монтирует, или в сетевом плагине: его песочница не поднята.",
     creatingQuietUnknown:
       "kubelet не хранит предупреждений о нём. Вероятно, дело в томе, который он монтирует, в сетевом плагине или в долгой загрузке образа.",
+    claimClassMissing:
+      "StorageClass {name} не существует, так что том для него никто не создаст",
+    claimNoDefaultClass:
+      "Он не указывает StorageClass, а класса по умолчанию в кластере нет, так что том для него никто не создаст",
+    claimClassUnread:
+      "Его StorageClass прочитать не удалось, поэтому неизвестно, ждёт ли он под по замыслу",
+    claimNamesVolume:
+      "Он запрашивает PersistentVolume {volume}, который к нему не привязался",
+    claimWaitsForPod:
+      "StorageClass {name} привязывает том только после того, как запланирован под, который его монтирует",
+    claimNoProvisioner:
+      "StorageClass {name} ничего не создаёт, так что он ждёт PersistentVolume, созданный вручную",
+    claimUnprovisioned:
+      "{provisioner}, провизионер StorageClass {name}, ещё не создал для него том",
+    claimBlocksPods:
+      "Под, который его монтирует, не запустится, пока не привязан том.",
+    claimWarned: "Последнее предупреждение, {reason}:",
   },
   statusMeaning: {
     replaced:

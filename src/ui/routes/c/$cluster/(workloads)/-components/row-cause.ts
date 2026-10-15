@@ -4,7 +4,7 @@ import type { ResourceMetrics } from "@/lib/metrics";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { kubeletWarned, sharedText } from "@/lib/pod-cause";
 import { causeDeadlines, workloadCause } from "@/lib/share/pod-status";
-import { widestText } from "@/lib/text-width";
+import { causeTextPx } from "../../-list/columns";
 
 /** What a list row says of the cause its pods share: still reading them, could not read them, or what they told. */
 export type RowCause =
@@ -112,9 +112,6 @@ export function rowCauseText(
   );
 }
 
-/** The most of a cause a status column widens for while the table has room; the rest is on hover. */
-const CAUSE_PX = 360;
-
 /** What the widest cause its rows say adds to a column, a still-reading one aside so the column does not jump. */
 export function causeCellPx(
   rows: readonly { podsCause: RowCause; verdict: RowVerdict }[],
@@ -125,7 +122,5 @@ export function causeCellPx(
     const text = rowCauseText(podsCause, verdict, t);
     return text ? [text] : [];
   });
-  return said.length === 0
-    ? 0
-    : 6 + Math.min(widestText(said, "sans", 6.2), CAUSE_PX);
+  return causeTextPx(said);
 }

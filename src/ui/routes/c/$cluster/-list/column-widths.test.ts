@@ -83,7 +83,7 @@ const PAGES: [string, Column[]][] = [
   ["Namespaces", namespaces],
   ["NetworkPolicies", networkPolicyColumns],
   ["Nodes", nodes(new Map())],
-  ["PersistentVolumeClaims", persistentVolumeClaims],
+  ["PersistentVolumeClaims", persistentVolumeClaims([])],
   ["PersistentVolumes", persistentVolumes()],
   ["Pods", pods],
   ["Secrets", secrets()],

@@ -277,6 +277,7 @@ export interface ProblemSummaryProps {
   action?: ReactNode;
   /** `info` for a state still inside its wait: coming, not wrong. */
   tone?: "err" | "warn" | "info";
+  className?: string;
 }
 
 const SUMMARY_ROLE: Record<
@@ -303,11 +304,12 @@ export function ProblemSummary({
   detail,
   action,
   tone = "err",
+  className,
 }: ProblemSummaryProps) {
   const color = TONE_TEXT[tone];
   const Icon = ROLE_ICON[SUMMARY_ROLE[tone]];
   return (
-    <div className="flex items-start gap-2">
+    <div className={cn("flex items-start gap-2", className)}>
       <Icon
         className={cn("mt-[3px] h-3 w-3 flex-none", color)}
         aria-hidden="true"
