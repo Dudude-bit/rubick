@@ -6,7 +6,7 @@ import {
   yieldedColumns,
 } from "@/components/ui/column-shares";
 import { translate } from "@/i18n";
-import type { PersistentVolumeClaimInfo } from "@/generated/types";
+import type { IngressInfo, PersistentVolumeClaimInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { columnFloor, columnIdeal } from "@/lib/column-label";
 import { serviceVerdictLabels } from "@/lib/service-health";
@@ -866,5 +866,51 @@ describe("the claims list beside a claim's cause", () => {
     expect(at("volume")).toBeGreaterThanOrEqual(12 * 7.2 + 38);
     expect(at("storageClass")).toBeGreaterThanOrEqual(16 * 7.2 + 38);
     expect(at("status")).toBeGreaterThan(statusCellPx(7));
+  });
+});
+
+describe("the Ingresses list beside a cause", () => {
+  const ingress = (name: string, host: string) =>
+    ({
+      name,
+      namespace: "k8s-gui-test",
+      className: "traefik",
+      rules: [{ host, paths: [] }],
+    }) as unknown as IngressInfo;
+
+  /**
+   * Live at 1040px, Status took every pixel above the floors for "No
+   * IngressClass named nginx in this cluster" and left Hosts "checko" and
+   * TLS "no TL". Fails if a host or the TLS words stop fitting beside it.
+   */
+  it("keeps a host and the TLS words whole while a cause widens Status", () => {
+    const rows = [
+      ingress("checkout", "checkout.k8s-gui.test"),
+      ingress("promo-nginx", "promo.nginx.k8s-gui.test"),
+    ];
+    // The page adds the cause to the column's ideal; the widest it allows.
+    const columns = [
+      ...(ingresses as Column[]).map((column) =>
+        nameOf(column) === "health"
+          ? { ...column, meta: { ...column.meta, ideal: () => 185 + 366 } }
+          : column
+      ),
+      ACTIONS,
+    ] as Column[];
+    const layout = tableLayout(
+      columns.map((c) => ({
+        size: c.size ?? 150,
+        floor: columnFloor(c, en, rows),
+        ideal: columnIdeal(c, en, rows),
+      })),
+      1040
+    );
+    const px = layout.shares.map((share) => (share / 100) * layout.span);
+    const at = (id: string) => px[columns.findIndex((c) => nameOf(c) === id)];
+    expect(at("hosts")).toBeGreaterThanOrEqual(24 * 7.2 + 20);
+    expect(at("tlsHosts")).toBeGreaterThanOrEqual(
+      "TLS not checked".length * 7 + 20
+    );
+    expect(at("className")).toBeGreaterThanOrEqual("traefik".length * 7 + 20);
   });
 });

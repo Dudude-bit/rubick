@@ -46,6 +46,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useT, type T as Translate } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
+import { widestText } from "@/lib/text-width";
 
 /**
  * What a cloud controller says about these rows' TLS, handed to the cells
@@ -138,6 +139,24 @@ function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
   );
 }
 
+/** A cell's own padding on both sides. */
+const CELL_PAD_PX = 20;
+
+/** `promo.nginx.example.com`, 24 glyphs of mono; a longer host ends in an ellipsis, whole on hover. */
+const HOST_PX = Math.ceil(24 * 7.2);
+
+// A floor is also asked with another list's rows, which carry no rules.
+const firstHosts = (rows: readonly IngressInfo[]) =>
+  rows.flatMap((row) => row.rules?.find((rule) => rule.host)?.host ?? []);
+
+/** Every word the TLS cell can say, so none of them is cut to "no TL". */
+const tlsWords = (t: Translate) => [
+  t("count", "hosts", { n: 99 }),
+  t("empty", "tlsEveryHost"),
+  t("empty", "noTls"),
+  t("empty", "tlsNotChecked"),
+];
+
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
 // oxlint-disable-next-line react-refresh/only-export-components
@@ -159,7 +178,18 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     cell: ({ row }) => (
       <span className="text-fg-mut">{row.original.className || "default"}</span>
     ),
-    meta: { yields: 2 },
+    meta: {
+      yields: 2,
+      floor: (_t, rows: readonly IngressInfo[]) =>
+        Math.min(
+          widestText(
+            rows.map((row) => row.className || "default"),
+            "sans",
+            7
+          ),
+          HOST_PX / 2
+        ) + CELL_PAD_PX,
+    },
   },
   {
     // The column people came to this page to read, and a hostname is long.
@@ -174,6 +204,13 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
         .filter((host): host is string => Boolean(host))
         .join(" "),
     header: columnHeader("columns", "hosts"),
+    // The column with no ideal of its own was the one the status column's
+    // reasons squeezed to "checko".
+    meta: {
+      floor: (_t, rows: readonly IngressInfo[]) =>
+        Math.min(widestText(firstHosts(rows), "mono", 7.2), HOST_PX) +
+        CELL_PAD_PX,
+    },
     cell: ({ row }) => {
       const hosts = row.original.rules
         .map((rule) => rule.host)
@@ -219,6 +256,8 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     id: "paths",
     header: columnHeader("columns", "paths"),
     meta: {
+      floor: (t) =>
+        widestText([t("count", "paths", { n: 99 })], "sans", 7) + CELL_PAD_PX,
       share: (row: IngressInfo, t) => {
         const paths = row.rules.flatMap((rule) => rule.paths).length;
         return paths === 0
@@ -258,7 +297,10 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     accessorKey: "tlsHosts",
     header: columnHeader("columns", "tls"),
     cell: ({ row }) => <VendorTlsCell ingress={row.original} />,
-    meta: { yields: 1 },
+    meta: {
+      yields: 1,
+      floor: (t) => widestText(tlsWords(t), "sans", 7) + CELL_PAD_PX,
+    },
   },
   yielding(createAgeColumn<IngressInfo>(), 3),
 ];
