@@ -54,12 +54,15 @@ import {
   FindingList,
 } from "../page-kit";
 import { useServiceRoutes, type ServiceRoutes } from "@/hooks/useServiceRoutes";
+import { useIngressTls } from "@/hooks/useIngressTls";
+import { hostTls } from "@/lib/ingress-tls";
 import {
   APPLICATIONS_CRD,
   APPLICATIONSETS_CRD,
   PROJECTS_CRD,
   SERVER_SERVICE,
   applicationUrl,
+  uiFromFront,
   uiFromRoutes,
   useApplicationSets,
   useApplications,
@@ -67,6 +70,7 @@ import {
   useProjects,
   type ControllerInfo,
   type RoutedUi,
+  type UiFront,
 } from "./data";
 import {
   appState,
@@ -116,7 +120,9 @@ export default function ArgoCdPage() {
       : null
   );
   const viaRoutes = useMemo(() => uiFromRoutes(routed.routes), [routed.routes]);
-  const ui = controller.data?.ui ?? viaRoutes.url;
+  const viaIngress = useFrontUi(controller.data?.ui ?? null);
+  const shown = viaIngress ?? viaRoutes;
+  const ui = shown.url;
 
   if (applications.error) {
     return (
@@ -190,7 +196,7 @@ export default function ArgoCdPage() {
         <ControllerTab
           controller={controller.data}
           ui={ui}
-          routed={viaRoutes}
+          routed={shown}
           routes={routed}
         />
       ),
@@ -1018,6 +1024,37 @@ function ProjectsTab({
 
 // --- controller ---------------------------------------------------------
 
+/**
+ * The UI's address from the Ingress in front of it, once that Ingress's
+ * controller has said whether it serves TLS. `spec.tls` alone missed an ALB
+ * certificate in an annotation and took Traefik's loaded Secret for HTTPS.
+ */
+function useFrontUi(front: UiFront | null): RoutedUi | null {
+  const asked = useMemo(
+    () =>
+      front
+        ? [
+            {
+              namespace: front.via.namespace,
+              name: front.via.name,
+              hosts: [front.host],
+            },
+          ]
+        : [],
+    [front]
+  );
+  const answers = useIngressTls(asked);
+  if (!front) return null;
+  return uiFromFront(
+    front,
+    hostTls(
+      front.spec,
+      answers.of(front.via, front.host),
+      answers.isPending || answers.error !== null
+    )
+  );
+}
+
 function ControllerTab({
   controller,
   ui,
@@ -1112,7 +1149,7 @@ function ControllerTab({
         />
         {ui ? (
           <p className="text-[11.5px] text-fg-mut">
-            {routed.via && !controller.ui ? (
+            {routed.via ? (
               <>
                 {parts(
                   t("empty", "kindNameServes", { kind: routed.via.kind }),

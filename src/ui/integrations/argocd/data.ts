@@ -104,8 +104,8 @@ export interface ArgoComponent {
 
 export interface ControllerInfo {
   components: ArgoComponent[];
-  /** Where Argo's own UI answers, or `null` — see {@link uiAddress}. */
-  ui: string | null;
+  /** The Ingress putting Argo's own UI on a hostname — see {@link uiFront}. */
+  ui: UiFront | null;
   /** Where its workloads run, which is where `argocd-server` is too. */
   namespace: string;
   /** Why the list is empty, where every read answered and it still is. */
@@ -173,10 +173,17 @@ export function uiFromRoutes(routes: ServiceRoute[]): RoutedUi {
   };
 }
 
-export function uiAddress(
+export interface UiFront {
+  via: { kind: "Ingress"; name: string; namespace: string };
+  host: string;
+  /** `spec.tls` alone; the controller serving the Ingress may say otherwise. */
+  spec: boolean;
+}
+
+export function uiFront(
   ingresses: IngressInfo[],
   namespace: string
-): string | null {
+): UiFront | null {
   for (const ingress of ingresses) {
     if (ingress.namespace !== namespace) continue;
     const serves = ingress.rules.some((rule) =>
@@ -188,13 +195,30 @@ export function uiAddress(
     // `covers`, not equality: a wildcard Secret is how most people serve a
     // subdomain, and read literally this returned `http://` for a host that
     // only answers on 443.
-    const secure =
+    const spec =
       ingress.hasCatchAllTls ||
       covers(ingress.tlsHosts, rule.host) ||
       ingress.tlsConfigs.some((config) => covers(config.hosts, rule.host));
-    return `${secure ? "https" : "http"}://${rule.host}`;
+    return {
+      via: {
+        kind: "Ingress",
+        name: ingress.name,
+        namespace: ingress.namespace,
+      },
+      host: rule.host,
+      spec,
+    };
   }
   return null;
+}
+
+/** The Ingress's address once its controller has settled the scheme, if it has. */
+export function uiFromFront(front: UiFront, tls: boolean | null): RoutedUi {
+  return {
+    url: tls === null ? null : `${tls ? "https" : "http"}://${front.host}`,
+    host: front.host,
+    via: front.via,
+  };
 }
 
 /** The reads that failed, each with the kind it was a list of. */
@@ -254,7 +278,7 @@ export function useController() {
       ]);
       return {
         components,
-        ui: uiAddress(ingresses, namespace),
+        ui: uiFront(ingresses, namespace),
         namespace,
         problem:
           components.length === 0 && unread.length === 0
@@ -275,7 +299,7 @@ export function useController() {
  *
  * The diff is the one thing Argo does better than this app could without a
  * credential, so it is handed over rather than approximated. `null` when
- * there is no address — see {@link uiAddress}.
+ * there is no address — see {@link uiFront}.
  */
 export function applicationUrl(
   ui: string | null,

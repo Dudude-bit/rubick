@@ -6,7 +6,12 @@ const { listCustomResources } = vi.hoisted(() => ({
 vi.mock("@/lib/commands", () => ({ commands: { listCustomResources } }));
 
 import type { ServiceRoute } from "../registry";
-import { fetchApplicationSets, uiAddress, uiFromRoutes } from "./data";
+import {
+  fetchApplicationSets,
+  uiFromFront,
+  uiFromRoutes,
+  uiFront,
+} from "./data";
 import type { IngressInfo } from "@/generated/types";
 
 const failing = (code: string, words: string) =>
@@ -140,6 +145,12 @@ const serving = (overrides: Partial<IngressInfo>): IngressInfo => ({
   ...overrides,
 });
 
+/** The address `spec.tls` alone gives, before any controller has spoken. */
+const uiAddress = (ingresses: IngressInfo[], namespace: string) => {
+  const front = uiFront(ingresses, namespace);
+  return front && uiFromFront(front, front.spec).url;
+};
+
 describe("the scheme an Ingress is read as serving", () => {
   /**
    * The reported case: one Secret holding `*.example.com` and `example.com`,
@@ -200,5 +211,30 @@ describe("the scheme an Ingress is read as serving", () => {
         "argocd"
       )
     ).toBe("http://a.argocd.example.com");
+  });
+});
+
+describe("the UI address once the Ingress's controller has spoken", () => {
+  const front = uiFront(
+    [serving({ tlsHosts: ["argocd.example.com"] })],
+    "argocd"
+  )!;
+
+  /**
+   * Traefik serves a host spec.tls names as plain HTTP unless the router asks
+   * for TLS, and every Application's "open in Argo CD" link went to https://.
+   */
+  it("follows the controller's scheme over spec.tls", () => {
+    expect(front.spec).toBe(true);
+    expect(uiFromFront(front, false).url).toBe("http://argocd.example.com");
+  });
+
+  /** A scheme nobody settled names the host and links nothing. */
+  it("withholds the link and keeps the host where nobody could tell", () => {
+    expect(uiFromFront(front, null)).toEqual({
+      url: null,
+      host: "argocd.example.com",
+      via: { kind: "Ingress", name: front.via.name, namespace: "argocd" },
+    });
   });
 });
