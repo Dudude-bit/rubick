@@ -10,7 +10,7 @@
 
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
-import { ExternalLink, Unlink } from "lucide-react";
+import { Ban, ExternalLink, Unlink } from "lucide-react";
 
 import { PerfProfiler } from "@/lib/perf-profiler";
 
@@ -148,6 +148,12 @@ function Row({ row }: { row: ConnRow }) {
             </span>
           )}
         </span>
+        {row.refused && (
+          <p className="flex items-center gap-1 text-[11px] text-err">
+            <Ban className="h-3 w-3 flex-none" aria-hidden="true" />
+            {row.refused}
+          </p>
+        )}
         {!inline &&
           row.ways.map((way) => (
             <p key={way} className="text-[11px] text-fg-fnt">

@@ -188,9 +188,10 @@ impl ServicePublished {
     }
 
     /// A selector matching no pod, said as [`ChainStop::ScaledToZero`] where
-    /// [`scaled_to_zero`] finds every workload behind it asking for none, and
-    /// as [`ChainStop::PodsBeingMade`] where [`being_made`] finds one making
-    /// its pods.
+    /// [`scaled_to_zero`] finds every workload behind it asking for none, as
+    /// [`ChainStop::PodsRefused`] where [`refused_behind`] finds one refused
+    /// its pods, and as [`ChainStop::PodsBeingMade`] where [`being_made`]
+    /// finds one making them.
     #[must_use]
     pub fn with_makers(mut self, service: &Service, makers: &[PodMaker<'_>]) -> Self {
         if let Some(ChainStop::SelectsNothing {
@@ -205,6 +206,13 @@ impl ServicePublished {
                     service: service_at,
                     selector,
                     workloads,
+                });
+            } else if let Some((workloads, said)) = refused_behind(service, makers) {
+                self.stop = Some(ChainStop::PodsRefused {
+                    service: service_at,
+                    selector,
+                    workloads,
+                    said,
                 });
             } else if let Some(workloads) = being_made(service, makers) {
                 self.stop = Some(ChainStop::PodsBeingMade {
@@ -792,6 +800,8 @@ pub struct PodMaker<'a> {
     pub rollout: Rollout,
     /// The controllers whose pods are its own.
     pub owners: Owners<'a>,
+    /// The API server's refusal to create its pods, where its status says so.
+    pub refused: Option<String>,
 }
 
 impl<'a> PodMaker<'a> {
@@ -801,6 +811,9 @@ impl<'a> PodMaker<'a> {
         let spec = deployment.spec.as_ref()?;
         let status = deployment.status.as_ref();
         let rollout = super::deployment_rollout(deployment);
+        let refused = status
+            .and_then(|s| s.conditions.as_deref())
+            .and_then(super::replica_failure);
         Some(Self {
             workload: maker_ref(
                 "Deployment",
@@ -809,6 +822,7 @@ impl<'a> PodMaker<'a> {
                 status.and_then(|s| s.replicas).unwrap_or(0),
                 status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 rollout.clone(),
+                refused.clone(),
             ),
             labels: spec.template.metadata.as_ref()?.labels.as_ref()?,
             replicas: spec.replicas.unwrap_or(1),
@@ -818,6 +832,7 @@ impl<'a> PodMaker<'a> {
                 deployment.metadata.uid.as_deref(),
                 sets,
             ),
+            refused,
         })
     }
 
@@ -834,11 +849,13 @@ impl<'a> PodMaker<'a> {
                 status.map_or(0, |s| s.replicas),
                 status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 rollout.clone(),
+                None,
             ),
             labels: spec.template.metadata.as_ref()?.labels.as_ref()?,
             replicas: spec.replicas.unwrap_or(1),
             rollout,
             owners: Owners::of(set.metadata.uid.as_deref()),
+            refused: None,
         })
     }
 }
@@ -865,6 +882,7 @@ fn maker_ref(
     replicas: i32,
     ready_replicas: i32,
     rollout: super::Rollout,
+    pods_refused: Option<String>,
 ) -> ObjectRef {
     ObjectRef::new(kind, name, namespace, Existence::Present).with_facts(ObjectFacts::Workload {
         replicas,
@@ -872,6 +890,7 @@ fn maker_ref(
         rollout: Some(rollout),
         revision: None,
         current: None,
+        pods_refused,
     })
 }
 
@@ -893,6 +912,35 @@ pub fn scaled_to_zero(service: &Service, makers: &[PodMaker<'_>]) -> Option<Vec<
         return None;
     }
     Some(picked.iter().map(|maker| maker.workload.clone()).collect())
+}
+
+/// The workloads whose pods a Service's selector picks that ask for some and
+/// are refused them, with what the API server said to the first: with no pod
+/// carrying the selector, that is why.
+#[must_use]
+pub fn refused_behind(
+    service: &Service,
+    makers: &[PodMaker<'_>],
+) -> Option<(Vec<ObjectRef>, String)> {
+    let selector = service
+        .spec
+        .as_ref()
+        .and_then(|s| s.selector.clone())
+        .unwrap_or_default();
+    let query = Selector::Equality(&selector);
+    let refused: Vec<&PodMaker> = makers
+        .iter()
+        .filter(|maker| {
+            maker.replicas > 0
+                && maker.refused.is_some()
+                && query.matches(maker.labels) == Some(true)
+        })
+        .collect();
+    let said = refused.first()?.refused.clone()?;
+    Some((
+        refused.iter().map(|maker| maker.workload.clone()).collect(),
+        said,
+    ))
 }
 
 /// The workloads whose pods a Service's selector picks that ask for some and
@@ -1951,18 +1999,18 @@ mod tests {
             [("Deployment", "web")]
         );
 
-        let refused = stated(
+        let stalled = stated(
             false,
             serde_json::json!({
                 "observedGeneration": 1,
                 "conditions": [
                     {"type": "Available", "status": "False", "reason": "MinimumReplicasUnavailable"},
-                    {"type": "ReplicaFailure", "status": "True", "reason": "FailedCreate"},
+                    {"type": "Progressing", "status": "False", "reason": "ProgressDeadlineExceeded"},
                 ],
             }),
         );
         assert!(matches!(
-            said(&[refused]),
+            said(&[stalled]),
             Some(ChainStop::SelectsNothing { .. })
         ));
         let paused = stated(true, serde_json::json!({"observedGeneration": 1}));
@@ -1970,6 +2018,67 @@ mod tests {
             said(&[paused]),
             Some(ChainStop::SelectsNothing { .. })
         ));
+    }
+
+    /// A Service in front of `root-web`, whose pods Pod Security refuses,
+    /// said no pod carries app=root-web and that nothing is behind it. Fails
+    /// if a workload refused its pods leaves the labels blamed, or loses the
+    /// API server's words, or if one not refused is said to be.
+    #[test]
+    fn a_service_whose_workload_is_refused_its_pods_says_so_instead_of_blaming_its_labels() {
+        const SAID: &str = "pods \"web-7d9-x\" is forbidden: violates PodSecurity \"restricted:latest\": runAsNonRoot != true";
+        let svc = selecting("web");
+        let stop_behind = |conditions: serde_json::Value| {
+            let deployment: Deployment = serde_json::from_value(serde_json::json!({
+                "apiVersion": "apps/v1", "kind": "Deployment",
+                "metadata": {"name": "web", "namespace": "k8s-gui-test", "generation": 1},
+                "spec": {
+                    "replicas": 1,
+                    "selector": {"matchLabels": {"app": "web"}},
+                    "template": {"metadata": {"labels": {"app": "web"}}, "spec": {"containers": []}}
+                },
+                "status": {"observedGeneration": 1, "conditions": conditions},
+            }))
+            .expect("deployment parses");
+            let makers: Vec<PodMaker> = PodMaker::deployment(&deployment, None)
+                .into_iter()
+                .collect();
+            from_slices(&svc, svc_ref("web"), &[], &[])
+                .with_stop(&svc, Some(&[]))
+                .with_makers(&svc, &makers)
+                .stop
+        };
+
+        let refused = stop_behind(serde_json::json!([
+            {"type": "Available", "status": "False", "reason": "MinimumReplicasUnavailable"},
+            {"type": "ReplicaFailure", "status": "True", "reason": "FailedCreate", "message": SAID},
+        ]));
+        let Some(ChainStop::PodsRefused {
+            selector,
+            workloads,
+            said,
+            ..
+        }) = refused
+        else {
+            panic!("a workload refused its pods is why none carries the selector, got {refused:?}");
+        };
+        assert_eq!(selector, "app=web");
+        assert_eq!(said, SAID);
+        assert_eq!(workloads.len(), 1);
+        assert_eq!(workloads[0].name, "web");
+        assert!(matches!(
+            &workloads[0].facts,
+            Some(ObjectFacts::Workload { pods_refused: Some(on_it), .. }) if on_it == SAID
+        ));
+
+        let cleared = stop_behind(serde_json::json!([
+            {"type": "Available", "status": "False", "reason": "MinimumReplicasUnavailable"},
+            {"type": "ReplicaFailure", "status": "False", "reason": "FailedCreate", "message": SAID},
+        ]));
+        assert!(
+            !matches!(cleared, Some(ChainStop::PodsRefused { .. })),
+            "{cleared:?}"
+        );
     }
 
     /// Only a selector that matched no pod is turned idle: endpoints alone

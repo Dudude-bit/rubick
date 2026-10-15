@@ -289,6 +289,7 @@ pub(super) async fn workload_connections(
             rollout,
             revision: None,
             current: None,
+            pods_refused: None,
         },
     );
     out.subject = Some(subject.clone());
@@ -438,6 +439,11 @@ pub(super) async fn revisions_of(
                     this.and_then(|r| r.parse::<u64>().ok())
                         .is_some_and(|r| Some(r) == newest),
                 ),
+                pods_refused: rs
+                    .status
+                    .as_ref()
+                    .and_then(|s| s.conditions.as_deref())
+                    .and_then(crate::resources::replica_failure),
             }),
             Relation::Owns { controller: true },
         );
@@ -485,8 +491,8 @@ pub(super) async fn service_connections(
     Ok(())
 }
 
-/// The workloads a Service would reach if they ran: scaled to zero, they
-/// own no pod, so no owner chain names them.
+/// The workloads a Service would reach if they ran: scaled to zero or
+/// refused their pods, they own no pod, so no owner chain names them.
 pub(super) fn idle_behind(subject: &ObjectRef, out: &mut Neighbourhood) {
     let idle: Vec<(String, Vec<ObjectRef>)> = out
         .stops
@@ -496,6 +502,12 @@ pub(super) fn idle_behind(subject: &ObjectRef, out: &mut Neighbourhood) {
                 service,
                 selector,
                 workloads,
+            }
+            | ChainStop::PodsRefused {
+                service,
+                selector,
+                workloads,
+                ..
             } if service.same_object(subject) => Some((selector.clone(), workloads.clone())),
             _ => None,
         })
@@ -1770,6 +1782,76 @@ mod set_rollout_tests {
                 available: 3,
                 desired: 4
             })
+        );
+    }
+
+    /// `root-web`'s Connections tab listed its `ReplicaSet` as "revision 1
+    /// (current) · 0 pods" while Pod Security refused every pod of it.
+    /// Fails if a revision row loses the refusal its own status reports.
+    #[tokio::test]
+    async fn a_deployment_revision_refused_its_pods_carries_the_refusal() {
+        const SAID: &str = "pods \"root-web-7d9-x\" is forbidden: violates PodSecurity \"restricted:latest\": runAsNonRoot != true";
+        let deployment = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": { "name": "root-web", "namespace": "shop", "uid": "root-web" },
+            "spec": {
+                "replicas": 1,
+                "selector": { "matchLabels": { "app": "web" } },
+                "template": { "metadata": { "labels": { "app": "web" } } },
+            },
+        });
+        let sets = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "ReplicaSetList", "metadata": {},
+            "items": [{
+                "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                "metadata": {
+                    "name": "root-web-7d9", "namespace": "shop", "uid": "rs",
+                    "labels": { "app": "web" },
+                    "annotations": { "deployment.kubernetes.io/revision": "1" },
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "Deployment",
+                        "name": "root-web", "uid": "root-web", "controller": true,
+                    }],
+                },
+                "spec": { "selector": { "matchLabels": { "app": "web" } } },
+                "status": {
+                    "replicas": 0,
+                    "conditions": [{
+                        "type": "ReplicaFailure", "status": "True",
+                        "reason": "FailedCreate", "message": SAID,
+                    }],
+                },
+            }],
+        });
+        let (client, _) = server(vec![
+            (
+                "/apis/apps/v1/namespaces/shop/deployments/root-web",
+                200,
+                deployment.to_string(),
+            ),
+            (
+                "/apis/apps/v1/namespaces/shop/replicasets",
+                200,
+                sets.to_string(),
+            ),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        let page = connections_of(&ctx, "Deployment", "root-web", None)
+            .await
+            .expect("the neighbourhood");
+        let revision = page
+            .edges
+            .iter()
+            .find(|edge| edge.to.kind == "ReplicaSet")
+            .expect("its revision");
+        assert!(
+            matches!(
+                &revision.to.facts,
+                Some(ObjectFacts::Workload { pods_refused: Some(said), .. }) if said == SAID
+            ),
+            "{:?}",
+            revision.to.facts
         );
     }
 

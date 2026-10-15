@@ -40,6 +40,7 @@ function conns(over: Partial<ResourceConnections> = {}): ResourceConnections {
         rollout: null,
         revision: null,
         current: null,
+        podsRefused: null,
       },
     },
     edges: [],
@@ -121,6 +122,7 @@ describe("stateOf", () => {
           rollout: null,
           revision: null,
           current: null,
+          podsRefused: null,
         },
       },
     });
@@ -147,6 +149,7 @@ describe("stateOf", () => {
           rollout: { state: "stalled", message: null, serving: 2 },
           revision: null,
           current: null,
+          podsRefused: null,
         },
       },
     });

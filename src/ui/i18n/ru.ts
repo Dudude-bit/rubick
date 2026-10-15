@@ -114,6 +114,9 @@ export const ru: Catalogue = {
       "Подов с меткой {selector} пока нет: {names} создают свои поды",
     stopPodsBeingMadeNote:
       "Их только что запросили, и адреса у них пока нет, поэтому подключения к этому адресу пока отклоняются. Это сбой, только если поды так и не появятся.",
+    stopPodsRefused: "{workloads}: {reason}",
+    stopPodsRefusedNote:
+      "Ни у одного пода нет метки {selector}: API-сервер не даёт их создать, поэтому подключения к этому адресу отклоняются. На странице {name} сказано, почему, и что изменить.",
     stopNearMissNote:
       "Ближе всех: {pods}. Подключения к этому адресу отклоняются, пока ни один под не подходит под весь селектор: добавьте метку {lacks} в их шаблон или уберите её из селектора.",
     stopScaledToZeroNote:
@@ -6353,6 +6356,7 @@ export const ru: Catalogue = {
     stopSelectorMatchesNothing: "селектор ничего не находит",
     stopScaledToZeroUnder: "масштабирован до нуля",
     stopPodsBeingMadeUnder: "поды создаются",
+    stopPodsRefusedUnder: "поды запрещены",
     stopNothingPublishedYet: "пока ничего не опубликовано",
     stopRunningNoneReady: "работают, но ни один не готов",
     stopNotScheduled: "не размещены на узле",

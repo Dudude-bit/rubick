@@ -102,6 +102,7 @@ function stopSubject(stop: ChainStop) {
     case "selectsNothing":
     case "scaledToZero":
     case "podsBeingMade":
+    case "podsRefused":
     case "publishesNothingYet":
     case "noneReady":
     case "publishesNothing":

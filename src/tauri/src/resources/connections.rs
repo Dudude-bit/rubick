@@ -143,6 +143,11 @@ pub enum ObjectFacts {
         /// Whether this is the highest revision among the siblings this call
         /// listed. `None` where the kind has no siblings to be newest of.
         current: Option<bool>,
+        /// The API server's refusal its own status reports (`ReplicaFailure`
+        /// on a Deployment or `ReplicaSet`). The kinds that report it only in
+        /// events leave it `None`.
+        #[serde(rename = "podsRefused", default)]
+        pods_refused: Option<String>,
     },
     Claim {
         /// Absent when the cluster wrote none — see `PersistentVolumeClaimInfo`.
@@ -429,6 +434,15 @@ pub enum ChainStop {
         service: ObjectRef,
         selector: String,
         workloads: Vec<ObjectRef>,
+    },
+    /// The selector matches no pod because the API server refuses to create
+    /// the pods of a workload whose pods it would pick. The labels are fine;
+    /// `said` is the API server's answer to the first of them.
+    PodsRefused {
+        service: ObjectRef,
+        selector: String,
+        workloads: Vec<ObjectRef>,
+        said: String,
     },
     /// The Service publishes no endpoint, and this reader cannot say why.
     ///

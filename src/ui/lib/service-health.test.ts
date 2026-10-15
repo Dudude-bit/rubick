@@ -497,6 +497,35 @@ describe("a Service whose workloads wait on their pods", () => {
   });
 
   /**
+   * A Service in front of root-web, whose pods Pod Security refuses, said
+   * no pod carries app=root-web and that nothing is behind it. Fails if the
+   * refusal is not the reason on its row and its chain, names no workload,
+   * or reads as anything but a fault.
+   */
+  it("says the API server refuses its workload's pods, not that no pod carries its selector", () => {
+    const stop = {
+      reason: "podsRefused" as const,
+      service: SERVICE,
+      selector: "app=root-web",
+      workloads: [{ ...SERVICE, kind: "Deployment", name: "root-web" }],
+      said: 'pods "root-web-7d9-x" is forbidden: violates PodSecurity "restricted:latest": allowPrivilegeEscalation != false (container "app" must set securityContext.allowPrivilegeEscalation=false), runAsNonRoot != true (pod or container "app" must set securityContext.runAsNonRoot=true)',
+    };
+    const health = serviceHealthOf(SELECTING, published({ stop }), null);
+    expect(health.state).toBe("noEndpoints");
+    const words = serviceHealthWords(health, t);
+    expect(words.role).toBe("err");
+    expect(words.reason).toBe(
+      "Deployment root-web: Pod Security restricted refuses its pods: 2 checks fail"
+    );
+    expect(chainStopHop(stop, SERVICE, t)).toMatchObject({
+      mood: "fault",
+      title:
+        "Deployment root-web: Pod Security restricted refuses its pods: 2 checks fail",
+      note: "No pod carries app=root-web: the API server will not create one, so connections to this address are refused. The page of root-web says why and what to change.",
+    });
+  });
+
+  /**
    * A Service in front of a Deployment pulling its first image read red
    * none ready while the Deployment read coming up. Fails if the two
    * disagree, or the Service is drawn as a fault.

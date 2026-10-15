@@ -47,6 +47,7 @@ const workload = ref("Deployment", "log-demo", {
   rollout: null,
   revision: null,
   current: null,
+  podsRefused: null,
 });
 
 const condition = (

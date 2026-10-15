@@ -134,6 +134,9 @@ export const en = {
       "No pod carries {selector} yet: {names} are making their pods",
     stopPodsBeingMadeNote:
       "They have only just been asked for and have no address yet, so connections to this address are refused for now. It is a fault only if no pod comes.",
+    stopPodsRefused: "{workloads}: {reason}",
+    stopPodsRefusedNote:
+      "No pod carries {selector}: the API server will not create one, so connections to this address are refused. The page of {name} says why and what to change.",
     stopNearMissNote:
       "Closest: {pods}. Connections to this address are refused until a pod carries the whole selector: add {lacks} to their template, or drop it from the selector.",
     stopScaledToZeroNote:
@@ -5722,6 +5725,7 @@ export const en = {
     stopSelectorMatchesNothing: "selector matches nothing",
     stopScaledToZeroUnder: "scaled to zero",
     stopPodsBeingMadeUnder: "pods being made",
+    stopPodsRefusedUnder: "pods refused",
     stopNothingPublishedYet: "nothing published yet",
     stopRunningNoneReady: "running, none ready",
     stopNotScheduled: "not scheduled",

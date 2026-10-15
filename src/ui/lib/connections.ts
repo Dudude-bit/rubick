@@ -22,6 +22,7 @@ import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
 import { clusterIpText } from "./cluster-ip";
+import { refusalText } from "./create-refusal";
 import {
   autoscalerRange,
   autoscalerReplicas,
@@ -371,6 +372,8 @@ export function stopUnder(
       return "stopScaledToZeroUnder";
     case "podsBeingMade":
       return "stopPodsBeingMadeUnder";
+    case "podsRefused":
+      return "stopPodsRefusedUnder";
     case "publishesNothingYet":
       return stop.podsUnread ? "podsNotRead" : "stopNothingPublishedYet";
     case "noneReady":
@@ -499,6 +502,19 @@ export function describeStop(
         note: t("nav", "stopPodsBeingMadeNote"),
       };
     }
+    case "podsRefused":
+      return {
+        title: t("nav", "stopPodsRefused", {
+          workloads: stop.workloads
+            .map((workload) => `${workload.kind} ${workload.name}`)
+            .join(", "),
+          reason: refusalText(stop.said, t),
+        }),
+        note: t("nav", "stopPodsRefusedNote", {
+          selector: stop.selector,
+          name: stop.workloads[0]?.name ?? "",
+        }),
+      };
     // Said by a reader holding the endpoints and no pod list: it knows
     // nothing arrives and cannot say whether that is a selector matching
     // nothing or pods that have no address yet.
@@ -1370,6 +1386,8 @@ export interface ConnRow {
   outside?: OutsideEnd;
   /** What the far end knows about itself, beside the name. */
   detail: string;
+  /** The API server's refusal of its pods, said as a cause under the name. */
+  refused?: string;
   /** Every way the subject draws on it — one line each past two. */
   ways: string[];
   /**
@@ -1611,11 +1629,16 @@ function rowFor(
   t: T,
   extra?: string
 ): ConnRow {
+  const facts = object.facts;
   return {
     key: refKey(object),
     label,
     object,
-    detail: join(extra, describeFacts(object.facts, t)),
+    detail: join(extra, describeFacts(facts, t)),
+    refused:
+      facts?.kind === "workload" && facts.podsRefused !== null
+        ? refusalText(facts.podsRefused, t)
+        : undefined,
     ways: [],
   };
 }

@@ -2428,6 +2428,7 @@ export type ObjectFacts =
       rollout: Rollout | null;
       revision: string | null;
       current: boolean | null;
+      podsRefused: string | null;
     }
   | {
       kind: "claim";
@@ -2528,6 +2529,13 @@ export type ChainStop =
       service: ObjectRef;
       selector: string;
       workloads: ObjectRef[];
+    }
+  | {
+      reason: "podsRefused";
+      service: ObjectRef;
+      selector: string;
+      workloads: ObjectRef[];
+      said: string;
     }
   | {
       reason: "publishesNothingYet";

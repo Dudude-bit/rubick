@@ -1026,6 +1026,7 @@ describe("the traffic chain", () => {
         rollout,
         revision: null,
         current: null,
+        podsRefused: null,
       });
       const [path] = trafficChains(
         connections(
@@ -1086,6 +1087,7 @@ describe("the traffic chain", () => {
       rollout: null,
       revision: null,
       current: null,
+      podsRefused: null,
     });
     const chainOf = (why: NotServing) => {
       const [path] = trafficChains(
@@ -1163,6 +1165,7 @@ describe("the traffic chain", () => {
       rollout: null,
       revision: null,
       current: null,
+      podsRefused: null,
     });
     const stopOf = (own: string[]) =>
       trafficChains(
@@ -1222,6 +1225,7 @@ describe("the traffic chain", () => {
       rollout: null,
       revision: null,
       current: null,
+      podsRefused: null,
     });
     const chainOf = (podsUnread: boolean) => {
       const stop = {
@@ -1277,6 +1281,7 @@ describe("the traffic chain", () => {
       rollout: { state: "idle" },
       revision: null,
       current: null,
+      podsRefused: null,
     });
     const conns = connections(
       front,
@@ -2286,6 +2291,7 @@ describe("where a pod's replica count is really set", () => {
       rollout: { state: "stalled", message: null, serving: 0 },
       revision: null,
       current: null,
+      podsRefused: null,
     });
     const rows =
       connectionGroups(connections(pod, [owns(deployment, pod)]), ru).find(
@@ -2306,6 +2312,40 @@ describe("where a pod's replica count is really set", () => {
         .find((group) => group.key === "owners")
         ?.rows.filter((row) => row.object?.kind === "ReplicaSet") ?? [];
     expect(rows.map((row) => row.label)).toEqual(["Ревизии"]);
+  });
+
+  /**
+   * root-web's Connections tab listed its ReplicaSet as "revision 1 (current)
+   * · 0 pods" while Pod Security refused every pod of it. Fails if a row
+   * whose status reports the refusal does not say it, or one without does.
+   */
+  it("says on a revision's row that the API server refuses its pods", () => {
+    const deployment = ref("Deployment", "root-web");
+    const revision = (podsRefused: string | null) => ({
+      ...ref("ReplicaSet", "root-web-7d9"),
+      facts: {
+        kind: "workload" as const,
+        replicas: 0,
+        readyReplicas: 0,
+        rollout: null,
+        revision: "1",
+        current: true,
+        podsRefused,
+      },
+    });
+    const rowOf = (podsRefused: string | null) =>
+      connectionGroups(
+        connections(deployment, [owns(deployment, revision(podsRefused))]),
+        t
+      )
+        .flatMap((group) => group.rows)
+        .find((row) => row.object?.kind === "ReplicaSet");
+    expect(
+      rowOf(
+        'pods "root-web-7d9-x" is forbidden: violates PodSecurity "restricted:latest": runAsNonRoot != true (pod or container "app" must set securityContext.runAsNonRoot=true)'
+      )?.refused
+    ).toBe("Pod Security restricted refuses its pods: 1 check fails");
+    expect(rowOf(null)?.refused).toBeUndefined();
   });
 });
 
