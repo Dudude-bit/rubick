@@ -261,20 +261,21 @@ impl ServicePublished {
         self.summary_keeping(|_| false)
     }
 
-    /// [`Self::summary`], keeping every address `own` picks where it picks
-    /// any: a workload's chain names its own pods, which the Service's first
-    /// address need not be.
+    /// [`Self::summary`], keeping every address of a pod `own` picks where it
+    /// picks any, and those of its pods nothing publishes: a workload's chain
+    /// names its own pods, which the Service's first address need not be.
     #[must_use]
-    pub fn summary_keeping(mut self, own: impl Fn(&PublishedEndpoint) -> bool) -> Self {
+    pub fn summary_keeping(mut self, own: impl Fn(&ObjectRef) -> bool) -> Self {
         let listed = self.endpoints.len();
         self.endpoints.sort_by_key(PublishedEndpoint::rank);
-        if self.endpoints.iter().any(&own) {
-            self.endpoints.retain(|endpoint| own(endpoint));
+        let mine = |endpoint: &PublishedEndpoint| endpoint.target.as_ref().is_some_and(&own);
+        if self.endpoints.iter().any(mine) {
+            self.endpoints.retain(mine);
         } else {
             self.endpoints.truncate(1);
         }
         self.whole = self.endpoints.len() == listed;
-        self.unpublished.clear();
+        self.unpublished.retain(|entry| own(&entry.pod));
         self
     }
 }
@@ -1316,6 +1317,56 @@ mod tests {
         assert_eq!((summary.ready, summary.draining), (1, 1));
     }
 
+    /// mixed-port-bad's page drew "mixed-port-demo :80 → this Pod" for a pod
+    /// whose slice carries no port, as the chain's summary dropped what said
+    /// so. Fails if a pod's chain loses its own entry among the pods nothing
+    /// publishes, or keeps another pod's.
+    #[test]
+    fn a_summary_for_a_pod_keeps_its_own_entry_among_the_unpublished() {
+        let svc = service("mixed", vec![port("http", IntOrString::Int(80))]);
+        let pods = [pod("ok", Some("http")), pod("bad", None)];
+        let refs: Vec<&Pod> = pods.iter().collect();
+        let ready = || EndpointConditions {
+            ready: Some(true),
+            serving: Some(true),
+            terminating: Some(false),
+        };
+        let slices = [
+            slice(
+                "mixed-a",
+                "mixed",
+                Some(vec![http_port()]),
+                vec![endpoint("10.0.0.1", "ok", ready())],
+            ),
+            slice(
+                "mixed-b",
+                "mixed",
+                None,
+                vec![endpoint("10.0.0.2", "bad", ready())],
+            ),
+        ];
+        let whole = from_slices(
+            &svc,
+            svc_ref("mixed"),
+            &slices.iter().collect::<Vec<_>>(),
+            &refs,
+        );
+        let only = |name: &'static str| move |target: &ObjectRef| target.name == name;
+        let unpublished = |published: ServicePublished| -> Vec<(String, bool)> {
+            published
+                .unpublished
+                .into_iter()
+                .map(|entry| (entry.pod.name, entry.in_slice))
+                .collect()
+        };
+        assert_eq!(
+            unpublished(whole.clone().summary_keeping(only("bad"))),
+            [("bad".to_string(), true)]
+        );
+        assert!(unpublished(whole.clone().summary_keeping(only("ok"))).is_empty());
+        assert!(unpublished(whole.summary()).is_empty());
+    }
+
     /// Sam's big-pull made again while its old pod drained: "none of its
     /// pods published" for 27 s over a Service sending to its own new pod,
     /// as the one address kept was the old pod's. Fails if a workload's own
@@ -1324,12 +1375,7 @@ mod tests {
     #[test]
     fn a_summary_for_a_workload_keeps_every_address_of_its_own_pods() {
         let of = |names: &'static [&'static str]| {
-            move |endpoint: &PublishedEndpoint| {
-                endpoint
-                    .target
-                    .as_ref()
-                    .is_some_and(|target| names.contains(&target.name.as_str()))
-            }
+            move |target: &ObjectRef| names.contains(&target.name.as_str())
         };
         let both =
             drained_and_replaced().summary_keeping(of(&["big-pull-84b6h", "big-pull-mgdwc"]));

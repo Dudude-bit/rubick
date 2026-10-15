@@ -138,6 +138,76 @@ const endpointOf = (pod: string, state: Partial<PublishedEndpoint> = {}) => ({
 });
 
 describe("the traffic chain", () => {
+  describe("to a pod in a slice that carries no port", () => {
+    const svc = service("mixed-port-demo", "app=mixed-port-demo");
+    const bad = pod("mixed-port-bad-58vt7", true);
+    const offPort = (subject: ObjectRef, unpublished: boolean) =>
+      trafficChains(
+        connections(
+          subject,
+          [
+            {
+              from: svc,
+              to: subject,
+              relation: { verb: "selects", selector: "app=mixed-port-demo" },
+            },
+          ],
+          [],
+          [],
+          [
+            publishes(
+              "mixed-port-demo",
+              { ready: 1, unrouted: 1 },
+              {
+                endpoints: [endpointOf("mixed-port-ok-d6zqb")],
+                whole: false,
+                unpublished: unpublished
+                  ? [{ pod: bad, unnamedPorts: [], inSlice: true }]
+                  : [],
+              }
+            ),
+          ]
+        ),
+        t
+      )[0];
+
+    /**
+     * mixed-port-bad's page drew "mixed-port-demo :80 → this Pod" for a
+     * pod whose slice carries no port, so nothing is sent to it. Fails if
+     * the path reaches a pod the Service publishes nothing for, or stops
+     * one it does.
+     */
+    it("stops at the pod the Service sends nothing", () => {
+      const path = offPort(bad, true);
+      const stop = path.hops.at(-1);
+      expect(stop).toMatchObject({
+        at: "stop",
+        title: "mixed-port-demo sends this pod no traffic",
+        mood: "fault",
+      });
+      expect(stop?.at === "stop" && stop.note).toContain(
+        "in a slice that carries no port"
+      );
+      expect(path.broken).toBe(true);
+      expect(offPort(pod("mixed-port-ok-d6zqb", true), false).broken).toBe(
+        false
+      );
+    });
+
+    /**
+     * The Service's own chain named the pod taking traffic and nothing
+     * about the one beside it taking none. Fails if the hop stops naming
+     * the pod in a portless slice, or keeps calling the Service fine.
+     */
+    it("names the pod beside the one taking traffic on the Service's own chain", () => {
+      const hop = offPort(svc, true).hops.find((h) => h.at === "published");
+      expect(hop).toMatchObject({ tone: "warn" });
+      expect(hop?.at === "published" && hop.summary).toContain(
+        "mixed-port-bad-58vt7 takes no traffic: in a slice that carries no port"
+      );
+    });
+  });
+
   it("draws a Service in front of a workload as a hop, and the pods behind it", () => {
     /** The whole point of the view: a Deployment cannot say today whether
      *  anything fronts it. If the Service edge stops becoming a hop, the

@@ -3762,6 +3762,11 @@ export const en = {
     },
     stillTakingTraffic: ", still taking traffic",
     noneOfItsPodsPublished: "none of its pods published",
+    sendsThisPodNothing: "{service} sends this pod no traffic",
+    offPortNamed: {
+      one: "{names} takes no traffic: in a slice that carries no port",
+      other: "{names} take no traffic: in slices that carry no port",
+    },
     acrossTheService: "across the Service: {counts}",
     delUnconfirmedMark: "{vendor} · {claim} · unconfirmed",
     delEditWhatApplies: "To change it for good, change what {name} applies.",

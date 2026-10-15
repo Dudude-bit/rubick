@@ -4227,6 +4227,13 @@ export const ru: Catalogue = {
     },
     stillTakingTraffic: ", всё ещё принимает трафик",
     noneOfItsPodsPublished: "ни один его под не опубликован",
+    sendsThisPodNothing: "{service} не отправляет этому поду трафик",
+    offPortNamed: {
+      one: "{names} не получает трафик: в срезе, где нет порта",
+      few: "{names} не получают трафик: в срезах, где нет порта",
+      many: "{names} не получают трафик: в срезах, где нет порта",
+      other: "{names} не получают трафик: в срезах, где нет порта",
+    },
     acrossTheService: "по всему Service: {counts}",
     delUnconfirmedMark: "{vendor} · {claim} · не подтверждено",
     delEditWhatApplies:

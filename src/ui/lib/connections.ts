@@ -34,6 +34,7 @@ import {
   endpointCount,
   publishedFor,
   sourceMark,
+  unpublishedNote,
 } from "./published";
 import type { en } from "@/i18n/catalogue";
 import type {
@@ -955,6 +956,9 @@ function publishedHop(
   ).sort((a, b) => endpointRank(a) - endpointRank(b));
   const first = listed[0];
   const rest = (own ? listed.length : endpointCount(published)) - 1;
+  const offPort = published.unpublished
+    .filter((entry) => entry.inSlice)
+    .map((entry) => entry.pod);
   const counts = join(
     published.ready > 0 &&
       t("readings", "publishedCount", { n: published.ready }),
@@ -969,7 +973,12 @@ function publishedHop(
   const summary = join(
     own && !first && t("readings", "noneOfItsPodsPublished"),
     rest > 0 && t("empty", "andMore", { n: rest }),
-    own && counts ? t("readings", "acrossTheService", { counts }) : counts
+    own && counts ? t("readings", "acrossTheService", { counts }) : counts,
+    offPort.length > 0 &&
+      t("readings", "offPortNamed", {
+        n: offPort.length,
+        names: namesOf(offPort, t),
+      })
   );
   return {
     at: "published",
@@ -977,7 +986,30 @@ function publishedHop(
     first: first?.target ?? null,
     address: first ? endpointAddress(first) : null,
     summary,
-    tone: published.ready === 0 && published.draining > 0 ? "warn" : "on",
+    tone:
+      (published.ready === 0 && published.draining > 0) || offPort.length > 0
+        ? "warn"
+        : "on",
+  };
+}
+
+/** The subject pod a Service selects and sends nothing, where nothing else stopped the path first. */
+function unpublishedHop(
+  service: ObjectRef,
+  published: ServicePublished | undefined,
+  subject: ObjectRef,
+  t: T
+): ChainHopStop | null {
+  const entry = published?.unpublished.find((pod) =>
+    sameObject(pod.pod, subject)
+  );
+  const ready = entry?.pod.facts?.kind === "pod" && entry.pod.facts.ready;
+  if (!entry || !(entry.inSlice || ready)) return null;
+  return {
+    at: "stop",
+    title: t("readings", "sendsThisPodNothing", { service: service.name }),
+    note: unpublishedNote(entry, t),
+    mood: "fault",
   };
 }
 
@@ -1211,7 +1243,11 @@ export function trafficChains(
       // A route-level refusal breaks the path even where the Service behind
       // it is perfectly healthy — an unaccepted route serves nothing.
       const routeBroken = hops.some((hop) => hop.at === "stop");
-      const said = stop ? chainStopHop(stop, subject, t, own) : null;
+      const said =
+        (stop ? chainStopHop(stop, subject, t, own) : null) ??
+        (subject.kind === "Pod"
+          ? unpublishedHop(service, published, subject, t)
+          : null);
 
       if (said) hops.push(said);
       else if (

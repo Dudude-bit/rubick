@@ -329,10 +329,8 @@ pub(super) fn note_reach(
     let stop = published.stop.clone();
     out.published.push(match carry {
         Carry::Whole => published,
-        Carry::Named(own) => published.summary_keeping(|endpoint| {
-            endpoint.target.as_ref().is_some_and(|target| {
-                target.kind == "Pod" && own.iter().any(|pod| pod.name_any() == target.name)
-            })
+        Carry::Named(own) => published.summary_keeping(|target| {
+            target.kind == "Pod" && own.iter().any(|pod| pod.name_any() == target.name)
         }),
     });
     if let Some(stop) = stop {
