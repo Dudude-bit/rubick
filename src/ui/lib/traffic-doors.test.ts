@@ -9,11 +9,13 @@ const t = ((section, key, values) =>
 
 import { trafficDoors } from "./traffic-doors";
 import type { RouteTls } from "./ingress-tls";
+import type { DoorRead } from "./policy-door";
 import type {
   GatewayInfo,
   ObjectRef,
   Relation,
   ResourceConnections,
+  ServicePublished,
 } from "@/generated/types";
 
 const ref = (
@@ -583,6 +585,84 @@ describe("trafficDoors", () => {
 
     expect(doorsWith(() => false)).toBe("/");
     expect(doorsWith(() => null)).toBe("/ · TLS not checked");
+  });
+
+  /**
+   * The peek drew door-shut's host as an unjudged door while the page beside
+   * it said allow-nginx-only refuses Traefik. Fails if the peek stops asking
+   * the Ingress's controller at the pods' door, or calls a door it could not
+   * judge broken.
+   */
+  it("calls an Ingress door shut where the pods' policies refuse its controller", () => {
+    const service = ref("Service", "app");
+    const published: ServicePublished = {
+      service,
+      source: "slices",
+      slices: 1,
+      ready: 1,
+      draining: 0,
+      notReady: 0,
+      unrouted: 0,
+      unroutedReady: 0,
+      ports: [],
+      endpoints: [],
+      whole: true,
+      unpublished: [],
+      stop: null,
+      door: {
+        state: "guarded",
+        isolating: ["allow-nginx-only"],
+        unsettled: [],
+        ports: [
+          {
+            name: null,
+            servicePort: 3000,
+            port: 8080,
+            protocol: "TCP",
+            rules: [],
+          },
+        ],
+      },
+    };
+    const traefik: DoorRead = {
+      name: "Traefik",
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "traefik-7d9",
+            namespace: "traefik",
+            labels: {},
+            ip: "10.42.1.7",
+            hostNetwork: false,
+          },
+        ],
+      },
+      namespaces: { known: true, value: [] },
+    };
+    const doorWith = (read: DoorRead | null) =>
+      trafficDoors(
+        conns({
+          published: [published],
+          edges: [
+            edge(ref("Ingress", "front"), service, {
+              verb: "routes",
+              host: "shop.example.com",
+              path: "/",
+              pathType: "Prefix",
+              port: "3000",
+              tls: false,
+            }),
+          ],
+        }),
+        [],
+        t,
+        undefined,
+        { controllerOf: () => "traefik.io/ingress-controller", ask: () => read }
+      ).entries[0].doors[0].broken;
+
+    expect(doorWith(traefik)).toBe("shut by NetworkPolicy");
+    expect(doorWith(null)).toBeNull();
   });
 
   it("caps the doors and counts the rest", () => {

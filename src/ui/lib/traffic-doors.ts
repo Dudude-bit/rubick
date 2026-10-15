@@ -12,6 +12,8 @@
 import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
 import type { T } from "@/i18n/useT";
 import type { RouteTls } from "@/lib/ingress-tls";
+import { refusedStop, type DoorAsk } from "@/lib/policy-door";
+import { publishedFor } from "@/lib/published";
 import type {
   ChainStop,
   GatewayInfo,
@@ -110,7 +112,12 @@ export function trafficDoors(
   gateways: GatewayInfo[],
   t: T,
   /** Whether an Ingress host is served over TLS once its controller spoke. */
-  tlsOf?: RouteTls
+  tlsOf?: RouteTls,
+  /** Who serves each Ingress, to judge its controller at the pods' NetworkPolicies. */
+  door?: {
+    controllerOf: (ingress: ObjectRef) => string | null | undefined;
+    ask: DoorAsk;
+  }
 ): TrafficDoors {
   // What broke, and under which gateway. A refusal is a verdict about ONE
   // (route, gateway) pair — a route refused by one gateway may be serving
@@ -257,12 +264,21 @@ export function trafficDoors(
         host && tlsOf
           ? tlsOf(edge.from, host, edge.relation.tls)
           : edge.relation.tls;
+      const controller = door?.controllerOf(edge.from);
+      const shut =
+        door &&
+        controller &&
+        refusedStop(
+          publishedFor(conns, edge.to),
+          edge.relation.port,
+          door.ask(controller)
+        );
       entry.doors.push({
         host: edge.relation.host ?? t("empty", "gwAllHosts"),
         copy: edge.relation.host,
         // Nobody asked who serves this Ingress's class here — the detail
         // page does, and says so in red when the answer is nobody.
-        broken: null,
+        broken: shut ? t("empty", "stopPolicyShutUnder") : null,
         checked: false,
         route: null,
         note:

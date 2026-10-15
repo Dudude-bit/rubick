@@ -27,7 +27,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-const { useIngressRouting } = await import("./useIngressRouting");
+const { routedOf, useIngressRouting } = await import("./useIngressRouting");
 const { queryKeys } = await import("@/lib/query-keys");
 
 function wrapper() {
@@ -156,6 +156,36 @@ describe("useIngressRouting", () => {
       expect(routed?.binding?.viaDefault).toBe(true);
       expect(routed?.binding?.controller).toBe("k8s.io/ingress-nginx");
     });
+  });
+
+  /**
+   * The pinned cards and the peek memoize their chains on this map; rebuilt
+   * on every render, it rebuilt every chain with it. Fails if a render with
+   * nothing new hands back another map, or one with a new answer does not.
+   */
+  it("hands back the same routing until what it says changes", async () => {
+    getIngress.mockResolvedValue(info(null));
+    resolveIngressClass.mockResolvedValue({
+      requested: null,
+      resolved: "nginx",
+      controller: "k8s.io/ingress-nginx",
+      viaDefault: true,
+      available: [],
+    });
+    const { result, rerender } = renderHook(() => useIngressRouting(conns), {
+      wrapper: wrapper(),
+    });
+    await waitFor(() =>
+      expect(
+        result.current.routing.get("Ingress/storefront/shop")
+      ).toBeDefined()
+    );
+    const first = result.current.routing;
+    rerender();
+    expect(result.current.routing).toBe(first);
+    expect(routedOf(result.current.routing, ingress)?.binding?.controller).toBe(
+      "k8s.io/ingress-nginx"
+    );
   });
 
   /**

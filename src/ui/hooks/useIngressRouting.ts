@@ -20,6 +20,7 @@
  * from there pays for neither.
  */
 
+import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
@@ -44,6 +45,12 @@ const refKey = (ref: {
   namespace: string | null;
   name: string;
 }) => `${ref.kind}/${ref.namespace ?? "-"}/${ref.name}`;
+
+/** What this hook read of an Ingress, under the key it files it by. */
+export const routedOf = (
+  routing: Map<string, RoutedIngress>,
+  ingress: Parameters<typeof refKey>[0]
+) => routing.get(refKey(ingress));
 
 /**
  * A read that came back a failure, which is a third thing from a read that
@@ -222,8 +229,14 @@ export function useIngressRouting(
   const certificates = useTlsCertificates(namespace, secretNames);
   const issuance = useCertificateIssuance(namespace, secretNames);
 
+  // Rebuilt from the reads on every render; held by what it says, so a chain
+  // memoized on it is not rebuilt with it.
+  const said = JSON.stringify([...routing]);
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  const held = useMemo(() => routing, [said]);
+
   return {
-    routing,
+    routing: held,
     certificates: certificates ?? new Map(),
     issuance,
     unread,

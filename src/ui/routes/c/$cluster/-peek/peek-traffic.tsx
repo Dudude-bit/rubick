@@ -24,6 +24,8 @@ import { cn } from "@/lib/utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { trafficDoors } from "@/lib/traffic-doors";
 import { useRouteTls } from "@/hooks/useRouteTls";
+import { useDoorAsk } from "@/hooks/useDoorAsk";
+import { routedOf, useIngressRouting } from "@/hooks/useIngressRouting";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   ResourceName,
@@ -111,12 +113,18 @@ function TrafficPath({
   // The doors under their entries: Gateway API and Ingress ways in, each
   // door wearing its verdict — see `lib/traffic-doors`.
   const tlsOf = useRouteTls(conns.data);
+  const routing = useIngressRouting(conns.data).routing;
+  const ask = useDoorAsk();
   const doors = useMemo(
     () =>
       conns.data
-        ? trafficDoors(conns.data, gatewaysQuery.data ?? [], t, tlsOf)
+        ? trafficDoors(conns.data, gatewaysQuery.data ?? [], t, tlsOf, {
+            controllerOf: (ingress) =>
+              routedOf(routing, ingress)?.binding?.controller,
+            ask,
+          })
         : { entries: [], mesh: [], unresolved: [] },
-    [conns.data, gatewaysQuery.data, t, tlsOf]
+    [conns.data, gatewaysQuery.data, t, tlsOf, routing, ask]
   );
   // For a Pod or a workload, the level above is whichever Services stand in
   // front of it — the graph names them from either end of an edge.
