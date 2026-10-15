@@ -49,7 +49,9 @@ import {
   type EdgeTls,
   stopWeight,
   stopsRowState,
+  doubtsOf,
 } from "../ingress";
+import type { DoorDoubt } from "@/lib/policy-door";
 import type { T } from "@/i18n/useT";
 import type { RowTone } from "../page-kit";
 import { readRule, type RuleClause, type RuleReading } from "./rule";
@@ -168,6 +170,14 @@ export type Finding =
       stop: ChainStop;
       answer: StopAnswer;
     }
+  /** NetworkPolicies guard the pods, and whether Traefik gets through is not known. */
+  | {
+      kind: "door";
+      severity: "warn";
+      route: TraefikRoute;
+      service: string;
+      doubt: DoorDoubt;
+    }
   /** Reachable unencrypted, and nothing upgrades the connection. */
   | {
       kind: "clear";
@@ -221,6 +231,8 @@ export interface HostGroup {
   worst: "err" | "warn" | null;
   /** False while a Service this host routes to has not been read. */
   backendsKnown: boolean;
+  /** Whether the controller gets through to a backend's pods is not known. */
+  doubted: boolean;
   /** The one answer to "is this host served over TLS"; see `HostTls`. */
   tls: HostTls;
 }
@@ -707,6 +719,7 @@ export function middlewareUses(
 const URGENCY: Record<Finding["kind"], number> = {
   stop: 4,
   resourceBackend: 4,
+  door: 4,
   certificate: 3,
   clear: 2,
   duplicate: 1,
@@ -960,8 +973,11 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
     // pointing at the same missing Service is one repair, and printing the
     // same sentence three times spends the reader's attention on nothing.
     const seenStops = new Set<string>();
+    const backings = new Map(
+      own.map((route) => [route.key, backingOf(route, sources)])
+    );
     const stopOf = new Map(
-      own.map((route) => [route.key, backingOf(route, sources).stop])
+      own.map((route) => [route.key, backings.get(route.key)!.stop])
     );
     const dropped = new Set(
       own.flatMap((route) => {
@@ -988,6 +1004,10 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
         },
       ];
     });
+
+    const doubts = doubtsOf(own, (route) => backings.get(route.key)!).map(
+      (doubt): Finding => ({ kind: "door", severity: "warn", ...doubt })
+    );
 
     const resourceBackends = own.flatMap((route): Finding[] =>
       route.resourceBackend
@@ -1024,6 +1044,7 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
     );
     const findings = [
       ...stops,
+      ...doubts,
       ...resourceBackends,
       ...certificateFindings(tlsSecrets, sources.certificates),
       ...(clear && clear !== "tlsUnknown" ? [clear] : []),
@@ -1045,12 +1066,15 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
           ? stops[0].route
           : resourceBackends[0]?.kind === "resourceBackend"
             ? resourceBackends[0].route
-            : [...own].sort(
-                (a, b) => b.middlewares.length - a.middlewares.length
-              )[0],
+            : doubts[0]?.kind === "door"
+              ? doubts[0].route
+              : [...own].sort(
+                  (a, b) => b.middlewares.length - a.middlewares.length
+                )[0],
       tlsSecrets,
       overTls,
-      worst: worstOf(findings),
+      worst: worstOf(findings.filter((finding) => finding.kind !== "door")),
+      doubted: doubts.length > 0,
       backendsKnown:
         sources.backingKnown || !own.some((route) => route.service?.kubernetes),
       tls: own.some((route) => overTls.get(route.key) === true)
@@ -1113,6 +1137,9 @@ export function hostState(
     return { text: certificateStateWords(certificate, t), tone: "err" };
   }
   if (stopped) return stopped;
+  if (group.findings.some((finding) => finding.kind === "door")) {
+    return { text: t("empty", "doorNotChecked"), tone: "unknown" };
+  }
   if (group.findings.some((finding) => finding.kind === "clear")) {
     return { text: t("empty", "servedInTheClear"), tone: "warn" };
   }

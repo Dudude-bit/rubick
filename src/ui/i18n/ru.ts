@@ -6379,6 +6379,7 @@ export const ru: Catalogue = {
     noTls: "без TLS",
     tlsEveryHost: "все хосты",
     tlsNotChecked: "TLS не проверен",
+    doorNotChecked: "NetworkPolicy не проверена",
     relatedShortBy:
       "Интеграция, которая читает объекты {kind}, не ответила, поэтому ниже не хватает неизвестно скольких.",
     relatedNothing:
@@ -8772,6 +8773,18 @@ export const ru: Catalogue = {
       few: "NetworkPolicy {names} решают, кто может подключиться к этим подам",
       other:
         "NetworkPolicy {names} решают, кто может подключиться к этим подам",
+    },
+    doorDecidesFor: {
+      one: "NetworkPolicy {names} решает, кто может подключиться к подам за {service}",
+      few: "NetworkPolicy {names} решают, кто может подключиться к подам за {service}",
+      other:
+        "NetworkPolicy {names} решают, кто может подключиться к подам за {service}",
+    },
+    healthBackendDoorUnchecked: {
+      one: "{name}: NetworkPolicy {names} решает, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",
+      few: "{name}: NetworkPolicy {names} решают, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",
+      other:
+        "{name}: NetworkPolicy {names} решают, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",
     },
     podsMatchAllReady: {
       one: "{n} под подходит под его селектор, и он Ready",

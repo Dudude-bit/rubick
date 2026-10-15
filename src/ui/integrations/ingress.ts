@@ -25,13 +25,21 @@ import { queryKeys } from "@/lib/query-keys";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import type { Saying } from "@/i18n/say";
-import { refusedStop, type DoorClaim, type DoorRead } from "@/lib/policy-door";
+import {
+  doorDoubt,
+  refusedStop,
+  type DoorClaim,
+  type DoorDoubt,
+  type DoorRead,
+} from "@/lib/policy-door";
 import type { T } from "@/i18n/useT";
 import type { AppLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
 import { stopMood, type StopMood } from "@/lib/stop-mood";
-import type { MapTone } from "./routing-map";
+import { servingCount } from "@/lib/published";
+import { ResourceType } from "@/lib/resource-registry";
+import type { MapNode, MapTone } from "./routing-map";
 import type { RowTone } from "./page-kit";
 import { certificatesOf } from "@/hooks/useTlsCertificates";
 import type {
@@ -128,6 +136,8 @@ export interface Backing {
   notReady: number;
   /** Set only where the path stops. */
   stop: ServiceStop | null;
+  /** Where policies guard the pods and whether the page's controller gets through is not known. */
+  doubt: DoorDoubt | null;
   /** False while the Services and their slices are still being read, or
    *  since they could not be. */
   known: boolean;
@@ -152,7 +162,13 @@ export interface BackingSources {
   /** Why they were not read, where they could not be; null while reading. */
   backingError: string | null;
   /** The page's own controller, judged at each backend's NetworkPolicies; absent, nobody is. */
-  door?: DoorRead | null;
+  door?: PageDoor;
+}
+
+/** Who a page's controller is, and its pods as read so far. */
+export interface PageDoor {
+  client: string;
+  read: DoorRead | null | undefined;
 }
 
 /** For a caller that counts routes and never reads what is behind them. */
@@ -170,7 +186,7 @@ export const BACKING_NOT_READ: BackingSources = {
 export function backingFrom(
   data: BackingLists | undefined,
   error: unknown,
-  door?: DoorRead | null
+  door?: PageDoor
 ): BackingSources {
   return {
     services: data?.services ?? [],
@@ -190,10 +206,14 @@ export function hostSeverity(group: {
   worst: "err" | "warn" | null;
   backendsKnown: boolean;
   tls: { at: string };
+  /** A backend behind NetworkPolicies its controller may or may not get through. */
+  doubted?: boolean;
 }): "err" | "warn" | "unknown" | null {
   return (
     group.worst ??
-    (group.backendsKnown && group.tls.at !== "unknown" ? null : "unknown")
+    (group.backendsKnown && !group.doubted && group.tls.at !== "unknown"
+      ? null
+      : "unknown")
   );
 }
 
@@ -230,6 +250,7 @@ export function backingOf(
     draining: 0,
     notReady: 0,
     stop: null,
+    doubt: null,
     known,
     error,
   };
@@ -263,15 +284,18 @@ export function backingOf(
       candidate.service.name === service.name &&
       candidate.service.namespace === service.namespace
   );
+  const port = backend.port ?? null;
+  const door = sources.door;
   const stop =
-    published?.stop ??
-    refusedStop(published, backend.port ?? null, sources.door);
+    published?.stop ?? (door ? refusedStop(published, port, door.read) : null);
   return {
     service,
     ready: published?.ready ?? 0,
     draining: published?.draining ?? 0,
     notReady: published?.notReady ?? 0,
     stop: stop && "service" in stop ? stop : null,
+    doubt:
+      door && !stop ? doorDoubt(published, port, door.read, door.client) : null,
     known,
     error,
   };
@@ -284,7 +308,7 @@ export function backingOf(
  */
 const STOP_WEIGHT: Record<
   StopMood,
-  { severity: "err" | "warn"; tone: MapTone; row: RowTone }
+  { severity: "err" | "warn"; tone: MapTone; row: Exclude<RowTone, "ok"> }
 > = {
   fault: { severity: "err", tone: "err", row: "err" },
   coming: { severity: "warn", tone: "warn", row: "warn" },
@@ -331,6 +355,77 @@ export function stopCellLook(stop: ChainStop) {
     unknown: tone === "unknown",
   };
 }
+
+/** One doubt per Service, on the first of the routes that lead to it. */
+export function doubtsOf<R>(
+  routes: R[],
+  backing: (route: R) => Backing
+): Array<{ route: R; service: string; doubt: DoorDoubt }> {
+  const seen = new Set<string>();
+  return routes.flatMap((route) => {
+    const { service, doubt } = backing(route);
+    if (!service || !doubt) return [];
+    const key = `${service.namespace}/${service.name}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ route, service: service.name, doubt }];
+  });
+}
+
+/** A host finding's colour: what nobody could check is never drawn as a warning. */
+export function findingTone(finding: {
+  kind: string;
+  severity: "err" | "warn";
+  stop?: ChainStop;
+}): "err" | "warn" | "unknown" {
+  if (finding.kind === "door") return "unknown";
+  return finding.stop ? stopWeight(finding.stop).row : finding.severity;
+}
+
+const FINDING_ROLE = { err: "err", warn: "warn", unknown: "neutral" } as const;
+
+/** `findingTone` as a shared file colours it. */
+export const findingRole = (finding: Parameters<typeof findingTone>[0]) =>
+  FINDING_ROLE[findingTone(finding)];
+
+/** A backend's tone on a controller's map: unread, stopped, behind a door nobody settled, or reached. */
+function backendTone(backing: Backing): MapTone | null {
+  if (!backing.known || backing.doubt) return "unknown";
+  return backing.stop ? stopWeight(backing.stop).tone : null;
+}
+
+/** A backend Service as a node on a controller's map. */
+export function backendNode(
+  id: string,
+  service: { name: string; namespace: string; port?: string | null },
+  backing: Backing,
+  t: T
+): MapNode {
+  const tone = backendTone(backing);
+  return {
+    id,
+    label: service.name,
+    sub: `${service.namespace}${service.port ? ` · :${service.port}` : ""}`,
+    tone: tone ?? "ok",
+    object: {
+      kind: ResourceType.Service,
+      name: service.name,
+      namespace: service.namespace,
+    },
+    tag: !backing.known
+      ? backing.error
+        ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
+        : undefined
+      : {
+          text: t("count", "nReady", { n: servingCount(backing) }),
+          tone: tone ?? (backing.ready === 0 ? "warn" : "mute"),
+        },
+  };
+}
+
+/** The link into a backend, under a host drawn in `host`. */
+export const backendLinkTone = (backing: Backing, host: MapTone): MapTone =>
+  backendTone(backing) ?? (host === "err" ? "warn" : "ok");
 
 /** The two lists every routing page needs to say what is behind a route. */
 export interface BackingLists {

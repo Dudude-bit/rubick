@@ -13,17 +13,16 @@
  * rides on the Service node as its tag.
  */
 
-import { servingCount } from "@/lib/published";
 import type { T } from "@/i18n/useT";
 
-import { ResourceType } from "@/lib/resource-registry";
 import { hostsBrokenOfTotal } from "@/lib/two-counts";
 
 import {
+  backendLinkTone,
+  backendNode,
   hostFilterLink,
   hostSeverity,
   hostTlsTag,
-  stopWeight,
 } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import {
@@ -111,48 +110,9 @@ export function routingMap(
       const serviceId = `service/${service.namespace}/${service.name}`;
       const backing = backingOf(route, sources);
       if (!services.has(serviceId)) {
-        services.set(serviceId, {
-          id: serviceId,
-          label: service.name,
-          sub: `${service.namespace}${service.port ? ` · :${service.port}` : ""}`,
-          tone: !backing.known
-            ? "unknown"
-            : backing.stop
-              ? stopWeight(backing.stop).tone
-              : "ok",
-          object: {
-            kind: ResourceType.Service,
-            name: service.name,
-            namespace: service.namespace,
-          },
-          tag: !backing.known
-            ? backing.error
-              ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
-              : undefined
-            : backing.stop
-              ? {
-                  text: t("count", "nReady", { n: servingCount(backing) }),
-                  tone: stopWeight(backing.stop).tone,
-                }
-              : {
-                  text: t("count", "nReady", {
-                    n: backing.ready + backing.draining,
-                  }),
-                  tone: backing.ready === 0 ? "warn" : "mute",
-                },
-        });
+        services.set(serviceId, backendNode(serviceId, service, backing, t));
       }
-      link(
-        id,
-        serviceId,
-        !backing.known
-          ? "unknown"
-          : backing.stop
-            ? stopWeight(backing.stop).tone
-            : tone === "err"
-              ? "warn"
-              : "ok"
-      );
+      link(id, serviceId, backendLinkTone(backing, tone));
     }
 
     const at = publishedAt(group, sources);

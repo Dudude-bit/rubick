@@ -86,7 +86,12 @@ function HealthCell({ ingress }: { ingress: IngressInfo }) {
 }
 
 /** Verdicts nobody could confirm, which a shared file marks as not read. */
-const UNCONFIRMED = new Set(["unknown", "reading", "backendUnconfirmed"]);
+const UNCONFIRMED = new Set([
+  "unknown",
+  "reading",
+  "backendUnconfirmed",
+  "backendDoorUnchecked",
+]);
 
 /** The health column as wide as the reasons beside its badges, and saying them in a shared file. */
 function withHealthOf(

@@ -31,6 +31,8 @@ import {
   secretMissing,
   useRouteCertificates,
   stopCellLook,
+  findingRole,
+  findingTone,
 } from "../ingress";
 import {
   Box,
@@ -53,6 +55,7 @@ import {
 } from "@/components/object/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop, stopUnder } from "@/lib/connections";
+import { doorDoubtWords } from "@/lib/policy-door";
 import { RoutingMap } from "../routing-map";
 import { useFrontingTls } from "../fronting-tls";
 import { ProxyControllerTab } from "../proxy-controller";
@@ -141,7 +144,10 @@ export default function IngressNginxPage() {
         ? {
             ...sourcesFrom(
               routeSources.data,
-              backingFrom(backing.data, backing.error, door),
+              backingFrom(backing.data, backing.error, {
+                client: "ingress-nginx",
+                read: door,
+              }),
               certificates
             ),
             upstreamTls,
@@ -758,6 +764,10 @@ function HostChain({
             >
               {t("count", "nPublished", { n: servingCount(backing) })}
             </Cell>
+          ) : backing.doubt ? (
+            <Cell unknown under={t("empty", "doorNotChecked")}>
+              {t("count", "nPublished", { n: servingCount(backing) })}
+            </Cell>
           ) : (
             <Cell
               warn={backing.ready === 0 && backing.draining > 0}
@@ -880,7 +890,7 @@ function Findings({
       render={(finding) => {
         const said = describeFinding(finding, t);
         return (
-          <FindingBlock tone={finding.severity} title={said.title}>
+          <FindingBlock tone={findingTone(finding)} title={said.title}>
             {!brief && said.note}
             {!brief && finding.kind === "certificate" && (
               <RenewalNote
@@ -899,7 +909,7 @@ function Findings({
           return {
             title: said.title,
             detail: said.note || null,
-            role: finding.severity,
+            role: findingRole(finding),
           };
         },
       }}
@@ -930,6 +940,8 @@ function describeFinding(
         note: said.note,
       };
     }
+    case "door":
+      return doorDoubtWords(finding.doubt, t, finding.service);
     case "clear":
       return {
         title: t("empty", "servedInClearTitle"),

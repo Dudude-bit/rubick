@@ -46,7 +46,9 @@ import {
   type EdgeTls,
   stopWeight,
   stopsRowState,
+  doubtsOf,
 } from "../ingress";
+import type { DoorDoubt } from "@/lib/policy-door";
 import type { RowTone } from "../page-kit";
 import { PREFIX, readAnnotations, type AnnotationReading } from "./annotations";
 
@@ -104,6 +106,14 @@ export type Finding =
       route: NginxRoute;
       stop: ChainStop;
     }
+  /** NetworkPolicies guard the pods, and whether nginx gets through is not known. */
+  | {
+      kind: "door";
+      severity: "warn";
+      route: NginxRoute;
+      service: string;
+      doubt: DoorDoubt;
+    }
   /** Nothing serves this host over TLS at all. */
   | { kind: "clear"; severity: "warn"; redirectAnyway: boolean }
   /** Two objects claim the same host and the same path. */
@@ -153,6 +163,8 @@ export interface NginxHostGroup {
   worst: "err" | "warn" | null;
   /** False while a Service this host routes to has not been read. */
   backendsKnown: boolean;
+  /** Whether the controller gets through to a backend's pods is not known. */
+  doubted: boolean;
   /** The one answer to "is this host served over TLS"; see `HostTls`. */
   tls: HostTls;
 }
@@ -396,6 +408,7 @@ function clearFinding(
 
 const URGENCY: Record<Finding["kind"], number> = {
   stop: 5,
+  door: 5,
   certificate: 4,
   orphanCanary: 3,
   clear: 2,
@@ -459,9 +472,12 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
   const groups = [...byHost.entries()].map(([host, own]) => {
     // One stop per broken backend, not per route that names it: three paths
     // pointing at the same missing Service is one repair.
+    const backings = new Map(
+      own.map((route) => [route, backingOf(route, sources)])
+    );
     const seen = new Set<string>();
     const stops = own.flatMap((route): Finding[] => {
-      const stop = backingOf(route, sources).stop;
+      const stop = backings.get(route)!.stop;
       if (!stop) return [];
       const key = `${stop.reason}/${stop.service.namespace}/${stop.service.name}`;
       if (seen.has(key)) return [];
@@ -470,6 +486,10 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
         { kind: "stop", severity: stopWeight(stop).severity, route, stop },
       ];
     });
+
+    const doubts = doubtsOf(own, (route) => backings.get(route)!).map(
+      (doubt): Finding => ({ kind: "door", severity: "warn", ...doubt })
+    );
 
     const tlsSecrets = [
       ...new Map(
@@ -500,6 +520,7 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
     const clear = clearFinding(own, sources, host === "" ? null : host);
     const findings: Finding[] = [
       ...stops,
+      ...doubts,
       ...certificateProblems(tlsSecrets, sources.certificates).map(
         (problem) => ({ kind: "certificate" as const, ...problem })
       ),
@@ -518,12 +539,15 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
       chainFor:
         stops[0]?.kind === "stop"
           ? stops[0].route
-          : [...own].sort(
-              (a, b) => b.annotations.length - a.annotations.length
-            )[0],
+          : doubts[0]?.kind === "door"
+            ? doubts[0].route
+            : [...own].sort(
+                (a, b) => b.annotations.length - a.annotations.length
+              )[0],
       split,
       tlsSecrets,
-      worst: worstOf(findings),
+      worst: worstOf(findings.filter((finding) => finding.kind !== "door")),
+      doubted: doubts.length > 0,
       backendsKnown:
         sources.backingKnown || !own.some((route) => route.service !== null),
       tls: tlsSecrets[0]
@@ -566,6 +590,9 @@ export function hostState(
     return { text: certificateStateWords(certificate, t), tone: "err" };
   }
   if (stopped) return stopped;
+  if (group.findings.some((finding) => finding.kind === "door")) {
+    return { text: t("empty", "doorNotChecked"), tone: "unknown" };
+  }
   if (group.findings.some((finding) => finding.kind === "orphanCanary")) {
     return { text: t("empty", "canaryShadowingNothing"), tone: "warn" };
   }

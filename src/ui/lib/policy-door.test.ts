@@ -9,12 +9,16 @@ import type {
 import type { Known } from "@/lib/known";
 import type { LabeledNamespace } from "@/lib/policy-peers";
 import {
+  doorDoubt,
+  doorDoubtWords,
   doorPortOf,
   doorVerdict,
   refusedStop,
   type DoorClient,
   type DoorRead,
 } from "./policy-door";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 
 const namespaces: Known<LabeledNamespace[]> = {
   known: true,
@@ -241,6 +245,56 @@ describe("whether a controller gets through the policies over a Service's pods",
     const open = behind(guarded([rule([fromNamespace("traefik")])]));
     expect(refusedStop(open, "80", readOf())).toBeNull();
     expect(refusedStop(undefined, "80", readOf())).toBeNull();
+  });
+});
+
+describe("a controller's way in nobody could settle", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const block: PolicyPeer = {
+    pods: { kind: "notSaid" },
+    namespaces: { kind: "notSaid" },
+    ipBlock: { cidr: "10.42.0.0/16", except: [] },
+  };
+
+  /**
+   * Every reader beside the chain drew a door only the network plugin can
+   * answer for as an open one. Fails if a doubt is lost, or if an open,
+   * refused or unread door is called one.
+   */
+  it("holds a doubt only where policies guard the pods and the answer is not known", () => {
+    const doubted = behind(guarded([rule([block])]));
+    expect(doorDoubt(doubted, "80", readOf(), "traefik.io")).toEqual({
+      policies: ["allow-nginx"],
+      why: "ipBlock",
+      client: "Traefik",
+    });
+    expect(doorDoubt(doubted, "80", undefined, "traefik.io")).toMatchObject({
+      why: "clientsReading",
+      client: "traefik.io",
+    });
+    const open = behind(guarded([rule([fromNamespace("traefik")])]));
+    const shut = behind(guarded([rule([fromNamespace("ingress-nginx")])]));
+    for (const subject of [open, shut, behind(undefined), undefined])
+      expect(doorDoubt(subject, "80", readOf(), "traefik.io")).toBeNull();
+  });
+
+  /** A finding away from the chain has no pods above it for "these" to point at. */
+  it("names the Service its pods are behind where nothing nearby does", () => {
+    const doubt = {
+      policies: ["allow-pod-cidr"],
+      why: "ipBlock" as const,
+      client: "Traefik",
+    };
+    expect(doorDoubtWords(doubt, t).title).toBe(
+      "NetworkPolicy allow-pod-cidr decides who may connect to these pods"
+    );
+    expect(doorDoubtWords(doubt, t, "door-block")).toEqual({
+      title:
+        "NetworkPolicy allow-pod-cidr decides who may connect to the pods behind door-block",
+      note: expect.stringMatching(
+        /^Whether Traefik may connect is not checked: an ipBlock holds/
+      ),
+    });
   });
 });
 

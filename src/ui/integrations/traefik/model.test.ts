@@ -6,9 +6,11 @@ import type {
   ServicePublished,
   IngressClassSummary,
   IngressInfo,
+  PolicyDoor,
   ServiceInfo,
   TlsCertificate,
 } from "@/generated/types";
+import type { DoorRead } from "@/lib/policy-door";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { backingFrom, hostSeverity, hostTlsWords } from "../ingress";
@@ -953,6 +955,96 @@ describe("what Traefik answers for a route with nothing behind it", () => {
       readEmptyServices(["--configFile=/etc/traefik/traefik.yml"])
     ).toBeNull();
     expect(readEmptyServices([])).toBeNull();
+  });
+});
+
+describe("a host whose pods an ipBlock may or may not admit Traefik to", () => {
+  const door: PolicyDoor = {
+    state: "guarded",
+    isolating: ["allow-pod-cidr"],
+    unsettled: [],
+    ports: [
+      {
+        name: "http",
+        servicePort: 80,
+        port: 8080,
+        protocol: "TCP",
+        rules: [
+          {
+            policy: "allow-pod-cidr",
+            byName: false,
+            peers: [
+              {
+                pods: { kind: "notSaid" },
+                namespaces: { kind: "notSaid" },
+                ipBlock: { cidr: "10.42.0.0/16", except: [] },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const read: DoorRead = {
+    name: "Traefik",
+    clients: {
+      known: true,
+      value: [
+        {
+          name: "traefik-7d9",
+          namespace: "traefik",
+          labels: {},
+          ip: "10.42.0.189",
+          hostNetwork: false,
+        },
+      ],
+    },
+    namespaces: { known: true, value: [] },
+  };
+  const at = (judged: boolean, tls = false) =>
+    sources({
+      ingresses: [
+        ingress("door-block", "block.example.com", { service: "door-block" }),
+      ],
+      services: [service("door-block", { app: "door-block" })],
+      published: [published("door-block", 1, 0, { door })],
+      entryPoints: [{ name: "web", address: ":8000", tls, redirectTo: null }],
+      door: judged ? { client: "Traefik", read } : undefined,
+    });
+
+  /**
+   * The page drew it "served in the clear", amber, word for word like a
+   * host Traefik certainly reaches, beside a chain that said nobody checked.
+   * Fails if the doubt leaves the findings or the host line.
+   */
+  it("says the NetworkPolicy was not checked rather than calling the host served", () => {
+    const [group] = hostGroups(at(true));
+    expect(hostState(group, null, t)).toEqual({
+      text: "NetworkPolicy not checked",
+      tone: "unknown",
+    });
+    const found = group.findings.find((finding) => finding.kind === "door");
+    expect(found && describeFinding(found, t)).toMatchObject({
+      title:
+        "NetworkPolicy allow-pod-cidr decides who may connect to the pods behind door-block",
+      note: expect.stringMatching(
+        /^Whether Traefik may connect is not checked/
+      ),
+    });
+    const [unjudged] = hostGroups(at(false));
+    expect(unjudged.findings.some((finding) => finding.kind === "door")).toBe(
+      false
+    );
+    expect(hostState(unjudged, null, t).text).toBe("served in the clear");
+  });
+
+  /** The map, the tab mark and the Share coloured a host with nothing else wrong green, or amber. */
+  it("leaves a host whose only doubt is the door unknown, neither fine nor a warning", () => {
+    const [group] = hostGroups(at(true, true));
+    expect(group.worst).toBeNull();
+    expect(hostSeverity(group)).toBe("unknown");
+    const [unjudged] = hostGroups(at(false, true));
+    expect(hostSeverity(unjudged)).toBeNull();
   });
 });
 

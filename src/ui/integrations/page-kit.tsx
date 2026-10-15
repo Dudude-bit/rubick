@@ -566,7 +566,7 @@ export function Finding({
   verbatim,
   children,
 }: {
-  tone: Exclude<Tone, "ok">;
+  tone: Exclude<RowTone, "ok">;
   title: ReactNode;
   verbatim?: string | null;
   children?: ReactNode;

@@ -12,7 +12,7 @@
 import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
 import type { T } from "@/i18n/useT";
 import type { RouteTls } from "@/lib/ingress-tls";
-import { refusedStop, type DoorAsk } from "@/lib/policy-door";
+import { doorDoubt, refusedStop, type DoorAsk } from "@/lib/policy-door";
 import { publishedFor } from "@/lib/published";
 import type {
   ChainStop,
@@ -265,14 +265,14 @@ export function trafficDoors(
           ? tlsOf(edge.from, host, edge.relation.tls)
           : edge.relation.tls;
       const controller = door?.controllerOf(edge.from);
+      const read = door && controller ? door.ask(controller) : undefined;
+      const published = publishedFor(conns, edge.to);
       const shut =
-        door &&
+        controller && refusedStop(published, edge.relation.port, read);
+      const doubt =
         controller &&
-        refusedStop(
-          publishedFor(conns, edge.to),
-          edge.relation.port,
-          door.ask(controller)
-        );
+        !shut &&
+        doorDoubt(published, edge.relation.port, read, controller);
       entry.doors.push({
         host: edge.relation.host ?? t("empty", "gwAllHosts"),
         copy: edge.relation.host,
@@ -289,6 +289,7 @@ export function trafficDoors(
               : secure === null
                 ? t("empty", "tlsNotChecked")
                 : null,
+            doubt ? t("empty", "doorNotChecked") : null,
           ]
             .filter(Boolean)
             .join(" · ") || null,

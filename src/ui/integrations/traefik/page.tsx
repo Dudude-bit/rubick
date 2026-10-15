@@ -36,6 +36,8 @@ import {
   secretMissing,
   useRouteCertificates,
   stopCellLook,
+  findingRole,
+  findingTone,
 } from "../ingress";
 import { Link } from "@tanstack/react-router";
 import { stopUnder } from "@/lib/connections";
@@ -158,7 +160,10 @@ export default function TraefikPage() {
         ? {
             ...sourcesFrom(
               routeSources.data,
-              backingFrom(backing.data, backing.error, door),
+              backingFrom(backing.data, backing.error, {
+                client: "Traefik",
+                read: door,
+              }),
               controller.data,
               certificates
             ),
@@ -827,6 +832,10 @@ function HostChain({
             >
               {t("count", "nPublished", { n: servingCount(backing) })}
             </Cell>
+          ) : backing.doubt ? (
+            <Cell unknown under={t("empty", "doorNotChecked")}>
+              {t("count", "nPublished", { n: servingCount(backing) })}
+            </Cell>
           ) : (
             <Cell
               // A draining address is still the one traffic goes to, so the
@@ -933,7 +942,7 @@ function Findings({ group, brief }: { group: HostGroup; brief?: boolean }) {
         toFinding: (finding) => ({
           title: describeFinding(finding, t).title,
           detail: findingDetail(finding, t),
-          role: finding.severity === "err" ? "err" : "warn",
+          role: findingRole(finding),
         }),
       }}
     />
@@ -952,7 +961,7 @@ function FindingLine({
   const t = useT();
   const said = describeFinding(finding, t);
   return (
-    <FindingBlock tone={finding.severity} title={said.title}>
+    <FindingBlock tone={findingTone(finding)} title={said.title}>
       {!brief && said.objects.length > 0 && <>{objectRefs(said.objects, t)} </>}
       {!brief && said.note}
       {/* Core above, extension below, in that order and never the other way

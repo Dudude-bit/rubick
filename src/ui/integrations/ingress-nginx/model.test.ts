@@ -8,9 +8,11 @@ const t: T = (section, key, values) => translate("en", section, key, values);
 import type {
   IngressClassSummary,
   IngressInfo,
+  PolicyDoor,
   ServiceInfo,
   ServicePublished,
 } from "@/generated/types";
+import { findingTone } from "../ingress";
 import { backingFrom, hostSeverity } from "../ingress";
 import { PREFIX } from "./annotations";
 import {
@@ -432,6 +434,85 @@ describe("the findings", () => {
       text: "shut by NetworkPolicy",
       tone: "err",
     });
+  });
+
+  /**
+   * A controller on the node's network is seen by a policy as the node,
+   * which the network plugin decides about. The page called the host
+   * served. Fails if the doubt is lost, or drawn as a warning.
+   */
+  it("says a host behind a door nobody settled for nginx was not checked", () => {
+    const door: PolicyDoor = {
+      state: "guarded",
+      isolating: ["allow-ingress"],
+      unsettled: [],
+      ports: [
+        {
+          name: "http",
+          servicePort: 80,
+          port: 8080,
+          protocol: "TCP",
+          rules: [
+            {
+              policy: "allow-ingress",
+              byName: false,
+              peers: [
+                {
+                  pods: { kind: "notSaid" },
+                  namespaces: {
+                    kind: "written",
+                    query: "kubernetes.io/metadata.name=ingress-nginx",
+                  },
+                  ipBlock: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const [group, secured] = hostGroups(
+      {
+        ...sources([
+          ingress("shop", "shop.test"),
+          ingress("vault", "vault.test", { secretName: "vault-tls" }),
+        ]),
+        published: [{ ...published("web", 2), door }],
+        door: {
+          client: "ingress-nginx",
+          read: {
+            name: "ingress-nginx",
+            clients: {
+              known: true,
+              value: [
+                {
+                  name: "ingress-nginx-controller-5c",
+                  namespace: "ingress-nginx",
+                  labels: {},
+                  ip: "172.18.0.2",
+                  hostNetwork: true,
+                },
+              ],
+            },
+            namespaces: { known: true, value: [] },
+          },
+        },
+      },
+      t
+    );
+    const found = group.findings.find((finding) => finding.kind === "door");
+    expect(found).toMatchObject({
+      service: "web",
+      doubt: { why: "hostNetwork", client: "ingress-nginx" },
+    });
+    expect(found && findingTone(found)).toBe("unknown");
+    expect(hostState(group, null, t)).toEqual({
+      text: "NetworkPolicy not checked",
+      tone: "unknown",
+    });
+    expect(secured.host).toBe("vault.test");
+    expect(secured.worst).toBeNull();
+    expect(secured.doubted).toBe(true);
   });
 
   /** Would break if the page stopped putting the outage first. */

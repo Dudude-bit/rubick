@@ -591,7 +591,7 @@ describe("trafficDoors", () => {
    * The peek drew door-shut's host as an unjudged door while the page beside
    * it said allow-nginx-only refuses Traefik. Fails if the peek stops asking
    * the Ingress's controller at the pods' door, or calls a door it could not
-   * judge broken.
+   * judge broken rather than not checked.
    */
   it("calls an Ingress door shut where the pods' policies refuse its controller", () => {
     const service = ref("Service", "app");
@@ -659,10 +659,17 @@ describe("trafficDoors", () => {
         t,
         undefined,
         { controllerOf: () => "traefik.io/ingress-controller", ask: () => read }
-      ).entries[0].doors[0].broken;
+      ).entries[0].doors[0];
 
-    expect(doorWith(traefik)).toBe("shut by NetworkPolicy");
-    expect(doorWith(null)).toBeNull();
+    expect(doorWith(traefik)).toMatchObject({
+      broken: "shut by NetworkPolicy",
+      note: "/",
+    });
+    expect(doorWith(null)).toMatchObject({
+      broken: null,
+      checked: false,
+      note: "/ · NetworkPolicy not checked",
+    });
   });
 
   it("caps the doors and counts the rest", () => {

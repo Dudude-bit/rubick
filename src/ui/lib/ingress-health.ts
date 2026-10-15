@@ -12,7 +12,13 @@ import { EyeOff } from "lucide-react";
 
 import type { T } from "@/i18n/useT";
 import type { Known } from "@/lib/known";
-import { refusedStop, type DoorAsk } from "@/lib/policy-door";
+import {
+  doorDoubt,
+  doorWhy,
+  refusedStop,
+  type DoorAsk,
+  type DoorDoubt,
+} from "@/lib/policy-door";
 import type {
   IngressClassBinding,
   IngressInfo,
@@ -65,7 +71,9 @@ export type IngressProblem =
   /** None ready, and the pods the workloads behind the backend wait on were not read. */
   | { kind: "backendUnconfirmed"; service: string; health: ServiceHealth }
   /** Every workload behind the backend is scaled to zero, on purpose. */
-  | { kind: "backendIdle"; service: string };
+  | { kind: "backendIdle"; service: string }
+  /** Its pods are up, and whether their NetworkPolicies let the controller through is not known. */
+  | { kind: "backendDoorUnchecked"; service: string; doubt: DoorDoubt };
 
 export interface IngressHealth {
   problems: IngressProblem[];
@@ -109,7 +117,10 @@ const BACKEND_PROBLEM: Record<
   ServiceHealth["state"],
   Exclude<
     IngressProblem["kind"],
-    "noController" | "backendMissing" | "tlsSecretMissing"
+    | "noController"
+    | "backendMissing"
+    | "tlsSecretMissing"
+    | "backendDoorUnchecked"
   > | null
 > = {
   ready: null,
@@ -159,7 +170,8 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
         stop: service.stop,
         door: service.door,
       };
-      const refused = backendPorts(ingress, name)
+      const ports = backendPorts(ingress, name);
+      const refused = ports
         .map((port) => refusedStop(subject, port, read))
         .find((stop) => stop !== null);
       const health = serviceHealthOf(
@@ -171,6 +183,13 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
       if (problem === "backendDown" || problem === "backendUnconfirmed")
         problems.push({ kind: problem, service: name, health });
       else if (problem) problems.push({ kind: problem, service: name });
+      else if (controller && inputs.door) {
+        const doubt = ports
+          .map((port) => doorDoubt(subject, port, read, controller))
+          .find((found) => found !== null);
+        if (doubt)
+          problems.push({ kind: "backendDoorUnchecked", service: name, doubt });
+      }
     }
   }
 
@@ -271,6 +290,7 @@ const ORDER: IngressProblem["kind"][] = [
   "backendDown",
   "backendStarting",
   "backendUnconfirmed",
+  "backendDoorUnchecked",
   "backendIdle",
 ];
 
@@ -292,6 +312,14 @@ function problemSentence(problem: IngressProblem, t: T): string {
       return backendWhy(problem, "healthBackendUnconfirmed", t);
     case "backendIdle":
       return t("readings", "healthBackendIdle", { name: problem.service });
+    case "backendDoorUnchecked":
+      return t("count", "healthBackendDoorUnchecked", {
+        n: problem.doubt.policies.length,
+        names: problem.doubt.policies.join(", "),
+        name: problem.service,
+        client: problem.doubt.client,
+        why: doorWhy(problem.doubt, t),
+      });
   }
 }
 
@@ -323,6 +351,7 @@ const PROBLEM_LABEL: Record<
   backendDown: "healthBackendDownShort",
   backendStarting: "healthBackendStartingShort",
   backendUnconfirmed: "healthBackendUnconfirmedShort",
+  backendDoorUnchecked: "healthBackendUnconfirmedShort",
   backendIdle: "healthBackendIdleShort",
 };
 
@@ -334,8 +363,15 @@ const PROBLEM_ROLE: Record<IngressProblem["kind"], StatusRole> = {
   backendDown: "err",
   backendStarting: "pending",
   backendUnconfirmed: "neutral",
+  backendDoorUnchecked: "neutral",
   backendIdle: "neutral",
 };
+
+/** Problems nobody could confirm or rule out. */
+const UNCONFIRMED: ReadonlySet<IngressProblem["kind"]> = new Set([
+  "backendUnconfirmed",
+  "backendDoorUnchecked",
+]);
 
 /** Every label `ingressHealthWords` can draw, for the column that has to hold the widest. */
 export const ingressVerdictLabels = (t: T) => [
@@ -361,7 +397,7 @@ export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
       code: worst.kind,
       label: t("readings", PROBLEM_LABEL[worst.kind]),
       role: partial ? "warn" : PROBLEM_ROLE[worst.kind],
-      glyph: worst.kind === "backendUnconfirmed" ? EyeOff : undefined,
+      glyph: UNCONFIRMED.has(worst.kind) ? EyeOff : undefined,
       reason: `${problems.map((problem) => problemSentence(problem, t)).join(". ")}.`,
     };
   }

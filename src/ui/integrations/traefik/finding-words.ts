@@ -2,6 +2,7 @@ import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { problemWords } from "@/lib/certificates";
 import { describeStop } from "@/lib/connections";
+import { doorDoubtWords } from "@/lib/policy-door";
 import { missingSecretWords } from "../ingress";
 import type { Finding, StopAnswer, TraefikRoute } from "./model";
 import { describePath } from "./rule";
@@ -46,6 +47,11 @@ export function describeFinding(
         note: said.note,
       };
     }
+    case "door":
+      return {
+        ...doorDoubtWords(finding.doubt, t, finding.service),
+        objects: [],
+      };
     case "clear": {
       const n = finding.entryPoints.length;
       const list = finding.entryPoints.join(", ");

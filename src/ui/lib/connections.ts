@@ -26,10 +26,11 @@ import { clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
 import { makersUnread, stopMood, type StopMood } from "./stop-mood";
 import {
-  doorVerdict,
+  doorDoubt,
+  doorDoubtWords,
+  refusedStop,
   type DoorAsk,
-  type DoorUnsure,
-  type DoorVerdict,
+  type DoorDoubt,
 } from "./policy-door";
 
 export { stopMood, type StopMood };
@@ -782,41 +783,17 @@ const policyRefs = (names: string[], namespace: string | null): ObjectRef[] =>
     facts: null,
   }));
 
-const DOOR_WHY: Record<DoorUnsure, keyof typeof en.nav> = {
-  policiesUnread: "doorWhyPoliciesUnread",
-  noPort: "doorWhyNoPort",
-  noIntegration: "doorWhyNoIntegration",
-  clientsReading: "doorWhyClientsReading",
-  clientsUnread: "doorWhyClientsUnread",
-  noClients: "doorWhyNoClients",
-  namespacesUnread: "doorWhyNamespacesUnread",
-  hostNetwork: "doorWhyHostNetwork",
-  byName: "doorWhyByName",
-  unsettled: "doorWhyUnsettled",
-  someClients: "doorWhySomeClients",
-  ipBlock: "doorWhyIpBlock",
-  unevaluable: "doorWhyUnevaluable",
-};
-
 /** Policies over the pods that may or may not admit this controller, said as the stop they might be. */
-export function doorDoubtHop(
+function doorDoubtHop(
   service: ObjectRef,
-  verdict: Extract<DoorVerdict, { state: "unsure" }>,
-  client: string,
+  doubt: DoorDoubt,
   t: T
 ): ChainHopStop {
   return {
     at: "stop",
     mood: "unchecked",
-    title: t("count", "doorDecides", {
-      n: verdict.policies.length,
-      names: verdict.policies.join(", "),
-    }),
-    note: t("nav", "doorUnsureNote", {
-      client,
-      why: t("nav", DOOR_WHY[verdict.why]),
-    }),
-    objects: policyRefs(verdict.policies, service.namespace),
+    ...doorDoubtWords(doubt, t),
+    objects: policyRefs(doubt.policies, service.namespace),
   };
 }
 
@@ -1201,18 +1178,13 @@ function doorHops(
   for (const { controller, port } of ways) {
     if (controller === null) continue;
     const read = ask(controller);
-    const verdict = doorVerdict(published, port, read);
-    const hop =
-      verdict.state === "refused"
-        ? chainStopHop(verdict.stop, subject, t, own)
-        : verdict.state === "unsure" && verdict.policies.length > 0
-          ? doorDoubtHop(
-              published.service,
-              verdict,
-              read?.name ?? controller,
-              t
-            )
-          : null;
+    const refused = refusedStop(published, port, read);
+    const doubt = refused ? null : doorDoubt(published, port, read, controller);
+    const hop = refused
+      ? chainStopHop(refused, subject, t, own)
+      : doubt
+        ? doorDoubtHop(published.service, doubt, t)
+        : null;
     if (hop) said.set(`${hop.title}\n${hop.note}`, hop);
   }
   return [...said.values()];

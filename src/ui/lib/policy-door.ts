@@ -15,6 +15,8 @@ import type {
   PolicyPeer,
   ServicePublished,
 } from "@/generated/types";
+import type { en } from "@/i18n/catalogue";
+import type { T } from "@/i18n/useT";
 import { inCidr } from "@/lib/cidr";
 import type { Known } from "@/lib/known";
 import {
@@ -230,4 +232,68 @@ export function refusedStop(
   if (!published || published.stop) return null;
   const verdict = doorVerdict(published, backend, read);
   return verdict.state === "refused" ? verdict.stop : null;
+}
+
+/** A controller's way to pods that NetworkPolicies guard, where no answer was reached. */
+export interface DoorDoubt {
+  policies: string[];
+  why: DoorUnsure;
+  client: string;
+}
+
+/** Why `client` may or may not get through, where policies guard the pods and nothing settled it. */
+export function doorDoubt(
+  published: DoorSubject | undefined,
+  backend: string | null,
+  read: DoorRead | null | undefined,
+  client: string
+): DoorDoubt | null {
+  if (!published || published.stop) return null;
+  const verdict = doorVerdict(published, backend, read);
+  return verdict.state === "unsure" && verdict.policies.length > 0
+    ? {
+        policies: verdict.policies,
+        why: verdict.why,
+        client: read?.name ?? client,
+      }
+    : null;
+}
+
+const DOOR_WHY: Record<DoorUnsure, keyof typeof en.nav> = {
+  policiesUnread: "doorWhyPoliciesUnread",
+  noPort: "doorWhyNoPort",
+  noIntegration: "doorWhyNoIntegration",
+  clientsReading: "doorWhyClientsReading",
+  clientsUnread: "doorWhyClientsUnread",
+  noClients: "doorWhyNoClients",
+  namespacesUnread: "doorWhyNamespacesUnread",
+  hostNetwork: "doorWhyHostNetwork",
+  byName: "doorWhyByName",
+  unsettled: "doorWhyUnsettled",
+  someClients: "doorWhySomeClients",
+  ipBlock: "doorWhyIpBlock",
+  unevaluable: "doorWhyUnevaluable",
+};
+
+/** Why nobody settled it, in the reader's words. */
+export const doorWhy = (doubt: DoorDoubt, t: T) =>
+  t("nav", DOOR_WHY[doubt.why]);
+
+/** A doubt in the words every reader draws it with; `behind` names the Service where nothing nearby does. */
+export function doorDoubtWords(
+  doubt: DoorDoubt,
+  t: T,
+  behind?: string
+): { title: string; note: string } {
+  const named = { n: doubt.policies.length, names: doubt.policies.join(", ") };
+  return {
+    title:
+      behind === undefined
+        ? t("count", "doorDecides", named)
+        : t("count", "doorDecidesFor", { ...named, service: behind }),
+    note: t("nav", "doorUnsureNote", {
+      client: doubt.client,
+      why: doorWhy(doubt, t),
+    }),
+  };
 }

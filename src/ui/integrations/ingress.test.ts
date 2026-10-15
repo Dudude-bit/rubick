@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  backendLinkTone,
+  backendNode,
   backingFrom,
   backingOf,
+  findingRole,
+  findingTone,
   hostRole,
   stopCellLook,
   stopsRowState,
@@ -140,7 +144,7 @@ describe("what a route's backend is doing", () => {
     };
     const read = sources({
       published: [published({ ready: 2, door })],
-      door: traefik,
+      door: { client: "Traefik", read: traefik },
     });
     const backend = { name: "app", namespace: "shop" };
     expect(
@@ -155,6 +159,71 @@ describe("what a route's backend is doing", () => {
       backingOf({ ...backend, port: "80" }, from, { ...read, door: undefined })
         .stop
     ).toBeNull();
+  });
+
+  /**
+   * The Traefik page drew a host over pods only an ipBlock admits as served,
+   * beside a chain that said nobody checked. Fails if the doubt is dropped,
+   * or claimed on a page that judges no controller.
+   */
+  it("carries a doubt where the page's controller may or may not get through", () => {
+    const door: PolicyDoor = {
+      state: "guarded",
+      isolating: ["allow-pod-cidr"],
+      unsettled: [],
+      ports: [
+        {
+          name: "http",
+          servicePort: 80,
+          port: 8080,
+          protocol: "TCP",
+          rules: [
+            {
+              policy: "allow-pod-cidr",
+              byName: false,
+              peers: [
+                {
+                  pods: { kind: "notSaid" },
+                  namespaces: { kind: "notSaid" },
+                  ipBlock: { cidr: "10.42.0.0/16", except: [] },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const traefik: DoorRead = {
+      name: "Traefik",
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "traefik-7d9",
+            namespace: "traefik",
+            labels: {},
+            ip: "10.42.1.7",
+            hostNetwork: false,
+          },
+        ],
+      },
+      namespaces: { known: true, value: [] },
+    };
+    const read = sources({
+      published: [published({ ready: 1, door })],
+      door: { client: "Traefik", read: traefik },
+    });
+    const backend = { name: "app", namespace: "shop", port: "80" };
+    const doubted = backingOf(backend, from, read);
+    expect(doubted.stop).toBeNull();
+    expect(doubted.doubt).toEqual({
+      policies: ["allow-pod-cidr"],
+      why: "ipBlock",
+      client: "Traefik",
+    });
+    expect(backingOf(backend, from, { ...read, door: undefined }).doubt).toBe(
+      null
+    );
   });
 
   /** A route naming a Service the list does not hold: the one stop only the
@@ -294,6 +363,49 @@ describe("how much a stopped backend weighs", () => {
       tone: "unknown",
       row: "unknown",
     });
+  });
+
+  /** A finding nobody could check was drawn amber, beside a trace that drew it grey. */
+  it("draws a host finding nobody could check unknown, never as a warning", () => {
+    expect(findingTone({ kind: "door", severity: "warn" })).toBe("unknown");
+    expect(findingRole({ kind: "door", severity: "warn" })).toBe("neutral");
+    expect(
+      findingTone({ kind: "stop", severity: "warn", stop: stops.unchecked })
+    ).toBe("unknown");
+    expect(
+      findingTone({ kind: "stop", severity: "err", stop: stops.fault })
+    ).toBe("err");
+    expect(findingTone({ kind: "clear", severity: "warn" })).toBe("warn");
+  });
+
+  /** A backend behind a door nobody settled was a green node on the map. */
+  it("draws a backend behind a doubted door unknown on the map", () => {
+    const t: T = (section, key, values) =>
+      translate("en", section, key, values);
+    const backing = {
+      ...backingOf(
+        { name: "app", namespace: "shop" },
+        from,
+        sources({ published: [published({ ready: 1 })] })
+      ),
+      doubt: {
+        policies: ["allow-pod-cidr"],
+        why: "ipBlock" as const,
+        client: "Traefik",
+      },
+    };
+    const service = { name: "app", namespace: "shop", port: "80" };
+    expect(backendNode("svc", service, backing, t)).toMatchObject({
+      tone: "unknown",
+      tag: { text: "1 ready", tone: "unknown" },
+    });
+    expect(backendLinkTone(backing, "ok")).toBe("unknown");
+    const reached = { ...backing, doubt: null };
+    expect(backendNode("svc", service, reached, t)).toMatchObject({
+      tone: "ok",
+      tag: { tone: "mute" },
+    });
+    expect(backendLinkTone(reached, "err")).toBe("warn");
   });
 
   /** A cell over a Service whose pods were not read was struck red as down. */

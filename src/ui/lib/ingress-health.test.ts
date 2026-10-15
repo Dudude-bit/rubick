@@ -288,6 +288,36 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     );
   });
 
+  const allowTraefik: PolicyDoor = {
+    state: "guarded",
+    isolating: ["allow-traefik"],
+    unsettled: [],
+    ports: [
+      {
+        name: "http",
+        servicePort: 80,
+        port: 8080,
+        protocol: "TCP",
+        rules: [
+          {
+            policy: "allow-traefik",
+            byName: false,
+            peers: [
+              {
+                pods: { kind: "notSaid" },
+                namespaces: {
+                  kind: "written",
+                  query: "kubernetes.io/metadata.name=traefik",
+                },
+                ipBlock: null,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
   /**
    * The list called shop "served" while allow-traefik admitted only Traefik
    * and nginx served the class, so every request got a 502. Fails if the
@@ -295,35 +325,6 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
    * controller nobody asked about is refused.
    */
   it("calls a backend whose policies refuse the class's controller down", () => {
-    const door: PolicyDoor = {
-      state: "guarded",
-      isolating: ["allow-traefik"],
-      unsettled: [],
-      ports: [
-        {
-          name: "http",
-          servicePort: 80,
-          port: 8080,
-          protocol: "TCP",
-          rules: [
-            {
-              policy: "allow-traefik",
-              byName: false,
-              peers: [
-                {
-                  pods: { kind: "notSaid" },
-                  namespaces: {
-                    kind: "written",
-                    query: "kubernetes.io/metadata.name=traefik",
-                  },
-                  ipBlock: null,
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    };
     const nginx: DoorRead = {
       name: "ingress-nginx",
       clients: {
@@ -351,7 +352,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       binding: { known: true, value: SERVED },
       backing: {
         known: true,
-        value: new Map([["web", { ...serving(2), door }]]),
+        value: new Map([["web", { ...serving(2), door: allowTraefik }]]),
       },
       certificates: undefined,
       door: ask,
@@ -367,6 +368,51 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     );
     expect(verdict(inputs()).code).not.toBe("backendDown");
     expect(verdict(inputs(() => null)).code).not.toBe("backendDown");
+  });
+
+  /**
+   * A controller on the node's network is seen by a policy as its node,
+   * which the network plugin decides about; the list called the Ingress
+   * served beside a chain that said nobody checked. Fails if the doubt is
+   * dropped, counted as a problem, or claimed where no controller is asked.
+   */
+  it("says a backend's door nobody could settle for the class's controller was not checked", () => {
+    const inputs = (door?: IngressInputs["door"]): IngressInputs => ({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([["web", { ...serving(2), door: allowTraefik }]]),
+      },
+      certificates: undefined,
+      door,
+    });
+    const onNode: DoorRead = {
+      name: "ingress-nginx",
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "ingress-nginx-controller-5f",
+            namespace: "ingress-nginx",
+            labels: {},
+            ip: "172.18.0.2",
+            hostNetwork: true,
+          },
+        ],
+      },
+      namespaces: { known: true, value: [] },
+    };
+    const said = verdict(inputs(() => onNode));
+    expect(said).toMatchObject({
+      code: "backendDoorUnchecked",
+      label: "backend not checked",
+      role: "neutral",
+    });
+    expect(said.reason).toBe(
+      "web: NetworkPolicy allow-traefik decides who may connect to its pods, and whether ingress-nginx may is not checked: it runs on the node's network, and what a policy sees of it is the network plugin's choice."
+    );
+    expect(verdict(inputs()).code).not.toBe("backendDoorUnchecked");
   });
 
   /**

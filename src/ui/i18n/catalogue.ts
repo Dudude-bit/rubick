@@ -5748,6 +5748,7 @@ export const en = {
     noTls: "no TLS",
     tlsEveryHost: "every host",
     tlsNotChecked: "TLS not checked",
+    doorNotChecked: "NetworkPolicy not checked",
     relatedShortBy:
       "An integration that reads {kind} objects could not answer, so what is below is short by an unknown amount.",
     relatedNothing:
@@ -7862,6 +7863,16 @@ export const en = {
     doorDecides: {
       one: "NetworkPolicy {names} decides who may connect to these pods",
       other: "NetworkPolicies {names} decide who may connect to these pods",
+    },
+    doorDecidesFor: {
+      one: "NetworkPolicy {names} decides who may connect to the pods behind {service}",
+      other:
+        "NetworkPolicies {names} decide who may connect to the pods behind {service}",
+    },
+    healthBackendDoorUnchecked: {
+      one: "{name}: NetworkPolicy {names} decides who may connect to its pods, and whether {client} may is not checked: {why}",
+      other:
+        "{name}: NetworkPolicies {names} decide who may connect to its pods, and whether {client} may is not checked: {why}",
     },
     podsMatchAllReady: {
       one: "{n} pod matches its selector and it is Ready",
