@@ -7,9 +7,11 @@ import type { PodMetrics, Scoped, UnreadNamespace } from "@/generated/types";
 import type { PodRow } from "@/lib/pod-rows";
 import type { NodeSilence } from "@/lib/node-reporting";
 import * as metricsModule from "@/lib/metrics";
+import { queryKeys } from "@/lib/query-keys";
 import { usePodsWithMetrics } from "./usePodsWithMetrics";
 
 interface ClusterState {
+  currentContext: string;
   isConnected: boolean;
   currentNamespace: string;
   namespaceScope: string[];
@@ -28,6 +30,7 @@ const state = vi.hoisted(() => ({
   metrics: [] as PodMetrics[],
   silent: new Map<string, NodeSilence>(),
   cluster: {
+    currentContext: "kind-dev",
     isConnected: true,
     currentNamespace: "default",
     namespaceScope: [],
@@ -136,6 +139,24 @@ it("does not re-run the merge when only node silence changes", () => {
   }
 });
 
+/**
+ * The Pods list drew ledger-0 blue "starting" beside an Overview that had
+ * read the kubelet's FailedMount for it. Fails if the rows stop carrying
+ * the overview's warned pods, or mark one it did not name.
+ */
+it("marks the rows of the pods the overview found the kubelet warning about", () => {
+  state.pods = state.pods.map((pod, i) => ({ ...pod, uid: `u${i}` }));
+  client.setQueryData(
+    queryKeys.clusterOverview("kind-dev", state.cluster.namespaceScope),
+    { podsWarned: ["u1"] }
+  );
+  const { result } = renderHook(() => usePodsWithMetrics());
+  expect(result.current.data.map((row) => row.kubeletWarned)).toEqual([
+    undefined,
+    true,
+  ]);
+});
+
 /** The hook must expose changed CPU while leaving other annotated rows stable. */
 it("replaces only the final row whose CPU changed", () => {
   const { result, rerender } = renderHook(() => usePodsWithMetrics());
@@ -209,7 +230,6 @@ it("keeps a watched namespace's pods when a re-read misses it", async () => {
       rows: [state.pods[0]],
       unread: [{ namespace: "staging", code: "READ_DEADLINE", message: "" }],
     };
-    const { queryKeys } = await import("@/lib/query-keys");
     client.setQueryData<Scoped<PodRow>>(queryKeys.podRows("default,staging"), {
       rows: [state.pods[0], worker],
       unread: [],

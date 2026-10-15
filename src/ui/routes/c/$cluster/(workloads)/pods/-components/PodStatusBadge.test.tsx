@@ -69,7 +69,9 @@ describe("PodStatusBadge", () => {
     expect(screen.getByText("ContainerCreating").className).toContain(
       "text-info"
     );
-    rerender(<PodStatusBadge pod={pod} silence={null} warned />);
+    rerender(
+      <PodStatusBadge pod={{ ...pod, kubeletWarned: true }} silence={null} />
+    );
     expect(screen.getByText("ContainerCreating").className).toContain(
       "text-warn"
     );

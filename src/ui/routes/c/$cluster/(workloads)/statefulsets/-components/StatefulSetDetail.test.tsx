@@ -30,7 +30,8 @@ vi.mock("@/lib/commands", () => ({
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { renderWithRouter } from "@/test/render";
+import { renderWithRouter, testQueryClient } from "@/test/render";
+import { useClusterStore } from "@/stores/clusterStore";
 import { StatefulSetDetail } from "./StatefulSetDetail";
 
 function buildSet(
@@ -302,6 +303,42 @@ describe("StatefulSetDetail", () => {
       "k8s-gui-test",
       "stateful-demo-0"
     );
+  });
+
+  /**
+   * The page led with the kubelet's warning in red over a strip that counted
+   * the same pods blue, starting, for the rest of their wait. Fails if pods
+   * the overview found warned about are counted as starting, or pods it did
+   * not name stop being.
+   */
+  it("counts the pods its kubelet warned about as failing, not starting", async () => {
+    mockSettingUp([]);
+    const strip = async (warned: string[]) => {
+      const client = testQueryClient();
+      const { currentContext, namespaceScope } = useClusterStore.getState();
+      client.setQueryData(
+        queryKeys.clusterOverview(currentContext, namespaceScope),
+        { podsWarned: warned }
+      );
+      const { unmount } = await renderWithRouter(<StatefulSetDetail />, {
+        client,
+        at: "/c/prod/statefulsets/k8s-gui-test/stateful-demo",
+        route: "/c/$cluster/statefulsets/$namespace/$name",
+      });
+      const segment = (word: string) => new RegExp(`^\\d+ ${word}$`);
+      await screen.findByText(
+        segment(warned.length > 0 ? "failing" : "starting")
+      );
+      const words = ["failing", "starting"].filter((word) =>
+        screen.queryByText(segment(word))
+      );
+      unmount();
+      return words;
+    };
+    expect(await strip(["stateful-demo-0", "stateful-demo-1"])).toEqual([
+      "failing",
+    ]);
+    expect(await strip([])).toEqual(["starting"]);
   });
 
   /**

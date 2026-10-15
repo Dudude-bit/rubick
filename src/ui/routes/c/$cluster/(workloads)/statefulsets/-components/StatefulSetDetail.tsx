@@ -75,6 +75,7 @@ import { controlledBy } from "@/lib/controlled-by";
 import {
   readyBesideBadge,
   rolloutSettled,
+  startOf,
   watchedWorkload,
 } from "@/lib/workload-status";
 import { useT } from "@/i18n/useT";
@@ -173,7 +174,7 @@ export function StatefulSetDetail() {
       watchedWorkload(
         read,
         delivered,
-        splitPods && splitPods.map((pod) => pod.start),
+        splitPods && splitPods.map(startOf),
         startsNow
       ),
     [read, delivered, splitPods, startsNow]

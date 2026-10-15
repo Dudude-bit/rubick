@@ -4,13 +4,15 @@ import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useMetrics } from "@/hooks/useMetrics";
-import { mergePodsWithMetrics, type PodWithMetrics } from "@/lib/metrics";
+import { mergePodsWithMetrics } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
-import { withNodeSilence, type WithNodeSilence } from "@/lib/node-reporting";
+import { withNodeSilence } from "@/lib/node-reporting";
+import { withKubeletWarned } from "@/lib/share/pod-status";
+import { useWarnedPods } from "@/hooks/useClusterOverview";
 import { queryKeys } from "@/lib/query-keys";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -110,14 +112,15 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   // Which nodes stopped reporting. A pod on one of them is describing a
   // moment that has passed, and nothing in the pod object says so.
   const silent = useSilentNodes(enabled);
+  const warned = useWarnedPods();
 
   const mergedPods = useMemo(
     () => mergePodsWithMetrics(pods, podMetrics),
     [pods, podMetrics]
   );
-  const podsWithMetrics = useMemo<WithNodeSilence<PodWithMetrics>[]>(
-    () => withNodeSilence(mergedPods, silent),
-    [mergedPods, silent]
+  const podsWithMetrics = useMemo(
+    () => withKubeletWarned(withNodeSilence(mergedPods, silent), warned),
+    [mergedPods, silent, warned]
   );
 
   return {

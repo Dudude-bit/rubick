@@ -41,6 +41,7 @@ import {
   podsAhead,
   readyBesideBadge,
   rolloutSettled,
+  startOf,
   watchedWorkload,
   workloadRole,
 } from "@/lib/workload-status";
@@ -202,7 +203,7 @@ export function DeploymentDetail() {
       watchedWorkload(
         read,
         delivered,
-        splitPods && splitPods.map((pod) => pod.start),
+        splitPods && splitPods.map(startOf),
         startsNow
       ),
     [read, delivered, splitPods, startsNow]

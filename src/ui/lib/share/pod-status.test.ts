@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { PodCause, PodStart } from "@/generated/types";
-import { workloadCause, type PodBadgeInput } from "./pod-status";
+import {
+  withKubeletWarned,
+  workloadCause,
+  type PodBadgeInput,
+} from "./pod-status";
 
 const NOW = Date.parse("2026-10-15T10:00:00Z");
 const ago = (seconds: number) => new Date(NOW - seconds * 1000).toISOString();
@@ -83,5 +87,22 @@ describe("workloadCause", () => {
       warnedOnly: false,
       shared: { cause: { says: "creating" }, pods: 1, of: 2 },
     });
+  });
+});
+
+describe("withKubeletWarned", () => {
+  /**
+   * The mark rides on the row the way node silence does, and the list keeps
+   * a row's identity so an untouched row is not redrawn. Fails if an
+   * unwarned row or an unwarned list is copied, a warned row loses its mark,
+   * or the same row is marked into a new object on every tick.
+   */
+  it("marks the warned rows and leaves every other row and list as it was", () => {
+    const rows = [{ uid: "u1" }, { uid: "u2" }];
+    expect(withKubeletWarned(rows, new Set())).toBe(rows);
+    const marked = withKubeletWarned(rows, new Set(["u2"]));
+    expect(marked[0]).toBe(rows[0]);
+    expect(marked[1]).toEqual({ uid: "u2", kubeletWarned: true });
+    expect(withKubeletWarned(rows, new Set(["u2"]))[1]).toBe(marked[1]);
   });
 });

@@ -827,7 +827,10 @@ export function PodDetail() {
         onTabAgain={askOn}
         statusBadge={
           pod?.status.display ? (
-            <PodStatusBadge pod={pod} silence={silence} warned={warned} />
+            <PodStatusBadge
+              pod={warned ? { ...pod, kubeletWarned: true } : pod}
+              silence={silence}
+            />
           ) : null
         }
         // The kubelet's word for the trouble, on every tab — but only when

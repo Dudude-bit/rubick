@@ -20,7 +20,6 @@ import {
   podStatusTitle,
   settingUp,
   troubleCause,
-  warnedRole,
 } from "@/lib/share/pod-status";
 import { PodCauseLine } from "../-object/CauseLine";
 import { formatDate } from "@/lib/utils";
@@ -117,7 +116,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
     return {
       status: pod.status.display,
       statusFrom: pod.nodeName,
-      statusRole: warnedRole(podRole(pod, null), warned),
+      statusRole: podRole({ ...pod, kubeletWarned: warned }, null),
       statusTitle: podStatusTitle(pod, null, t),
       createdAt: pod.createdAt,
       endedAt: pod.status.failedAt,

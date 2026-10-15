@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { listenEvent } from "@/lib/events";
@@ -93,6 +93,26 @@ export function useClusterOverview(scope: readonly string[], enabled = true) {
  */
 export function useScopedOverview() {
   return useClusterOverview(useClusterStore((s) => s.namespaceScope));
+}
+
+const NO_UIDS: readonly string[] = [];
+
+/**
+ * The pods the overview of this window found its kubelet warning about
+ * inside their wait, by uid. Read from the answer the shell keeps live and
+ * never asked for here: a pod outside the scope reads as unwarned, as every
+ * screen read it before.
+ */
+export function useWarnedPods(): ReadonlySet<string> {
+  const context = useClusterStore((s) => s.currentContext);
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const { data } = useQuery({
+    queryKey: queryKeys.clusterOverview(context, scope),
+    queryFn: () => readOverview(scope),
+    enabled: false,
+    select: (overview: ClusterOverview) => overview.podsWarned,
+  });
+  return useMemo(() => new Set(data ?? NO_UIDS), [data]);
 }
 
 /**

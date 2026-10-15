@@ -11,6 +11,15 @@ import { rolloutWord } from "@/lib/status-words";
 import { formatCount } from "@/lib/count";
 import { loopState } from "@/lib/crash-loop";
 
+const FAILING: PodStart = { state: "failing" };
+
+/** A pod's start once its kubelet's warnings are read: one they warn about inside its wait is failing, not starting. */
+export const startOf = (pod: {
+  start: PodStart;
+  kubeletWarned?: boolean;
+}): PodStart =>
+  pod.kubeletWarned && pod.start.state === "starting" ? FAILING : pod.start;
+
 /**
  * The one word a workload's rollout comes to, on every screen that draws it.
  *
@@ -278,7 +287,9 @@ const workloadKey = (kind: string, namespace: string, name: string) =>
 
 /** Each pod under the workload Rust read off its owner, a Deployment's through its ReplicaSet. */
 export function startsOf(
-  pods: readonly Pick<PodRow, "namespace" | "start" | "workload">[],
+  pods: readonly (Pick<PodRow, "namespace" | "start" | "workload"> & {
+    kubeletWarned?: boolean;
+  })[],
   unread: readonly { namespace: string }[] = []
 ): WorkloadStarts {
   const byWorkload = new Map<string, PodStart[]>();
@@ -290,11 +301,12 @@ export function startsOf(
       pod.namespace,
       pod.workload.name
     );
+    const start = startOf(pod);
     const starts = byWorkload.get(key);
-    if (starts) starts.push(pod.start);
-    else byWorkload.set(key, [pod.start]);
-    if (pod.start.state === "starting" || pod.start.state === "up")
-      deadlines.push(Date.parse(pod.start.until));
+    if (starts) starts.push(start);
+    else byWorkload.set(key, [start]);
+    if (start.state === "starting" || start.state === "up")
+      deadlines.push(Date.parse(start.until));
   }
   return {
     byWorkload,
@@ -342,6 +354,7 @@ export function rowsWithStarts<
 /** A pod as a page's own rows paint it, which is how its pods are counted beside the verdict. */
 export interface CountedPod {
   start: PodStart;
+  kubeletWarned?: boolean;
   status: Pick<
     PodStatusInfo,
     "display" | "ready" | "loopingUntil" | "exitUnreported"
@@ -361,7 +374,9 @@ export interface PodCounts {
 /** A page's own pods counted as their rows paint them. */
 export function podCounts(pods: readonly CountedPod[], now: number): PodCounts {
   const counts = { ready: 0, failing: 0, starting: 0, terminating: 0 };
-  for (const { start, status } of pods) {
+  for (const pod of pods) {
+    const { status } = pod;
+    const start = startOf(pod);
     if (start.state === "failing" || loopState(status, now) === "looping")
       counts.failing += 1;
     else if (start.state === "starting" && Date.parse(start.until) > now)

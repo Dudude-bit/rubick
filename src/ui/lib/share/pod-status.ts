@@ -26,6 +26,8 @@ type LoopStatus = {
 export type PodBadgeInput = ReadinessLists & {
   status: LoopStatus & { phase?: string; kubectlStatus?: string };
   start?: PodStart;
+  /** Its kubelet's warnings, where a surface read them, say it is not coming. */
+  kubeletWarned?: boolean;
 };
 
 /**
@@ -90,15 +92,31 @@ export function podRole(
   if (silence) return "neutral";
   if (upBetweenCrashes(pod) || pod.status.phase === "Failed") return "err";
   const role = statusRole(pod.status.display);
-  if (role === "pending" && pendingTooLong(pod, now)) return "warn";
+  if (role === "pending" && (pod.kubeletWarned || pendingTooLong(pod, now)))
+    return "warn";
   return role === "ok" && (!podReadiness(pod).allReady || exitUnreported(pod))
     ? "warn"
     : role;
 }
 
-/** A pod's colour once its kubelet's warnings are read: one they warn about inside its wait is not coming. */
-export const warnedRole = (role: StatusRole, warned: boolean): StatusRole =>
-  warned && role === "pending" ? "warn" : role;
+const warnedRows = new WeakMap<object, object>();
+
+/** The rows the kubelet warned about, marked; the rest keep their identity, and an unwarned list its array. */
+export function withKubeletWarned<T extends { uid: string }>(
+  rows: T[],
+  warned: ReadonlySet<string>
+): (T & { kubeletWarned?: boolean })[] {
+  if (warned.size === 0) return rows;
+  return rows.map((row) => {
+    if (!warned.has(row.uid)) return row;
+    const marked = (warnedRows.get(row) as T | undefined) ?? {
+      ...row,
+      kubeletWarned: true,
+    };
+    warnedRows.set(row, marked);
+    return marked;
+  });
+}
 
 /** The cause a pod's red or amber word leads with, where it has one now. */
 export function troubleCause(
@@ -186,7 +204,9 @@ export function podStatusTitle(
       statusRole(pod.status.display) === "pending" &&
         pendingTooLong(pod) &&
         t("statusMeaning", "pendingTooLong"),
-      insideWait(pod) && t("statusMeaning", "pendingStarting"),
+      !pod.kubeletWarned &&
+        insideWait(pod) &&
+        t("statusMeaning", "pendingStarting"),
       pod.status.kubectlStatus &&
         t("statusMeaning", "kubectlPrints", {
           status: pod.status.kubectlStatus,

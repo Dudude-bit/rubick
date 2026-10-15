@@ -72,7 +72,8 @@ import { usePeekHost } from "./peek-dock";
 import { usePodWatch } from "@/hooks/usePodWatch";
 import { useCauseWarnings } from "../-object/useCauseEvidence";
 import { kubeletWarned } from "@/lib/pod-cause";
-import { settingUp } from "@/lib/share/pod-status";
+import { settingUp, withKubeletWarned } from "@/lib/share/pod-status";
+import { useWarnedPods } from "@/hooks/useClusterOverview";
 import type { PodInfo } from "@/generated/types";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { usePeekWidth } from "./peek-width";
@@ -769,9 +770,10 @@ function NamespaceContents({ namespace }: { namespace: string }) {
     pods.data?.filter(
       (pod) => !pod.status.ready && pod.status.display !== "Terminating"
     ).length ?? 0;
+  const warned = useWarnedPods();
   const starts = useMemo(
-    () => (pods.data ? startsOf(pods.data) : null),
-    [pods.data]
+    () => (pods.data ? startsOf(withKubeletWarned(pods.data, warned)) : null),
+    [pods.data, warned]
   );
   const ranOut = useLastPassed(starts?.deadlines ?? []);
   const verdicts = useMemo(

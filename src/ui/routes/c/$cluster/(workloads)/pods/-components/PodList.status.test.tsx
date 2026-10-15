@@ -28,6 +28,7 @@ type Row = {
   containers?: RowContainer[];
   initContainers?: RowContainer[];
   nodeSilence?: unknown;
+  kubeletWarned?: boolean;
 };
 
 function statusCell(original: Row) {
@@ -369,5 +370,24 @@ describe("a pod Pending past the wait it is given", () => {
     expect(podStatusTitle(neverPlaced(-90) as never, null, t)).not.toMatch(
       /Starting:/
     );
+  });
+
+  /**
+   * ledger-0 stayed blue Pending on the Pods list with "Starting: still
+   * inside the wait" while its page, beside the FailedMount the kubelet
+   * wrote, said it was not coming. Fails if a row the kubelet warned about
+   * stays blue or keeps calling itself starting, or the mark leaks onto an
+   * unwarned row.
+   */
+  it("turns amber inside its wait once the kubelet warned about it", () => {
+    const pod = { ...neverPlaced(30), kubeletWarned: true };
+    render(<>{statusCell(pod)}</>);
+    const badge = screen.getByText("Pending");
+    expect(badge.className).toContain("text-warn");
+    expect(badge.closest("[title]")?.getAttribute("title") ?? "").not.toMatch(
+      /Starting:/
+    );
+    expect(podRole(pod, null)).toBe("warn");
+    expect(podRole(neverPlaced(30), null)).toBe("pending");
   });
 });

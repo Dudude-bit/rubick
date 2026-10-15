@@ -18,6 +18,7 @@ import { useWorkloadPods } from "../../-components/workload-pods";
 import {
   readyBesideBadge,
   rolloutSettled,
+  startOf,
   watchedWorkload,
   workloadRole,
 } from "@/lib/workload-status";
@@ -191,7 +192,7 @@ export function DaemonSetDetail() {
       watchedWorkload(
         read,
         delivered,
-        splitPods && splitPods.map((pod) => pod.start),
+        splitPods && splitPods.map(startOf),
         startsNow
       ),
     [read, delivered, splitPods, startsNow]

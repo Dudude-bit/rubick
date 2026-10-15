@@ -6,7 +6,6 @@ import {
   podDeadlines,
   podRole,
   podStatusTitle,
-  warnedRole,
   type PodBadgeInput,
 } from "@/lib/share/pod-status";
 
@@ -14,19 +13,13 @@ import {
 export function PodStatusBadge({
   pod,
   silence,
-  warned = false,
 }: {
   pod: PodBadgeInput & { status: { phase: string } };
   silence: NodeSilence | null;
-  /** Its kubelet's warnings were read and say it is not coming. */
-  warned?: boolean;
 }) {
   const t = useT();
   // Read through the clock so a pod turns the moment its wait runs out.
-  const role = warnedRole(
-    podRole(pod, silence, useLastPassed(podDeadlines(pod))),
-    warned
-  );
+  const role = podRole(pod, silence, useLastPassed(podDeadlines(pod)));
   return (
     <StatusBadge
       status={pod.status.display}

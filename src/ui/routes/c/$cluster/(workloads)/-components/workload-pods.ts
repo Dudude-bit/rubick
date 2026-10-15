@@ -1,8 +1,11 @@
+import { useMemo } from "react";
 import type { QueryKey, UseQueryResult } from "@tanstack/react-query";
 
+import { useWarnedPods } from "@/hooks/useClusterOverview";
 import { useHeldOwner, useHeldRead, useReadBehind } from "@/hooks/useHeldRead";
+import { withKubeletWarned } from "@/lib/share/pod-status";
 
-type Pod = { status: { ready: boolean; display: string } };
+type Pod = { uid: string; status: { ready: boolean; display: string } };
 
 /** Pods read with the uid of the object they were read for. */
 type Owned<P> = { uid: string; pods: P[] };
@@ -52,7 +55,11 @@ export function useWorkloadPods<P extends Pod>(
     key
   );
   const listed = other ? undefined : Array.isArray(data) ? data : data?.pods;
-  const pods: P[] = listed ?? NONE;
+  const warned = useWarnedPods();
+  const pods: P[] = useMemo(
+    () => withKubeletWarned(listed ?? NONE, warned),
+    [listed, warned]
+  );
   const unread = !!read.error || read.isPending || other || !listed;
   const behind = useReadBehind(
     kind,
