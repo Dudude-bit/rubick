@@ -123,7 +123,7 @@ pub(super) async fn fetch_template(
                 .unwrap_or_default(),
             obj.spec.as_ref().map(|s| s.selector.clone()),
             obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
-            obj.status.as_ref().and_then(|s| s.replicas).unwrap_or(0),
+            obj.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
             obj.status
                 .as_ref()
                 .and_then(|s| s.ready_replicas)
@@ -141,7 +141,7 @@ pub(super) async fn fetch_template(
                 .unwrap_or_default(),
             obj.spec.as_ref().map(|s| s.selector.clone()),
             obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
-            obj.status.as_ref().map_or(0, |s| s.replicas),
+            obj.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
             obj.status
                 .as_ref()
                 .and_then(|s| s.ready_replicas)
@@ -180,7 +180,7 @@ pub(super) async fn fetch_template(
                 .as_ref()
                 .and_then(|s| s.template.as_ref())
                 .and_then(|t| t.spec.clone()),
-            obj.status.as_ref().map_or(0, |s| s.replicas),
+            obj.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
             obj.status
                 .as_ref()
                 .and_then(|s| s.ready_replicas)
@@ -1852,6 +1852,45 @@ mod set_rollout_tests {
             ),
             "{:?}",
             revision.to.facts
+        );
+    }
+
+    /// `root-web`'s row behind its Service read "0 of 0 ready" beside a
+    /// header reading 0/1 while its only pod was refused. Fails if a
+    /// workload's facts count the pods it has rather than those it asks for.
+    #[tokio::test]
+    async fn a_workload_with_no_pod_yet_counts_the_pods_it_asks_for() {
+        let deployment = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": { "name": "root-web", "namespace": "shop", "uid": "root-web" },
+            "spec": {
+                "replicas": 2,
+                "selector": { "matchLabels": { "app": "web" } },
+                "template": { "metadata": { "labels": { "app": "web" } } },
+            },
+            "status": { "replicas": 0 },
+        });
+        let (client, _) = server(vec![(
+            "/apis/apps/v1/namespaces/shop/deployments/root-web",
+            200,
+            deployment.to_string(),
+        )])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        let page = connections_of(&ctx, "Deployment", "root-web", None)
+            .await
+            .expect("the neighbourhood");
+        assert!(
+            matches!(
+                page.subject.facts,
+                Some(ObjectFacts::Workload {
+                    replicas: 2,
+                    ready_replicas: 0,
+                    ..
+                })
+            ),
+            "{:?}",
+            page.subject.facts
         );
     }
 

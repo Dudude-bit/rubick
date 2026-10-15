@@ -133,6 +133,7 @@ pub enum ObjectFacts {
         exit_unreported: bool,
     },
     Workload {
+        /// How many pods it asks for; on a revision row, how many it has.
         replicas: i32,
         #[serde(rename = "readyReplicas")]
         ready_replicas: i32,

@@ -820,7 +820,7 @@ impl<'a> PodMaker<'a> {
                 "Deployment",
                 &deployment.name_any(),
                 deployment.namespace(),
-                status.and_then(|s| s.replicas).unwrap_or(0),
+                spec.replicas.unwrap_or(1),
                 status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 rollout.clone(),
                 refused.clone(),
@@ -849,7 +849,7 @@ impl<'a> PodMaker<'a> {
                 "StatefulSet",
                 &set.name_any(),
                 set.namespace(),
-                status.map_or(0, |s| s.replicas),
+                spec.replicas.unwrap_or(1),
                 status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 rollout.clone(),
                 refused.clone(),
@@ -2103,7 +2103,7 @@ mod tests {
         assert_eq!(workloads[0].name, "web");
         assert!(matches!(
             &workloads[0].facts,
-            Some(ObjectFacts::Workload { pods_refused: Some(on_it), .. }) if on_it == SAID
+            Some(ObjectFacts::Workload { pods_refused: Some(on_it), replicas: 1, .. }) if on_it == SAID
         ));
 
         let cleared = stop_behind(serde_json::json!([
