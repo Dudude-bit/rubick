@@ -164,9 +164,10 @@ impl ProblemDetail {
 fn workload_detail<'a>(
     pods: impl IntoIterator<Item = &'a Pod>,
     said: Option<String>,
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
 ) -> Option<ProblemDetail> {
-    match crate::resources::shared_cause_by(pods, |pod| trouble_cause(pod, now)) {
+    match crate::resources::shared_cause_by(pods, |pod| trouble_cause(pod, warned, now)) {
         Some(shared) => Some(ProblemDetail::PodsCause {
             cause: shared.cause,
             pods: shared.pods,
@@ -944,9 +945,13 @@ fn still_starting(pod: &Pod, now: DateTime<Utc>) -> bool {
 /// The cause a pod counts as trouble by at `now`: none while it is Pending
 /// inside its wait, or not Ready for less than a probe's first passes, as
 /// every pod is on its way up.
-fn trouble_cause(pod: &Pod, now: DateTime<Utc>) -> Option<crate::resources::PodCause> {
+fn trouble_cause(
+    pod: &Pod,
+    warned: &HashSet<&str>,
+    now: DateTime<Utc>,
+) -> Option<crate::resources::PodCause> {
     let pending = pod.status.as_ref().and_then(|s| s.phase.as_deref()) == Some("Pending");
-    if pending && still_starting(pod, now) {
+    if pending && still_starting(pod, now) && !warned_about(pod, warned) {
         return None;
     }
     crate::resources::pod_cause(pod).filter(|cause| {
@@ -1163,6 +1168,7 @@ fn deployments_saying<'a>(
                 detail: workload_detail(
                     owned.get(&key_of(d)).into_iter().flatten().copied(),
                     condition.as_ref().and_then(|c| c.message.clone()),
+                    warned,
                     now,
                 )
                 .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
@@ -1191,9 +1197,9 @@ fn set_problem(
     kind: &str,
     meta: &kube::core::ObjectMeta,
     rollout: &Rollout,
-    ready: i32,
-    desired: i32,
+    counts: ProblemDetail,
     owned: &HashMap<&str, Vec<&Pod>>,
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
 ) -> Option<ClusterProblem> {
     let pods = meta.uid.as_deref().and_then(|uid| owned.get(uid));
@@ -1203,8 +1209,8 @@ fn set_problem(
         name: meta.name.clone().unwrap_or_default(),
         namespace: meta.namespace.clone(),
         reason: rollout.code().to_string(),
-        detail: workload_detail(pods.into_iter().flatten().copied(), None, now)
-            .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
+        detail: workload_detail(pods.into_iter().flatten().copied(), None, warned, now)
+            .or(Some(counts)),
         since: None,
         restarts: None,
         folded_pods: None,
@@ -1271,12 +1277,16 @@ fn stateful_set_problems<'a>(
                     warned,
                     now,
                 ))?,
-                set.status
-                    .as_ref()
-                    .and_then(|s| s.ready_replicas)
-                    .unwrap_or(0),
-                set.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
+                ProblemDetail::ReplicasReady {
+                    ready: set
+                        .status
+                        .as_ref()
+                        .and_then(|s| s.ready_replicas)
+                        .unwrap_or(0),
+                    desired: set.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
+                },
                 owned,
+                warned,
                 now,
             )
         })
@@ -1305,9 +1315,12 @@ fn daemon_set_problems<'a>(
                     warned,
                     now,
                 ))?,
-                status.map_or(0, |s| s.number_ready),
-                status.map_or(0, |s| s.desired_number_scheduled),
+                ProblemDetail::ReplicasReady {
+                    ready: status.map_or(0, |s| s.number_ready),
+                    desired: status.map_or(0, |s| s.desired_number_scheduled),
+                },
                 owned,
+                warned,
                 now,
             )
         })
@@ -1329,6 +1342,7 @@ fn failed_since(job: &Job) -> Option<String> {
 fn job_problems<'a>(
     jobs: impl IntoIterator<Item = &'a Job>,
     owned: &HashMap<&str, Vec<&Pod>>,
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
     jobs.into_iter()
@@ -1341,7 +1355,12 @@ fn job_problems<'a>(
                 name: job.metadata.name.clone().unwrap_or_default(),
                 namespace: job.metadata.namespace.clone(),
                 reason: failure.reason.unwrap_or_else(|| "Failed".to_string()),
-                detail: workload_detail(pods.into_iter().flatten().copied(), failure.message, now),
+                detail: workload_detail(
+                    pods.into_iter().flatten().copied(),
+                    failure.message,
+                    warned,
+                    now,
+                ),
                 since: failed_since(job),
                 restarts: None,
                 folded_pods: None,
@@ -2127,7 +2146,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         unconfirmed,
     ));
     let (unconfirmed, _) = rank_and_cap(said);
-    problems.extend(job_problems(refs(input.jobs), &owned, input.now));
+    problems.extend(job_problems(refs(input.jobs), &owned, &warned, input.now));
     problems.extend(node_problems(refs(nodes)));
     problems.extend(warned_while_starting(&warned_rows));
     let pods_warned: Vec<String> = warned_rows
@@ -4157,7 +4176,12 @@ mod tests {
             pods,
             of,
             said,
-        }) = workload_detail(pods.iter(), Some("timed out".to_string()), Utc::now())
+        }) = workload_detail(
+            pods.iter(),
+            Some("timed out".to_string()),
+            &HashSet::new(),
+            Utc::now(),
+        )
         else {
             panic!("pods with causes tell the workload's");
         };
@@ -4171,6 +4195,7 @@ mod tests {
             workload_detail(
                 std::iter::empty(),
                 Some("timed out".to_string()),
+                &HashSet::new(),
                 Utc::now()
             ),
             ProblemDetail::said(Some("timed out".to_string()))
@@ -4227,12 +4252,38 @@ mod tests {
         ];
         let Some(ProblemDetail::PodsCause {
             cause, pods, of, ..
-        }) = workload_detail(pods.iter(), None, now)
+        }) = workload_detail(pods.iter(), None, &HashSet::new(), now)
         else {
             panic!("the pod not Ready for minutes tells the workload's");
         };
         assert_eq!((pods, of), (1, 3));
         assert!(matches!(cause, crate::resources::PodCause::NotReady { .. }));
+    }
+
+    /// no-config's Deployment row said only "does not have minimum
+    /// availability" for its pods' first minute while each pod's row, and
+    /// its Service's, named the missing `ConfigMap`. Fails if the warned pods
+    /// stop counting toward the workload's cause, or a quiet one starts to.
+    #[test]
+    fn a_workload_row_counts_the_pods_the_kubelet_warned_about_inside_their_wait() {
+        let now = Utc::now();
+        let pods = [
+            creating_pod_for("web-1", "u1", now, 5),
+            creating_pod_for("web-2", "u2", now, 5),
+            creating_pod_for("web-3", "u3", now, 5),
+        ];
+        let Some(ProblemDetail::PodsCause {
+            cause, pods: n, of, ..
+        }) = workload_detail(pods.iter(), None, &HashSet::from(["u1", "u2"]), now)
+        else {
+            panic!("the warned pods tell the workload's cause");
+        };
+        assert_eq!((n, of), (2, 3));
+        assert!(matches!(cause, crate::resources::PodCause::Creating { .. }));
+        assert_eq!(
+            workload_detail(pods.iter(), None, &HashSet::new(), now),
+            None
+        );
     }
 
     /// A missing `ConfigMap` holds a pod for good, so the kubelet's warning
