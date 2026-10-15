@@ -323,7 +323,7 @@ pub(super) fn note_reach(
     let published = snapshot
         .published_of(svc, svc_ref.clone(), &selected)
         .with_stop(svc, pods)
-        .with_policies(svc, snapshot.policies.as_deref().ok())
+        .with_policies(svc, snapshot.policies.as_deref().map_err(String::as_str))
         .with_makers(svc, &makers, snapshot.makers_read())
         .with_workloads(svc, &makers, pods, chrono::Utc::now())
         .with_near_miss(svc, snapshot.pods());

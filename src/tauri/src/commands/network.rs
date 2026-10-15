@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::resources::{
     published, selected_count, ChainStop, EndpointsInfo, Existence, IngressDefaultBackend,
     IngressInfo, IngressRule, IngressTlsConfig, NetworkPolicyInfo, NotServing, ObjectRef,
@@ -233,7 +233,7 @@ pub struct ServiceHealthGroup {
     pub unrouted: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<ChainStop>,
-    /// Only a guarded door: an open one and an unread one refuse nobody.
+    /// Only a guarded or an unread door: an open one refuses nobody.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub door: Option<PolicyDoor>,
 }
@@ -243,8 +243,8 @@ impl ServiceHealthGroup {
     fn reads_like(&self, other: &Self) -> bool {
         self.stop.is_none()
             && other.stop.is_none()
-            && self.door.is_none()
-            && other.door.is_none()
+            && self.door == other.door
+            && !matches!(self.door, Some(PolicyDoor::Guarded { .. }))
             && self.type_ == other.type_
             && self.selectorless == other.selectorless
             && (self.ready, self.draining, self.not_ready, self.unrouted)
@@ -452,7 +452,7 @@ fn health_inputs_of(
             stop: published.stop,
             door: published
                 .door
-                .filter(|door| matches!(door, PolicyDoor::Guarded { .. })),
+                .filter(|door| !matches!(door, PolicyDoor::Open)),
         };
         let groups = by_namespace
             .entry(service.namespace().unwrap_or_default())
@@ -482,8 +482,9 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
     })
     .await;
     let services = services?.items;
-    // A refused list says nothing about the policies, so nothing is said.
-    let policies = policies.ok().map(|list| list.items);
+    let policies = policies
+        .map(|list| list.items)
+        .map_err(|error| Error::from(error).said());
 
     // A cluster below 1.21 serves no `discovery.k8s.io/v1` at all, so the
     // legacy object answers and the reader is told which one did.
@@ -504,7 +505,7 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
                     }),
                 )
                 .with_stop(svc, None)
-                .with_policies(svc, policies.as_deref())
+                .with_policies(svc, policies.as_deref().map_err(String::as_str))
                 .summary()
             })
             .collect();
@@ -515,7 +516,9 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
     let published = published_from_slices(&services, &slices.items)
         .into_iter()
         .zip(&services)
-        .map(|(published, svc)| published.with_policies(svc, policies.as_deref()))
+        .map(|(published, svc)| {
+            published.with_policies(svc, policies.as_deref().map_err(String::as_str))
+        })
         .collect();
     let published = with_unready_cause(&ctx.client, &services, published).await;
     Ok((services, published))
@@ -936,11 +939,11 @@ mod tests {
     }
 
     /// The Ingresses list judges a controller at the policies over a
-    /// backend's pods from this answer. Fails if a guarded door is dropped,
-    /// if an open one is sent for every Service, or if a Service with a door
-    /// shares a group, and so a door, with one that has none.
+    /// backend's pods from this answer. Fails if a guarded or an unread door
+    /// is dropped, if an open one is sent for every Service, or if a Service
+    /// with a door shares a group, and so a door, with one that has none.
     #[test]
-    fn the_compact_answer_keeps_a_guarded_door_and_stands_it_alone() {
+    fn the_compact_answer_keeps_a_guarded_or_unread_door_and_stands_it_alone() {
         let (services, slices) = synthetic(51, |_| false);
         let mut published = published_from_slices(&services, &slices);
         published[50] = ServicePublished {
@@ -968,6 +971,14 @@ mod tests {
         let open = team(PolicyDoor::Open);
         assert_eq!(open.len(), 1);
         assert!(open[0].door.is_none());
+        let unread = team(PolicyDoor::Unread {
+            reason: "networkpolicies is forbidden".into(),
+        });
+        assert_eq!(unread.len(), 2);
+        assert!(unread
+            .iter()
+            .any(|group| group.names.len() == 1
+                && matches!(group.door, Some(PolicyDoor::Unread { .. }))));
     }
 
     /// The Ingress the attention count reads is its row cut down, not a
@@ -1605,9 +1616,9 @@ mod tests {
 
     /// The routing pages, the Overview and the Services list read stops from
     /// here, and the chain from the neighbourhood: both say the same shut
-    /// door. A policy list the reader is refused says nothing, rather than
-    /// that no policy exists. Fails if this reader skips the policies, or
-    /// turns a 403 into a finding.
+    /// door. A policy list the reader is refused stops nothing and leaves the
+    /// door unread, rather than open. Fails if this reader skips the
+    /// policies, turns a 403 into a finding, or into no door at all.
     #[tokio::test]
     async fn a_service_behind_a_policy_that_admits_nothing_stops_at_the_pods_door() {
         use crate::client::served::test_server::answering;
@@ -1645,7 +1656,7 @@ mod tests {
                 "spec": { "podSelector": {}, "policyTypes": ["Ingress"] }
             }]),
         );
-        let stop_with = |policies: (u16, String)| {
+        let published_with = |policies: (u16, String)| {
             let (services, slices) = (services.clone(), slices.clone());
             async move {
                 let (client, _) = answering(move |path, _| match path {
@@ -1667,10 +1678,9 @@ mod tests {
                 .expect("published")
                 .1
                 .remove(0)
-                .stop
             }
         };
-        let shut = stop_with((200, policies)).await;
+        let shut = published_with((200, policies)).await.stop;
         assert!(
             matches!(
                 &shut,
@@ -1679,7 +1689,12 @@ mod tests {
             ),
             "{shut:?}"
         );
-        let refused = stop_with((403, r#"{"kind":"Status","code":403}"#.to_string())).await;
-        assert!(refused.is_none(), "{refused:?}");
+        let refused = published_with((403, r#"{"kind":"Status","code":403}"#.to_string())).await;
+        assert!(refused.stop.is_none(), "{:?}", refused.stop);
+        assert!(
+            matches!(refused.door, Some(PolicyDoor::Unread { .. })),
+            "{:?}",
+            refused.door
+        );
     }
 }

@@ -2524,7 +2524,8 @@ export type PolicyDoor =
       isolating: string[];
       unsettled: string[];
       ports: DoorPort[];
-    };
+    }
+  | { state: "unread"; reason: string };
 
 export type PolicySelects =
   | { kind: "everything" }

@@ -312,14 +312,20 @@ function problemSentence(problem: IngressProblem, t: T): string {
       return backendWhy(problem, "healthBackendUnconfirmed", t);
     case "backendIdle":
       return t("readings", "healthBackendIdle", { name: problem.service });
-    case "backendDoorUnchecked":
-      return t("count", "healthBackendDoorUnchecked", {
-        n: problem.doubt.policies.length,
-        names: problem.doubt.policies.join(", "),
+    case "backendDoorUnchecked": {
+      const said = {
         name: problem.service,
         client: problem.doubt.client,
         why: doorWhy(problem.doubt, t),
-      });
+      };
+      return problem.doubt.policies.length === 0
+        ? t("readings", "healthBackendPoliciesUnread", said)
+        : t("count", "healthBackendDoorUnchecked", {
+            ...said,
+            n: problem.doubt.policies.length,
+            names: problem.doubt.policies.join(", "),
+          });
+    }
   }
 }
 

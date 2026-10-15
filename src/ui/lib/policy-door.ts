@@ -178,7 +178,8 @@ export function doorVerdict(
 ): DoorVerdict {
   if (published.stop?.reason === "policyRefuses") return { state: "open" };
   const door = published.door;
-  if (!door) return { state: "unsure", policies: [], why: "policiesUnread" };
+  if (!door || door.state === "unread")
+    return { state: "unsure", policies: [], why: "policiesUnread" };
   if (door.state === "open" || door.isolating.length === 0)
     return { state: "open" };
   const policies = [...door.isolating, ...door.unsettled];
@@ -239,6 +240,8 @@ export interface DoorDoubt {
   policies: string[];
   why: DoorUnsure;
   client: string;
+  /** What the cluster answered where it refused to list the policies. */
+  said: string | null;
 }
 
 /** Why `client` may or may not get through, where policies guard the pods and nothing settled it. */
@@ -250,11 +253,15 @@ export function doorDoubt(
 ): DoorDoubt | null {
   if (!published || published.stop) return null;
   const verdict = doorVerdict(published, backend, read);
-  return verdict.state === "unsure" && verdict.policies.length > 0
+  const said =
+    published.door?.state === "unread" ? published.door.reason : null;
+  return verdict.state === "unsure" &&
+    (verdict.policies.length > 0 || said !== null)
     ? {
         policies: verdict.policies,
         why: verdict.why,
         client: read?.name ?? client,
+        said,
       }
     : null;
 }
@@ -275,9 +282,9 @@ const DOOR_WHY: Record<DoorUnsure, keyof typeof en.nav> = {
   unevaluable: "doorWhyUnevaluable",
 };
 
-/** Why nobody settled it, in the reader's words. */
+/** Why nobody settled it: the cluster's refusal where it gave one, else the reader's words. */
 export const doorWhy = (doubt: DoorDoubt, t: T) =>
-  t("nav", DOOR_WHY[doubt.why]);
+  doubt.said || t("nav", DOOR_WHY[doubt.why]);
 
 /** A doubt in the words every reader draws it with; `behind` names the Service where nothing nearby does. */
 export function doorDoubtWords(
@@ -285,12 +292,17 @@ export function doorDoubtWords(
   t: T,
   behind?: string
 ): { title: string; note: string } {
-  const named = { n: doubt.policies.length, names: doubt.policies.join(", ") };
+  const n = doubt.policies.length;
+  const names = doubt.policies.join(", ");
   return {
     title:
-      behind === undefined
-        ? t("count", "doorDecides", named)
-        : t("count", "doorDecidesFor", { ...named, service: behind }),
+      n === 0
+        ? behind === undefined
+          ? t("nav", "doorPoliciesUnread")
+          : t("nav", "doorPoliciesUnreadFor", { service: behind })
+        : behind === undefined
+          ? t("count", "doorDecides", { n, names })
+          : t("count", "doorDecidesFor", { n, names, service: behind }),
     note: t("nav", "doorUnsureNote", {
       client: doubt.client,
       why: doorWhy(doubt, t),

@@ -220,6 +220,7 @@ describe("what a route's backend is doing", () => {
       policies: ["allow-pod-cidr"],
       why: "ipBlock",
       client: "Traefik",
+      said: null,
     });
     expect(backingOf(backend, from, { ...read, door: undefined }).doubt).toBe(
       null
@@ -392,6 +393,7 @@ describe("how much a stopped backend weighs", () => {
         policies: ["allow-pod-cidr"],
         why: "ipBlock" as const,
         client: "Traefik",
+        said: null,
       },
     };
     const service = { name: "app", namespace: "shop", port: "80" };

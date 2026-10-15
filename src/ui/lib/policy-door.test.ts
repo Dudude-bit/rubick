@@ -267,6 +267,7 @@ describe("a controller's way in nobody could settle", () => {
       policies: ["allow-nginx"],
       why: "ipBlock",
       client: "Traefik",
+      said: null,
     });
     expect(doorDoubt(doubted, "80", undefined, "traefik.io")).toMatchObject({
       why: "clientsReading",
@@ -284,6 +285,7 @@ describe("a controller's way in nobody could settle", () => {
       policies: ["allow-pod-cidr"],
       why: "ipBlock" as const,
       client: "Traefik",
+      said: null,
     };
     expect(doorDoubtWords(doubt, t).title).toBe(
       "NetworkPolicy allow-pod-cidr decides who may connect to these pods"
@@ -295,6 +297,37 @@ describe("a controller's way in nobody could settle", () => {
         /^Whether Traefik may connect is not checked: an ipBlock holds/
       ),
     });
+  });
+
+  /**
+   * A refused NetworkPolicy list left the door unsaid, and a host over
+   * policies nobody read was called served. Fails if the refusal is lost,
+   * read as an open door, or said without the cluster's words.
+   */
+  it("says the door of pods whose policies could not be listed, in the cluster's words", () => {
+    const reason =
+      'networkpolicies.networking.k8s.io is forbidden: User "dev" cannot list resource "networkpolicies"';
+    const doubt = doorDoubt(
+      behind({ state: "unread", reason }),
+      "80",
+      readOf(),
+      "traefik.io"
+    );
+    expect(doubt).toEqual({
+      policies: [],
+      why: "policiesUnread",
+      client: "Traefik",
+      said: reason,
+    });
+    if (!doubt) throw new Error("expected a doubt");
+    expect(doorDoubtWords(doubt, t, "door-block")).toEqual({
+      title:
+        "The NetworkPolicies over the pods behind door-block could not be read",
+      note: `Whether Traefik may connect is not checked: ${reason}.`,
+    });
+    expect(doorDoubtWords(doubt, t).title).toBe(
+      "The NetworkPolicies over these pods could not be read"
+    );
   });
 });
 

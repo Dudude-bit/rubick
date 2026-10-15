@@ -105,6 +105,9 @@ export const ru: Catalogue = {
       "Поды готовы и опубликованы, но {client} подключается из пространства имён {namespaces}, которое не пускает ни одно правило ingress, поэтому его подключения отклоняются или отбрасываются, а каждый запрос через него получает 502, 503 или 504. Разрешите это пространство имён в from правила ingress через namespaceSelector по kubernetes.io/metadata.name или удалите политику. Если сетевой плагин не применяет NetworkPolicy, она ни на что не влияет.",
     doorUnsureNote: "Может ли подключиться {client}, не проверено: {why}.",
     doorWhyPoliciesUnread: "не удалось прочитать NetworkPolicy",
+    doorPoliciesUnread: "NetworkPolicy над этими подами прочитать не удалось",
+    doorPoliciesUnreadFor:
+      "NetworkPolicy над подами за {service} прочитать не удалось",
     doorWhyNoPort: "неизвестно, на какой порт Service отправляет маршрут",
     doorWhyNoIntegration:
       "ни одна интеграция здесь не знает, из каких подов подключается этот контроллер",
@@ -4853,6 +4856,8 @@ export const ru: Catalogue = {
       "У {name} нет готовых адресов, а его поды прочитать не удалось, поэтому неизвестно, запускаются ли они ещё",
     healthBackendUnconfirmedShort: "бэкенд не проверен",
     healthBackendIdleShort: "бэкенд простаивает",
+    healthBackendPoliciesUnread:
+      "{name}: NetworkPolicy над его подами прочитать не удалось, поэтому не проверено, может ли подключиться {client}: {why}",
     healthMissingBackend: "нет бэкенда",
     healthMissingTlsSecret: "нет Secret для TLS",
     healthBackendDownShort: "бэкенд недоступен",

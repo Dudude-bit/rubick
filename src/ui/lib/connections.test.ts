@@ -1095,7 +1095,8 @@ describe("the traffic chain", () => {
       read?: DoorRead,
       stop: ChainStop | null = null,
       also: ConnectionEdge[] = [],
-      reads: Record<string, DoorRead> = {}
+      reads: Record<string, DoorRead> = {},
+      guard: PolicyDoor = door
     ) =>
       trafficChains(
         connections(
@@ -1115,7 +1116,7 @@ describe("the traffic chain", () => {
             publishes(
               "shop",
               { ready: 2 },
-              { endpoints: [endpointOf("shop-a")], door, stop }
+              { endpoints: [endpointOf("shop-a")], door: guard, stop }
             ),
           ]
         ),
@@ -1210,6 +1211,26 @@ describe("the traffic chain", () => {
       });
       const note = path.hops.at(-1);
       expect(note?.at === "stop" && note.note).toContain("node's network");
+    });
+
+    /** A refused policy list is said at the door, never passed as an open one. */
+    it("says the policies could not be read where the cluster refused the list", () => {
+      const reason = "networkpolicies.networking.k8s.io is forbidden";
+      const path = chainOf(
+        traefik(),
+        null,
+        [],
+        {},
+        { state: "unread", reason }
+      );
+      expect(path.broken).toBe(false);
+      expect(path.hops.at(-1)).toMatchObject({
+        at: "stop",
+        mood: "unchecked",
+        title: "The NetworkPolicies over these pods could not be read",
+        note: `Whether Traefik may connect is not checked: ${reason}.`,
+        only: ["http://shop.local/"],
+      });
     });
 
     /** Nobody asked about the controller, or a stop already said, adds nothing. */

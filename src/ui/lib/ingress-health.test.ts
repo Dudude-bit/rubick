@@ -416,6 +416,32 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
   });
 
   /**
+   * The cluster refused the NetworkPolicy list and the Ingress read as
+   * served. Fails if the refusal is dropped, or said without the cluster's
+   * words.
+   */
+  it("says a backend's door was not checked where its policies could not be listed", () => {
+    const reason = "networkpolicies.networking.k8s.io is forbidden";
+    const said = verdict({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([
+          ["web", { ...serving(2), door: { state: "unread", reason } }],
+        ]),
+      },
+      certificates: undefined,
+      door: () => null,
+    });
+    expect(said).toMatchObject({
+      code: "backendDoorUnchecked",
+      role: "neutral",
+      reason: `web: the NetworkPolicies over its pods could not be read, so whether ${SERVED.controller} may connect is not checked: ${reason}.`,
+    });
+  });
+
+  /**
    * Marco, who may list pods and not Deployments, read idle-web's Ingress as
    * "its pods could not be read" beside a trace that had read them and could
    * not read the workloads. Fails if an unconfirmed backend stops saying

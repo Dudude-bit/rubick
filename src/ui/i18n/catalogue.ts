@@ -127,6 +127,9 @@ export const en = {
       "The pods are ready and published, and {client} connects from namespace {namespaces}, which no ingress rule admits, so its connections are refused or dropped and every request through it gets a 502, 503 or 504. Admit that namespace in an ingress rule's from, with a namespaceSelector on kubernetes.io/metadata.name, or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
     doorUnsureNote: "Whether {client} may connect is not checked: {why}.",
     doorWhyPoliciesUnread: "the NetworkPolicies could not be read",
+    doorPoliciesUnread: "The NetworkPolicies over these pods could not be read",
+    doorPoliciesUnreadFor:
+      "The NetworkPolicies over the pods behind {service} could not be read",
     doorWhyNoPort:
       "which of the Service's ports the route sends to is not known",
     doorWhyNoIntegration:
@@ -4322,6 +4325,8 @@ export const en = {
       "{name} has no ready address, and its pods could not be read to tell whether they are still starting",
     healthBackendUnconfirmedShort: "backend not checked",
     healthBackendIdleShort: "backend idle",
+    healthBackendPoliciesUnread:
+      "{name}: the NetworkPolicies over its pods could not be read, so whether {client} may connect is not checked: {why}",
     healthMissingBackend: "missing backend",
     healthMissingTlsSecret: "missing TLS Secret",
     healthBackendDownShort: "backend down",

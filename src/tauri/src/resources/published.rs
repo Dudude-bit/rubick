@@ -167,7 +167,7 @@ pub struct ServicePublished {
     /// where it reaches something.
     pub stop: Option<ChainStop>,
     /// Who the policies over its pods let in, by [`policy_door`]; absent
-    /// where the policies were not read.
+    /// where it selects no pods for a policy to fall on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub door: Option<PolicyDoor>,
 }
@@ -186,6 +186,11 @@ pub enum PolicyDoor {
         /// Policies picking some of them by a label the Service does not name.
         unsettled: Vec<String>,
         ports: Vec<DoorPort>,
+    },
+    /// The policies could not be listed, so who they let in is unknown.
+    Unread {
+        /// What the cluster answered instead.
+        reason: String,
     },
 }
 
@@ -234,12 +239,22 @@ impl ServicePublished {
     }
 
     /// [`policy_door`], and [`policy_stop`] where nothing earlier stopped the
-    /// path. `None` is a policy list that was not read, which leaves the
-    /// answer as it was.
+    /// path. A list that was not read stops nothing and leaves the door
+    /// unread, in the cluster's words.
     #[must_use]
-    pub fn with_policies(mut self, service: &Service, policies: Option<&[NetworkPolicy]>) -> Self {
-        let Some(policies) = policies else {
-            return self;
+    pub fn with_policies(
+        mut self,
+        service: &Service,
+        policies: std::result::Result<&[NetworkPolicy], &str>,
+    ) -> Self {
+        let policies = match policies {
+            Ok(policies) => policies,
+            Err(reason) => {
+                self.door = pod_selector(service).map(|_| PolicyDoor::Unread {
+                    reason: reason.to_string(),
+                });
+                return self;
+            }
         };
         self.door = policy_door(service, &self, policies);
         if self.stop.is_none() && self.serving() > 0 {
@@ -871,13 +886,17 @@ struct Guard {
     rules: Vec<(String, PolicyRule)>,
 }
 
-fn guard(service: &Service, policies: &[NetworkPolicy]) -> Option<Guard> {
-    let selector = service
+fn pod_selector(service: &Service) -> Option<&BTreeMap<String, String>> {
+    service
         .spec
         .as_ref()?
         .selector
         .as_ref()
-        .filter(|selector| !selector.is_empty())?;
+        .filter(|selector| !selector.is_empty())
+}
+
+fn guard(service: &Service, policies: &[NetworkPolicy]) -> Option<Guard> {
+    let selector = pod_selector(service)?;
     let namespace = service.namespace();
     let mut found = Guard {
         isolating: Vec::new(),
@@ -3043,7 +3062,7 @@ mod tests {
 
     fn policy_stop_of(policies: &[NetworkPolicy]) -> Option<ChainStop> {
         let (svc, published) = serving_web();
-        published.with_policies(&svc, Some(policies)).stop
+        published.with_policies(&svc, Ok(policies)).stop
     }
 
     /// The live specimen: ready pods, published, and a policy selecting every
@@ -3151,15 +3170,18 @@ mod tests {
     #[test]
     fn unread_policies_and_an_earlier_stop_are_left_as_they_were() {
         let (svc, published) = serving_web();
-        assert!(published.with_policies(&svc, None).stop.is_none());
+        assert!(published
+            .with_policies(&svc, Err("forbidden"))
+            .stop
+            .is_none());
         let svc = selecting("web");
         let empty = from_slices(&svc, svc_ref("web"), &[], &[]).with_stop(&svc, Some(&[]));
         let before = format!("{:?}", empty.stop);
-        let after = empty.with_policies(&svc, Some(&[deny_all()])).stop;
+        let after = empty.with_policies(&svc, Ok(&[deny_all()])).stop;
         assert_eq!(format!("{after:?}"), before);
     }
 
-    fn door_of(policies: Option<&[NetworkPolicy]>) -> Option<PolicyDoor> {
+    fn door_of(policies: std::result::Result<&[NetworkPolicy], &str>) -> Option<PolicyDoor> {
         let (svc, published) = serving_web();
         published.with_policies(&svc, policies).door
     }
@@ -3187,7 +3209,7 @@ mod tests {
             isolating,
             unsettled,
             ports,
-        }) = door_of(Some(&[from_traefik]))
+        }) = door_of(Ok(&[from_traefik]))
         else {
             panic!("the policy selects every pod");
         };
@@ -3209,11 +3231,26 @@ mod tests {
     }
 
     /// No policy over the pods is an open door, a policy the Service's labels
-    /// cannot settle is named apart, and an unread list says nothing at all.
+    /// cannot settle is named apart, and an unread list says so in the
+    /// cluster's words, where pods were selected for a policy to fall on.
+    /// Fails if a refused list reads as an open door or as no door at all.
     #[test]
-    fn a_door_is_open_unsettled_or_unsaid_as_the_policies_read() {
-        assert_eq!(door_of(Some(&[])), Some(PolicyDoor::Open));
-        assert_eq!(door_of(None), None);
+    fn a_door_is_open_unsettled_or_unread_as_the_policies_read() {
+        assert_eq!(door_of(Ok(&[])), Some(PolicyDoor::Open));
+        assert_eq!(
+            door_of(Err("networkpolicies is forbidden")),
+            Some(PolicyDoor::Unread {
+                reason: "networkpolicies is forbidden".to_string()
+            })
+        );
+        let selectorless = service("web", vec![]);
+        let published = from_slices(&selectorless, svc_ref("web"), &[], &[]);
+        assert_eq!(
+            published
+                .with_policies(&selectorless, Err("forbidden"))
+                .door,
+            None
+        );
         let edge = network_policy(
             "edge",
             "k8s-gui-test",
@@ -3226,7 +3263,7 @@ mod tests {
             isolating,
             unsettled,
             ..
-        }) = door_of(Some(&[edge]))
+        }) = door_of(Ok(&[edge]))
         else {
             panic!("the policy may select some pods");
         };
