@@ -8,7 +8,7 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { IngressTls } from "@/integrations";
 import { TlsBadge } from "./TlsBadge";
-import { vendorTlsAnswer } from "./vendor-tls";
+import { vendorTlsAnswer } from "../../-object/vendor-tls";
 import { useLocaleStore } from "@/stores/localeStore";
 
 const t = ((section, key, values) =>

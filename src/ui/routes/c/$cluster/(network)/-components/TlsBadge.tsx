@@ -1,6 +1,9 @@
 import { useT } from "@/i18n/useT";
 import { covers } from "@/lib/certificates";
-import { TLS_NOT_CHECKED_TONE, type VendorTlsAnswer } from "./vendor-tls";
+import {
+  TLS_NOT_CHECKED_TONE,
+  type VendorTlsAnswer,
+} from "../../-object/vendor-tls";
 import {
   Tooltip,
   TooltipContent,

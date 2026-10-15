@@ -8,6 +8,7 @@ import type {
   ResourceConnections,
   ServiceInfo,
   ServicePublished,
+  TlsCertificate,
 } from "@/generated/types";
 import type { KeyValue } from "@/components/object/key-values";
 
@@ -16,6 +17,7 @@ import type { KeyValue } from "@/components/object/key-values";
 const answer = vi.hoisted(() => ({
   connections: (): Promise<ResourceConnections> =>
     Promise.reject(new Error("not set")),
+  certificates: (): Promise<TlsCertificate[]> => Promise.resolve([]),
 }));
 
 vi.mock("@/lib/commands", () => ({
@@ -32,7 +34,7 @@ vi.mock("@/lib/commands", () => ({
         available: [],
       }),
     listServiceHealthInputs: () => Promise.resolve({ rows: [], unread: [] }),
-    getTlsCertificates: () => Promise.resolve([]),
+    getTlsCertificates: () => answer.certificates(),
   },
 }));
 
@@ -48,15 +50,17 @@ const t = ((section: never, key: never, values: never) =>
 
 const target = (kind: string) => ({ kind, name: "web", namespace: "net" });
 
-function statusOf(kind: string, data: unknown): ReactNode {
+function rowOf(kind: string, data: unknown, label: string): ReactNode {
   const groups = resolveSource(target(kind)).summarise(
     data,
     target(kind),
     t
   ).groups;
   const items: KeyValue[] = groups.flatMap((group) => group.items);
-  return items.find((item) => item.label === "Status")?.value;
+  return items.find((item) => item.label === label)?.value;
 }
+
+const statusOf = (kind: string, data: unknown) => rowOf(kind, data, "Status");
 
 const SERVICE = {
   name: "web",
@@ -312,5 +316,53 @@ describe("the peek draws a network object's verdict as its page does", () => {
       </>
     );
     expect(await screen.findByText("no controller")).toHaveClass(ROLE_TEXT.err);
+  });
+});
+
+describe("the Ingress peek's TLS row", () => {
+  const shop = {
+    name: "shop",
+    namespace: "net",
+    className: "nginx",
+    rules: [{ host: "shop.example.com", paths: [] }],
+    defaultBackend: null,
+    loadBalancerIps: [],
+    tlsHosts: ["shop.example.com"],
+    tlsConfigs: [
+      {
+        hosts: ["shop.example.com"],
+        secretName: "shop-tls",
+        isCatchAll: false,
+      },
+    ],
+    hasCatchAllTls: false,
+    createdAt: null,
+  } as unknown as IngressInfo;
+
+  /**
+   * The peek listed the host under "TLS hosts" as if it were fine while the
+   * page's TLS fact said, in red, that the Secret it is served under is gone.
+   */
+  it("names a TLS Secret that does not exist, in red, as the page does", async () => {
+    answer.certificates = () =>
+      Promise.resolve([
+        {
+          secretName: "shop-tls",
+          certificate: null,
+          problem: { says: "noSecret" },
+        },
+      ]);
+    await renderWithRouter(<>{rowOf("Ingress", shop, "TLS")}</>);
+    expect(
+      await screen.findByText("Secret shop-tls does not exist")
+    ).toHaveClass("text-err");
+  });
+
+  /** Fails if the peek says "1 host" where it has room for the name. */
+  it("spells a bare host count out as the hosts", async () => {
+    answer.certificates = () => Promise.resolve([]);
+    await renderWithRouter(<>{rowOf("Ingress", shop, "TLS")}</>);
+    expect(await screen.findByText("shop.example.com")).toBeTruthy();
+    expect(screen.queryByText("1 host")).toBeNull();
   });
 });

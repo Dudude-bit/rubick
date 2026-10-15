@@ -5,6 +5,6 @@ export {
   TLS_NOT_CHECKED_TONE,
   vendorTlsAnswer,
   type VendorTlsAnswer,
-} from "./vendor-tls";
+} from "../../-object/vendor-tls";
 export { PortsDisplay } from "./PortsDisplay";
 export { ServiceAccessInfo } from "./ServiceAccessInfo";

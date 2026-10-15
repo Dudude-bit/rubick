@@ -8,6 +8,7 @@ import { BalancerAddress } from "../-object/BalancerAddress";
 import { ClusterIpValue } from "../-object/ClusterIpValue";
 import {
   IngressHealthView,
+  IngressTlsView,
   ServiceHealthView,
   ServiceNotReady,
 } from "../-object/health-views";
@@ -307,9 +308,8 @@ export const NETWORK_SOURCES: PeekSources = {
             ),
           },
           {
-            label: t("columns", "tlsHosts"),
-            value: list(ingress.tlsHosts),
-            mono: true,
+            label: "TLS",
+            value: <IngressTlsView ingress={ingress} />,
           },
         ],
       },

@@ -15,6 +15,11 @@ import {
 import { ResourceType } from "@/lib/resource-registry";
 import { StopCauseLine } from "./CauseLine";
 import { useOneIngressHealth } from "@/hooks/useIngressHealth";
+import { None } from "@/components/ui/none";
+import { TONE_CLASS } from "@/components/object/key-values";
+import type { IngressInfo } from "@/generated/types";
+import { useIngressTlsFact, type IngressTlsFact } from "./ingress-tls-fact";
+import { TLS_NOT_CHECKED_TONE } from "./vendor-tls";
 import { useT } from "@/i18n/useT";
 import { ingressHealthWords, type IngressInputs } from "@/lib/ingress-health";
 import {
@@ -189,5 +194,33 @@ export function ServiceNotReady({
     <NotReadyMark podsUnread={useServicePodsUnread(name, namespace)}>
       {children}
     </NotReadyMark>
+  );
+}
+
+/** The fact painted as every surface paints it, "not checked" apart. */
+export function TlsFactText({ fact }: { fact: IngressTlsFact }) {
+  return (
+    <span
+      className={
+        !fact.known
+          ? TLS_NOT_CHECKED_TONE
+          : fact.tone
+            ? TONE_CLASS[fact.tone]
+            : undefined
+      }
+    >
+      {fact.text}
+    </span>
+  );
+}
+
+/** The peek's TLS row: the page's fact, with a bare count spelled as names. */
+export function IngressTlsView({ ingress }: { ingress: IngressInfo }) {
+  const { fact, hosts } = useIngressTlsFact(ingress);
+  if (!fact.counted) return <TlsFactText fact={fact} />;
+  return hosts.length ? (
+    <span className="font-mono">{hosts.join(" · ")}</span>
+  ) : (
+    <None />
   );
 }

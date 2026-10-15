@@ -12,23 +12,19 @@ import {
   ingressClassWords,
   INGRESS_ADDRESS_WORDS,
 } from "@/lib/ingress-health";
+import type { IngressTlsFact } from "../../../-object/ingress-tls-fact";
 import type {
   IngressClassBinding,
   IngressInfo,
   TlsCertificate,
 } from "@/generated/types";
 
-/** The page's TLS fact, as it drew it: words, tone, and whether it could tell. */
-export interface IngressTlsFact {
-  text: string;
-  tone: "warn" | "err" | null;
-  known: boolean;
-}
+type TlsLine = Pick<IngressTlsFact, "text" | "tone" | "known">;
 
 export function ingressStats(
   ingress: IngressInfo,
   controller: IngressClassBinding | undefined,
-  tls: IngressTlsFact,
+  tls: TlsLine,
   t: T
 ): ReportStat[] {
   const loadBalancerIps = ingress.loadBalancerIps;
@@ -150,7 +146,7 @@ export function useIngressShare(
   ingress: IngressInfo | undefined,
   controller: IngressClassBinding | undefined,
   page: {
-    tls: IngressTlsFact;
+    tls: TlsLine;
     certificates: Map<string, TlsCertificate> | undefined;
   }
 ): () => ShareContribution {

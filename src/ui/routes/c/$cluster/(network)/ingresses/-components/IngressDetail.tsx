@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
 
@@ -30,7 +29,7 @@ import { CertificateLine } from "../../../-object/CertificateFacts";
 import { IssuanceSection } from "@/components/object/IssuanceChain";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
-import { IngressHealthView } from "../../../-object/health-views";
+import { IngressHealthView, TlsFactText } from "../../../-object/health-views";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useOneIngressHealth } from "@/hooks/useIngressHealth";
 import { useResourceDetail } from "@/hooks";
@@ -41,14 +40,9 @@ import { IngressAccess } from "./IngressAccess";
 import { generateAccessUrls } from "./access-urls";
 import { useProxyBehind } from "@/hooks/useServiceRoutes";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
-import { useTlsCertificates } from "@/hooks/useTlsCertificates";
-import { expiryOf, expiryText } from "@/lib/certificates";
-import { useIngressTls } from "@/hooks/useIngressTls";
-import {
-  hostTlsOf,
-  TLS_NOT_CHECKED_TONE,
-  vendorTlsAnswer,
-} from "../../-components";
+import { expiryText } from "@/lib/certificates";
+import { TLS_NOT_CHECKED_TONE } from "../../-components";
+import { useIngressTlsFact } from "../../../-object/ingress-tls-fact";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
   ingressAddressOf,
@@ -106,58 +100,27 @@ export function IngressDetail() {
       ? { namespace: ingress.namespace, name: fallback.backendService }
       : null
   );
-  const tlsHosts = ingress?.tlsHosts ?? [];
   const tlsConfigs = ingress?.tlsConfigs ?? [];
   const loadBalancerIps = ingress?.loadBalancerIps ?? [];
-  const hasCatchAllTls = ingress?.hasCatchAllTls ?? false;
-  const asked = useMemo(
-    () =>
-      ingress
-        ? [
-            {
-              namespace: ingress.namespace,
-              name: ingress.name,
-              hosts: ingress.rules.flatMap((rule) =>
-                rule.host ? [rule.host] : []
-              ),
-            },
-          ]
-        : [],
-    [ingress]
-  );
-  const vendorTls = useIngressTls(asked);
-  const vendor = ingress ? vendorTlsAnswer(ingress, vendorTls, t) : null;
-  // `null` where nobody could tell, or the controllers have not answered yet.
-  const tlsOf = (host: string): boolean | null =>
-    ingress ? hostTlsOf(ingress, host, vendor) : false;
+  const {
+    tls,
+    fact: tlsFact,
+    vendor,
+    tlsOf,
+    certificates,
+    secretNames: tlsSecretNames,
+    soonest,
+    missing,
+  } = useIngressTlsFact(ingress);
   const accessUrls = generateAccessUrls(
     rules,
-    tlsHosts,
+    ingress?.tlsHosts ?? [],
     t("empty", "allHosts"),
     tlsOf
   );
-  // "no TLS" is a claim about the whole way in, and `spec.tls` is only part
-  // of it on every managed cloud, and not all of it under Traefik.
-  const verdicts = rules.flatMap((rule) =>
-    rule.host ? [tlsOf(rule.host)] : []
-  );
-  const tls: "yes" | "no" | "unknown" =
-    verdicts.includes(true) ||
-    (tlsConfigs.length > 0 && (vendor?.plain.length ?? 0) === 0)
-      ? "yes"
-      : verdicts.includes(null)
-        ? "unknown"
-        : "no";
 
   const chain = useChainAnswer(ResourceType.Ingress, name, namespace);
   const connections = chain.read;
-  const tlsSecretNames = tlsConfigs.flatMap((config) =>
-    config.secretName ? [config.secretName] : []
-  );
-  const certificates = useTlsCertificates(
-    ingress?.namespace ?? namespace,
-    tlsSecretNames
-  );
   const issuance = useCertificateIssuance(
     ingress?.namespace ?? namespace,
     tlsSecretNames
@@ -173,55 +136,8 @@ export function IngressDetail() {
   const address = ingressAddressOf({ loadBalancerIps }, controller);
   const health = useOneIngressHealth(ingress);
 
-  // The soonest expiry across every certificate this Ingress serves: one
-  // Ingress with four hosts has four certificates, and the badge can only
-  // carry the one that runs out first.
-  const soonest = tlsConfigs
-    .map((config) =>
-      config.secretName
-        ? certificates?.get(config.secretName)?.certificate
-        : undefined
-    )
-    .filter((cert) => cert != null)
-    .map((cert) => expiryOf(cert))
-    // Exact remaining time rather than whole days: several certificates
-    // expiring today all tie on `days`, and this picks the one to show.
-    .sort((a, b) => a.left - b.left)[0];
-
-  // Served over TLS under a name that points at nothing, "1 host" read as
-  // fine beside a red Status and a red certificate step.
-  const missing = tlsSecretNames.find(
-    (secret) => certificates?.get(secret)?.problem?.says === "noSecret"
-  );
-
-  // Once the certificate has been read, how long it has left is a more useful
-  // answer than how many hosts it covers — the host count is a shape, and the
-  // expiry is a date somebody has to act on. Said once, for the page and the
-  // shared file both.
-  const tlsFact: { text: string; tone: "warn" | "err" | null } =
-    tls === "no"
-      ? {
-          text: vendor?.plainWhy ?? t("empty", "noneTrafficUnencrypted"),
-          tone: "warn",
-        }
-      : tls === "unknown"
-        ? { text: t("empty", "tlsNotChecked"), tone: null }
-        : missing
-          ? {
-              text: t("empty", "tlsSecretMissingTitle", { name: missing }),
-              tone: "err",
-            }
-          : soonest
-            ? { text: expiryText(soonest, t), tone: soonest.tone ?? null }
-            : hasCatchAllTls
-              ? { text: t("empty", "catchAllCertificate"), tone: "warn" }
-              : {
-                  text: t("count", "hosts", { n: tlsHosts.length }),
-                  tone: null,
-                };
-
   const share = useIngressShare(ingress, controller, {
-    tls: { ...tlsFact, known: tls !== "unknown" },
+    tls: tlsFact,
     certificates,
   });
 
@@ -270,13 +186,7 @@ export function IngressDetail() {
     { label: t("columns", "paths"), value: accessUrls.length, mono: true },
     {
       label: "TLS",
-      value:
-        tls === "unknown" ? (
-          <span className={TLS_NOT_CHECKED_TONE}>{tlsFact.text}</span>
-        ) : (
-          tlsFact.text
-        ),
-      tone: tlsFact.tone ?? undefined,
+      value: <TlsFactText fact={tlsFact} />,
     },
   ];
 
@@ -574,16 +484,20 @@ export function IngressDetail() {
                   ? "text-warn"
                   : tls === "unknown"
                     ? TLS_NOT_CHECKED_TONE
-                    : soonest?.tone
-                      ? TONE_CLASS[soonest.tone]
-                      : "text-fg-fnt"
+                    : missing
+                      ? "text-err"
+                      : soonest?.tone
+                        ? TONE_CLASS[soonest.tone]
+                        : "text-fg-fnt"
               )}
             >
               {tls === "no"
                 ? t("empty", "noTls")
                 : tls === "unknown"
                   ? t("empty", "tlsNotChecked")
-                  : (soonest?.tone && expiryText(soonest, t)) || "TLS"}
+                  : missing
+                    ? t("empty", "certificateMissing")
+                    : (soonest?.tone && expiryText(soonest, t)) || "TLS"}
             </span>
           </>
         }

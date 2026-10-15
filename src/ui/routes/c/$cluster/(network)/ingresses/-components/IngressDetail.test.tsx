@@ -13,6 +13,8 @@ const vendor = vi.hoisted(() => ({
   error: null as Error | null,
   /** Answers as Traefik does, for the hosts `spec.tls` names too. */
   replaces: false,
+  /** A host whose answer differs from `terminated`. */
+  byHost: {} as Record<string, boolean>,
 }));
 vi.mock("@/hooks/useIngressTls", () => ({
   useIngressTls: () => ({
@@ -21,7 +23,7 @@ vi.mock("@/hooks/useIngressTls", () => ({
       vendor.answered
         ? {
             host,
-            terminated: vendor.terminated,
+            terminated: vendor.byHost[host] ?? vendor.terminated,
             by: vendor.replaces
               ? { key: "traefikTlsNotServed" }
               : { key: "verbatimLine", values: { said: "shop-cert" } },
@@ -102,6 +104,7 @@ beforeEach(() => {
   vendor.answered = true;
   vendor.error = null;
   vendor.replaces = false;
+  vendor.byHost = {};
 });
 
 /** The role token that paints an element's text, its own or inherited. */
@@ -136,7 +139,7 @@ async function paints(terminated: boolean | null) {
       terminated === null
         ? "TLS not checked"
         : terminated
-          ? "0 hosts"
+          ? "1 host"
           : "none: traffic is unencrypted",
       { selector: "dd *, dd" }
     )
@@ -199,6 +202,17 @@ describe("an Ingress whose certificate the controller could not read", () => {
       expect(unknown[place], place).not.toBe(yes[place]);
       expect(unknown[place], place).not.toBe(no[place]);
     }
+  });
+
+  /**
+   * The count read `spec.tls` alone, so a host GKE serves over HTTPS with the
+   * certificate on its load balancer was "0 hosts" beside a "TLS" badge.
+   */
+  it("counts a host the load balancer holds the certificate for", async () => {
+    vendor.terminated = true;
+    await open("overview");
+
+    expect(screen.getByText("1 host", { selector: "dd *, dd" })).toBeTruthy();
   });
 });
 
@@ -380,6 +394,28 @@ describe("the Access tab of an Ingress the page calls unserved", () => {
   });
 });
 
+describe("the TLS host count under a controller that replaces spec.tls", () => {
+  /**
+   * Both hosts sit in `spec.tls`, and Traefik serves one of them in the
+   * clear: the count said "2 hosts" over a page that calls one plain HTTP.
+   */
+  it("leaves out a host the controller serves in the clear", async () => {
+    vendor.replaces = true;
+    vendor.terminated = true;
+    vendor.byHost = { "admin.example.com": false };
+    const hosts = ["shop.example.com", "admin.example.com"];
+    await open("overview", {
+      ...shop,
+      className: "traefik",
+      rules: hosts.map((host) => ({ ...shop.rules[0], host })),
+      tlsHosts: hosts,
+      tlsConfigs: [{ hosts, secretName: null, isCatchAll: false }],
+    });
+
+    expect(screen.getByText("1 host", { selector: "dd *, dd" })).toBeTruthy();
+  });
+});
+
 describe("the TLS fact of an Ingress whose Secret does not exist", () => {
   /**
    * The fact said "1 host" in plain text beside a red Status and a red
@@ -394,6 +430,16 @@ describe("the TLS fact of an Ingress whose Secret does not exist", () => {
     });
     expect(colourOf(fact)).toBe("text-err");
     expect(screen.queryByText("1 host", { selector: "dd *, dd" })).toBeNull();
+  });
+
+  /** The header still said a neutral "TLS" over the red fact below it. */
+  it("says the certificate is missing in the header, in red", async () => {
+    shopCluster("traefik");
+    await open("overview", shopTls);
+
+    expect(colourOf(await screen.findByText("certificate missing"))).toBe(
+      "text-err"
+    );
   });
 });
 
