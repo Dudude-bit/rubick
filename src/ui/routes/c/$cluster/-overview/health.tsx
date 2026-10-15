@@ -235,10 +235,13 @@ function UnservedRow({
 
 function AttentionRow({
   item,
-  grouped = false,
+  under = null,
+  sameCause = false,
 }: {
   item: AttentionItem;
-  grouped?: boolean;
+  under?: Extract<AttentionLine, { at: "item" }>["under"];
+  /** Under its workload's row, which already tells this cause. */
+  sameCause?: boolean;
 }) {
   const t = useT();
   const navigate = useNavigate();
@@ -249,7 +252,8 @@ function AttentionRow({
   const { Icon: ReasonIcon } = eventReasonMark(item.reason);
   const elsewhere =
     item.opens.kind !== item.kind || item.opens.name !== item.name;
-  const marked = grouped ? item.unservedClass : undefined;
+  const marked = under === "class" ? item.unservedClass : undefined;
+  const pod = under === "workload";
   const detail: AttentionItem["detail"] = !marked
     ? item.detail
     : marked.rest
@@ -267,6 +271,7 @@ function AttentionRow({
         <span
           className={cn(
             "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
+            pod && "pl-3",
             tone
           )}
         >
@@ -299,7 +304,7 @@ function AttentionRow({
             />
           </>
         )}
-        {item.namespace && (
+        {item.namespace && !pod && (
           <span className="whitespace-nowrap text-fg-fnt">
             {" "}
             · {item.namespace}
@@ -315,7 +320,11 @@ function AttentionRow({
             title={detailWords(detail, t) ?? undefined}
           >
             {": "}
-            <AttentionDetailText item={{ ...item, detail }} />
+            {sameCause ? (
+              t("cluster", "attentionSameCause")
+            ) : (
+              <AttentionDetailText item={{ ...item, detail }} />
+            )}
           </span>
         )}
       </span>
@@ -673,7 +682,8 @@ export function AttentionPanel({
             <AttentionRow
               key={line.item.key}
               item={line.item}
-              grouped={line.grouped}
+              under={line.under}
+              sameCause={line.under === "workload" && line.sameCause}
             />
           ) : (
             <UnservedRow

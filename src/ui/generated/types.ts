@@ -2159,6 +2159,7 @@ export interface ClusterProblem {
   restarts: number | null;
   foldedPods: number | null;
   replaced: boolean;
+  workload?: PodWorkload;
 }
 
 export interface TlsCertificate {

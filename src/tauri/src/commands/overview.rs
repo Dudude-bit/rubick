@@ -229,6 +229,9 @@ pub struct ClusterProblem {
     /// a record of what happened, ranked after what is down now.
     #[serde(default)]
     pub replaced: bool,
+    /// The workload a row of pods belongs to, which the list draws it under.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workload: Option<crate::resources::PodWorkload>,
 }
 
 /// Requested vs allocatable for one resource dimension, plus live usage.
@@ -773,6 +776,7 @@ fn pod_problems<'a>(
         .filter_map(|pod| {
             pod_problem(pod, now).map(|problem| ClusterProblem {
                 replaced: crate::resources::replaced(pod),
+                workload: crate::resources::PodWorkload::of(pod),
                 ..problem
             })
         })
@@ -819,6 +823,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             restarts: Some(restarts),
             folded_pods: None,
             replaced: false,
+            workload: None,
         });
     }
 
@@ -845,6 +850,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             restarts: Some(restarts),
             folded_pods: None,
             replaced: false,
+            workload: None,
         });
     }
 
@@ -867,6 +873,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             restarts: (restarts > 0).then_some(restarts),
             folded_pods: None,
             replaced: false,
+            workload: None,
         });
     }
 
@@ -898,6 +905,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             restarts: None,
             folded_pods: None,
             replaced: false,
+            workload: None,
         });
     }
 
@@ -919,6 +927,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             restarts: Some(restarts),
             folded_pods: None,
             replaced: false,
+            workload: None,
         });
     }
 
@@ -942,6 +951,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 restarts: (restarts > 0).then_some(restarts),
                 folded_pods: None,
                 replaced: false,
+                workload: None,
             });
         }
     }
@@ -1025,6 +1035,7 @@ fn warned_while_starting(warned: &[(&Pod, crate::resources::PodCause)]) -> Vec<C
             restarts: None,
             folded_pods: None,
             replaced: false,
+            workload: crate::resources::PodWorkload::of(pod),
         })
         .collect()
 }
@@ -1186,6 +1197,7 @@ fn deployments_saying<'a>(
                 restarts: None,
                 folded_pods: None,
                 replaced: false,
+                workload: None,
             })
         })
         .collect()
@@ -1223,6 +1235,7 @@ fn set_problem(
         restarts: None,
         folded_pods: None,
         replaced: false,
+        workload: None,
     })
 }
 
@@ -1374,6 +1387,7 @@ fn job_problems<'a>(
                 restarts: None,
                 folded_pods: None,
                 replaced: false,
+                workload: None,
             })
         })
         .collect()
@@ -1418,6 +1432,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     restarts: None,
                     folded_pods: None,
                     replaced: false,
+                    workload: None,
                 });
             }
             if let Some(pressure) = node_pressure(n) {
@@ -1435,6 +1450,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     restarts: None,
                     folded_pods: None,
                     replaced: false,
+                    workload: None,
                 });
             }
             // Cordoned nodes are usually intentional, but a node left
@@ -1455,6 +1471,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     restarts: None,
                     folded_pods: None,
                     replaced: false,
+                    workload: None,
                 });
             }
             None
@@ -2051,6 +2068,10 @@ fn fold_replaced<'a>(
             continue;
         };
         kept.push(ClusterProblem {
+            workload: Some(crate::resources::PodWorkload {
+                kind: kind.clone(),
+                name: name.clone(),
+            }),
             kind,
             name,
             namespace,
@@ -3526,6 +3547,7 @@ mod tests {
             restarts: None,
             folded_pods: None,
             replaced: false,
+            workload: None,
         }
     }
 
@@ -6160,7 +6182,8 @@ mod tests {
     /// its `ReplicaSet` replaced, and Needs attention was 25 rows of them above
     /// the pods failing now. Fails if two replaced pods of one workload keep a
     /// row each, if a lone one loses its own, if the folded row is not told by
-    /// the newest of them, or if it ranks above what is down now.
+    /// the newest of them, if it ranks above what is down now, or if a row
+    /// loses the workload the list draws it under.
     #[test]
     fn pods_a_controller_replaced_fold_into_one_row_after_what_is_down_now() {
         let now: DateTime<Utc> = "2026-10-15T06:00:00Z".parse().expect("a time");
@@ -6276,6 +6299,24 @@ mod tests {
             })
         );
         assert_eq!(overview.problems[2].folded_pods, None);
+        let workloads: Vec<_> = overview
+            .problems
+            .iter()
+            .map(|p| {
+                p.workload
+                    .as_ref()
+                    .map(|w| (w.kind.as_str(), w.name.as_str()))
+            })
+            .collect();
+        assert_eq!(
+            workloads,
+            vec![
+                None,
+                Some(("Deployment", "recs")),
+                Some(("StatefulSet", "db")),
+                Some(("Deployment", "recs")),
+            ]
+        );
         assert_eq!(
             overview.pods_unlisted,
             vec![ReasonCount {
@@ -7555,6 +7596,7 @@ mod across_namespaces {
             restarts: None,
             folded_pods: None,
             replaced: false,
+            workload: None,
         }
     }
 

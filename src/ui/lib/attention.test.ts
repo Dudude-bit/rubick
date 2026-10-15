@@ -8,9 +8,11 @@ import type {
   ClusterProblem,
   IngressHealthInput,
   PersistentVolumeClaimInfo,
+  PodCause,
   ServiceHealthGroup,
 } from "@/generated/types";
 import {
+  attentionLines,
   attentionOf,
   checkSaid,
   foldedWords,
@@ -649,6 +651,97 @@ describe("what Needs attention lists beyond pods", () => {
     expect(foldedWords(listed.items[1], t)).toBe(
       "25 pods already replaced, the newest"
     );
+  });
+
+  /**
+   * Live, missing-image's Deployment said "2 of 2 pods: image does not exist"
+   * and each of its pods said it again on a row of its own, nowhere near it.
+   * Fails if a workload's pods leave its row, if the group is not drawn where
+   * the first of it ranked, if a pod whose workload has no row is pulled out
+   * of rank, or if a pod with a cause of its own is marked as telling the
+   * workload's.
+   */
+  it("draws a workload's pods under its row, marking the ones its row already tells", () => {
+    const pulled: PodCause = {
+      says: "blocked",
+      container: "app",
+      reason: "ImagePullBackOff",
+      said: null,
+      image: "registry.example.test/app:9.9",
+      pull: null,
+      secrets: [],
+    };
+    const exits: PodCause = {
+      says: "exits",
+      container: "app",
+      restarts: 4,
+      run: null,
+      until: null,
+    };
+    const row = (
+      kind: string,
+      name: string,
+      since: string,
+      over: Partial<ClusterProblem> = {}
+    ): ClusterProblem => ({
+      severity: "critical",
+      kind,
+      name,
+      namespace: "shop",
+      reason: kind === "Pod" ? "ImagePullBackOff" : "ProgressDeadlineExceeded",
+      detail: null,
+      since,
+      restarts: null,
+      foldedPods: null,
+      replaced: false,
+      ...over,
+    });
+    const app = { kind: "Deployment", name: "app" };
+    const lines = attentionLines(
+      attention({
+        overview: overview({
+          problems: [
+            row("Deployment", "app", "2026-10-05T11:00:00Z", {
+              detail: {
+                says: "podsCause",
+                cause: pulled,
+                pods: 1,
+                of: 2,
+                said: null,
+              },
+            }),
+            row("Pod", "app-1", "2026-10-05T09:00:00Z", {
+              workload: app,
+              detail: { says: "cause", cause: pulled, by: null },
+            }),
+            row("Pod", "lonely", "2026-10-05T10:00:00Z", {
+              workload: { kind: "Deployment", name: "quiet" },
+            }),
+            row("Pod", "app-2", "2026-10-05T11:30:00Z", {
+              workload: app,
+              detail: { says: "cause", cause: exits, by: null },
+            }),
+          ],
+        }),
+      }).items
+    );
+
+    expect(
+      lines.map((line) =>
+        line.at === "item"
+          ? [
+              line.item.name,
+              line.under,
+              line.under === "workload" && line.sameCause,
+            ]
+          : line.at
+      )
+    ).toEqual([
+      ["app", null, false],
+      ["app-1", "workload", true],
+      ["app-2", "workload", false],
+      ["lonely", null, false],
+    ]);
   });
 
   /**

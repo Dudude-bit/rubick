@@ -36,6 +36,7 @@ import type {
   ClusterProblem,
   IngressHealthInput,
   NodeSummary,
+  PodCause,
   PodComposition,
   ServiceHealthGroup,
   WarningGroup,
@@ -532,6 +533,92 @@ describe("the detail line on a problem row", () => {
     ).toBeInTheDocument();
     quoted.unmount();
     useLocaleStore.setState({ choice: null });
+  });
+});
+
+describe("a workload's pods under its row", () => {
+  /**
+   * Live, missing-image's row said "2 of 2 pods: image does not exist" and
+   * both its pods said it again on rows of their own, the namespace on each.
+   * Fails if a pod drawn under its workload repeats the cause the row above
+   * tells or its namespace, or if a pod with a cause of its own loses it.
+   */
+  it("says a pod's cause only where it is not the one its workload's row tells", async () => {
+    const pulled: PodCause = {
+      says: "blocked",
+      container: "app",
+      reason: "ImagePullBackOff",
+      said: null,
+      image: "registry.example.test/app:9.9",
+      pull: null,
+      secrets: [],
+    };
+    const row = (over: Partial<ClusterProblem>): ClusterProblem => ({
+      severity: "critical",
+      kind: "Pod",
+      name: "missing-image",
+      namespace: "cause-demo",
+      reason: "ImagePullBackOff",
+      detail: null,
+      since: null,
+      restarts: null,
+      foldedPods: null,
+      replaced: false,
+      ...over,
+    });
+    const workload = { kind: "Deployment", name: "missing-image" };
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([
+          row({
+            kind: "Deployment",
+            reason: "ProgressDeadlineExceeded",
+            detail: {
+              says: "podsCause",
+              cause: pulled,
+              pods: 1,
+              of: 2,
+              said: null,
+            },
+          }),
+          row({
+            name: "missing-image-1",
+            workload,
+            detail: { says: "cause", cause: pulled, by: null },
+          }),
+          row({
+            name: "missing-image-2",
+            reason: "CrashLoopBackOff",
+            workload,
+            detail: {
+              says: "cause",
+              cause: {
+                says: "exits",
+                container: "sidecar",
+                restarts: 4,
+                run: null,
+                until: null,
+              },
+              by: null,
+            },
+          }),
+        ])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+
+    const said = screen
+      .getAllByTestId("attention-said")
+      .map((line) => line.textContent ?? "");
+    expect(said).toEqual([
+      "Deployment missing-image · cause-demo: 1 of 2 pods: app cannot start (ImagePullBackOff).",
+      "Pod missing-image-1: same cause",
+      expect.stringMatching(/^Pod missing-image-2: sidecar restarted/),
+    ]);
+    expect(said[2]).not.toMatch(/cause-demo|same cause/);
   });
 });
 

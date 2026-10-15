@@ -177,7 +177,7 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
         role: "err",
       };
     const { item } = line;
-    const marked = line.grouped ? item.unservedClass : undefined;
+    const marked = line.under === "class" ? item.unservedClass : undefined;
     return {
       title: marked
         ? `${reasonWord(item, t)} · ${marked.name}`

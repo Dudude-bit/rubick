@@ -5191,6 +5191,7 @@ export const ru: Catalogue = {
     attentionUnconfirmed:
       "контроллер говорит {word} уже {age}; поды не прочитаны",
     attentionUnconfirmedUndated: "контроллер говорит {word}; поды не прочитаны",
+    attentionSameCause: "та же причина",
     attentionStillReading: "ещё читается",
     attentionRefused: "доступ запрещён",
     attentionForbidden: "запрос {verb} запрещён",

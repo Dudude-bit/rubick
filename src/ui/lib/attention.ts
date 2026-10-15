@@ -16,6 +16,7 @@ import type {
   IngressHealthInput,
   PersistentVolumeClaimInfo,
   StorageClassInfo,
+  PodWorkload,
   ProblemDetail,
   Scoped,
   ServiceHealthInputs,
@@ -24,6 +25,7 @@ import type { T } from "@/i18n/useT";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { autoscalerVerdict } from "@/lib/governance";
 import { namespacesWhere } from "@/lib/namespace-scope";
+import { sameCause } from "@/lib/pod-cause";
 import { parseRefusal } from "@/lib/refusal";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
 import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
@@ -55,6 +57,8 @@ export interface AttentionItem {
   foldedPods: number | null;
   /** Pods their controller already replaced: a record, ranked after what is down now. */
   replaced: boolean;
+  /** The workload a pod's row belongs to, whose row the list draws it under. */
+  workload?: PodWorkload;
   /** Where the row opens: the object itself, or what an autoscaler scales. */
   opens: { kind: string; name: string; namespace: string | null };
   /** The IngressClass it asks for that nothing serves, and what else is wrong with it. */
@@ -213,6 +217,7 @@ const itemOf = (problem: ClusterProblem): AttentionItem =>
     restarts: problem.restarts,
     foldedPods: problem.foldedPods,
     replaced: problem.replaced,
+    workload: problem.workload,
     opens: {
       kind: problem.kind,
       name: problem.name,
@@ -490,33 +495,79 @@ function ranked(items: AttentionItem[]): AttentionItem[] {
 }
 
 export type AttentionLine =
-  | { at: "item"; item: AttentionItem; grouped: boolean }
+  | { at: "item"; item: AttentionItem; under: null | "class" }
+  | {
+      at: "item";
+      item: AttentionItem;
+      under: "workload";
+      /** The pod's cause is the one its workload's row already tells. */
+      sameCause: boolean;
+    }
   | { at: "unserved"; className: string; members: number };
 
+const workloadKey = (kind: string, name: string, namespace: string | null) =>
+  `${kind}/${namespace ?? "-"}/${name}`;
+
+function causeTold(head: AttentionItem, row: AttentionItem): boolean {
+  const told = head.detail?.says === "podsCause" ? head.detail.cause : null;
+  const own = row.detail?.says === "cause" ? row.detail.cause : null;
+  return told !== null && own !== null && sameCause(told, own);
+}
+
 /**
- * The list as it is drawn: Ingresses asking for the same missing IngressClass
- * sit under one line that says so, where the first of them ranked.
+ * The list as it is drawn, each group where the first of it ranked:
+ * Ingresses asking for the same missing IngressClass under one line that says
+ * so, and a workload's pods under the workload's own row.
  */
 export function attentionLines(items: AttentionItem[]): AttentionLine[] {
   const byClass = new Map<string, AttentionItem[]>();
+  const heads = new Map<string, AttentionItem>();
   for (const item of items) {
     const name = item.unservedClass?.name;
     if (name) byClass.set(name, [...(byClass.get(name) ?? []), item]);
+    const key = workloadKey(item.kind, item.name, item.namespace);
+    if (!item.workload && !heads.has(key)) heads.set(key, item);
+  }
+  const rowsOf = new Map<AttentionItem, AttentionItem[]>();
+  const headOf = new Map<AttentionItem, AttentionItem>();
+  for (const item of items) {
+    const head =
+      item.workload &&
+      heads.get(
+        workloadKey(item.workload.kind, item.workload.name, item.namespace)
+      );
+    if (!head) continue;
+    headOf.set(item, head);
+    rowsOf.set(head, [...(rowsOf.get(head) ?? []), item]);
   }
   const lines: AttentionLine[] = [];
-  const placed = new Set<string>();
+  const placed = new Set<string | AttentionItem>();
   for (const item of items) {
+    const head = headOf.get(item) ?? (rowsOf.has(item) ? item : undefined);
+    if (head) {
+      if (placed.has(head)) continue;
+      placed.add(head);
+      lines.push({ at: "item", item: head, under: null });
+      for (const row of rowsOf.get(head) ?? [])
+        lines.push({
+          at: "item",
+          item: row,
+          under: "workload",
+          sameCause: causeTold(head, row),
+        });
+      continue;
+    }
     const name = item.unservedClass?.name;
     const members = name ? (byClass.get(name) ?? []) : [];
     if (!name || members.length < 2) {
-      lines.push({ at: "item", item, grouped: false });
+      lines.push({ at: "item", item, under: null });
       continue;
     }
     if (placed.has(name)) continue;
     placed.add(name);
     lines.push({ at: "unserved", className: name, members: members.length });
     for (const member of members)
-      lines.push({ at: "item", item: member, grouped: true });
+      lines.push({ at: "item", item: member, under: "class" });
   }
   return lines;
 }

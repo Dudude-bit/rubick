@@ -495,6 +495,10 @@ function causeKey(cause: PodCause): string {
   }
 }
 
+/** Whether two pods' causes are the one `sharedCause` would count together. */
+export const sameCause = (a: PodCause, b: PodCause): boolean =>
+  causeKey(a) === causeKey(b);
+
 /**
  * The cause most of a workload's pods share, how many share it and how many
  * it runs. `share` in pod_cause.rs answers the Overview and a Deployment's
