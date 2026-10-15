@@ -39,19 +39,18 @@ export function describeFinding(
       };
     }
     case "clear": {
-      const values = {
-        n: finding.entryPoints.length,
-        list: finding.entryPoints.join(", "),
-      };
+      const n = finding.entryPoints.length;
+      const list = finding.entryPoints.join(", ");
       return {
         title: t("empty", "servedInClearTitle"),
         objects: [],
         note: finding.loaded
           ? t("empty", "traefikClearLoadedNote", {
-              ...values,
+              n,
+              list,
               secret: finding.loaded,
             })
-          : t("empty", "traefikClearNote", values),
+          : t("empty", "traefikClearNote", { n, list }),
       };
     }
     case "resourceBackend":
