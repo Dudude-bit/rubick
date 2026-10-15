@@ -24,6 +24,7 @@ import {
   type ChainHop,
 } from "@/lib/connections";
 import type { JournalEntry } from "@/lib/changes";
+import type { IngressAddress } from "@/lib/ingress-health";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { endpointCount, servingCount } from "@/lib/published";
 import { isOpen, type Watch } from "@/lib/tell-me-when";
@@ -200,12 +201,22 @@ export interface EntryPoint {
   shut: boolean;
   /** Its chain reaches a door nobody could settle, rather than one unread. */
   unsure: boolean;
+  /** Whether the Ingress handing out this URL has an address to reach it on. */
+  address: IngressAddress | null;
 }
 
-export type WayState = "unread" | "unsure" | "shut" | "empty";
+export type WayState =
+  | "noController"
+  | "noAddress"
+  | "unread"
+  | "unsure"
+  | "shut"
+  | "empty";
 
-/** What a way in says beside its name; null where something serves it. */
+/** What a way in says beside its name, the break nearest the client first; null where something serves it. */
 export function wayState(way: EntryPoint): WayState | null {
+  if (way.address === "noController") return "noController";
+  if (way.address === "pending") return "noAddress";
   if (!way.servingKnown) return way.unsure ? "unsure" : "unread";
   if (way.shut) return "shut";
   return way.serving ? null : "empty";
@@ -218,7 +229,12 @@ export function noWayServes(ways: {
 }): "shut" | "empty" | null {
   if (!ways.known || ways.entries.length === 0) return null;
   const states = ways.entries.map(wayState);
-  if (!states.every((state) => state === "shut" || state === "empty"))
+  if (
+    !states.every(
+      (state) =>
+        state === "shut" || state === "empty" || state === "noController"
+    )
+  )
     return null;
   return states.every((state) => state === "shut") ? "shut" : "empty";
 }
@@ -307,6 +323,7 @@ function entryOf(hop: ChainHop): EntryPoint | null {
         servingKnown: false,
         shut: false,
         unsure: false,
+        address: hop.address?.state ?? null,
       };
     }
     if (hop.object.kind !== "Service") return null;
@@ -319,6 +336,7 @@ function entryOf(hop: ChainHop): EntryPoint | null {
       servingKnown: false,
       shut: false,
       unsure: false,
+      address: null,
     };
   }
   if (hop.at === "published") return publishedEntry(hop.published);
@@ -342,6 +360,7 @@ function publishedEntry(published: ServicePublished): EntryPoint {
       published.source !== "podReadiness" || endpointCount(published) > 0,
     shut,
     unsure: false,
+    address: null,
   };
 }
 

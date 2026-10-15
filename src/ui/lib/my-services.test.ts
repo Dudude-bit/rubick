@@ -735,12 +735,55 @@ describe("more ways in", () => {
   });
 
   /**
+   * door-shut-edge's URL read as serving beside a chain that said its
+   * Ingress has no address and nothing reaches it. Fails if an address
+   * with no controller or no published address is called serving, or is
+   * said after a stop further from the client.
+   */
+  it("says first that nothing serves an address's class, or that it has no address", () => {
+    const url = (
+      state: "assigned" | "pending" | "noController" | "unknown"
+    ): ChainHop => ({
+      at: "object",
+      object: ref("Ingress", "shop"),
+      self: false,
+      detail: null,
+      via: null,
+      urls: ["http://shop.local/"],
+      address: { state, addresses: [] },
+    });
+    const shut: ChainHop = {
+      at: "stop",
+      mood: "fault",
+      shut: true,
+      title: "",
+      note: "",
+    };
+    const way = (hops: ChainHop[]) =>
+      wayState(entryPointsOf(conns(), chain(hops)).entries[0]);
+    const ready = publishedHop({ ready: 2 });
+    expect(way([url("pending"), ready])).toBe("noAddress");
+    expect(way([url("noController"), ready])).toBe("noController");
+    expect(way([url("noController"), ready, shut])).toBe("noController");
+    expect(way([url("assigned"), ready])).toBeNull();
+    expect(way([url("unknown"), ready])).toBeNull();
+  });
+
+  /**
    * The card's header read "2/2 ready" in green over two ways in a policy
    * shut. Fails if the header is told nothing serves while one does, or
    * while one was never read.
    */
   it("says no way in serves only where every one was read and none does", () => {
-    const entry = (state: "serving" | "shut" | "empty" | "unread") => ({
+    const entry = (
+      state:
+        | "serving"
+        | "shut"
+        | "empty"
+        | "unread"
+        | "unserved"
+        | "unaddressed"
+    ) => ({
       key: state,
       url: null,
       label: state,
@@ -749,6 +792,12 @@ describe("more ways in", () => {
       servingKnown: state !== "unread",
       shut: state === "shut",
       unsure: false,
+      address:
+        state === "unserved"
+          ? ("noController" as const)
+          : state === "unaddressed"
+            ? ("pending" as const)
+            : null,
     });
     const ways = (...states: Parameters<typeof entry>[0][]) => ({
       entries: states.map(entry),
@@ -758,6 +807,8 @@ describe("more ways in", () => {
     expect(noWayServes(ways("shut", "empty"))).toBe("empty");
     expect(noWayServes(ways("shut", "serving"))).toBeNull();
     expect(noWayServes(ways("shut", "unread"))).toBeNull();
+    expect(noWayServes(ways("shut", "unserved"))).toBe("empty");
+    expect(noWayServes(ways("shut", "unaddressed"))).toBeNull();
     expect(noWayServes(ways())).toBeNull();
     expect(noWayServes({ ...ways("shut"), known: false })).toBeNull();
   });

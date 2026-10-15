@@ -2008,6 +2008,8 @@ export const en = {
     nothingBehind: "nothing behind it",
     everyWayShut: "every way in shut by NetworkPolicy",
     noWayServes: "no way in serves",
+    noControllerServes: "nothing serves its class",
+    noAddressPublished: "no address published",
     moreWays: "{n} more",
     lastChange: "Last change",
     nothingSeen: "nothing seen while this app was watching",

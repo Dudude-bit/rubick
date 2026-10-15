@@ -34,6 +34,8 @@ import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { useT, type T } from "@/i18n/useT";
 
 const WAY_TONE: Record<WayState, string> = {
+  noController: "text-err",
+  noAddress: "text-warn",
   unread: "text-fg-fnt",
   unsure: "text-fg-fnt",
   shut: "text-err",

@@ -2093,6 +2093,8 @@ export const ru: Catalogue = {
     nothingBehind: "за ним ничего нет",
     everyWayShut: "все входы закрыты NetworkPolicy",
     noWayServes: "ни один вход не обслуживается",
+    noControllerServes: "его класс никто не обслуживает",
+    noAddressPublished: "адрес не опубликован",
     moreWays: "ещё {n}",
     lastChange: "Последнее изменение",
     nothingSeen: "приложение ничего не видело, пока смотрело",
