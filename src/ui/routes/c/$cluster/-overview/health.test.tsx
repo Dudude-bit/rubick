@@ -534,6 +534,52 @@ describe("the detail line on a problem row", () => {
     quoted.unmount();
     useLocaleStore.setState({ choice: null });
   });
+
+  /**
+   * Live, orphan-claim's red row said why in grey, beside pod rows whose
+   * causes read in red. Fails if a cause this app worked out stops taking
+   * the row's colour.
+   */
+  it("draws a cause this app worked out in the row's colour", async () => {
+    const attention = attentionFrom([], {
+      claims: {
+        data: {
+          rows: [
+            {
+              uid: "u1",
+              name: "orphan-claim",
+              namespace: "cause-demo",
+              status: "Pending",
+              volume: null,
+              capacity: null,
+              accessModes: ["ReadWriteOnce"],
+              storageClass: "fast-ssd-missing",
+              labels: {},
+              annotations: {},
+              createdAt: "2026-10-13T12:00:00Z",
+            },
+          ],
+          unread: [],
+        },
+        error: null,
+      },
+      classes: [],
+    });
+    const panel = await wrap(
+      <AttentionPanel
+        attention={attention}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    const cause = panel.getByTestId("attention-ours");
+    expect(cause.textContent).toMatch(
+      /^StorageClass fast-ssd-missing does not exist/
+    );
+    expect(cause.className).toContain("text-err");
+  });
 });
 
 describe("a workload's pods under its row", () => {

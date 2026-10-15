@@ -60,6 +60,7 @@ import {
   ROLE_TEXT,
   type StatusRole,
 } from "@/lib/status-role";
+import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
@@ -181,15 +182,14 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
         }}
       />
     );
-  return (
-    <Prose
-      text={
-        detail.says === "ours"
-          ? detail.text
-          : composedDetail(detail, t, item.foldedPods)
-      }
-    />
-  );
+  // The cause this app worked out, in the row's colour as a pod's is.
+  if (detail.says === "ours")
+    return (
+      <span className={TONE_TEXT[item.tone]} data-testid="attention-ours">
+        <Prose text={detail.text} />
+      </span>
+    );
+  return <Prose text={composedDetail(detail, t, item.foldedPods)} />;
 }
 
 /** The class an Ingress under the missing-class line lacks, in place of the line's sentence. */
