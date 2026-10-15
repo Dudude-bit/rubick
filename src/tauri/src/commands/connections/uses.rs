@@ -243,7 +243,7 @@ pub(super) fn claim_ref(claim: &PersistentVolumeClaim, ns: &str) -> ObjectRef {
     .with_facts(ObjectFacts::Claim {
         phase: info.status,
         capacity: info.capacity,
-        storage_class: info.storage_class,
+        storage_class: info.storage_class.unwrap_or_default(),
     })
 }
 

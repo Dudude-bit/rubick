@@ -6490,6 +6490,7 @@ export const en = {
     notProvisionedYet: "not provisioned yet",
     notBoundNothingSatisfied: "not bound: nothing has satisfied this claim",
     clusterDefault: "cluster default",
+    noClassOnPurpose: "none: it binds only a PersistentVolume without a class",
     noAccessModes: "no access modes",
     noVolumeBound: "no volume bound",
     defaultClassBadge: "default class",
@@ -7264,6 +7265,8 @@ export const en = {
       "{provisioner}, the provisioner of StorageClass {name}, has not made a volume for it yet",
     claimBlocksPods:
       "A pod that mounts it cannot start until a volume is bound.",
+    claimStaticOnly:
+      "It asks for no StorageClass, so nothing will provision a volume for it; it waits for a PersistentVolume without a class",
     claimWarned: "Its newest warning, {reason}:",
   },
   statusMeaning: {

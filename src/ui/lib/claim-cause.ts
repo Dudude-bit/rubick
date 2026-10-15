@@ -18,6 +18,7 @@ export type ClaimCause =
   | { says: "noDefaultClass" }
   | { says: "classUnread" }
   | { says: "namesVolume"; volume: string }
+  | { says: "staticOnly" }
   | { says: "waitsForPod"; name: string }
   | { says: "noProvisioner"; name: string }
   | { says: "unprovisioned"; name: string; provisioner: string };
@@ -30,6 +31,7 @@ const CAUSE_ROLE: Record<ClaimCause["says"], ClaimCauseRole> = {
   noDefaultClass: "err",
   classUnread: "warn",
   namesVolume: "warn",
+  staticOnly: "warn",
   waitsForPod: "pending",
   noProvisioner: "warn",
   unprovisioned: "warn",
@@ -46,6 +48,8 @@ export function claimCause(
   if (claim.status !== "Pending") return null;
   // A claim that names its volume is never provisioned for, whatever its class.
   if (claim.volume) return { says: "namesVolume", volume: claim.volume };
+  // Asking for no class is asking for a volume made by hand, never provisioned.
+  if (claim.storageClass === "") return { says: "staticOnly" };
   if (classes === "reading") return null;
   if (classes === "unread") return { says: "classUnread" };
   const named = classes.find((each) =>
@@ -97,6 +101,8 @@ export function claimCauseText(cause: ClaimCause, t: T): string {
       return t("cause", "claimClassUnread");
     case "namesVolume":
       return t("cause", "claimNamesVolume", { volume: cause.volume });
+    case "staticOnly":
+      return t("cause", "claimStaticOnly");
     case "waitsForPod":
       return t("cause", "claimWaitsForPod", { name: cause.name });
     case "noProvisioner":

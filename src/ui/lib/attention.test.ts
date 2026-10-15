@@ -146,7 +146,7 @@ function claim(
     volume: null,
     capacity: null,
     accessModes: ["ReadWriteOnce"],
-    storageClass: "",
+    storageClass: null,
     labels: {},
     annotations: {},
     createdAt: new Date(NOW - ageMs).toISOString(),

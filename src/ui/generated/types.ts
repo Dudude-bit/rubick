@@ -644,7 +644,7 @@ export interface PersistentVolumeClaimInfo {
   volume: string | null;
   capacity: string | null;
   accessModes: string[];
-  storageClass: string;
+  storageClass: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;

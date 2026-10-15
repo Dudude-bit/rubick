@@ -30,7 +30,7 @@ function claim(
     volume: null,
     capacity: null,
     accessModes: ["ReadWriteOnce"],
-    storageClass: "",
+    storageClass: null,
     labels: {},
     annotations: {},
     createdAt: new Date(NOW - 2 * 86_400_000).toISOString(),
@@ -114,6 +114,28 @@ describe("why a claim is Pending", () => {
         cls("manual", { provisioner: "kubernetes.io/no-provisioner" }),
       ])
     ).toEqual({ says: "noProvisioner", name: "manual" });
+  });
+
+  /**
+   * `storageClassName: ""` asks for a volume made by hand and is never
+   * provisioned; a claim naming no class takes the default. They travelled
+   * as the same empty string, so a claim asking for no class beside a
+   * WaitForFirstConsumer default read as a wait by design. Fails if the two
+   * are taken for each other.
+   */
+  it("tells a claim that asks for no class from one that takes the default", () => {
+    const local = cls("local-path", {
+      isDefault: true,
+      volumeBindingMode: "WaitForFirstConsumer",
+    });
+    expect(claimCause(claim({ storageClass: "" }), [local])).toEqual({
+      says: "staticOnly",
+    });
+    expect(claimCause(claim({ storageClass: null }), [local])).toEqual({
+      says: "waitsForPod",
+      name: "local-path",
+    });
+    expect(causeRole(claim(), { says: "staticOnly" }, NOW)).toBe("warn");
   });
 
   /** A claim that names its volume is never provisioned for; fails if its class is blamed, or if it waits on the classes being read. */

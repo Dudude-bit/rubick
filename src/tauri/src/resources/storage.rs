@@ -103,7 +103,9 @@ pub struct PersistentVolumeClaimInfo {
     /// a hole the reader is told about, not filled with a word.
     pub capacity: Option<String>,
     pub access_modes: Vec<String>,
-    pub storage_class: String,
+    /// Absent where the claim names none and takes the cluster's default;
+    /// `""` where it asks for no class, which binds only a volume without one.
+    pub storage_class: Option<String>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     /// When the cluster created it. The age is a word the reader
@@ -141,9 +143,7 @@ impl From<&PersistentVolumeClaim> for PersistentVolumeClaimInfo {
             volume: spec.and_then(|s| s.volume_name.clone()),
             capacity,
             access_modes,
-            storage_class: spec
-                .and_then(|s| s.storage_class_name.clone())
-                .unwrap_or_default(),
+            storage_class: spec.and_then(|s| s.storage_class_name.clone()),
             labels: pvc.labels().clone(),
             annotations: pvc.annotations().clone(),
             created_at: pvc.metadata.creation_timestamp.to_rfc3339_opt(),
@@ -277,6 +277,22 @@ mod tests {
 
         let pvc = PersistentVolumeClaim::default();
         assert_eq!(PersistentVolumeClaimInfo::from(&pvc).status, None);
+    }
+
+    /// A claim that asks for no class binds only a volume without one, and one
+    /// that names none takes the default. Fails if the two travel alike.
+    #[test]
+    fn a_claim_that_asks_for_no_class_is_told_from_one_that_names_none() {
+        let mut pvc = PersistentVolumeClaim::default();
+        assert_eq!(PersistentVolumeClaimInfo::from(&pvc).storage_class, None);
+        pvc.spec = Some(k8s_openapi::api::core::v1::PersistentVolumeClaimSpec {
+            storage_class_name: Some(String::new()),
+            ..Default::default()
+        });
+        assert_eq!(
+            PersistentVolumeClaimInfo::from(&pvc).storage_class,
+            Some(String::new())
+        );
     }
 
     /// And when it did stamp one, what travels is the stamp — not a duration

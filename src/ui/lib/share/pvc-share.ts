@@ -89,7 +89,14 @@ export function pvcFactsSection(
                   namespace: null,
                 }),
               }
-            : { text: t("empty", "clusterDefault") },
+            : {
+                text: t(
+                  "empty",
+                  pvc.storageClass === ""
+                    ? "noClassOnPurpose"
+                    : "clusterDefault"
+                ),
+              },
       ],
     },
   ];

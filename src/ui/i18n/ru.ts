@@ -7174,6 +7174,7 @@ export const ru: Catalogue = {
     notProvisionedYet: "ещё не выделен",
     notBoundNothingSatisfied: "не привязана: заявку никто не удовлетворил",
     clusterDefault: "по умолчанию для кластера",
+    noClassOnPurpose: "нет: привязывается только к PersistentVolume без класса",
     noAccessModes: "режимов доступа нет",
     noVolumeBound: "том не привязан",
     defaultClassBadge: "класс по умолчанию",
@@ -8039,6 +8040,8 @@ export const ru: Catalogue = {
       "{provisioner}, провизионер StorageClass {name}, ещё не создал для него том",
     claimBlocksPods:
       "Под, который его монтирует, не запустится, пока не привязан том.",
+    claimStaticOnly:
+      "Он явно не просит StorageClass, так что том для него никто не создаст; он ждёт PersistentVolume без класса",
     claimWarned: "Последнее предупреждение, {reason}:",
   },
   statusMeaning: {

@@ -97,7 +97,14 @@ export function ClaimClassCell({
   const t = useT();
   const cause = claimCause(claim, classes);
   if (cause?.says !== "classMissing")
-    return <StorageClassRef name={claim.storageClass} fallback="default" />;
+    return (
+      <StorageClassRef
+        name={claim.storageClass}
+        fallback={
+          claim.storageClass === "" ? t("empty", "noneLower") : "default"
+        }
+      />
+    );
   return (
     <span
       className="inline-flex min-w-0 max-w-full items-center gap-1 text-err"
@@ -155,7 +162,10 @@ export function ClaimClass({ claim, cause: given }: ClaimProps) {
     );
   return (
     <span className={cn(cause?.says === "noDefaultClass" && ROLE_TEXT.err)}>
-      {t("empty", "clusterDefault")}
+      {t(
+        "empty",
+        claim.storageClass === "" ? "noClassOnPurpose" : "clusterDefault"
+      )}
     </span>
   );
 }
