@@ -7781,6 +7781,12 @@ export const en = {
     jobsSucceededSegment: { one: "succeeded", other: "succeeded" },
     jobsFailedSegment: { one: "failed", other: "failed" },
     retryingSegment: { one: "retrying", other: "retrying" },
+    jobsNotStartedSegment: { one: "not started", other: "not started" },
+    jobsRefusedSegment: {
+      one: "with its pods refused",
+      other: "with their pods refused",
+    },
+    jobsSuspendedSegment: { one: "suspended", other: "suspended" },
     notScheduledSegment: { one: "not scheduled", other: "not scheduled" },
     plusMore: "+{n} more",
     hostsNeedAttention: {

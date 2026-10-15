@@ -8760,6 +8760,24 @@ export const ru: Catalogue = {
       many: "повторяются",
       other: "повторяются",
     },
+    jobsNotStartedSegment: {
+      one: "не запустилась",
+      few: "не запустились",
+      many: "не запустились",
+      other: "не запустились",
+    },
+    jobsRefusedSegment: {
+      one: "с отклонёнными подами",
+      few: "с отклонёнными подами",
+      many: "с отклонёнными подами",
+      other: "с отклонёнными подами",
+    },
+    jobsSuspendedSegment: {
+      one: "приостановлена",
+      few: "приостановлены",
+      many: "приостановлены",
+      other: "приостановлены",
+    },
     notScheduledSegment: {
       one: "не назначен",
       few: "не назначены",

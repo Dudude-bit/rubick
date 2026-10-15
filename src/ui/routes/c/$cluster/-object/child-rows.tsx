@@ -313,7 +313,7 @@ export function JobRows({
   jobs,
   emptyMessage,
 }: {
-  jobs: JobInfo[];
+  jobs: readonly JobInfo[];
   emptyMessage?: string;
 }) {
   const t = useT();

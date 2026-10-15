@@ -11,6 +11,7 @@ import {
   refusalGist,
   refusalText,
   refusedUid,
+  toldRuns,
 } from "./create-refusal";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -113,5 +114,30 @@ describe("how a refusal is said", () => {
     expect(jobWord("Pending", "")).toBe("FailedCreate");
     expect(jobWord("Pending", null)).toBe("Pending");
     expect(jobWord("Running", "exceeded quota")).toBe("Running");
+  });
+});
+
+describe("runs told with their refusals", () => {
+  /**
+   * A CronJob's runs bar and Jobs tab drew a refused run as Pending. Fails if
+   * a Pending run with a refusal is not FailedCreate, a run of another word
+   * is changed, or the runs are told before the refusals are read.
+   */
+  it("turns only a refused Pending run into FailedCreate", () => {
+    const runs = [
+      { uid: "a", status: "Pending" },
+      { uid: "b", status: "Pending" },
+      { uid: "c", status: "Running" },
+    ];
+    const refusals = [
+      event({ uid: "a", message: "refused" }),
+      event({ uid: "c", message: "refused" }),
+    ];
+    expect(toldRuns(runs, refusals).map((run) => run.status)).toEqual([
+      "FailedCreate",
+      "Pending",
+      "Running",
+    ]);
+    expect(toldRuns(runs, null)).toBe(runs);
   });
 });

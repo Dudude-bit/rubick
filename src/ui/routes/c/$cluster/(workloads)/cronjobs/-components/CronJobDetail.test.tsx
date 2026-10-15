@@ -195,7 +195,8 @@ describe("CronJobDetail", () => {
   /**
    * A quota refused every pod its run asked for, so no pod was there to say
    * why and the page said nothing. Fails if the last run's cause does not
-   * quote the API server's refusal of that run's pods.
+   * quote the API server's refusal of that run's pods, or the runs bar does
+   * not count the run as refused.
    */
   it("leads with the API server's refusal of its newest run's pods", async () => {
     const said =
@@ -228,7 +229,25 @@ describe("CronJobDetail", () => {
     expect(await screen.findByTestId("refused-line")).toHaveTextContent(
       `In its last run, Job nightly-backup-29000000, The API server refuses to create its pods. The API server answered: ${said}`
     );
+    expect(
+      await screen.findByText("1 with its pods refused")
+    ).toBeInTheDocument();
     vi.mocked(commands.listEvents).mockResolvedValue([]);
+  });
+
+  /**
+   * The runs bar counted only running, succeeded, retrying and failed runs,
+   * so a run kept and not yet started read "1 job kept" over "nothing
+   * scheduled". Fails if a kept run is left out of the bar.
+   */
+  it("counts a run that has not started in its runs bar", async () => {
+    vi.mocked(commands.listJobs).mockResolvedValueOnce([
+      run("nightly-backup-29000000", "Pending"),
+    ]);
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    await renderPage();
+    expect(await screen.findByText("1 not started")).toBeInTheDocument();
+    expect(screen.queryByText("nothing scheduled")).toBeNull();
   });
 
   /**

@@ -88,3 +88,16 @@ export const refusalText = (said: string, t: T) =>
 /** A Job's word with its pods' refusal read beside it; `JobState::refused` answers the same in Rust. */
 export const jobWord = (status: string, refused: string | null) =>
   refused !== null && status === "Pending" ? "FailedCreate" : status;
+
+/** Runs as their rows and bars draw them: a Pending run whose pods the API server refuses is FailedCreate. A Pending run has no pod running, so none can postdate the refusal. */
+export function toldRuns<J extends { uid: string; status: string }>(
+  jobs: readonly J[],
+  refusals: readonly EventInfo[] | null
+): readonly J[] {
+  if (!refusals) return jobs;
+  return jobs.map((job) => {
+    if (job.status !== "Pending") return job;
+    const status = jobWord(job.status, createRefusal(job.uid, refusals, []));
+    return status === job.status ? job : { ...job, status };
+  });
+}

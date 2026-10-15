@@ -61,6 +61,10 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate, formatTimeUnit } from "@/lib/utils";
 import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
+import type { CompositionTone } from "@/components/object/detail-blocks";
+import { useRefusals } from "@/hooks/useRefusals";
+import { toldRuns } from "@/lib/create-refusal";
+import type { JobStatus } from "@/lib/status-meaning";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
@@ -222,6 +226,30 @@ function useRunsWatch(namespace: string | undefined, name: string | undefined) {
 }
 const RUNS_IN_FLIGHT = new Set(["Running", "Retrying", "Pending"]);
 
+/** Every word a run can carry, so no run kept is left out of the bar. */
+const RUN_SEGMENT: Record<
+  JobStatus,
+  {
+    key:
+      | "runningSegment"
+      | "jobsSucceededSegment"
+      | "retryingSegment"
+      | "jobsFailedSegment"
+      | "jobsRefusedSegment"
+      | "jobsNotStartedSegment"
+      | "jobsSuspendedSegment";
+    tone: CompositionTone;
+  }
+> = {
+  Running: { key: "runningSegment", tone: "ok" },
+  Complete: { key: "jobsSucceededSegment", tone: "neutral" },
+  Retrying: { key: "retryingSegment", tone: "warn" },
+  Failed: { key: "jobsFailedSegment", tone: "err" },
+  FailedCreate: { key: "jobsRefusedSegment", tone: "err" },
+  Pending: { key: "jobsNotStartedSegment", tone: "pending" },
+  Suspended: { key: "jobsSuspendedSegment", tone: "neutral" },
+};
+
 export function CronJobDetail() {
   const t = useT();
   const {
@@ -282,16 +310,19 @@ export function CronJobDetail() {
   } = useCronJobRuns(namespace, name);
   const jobs = jobsRead ?? NO_JOBS;
   useRunsWatch(namespace, name);
-  const tally = useMemo(() => {
-    const jobsIn = (status: string) =>
-      jobs.filter((job) => job.status === status).length;
-    return {
-      running: jobsIn("Running"),
-      complete: jobsIn("Complete"),
-      retrying: jobsIn("Retrying"),
-      failed: jobsIn("Failed"),
-    };
-  }, [jobs]);
+  const refusals = useRefusals(
+    namespace ?? null,
+    jobs.some((job) => job.status === "Pending")
+  );
+  const told = useMemo(() => toldRuns(jobs, refusals), [jobs, refusals]);
+  const tally = useMemo(
+    () =>
+      (Object.keys(RUN_SEGMENT) as JobStatus[]).map((status) => ({
+        status,
+        count: told.filter((run) => run.status === status).length,
+      })),
+    [told]
+  );
 
   // A CronJob's pods are two hops away, owned by its runs, so they are asked
   // for only while the controller or a Job held here says a run is in flight.
@@ -383,36 +414,13 @@ export function CronJobDetail() {
                       // Every segment is counted off the same list as the total,
                       // so the bar cannot disagree with the rows under the Jobs
                       // tab.
-                      segments={[
-                        {
-                          label: t("count", "runningSegment", {
-                            n: tally.running,
-                          }),
-                          count: tally.running,
-                          tone: "ok",
-                        },
-                        {
-                          label: t("count", "jobsSucceededSegment", {
-                            n: tally.complete,
-                          }),
-                          count: tally.complete,
-                          tone: "neutral",
-                        },
-                        {
-                          label: t("count", "retryingSegment", {
-                            n: tally.retrying,
-                          }),
-                          count: tally.retrying,
-                          tone: "warn",
-                        },
-                        {
-                          label: t("count", "jobsFailedSegment", {
-                            n: tally.failed,
-                          }),
-                          count: tally.failed,
-                          tone: "err",
-                        },
-                      ]}
+                      segments={tally.map(({ status, count }) => ({
+                        label: t("count", RUN_SEGMENT[status].key, {
+                          n: count,
+                        }),
+                        count,
+                        tone: RUN_SEGMENT[status].tone,
+                      }))}
                       note={
                         <>
                           {t("action", "historyLimits", {
@@ -507,7 +515,7 @@ export function CronJobDetail() {
                 onRetry={() => void refetchJobs()}
               />
             ) : (
-              <JobRows jobs={jobs} />
+              <JobRows jobs={told} />
             )}
           </Section>
         ),
@@ -553,6 +561,7 @@ export function CronJobDetail() {
       events,
       cronJob,
       jobs,
+      told,
       tally,
       jobsRead,
       jobsError,
