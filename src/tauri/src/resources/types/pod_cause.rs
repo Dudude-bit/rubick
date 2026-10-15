@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use super::pod_display::{
-    blocking_init, condition_is_true, container_restarting_until, counted, last_terminated,
+    blocking_init, condition_is_true, container_restarting_until, counted, gone, last_terminated,
     pod_verdict,
 };
 use super::EventInfo;
@@ -287,19 +287,19 @@ pub fn shared_cause_by<'a>(
 ) -> Option<SharedCause> {
     share(
         pods.into_iter()
-            .map(|pod| (pod.metadata.deletion_timestamp.is_some(), cause_of(pod))),
+            .map(|pod| (gone(pod).is_some(), cause_of(pod))),
     )
 }
 
-/// The rule `shared_cause` applies, over each pod's deletion and cause.
+/// The rule `shared_cause` applies, over whether each pod is gone and its cause.
 ///
 /// `src/contracts/shared-cause-conformance.json` holds the answers, and
 /// `sharedCause` in `src/ui/lib/pod-cause.ts` owes the same ones.
 fn share(pods: impl IntoIterator<Item = (bool, Option<PodCause>)>) -> Option<SharedCause> {
     let mut of = 0;
     let mut groups: Vec<(String, PodCause, i32)> = Vec::new();
-    for (deleting, cause) in pods {
-        if deleting {
+    for (gone, cause) in pods {
+        if gone {
             continue;
         }
         of += 1;
@@ -1313,6 +1313,23 @@ mod tests {
         ));
     }
 
+    /// Live, `recommendations` read "1 of 26 pods" over one crash-looping pod
+    /// and 25 its `ReplicaSet` had replaced after the node evicted them. Fails
+    /// if a pod its controller replaced counts in the whole a workload runs.
+    #[test]
+    fn a_pod_its_controller_replaced_is_not_one_the_workload_runs() {
+        let replaced = pod(serde_json::json!({
+            "metadata": {"name": "api-x", "ownerReferences": [{
+                "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "api-abc",
+                "uid": "rs", "controller": true
+            }]},
+            "status": {"phase": "Failed", "reason": "Evicted"}
+        }));
+        let blocked = waiting_pod("CreateContainerConfigError", "couldn't find key");
+        let shared = shared_cause([&blocked, &replaced, &replaced]).expect("a shared cause");
+        assert_eq!((shared.pods, shared.of), (1, 1));
+    }
+
     /// A missing key is the kubelet's sentence, kept whole. Fails if it is dropped.
     #[test]
     fn a_config_error_carries_the_kubelets_sentence() {
@@ -1360,7 +1377,7 @@ mod tests {
     fn answers_every_case_in_the_shared_corpus_as_the_frontend_does() {
         #[derive(Deserialize)]
         struct Read {
-            deleting: bool,
+            gone: bool,
             cause: Option<PodCause>,
         }
         #[derive(Deserialize)]
@@ -1389,7 +1406,7 @@ mod tests {
                 pods: is.pods,
                 of: is.of,
             });
-            let read = share(case.pods.into_iter().map(|p| (p.deleting, p.cause)));
+            let read = share(case.pods.into_iter().map(|p| (p.gone, p.cause)));
             assert_eq!(read, want, "{}", case.name);
         }
     }

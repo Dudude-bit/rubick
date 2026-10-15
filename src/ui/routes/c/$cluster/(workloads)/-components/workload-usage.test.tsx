@@ -26,7 +26,6 @@ function pod(name: string, phase: string): PodInfo {
       phase,
       display: phase,
       exitUnreported: false,
-      deleting: false,
       ready: phase === "Running",
       conditions: [],
       message: null,

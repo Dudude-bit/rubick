@@ -20,6 +20,7 @@ use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{
     Container, ContainerStateTerminated, ContainerStatus, Pod, PodStatus,
 };
+use serde::{Deserialize, Serialize};
 
 /// The kubelet's placeholder while it sets a pod up; kubectl skips it in
 /// favour of the `Init:i/n` progress counter.
@@ -132,6 +133,50 @@ pub(crate) fn pod_verdict(pod: &Pod) -> Option<&str> {
         .then_some(status.reason.as_deref())
         .flatten()
         .filter(|reason| !reason.is_empty())
+}
+
+/// The controllers that start another pod in place of one that failed.
+const REPLACING: &[&str] = &[
+    "ReplicaSet",
+    "StatefulSet",
+    "DaemonSet",
+    "ReplicationController",
+];
+
+/// Why a workload's count of its pods leaves one out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PodGone {
+    /// See [`replaced`]; whether it is also being deleted no longer matters.
+    Replaced,
+    Deleting,
+}
+
+/// Whether a workload still runs `pod`, and if not, why.
+#[must_use]
+pub fn gone(pod: &Pod) -> Option<PodGone> {
+    if replaced(pod) {
+        Some(PodGone::Replaced)
+    } else {
+        pod.metadata
+            .deletion_timestamp
+            .is_some()
+            .then_some(PodGone::Deleting)
+    }
+}
+
+/// Failed under a controller that starts another pod in its place, so its
+/// workload no longer runs it: what an eviction leaves behind. A Job's failed
+/// pods are its runs and stay its record.
+#[must_use]
+pub fn replaced(pod: &Pod) -> bool {
+    pod.status.as_ref().and_then(|s| s.phase.as_deref()) == Some("Failed")
+        && pod
+            .metadata
+            .owner_references
+            .iter()
+            .flatten()
+            .any(|o| o.controller == Some(true) && REPLACING.contains(&o.kind.as_str()))
 }
 
 /// The status every screen leads with: kubectl's, except a failed pod's own
@@ -719,6 +764,36 @@ mod tests {
             }),
             ..Default::default()
         }
+    }
+
+    /// A failed pod a `ReplicaSet`, `StatefulSet` or `DaemonSet` starts another
+    /// in place of is no longer one its workload runs; a Job's failed pod is a
+    /// run, and a failed pod with no controller is all there is. Fails if any
+    /// of them is read the other way.
+    #[test]
+    fn only_a_failed_pod_a_controller_starts_again_is_replaced() {
+        let owned = |phase: &str, kind: Option<&str>| {
+            let mut p = pod(phase);
+            p.metadata.owner_references = kind.map(|kind| {
+                vec![
+                    k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference {
+                        api_version: "apps/v1".to_string(),
+                        kind: kind.to_string(),
+                        name: "x".to_string(),
+                        uid: "u".to_string(),
+                        controller: Some(true),
+                        ..Default::default()
+                    },
+                ]
+            });
+            p
+        };
+        for kind in ["ReplicaSet", "StatefulSet", "DaemonSet"] {
+            assert!(replaced(&owned("Failed", Some(kind))), "{kind}");
+            assert!(!replaced(&owned("Running", Some(kind))), "{kind} running");
+        }
+        assert!(!replaced(&owned("Failed", Some("Job"))));
+        assert!(!replaced(&owned("Failed", None)));
     }
 
     fn status(name: &str, state: ContainerState, ready: bool) -> ContainerStatus {

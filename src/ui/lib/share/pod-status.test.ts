@@ -88,6 +88,22 @@ describe("workloadCause", () => {
       shared: { cause: { says: "creating" }, pods: 1, of: 2 },
     });
   });
+
+  /**
+   * Live, a Deployment of one replica read "1 of 26 pods" beside the 25 its
+   * ReplicaSet had replaced after an eviction. Fails if a pod its controller
+   * replaced counts in the whole the workload runs.
+   */
+  it("leaves pods their controller replaced out of the whole", () => {
+    const evicted = {
+      status: { phase: "Failed", display: "Evicted", gone: "replaced" },
+      containers: [],
+      initContainers: [],
+    } as PodBadgeInput;
+    expect(
+      workloadCause([notReady(300), evicted, evicted], NOW)?.shared
+    ).toMatchObject({ pods: 1, of: 1 });
+  });
 });
 
 describe("withKubeletWarned", () => {

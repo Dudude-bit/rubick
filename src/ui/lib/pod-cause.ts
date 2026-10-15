@@ -501,12 +501,12 @@ function causeKey(cause: PodCause): string {
  * read; src/contracts/shared-cause-conformance.json holds both to one answer.
  */
 export function sharedCause(
-  pods: readonly { deleting?: boolean; cause?: PodCause | null }[]
+  pods: readonly { gone?: boolean; cause?: PodCause | null }[]
 ): SharedCause | null {
   let of = 0;
   const groups = new Map<string, { cause: PodCause; pods: number }>();
-  for (const { deleting, cause } of pods) {
-    if (deleting) continue;
+  for (const { gone, cause } of pods) {
+    if (gone) continue;
     of += 1;
     if (!cause) continue;
     const key = causeKey(cause);

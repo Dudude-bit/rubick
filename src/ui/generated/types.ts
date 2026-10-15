@@ -1593,7 +1593,7 @@ export interface PodStatusInfo {
   restartingUntil?: string;
   rejected?: string;
   cause?: PodCause;
-  deleting: boolean;
+  gone?: PodGone;
 }
 
 export type PodFilters = {
@@ -2858,6 +2858,8 @@ export type ContainerState =
   | { type: "waiting"; reason: string | null; message: string | null }
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
+
+export type PodGone = "replaced" | "deleting";
 
 export type Severity = "blocking" | "misconfigured" | "unverified" | "optional";
 

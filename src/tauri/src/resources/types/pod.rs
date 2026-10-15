@@ -11,8 +11,8 @@ use crate::utils::format_cpu;
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
 use super::pod_display::{
-    counts_ready, display_status, exit_unreported, failed_at, kubectl_status, looping_until,
-    rejected_at_admission, restarting_until, restarts, restarts_by,
+    counts_ready, display_status, exit_unreported, failed_at, gone, kubectl_status, looping_until,
+    rejected_at_admission, restarting_until, restarts, restarts_by, PodGone,
 };
 use crate::utils::Moment;
 
@@ -430,9 +430,9 @@ pub struct PodStatusInfo {
     /// See [`super::pod_cause::pod_cause`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cause: Option<super::PodCause>,
-    /// Being deleted, which a workload's count of its pods leaves out.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub deleting: bool,
+    /// See [`gone`]: why a workload's count of its pods leaves this one out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gone: Option<PodGone>,
 }
 
 impl PodStatusInfo {
@@ -453,7 +453,7 @@ impl PodStatusInfo {
                 restarting_until: None,
                 rejected: None,
                 cause: None,
-                deleting: pod.metadata.deletion_timestamp.is_some(),
+                gone: gone(pod),
             };
         };
 
@@ -479,7 +479,7 @@ impl PodStatusInfo {
             restarting_until: restarting_until(pod),
             rejected: rejected_at_admission(pod),
             cause: super::pod_cause(pod),
-            deleting: pod.metadata.deletion_timestamp.is_some(),
+            gone: gone(pod),
         }
     }
 }

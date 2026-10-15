@@ -261,7 +261,7 @@ const corpus = JSON.parse(
 ) as {
   cases: {
     name: string;
-    pods: { deleting: boolean; cause: PodCause | null }[];
+    pods: { gone: boolean; cause: PodCause | null }[];
     is: { from: number; pods: number; of: number } | null;
   }[];
 };

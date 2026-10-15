@@ -111,7 +111,6 @@ const CREATING = {
     phase: "Pending",
     display: "ContainerCreating",
     exitUnreported: false,
-    deleting: false,
     ready: false,
     loopingUntil: null,
     conditions: [],

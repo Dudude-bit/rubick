@@ -1,11 +1,11 @@
 {
-  "about": "The cause most of a workload's pods share, as both halves read it: `share` in src/tauri/src/resources/types/pod_cause.rs (the Overview's rows, a Deployment's page and peek) and `sharedCause` in src/ui/lib/pod-cause.ts (the StatefulSet, DaemonSet and Job pages and peeks, which read their pods as a list). Each pod arrives as its `deleting` flag and the cause `pod_cause` read; `is` names the pod whose cause is told (`from`), how many share it and how many the workload runs, or null where none has a cause.",
+  "about": "The cause most of a workload's pods share, as both halves read it: `share` in src/tauri/src/resources/types/pod_cause.rs (the Overview's rows, a Deployment's page and peek) and `sharedCause` in src/ui/lib/pod-cause.ts (the StatefulSet, DaemonSet and Job pages and peeks, which read their pods as a list). Each pod arrives as its `gone` flag (being deleted, or failed and replaced by its controller) and the cause `pod_cause` read; `is` names the pod whose cause is told (`from`), how many share it and how many the workload runs, or null where none has a cause.",
   "cases": [
     {
       "name": "two pods that exit the same way share it, the third has none",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -27,7 +27,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -49,7 +49,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": null
         }
       ],
@@ -60,10 +60,10 @@
       }
     },
     {
-      "name": "a pod being deleted is counted neither in the share nor in the whole",
+      "name": "a pod being deleted or already replaced is counted neither in the share nor in the whole",
       "pods": [
         {
-          "deleting": true,
+          "gone": true,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -85,11 +85,11 @@
           }
         },
         {
-          "deleting": true,
+          "gone": true,
           "cause": null
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -121,11 +121,11 @@
       "name": "pods with no cause share none",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": null
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": null
         }
       ],
@@ -140,7 +140,7 @@
       "name": "of two causes as common, the later one is told",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "blocked",
             "container": "api",
@@ -152,7 +152,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "notReady",
             "containers": ["web"],
@@ -171,7 +171,7 @@
       "name": "the same exit in another container is another cause",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -193,7 +193,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "sidecar",
@@ -215,7 +215,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "sidecar",
@@ -247,7 +247,7 @@
       "name": "another exit code in the same container is another cause",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -269,7 +269,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -291,7 +291,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -323,7 +323,7 @@
       "name": "restarts with no exit reported share one cause",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -333,7 +333,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -343,7 +343,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "exits",
             "container": "api",
@@ -375,7 +375,7 @@
       "name": "pulls the registry answered differently are different causes",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "blocked",
             "container": "api",
@@ -387,7 +387,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "blocked",
             "container": "api",
@@ -399,7 +399,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "blocked",
             "container": "api",
@@ -421,7 +421,7 @@
       "name": "a pull refused for the same reason in the same container is one cause",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "blocked",
             "container": "api",
@@ -433,7 +433,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "blocked",
             "container": "api",
@@ -445,7 +445,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "blocked",
             "container": "api",
@@ -467,7 +467,7 @@
       "name": "pods the scheduler turned down for the same reasons share it, whatever its sentence",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "unplaced",
             "said": "0/3 nodes are available: 3 Insufficient cpu.",
@@ -483,7 +483,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "unplaced",
             "said": "0/3 nodes are available: 3 Insufficient cpu. preemption: 0/3 nodes are available.",
@@ -509,7 +509,7 @@
       "name": "other scheduler reasons are another cause",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "unplaced",
             "said": null,
@@ -525,7 +525,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "unplaced",
             "said": null,
@@ -541,7 +541,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "unplaced",
             "said": null,
@@ -567,7 +567,7 @@
       "name": "a spread missing another label is another cause",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "unplaced",
             "said": null,
@@ -583,7 +583,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "unplaced",
             "said": null,
@@ -599,7 +599,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "unplaced",
             "said": null,
@@ -625,7 +625,7 @@
       "name": "pods not ready in other containers are other causes",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "notReady",
             "containers": ["web"],
@@ -634,7 +634,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "notReady",
             "containers": ["web", "proxy"],
@@ -643,7 +643,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "notReady",
             "containers": ["web"],
@@ -662,7 +662,7 @@
       "name": "pods the kubelet has not set up share it, whichever pod is named",
       "pods": [
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "creating",
             "uid": "uid-web-1",
@@ -674,7 +674,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": {
             "says": "creating",
             "uid": "uid-web-2",
@@ -686,7 +686,7 @@
           }
         },
         {
-          "deleting": false,
+          "gone": false,
           "cause": null
         }
       ],

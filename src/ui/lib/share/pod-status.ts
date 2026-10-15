@@ -11,7 +11,12 @@ import {
   currentCause,
   sharedCause,
 } from "@/lib/pod-cause";
-import type { PodCause, PodStart, SharedCause } from "@/generated/types";
+import type {
+  PodCause,
+  PodGone,
+  PodStart,
+  SharedCause,
+} from "@/generated/types";
 
 type LoopStatus = {
   display: string;
@@ -158,19 +163,19 @@ export function causeDeadlines(pod: PodBadgeInput): number[] {
  * what every pod shows on its way up is no workload's cause.
  */
 export function workloadCause(
-  pods: readonly (PodBadgeInput & { status: { deleting?: boolean } })[],
+  pods: readonly (PodBadgeInput & { status: { gone?: PodGone } })[],
   now: number
 ): { shared: SharedCause; warnedOnly: boolean } | null {
   const trouble = sharedCause(
     pods.map((pod) => ({
-      deleting: pod.status.deleting,
+      gone: pod.status.gone !== undefined,
       cause: countsAt(troubleCause(pod, now), now),
     }))
   );
   if (trouble) return { shared: trouble, warnedOnly: false };
   const setup = sharedCause(
     pods.map((pod) => ({
-      deleting: pod.status.deleting,
+      gone: pod.status.gone !== undefined,
       cause: settingUp(pod, now),
     }))
   );
