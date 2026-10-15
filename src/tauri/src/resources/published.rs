@@ -2896,7 +2896,7 @@ mod tests {
         (svc, published)
     }
 
-    fn network_policy(name: &str, namespace: &str, spec: serde_json::Value) -> NetworkPolicy {
+    fn network_policy(name: &str, namespace: &str, spec: &serde_json::Value) -> NetworkPolicy {
         serde_json::from_value(serde_json::json!({
             "metadata": { "name": name, "namespace": namespace },
             "spec": spec
@@ -2908,7 +2908,7 @@ mod tests {
         network_policy(
             "deny-all-ingress",
             "k8s-gui-test",
-            serde_json::json!({ "podSelector": {}, "policyTypes": ["Ingress"] }),
+            &serde_json::json!({ "podSelector": {}, "policyTypes": ["Ingress"] }),
         )
     }
 
@@ -2944,7 +2944,7 @@ mod tests {
         let allow = network_policy(
             "allow-traefik",
             "k8s-gui-test",
-            serde_json::json!({
+            &serde_json::json!({
                 "podSelector": { "matchLabels": { "app": "web" } },
                 "ingress": [{ "from": [{ "namespaceSelector": { "matchLabels": { "name": "traefik" } } }] }]
             }),
@@ -2961,7 +2961,7 @@ mod tests {
             network_policy(
                 "metrics-only",
                 "k8s-gui-test",
-                serde_json::json!({ "podSelector": {}, "ingress": [{ "ports": ports }] }),
+                &serde_json::json!({ "podSelector": {}, "ingress": [{ "ports": ports }] }),
             )
         };
         let Some(ChainStop::PolicyRefuses {
@@ -2983,7 +2983,7 @@ mod tests {
     /// beside a deny may admit the pods it holds.
     #[test]
     fn a_label_the_service_does_not_name_leaves_the_door_unsaid() {
-        let edge = |spec: serde_json::Value| network_policy("edge", "k8s-gui-test", spec);
+        let edge = |spec: serde_json::Value| network_policy("edge", "k8s-gui-test", &spec);
         assert!(policy_stop_of(&[edge(serde_json::json!({
             "podSelector": { "matchLabels": { "tier": "edge" } },
             "policyTypes": ["Ingress"]
@@ -3006,13 +3006,13 @@ mod tests {
         assert!(policy_stop_of(&[network_policy(
             "deny-egress",
             "k8s-gui-test",
-            serde_json::json!({ "podSelector": {}, "policyTypes": ["Egress"] }),
+            &serde_json::json!({ "podSelector": {}, "policyTypes": ["Egress"] }),
         )])
         .is_none());
         assert!(policy_stop_of(&[network_policy(
             "deny-all-ingress",
             "elsewhere",
-            serde_json::json!({ "podSelector": {}, "policyTypes": ["Ingress"] }),
+            &serde_json::json!({ "podSelector": {}, "policyTypes": ["Ingress"] }),
         )])
         .is_none());
     }
