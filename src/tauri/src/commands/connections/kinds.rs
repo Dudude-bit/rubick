@@ -264,11 +264,22 @@ pub(super) async fn workload_connections(
     // The workload's own pods decide whether its short count is a scale
     // coming up, as its page reads it.
     let pods_read = snapshot.pods.is_ok() && selector.query_text().is_some();
+    let now = chrono::Utc::now();
+    let warned = if pods_read && template.rollout.is_some() {
+        crate::commands::events::warned_while_creating(
+            &ctx.namespaced_api::<k8s_openapi::api::core::v1::Event>(),
+            mine.iter().copied(),
+            now,
+        )
+        .await
+    } else {
+        std::collections::HashSet::new()
+    };
     let rollout = template.rollout.clone().map(|rollout| {
         if !pods_read {
             return rollout.pods_unread();
         }
-        crate::resources::with_pods(rollout, mine.iter().copied(), chrono::Utc::now())
+        crate::resources::with_pods_warned(rollout, mine.iter().copied(), &warned, now)
     });
 
     let subject = ObjectRef::new(kind, name, Some(ns.to_string()), Existence::Present).with_facts(

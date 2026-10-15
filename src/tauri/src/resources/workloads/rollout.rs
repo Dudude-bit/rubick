@@ -6,6 +6,8 @@ use chrono::{DateTime, Utc};
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
 use k8s_openapi::api::core::v1::Pod;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::hash::BuildHasher;
 
 use super::replicaset::POD_TEMPLATE_HASH;
 use crate::resources::{
@@ -442,7 +444,33 @@ pub fn with_pods<'a>(
     pods: impl IntoIterator<Item = &'a Pod>,
     now: DateTime<Utc>,
 ) -> Rollout {
-    let starts: Vec<PodStart> = pods.into_iter().map(pod_start).collect();
+    with_pods_warned(rollout, pods, &HashSet::new(), now)
+}
+
+/// [`with_pods`] where a pod whose uid is in `warned` is failing, whatever
+/// its wait says: the kubelet has written that it cannot set it up.
+#[must_use]
+pub fn with_pods_warned<'a, S: BuildHasher>(
+    rollout: Rollout,
+    pods: impl IntoIterator<Item = &'a Pod>,
+    warned: &HashSet<&str, S>,
+    now: DateTime<Utc>,
+) -> Rollout {
+    let starts: Vec<PodStart> = pods
+        .into_iter()
+        .map(|pod| {
+            if pod
+                .metadata
+                .uid
+                .as_deref()
+                .is_some_and(|uid| warned.contains(uid))
+            {
+                PodStart::Failing
+            } else {
+                pod_start(pod)
+            }
+        })
+        .collect();
     with_starts(rollout, &starts, now)
 }
 
@@ -1571,6 +1599,32 @@ mod tests {
                 short
             );
         }
+    }
+
+    /// ledger-0 sat in the kubelet's `FailedMount` while its `StatefulSet`'s
+    /// page read "Pods coming up" until its watch arrived. Fails if a pod the
+    /// kubelet warned about counts as starting, or a quiet one stops to.
+    #[test]
+    fn a_pod_the_kubelet_warned_about_is_not_coming_up() {
+        let short = Rollout::Short {
+            available: 1,
+            desired: 2,
+        };
+        let mut warned = creating("web-1");
+        warned.metadata.uid = Some("u1".to_string());
+        let pods = [serving("web-0"), warned];
+        let now = Utc::now();
+        assert_eq!(
+            with_pods_warned(short.clone(), &pods, &HashSet::from(["u1"]), now),
+            short
+        );
+        assert_eq!(
+            with_pods_warned(short, &pods, &HashSet::new(), now),
+            Rollout::ComingUp {
+                available: 1,
+                desired: 2
+            }
+        );
     }
 
     /// Sam's big-pull read red "Not available (`MinimumReplicasUnavailable`)"

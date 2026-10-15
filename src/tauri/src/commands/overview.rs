@@ -1064,17 +1064,7 @@ fn with_pods_read<'a>(
     if pods_unread_in(unread, meta.namespace.as_deref()) {
         return rollout.pods_unread();
     }
-    let starts: Vec<PodStart> = pods
-        .into_iter()
-        .map(|pod| {
-            if warned_about(pod, warned) {
-                PodStart::Failing
-            } else {
-                pod_start(pod)
-            }
-        })
-        .collect();
-    crate::resources::with_starts(rollout, &starts, now)
+    crate::resources::with_pods_warned(rollout, pods, warned, now)
 }
 
 fn key_of(d: &Deployment) -> (&str, &str) {

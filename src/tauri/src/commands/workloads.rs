@@ -2,13 +2,13 @@
 
 use crate::error::Result;
 use crate::resources::{
-    runs_for, with_pods, CronJobDetailInfo, CronJobInfo, DaemonSetDetailInfo, DaemonSetInfo,
+    runs_for, with_pods_warned, CronJobDetailInfo, CronJobInfo, DaemonSetDetailInfo, DaemonSetInfo,
     JobDetailInfo, JobInfo, Owners, Rollout, Selector, StatefulSetDetailInfo, StatefulSetInfo,
 };
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{DaemonSet, ReplicaSet, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{Event, Pod};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
 use kube::api::ListParams;
 use tauri::State;
@@ -61,8 +61,19 @@ pub(crate) async fn with_own_pods(
     } else {
         Owners::of(uid)
     };
-    let own = pods.items.iter().filter(|pod| runs_for(pod, &owners));
-    with_pods(rollout, own, chrono::Utc::now())
+    let own: Vec<&Pod> = pods
+        .items
+        .iter()
+        .filter(|pod| runs_for(pod, &owners))
+        .collect();
+    let now = chrono::Utc::now();
+    let warned = crate::commands::events::warned_while_creating(
+        &ctx.namespaced_api::<Event>(),
+        own.iter().copied(),
+        now,
+    )
+    .await;
+    with_pods_warned(rollout, own, &warned, now)
 }
 
 async fn statefulset_detail(

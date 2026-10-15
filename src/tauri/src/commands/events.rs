@@ -3,13 +3,14 @@
 use crate::commands::helpers::ResourceContext;
 use crate::error::Result;
 use crate::resources::{
-    ChainStop, EventInfo, NotServing, PodCause, SetupWarning, SharedCause, Warned,
+    ChainStop, EventInfo, NotServing, PodCause, PodStart, SetupWarning, SharedCause, Warned,
 };
 use crate::state::AppState;
-use k8s_openapi::api::core::v1::Event;
+use chrono::{DateTime, Utc};
+use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::api::ListParams;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use tauri::State;
 
 /// Server-side page size for the event walk. Big enough that the common
@@ -156,6 +157,41 @@ async fn warnings_of(api: &kube::Api<Event>, uid: &str) -> Result<Vec<SetupWarni
     Ok(crate::resources::setup_warnings(uid, &events.items))
 }
 
+/// The pods the kubelet is setting up inside their wait that it has already
+/// warned about: its warning, not the clock, says they are not coming. One
+/// read per such pod; a read that fails leaves its pod to the clock.
+pub(crate) async fn warned_while_creating<'a>(
+    api: &kube::Api<Event>,
+    pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
+) -> HashSet<&'a str> {
+    let reads = pods
+        .into_iter()
+        .filter(|pod| creating_in_wait(pod, now))
+        .filter_map(|pod| {
+            let uid = pod.metadata.uid.as_deref()?;
+            Some(async move {
+                warnings_of(api, uid)
+                    .await
+                    .is_ok_and(|warnings| !warnings.is_empty())
+                    .then_some(uid)
+            })
+        });
+    futures::future::join_all(reads)
+        .await
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+fn creating_in_wait(pod: &Pod, now: DateTime<Utc>) -> bool {
+    matches!(crate::resources::pod_start(pod), PodStart::Starting { until } if until > now)
+        && matches!(
+            crate::resources::pod_cause(pod),
+            Some(PodCause::Creating { .. })
+        )
+}
+
 /// The pod a stop's cause names, where the kubelet has not set it up and
 /// nobody has read its warnings yet.
 fn unwarned(stop: &ChainStop) -> Option<&str> {
@@ -240,6 +276,32 @@ fn fill_warned(stops: Vec<(&str, &mut ChainStop)>, read: &HashMap<(String, Strin
 mod tests {
     use super::*;
     use crate::resources::{Existence, ObjectRef, SetupFault};
+
+    /// A page reads the kubelet's warnings only for the pods it is setting up
+    /// inside their wait. Fails if such a pod goes unread, or one the
+    /// scheduler has not placed, or one past its wait, costs a read.
+    #[test]
+    fn only_a_pod_the_kubelet_is_setting_up_inside_its_wait_is_read_for_warnings() {
+        let now = Utc::now();
+        let ago = |seconds: i64| (now - chrono::Duration::seconds(seconds)).to_rfc3339();
+        let pending = |scheduled: &str, seconds: i64| -> Pod {
+            serde_json::from_value(serde_json::json!({
+                "metadata": {"name": "web-1", "uid": "u1", "creationTimestamp": ago(seconds)},
+                "status": {
+                    "phase": "Pending",
+                    "conditions": [{"type": "PodScheduled", "status": scheduled,
+                        "lastTransitionTime": ago(seconds)}],
+                    "containerStatuses": [{"name": "web", "image": "", "imageID": "",
+                        "ready": false, "restartCount": 0,
+                        "state": {"waiting": {"reason": "ContainerCreating"}}}]
+                }
+            }))
+            .expect("a pod this test wrote itself")
+        };
+        assert!(creating_in_wait(&pending("True", 5), now));
+        assert!(!creating_in_wait(&pending("False", 5), now));
+        assert!(!creating_in_wait(&pending("True", 3600), now));
+    }
 
     fn none_ready(cause: PodCause, why: NotServing) -> ChainStop {
         ChainStop::NoneReady {
