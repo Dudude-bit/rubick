@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { findingDetail } from "./finding-words";
+import { describeFinding, findingDetail } from "./finding-words";
 import type { Finding, TraefikRoute } from "./model";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -46,5 +46,39 @@ describe("a Traefik finding in a shared file", () => {
       t
     );
     expect(detail).toContain("web");
+  });
+});
+
+describe("a Traefik finding on the page", () => {
+  /**
+   * The stop's words were lowercased after the colon, which turned "Pod
+   * Security" into "pod Security" and would turn ResourceQuota into
+   * resourceQuota, a kind the reader then cannot find in their terminal.
+   */
+  it("keeps the case of a refusal's first word after the colon", () => {
+    const said = describeFinding(
+      {
+        kind: "stop",
+        severity: "err",
+        route: route("web"),
+        stop: {
+          reason: "podsRefused",
+          service: {
+            kind: "Service",
+            name: "web",
+            namespace: "shop",
+            existence: "present",
+            facts: null,
+          },
+          selector: "app=web",
+          workloads: [],
+          said: 'pods "web-1" is forbidden: exceeded quota: two-pods, requested: pods=1, used: pods=2, limited: pods=2',
+        },
+      } as unknown as Finding,
+      t
+    );
+    expect(said.title).toContain(
+      "502: ResourceQuota two-pods refuses its pods"
+    );
   });
 });

@@ -24,7 +24,7 @@ export function describeFinding(
       const said = describeStop(finding.stop, t);
       return {
         title: t("empty", "everyRequest502", {
-          reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+          reason: said.title,
         }),
         objects: [],
         note: said.note,

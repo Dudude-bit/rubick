@@ -780,7 +780,7 @@ function describeFinding(
       const said = describeStop(finding.stop, t);
       return {
         title: t("empty", "istioRouteResolves503", {
-          detail: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+          detail: said.title,
         }),
         note: said.note,
       };

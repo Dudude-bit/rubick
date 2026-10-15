@@ -905,7 +905,7 @@ function describeFinding(
       const said = describeStop(finding.stop, t);
       return {
         title: t("empty", "everyRequest503", {
-          reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
+          reason: said.title,
         }),
         note: said.note,
       };
