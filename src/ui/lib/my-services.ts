@@ -222,6 +222,16 @@ export function wayState(way: EntryPoint): WayState | null {
   return way.serving ? null : "empty";
 }
 
+/** Whether nothing reaches a way in or nothing answers on it, as the chain says; an unread one is neither. */
+const UNSERVED: Record<WayState, boolean> = {
+  noController: true,
+  noAddress: true,
+  shut: true,
+  empty: true,
+  unread: false,
+  unsure: false,
+};
+
 /** Every way in read and none serving; null where one serves or one was not read. */
 export function noWayServes(ways: {
   entries: EntryPoint[];
@@ -229,13 +239,7 @@ export function noWayServes(ways: {
 }): "shut" | "empty" | null {
   if (!ways.known || ways.entries.length === 0) return null;
   const states = ways.entries.map(wayState);
-  if (
-    !states.every(
-      (state) =>
-        state === "shut" || state === "empty" || state === "noController"
-    )
-  )
-    return null;
+  if (!states.every((state) => state !== null && UNSERVED[state])) return null;
   return states.every((state) => state === "shut") ? "shut" : "empty";
 }
 

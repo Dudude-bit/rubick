@@ -808,7 +808,7 @@ describe("more ways in", () => {
     expect(noWayServes(ways("shut", "serving"))).toBeNull();
     expect(noWayServes(ways("shut", "unread"))).toBeNull();
     expect(noWayServes(ways("shut", "unserved"))).toBe("empty");
-    expect(noWayServes(ways("shut", "unaddressed"))).toBeNull();
+    expect(noWayServes(ways("shut", "unaddressed"))).toBe("empty");
     expect(noWayServes(ways())).toBeNull();
     expect(noWayServes({ ...ways("shut"), known: false })).toBeNull();
   });
