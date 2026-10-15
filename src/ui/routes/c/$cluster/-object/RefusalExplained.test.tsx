@@ -117,12 +117,16 @@ describe("RefusalExplained", () => {
     expect(commands.getNamespace).not.toHaveBeenCalled();
   });
 
-  /** Fails if an unreachable webhook stops pointing at the Service it calls. */
+  /** Live, the Service ran on from the quoted error as one sentence. Fails if an unreachable webhook stops pointing at the Service it calls, on a line of its own. */
   it("points an unreachable webhook at the Service behind it", async () => {
     await show(
       'Error creating: Internal error occurred: failed calling webhook "pods.guard.example.com": failed to call webhook: Post "https://guard.refused-hook.svc:443/validate?timeout=10s": service "guard" not found'
     );
-    expect(screen.getByRole("link", { name: "Service guard" })).toHaveAttribute(
+    const service = screen.getByRole("link", { name: "Service guard" });
+    expect(service.closest("p")?.textContent).toMatch(
+      /^The webhook is served by the Service .*guard in the namespace .*refused-hook\.$/
+    );
+    expect(service).toHaveAttribute(
       "href",
       "/c/test/services/refused-hook/guard"
     );

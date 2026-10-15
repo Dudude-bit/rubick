@@ -31,6 +31,8 @@ interface Row {
 interface Told {
   why: ReactNode;
   rows: readonly Row[];
+  /** What else the cluster says about who refused, on a line of its own. */
+  after?: ReactNode;
   wayOut: string | null;
 }
 
@@ -238,24 +240,28 @@ function told(
               webhook: <Mono>{reason.webhook}</Mono>,
             })}
             {said(reason.said)}
-            {reason.service && (
-              <>
-                {" "}
-                {parts(t("cause", "refusedWebhookService"), {
-                  service: (
-                    <ResourceRef
-                      kind="Service"
-                      name={reason.service.name}
-                      namespace={reason.service.namespace}
-                      showNamespace
-                    />
-                  ),
-                })}
-              </>
-            )}
           </>
         ),
         rows: [],
+        after:
+          reason.service &&
+          parts(t("cause", "refusedWebhookService"), {
+            service: (
+              <ResourceRef
+                kind="Service"
+                name={reason.service.name}
+                namespace={reason.service.namespace}
+                showKind={false}
+              />
+            ),
+            namespace: (
+              <ResourceRef
+                kind="Namespace"
+                name={reason.service.namespace}
+                showKind={false}
+              />
+            ),
+          }),
         wayOut: t("cause", "refusedWebhookDownWayOut"),
       };
     case "terminating":
@@ -317,9 +323,12 @@ export function RefusalExplained({
         )}
       </p>
     );
-  const { why, rows, wayOut } = told(reason, namespace, source, t);
+  const { why, rows, after, wayOut } = told(reason, namespace, source, t);
   return (
-    <div className={cn("text-xs", className)} data-testid="refused-line">
+    <div
+      className={cn("@container text-xs", className)}
+      data-testid="refused-line"
+    >
       <p>
         {lead && <span className="text-fg-mut">{lead} </span>}
         {mark}
@@ -328,17 +337,20 @@ export function RefusalExplained({
       </p>
       {rows.length > 0 && (
         <dl
-          className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 pl-3.5"
+          className="mt-1.5 grid grid-cols-1 gap-x-4 gap-y-0.5 pl-3.5 @3xl:grid-cols-[auto_minmax(0,1fr)] @3xl:gap-y-1"
           data-testid="refusal-rows"
         >
           {rows.map((row) => (
             <Fragment key={row.what}>
               <dt className="font-mono text-err">{row.what}</dt>
-              <dd className="wrap-break-word text-fg-mut">{row.how}</dd>
+              <dd className="mb-1 pl-3 wrap-break-word text-fg-mut @3xl:mb-0 @3xl:pl-0">
+                {row.how}
+              </dd>
             </Fragment>
           ))}
         </dl>
       )}
+      {after && <p className="mt-1.5 pl-3.5 text-fg-mut">{after}</p>}
       {wayOut && <p className="mt-1.5 pl-3.5 text-fg-mut">{wayOut}</p>}
       <details className="group mt-1 pl-3.5">
         <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-md py-0.5 text-fg-fnt hover:text-fg-mut">

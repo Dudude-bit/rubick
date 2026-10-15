@@ -7329,7 +7329,8 @@ export const en = {
       "Change the pod template to meet it, or ask whoever owns the rule.",
     refusedByWebhookDown:
       "Every new pod here has to be approved by the admission webhook {webhook}, and the API server cannot reach it, so it refuses them. It answered:",
-    refusedWebhookService: "The webhook is served by {service}.",
+    refusedWebhookService:
+      "The webhook is served by the Service {service} in the namespace {namespace}.",
     refusedWebhookDownWayOut:
       "Bring the webhook's backend back, or have its configuration changed so it no longer has to approve these pods.",
     refusedByTerminating:

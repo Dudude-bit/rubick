@@ -8108,7 +8108,8 @@ export const ru: Catalogue = {
       "Измените шаблон пода, чтобы он прошёл, или обратитесь к владельцу правила.",
     refusedByWebhookDown:
       "Каждый новый под здесь должен одобрить admission-вебхук {webhook}, а API-сервер не может до него достучаться и поэтому отказывает. Ответ:",
-    refusedWebhookService: "Вебхук обслуживает {service}.",
+    refusedWebhookService:
+      "Вебхук обслуживает Service {service} в неймспейсе {namespace}.",
     refusedWebhookDownWayOut:
       "Поднимите бэкенд вебхука или попросите изменить его конфигурацию, чтобы он не проверял эти поды.",
     refusedByTerminating:
