@@ -625,6 +625,11 @@ pub struct ClusterOverview {
     /// Phase breakdown of the pods read in the requested scope; `None` when
     /// no pod list in it answered.
     pub pods: Option<Census<PodComposition>>,
+    /// The uids of pods inside their wait that the kubelet has already warned
+    /// it cannot set up, uncapped unlike `problems`: every screen that would
+    /// call one starting reads it here. Empty when `warnings_known` is false
+    /// means not looked, not none.
+    pub pods_warned: Vec<String>,
     /// Jobs per word the Jobs list prints; `None` when no Job list answered.
     pub jobs: Option<Census<Vec<ReasonCount>>>,
     /// Deployments per rollout word the Deployments list prints, the words
@@ -949,13 +954,13 @@ fn trouble_cause(pod: &Pod, now: DateTime<Utc>) -> Option<crate::resources::PodC
     })
 }
 
-/// A pod inside its wait whose kubelet has already warned it cannot set it
-/// up: the warning is the evidence the wait would otherwise stand in for.
-fn warned_while_starting<'a>(
+/// The pods inside their wait whose kubelet has already warned it cannot set
+/// them up: the warning is the evidence the wait would otherwise stand in for.
+fn warned_pods<'a>(
     pods: impl IntoIterator<Item = &'a Pod>,
     events: &[&Event],
     now: DateTime<Utc>,
-) -> Vec<ClusterProblem> {
+) -> Vec<(&'a Pod, crate::resources::PodCause)> {
     pods.into_iter()
         .filter(|pod| {
             pod.status.as_ref().and_then(|s| s.phase.as_deref()) == Some("Pending")
@@ -969,17 +974,28 @@ fn warned_while_starting<'a>(
             if crate::resources::setup_warnings(uid, events.iter().copied()).is_empty() {
                 return None;
             }
-            Some(ClusterProblem {
-                severity: ProblemSeverity::Critical,
-                kind: "Pod".to_string(),
-                name: pod.metadata.name.clone().unwrap_or_default(),
-                namespace: pod.metadata.namespace.clone(),
-                reason: "Pending".to_string(),
-                detail: Some(ProblemDetail::Cause { cause, by: None }),
-                since: pending_since(pod).map(|t| t.to_rfc3339()),
-                restarts: None,
-                folded_pods: None,
-            })
+            Some((pod, cause))
+        })
+        .collect()
+}
+
+/// Their rows, told at once rather than when the wait runs out.
+fn warned_while_starting(warned: &[(&Pod, crate::resources::PodCause)]) -> Vec<ClusterProblem> {
+    warned
+        .iter()
+        .map(|(pod, cause)| ClusterProblem {
+            severity: ProblemSeverity::Critical,
+            kind: "Pod".to_string(),
+            name: pod.metadata.name.clone().unwrap_or_default(),
+            namespace: pod.metadata.namespace.clone(),
+            reason: "Pending".to_string(),
+            detail: Some(ProblemDetail::Cause {
+                cause: cause.clone(),
+                by: None,
+            }),
+            since: pending_since(pod).map(|t| t.to_rfc3339()),
+            restarts: None,
+            folded_pods: None,
         })
         .collect()
 }
@@ -1622,9 +1638,12 @@ fn account_by_node<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> NodeAccountin
     accounting
 }
 
+/// `warned` holds the uids of pods [`warned_pods`] found, which count as
+/// Pending rather than starting: Needs attention already lists them.
 fn pod_composition<'a>(
     pods: impl IntoIterator<Item = &'a Pod>,
     now: DateTime<Utc>,
+    warned: &HashSet<&str>,
 ) -> PodComposition {
     let mut composition = PodComposition::default();
     let mut stuck: BTreeMap<String, usize> = BTreeMap::new();
@@ -1652,7 +1671,13 @@ fn pod_composition<'a>(
                 composition.pending += 1;
                 if let Some((reason, _)) = stuck_reason(pod) {
                     *stuck.entry(reason).or_default() += 1;
-                } else if still_starting(pod, now) {
+                } else if still_starting(pod, now)
+                    && !pod
+                        .metadata
+                        .uid
+                        .as_deref()
+                        .is_some_and(|uid| warned.contains(uid))
+                {
                     composition.starting += 1;
                 }
             }
@@ -2071,11 +2096,13 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     problems.extend(job_problems(refs(input.jobs), &owned, input.now));
     problems.extend(node_problems(refs(nodes)));
     let events: Vec<&Event> = input.events.iter().map(AsRef::as_ref).collect();
-    problems.extend(warned_while_starting(
-        refs(input.scoped_pods),
-        &events,
-        input.now,
-    ));
+    let warned = warned_pods(refs(input.scoped_pods), &events, input.now);
+    problems.extend(warned_while_starting(&warned));
+    let pods_warned: Vec<String> = warned
+        .iter()
+        .filter_map(|(pod, _)| pod.metadata.uid.clone())
+        .collect();
+    let warned: HashSet<&str> = pods_warned.iter().map(String::as_str).collect();
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
     let problems = with_kubelet_words(problems, events.iter().copied(), input.events_known);
     let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
@@ -2118,9 +2145,10 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         warnings_known: input.events_known,
         counts,
         pods: census("Pod").map(|complete| Census {
-            read: pod_composition(refs(input.scoped_pods), input.now),
+            read: pod_composition(refs(input.scoped_pods), input.now, &warned),
             complete,
         }),
+        pods_warned,
         jobs: census("Job").map(|complete| Census {
             read: job_composition(refs(input.jobs)),
             complete,
@@ -3802,6 +3830,46 @@ mod tests {
             .collect()
     }
 
+    /// The Pods tile counted a pod its kubelet had warned about as starting
+    /// while Needs attention, a line above it, listed the same pod as Pending.
+    /// Fails if a warned pod counts as starting, or a quiet one stops.
+    #[test]
+    fn a_pod_the_kubelet_warned_about_is_not_counted_as_starting() {
+        let now = Utc::now();
+        let pods = [
+            creating_pod_for("web", "u1", now, 5),
+            creating_pod_for("quiet", "u2", now, 5),
+        ];
+        let overview = build_overview(&OverviewInputs {
+            scoped_pods: &arcs(pods.to_vec()),
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &arcs(vec![mount_warning("u1")]),
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            looked: &Looked::new(),
+            now,
+        });
+        assert_eq!(overview.pods_warned, ["u1"]);
+        let census = overview.pods.expect("the pods were read");
+        assert_eq!((census.read.pending, census.read.starting), (2, 1));
+        let listed: Vec<_> = overview
+            .problems
+            .iter()
+            .map(|row| row.name.as_str())
+            .collect();
+        assert_eq!(listed, ["web"]);
+    }
+
     /// A pod held by a missing `ConfigMap`: its row quotes the kubelet's
     /// `FailedMount` from the warnings the Overview already read. Fails if the
     /// row says only Pending, or takes another pod's warning as its own.
@@ -3894,7 +3962,7 @@ mod tests {
             pending_pod("never-placed", now, PENDING_GRACE_SECONDS + 10),
             config_error_pod(),
         ];
-        let composition = pod_composition(&pods, now);
+        let composition = pod_composition(&pods, now, &HashSet::new());
         assert_eq!((composition.pending, composition.starting), (5, 2));
         let listed = pod_problems(&pods, now).len();
         assert_eq!(composition.pending - composition.starting, listed);
@@ -4095,7 +4163,7 @@ mod tests {
         ];
         let warning = mount_warning("u1");
         assert!(pod_problems(&pods, now).is_empty());
-        let rows = warned_while_starting(&pods, &[&warning], now);
+        let rows = warned_while_starting(&warned_pods(&pods, &[&warning], now));
         let names: Vec<_> = rows.iter().map(|row| row.name.as_str()).collect();
         assert_eq!(names, ["web"]);
         assert!(matches!(
@@ -4194,7 +4262,7 @@ mod tests {
             ("up", &up, CRASH_LOOPING),
             ("backing off", &backing_off, "CrashLoopBackOff"),
         ] {
-            let composition = pod_composition([pod], now);
+            let composition = pod_composition([pod], now, &HashSet::new());
             assert_eq!(
                 (composition.running, composition.crash_looping),
                 (1, 1),
@@ -4251,7 +4319,7 @@ mod tests {
         let now = DateTime::parse_from_rfc3339("2026-10-09T08:39:00Z")
             .expect("now")
             .with_timezone(&Utc);
-        let composition = pod_composition([&pod], now);
+        let composition = pod_composition([&pod], now, &HashSet::new());
         assert_eq!(
             (
                 composition.running,
@@ -4321,7 +4389,7 @@ mod tests {
             ("exited", &exited, Some("Init:Error")),
             ("up", &up, None),
         ] {
-            let composition = pod_composition([pod], now);
+            let composition = pod_composition([pod], now, &HashSet::new());
             assert_eq!(composition.starting, 0, "{instant}");
             assert_eq!(
                 composition.stuck.first().map(|held| held.reason.as_str()),
@@ -4476,7 +4544,11 @@ mod tests {
             status: "True".to_string(),
             ..Default::default()
         }]);
-        let composition = pod_composition([&up, &search_pod(false), &search_pod(true)], now);
+        let composition = pod_composition(
+            [&up, &search_pod(false), &search_pod(true)],
+            now,
+            &HashSet::new(),
+        );
         assert_eq!(
             (
                 composition.running,
@@ -5206,7 +5278,7 @@ mod tests {
             })
             .collect();
 
-        let composition = pod_composition(&pods, Utc::now());
+        let composition = pod_composition(&pods, Utc::now(), &HashSet::new());
         assert_eq!(composition.running, 1);
         assert_eq!(composition.succeeded, 2);
         assert_eq!(composition.pending, 1);
@@ -5238,7 +5310,7 @@ mod tests {
             ..Default::default()
         }]);
 
-        let composition = pod_composition(&[looping], Utc::now());
+        let composition = pod_composition(&[looping], Utc::now(), &HashSet::new());
         assert_eq!(composition.running, 1);
         assert_eq!(composition.crash_looping, 1);
     }
@@ -5299,7 +5371,7 @@ mod tests {
     fn a_running_pod_failing_its_readiness_probe_is_counted_not_ready() {
         let pods = [search_pod(false), search_pod(true)];
 
-        let composition = pod_composition(&pods, Utc::now());
+        let composition = pod_composition(&pods, Utc::now(), &HashSet::new());
 
         assert_eq!(
             (
@@ -5328,7 +5400,7 @@ mod tests {
         ));
         let pods = [leaving, search_pod(true)];
 
-        let composition = pod_composition(&pods, Utc::now());
+        let composition = pod_composition(&pods, Utc::now(), &HashSet::new());
 
         assert_eq!(
             (
@@ -5429,7 +5501,7 @@ mod tests {
         let pod = config_error_pod();
         let now = Utc::now();
 
-        let composition = pod_composition([&pod], now);
+        let composition = pod_composition([&pod], now, &HashSet::new());
 
         assert_eq!(composition.pending, 1);
         assert_eq!(
@@ -5491,7 +5563,11 @@ mod tests {
 
     #[test]
     fn pods_with_no_phase_are_unknown_not_dropped() {
-        let composition = pod_composition(&[pod("mystery", PodStatus::default())], Utc::now());
+        let composition = pod_composition(
+            &[pod("mystery", PodStatus::default())],
+            Utc::now(),
+            &HashSet::new(),
+        );
         assert_eq!(composition.unknown, 1);
         assert_eq!(composition.running, 0);
     }

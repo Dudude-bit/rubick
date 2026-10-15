@@ -2027,6 +2027,7 @@ export interface ClusterOverview {
   counts: ResourceCounts;
   podsUnlisted: ReasonCount[];
   pods: Census<PodComposition> | null;
+  podsWarned: string[];
   jobs: Census<ReasonCount[]> | null;
   deployments: Census<RolloutCount[]> | null;
   metricsAvailable: boolean;
