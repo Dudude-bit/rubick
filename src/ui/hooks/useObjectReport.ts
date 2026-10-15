@@ -8,7 +8,11 @@ import { useAppInfo } from "@/hooks/useAppInfo";
 import { useChainAnswer } from "@/hooks/useChainAnswer";
 import { useConnections } from "@/hooks/useConnections";
 import { useServiceAnswer } from "@/hooks/useServiceAnswer";
-import { eventsOfEveryObject, useObjectEvents } from "@/hooks/useObjectEvents";
+import {
+  aboutAnother,
+  eventsOfEveryObject,
+  useObjectEvents,
+} from "@/hooks/useObjectEvents";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { uidIn } from "@/hooks/useReadUid";
 import { useLocationHref } from "@/hooks/useLocationHref";
@@ -165,18 +169,23 @@ export function useObjectReport(
           ? conditionsSection(found, t)
           : null;
     if (conditions) sections.push(conditions);
-    sections.push(
-      eventsSection(
+    const eventsOf = { kind: subject.kind, name: subject.name };
+    sections.push({
+      ...eventsSection(
         events.data,
         events.error
           ? errorToShow(events.error)
           : events.isPending && !events.data
             ? t("share", "stillReading")
             : null,
-        eventsOfEveryObject(subject.kind),
+        eventsOfEveryObject(subject.kind) ||
+          ((event) => aboutAnother(event, eventsOf)),
         t("columns", "events")
-      )
-    );
+      ),
+      partial: events.ownedUnread
+        ? `${t("empty", events.ownedUnread.unread)} ${errorToShow(events.ownedUnread.error)}`
+        : null,
+    });
     const changes = changesSection(
       { entries: journal, spans: spans[context] ?? [] },
       context,
@@ -264,6 +273,7 @@ export function useObjectReport(
     events.data,
     events.error,
     events.isPending,
+    events.ownedUnread,
     t,
     resource,
     journal,

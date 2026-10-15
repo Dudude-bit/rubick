@@ -598,8 +598,8 @@ const EVENT_ROW_COMPACT =
 export interface EventRowsProps {
   events: EventInfo[];
   emptyMessage?: ReactNode;
-  /** Off when every row is the same object and naming it would be noise. */
-  showObject?: boolean;
+  /** Off when every row is the same object and naming it would be noise; per row where only some are. */
+  showObject?: boolean | ((event: EventInfo) => boolean);
   /** Off when the whole feed is already scoped to one namespace. */
   showNamespace?: boolean;
   /** Narrow columns, for the peek panel's 440px. */
@@ -627,7 +627,9 @@ export function EventRows({
         <EventRow
           key={event.uid}
           event={event}
-          showObject={showObject}
+          showObject={
+            typeof showObject === "function" ? showObject(event) : showObject
+          }
           showNamespace={showNamespace}
           compact={compact}
         />

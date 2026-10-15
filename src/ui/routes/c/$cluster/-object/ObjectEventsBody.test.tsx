@@ -21,12 +21,21 @@ const about = (pod: string, reason: string, at: number): EventInfo => ({
   lastTimestamp: new Date(Date.UTC(2026, 9, 9, 10, 0, at)).toISOString(),
 });
 
-const answered = (data: EventInfo[]) =>
+const answered = (
+  data: EventInfo[],
+  ownedUnread: ObjectEventsQuery["ownedUnread"] = null
+) =>
   ({
+    subject: {
+      kind: data[0]?.involvedObject.kind ?? "Pod",
+      name: data[0]?.involvedObject.name ?? "",
+      namespace: "shop",
+    },
     data,
     error: null,
     dataUpdatedAt: Date.now(),
     refetch: vi.fn(),
+    ownedUnread,
   }) as unknown as ObjectEventsQuery;
 
 const body = (data: EventInfo[]) => (
@@ -75,5 +84,51 @@ describe("one object's events, live", () => {
     expect(
       screen.queryByRole("button", { name: /Show \d+ update/ })
     ).toBeNull();
+  });
+
+  /** Fails if a warning a Deployment carries from its ReplicaSet is drawn as if it were about the Deployment, or its own rows grow a name. */
+  it("names the ReplicaSet on a warning it carries, and not the object on its own rows", async () => {
+    const own = about("web", "ScalingReplicaSet", 1);
+    const refused: EventInfo = {
+      ...about("web-7d9f", "FailedCreate", 2),
+      involvedObject: {
+        kind: "ReplicaSet",
+        name: "web-7d9f",
+        namespace: "shop",
+        uid: null,
+      },
+    };
+    await renderWithRouter(
+      <ObjectEventsBody
+        query={answered([
+          {
+            ...own,
+            involvedObject: { ...own.involvedObject, kind: "Deployment" },
+          },
+          refused,
+        ])}
+        everyObject={false}
+      />
+    );
+    expect(
+      screen.getByRole("link", { name: "ReplicaSet web-7d9f" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Deployment web" })).toBeNull();
+  });
+
+  /** Fails if the warnings that could not be read go unsaid under the rows that could. */
+  it("says under its own rows that its ReplicaSets' warnings could not be read", async () => {
+    await renderWithRouter(
+      <ObjectEventsBody
+        query={answered([about("web", "Started", 1)], {
+          unread: "replicaSetWarningsUnread",
+          error: new Error("replicasets.apps is forbidden"),
+        })}
+        everyObject={false}
+      />
+    );
+    expect(screen.getByTestId("owned-events-unread")).toHaveTextContent(
+      "The warnings on its ReplicaSets could not be read, so a refusal written there is not shown: replicasets.apps is forbidden"
+    );
   });
 });

@@ -658,9 +658,11 @@ describe("the Events tab's own words", () => {
     const ru: T = (section, key, values) =>
       translate("ru", section, key, values);
     const query = {
+      subject: { kind: "Service", name: "web", namespace: "shop" },
       data: [],
       error: null,
       refetch: vi.fn(),
+      ownedUnread: null,
     } as unknown as ObjectEventsQuery;
     const tab = eventsTab(query, ru, { kind: "Service", name: "web" });
     expect(tab.label).toBe("События");

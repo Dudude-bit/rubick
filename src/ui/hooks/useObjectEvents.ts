@@ -1,10 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { useReadUid } from "@/hooks/useReadUid";
 import type { EventInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
-import type { RefreshRate } from "@/lib/refresh";
+import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import { isRefusal } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -36,10 +37,47 @@ export function ofIncarnation(
 }
 
 /**
+ * Where a kind's controller writes the news about it on objects it owns:
+ * a Deployment's refused pods are a FailedCreate on its ReplicaSet, and
+ * live its own Events said none beside a page explaining the refusal.
+ */
+const WARNINGS_OF_OWNED: Partial<
+  Record<
+    string,
+    {
+      kind: string;
+      owned: (
+        client: QueryClient,
+        name: string,
+        namespace: string
+      ) => Promise<{ uid: string; name: string }[]>;
+      unread: "replicaSetWarningsUnread";
+    }
+  >
+> = {
+  [ResourceType.Deployment]: {
+    kind: ResourceType.ReplicaSet,
+    // The Revisions tab's own read, so the page asks for them once.
+    owned: (client, name, namespace) =>
+      client.fetchQuery({
+        queryKey: queryKeys.deploymentReplicaSets(namespace, name),
+        queryFn: () => commands.getDeploymentReplicasets(name, namespace),
+        staleTime: STALE_TIMES.resourceList,
+      }),
+    unread: "replicaSetWarningsUnread",
+  },
+};
+
+const newestFirst = (a: EventInfo, b: EventInfo) =>
+  (Date.parse(b.lastTimestamp ?? "") || 0) -
+  (Date.parse(a.lastTimestamp ?? "") || 0);
+
+/**
  * One object's events, newest first: the peek, the object's page and Share
  * read the same answer. Once the object itself has been read, only its own
  * incarnation's: wd-demo deleted and created twice listed fifteen events,
- * eleven of them about the pods before it.
+ * eleven of them about the pods before it. A kind whose news is written on
+ * what it owns also carries those objects' warnings.
  */
 export function useObjectEvents(
   kind: string,
@@ -64,7 +102,7 @@ export function useObjectEvents(
     (events: EventInfo[]) => ofIncarnation(events, uid) ?? events,
     [uid]
   );
-  return useLiveQuery({
+  const own = useLiveQuery({
     queryKey: [...queryKeys.events(scope ?? null), "object", kind, name ?? ""],
     queryFn: () =>
       commands.listEvents({
@@ -80,7 +118,81 @@ export function useObjectEvents(
     refresh,
     retry: false,
   });
+  const client = useQueryClient();
+  const from = everyObject ? undefined : WARNINGS_OF_OWNED[kind];
+  const readsOwned = enabled && !!name && !!namespace && !!from;
+  const owned = useLiveQuery({
+    queryKey: [
+      ...queryKeys.events(namespace ?? null),
+      "owned",
+      kind,
+      name ?? "",
+    ],
+    queryFn: async () => {
+      const [sets, warnings] = await Promise.all([
+        from!.owned(client, name!, namespace!),
+        commands.listEvents({
+          namespace: namespace!,
+          involved_object_name: null,
+          involved_object_kind: from!.kind,
+          event_type: "Warning",
+          field_selector: null,
+          limit: OBJECT_EVENTS_READ,
+        }),
+      ]);
+      const uids = new Set(sets.map((set) => set.uid));
+      const names = new Set(sets.map((set) => set.name));
+      return warnings.filter((event) => {
+        const of = involvedUid(event);
+        return of ? uids.has(of) : names.has(event.involvedObject.name);
+      });
+    },
+    enabled: readsOwned,
+    refresh,
+    retry: false,
+  });
+  const data = useMemo(() => {
+    if (!readsOwned || !own.data) return own.data;
+    if (owned.error) return own.data;
+    if (!owned.data) return undefined;
+    return owned.data.length === 0
+      ? own.data
+      : [...own.data, ...owned.data]
+          .sort(newestFirst)
+          .slice(0, OBJECT_EVENTS_READ);
+  }, [readsOwned, own.data, owned.data, owned.error]);
+  const refetchOwn = own.refetch;
+  const refetchOwned = owned.refetch;
+  const refetch = useCallback(
+    () => Promise.all([refetchOwn(), readsOwned ? refetchOwned() : null]),
+    [refetchOwn, refetchOwned, readsOwned]
+  );
+  const ownedUnread = useMemo(
+    () =>
+      readsOwned && owned.error && from
+        ? { unread: from.unread, error: owned.error }
+        : null,
+    [readsOwned, owned.error, from]
+  );
+  return {
+    subject: { kind, name: name ?? "", namespace: namespace ?? "" },
+    data,
+    error: own.error,
+    isPending: own.isPending || (readsOwned && owned.isPending),
+    dataUpdatedAt: Math.max(own.dataUpdatedAt, owned.dataUpdatedAt),
+    refetch,
+    /** Where the owned objects' warnings could not be read, so the rows are only the object's own. */
+    ownedUnread,
+  };
 }
+
+/** Whether an event is about another object than the one whose events these are. */
+export const aboutAnother = (
+  event: EventInfo,
+  subject: { kind: string; name: string }
+) =>
+  event.involvedObject.kind !== subject.kind ||
+  event.involvedObject.name !== subject.name;
 
 /** Why an object's events are not on screen: refused here, or a read that failed. */
 export const eventsUnreadWords = (

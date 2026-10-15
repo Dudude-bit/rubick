@@ -13,6 +13,9 @@ const getResourceConnections = vi.fn<(...args: unknown[]) => Promise<unknown>>(
 const listNodes = vi.fn<(...args: unknown[]) => Promise<unknown[]>>(
   async () => []
 );
+const getDeploymentReplicasets = vi.fn<
+  (...args: unknown[]) => Promise<unknown[]>
+>(async () => []);
 vi.mock("@/lib/commands", () => ({
   commands: {
     getAppInfo: vi.fn(async () => ({ version: "4.20.1" })),
@@ -20,6 +23,8 @@ vi.mock("@/lib/commands", () => ({
     getResourceConnections: (...args: unknown[]) =>
       getResourceConnections(...args),
     listNodes: (...args: unknown[]) => listNodes(...args),
+    getDeploymentReplicasets: (...args: unknown[]) =>
+      getDeploymentReplicasets(...args),
   },
 }));
 
@@ -129,6 +134,70 @@ describe("the report of any object", () => {
     );
     expect(result.current.report!.sections.map((s) => s.id)).toContain(
       "routes"
+    );
+  });
+
+  /**
+   * Live, capped's report listed no events while its ReplicaSet held the
+   * refusal. Fails if a Deployment's report leaves out its ReplicaSets'
+   * warnings, draws one without naming the ReplicaSet, or keeps quiet that
+   * they could not be read.
+   */
+  it("carries a Deployment's ReplicaSet warnings, and says where they could not be read", async () => {
+    const deployment = { kind: "Deployment", name: "capped", namespace: "web" };
+    const refused = {
+      name: "capped-6d67.1",
+      namespace: "web",
+      uid: "event-1",
+      type: "Warning",
+      reason: "FailedCreate",
+      message: "exceeded quota: two-pods",
+      source: null,
+      involvedObject: {
+        kind: "ReplicaSet",
+        name: "capped-6d67",
+        namespace: "web",
+        uid: "rs",
+      },
+      count: 73,
+      firstTimestamp: null,
+      lastTimestamp: "2026-10-15T10:00:00Z",
+    };
+    listEvents.mockImplementation(async (filters) =>
+      (filters as { involved_object_kind: string | null })
+        .involved_object_kind === "ReplicaSet"
+        ? [refused]
+        : []
+    );
+    getDeploymentReplicasets.mockResolvedValue([
+      { uid: "rs", name: "capped-6d67" },
+    ]);
+    const read = renderHook(
+      () => useObjectReport(deployment, {}, undefined, true),
+      { wrapper }
+    );
+    await waitFor(() =>
+      expect(
+        read.result.current.report?.sections.find((s) => s.id === "events")
+          ?.body
+      ).toMatchObject({
+        type: "events",
+        rows: [{ reason: "FailedCreate", ref: expect.anything() }],
+      })
+    );
+    read.unmount();
+
+    getDeploymentReplicasets.mockRejectedValue(
+      new Error("replicasets.apps is forbidden")
+    );
+    const unread = renderHook(
+      () => useObjectReport(deployment, {}, undefined, true),
+      { wrapper }
+    );
+    await waitFor(() =>
+      expect(unread.result.current.report?.notRead.join(" ")).toContain(
+        "The warnings on its ReplicaSets could not be read, so a refusal written there is not shown: replicasets.apps is forbidden"
+      )
     );
   });
 

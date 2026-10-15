@@ -7,6 +7,7 @@ import { ReadAgain } from "@/components/ui/read-again";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { EventInfo } from "@/generated/types";
 import {
+  aboutAnother,
   eventsUnreadWords,
   type ObjectEventsQuery,
 } from "@/hooks/useObjectEvents";
@@ -40,12 +41,11 @@ export function ObjectEventsBody({
   const { data, error } = query;
   const [pointed, setPointed] = useState(false);
   const rows = shown ?? data ?? NO_EVENTS;
+  const { subject } = query;
   // Whose events these are, so another object's are drawn at once, held or not.
-  const about = rows[0]
-    ? everyObject
-      ? rows[0].namespace
-      : `${rows[0].involvedObject.kind}/${rows[0].namespace}/${rows[0].involvedObject.name}`
-    : "";
+  const about = everyObject
+    ? (rows[0]?.namespace ?? "")
+    : `${subject.kind}/${subject.namespace}/${subject.name}`;
   const held = useHeldRows(rows, pointed && rows.length > 0, about);
   if (error) {
     const refused = isRefusal(error);
@@ -95,7 +95,7 @@ export function ObjectEventsBody({
       )}
       <EventRows
         events={held.shown}
-        showObject={everyObject}
+        showObject={everyObject || ((event) => aboutAnother(event, subject))}
         compact={compact}
         emptyMessage={
           <>
@@ -112,6 +112,30 @@ export function ObjectEventsBody({
           </>
         }
       />
+      {query.ownedUnread && (
+        <p
+          className={cn(
+            "mt-1.5 flex items-start gap-1.5 text-xs",
+            isRefusal(query.ownedUnread.error) ? "text-warn" : "text-err"
+          )}
+          data-testid="owned-events-unread"
+        >
+          {isRefusal(query.ownedUnread.error) ? (
+            <Lock className="mt-0.5 h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          ) : (
+            <CircleX
+              className="mt-0.5 h-3.5 w-3.5 flex-none"
+              aria-hidden="true"
+            />
+          )}
+          <span>
+            {t("empty", query.ownedUnread.unread)}{" "}
+            <span className="font-mono text-fg-fnt">
+              {errorToShow(query.ownedUnread.error)}
+            </span>
+          </span>
+        </p>
+      )}
     </div>
   );
 }

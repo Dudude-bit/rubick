@@ -211,7 +211,7 @@ export function conditionsSection(
 export function eventsSection(
   events: readonly EventInfo[] | undefined,
   unread: string | null,
-  withObject = false,
+  withObject: boolean | ((event: EventInfo) => boolean) = false,
   title = "Events"
 ): PlacedSection {
   const sorted = [...(events ?? [])].sort(
@@ -240,7 +240,7 @@ export function eventsSection(
         reason: event.reason ?? event.type,
         message: event.message ?? "",
         count: event.count ?? 1,
-        ref: withObject
+        ref: (typeof withObject === "function" ? withObject(event) : withObject)
           ? refOf({
               kind: event.involvedObject.kind,
               name: event.involvedObject.name,

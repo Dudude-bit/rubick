@@ -3,9 +3,24 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-const answer = vi.hoisted(() => ({ events: [] as unknown[] }));
+const answer = vi.hoisted(() => ({
+  events: [] as unknown[],
+  setEvents: [] as unknown[],
+  sets: [] as unknown[] | Error,
+}));
 vi.mock("@/lib/commands", () => ({
-  commands: { listEvents: () => Promise.resolve(answer.events) },
+  commands: {
+    listEvents: (filters: { involved_object_kind: string | null }) =>
+      Promise.resolve(
+        filters.involved_object_kind === "ReplicaSet"
+          ? answer.setEvents
+          : answer.events
+      ),
+    getDeploymentReplicasets: () =>
+      answer.sets instanceof Error
+        ? Promise.reject(answer.sets)
+        : Promise.resolve(answer.sets),
+  },
 }));
 
 import type { EventInfo } from "@/generated/types";
@@ -151,4 +166,78 @@ it("filters by the uid of an object read from its manifest", async () => {
     "Started",
     "Noted",
   ]);
+});
+
+const at = (second: number) =>
+  new Date(Date.UTC(2026, 9, 15, 10, 0, second)).toISOString();
+
+const onObject = (
+  kind: string,
+  name: string,
+  uid: string,
+  reason: string,
+  second: number
+): EventInfo => ({
+  ...event(reason, uid),
+  name: `${name}.${reason}`,
+  uid: `event-${name}-${reason}`,
+  type: kind === "ReplicaSet" ? "Warning" : "Normal",
+  involvedObject: { kind, name, namespace: "lena-sandbox", uid },
+  lastTimestamp: at(second),
+});
+
+function mountDeployment() {
+  const client = testQueryClient();
+  const { result } = renderHook(
+    () =>
+      useObjectEvents("Deployment", "web", "lena-sandbox", {
+        refresh: "slow",
+      }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  return result;
+}
+
+/**
+ * Live, capped's Events tab said 0 while its ReplicaSet held 73 FailedCreate
+ * events. Fails if a Deployment's events leave out its own ReplicaSets'
+ * warnings, take another Deployment's, or lose the newest-first order.
+ */
+it("carries the warnings of a Deployment's own ReplicaSets, newest first", async () => {
+  answer.events = [
+    onObject("Deployment", "web", "deploy", "ScalingReplicaSet", 1),
+  ];
+  answer.sets = [{ uid: "rs-web", name: "web-7d9f" }];
+  answer.setEvents = [
+    onObject("ReplicaSet", "web-7d9f", "rs-web", "FailedCreate", 5),
+    onObject("ReplicaSet", "web-api-6c4b", "rs-other", "FailedCreate", 9),
+  ];
+  const result = mountDeployment();
+  await waitFor(() => expect(result.current.data).toHaveLength(2));
+  expect(
+    result.current.data?.map((e) => `${e.involvedObject.name} ${e.reason}`)
+  ).toEqual(["web-7d9f FailedCreate", "web ScalingReplicaSet"]);
+  expect(result.current.ownedUnread).toBeNull();
+});
+
+/**
+ * Fails if a ReplicaSet list that could not be read is taken for one with no
+ * warnings: the tab would say the Deployment's own events are all there is.
+ */
+it("says its ReplicaSets' warnings could not be read rather than that there are none", async () => {
+  answer.events = [
+    onObject("Deployment", "web", "deploy", "ScalingReplicaSet", 1),
+  ];
+  answer.sets = new Error("replicasets.apps is forbidden");
+  const result = mountDeployment();
+  await waitFor(() => expect(result.current.ownedUnread).not.toBeNull());
+  expect(result.current.ownedUnread?.unread).toBe("replicaSetWarningsUnread");
+  expect(result.current.data?.map((e) => e.reason)).toEqual([
+    "ScalingReplicaSet",
+  ]);
+  answer.sets = [];
 });
