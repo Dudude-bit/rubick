@@ -374,7 +374,7 @@ pub fn setup_warnings<'a>(
             })
         })
         .collect();
-    warnings.sort_by(|a, b| b.at.cmp(&a.at));
+    warnings.sort_by_key(|warning| std::cmp::Reverse(warning.at));
     warnings.truncate(MAX_WARNINGS);
     warnings
 }
@@ -472,17 +472,17 @@ fn creating(pod: &Pod) -> Option<PodCause> {
     if sandbox == Some(true) {
         return None;
     }
-    let states: Vec<_> = status
+    let containers: Vec<_> = status
         .init_container_statuses
         .iter()
         .chain(status.container_statuses.iter())
         .flatten()
         .filter_map(|cs| cs.state.as_ref())
         .collect();
-    let started = states
+    let started = containers
         .iter()
         .any(|s| s.running.is_some() || s.terminated.is_some());
-    let waiting = states.iter().any(|s| {
+    let waiting = containers.iter().any(|s| {
         s.waiting
             .as_ref()
             .and_then(|w| w.reason.as_deref())
@@ -1399,7 +1399,7 @@ mod tests {
         .expect("an event this test wrote itself")
     }
 
-    /// The kubelet's words as k3s wrote them. Fails if a missing ConfigMap or
+    /// The kubelet's words as k3s wrote them. Fails if a missing `ConfigMap` or
     /// Secret is not named with its kind, if the scheduler's or another pod's
     /// warning is taken, or if the newest stops coming first.
     #[test]

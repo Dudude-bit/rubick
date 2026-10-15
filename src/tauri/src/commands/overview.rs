@@ -2070,7 +2070,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     let (unconfirmed, _) = rank_and_cap(said);
     problems.extend(job_problems(refs(input.jobs), &owned, input.now));
     problems.extend(node_problems(refs(nodes)));
-    let events: Vec<&Event> = input.events.iter().map(|event| event.as_ref()).collect();
+    let events: Vec<&Event> = input.events.iter().map(AsRef::as_ref).collect();
     problems.extend(warned_while_starting(
         refs(input.scoped_pods),
         &events,
@@ -3802,8 +3802,8 @@ mod tests {
             .collect()
     }
 
-    /// A pod held by a missing ConfigMap: its row quotes the kubelet's
-    /// FailedMount from the warnings the Overview already read. Fails if the
+    /// A pod held by a missing `ConfigMap`: its row quotes the kubelet's
+    /// `FailedMount` from the warnings the Overview already read. Fails if the
     /// row says only Pending, or takes another pod's warning as its own.
     #[test]
     fn a_pod_the_kubelet_cannot_set_up_quotes_its_warnings_on_its_row() {
@@ -4083,7 +4083,7 @@ mod tests {
         assert!(matches!(cause, crate::resources::PodCause::NotReady { .. }));
     }
 
-    /// A missing ConfigMap holds a pod for good, so the kubelet's warning
+    /// A missing `ConfigMap` holds a pod for good, so the kubelet's warning
     /// tells it seconds in, not when the wait runs out. Fails if a warned
     /// pod waits for its row, or a quiet one inside its wait gets one.
     #[test]

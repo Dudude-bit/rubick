@@ -145,6 +145,7 @@ pub async fn get_pod_setup_warnings(
     let params = ListParams::default()
         .fields(&format!("involvedObject.uid={uid},type=Warning"))
         .limit(POD_WARNINGS_PAGE);
-    let events = api.list(&params).await?;
+    let events =
+        crate::client::clock::timed(&state.perf, "getPodSetupWarnings", api.list(&params)).await?;
     Ok(crate::resources::setup_warnings(&uid, &events.items))
 }
