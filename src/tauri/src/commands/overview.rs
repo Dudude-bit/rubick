@@ -979,6 +979,13 @@ fn warned_pods<'a>(
         .collect()
 }
 
+fn warned_about(pod: &Pod, warned: &HashSet<&str>) -> bool {
+    pod.metadata
+        .uid
+        .as_deref()
+        .is_some_and(|uid| warned.contains(uid))
+}
+
 /// Their rows, told at once rather than when the wait runs out.
 fn warned_while_starting(warned: &[(&Pod, crate::resources::PodCause)]) -> Vec<ClusterProblem> {
     warned
@@ -1046,12 +1053,23 @@ fn with_pods_read<'a>(
     meta: &kube::core::ObjectMeta,
     pods: impl IntoIterator<Item = &'a Pod>,
     unread: &[OverviewUnread],
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
 ) -> Rollout {
     if pods_unread_in(unread, meta.namespace.as_deref()) {
         return rollout.pods_unread();
     }
-    crate::resources::with_pods(rollout, pods, now)
+    let starts: Vec<PodStart> = pods
+        .into_iter()
+        .map(|pod| {
+            if warned_about(pod, warned) {
+                PodStart::Failing
+            } else {
+                pod_start(pod)
+            }
+        })
+        .collect();
+    crate::resources::with_starts(rollout, &starts, now)
 }
 
 fn key_of(d: &Deployment) -> (&str, &str) {
@@ -1066,6 +1084,7 @@ fn rollout_with_pods(
     d: &Deployment,
     owned: &HashMap<(&str, &str), Vec<&Pod>>,
     unread: &[OverviewUnread],
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
 ) -> Rollout {
     let key = (
@@ -1077,6 +1096,7 @@ fn rollout_with_pods(
         &d.metadata,
         owned.get(&key).into_iter().flatten().copied(),
         unread,
+        warned,
         now,
     )
 }
@@ -1099,22 +1119,24 @@ fn deployment_problems<'a>(
     deployments: impl IntoIterator<Item = &'a Deployment>,
     owned: &HashMap<(&str, &str), Vec<&Pod>>,
     unread: &[OverviewUnread],
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
-    deployments_saying(deployments, owned, unread, now, as_problem)
+    deployments_saying(deployments, owned, unread, warned, now, as_problem)
 }
 
 fn deployments_saying<'a>(
     deployments: impl IntoIterator<Item = &'a Deployment>,
     owned: &HashMap<(&str, &str), Vec<&Pod>>,
     unread: &[OverviewUnread],
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
     pick: fn(&Rollout) -> Option<&Rollout>,
 ) -> Vec<ClusterProblem> {
     deployments
         .into_iter()
         .filter_map(|d| {
-            let read = rollout_with_pods(d, owned, unread, now);
+            let read = rollout_with_pods(d, owned, unread, warned, now);
             let rollout = pick(&read)?;
             let status = d.status.as_ref();
             let desired = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1);
@@ -1214,6 +1236,7 @@ fn with_own_pods(
     set: &kube::core::ObjectMeta,
     owned: &HashMap<&str, Vec<&Pod>>,
     unread: &[OverviewUnread],
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
 ) -> Rollout {
     let pods = set.uid.as_deref().and_then(|uid| owned.get(uid));
@@ -1222,6 +1245,7 @@ fn with_own_pods(
         set,
         pods.into_iter().flatten().copied(),
         unread,
+        warned,
         now,
     )
 }
@@ -1230,6 +1254,7 @@ fn stateful_set_problems<'a>(
     sets: impl IntoIterator<Item = &'a StatefulSet>,
     owned: &HashMap<&str, Vec<&Pod>>,
     unread: &[OverviewUnread],
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
     pick: fn(&Rollout) -> Option<&Rollout>,
 ) -> Vec<ClusterProblem> {
@@ -1243,6 +1268,7 @@ fn stateful_set_problems<'a>(
                     &set.metadata,
                     owned,
                     unread,
+                    warned,
                     now,
                 ))?,
                 set.status
@@ -1261,6 +1287,7 @@ fn daemon_set_problems<'a>(
     sets: impl IntoIterator<Item = &'a DaemonSet>,
     owned: &HashMap<&str, Vec<&Pod>>,
     unread: &[OverviewUnread],
+    warned: &HashSet<&str>,
     now: DateTime<Utc>,
     pick: fn(&Rollout) -> Option<&Rollout>,
 ) -> Vec<ClusterProblem> {
@@ -1275,6 +1302,7 @@ fn daemon_set_problems<'a>(
                     &set.metadata,
                     owned,
                     unread,
+                    warned,
                     now,
                 ))?,
                 status.map_or(0, |s| s.number_ready),
@@ -1671,13 +1699,7 @@ fn pod_composition<'a>(
                 composition.pending += 1;
                 if let Some((reason, _)) = stuck_reason(pod) {
                     *stuck.entry(reason).or_default() += 1;
-                } else if still_starting(pod, now)
-                    && !pod
-                        .metadata
-                        .uid
-                        .as_deref()
-                        .is_some_and(|uid| warned.contains(uid))
-                {
+                } else if still_starting(pod, now) && !warned_about(pod, warned) {
                     composition.starting += 1;
                 }
             }
@@ -2043,24 +2065,32 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
 
     let unread = input.unread;
     let pods_known = !unread.iter().any(|entry| entry.kind == "Pod");
+    let events: Vec<&Event> = input.events.iter().map(AsRef::as_ref).collect();
+    let warned_rows = warned_pods(refs(input.scoped_pods), &events, input.now);
+    let warned: HashSet<&str> = warned_rows
+        .iter()
+        .filter_map(|(pod, _)| pod.metadata.uid.as_deref())
+        .collect();
     let mut problems = pod_problems(refs(input.scoped_pods), input.now);
     let by_deployment = pods_by_deployment(refs(input.scoped_pods));
     problems.extend(deployment_problems(
         refs(input.deployments),
         &by_deployment,
         unread,
+        &warned,
         input.now,
     ));
     let rollouts: Vec<Rollout> = input
         .deployments
         .iter()
-        .map(|d| rollout_with_pods(d, &by_deployment, unread, input.now))
+        .map(|d| rollout_with_pods(d, &by_deployment, unread, &warned, input.now))
         .collect();
     let owned = pods_by_controller(refs(input.scoped_pods));
     problems.extend(stateful_set_problems(
         refs(input.stateful_sets),
         &owned,
         unread,
+        &warned,
         input.now,
         as_problem,
     ));
@@ -2068,6 +2098,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         refs(input.daemon_sets),
         &owned,
         unread,
+        &warned,
         input.now,
         as_problem,
     ));
@@ -2075,6 +2106,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         refs(input.deployments),
         &by_deployment,
         unread,
+        &warned,
         input.now,
         unconfirmed,
     );
@@ -2082,6 +2114,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         refs(input.stateful_sets),
         &owned,
         unread,
+        &warned,
         input.now,
         unconfirmed,
     ));
@@ -2089,20 +2122,18 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         refs(input.daemon_sets),
         &owned,
         unread,
+        &warned,
         input.now,
         unconfirmed,
     ));
     let (unconfirmed, _) = rank_and_cap(said);
     problems.extend(job_problems(refs(input.jobs), &owned, input.now));
     problems.extend(node_problems(refs(nodes)));
-    let events: Vec<&Event> = input.events.iter().map(AsRef::as_ref).collect();
-    let warned = warned_pods(refs(input.scoped_pods), &events, input.now);
-    problems.extend(warned_while_starting(&warned));
-    let pods_warned: Vec<String> = warned
+    problems.extend(warned_while_starting(&warned_rows));
+    let pods_warned: Vec<String> = warned_rows
         .iter()
         .filter_map(|(pod, _)| pod.metadata.uid.clone())
         .collect();
-    let warned: HashSet<&str> = pods_warned.iter().map(String::as_str).collect();
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
     let problems = with_kubelet_words(problems, events.iter().copied(), input.events_known);
     let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
@@ -3870,6 +3901,59 @@ mod tests {
         assert_eq!(listed, ["web"]);
     }
 
+    /// ledger's page counted its warned pod failing while the Overview still
+    /// called the `StatefulSet` coming up and left it out of Needs attention.
+    /// Fails if a set whose only pod the kubelet warned about reads as coming
+    /// up, or one whose pod is quiet stops reading so.
+    #[test]
+    fn a_set_whose_pod_the_kubelet_warned_about_is_not_coming_up() {
+        let now = Utc::now();
+        let set: StatefulSet = serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "ledger", "namespace": "default", "uid": "set-1", "generation": 1},
+            "spec": {"replicas": 1, "serviceName": "ledger", "selector": {}, "template": {}},
+            "status": {"observedGeneration": 1, "replicas": 1, "readyReplicas": 0},
+        }))
+        .expect("a StatefulSet");
+        let mut pod = creating_pod_for("ledger-0", "u1", now, 5);
+        pod.metadata.owner_references = Some(vec![
+            k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference {
+                kind: "StatefulSet".to_string(),
+                name: "ledger".to_string(),
+                uid: "set-1".to_string(),
+                controller: Some(true),
+                ..Default::default()
+            },
+        ]);
+        let listed = |events: Vec<Event>| {
+            build_overview(&OverviewInputs {
+                scoped_pods: &arcs(vec![pod.clone()]),
+                accounting_pods: &[],
+                nodes: &[],
+                nodes_known: true,
+                deployments: &[],
+                stateful_sets: &arcs(vec![set.clone()]),
+                daemon_sets: &[],
+                unread: &[],
+                jobs: &[],
+                events: &arcs(events),
+                events_known: true,
+                usage_by_node: None,
+                counts: ResourceCounts::default(),
+                scope: None,
+                served_from: OverviewSource::List,
+                looked: &Looked::new(),
+                now,
+            })
+            .problems
+            .iter()
+            .map(|row| (row.kind.clone(), row.name.clone()))
+            .collect::<Vec<_>>()
+        };
+        let set_row = ("StatefulSet".to_string(), "ledger".to_string());
+        assert!(listed(vec![mount_warning("u1")]).contains(&set_row));
+        assert!(!listed(Vec::new()).contains(&set_row));
+    }
+
     /// A pod held by a missing `ConfigMap`: its row quotes the kubelet's
     /// `FailedMount` from the warnings the Overview already read. Fails if the
     /// row says only Pending, or takes another pod's warning as its own.
@@ -5060,6 +5144,7 @@ mod tests {
             [&deployment(1, ("False", "ProgressDeadlineExceeded"))],
             &HashMap::new(),
             &[],
+            &HashSet::new(),
             Utc::now(),
         );
         assert_eq!(stalled.len(), 1);
@@ -5069,6 +5154,7 @@ mod tests {
             [&deployment(1, ("True", "ReplicaSetUpdated"))],
             &HashMap::new(),
             &[],
+            &HashSet::new(),
             Utc::now()
         )
         .is_empty());
@@ -5113,12 +5199,18 @@ mod tests {
         let before = deployment.clone();
         crate::overview::strip_deployment(&mut deployment);
         assert_eq!(
-            deployment_problems([&before], &HashMap::new(), &[], Utc::now()).len(),
+            deployment_problems([&before], &HashMap::new(), &[], &HashSet::new(), Utc::now()).len(),
             1
         );
         assert_eq!(
-            deployment_problems([&deployment], &HashMap::new(), &[], Utc::now()),
-            deployment_problems([&before], &HashMap::new(), &[], Utc::now()),
+            deployment_problems(
+                [&deployment],
+                &HashMap::new(),
+                &[],
+                &HashSet::new(),
+                Utc::now()
+            ),
+            deployment_problems([&before], &HashMap::new(), &[], &HashSet::new(), Utc::now()),
             "a Deployment strip that reached status would empty the panel"
         );
         assert!(
@@ -6109,7 +6201,7 @@ mod tests {
             deployment(0, false),
         ]
         .iter()
-        .map(|d| rollout_with_pods(d, &owned, &[], Utc::now()))
+        .map(|d| rollout_with_pods(d, &owned, &[], &HashSet::new(), Utc::now()))
         .collect();
 
         let count = |reason: &str, count: usize| RolloutCount {
