@@ -812,6 +812,13 @@ export const ru: Catalogue = {
     cronJobNeverFired: "этот CronJob ещё ни разу не запускался",
     suspendFlagNote: "ничего не запустится, пока не снят флаг suspend",
     scheduleUnreadable: "не удалось разобрать расписание",
+    nextRunForbid:
+      "будет пропущен, если {run} не закончится раньше: политика параллельности Forbid",
+    nextRunForbidRefused:
+      "будет пропущен: {run} не закончится, пока его поды отклоняют, а политика параллельности Forbid",
+    nextRunReplace:
+      "остановит {run}, который ещё идёт: политика параллельности Replace",
+    theRunInFlight: "текущий прогон",
     runs: "Запуски",
     runsSubject: "задачи, которые этот CronJob ещё хранит",
     barUpToDate: {

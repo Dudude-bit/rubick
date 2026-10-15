@@ -834,6 +834,13 @@ export const en = {
     cronJobNeverFired: "this CronJob has not fired",
     suspendFlagNote: "nothing will start until the suspend flag is cleared",
     scheduleUnreadable: "the schedule could not be read",
+    nextRunForbid:
+      "skipped unless {run} ends first: the concurrency policy is Forbid",
+    nextRunForbidRefused:
+      "skipped: {run} cannot end while its pods are refused, and the concurrency policy is Forbid",
+    nextRunReplace:
+      "ends {run}, which is still running: the concurrency policy is Replace",
+    theRunInFlight: "the run in flight",
     runs: "Runs",
     runsSubject: "jobs this CronJob still owns",
     barUpToDate: { one: "up to date", other: "up to date" },

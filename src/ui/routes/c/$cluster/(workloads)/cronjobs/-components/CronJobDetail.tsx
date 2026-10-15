@@ -6,6 +6,8 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import { parts } from "@/i18n/parts";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { queryKeys } from "@/lib/query-keys";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
@@ -20,6 +22,7 @@ import { cronOutcome, outcomeWords } from "@/lib/cron-outcome";
 import {
   cronJobRunsKey,
   lastRunRefused,
+  newestRun,
   useCronJobRuns,
 } from "../../../-peek/cron-runs";
 import { LastRunCause } from "../../../-peek/peek-workload-diagnosis";
@@ -43,7 +46,12 @@ import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { guardedOf, noteDenied, useDeniedOf } from "@/lib/access";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { JobRows } from "../../../-object/child-rows";
-import { describeCron, nextCronRun } from "./cron-schedule";
+import {
+  describeCron,
+  nextCronRun,
+  nextRunMeets,
+  type NextRunMeets,
+} from "./cron-schedule";
 import { Composition, Headline } from "@/components/object/detail-blocks";
 import {
   CountBlock,
@@ -85,6 +93,7 @@ function ScheduleHeadlines({
   lastRun,
   running,
   refused,
+  inFlightRun,
 }: {
   cronJob: CronJobDetailInfo;
   /** When it last fired, by its own status or by the newest run it holds, whichever is later. */
@@ -93,6 +102,8 @@ function ScheduleHeadlines({
   running: boolean;
   /** The API server refuses its newest run's pods. */
   refused: boolean;
+  /** The newest run in flight, as its row tells it. */
+  inFlightRun: JobInfo | null;
 }) {
   const t = useT();
   const lastAge = useRealtimeAge(lastRun);
@@ -107,6 +118,7 @@ function ScheduleHeadlines({
     : nextCronRun(cronJob.schedule, new Date(), cronJob.timezone);
   const countdown = useRealtimeCountdown(next);
   const description = describeCron(cronJob.schedule, t);
+  const meets = nextRunMeets(cronJob.concurrencyPolicy, running, inFlightRun);
 
   return (
     <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-3">
@@ -162,17 +174,56 @@ function ScheduleHeadlines({
                 : t("action", "nowLower")
               : t("action", "unknownLower")
         }
-        tone={cronJob.suspend ? "warn" : undefined}
+        tone={
+          cronJob.suspend || meets?.says === "forbid"
+            ? "warn"
+            : meets?.says === "forbidRefused"
+              ? "err"
+              : undefined
+        }
         note={
-          cronJob.suspend
-            ? t("action", "suspendFlagNote")
-            : next
-              ? (formatDate(next.toISOString()) ?? undefined)
-              : t("action", "scheduleUnreadable")
+          cronJob.suspend ? (
+            t("action", "suspendFlagNote")
+          ) : meets && next ? (
+            <NextRunNote meets={meets} namespace={cronJob.namespace} />
+          ) : next ? (
+            (formatDate(next.toISOString()) ?? undefined)
+          ) : (
+            t("action", "scheduleUnreadable")
+          )
         }
       />
     </div>
   );
+}
+
+const MEETS_KEY = {
+  forbid: "nextRunForbid",
+  forbidRefused: "nextRunForbidRefused",
+  replace: "nextRunReplace",
+} as const;
+
+/** What the next fire does to the run in flight, or the run to it. */
+function NextRunNote({
+  meets,
+  namespace,
+}: {
+  meets: NextRunMeets;
+  namespace: string;
+}) {
+  const t = useT();
+  return parts(t("action", MEETS_KEY[meets.says]), {
+    run: meets.run ? (
+      <ResourceRef
+        kind="Job"
+        name={meets.run}
+        namespace={namespace}
+        showKind={false}
+      />
+    ) : (
+      t("action", "theRunInFlight")
+    ),
+  });
 }
 
 /**
@@ -235,6 +286,9 @@ function useRunsWatch(namespace: string | undefined, name: string | undefined) {
   });
 }
 const RUNS_IN_FLIGHT = new Set(["Running", "Retrying", "Pending"]);
+
+/** The same, told with their refusals: a refused Pending run is FailedCreate and still in flight. */
+const TOLD_IN_FLIGHT = new Set([...RUNS_IN_FLIGHT, "FailedCreate"]);
 
 /** Every word a run can carry, so no run kept is left out of the bar. */
 const RUN_SEGMENT: Record<
@@ -392,6 +446,9 @@ export function CronJobDetail() {
                 lastRun={lastRunOf(cronJob.name, cronJob.lastSchedule, jobs)}
                 running={inFlight}
                 refused={lastRunRefused(told)}
+                inFlightRun={newestRun(
+                  told.filter((job) => TOLD_IN_FLIGHT.has(job.status))
+                )}
               />
             )}
 

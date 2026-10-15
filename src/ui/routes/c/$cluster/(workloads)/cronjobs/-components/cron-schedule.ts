@@ -317,3 +317,29 @@ export function describeCron(schedule: string, t: T): string | null {
 
   return null;
 }
+
+/** What the next fire meets while a run is in flight, by the concurrency policy: nothing under Allow. */
+export type NextRunMeets = {
+  says: "forbid" | "forbidRefused" | "replace";
+  run: string | null;
+};
+
+/**
+ * Under Forbid the controller skips a fire while a run is in flight, and a
+ * run whose pods the API server refuses never ends; under Replace the fire
+ * ends the run in flight.
+ */
+export function nextRunMeets(
+  policy: string | null,
+  running: boolean,
+  run: { name: string; status: string } | null
+): NextRunMeets | null {
+  if (!running) return null;
+  if (policy === "Forbid")
+    return {
+      says: run?.status === "FailedCreate" ? "forbidRefused" : "forbid",
+      run: run?.name ?? null,
+    };
+  if (policy === "Replace") return { says: "replace", run: run?.name ?? null };
+  return null;
+}

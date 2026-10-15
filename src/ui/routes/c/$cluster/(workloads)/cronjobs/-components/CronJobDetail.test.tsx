@@ -235,6 +235,12 @@ describe("CronJobDetail", () => {
     expect(
       (await screen.findByText("Last run")).nextElementSibling
     ).toHaveClass("text-err");
+    expect(screen.getByText("Next run").parentElement).toHaveTextContent(
+      "skipped: Job nightly-backup-29000000 cannot end while its pods are refused, and the concurrency policy is Forbid"
+    );
+    expect(screen.getByText("Next run").nextElementSibling).toHaveClass(
+      "text-err"
+    );
     vi.mocked(commands.listEvents).mockResolvedValue([]);
   });
 

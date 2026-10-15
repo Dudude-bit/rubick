@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { describeCron, nextCronRun, parseCron } from "./cron-schedule";
+import {
+  describeCron,
+  nextCronRun,
+  nextRunMeets,
+  parseCron,
+} from "./cron-schedule";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -117,5 +122,40 @@ describe("describeCron", () => {
   it("says nothing rather than guessing at an unusual shape", () => {
     expect(describeCron("0 0 1,15 */2 3", t)).toBeNull();
     expect(describeCron("nonsense", t)).toBeNull();
+  });
+});
+
+describe("what the next fire meets while a run is in flight", () => {
+  const refused = { name: "nightly-29000000", status: "FailedCreate" };
+
+  /**
+   * Live, root-cron said "Next run in 4m" for an hour while its one run sat
+   * refused under Forbid, so no fire ever started. Fails if Forbid over a
+   * refused run is not told apart from a run that can still end, or a fire
+   * under Allow is said to meet anything.
+   */
+  it("says Forbid skips the fire, and for good while the run's pods are refused", () => {
+    expect(nextRunMeets("Forbid", true, refused)).toEqual({
+      says: "forbidRefused",
+      run: "nightly-29000000",
+    });
+    expect(
+      nextRunMeets("Forbid", true, { ...refused, status: "Running" })
+    ).toEqual({ says: "forbid", run: "nightly-29000000" });
+    expect(nextRunMeets("Forbid", false, null)).toBeNull();
+    expect(nextRunMeets("Allow", true, refused)).toBeNull();
+    expect(nextRunMeets(null, true, refused)).toBeNull();
+  });
+
+  /** A run the controller says is active but the page did not read is still met, by no name. */
+  it("says Replace ends the run in flight, named where it was read", () => {
+    expect(nextRunMeets("Replace", true, refused)).toEqual({
+      says: "replace",
+      run: "nightly-29000000",
+    });
+    expect(nextRunMeets("Replace", true, null)).toEqual({
+      says: "replace",
+      run: null,
+    });
   });
 });
