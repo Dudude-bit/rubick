@@ -85,7 +85,7 @@ export function PodListCard({
   const replaced = pods.filter((pod) => pod.status.gone === "replaced");
   const run = pods.filter((pod) => pod.status.gone !== "replaced");
   return (
-    <>
+    <div>
       <ChildRows
         emptyMessage={emptyMessage ?? t("empty", "noPodsForWorkload")}
         error={error}
@@ -115,6 +115,6 @@ export function PodListCard({
           )}
         </>
       )}
-    </>
+    </div>
   );
 }
