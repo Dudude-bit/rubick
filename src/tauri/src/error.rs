@@ -58,7 +58,7 @@ pub enum Error {
     Connection(String),
 
     /// Resource not found
-    #[error("Resource not found: {kind}/{name} in namespace {namespace}")]
+    #[error("Resource not found: {kind}/{name}{}", in_namespace(namespace))]
     NotFound {
         kind: String,
         name: String,
@@ -485,6 +485,15 @@ impl Error {
     }
 }
 
+/// " in namespace x", or nothing for an object no namespace holds.
+fn in_namespace(namespace: &str) -> String {
+    if namespace.is_empty() {
+        String::new()
+    } else {
+        format!(" in namespace {namespace}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -728,6 +737,25 @@ mod tests {
     /// the server's sentence. The struct dump (`Status { … }`, `ListMeta
     /// { … }`) is gone, and so are kube's `ApiError:` and the bare reason,
     /// which the code carries.
+    /// A CRD the cluster does not serve read "... in namespace" with
+    /// nothing after it on the Traefik page.
+    #[test]
+    fn a_missing_object_no_namespace_holds_names_no_namespace() {
+        let missing = |namespace: &str| Error::NotFound {
+            kind: "CustomResourceDefinition".to_string(),
+            name: "middlewares.traefik.io".to_string(),
+            namespace: namespace.to_string(),
+        };
+        assert_eq!(
+            missing("").to_string(),
+            "Resource not found: CustomResourceDefinition/middlewares.traefik.io"
+        );
+        assert_eq!(
+            missing("shop").to_string(),
+            "Resource not found: CustomResourceDefinition/middlewares.traefik.io in namespace shop"
+        );
+    }
+
     #[test]
     fn a_kube_api_error_is_shown_without_the_status_struct_dump() {
         let err: Error = api_error(403, "Forbidden").into();
