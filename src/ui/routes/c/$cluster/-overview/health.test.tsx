@@ -622,6 +622,81 @@ describe("a workload's pods under its row", () => {
   });
 });
 
+describe("what a row's fold already counted", () => {
+  /**
+   * Live, a failed Job's row read "2 failed pods: 2 of 2 pods: report exited",
+   * and a lone pod its ReplicaSet had replaced read like one down now. Fails
+   * if a row repeats a count its fold already said, drops one the fold does
+   * not cover, or a lone replaced pod stops saying it was replaced, on the
+   * panel or in Share.
+   */
+  it("counts the pods once and says a lone replaced pod was replaced", async () => {
+    const exited: PodCause = {
+      says: "exits",
+      container: "report",
+      restarts: 0,
+      run: null,
+      until: null,
+    };
+    const job = (name: string, of: number): ClusterProblem => ({
+      severity: "critical",
+      kind: "Job",
+      name,
+      namespace: "shop",
+      reason: "BackoffLimitExceeded",
+      detail: { says: "podsCause", cause: exited, pods: 2, of, said: null },
+      since: null,
+      restarts: null,
+      foldedPods: 2,
+      replaced: false,
+    });
+    const read = attentionFrom([
+      job("reports-1", 2),
+      job("reports-2", 3),
+      {
+        severity: "critical",
+        kind: "Pod",
+        name: "payments-rf746",
+        namespace: "shop",
+        reason: "Evicted",
+        detail: { says: "said", text: "The node was low on resource: memory." },
+        since: null,
+        restarts: null,
+        foldedPods: null,
+        replaced: true,
+      },
+    ]);
+    await wrap(
+      <AttentionPanel
+        attention={read}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+
+    const said = screen
+      .getAllByTestId("attention-said")
+      .map((line) => line.textContent ?? "");
+    expect(said[0]).toMatch(/^Job reports-1 · shop · 2 failed pods: report /);
+    expect(said[1]).toMatch(
+      /^Job reports-2 · shop · 2 failed pods: 2 of 3 pods: report /
+    );
+    expect(said[2]).toBe(
+      "Pod payments-rf746 · shop · already replaced: The node was low on resource: memory."
+    );
+    const shared = attentionShare(read, t);
+    const details =
+      shared.body.type === "findings"
+        ? shared.body.items.map((item) => item.detail)
+        : [];
+    expect(details[0]).toMatch(/^2 failed pods · report /);
+    expect(details[1]).toMatch(/^2 failed pods · 2 of 3 pods: report /);
+    expect(details[2]).toMatch(/^already replaced · The node was low/);
+  });
+});
+
 describe("the reason on a problem row", () => {
   const stalled: ClusterProblem = {
     severity: "critical",

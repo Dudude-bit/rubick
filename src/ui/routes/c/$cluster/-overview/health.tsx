@@ -15,7 +15,6 @@ import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { PastObjectRef, type Past } from "../-object/PastObjectRef";
 import { CauseLine, StopCauseLine } from "../-object/CauseLine";
-import { podsShare } from "@/lib/pod-cause";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
 import {
@@ -32,6 +31,7 @@ import {
   PRESSURE_WARN,
   attentionShare,
   schedulerShare,
+  shareOf,
   splitWords,
   uncheckedShare,
   warningsShare,
@@ -154,12 +154,11 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
         )}
       </>
     );
-  if (detail.says === "podsCause")
+  if (detail.says === "podsCause") {
+    const share = shareOf(detail, item.foldedPods, t);
     return (
       <>
-        <span className="text-fg-mut">
-          {podsShare(detail.pods, detail.of, t)}{" "}
-        </span>
+        {share && <span className="text-fg-mut">{share} </span>}
         <CauseLine cause={detail.cause} compact />
         {detail.said && (
           <span className="text-fg-fnt">
@@ -169,6 +168,7 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
         )}
       </>
     );
+  }
   if (detail.says === "stopCause") return <StopCauseLine cause={detail} />;
   if (detail.says === "said")
     return (
@@ -183,7 +183,11 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
     );
   return (
     <Prose
-      text={detail.says === "ours" ? detail.text : composedDetail(detail, t)}
+      text={
+        detail.says === "ours"
+          ? detail.text
+          : composedDetail(detail, t, item.foldedPods)
+      }
     />
   );
 }
@@ -254,6 +258,7 @@ function AttentionRow({
     item.opens.kind !== item.kind || item.opens.name !== item.name;
   const marked = under === "class" ? item.unservedClass : undefined;
   const pod = under === "workload";
+  const folded = foldedWords(item, t);
   const detail: AttentionItem["detail"] = !marked
     ? item.detail
     : marked.rest
@@ -310,14 +315,12 @@ function AttentionRow({
             · {item.namespace}
           </span>
         )}
-        {item.foldedPods !== null && (
-          <span className="text-fg-mut"> · {foldedWords(item, t)}</span>
-        )}
+        {folded && <span className="text-fg-mut"> · {folded}</span>}
         {detail && (
           // The row cuts a long sentence; hovering it has the whole one.
           <span
             className="text-fg-fnt"
-            title={detailWords(detail, t) ?? undefined}
+            title={detailWords(detail, t, item.foldedPods) ?? undefined}
           >
             {": "}
             {sameCause ? (

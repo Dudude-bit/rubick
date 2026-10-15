@@ -66,7 +66,8 @@ import { causeText, podsShare, sharedText } from "@/lib/pod-cause";
  */
 export function composedDetail(
   detail: Exclude<ProblemDetail, { says: "said" }>,
-  t: T
+  t: T,
+  folded: number | null = null
 ): string {
   switch (detail.says) {
     case "restarts":
@@ -88,13 +89,25 @@ export function composedDetail(
         .join(" ");
     case "podsCause":
       return [
-        `${podsShare(detail.pods, detail.of, t)} ${causeText(detail.cause, t)}`,
+        [shareOf(detail, folded, t), causeText(detail.cause, t)]
+          .filter(Boolean)
+          .join(" "),
         detail.said && t("readings", "controllerSaid", { said: detail.said }),
       ]
         .filter(Boolean)
         .join(" · ");
   }
 }
+
+/** "2 of 2 pods:", unless the row's fold already counted every pod the cause covers. */
+export const shareOf = (
+  detail: { pods: number; of: number },
+  folded: number | null,
+  t: T
+): string | null =>
+  folded === detail.of && detail.pods === detail.of
+    ? null
+    : podsShare(detail.pods, detail.of, t);
 
 /** A pod's restarts split by the containers behind them, where more than one restarted. */
 export function splitWords(
@@ -109,14 +122,15 @@ export function splitWords(
 /** A row's detail as plain words, whoever wrote them. */
 export function detailWords(
   detail: AttentionDetail | null,
-  t: T
+  t: T,
+  folded: number | null = null
 ): string | null {
   if (detail === null) return null;
   if (detail.says === "stopCause")
     return `${detail.lead}: ${sharedText(detail.shared, t)}`;
   return detail.says === "said" || detail.says === "ours"
     ? detail.text
-    : composedDetail(detail, t);
+    : composedDetail(detail, t, folded);
 }
 
 /** Reserved share past which the scheduler is the binding constraint. */
@@ -185,7 +199,7 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
       detail:
         [
           foldedWords(item, t),
-          marked ? marked.rest : detailWords(item.detail, t),
+          marked ? marked.rest : detailWords(item.detail, t, item.foldedPods),
         ]
           .filter((part) => part !== null)
           .join(" · ") || null,

@@ -572,13 +572,15 @@ export function attentionLines(items: AttentionItem[]): AttentionLine[] {
   return lines;
 }
 
-/** "2 failed pods" where a row stands for runs it folded, or the replaced pods it stands for. */
+/** "2 failed pods" where a row stands for runs it folded, or the replaced pods it stands for, or "already replaced" on one alone. */
 export const foldedWords = (item: AttentionItem, t: T): string | null =>
   item.foldedPods
     ? t("count", item.replaced ? "replacedPodsFolded" : "failedPodsFolded", {
         n: item.foldedPods,
       })
-    : null;
+    : item.replaced
+      ? t("cluster", "attentionReplacedPod")
+      : null;
 
 function countByNamespace(
   overview: ClusterOverview,

@@ -4626,6 +4626,7 @@ export const en = {
       "its controller has said {word} for {age}; its pods were not read",
     attentionUnconfirmedUndated:
       "its controller says {word}; its pods were not read",
+    attentionReplacedPod: "already replaced",
     attentionSameCause: "same cause",
     attentionStillReading: "still reading",
     attentionRefused: "refused",
