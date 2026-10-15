@@ -81,4 +81,23 @@ describe("the Endpoints list's empty row", () => {
     });
     expect(screen.getByText("no endpoints")).toHaveClass("text-err");
   });
+
+  /**
+   * hello-web's Endpoints row read only red "no endpoints" while its
+   * Service led with the API server refusing its Deployment's pods. Fails
+   * if the fault loses its Service's reason beside it.
+   */
+  it("says beside a fault why its Service publishes nothing", () => {
+    drawn({
+      reason: "podsRefused",
+      service: at("Service"),
+      selector: "app=hello-web",
+      workloads: [at("Deployment")],
+      said: 'pods "hello-web-7d9-x" is forbidden: exceeded quota: two-pods, requested: pods=1, used: pods=2, limited: pods=2',
+    });
+    expect(screen.getByText("no endpoints")).toHaveClass("text-err");
+    expect(screen.getByTestId("verdict-reason")).toHaveTextContent(
+      "Deployment hello-web: ResourceQuota two-pods refuses its pods: no room for pods"
+    );
+  });
 });

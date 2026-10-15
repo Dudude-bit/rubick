@@ -17,6 +17,7 @@ import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
+  causeTextPx,
 } from "../../../-list/columns";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
 import { None } from "@/components/ui/none";
@@ -25,7 +26,11 @@ import { NoEndpoints } from "./NoEndpoints";
 import { BackingAround } from "../../-components/ServiceBacking";
 import { useScopeBacking } from "../../-components/service-backing";
 import { NotReadyPill } from "./NotReadyPill";
-import { endpointsPodsUnread } from "./pods-unread";
+import {
+  WAITS,
+  emptyEndpointsVerdict,
+  endpointsPodsUnread,
+} from "./pods-unread";
 import type { ServiceBackingRead } from "@/hooks/useServiceBacking";
 
 /** Every address the object holds: an unready one is still an address. */
@@ -45,14 +50,38 @@ export const columns = ({
     id: "endpoints",
     header: columnHeader("columns", "endpoints"),
     meta: {
+      ideal: (t, rows: readonly EndpointsInfo[]) =>
+        200 +
+        causeTextPx(
+          rows.flatMap((row) =>
+            row.subsets.every(
+              (subset) =>
+                subset.addresses.length === 0 &&
+                subset.notReadyAddresses.length === 0
+            )
+              ? (emptyEndpointsVerdict(read, row, t)?.words.reason ?? [])
+              : []
+          )
+        ),
       share: (row: EndpointsInfo, t) => {
         const ready = row.subsets.reduce((n, s) => n + s.addresses.length, 0);
         const notReady = row.subsets.reduce(
           (n, s) => n + s.notReadyAddresses.length,
           0
         );
-        if (ready === 0 && notReady === 0)
-          return { text: t("readings", "healthNoEndpoints"), role: "err" };
+        if (ready === 0 && notReady === 0) {
+          const verdict = emptyEndpointsVerdict(read, row, t);
+          const waits = verdict && WAITS[verdict.state];
+          const label = waits
+            ? verdict.words.label
+            : t("readings", "healthNoEndpoints");
+          const reason = verdict?.words.reason;
+          return {
+            text: reason ? `${label} · ${reason}` : label,
+            role: waits ? verdict.words.role : "err",
+            unread: verdict?.state === "podsUnread",
+          };
+        }
         const podsUnread = notReady > 0 && endpointsPodsUnread(read, row);
         return {
           text: [

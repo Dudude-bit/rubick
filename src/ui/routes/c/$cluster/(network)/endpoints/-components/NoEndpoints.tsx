@@ -1,46 +1,31 @@
 import type { EndpointsInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
-import {
-  serviceHealthOf,
-  serviceHealthWords,
-  type ServiceHealth,
-} from "@/lib/service-health";
 import { useBackingRead } from "../../-components/service-backing";
-import { VerdictBadge } from "../../../-object/health-views";
+import { VerdictBesideReason } from "../../../-object/health-views";
+import { WAITS, emptyEndpointsVerdict } from "./pods-unread";
 
-/** Whether its own verdict stands in for "no endpoints": only the ones no fault explains. */
-const WAITS: Record<ServiceHealth["state"], boolean> = {
-  idle: true,
-  comingUp: true,
-  podsUnread: true,
-  ready: false,
-  partly: false,
-  draining: false,
-  noneReady: false,
-  noEndpoints: false,
-  externalName: false,
-  selectorless: false,
-  byHand: false,
-  unknown: false,
-};
-
-/** None published: a fault, unless what runs behind it is scaled to zero, making its pods, or unread. */
+/** None published: a fault, unless what runs behind it is scaled to zero, making its pods, or unread; the fault with its Service's reason beside it. */
 export function NoEndpoints({ endpoints }: { endpoints: EndpointsInfo }) {
   const t = useT();
-  const published = useBackingRead()?.published(
-    endpoints.namespace,
-    endpoints.name
-  );
-  const health = published
-    ? serviceHealthOf({ type: "", selectorless: false }, published, null)
-    : null;
-  if (health && WAITS[health.state]) {
-    return <VerdictBadge verdict={serviceHealthWords(health, t)} compact />;
-  }
+  const verdict = emptyEndpointsVerdict(useBackingRead(), endpoints, t);
+  if (verdict && WAITS[verdict.state])
+    return <VerdictBesideReason verdict={verdict.words} />;
+  const reason = verdict?.words.reason;
   return (
-    <span className="text-err">
-      <T section="readings" k="healthNoEndpoints" />
+    <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
+      <span className="flex-none text-err">
+        <T section="readings" k="healthNoEndpoints" />
+      </span>
+      {reason && (
+        <span
+          className="min-w-0 truncate text-xs text-fg-mut"
+          title={reason}
+          data-testid="verdict-reason"
+        >
+          {reason}
+        </span>
+      )}
     </span>
   );
 }
