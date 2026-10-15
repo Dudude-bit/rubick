@@ -27,7 +27,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { commands } from "@/lib/commands";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
-import type { EventInfo, PodInfo } from "@/generated/types";
+import type { EventInfo, PodCause, PodInfo, Warned } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
 import { MostLikelyPanel } from "./MostLikelyPanel";
 
@@ -435,6 +435,110 @@ describe("MostLikelyPanel on a pod the scheduler has not placed", () => {
     expect(late.panel.textContent).toContain("Most likely: no node fits it");
     expect(late.report).toContain(
       "App's own guess: Most likely: no node fits it"
+    );
+  });
+});
+
+describe("MostLikelyPanel on a pod whose kubelet cannot mount a volume", () => {
+  const mounting = {
+    ...crashing,
+    status: {
+      ...crashing.status,
+      phase: "Pending",
+      display: "ContainerCreating",
+    },
+    containers: [
+      {
+        ...crashing.containers[0],
+        state: { type: "waiting", reason: "ContainerCreating" },
+        lastTerminated: null,
+        restartCount: 0,
+      },
+    ],
+    restartCount: 0,
+    volumes: [
+      {
+        name: "creds",
+        source: "secret",
+        refs: [{ kind: "Secret", name: "web-creds" }],
+        mounts: [],
+        projections: [],
+      },
+    ],
+  } as unknown as PodInfo;
+  const said =
+    'MountVolume.SetUp failed for volume "creds" : secret "web-creds" not found';
+  const failedMount: EventInfo[] = [
+    {
+      name: "mounting.1",
+      namespace: "shop",
+      uid: "e1",
+      type: "Warning",
+      reason: "FailedMount",
+      message: said,
+      source: "kubelet",
+      involvedObject: {
+        kind: "Pod",
+        name: "mounting",
+        namespace: "shop",
+        uid: null,
+      },
+      count: 12,
+      firstTimestamp: null,
+      lastTimestamp: null,
+    },
+  ];
+  const creating = (kubelet: Warned): PodCause => ({
+    says: "creating",
+    uid: "u",
+    since: null,
+    sandbox: false,
+    kubelet,
+  });
+  const show = (cause: PodCause) =>
+    renderWithRouter(
+      <MostLikelyPanel
+        pod={mounting}
+        cause={cause}
+        events={failedMount}
+        eventsError={null}
+        onOpenTab={() => {}}
+      />,
+      { at: "/c/test", route: "/c/$cluster" }
+    );
+
+  /**
+   * The cause line read "Secret web-creds does not exist" from the kubelet's
+   * warnings, and under it the panel guessed "usually a Secret that does not
+   * exist yet", a settled fact told again as a hunch. Fails if the guess
+   * survives the warnings naming the object, or goes before they are read.
+   */
+  it("leaves the guess out once the kubelet's warnings name the missing object", async () => {
+    await show(
+      creating({
+        says: "read",
+        warnings: [
+          {
+            reason: "FailedMount",
+            said,
+            count: 12,
+            at: null,
+            fault: {
+              says: "missing",
+              volume: "creds",
+              kind: "Secret",
+              name: "web-creds",
+            },
+          },
+        ],
+      })
+    );
+    expect(screen.queryByTestId("most-likely")).not.toBeInTheDocument();
+
+    cleanup();
+    await show(creating({ says: "notRead" }));
+    expect((await screen.findByTestId("most-likely")).textContent).toContain(
+      "cannot be mounted"
     );
   });
 });

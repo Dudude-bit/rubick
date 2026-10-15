@@ -20,6 +20,7 @@ import {
   podStatusTitle,
   settingUp,
   troubleCause,
+  warnedRole,
 } from "@/lib/share/pod-status";
 import { PodCauseLine } from "../-object/CauseLine";
 import { formatDate } from "@/lib/utils";
@@ -107,15 +108,16 @@ function rolloutHeader(rollout: Rollout, t: Translate) {
 }
 
 export const WORKLOAD_SOURCES: PeekSources = {
-  Pod: source(commands.getPod, (pod, _target, t) => {
+  Pod: source(commands.getPod, (pod, _target, t, facts) => {
+    const warned = facts?.warned ?? false;
     const readiness = podReadiness(pod);
-    const notUp: KeyValueTone = insideWait(pod) ? "info" : "warn";
+    const notUp: KeyValueTone = insideWait(pod) && !warned ? "info" : "warn";
     const trouble = troubleCause(pod);
     const cause = trouble ?? settingUp(pod);
     return {
       status: pod.status.display,
       statusFrom: pod.nodeName,
-      statusRole: podRole(pod, null),
+      statusRole: warnedRole(podRole(pod, null), warned),
       statusTitle: podStatusTitle(pod, null, t),
       createdAt: pod.createdAt,
       endedAt: pod.status.failedAt,

@@ -70,6 +70,10 @@ import { PeekTraffic } from "./peek-traffic";
 import { TabGlyph, TabMark } from "@/components/object/tab-marks";
 import { usePeekHost } from "./peek-dock";
 import { usePodWatch } from "@/hooks/usePodWatch";
+import { useCauseWarnings } from "../-object/useCauseEvidence";
+import { kubeletWarned } from "@/lib/pod-cause";
+import { settingUp } from "@/lib/share/pod-status";
+import type { PodInfo } from "@/generated/types";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
@@ -148,12 +152,21 @@ export function PeekContent({
   );
   const hasStatus =
     served.state === "served" ? served.entry.hasStatus : undefined;
+  const warned =
+    kubeletWarned(
+      useCauseWarnings(
+        namespace ?? "",
+        data !== undefined && toKind(target.kind) === ResourceType.Pod
+          ? settingUp(data as PodInfo)
+          : null
+      )
+    ) !== null;
   const summary = useMemo(
     () =>
       data === undefined
         ? null
-        : source.summarise(data, target, t, { hasStatus }),
-    [data, source, target, t, hasStatus]
+        : source.summarise(data, target, t, { hasStatus, warned }),
+    [data, source, target, t, hasStatus, warned]
   );
   // The cache is dropped on every tab switch, so a peek mounted after the pod
   // died may never hold a read of it; the owners outlive that.

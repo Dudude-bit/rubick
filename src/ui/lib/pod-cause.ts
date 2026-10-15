@@ -68,6 +68,22 @@ export function kubeletWarned(cause: PodCause | null): PodCause | null {
     : null;
 }
 
+/** Whether the kubelet's warnings already name the object `volume` cannot mount, leaving nothing to guess. */
+export function mountSettled(
+  cause: PodCause | null,
+  volume: string | null
+): boolean {
+  return (
+    cause?.says === "creating" &&
+    cause.kubelet.says === "read" &&
+    cause.kubelet.warnings.some(
+      ({ fault }) =>
+        fault.says === "missing" &&
+        (volume === null || fault.volume === null || fault.volume === volume)
+    )
+  );
+}
+
 /** How long a run lasted, where the kubelet stamped both ends. */
 export function ranSeconds(run: EndedRun): number | null {
   if (!run.started || !run.ended) return null;

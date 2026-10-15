@@ -71,9 +71,12 @@ export interface PeekSummary {
   lead?: ReactNode;
 }
 
-/** What discovery says about the kind, where the catalogue has answered. */
+/** What the panel read with hooks, which a summary has none of. */
 export interface KindFacts {
+  /** What discovery says about the kind, where the catalogue has answered. */
   hasStatus?: boolean;
+  /** A pod being set up whose kubelet's warnings say it is not coming. */
+  warned?: boolean;
 }
 
 export interface PeekSource {

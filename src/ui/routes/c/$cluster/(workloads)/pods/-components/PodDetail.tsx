@@ -489,7 +489,14 @@ export function PodDetail() {
     refresh: "slow",
   });
   const pod = useKnownLoop(read, podEvents.data);
-  const waiting = usePodWaiting(pod);
+  const trouble = pod ? troubleCause(pod) : null;
+  const evidence = useCauseEvidence(
+    pod ?? { name: "", namespace: "" },
+    trouble ?? (pod ? settingUp(pod) : null)
+  );
+  const cause = trouble ? evidence : kubeletWarned(evidence);
+  const warned = !trouble && cause !== null;
+  const waiting = usePodWaiting(pod) && !warned;
   const notUpTone = waiting ? ("info" as const) : ("warn" as const);
 
   const share = usePodShare(pod, podEvents.data ?? [], podEvents.error);
@@ -786,12 +793,6 @@ export function PodDetail() {
   ];
 
   const problem = useMemo(() => podProblem(pod, waiting, t), [pod, waiting, t]);
-  const trouble = pod ? troubleCause(pod) : null;
-  const evidence = useCauseEvidence(
-    pod ?? { name: "", namespace: "" },
-    trouble ?? (pod ? settingUp(pod) : null)
-  );
-  const cause = trouble ? evidence : kubeletWarned(evidence);
   const causeSaid = cause && causeWords(cause, t);
 
   // A shell the reader opened and left is invisible the moment they click
@@ -826,7 +827,7 @@ export function PodDetail() {
         onTabAgain={askOn}
         statusBadge={
           pod?.status.display ? (
-            <PodStatusBadge pod={pod} silence={silence} />
+            <PodStatusBadge pod={pod} silence={silence} warned={warned} />
           ) : null
         }
         // The kubelet's word for the trouble, on every tab — but only when
@@ -933,6 +934,7 @@ export function PodDetail() {
                 {pod && (
                   <MostLikelyPanel
                     pod={pod}
+                    cause={cause}
                     events={podEvents.data ?? []}
                     eventsError={
                       podEvents.error ? errorToShow(podEvents.error) : null

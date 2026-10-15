@@ -18,13 +18,14 @@ import {
   type MountedConfig,
 } from "@/lib/hints";
 import { listLink } from "@/lib/links";
+import { mountSettled } from "@/lib/pod-cause";
 import { openExternal } from "@/lib/open-external";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
 import { useHintChain } from "./useHintChain";
 import { usePodWaiting } from "./usePodWaiting";
 import { useT, type T } from "@/i18n/useT";
-import type { EventInfo, PodInfo } from "@/generated/types";
+import type { EventInfo, PodCause, PodInfo } from "@/generated/types";
 
 /**
  * A hint in words. An inner {@link HintSaying} is chosen first: a count is
@@ -56,11 +57,14 @@ const PANEL: Record<
 
 export function MostLikelyPanel({
   pod,
+  cause = null,
   events,
   eventsError,
   onOpenTab,
 }: {
   pod: PodInfo;
+  /** The cause the page leads with, read with its evidence. */
+  cause?: PodCause | null;
   events: EventInfo[];
   eventsError: string | null;
   /** The log tab is opened on a container, the way the Containers tab does. */
@@ -71,10 +75,12 @@ export function MostLikelyPanel({
   const settings = useHintSettingsStore();
   const context = useClusterStore((s) => s.currentContext) ?? "";
   const waiting = usePodWaiting(pod);
-  const trouble = useMemo(
-    () => troubleOf(pod, events, waiting),
-    [pod, events, waiting]
-  );
+  const trouble = useMemo(() => {
+    const found = troubleOf(pod, events, waiting);
+    return found?.reason === "failedMount" && mountSettled(cause, found.volume)
+      ? null
+      : found;
+  }, [pod, cause, events, waiting]);
   const { chain, logLines, logContainer, previous } = useHintChain(
     pod,
     trouble,

@@ -51,6 +51,31 @@ describe("PodStatusBadge", () => {
   });
 
   /**
+   * A pod whose kubelet cannot mount a missing Secret led its page with that
+   * in red beside a blue badge saying it was coming. Fails if the warnings,
+   * once read, leave the badge blue, or if it turns amber without them.
+   */
+  it("turns amber inside its wait once its kubelet's warnings say it is not coming", () => {
+    const pod = {
+      status: { display: "ContainerCreating", phase: "Pending" },
+      start: {
+        state: "starting" as const,
+        until: new Date(Date.now() + 300_000).toISOString(),
+      },
+      containers: [],
+      initContainers: [],
+    };
+    const { rerender } = render(<PodStatusBadge pod={pod} silence={null} />);
+    expect(screen.getByText("ContainerCreating").className).toContain(
+      "text-info"
+    );
+    rerender(<PodStatusBadge pod={pod} silence={null} warned />);
+    expect(screen.getByText("ContainerCreating").className).toContain(
+      "text-warn"
+    );
+  });
+
+  /**
    * Dana's Pods list drew evicted pods grey `ContainerStatusUnknown` while
    * the page, peek and Needs attention said red `Evicted`. Fails if a failed
    * pod's badge reads grey, or kubectl's other word is not on its hover.

@@ -3014,3 +3014,113 @@ describe("PeekPanel on an object that belongs to a parent", () => {
     );
   });
 });
+
+describe("PeekPanel on a pod being set up inside its wait", () => {
+  beforeEach(() => {
+    mockCluster();
+    vi.mocked(commands.listNodes).mockResolvedValue([
+      {
+        name: "k3d-agent-0",
+        status: {
+          conditions: [
+            {
+              type: "Ready",
+              status: "True",
+              reason: "KubeletReady",
+              message: null,
+              lastTransitionTime: "2026-08-31T00:00:00Z",
+            },
+          ],
+        },
+      },
+    ] as unknown as Awaited<ReturnType<typeof commands.listNodes>>);
+  });
+
+  const settingUp = buildPod({
+    name: "ledger-0",
+    status: {
+      phase: "Pending",
+      display: "ContainerCreating",
+      exitUnreported: false,
+      deleting: false,
+      ready: false,
+      conditions: [],
+      message: null,
+      reason: null,
+      cause: {
+        says: "creating",
+        uid: "pod-uid",
+        since: null,
+        sandbox: false,
+        kubelet: { says: "notRead" },
+      },
+    },
+    start: {
+      state: "starting",
+      until: new Date(Date.now() + 300_000).toISOString(),
+    },
+    restartCount: 0,
+    containers: [
+      {
+        name: "db",
+        image: "busybox:1.36",
+        ready: false,
+        started: false,
+        phase: "app",
+        state: { type: "waiting", reason: "ContainerCreating", message: null },
+        lastTerminated: null,
+        restartCount: 0,
+        ports: [],
+        env: [],
+        resources: { requests: {}, limits: {} },
+        envFrom: [],
+      },
+    ],
+  } as Partial<PodInfo>);
+  const said =
+    'MountVolume.SetUp failed for volume "tls" : secret "ledger-tls" not found';
+
+  /**
+   * The page led with "Secret ledger-tls does not exist" in red while the
+   * badge beside it still said blue, coming. Fails if the peek's badge stays
+   * blue once the kubelet's warnings are read, or turns before they say so.
+   */
+  it("paints its badge amber once its kubelet's warnings say it is not coming", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(settingUp);
+    vi.mocked(commands.getPodSetupWarnings).mockResolvedValue([
+      {
+        reason: "FailedMount",
+        said,
+        count: 4,
+        at: null,
+        fault: {
+          says: "missing",
+          volume: "tls",
+          kind: "Secret",
+          name: "ledger-tls",
+        },
+      },
+    ]);
+    await wrap("/c/prod/events?peek=pods/k8s-gui-test/ledger-0");
+    await screen.findByText(/Secret ledger-tls does not exist/);
+    expect(screen.getByText("ContainerCreating").className).toContain(
+      "text-warn"
+    );
+  });
+
+  it("keeps it blue while the kubelet has no word against it", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(settingUp);
+    vi.mocked(commands.getPodSetupWarnings).mockResolvedValue([]);
+    await wrap("/c/prod/events?peek=pods/k8s-gui-test/ledger-0");
+    await screen.findByText("ContainerCreating");
+    await waitFor(() =>
+      expect(commands.getPodSetupWarnings).toHaveBeenCalledWith(
+        "k8s-gui-test",
+        "pod-uid"
+      )
+    );
+    expect(screen.getByText("ContainerCreating").className).toContain(
+      "text-info"
+    );
+  });
+});

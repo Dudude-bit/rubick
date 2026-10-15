@@ -96,6 +96,10 @@ export function podRole(
     : role;
 }
 
+/** A pod's colour once its kubelet's warnings are read: one they warn about inside its wait is not coming. */
+export const warnedRole = (role: StatusRole, warned: boolean): StatusRole =>
+  warned && role === "pending" ? "warn" : role;
+
 /** The cause a pod's red or amber word leads with, where it has one now. */
 export function troubleCause(
   pod: PodBadgeInput,
