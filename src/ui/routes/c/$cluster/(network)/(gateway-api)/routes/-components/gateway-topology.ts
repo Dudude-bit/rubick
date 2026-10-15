@@ -19,6 +19,7 @@
 
 import {
   backingOf,
+  stopWeight,
   type BackingSources,
   type RoutingMapData,
   type MapEdge,
@@ -244,6 +245,14 @@ export function gatewayTopology(
                 )
               : null;
             const stop = state?.known ? state.stop : null;
+            // Endpoints not read are unknown, as every routing map draws them.
+            const tone: MapTone = stop
+              ? stopWeight(stop).tone
+              : state?.known
+                ? "ok"
+                : state
+                  ? "unknown"
+                  : "mute";
             backendNodes.set(backendId, {
               id: backendId,
               label: backend.name,
@@ -257,16 +266,13 @@ export function gatewayTopology(
                         ? `, ${t("count", "nDraining", { n: state.draining })}`
                         : "")
                   : undefined,
-              tone: stop ? "err" : state?.known ? "ok" : "mute",
+              tone,
               object: { kind: "Service", name: backend.name, namespace: ns },
             });
           }
         }
-        link(
-          routeId,
-          backendId,
-          backendNodes.get(backendId)?.tone === "err" ? "err" : "mute"
-        );
+        const into = backendNodes.get(backendId)?.tone ?? "mute";
+        link(routeId, backendId, into === "ok" ? "mute" : into);
       }
     }
   }

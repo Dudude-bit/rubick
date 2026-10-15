@@ -1154,6 +1154,7 @@ export {
   backingFrom,
   backingListsKey,
   backingOf,
+  stopWeight,
   useBackingLists,
   ROUTING_STALE,
 } from "./ingress";

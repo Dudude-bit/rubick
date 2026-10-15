@@ -334,6 +334,77 @@ describe("the gateway topology map", () => {
     expect(backend.sub).toContain("Nothing is published");
   });
 
+  /**
+   * Every backend that stopped was red here, a Service scaled to zero and
+   * one whose pods were not read among them, beside a trace that drew them
+   * grey and unknown; a backend whose endpoints were refused drew as quiet
+   * as one nobody asked about.
+   */
+  it("draws a stopped backend in the trace's mood and an unread one unknown", () => {
+    const service = (name: string) => ({
+      name,
+      namespace: "gwtest",
+      type: "ClusterIP",
+      clusterIp: "10.0.0.1",
+      externalIps: [],
+      loadBalancerIps: [],
+      ports: [],
+      selector: { app: name },
+      sessionAffinity: "None",
+      labels: {},
+      annotations: {},
+      createdAt: null,
+    });
+    const behind = (name: string) => ({
+      kind: "Service",
+      name,
+      namespace: "gwtest",
+    });
+    const stopped = (name: string, stop: object) => ({
+      service: behind(name),
+      ready: 0,
+      draining: 0,
+      notReady: 0,
+      stop: { service: behind(name), selector: `app=${name}`, ...stop },
+    });
+    const backing = {
+      services: [service("idle"), service("unread")],
+      published: [
+        stopped("idle", { reason: "scaledToZero", workloads: [] }),
+        stopped("unread", { reason: "publishesNothingYet", podsUnread: true }),
+      ],
+      backingKnown: true,
+    };
+    const tones = (lists: object) => {
+      const data = gatewayTopology(
+        [gateway("edge")],
+        [route("idle"), route("unread")],
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        lists as any,
+        t
+      );
+      return new Map(
+        data.columns
+          .at(-1)!
+          .nodes.map((node) => [
+            node.label,
+            [node.tone, data.edges.find((edge) => edge.to === node.id)?.tone],
+          ])
+      );
+    };
+
+    const read = tones(backing);
+    expect(read.get("idle")).toEqual(["mute", "mute"]);
+    expect(read.get("unread")).toEqual(["unknown", "unknown"]);
+
+    const refused = tones({
+      ...backing,
+      backingKnown: false,
+      backingError: "forbidden",
+    });
+    expect(refused.get("idle")).toEqual(["unknown", "unknown"]);
+  });
+
   it("funnels routes through per-gateway kind nodes once kinds differ", () => {
     const data = gatewayTopology(
       [gateway("edge", [condition("Programmed", "True", "Programmed")])],
