@@ -3,10 +3,11 @@
  * certificate is nowhere near `spec.tls`.
  *
  * The core answer is the caller's and comes first: an Ingress that names a
- * Secret for a host is served over TLS, full stop, and this hook is never
- * consulted about it. What it adds is the case all three managed clouds are
- * in — a certificate held by the load balancer and named in an annotation —
- * which read as plain HTTP on every core surface in the app, links included.
+ * Secret for a host is served over TLS, unless the controller that owns it
+ * answers with `replacesSpec`, as Traefik does. What it adds is the case all
+ * three managed clouds are in — a certificate held by the load balancer and
+ * named in an annotation — which read as plain HTTP on every core surface in
+ * the app, links included.
  *
  * A list rather than one Ingress, because the widest of those surfaces is a
  * table: the Ingress list is where somebody clicks the URL, and a capability

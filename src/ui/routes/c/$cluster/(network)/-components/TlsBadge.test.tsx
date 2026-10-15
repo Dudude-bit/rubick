@@ -3,23 +3,56 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { IngressInfo } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import type { IngressTls } from "@/integrations";
 import { TlsBadge } from "./TlsBadge";
+import { vendorTlsAnswer } from "./vendor-tls";
 import { useLocaleStore } from "@/stores/localeStore";
 
+const t = ((section, key, values) =>
+  translate("en", section, key, values)) as T;
+
+/** The cell as the list draws it: the controllers' answer read through `vendorTlsAnswer`. */
 const badge = (
   tlsHosts: string[],
   unchecked: string[],
-  hasCatchAllTls = false
-) =>
-  render(
+  hasCatchAllTls = false,
+  said: Pick<IngressTls, "terminated" | "replacesSpec" | "by"> | null = null
+) => {
+  const hosts = [...new Set([...tlsHosts, ...unchecked])];
+  const ingress = {
+    name: "shop",
+    namespace: "web",
+    rules: hosts.map((host) => ({ host, paths: [] })),
+    tlsHosts,
+    hasCatchAllTls,
+  } as unknown as IngressInfo;
+  const vendor = vendorTlsAnswer(
+    ingress,
+    {
+      of: (_, host) =>
+        said
+          ? { host, ...said }
+          : unchecked.includes(host)
+            ? { host, terminated: null, by: { key: "awsHttpOnly" } }
+            : null,
+      isPending: false,
+      error: null,
+    },
+    t
+  );
+  return render(
     <TooltipProvider>
       <TlsBadge
         tlsHosts={tlsHosts}
         hasCatchAllTls={hasCatchAllTls}
-        vendor={{ hosts: [], by: "", unchecked }}
+        vendor={vendor}
       />
     </TooltipProvider>
   );
+};
 
 /** What the tooltip lists once the pointer is on the cell. */
 async function tooltipOf(label: string): Promise<string> {
@@ -88,6 +121,31 @@ describe("the Ingress list's TLS cell", () => {
     badge(["a.example.com"], [], true);
     expect(screen.getByText("все хосты")).toBeTruthy();
     expect(screen.queryByText(/^TLS \d/)).toBeNull();
+  });
+
+  /**
+   * Traefik reads `spec.tls` for certificates only. The cell counted the host
+   * as TLS while every request to it went over plain HTTP, and said nothing
+   * of why the certificate written there does nothing.
+   */
+  it("says no TLS, and why, for a host its controller serves plain despite spec.tls", async () => {
+    badge(["promo.example.com"], [], false, {
+      terminated: false,
+      replacesSpec: true,
+      by: { key: "traefikTlsNotServed" },
+    });
+    expect(screen.queryByText("1 host")).toBeNull();
+    const tip = await tooltipOf("no TLS");
+    expect(tip).toContain("router.tls");
+  });
+
+  /** Without `replacesSpec` a controller's "no" never outvotes spec.tls. */
+  it("keeps spec.tls over a controller that does not replace it", () => {
+    badge(["shop.example.com"], [], false, {
+      terminated: false,
+      by: { key: "awsHttpOnly" },
+    });
+    expect(screen.getByText("1 host")).toBeTruthy();
   });
 
   it("says no TLS once everything answered and nothing covers it", () => {

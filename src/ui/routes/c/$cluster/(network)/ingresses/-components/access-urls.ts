@@ -18,26 +18,21 @@ export interface AccessUrl {
 export function generateAccessUrls(
   rules: IngressRule[],
   tlsHosts: string[],
-  hasCatchAllTls: boolean,
   /** What a wildcard rule reads as in the host column. */
   allHosts: string,
   /**
-   * What a cloud controller says about a host `spec.tls` is silent on. All
-   * three managed clouds keep the certificate off the Ingress (an ACM ARN,
-   * a `ManagedCertificate`, one installed on an Application Gateway), so
-   * without this every HTTPS site on a managed cluster was offered as
-   * `http://`. `null` where it could not tell.
+   * Whether a host is served over TLS, `spec.tls` and the controllers both
+   * read: all three managed clouds keep the certificate off the Ingress, and
+   * Traefik serves a host `spec.tls` names as plain HTTP unless asked.
+   * `null` where it could not be told.
    */
-  vendorTls: (host: string) => boolean | null
+  tlsOf: (host: string) => boolean | null
 ): AccessUrl[] {
   const urls: AccessUrl[] = [];
 
   for (const rule of rules) {
     const isWildcard = rule.host === "*" || !rule.host;
-    // A wildcard entry in `spec.tls` serves this host; comparing literally
-    // handed the reader an http:// URL for a host that refuses it.
-    const explicit = covers(tlsHosts, rule.host);
-    const isHttps = explicit || hasCatchAllTls || vendorTls(rule.host);
+    const isHttps = tlsOf(rule.host);
     const scheme = isHttps === null ? "" : isHttps ? "https://" : "http://";
     const actualHost = isWildcard ? "" : rule.host;
 
@@ -53,7 +48,7 @@ export function generateAccessUrls(
         backendPort: path.backendPort,
         resourceBackend: path.resourceBackend,
         isHttps,
-        viaCatchAll: isHttps === true && !explicit,
+        viaCatchAll: isHttps === true && !covers(tlsHosts, rule.host),
       });
     }
   }

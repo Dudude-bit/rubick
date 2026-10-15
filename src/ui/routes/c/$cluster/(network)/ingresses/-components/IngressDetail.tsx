@@ -42,9 +42,13 @@ import { generateAccessUrls } from "./access-urls";
 import { useProxyBehind } from "@/hooks/useServiceRoutes";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
-import { covers, expiryOf, expiryText } from "@/lib/certificates";
+import { expiryOf, expiryText } from "@/lib/certificates";
 import { useIngressTls } from "@/hooks/useIngressTls";
-import { TLS_NOT_CHECKED_TONE } from "../../-components";
+import {
+  hostTlsOf,
+  TLS_NOT_CHECKED_TONE,
+  vendorTlsAnswer,
+} from "../../-components";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
   ingressAddressOf,
@@ -122,34 +126,26 @@ export function IngressDetail() {
     [ingress]
   );
   const vendorTls = useIngressTls(asked);
-  // `null` where the vendor could not tell, or has not answered yet.
-  const terminatedByVendor = (host: string): boolean | null => {
-    if (!ingress || !host) return false;
-    const said = vendorTls.of(
-      { namespace: ingress.namespace, name: ingress.name },
-      host
-    )?.terminated;
-    if (said !== undefined) return said;
-    return vendorTls.isPending || vendorTls.error !== null ? null : false;
-  };
+  const vendor = ingress ? vendorTlsAnswer(ingress, vendorTls, t) : null;
+  // `null` where nobody could tell, or the controllers have not answered yet.
+  const tlsOf = (host: string): boolean | null =>
+    ingress ? hostTlsOf(ingress, host, vendor) : false;
   const accessUrls = generateAccessUrls(
     rules,
     tlsHosts,
-    hasCatchAllTls,
     t("empty", "allHosts"),
-    terminatedByVendor
+    tlsOf
   );
   // "no TLS" is a claim about the whole way in, and `spec.tls` is only part
-  // of it on every managed cloud.
-  const vendorTerminates = rules.some(
-    (rule) => rule.host && terminatedByVendor(rule.host) === true
+  // of it on every managed cloud, and not all of it under Traefik.
+  const verdicts = rules.flatMap((rule) =>
+    rule.host ? [tlsOf(rule.host)] : []
   );
   const tls: "yes" | "no" | "unknown" =
-    tlsHosts.length > 0 || tlsConfigs.length > 0 || vendorTerminates
+    verdicts.includes(true) ||
+    (tlsConfigs.length > 0 && (vendor?.plain.length ?? 0) === 0)
       ? "yes"
-      : rules.some(
-            (rule) => rule.host && terminatedByVendor(rule.host) === null
-          )
+      : verdicts.includes(null)
         ? "unknown"
         : "no";
 
@@ -198,7 +194,10 @@ export function IngressDetail() {
   // shared file both.
   const tlsFact: { text: string; tone: "warn" | "err" | null } =
     tls === "no"
-      ? { text: t("empty", "noneTrafficUnencrypted"), tone: "warn" }
+      ? {
+          text: vendor?.plainWhy ?? t("empty", "noneTrafficUnencrypted"),
+          tone: "warn",
+        }
       : tls === "unknown"
         ? { text: t("empty", "tlsNotChecked"), tone: null }
         : soonest
@@ -293,7 +292,12 @@ export function IngressDetail() {
       label: t("nav", "access"),
       glyph: viewGlyph(ExternalLink),
       content: (
-        <IngressAccess ingress={ingress} urls={accessUrls} health={health} />
+        <IngressAccess
+          ingress={ingress}
+          urls={accessUrls}
+          health={health}
+          plainWhy={vendor?.plainWhy ?? null}
+        />
       ),
     },
     connectionsTab(connections, t, deliveryQuery),
@@ -356,10 +360,7 @@ export function IngressDetail() {
               <TableBody>
                 {rules.map((rule, ruleIdx) => {
                   const isWildcard = rule.host === "*" || !rule.host;
-                  const covered =
-                    covers(tlsHosts, rule.host) || hasCatchAllTls
-                      ? true
-                      : terminatedByVendor(rule.host);
+                  const covered = tlsOf(rule.host);
                   return [
                     // The host is context for the paths under it, so it is
                     // said once above them instead of on every row.

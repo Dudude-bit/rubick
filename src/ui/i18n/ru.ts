@@ -3716,6 +3716,9 @@ export const ru: Catalogue = {
     awsAcmCertificate: "сертификат из ACM",
     awsAcmDiscovered: "сертификат, найденный в ACM",
     awsHttpOnly: "только HTTP-слушатель",
+    traefikTlsNotServed:
+      "Traefik берёт из spec.tls только сертификаты и отдаёт этот хост по обычному HTTP: маршрут идёт по TLS только с аннотацией router.tls или на TLS entry point.",
+    traefikPickedCertificate: "сертификат, который выберет Traefik",
     azureCertOnGateway: "{name} на Application Gateway",
     azureSomeCertOnGateway: "сертификат на Application Gateway",
     istioMeshOnly: "только внутри меша",

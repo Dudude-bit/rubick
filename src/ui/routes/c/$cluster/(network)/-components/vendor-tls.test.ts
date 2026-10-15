@@ -4,7 +4,7 @@ import type { IngressInfo } from "@/generated/types";
 import type { IngressTls } from "@/integrations";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { ingressOpenUrl, vendorTlsAnswer } from "./vendor-tls";
+import { hostTlsOf, ingressOpenUrl, vendorTlsAnswer } from "./vendor-tls";
 
 const t = ((section, key, values) =>
   translate("en", section, key, values)) as T;
@@ -117,5 +117,45 @@ describe("what the Ingress list takes from a cloud controller", () => {
     expect(
       ingressOpenUrl(covered, vendorTlsAnswer(covered, answering(null), t))
     ).toBe("https://shop.example.com");
+  });
+});
+
+describe("a controller whose answer replaces spec.tls", () => {
+  const covered = { ...shop, tlsHosts: ["shop.example.com"] } as IngressInfo;
+  const traefik = (terminated: IngressTls["terminated"]) => ({
+    of: () => ({
+      host: "shop.example.com",
+      terminated,
+      by: { key: "traefikTlsNotServed" as const },
+      replacesSpec: true,
+    }),
+    isPending: false,
+    error: null,
+  });
+
+  /**
+   * Traefik loads a certificate from spec.tls and serves the router as plain
+   * HTTP all the same. "Open in browser" handed out https:// for a host that
+   * answers nothing on 443.
+   */
+  it("serves a host spec.tls names as plain HTTP when the controller says so", () => {
+    const vendor = vendorTlsAnswer(covered, traefik(false), t);
+    expect(vendor?.plain).toEqual(["shop.example.com"]);
+    expect(vendor?.plainWhy).toContain("router.tls");
+    expect(hostTlsOf(covered, "shop.example.com", vendor)).toBe(false);
+    expect(ingressOpenUrl(covered, vendor)).toBe("http://shop.example.com");
+  });
+
+  /** Its "could not tell" is not spec.tls's yes: the entry points went unread. */
+  it("leaves a host spec.tls names unknown when the controller could not tell", () => {
+    const vendor = vendorTlsAnswer(covered, traefik(null), t);
+    expect(hostTlsOf(covered, "shop.example.com", vendor)).toBeNull();
+    expect(ingressOpenUrl(covered, vendor)).toBeNull();
+  });
+
+  /** A controller that only adds to spec.tls never takes a host away from it. */
+  it("keeps spec.tls over a controller that does not replace it", () => {
+    const vendor = vendorTlsAnswer(covered, answering(false), t);
+    expect(hostTlsOf(covered, "shop.example.com", vendor)).toBe(true);
   });
 });

@@ -58,10 +58,13 @@ export function IngressAccess({
   ingress,
   urls,
   health,
+  plainWhy,
 }: {
   ingress: IngressInfo | undefined;
   urls: AccessUrl[];
   health: IngressHealth | undefined;
+  /** Why a host `spec.tls` names is served as plain HTTP, in its controller's words. */
+  plainWhy: string | null;
 }) {
   const t = useT();
   const copyToClipboard = useCopyToClipboard();
@@ -91,6 +94,11 @@ export function IngressAccess({
         <div className="px-1.5 pb-2">
           <VerdictBadge verdict={verdict} />
         </div>
+      )}
+      {plainWhy && (
+        <p className="max-w-[80ch] px-1.5 pb-2 text-[11px] text-warn">
+          {plainWhy}
+        </p>
       )}
       {urls.length === 0 ? (
         <p className="text-xs text-fg-fnt">

@@ -21,10 +21,14 @@ interface TlsBadgeProps {
   vendor?: VendorTlsAnswer | null;
 }
 
-/** "Not checked" is its own colour, or it reads as the "no" beside it. */
-const BARE_TONE: Record<"none" | "notChecked", string> = {
+/**
+ * "Not checked" is its own colour, or it reads as the "no" beside it. A
+ * certificate named and not served is a mistake, not the choice "none" is.
+ */
+const BARE_TONE: Record<"none" | "notChecked" | "plain", string> = {
   none: "text-fg-fnt",
   notChecked: TLS_NOT_CHECKED_TONE,
+  plain: "text-warn",
 };
 
 /**
@@ -36,24 +40,36 @@ const BARE_TONE: Record<"none" | "notChecked", string> = {
  */
 export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
   const t = useT();
-  const explicitCount = tlsHosts.length;
   const vendorHosts = vendor?.hosts ?? [];
-  const unchecked = hasCatchAllTls
-    ? []
-    : (vendor?.unchecked ?? []).filter((host) => !covers(tlsHosts, host));
+  const unchecked = vendor?.unchecked ?? [];
+  // What `spec.tls` names and the controller does not serve is not TLS.
+  const plain = vendor?.plain ?? [];
+  const named = tlsHosts.filter(
+    (name) => !plain.some((host) => covers([name], host))
+  );
+  const catchAll = hasCatchAllTls && plain.length === 0;
+  const explicitCount = named.length;
 
-  if (explicitCount === 0 && !hasCatchAllTls && vendorHosts.length === 0) {
-    const bare = unchecked.length > 0 ? "notChecked" : "none";
-    return (
-      <span className={BARE_TONE[bare]}>
-        {t("empty", bare === "notChecked" ? "tlsNotChecked" : "noTls")}
-      </span>
-    );
+  if (explicitCount === 0 && !catchAll && vendorHosts.length === 0) {
+    const bare =
+      unchecked.length > 0 ? "notChecked" : plain.length > 0 ? "plain" : "none";
+    const words = t("empty", bare === "notChecked" ? "tlsNotChecked" : "noTls");
+    if (bare === "plain" && vendor?.plainWhy) {
+      return (
+        <Tooltip>
+          <TooltipTrigger className={BARE_TONE.plain}>{words}</TooltipTrigger>
+          <TooltipContent className="max-w-[42ch] text-xs">
+            {vendor.plainWhy}
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+    return <span className={BARE_TONE[bare]}>{words}</span>;
   }
 
   // The controller's answer is not a Secret in this cluster, so it is counted
   // apart from the ones that are and named in the tooltip.
-  if (explicitCount === 0 && !hasCatchAllTls) {
+  if (explicitCount === 0 && !catchAll) {
     return (
       <Tooltip>
         <TooltipTrigger className="text-fg-mid">
@@ -79,13 +95,13 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
   }
 
   // A catch-all certificate covers every host, whatever spec.tls also names.
-  const label = hasCatchAllTls
+  const label = catchAll
     ? t("empty", "tlsEveryHost")
     : t("count", "hosts", { n: explicitCount });
 
   const hosts = [
-    ...tlsHosts,
-    ...(hasCatchAllTls ? [t("empty", "catchAllCertificate")] : []),
+    ...named,
+    ...(catchAll ? [t("empty", "catchAllCertificate")] : []),
     ...vendorHosts.map((host) =>
       vendor ? t("readings", "tlsHostFrom", { host, by: vendor.by }) : host
     ),

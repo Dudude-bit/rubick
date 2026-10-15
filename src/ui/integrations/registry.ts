@@ -338,6 +338,12 @@ export interface IngressTls {
    * inside a query; a Secret's own name goes through the verbatim one.
    */
   by: Saying;
+  /**
+   * The answer stands for a host `spec.tls` covers too. Set by a controller
+   * that reads that field for certificates only: Traefik loads the Secret and
+   * still serves the router as plain HTTP unless the router asks for TLS.
+   */
+  replacesSpec?: boolean;
 }
 
 /**

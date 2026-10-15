@@ -3411,6 +3411,9 @@ export const en = {
     awsAcmCertificate: "an ACM certificate",
     awsAcmDiscovered: "a certificate discovered in ACM",
     awsHttpOnly: "an HTTP listener only",
+    traefikTlsNotServed:
+      "Traefik reads spec.tls for certificates only and serves this host as plain HTTP: a router is TLS only with the router.tls annotation or on a TLS entry point.",
+    traefikPickedCertificate: "the certificate Traefik picks",
     azureCertOnGateway: "{name} on the Application Gateway",
     azureSomeCertOnGateway: "a certificate on the Application Gateway",
     istioMeshOnly: "mesh only",

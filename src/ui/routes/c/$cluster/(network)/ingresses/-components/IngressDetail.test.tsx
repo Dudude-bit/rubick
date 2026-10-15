@@ -11,6 +11,8 @@ const vendor = vi.hoisted(() => ({
   /** `false` when no controller has spoken for the host at all. */
   answered: true,
   error: null as Error | null,
+  /** Answers as Traefik does, for the hosts `spec.tls` names too. */
+  replaces: false,
 }));
 vi.mock("@/hooks/useIngressTls", () => ({
   useIngressTls: () => ({
@@ -20,7 +22,10 @@ vi.mock("@/hooks/useIngressTls", () => ({
         ? {
             host,
             terminated: vendor.terminated,
-            by: { key: "verbatimLine", values: { said: "shop-cert" } },
+            by: vendor.replaces
+              ? { key: "traefikTlsNotServed" }
+              : { key: "verbatimLine", values: { said: "shop-cert" } },
+            replacesSpec: vendor.replaces,
           }
         : undefined,
     isPending: false,
@@ -96,6 +101,7 @@ beforeEach(() => {
   vendor.terminated = null;
   vendor.answered = true;
   vendor.error = null;
+  vendor.replaces = false;
 });
 
 /** The role token that paints an element's text, its own or inherited. */
@@ -193,6 +199,49 @@ describe("an Ingress whose certificate the controller could not read", () => {
       expect(unknown[place], place).not.toBe(yes[place]);
       expect(unknown[place], place).not.toBe(no[place]);
     }
+  });
+});
+
+describe("an Ingress whose controller serves spec.tls hosts as plain HTTP", () => {
+  const named: IngressInfo = {
+    ...shop,
+    className: "traefik",
+    tlsHosts: ["shop.example.com"],
+    tlsConfigs: [
+      {
+        hosts: ["shop.example.com"],
+        secretName: "shop-tls",
+        isCatchAll: false,
+      },
+    ],
+  };
+
+  /**
+   * Traefik loads a certificate from spec.tls and serves the router as plain
+   * HTTP unless it asks for TLS. The page said "over HTTPS" from the field
+   * alone and handed out an https:// URL that answers nothing.
+   */
+  it("says HTTP on the Access tab, with Traefik's reason", async () => {
+    vendor.terminated = false;
+    vendor.replaces = true;
+    await open("access", named);
+
+    expect(screen.getByText("HTTP")).toBeTruthy();
+    expect(screen.queryByText("HTTPS")).toBeNull();
+    expect(screen.getAllByText(/router\.tls/).length).toBeGreaterThan(0);
+  });
+
+  it("leads the TLS fact with the reason rather than a host count", async () => {
+    vendor.terminated = false;
+    vendor.replaces = true;
+    await open("overview", named);
+
+    expect(screen.queryByText("1 host")).toBeNull();
+    expect(
+      screen.getByText(/reads spec\.tls for certificates only/, {
+        selector: "dd *, dd",
+      })
+    ).toBeTruthy();
   });
 });
 

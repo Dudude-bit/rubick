@@ -9,6 +9,7 @@ import {
   ROUTE_STALE,
 } from "./data";
 import { facts } from "./facts";
+import { ingressTls } from "./ingress-tls";
 import { reportOf } from "./report";
 import { proxyBehind, serviceRoutes } from "./routes";
 
@@ -40,6 +41,7 @@ export default defineVendor({
   provides: {
     "service.routes": serviceRoutes,
     "proxy.behind": proxyBehind,
+    "ingress.tls": ingressTls,
     "object.report": reportOf,
   },
   page: {
