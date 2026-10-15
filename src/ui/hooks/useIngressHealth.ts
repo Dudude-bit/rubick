@@ -14,6 +14,7 @@ import {
   useServiceHealthInputs,
   type ServiceHealthRead,
 } from "@/hooks/useServiceHealthInputs";
+import { useIngressTls } from "@/hooks/useIngressTls";
 import { certificatesOf, useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
 import {
@@ -22,13 +23,51 @@ import {
   type IngressHealth,
   type IngressInputs,
 } from "@/lib/ingress-health";
+import { hostTls } from "@/lib/ingress-tls";
 import { knownOf } from "@/lib/known";
 import { queryKeys } from "@/lib/query-keys";
+
+const NO_ROWS: readonly IngressHealthInput[] = [];
 
 type Answer<V> = Pick<UseQueryResult<V>, "data" | "error">;
 
 const answers = <V>(results: UseQueryResult<V>[]): Answer<V>[] =>
   results.map(({ data, error }) => ({ data, error }));
+
+type Ingress = Pick<IngressHealthInput, "namespace" | "name" | "rules">;
+
+const hostKey = (ingress: Pick<Ingress, "namespace" | "name">, host: string) =>
+  `${ingress.namespace}/${ingress.name}/${host}`;
+
+/**
+ * The hosts whose controller serves them as plain HTTP whatever `spec.tls`
+ * says, asked with the same hosts as the Ingress TLS column so the answer is
+ * one cached read. Kept as a string until it changes, so a verdict built on
+ * it does not churn with every render of the answers.
+ */
+export function usePlainHosts(ingresses: readonly Ingress[]) {
+  const asked = useMemo(
+    () =>
+      ingresses.map((ingress) => ({
+        namespace: ingress.namespace,
+        name: ingress.name,
+        hosts: ingress.rules.flatMap((rule) => (rule.host ? [rule.host] : [])),
+      })),
+    [ingresses]
+  );
+  const answers = useIngressTls(asked);
+  const unread = answers.isPending || answers.error !== null;
+  const plain = asked
+    .flatMap(({ hosts, ...ingress }) =>
+      hosts
+        .filter(
+          (host) => hostTls(true, answers.of(ingress, host), unread) === false
+        )
+        .map((host) => hostKey(ingress, host))
+    )
+    .join("\n");
+  return useMemo(() => new Set(plain.split("\n")), [plain]);
+}
 
 /**
  * Each Ingress's verdict, from reads made once for every row: the class
@@ -79,6 +118,7 @@ export function useIngressHealth(
     })),
     combine: answers<Map<string, TlsCertificate>>,
   });
+  const plain = usePlainHosts(rows ?? NO_ROWS);
 
   return useMemo(
     () => (ingress: IngressHealthInput) => {
@@ -94,9 +134,10 @@ export function useIngressHealth(
         certificates: read
           ? certificatesOf(read.data, read.error, secrets[at].names)
           : undefined,
+        servedPlain: (host) => plain.has(hostKey(ingress, host)),
       });
     },
-    [bindings, classes, backing, secrets, certificates]
+    [bindings, classes, backing, secrets, certificates, plain]
   );
 }
 
@@ -119,11 +160,15 @@ export function useOneIngressHealth(
     ingress?.namespace,
     ingress ? secretNamesOf(ingress) : []
   );
+  const plain = usePlainHosts(
+    useMemo(() => (ingress ? [ingress] : []), [ingress])
+  );
   if (!ingress) return undefined;
   return ingressHealthOf({
     ingress,
     binding: knownOf(binding),
     backing: backing.in(ingress.namespace),
     certificates,
+    servedPlain: (host) => plain.has(hostKey(ingress, host)),
   });
 }

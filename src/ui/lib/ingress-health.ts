@@ -32,6 +32,7 @@ export type NamespaceBacking = ReadonlyMap<string, ServiceHealthInput>;
 export interface IngressInputs {
   ingress: Pick<
     IngressInfo,
+    | "name"
     | "namespace"
     | "className"
     | "rules"
@@ -43,6 +44,11 @@ export interface IngressInputs {
   backing: Known<NamespaceBacking>;
   /** By Secret name; `undefined` until read. */
   certificates: Map<string, TlsCertificate> | undefined;
+  /**
+   * A host its controller serves as plain HTTP whatever `spec.tls` says, as
+   * Traefik does without `router.tls`. Absent, `spec.tls` stands.
+   */
+  servedPlain?: (host: string) => boolean;
 }
 
 export type IngressProblem =
@@ -128,6 +134,13 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
 
   for (const config of ingress.tlsConfigs) {
     if (!config.secretName) continue;
+    // Never presented, so its absence breaks nothing a client sees; the
+    // controller's own page says nothing of it either.
+    if (
+      config.hosts.length > 0 &&
+      config.hosts.every((host) => inputs.servedPlain?.(host))
+    )
+      continue;
     if (!certificates) {
       unread.push(null);
       continue;

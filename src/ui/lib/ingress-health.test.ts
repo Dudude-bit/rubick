@@ -47,6 +47,7 @@ function ingress(
   secretName: string | null = null
 ): IngressInputs["ingress"] {
   return {
+    name: "shop",
     namespace: "net",
     className: "nginx",
     rules: [
@@ -169,6 +170,33 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     });
     expect(said.code).toBe("tlsSecretMissing");
     expect(said.reason).toContain("api-tls");
+  });
+
+  /**
+   * Traefik without `router.tls` serves the host as plain HTTP and never
+   * presents the Secret. The page led with a red "missing TLS Secret" while
+   * Traefik's own page and the trace said plain HTTP and nothing of it.
+   */
+  it("says nothing of a missing Secret its controller never presents", () => {
+    const missing = new Map<string, TlsCertificate>([
+      [
+        "api-tls",
+        {
+          secretName: "api-tls",
+          certificate: null,
+          problem: { says: "noSecret" },
+        },
+      ],
+    ]);
+    const health = ingressHealthOf({
+      ingress: ingress(["api"], "api-tls"),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates: missing,
+      servedPlain: (host) => host === "shop.example.test",
+    });
+    expect(health.problems).toEqual([]);
+    expect(health.unread).toEqual([]);
   });
 
   /**
