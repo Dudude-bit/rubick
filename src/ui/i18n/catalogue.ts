@@ -7287,6 +7287,8 @@ export const en = {
     invalidImageName: "the image reference is not a valid image name.",
     runContainerError:
       "the container was created but could not start, often because of a wrong command or a missing file.",
+    startError:
+      "the runtime could not start the container's command, so it never ran; a crash loop shows this word between its restarts.",
     oomKilled: "a container used more memory than its limit and was killed.",
     error: "a container exited with a non-zero code.",
     completed: "every container finished successfully.",

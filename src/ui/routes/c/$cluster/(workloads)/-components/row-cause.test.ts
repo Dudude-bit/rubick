@@ -109,6 +109,18 @@ describe("the cause a workload list's row tells", () => {
   });
 
   /**
+   * Live, bad-command's row went quiet for the seconds its pod read
+   * StartError between two crashes. Fails if the word the runtime writes
+   * on a container it could not start drops the cause.
+   */
+  it("keeps the cause while a pod reads the runtime's word between crashes", () => {
+    const pods = rowPods([pod("web-1", "web", { display: "StartError" })], []);
+    expect(rowCause("shop", web, pods, NOW)).toMatchObject({
+      shared: { pods: 1, of: 1, cause: exits },
+    });
+  });
+
+  /**
    * A namespace whose pods were refused looks, row by row, exactly like one
    * whose pods are fine. Fails if a row in it says nothing rather than that
    * it could not look, or says so while the pods are still on their way.

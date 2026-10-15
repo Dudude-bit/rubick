@@ -28,7 +28,7 @@ const POD_PHASE: Record<PodPhase, Meaning> = {
   Unknown: "phaseUnknown",
 };
 
-const POD_REASON: Record<string, Meaning> = {
+export const POD_REASON: Record<string, Meaning> = {
   ContainerCreating: "containerCreating",
   PodInitializing: "podInitializing",
   CrashLoopBackOff: "crashLoopBackOff",
@@ -38,6 +38,7 @@ const POD_REASON: Record<string, Meaning> = {
   CreateContainerError: "createContainerError",
   InvalidImageName: "invalidImageName",
   RunContainerError: "runContainerError",
+  StartError: "startError",
   OOMKilled: "oomKilled",
   Error: "error",
   Completed: "completed",

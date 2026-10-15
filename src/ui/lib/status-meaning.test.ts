@@ -6,11 +6,12 @@ import { loadLocale, translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import {
   JOB,
+  POD_REASON,
   podStatusMeaning,
   statusMeaning,
   workloadStatusMeaning,
 } from "./status-meaning";
-import { statusRole } from "./status-role";
+import { listedStatus, statusRole } from "./status-role";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -125,5 +126,32 @@ describe("what a Job's word means", () => {
       "ok",
       "pending",
     ]);
+  });
+});
+
+describe("the kubelet's words a pod badge explains", () => {
+  /**
+   * Live, bad-command's row lost its cause while its pod read StartError
+   * between crashes: a word explained here but missing from the colour
+   * table draws grey, and a grey pod has no cause to lead with. Fails if
+   * a word with a meaning has no colour of its own.
+   */
+  it("gives every word it explains a colour of its own", () => {
+    expect(
+      Object.keys(POD_REASON).filter((word) => !listedStatus(word))
+    ).toEqual([]);
+    expect(statusRole("StartError")).toBe("err");
+  });
+
+  /** The Overview and the cause call a pod stuck on these; fails if the badge draws one in any colour but red. */
+  it("draws red every word the backend calls stuck", () => {
+    const stuck = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), "src/contracts/stuck-waiting.json"),
+        "utf8"
+      )
+    ) as { backingOff: string; blocked: string[] };
+    const words = [stuck.backingOff, ...stuck.blocked];
+    expect(words.filter((word) => statusRole(word) !== "err")).toEqual([]);
   });
 });

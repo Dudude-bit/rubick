@@ -130,6 +130,19 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "imagepullbackoff",
     "errimagepull",
     "createcontainerconfigerror",
+    // What the kubelet and the runtime write on a container they could not
+    // create or start; `StartError` stands between the crashes of a loop.
+    "createcontainererror",
+    "runcontainererror",
+    "starterror",
+    "containercannotrun",
+    "invalidimagename",
+    "errimageneverpull",
+    "imageinspecterror",
+    "registryunavailable",
+    "signaturevalidationfailed",
+    "prestarthookerror",
+    "poststarthookerror",
     "schedulererror",
     "unavailable",
     // A rollout past its progress deadline, whatever is still serving.
@@ -156,6 +169,10 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "superseded",
     "uninstalled",
     "unknown",
+    // Words for what nobody could look at: the node stopped reporting, or
+    // the kubelet lost the container. The pod's phase carries the colour.
+    "nodelost",
+    "containerstatusunknown",
     "idle",
     // Gateway API: no controller has claimed the class — not a fault, and
     // not health either.
@@ -179,6 +196,9 @@ const INIT_PROGRESS = /^\d+\/\d+$/;
 /** What kubectl prints when a termination carried no reason of its own. */
 const EXIT = /^exitcode:(\d+)$/;
 const SIGNAL = /^signal:\d+$/;
+
+/** Whether `status` has a row of its own, rather than neutral for want of one. */
+export const listedStatus = (status: string) => LOOKUP.has(normalize(status));
 
 export function statusRole(status: string): StatusRole {
   let key = normalize(status);

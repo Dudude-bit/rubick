@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 
 use super::pod_display::{
     blocking_init, condition_is_true, container_restarting_until, counted, gone, last_terminated,
-    pod_verdict,
+    pod_verdict, BLOCKED_WAITING_REASONS,
 };
 use super::EventInfo;
 use crate::utils::Moment;
@@ -639,18 +639,12 @@ fn unfit(text: &str, nodes: i32) -> Unfit {
     }
 }
 
-const BLOCKED: &[&str] = &[
-    "ErrImagePull",
-    "ImagePullBackOff",
-    "InvalidImageName",
-    "CreateContainerConfigError",
-    "CreateContainerError",
-    "RunContainerError",
-];
-
 fn blocked(cs: &ContainerStatus, pod: &Pod) -> Option<PodCause> {
     let waiting = cs.state.as_ref()?.waiting.as_ref()?;
-    let reason = waiting.reason.as_deref().filter(|r| BLOCKED.contains(r))?;
+    let reason = waiting
+        .reason
+        .as_deref()
+        .filter(|r| BLOCKED_WAITING_REASONS.contains(r))?;
     let said = waiting
         .message
         .as_deref()

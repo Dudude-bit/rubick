@@ -486,14 +486,20 @@ pub fn within_pending_grace(pod: &Pod, now: DateTime<Utc>) -> bool {
     pending_since(pod).is_some_and(|t| now - t < chrono::Duration::seconds(pending_grace(pod)))
 }
 
-/// Waiting-state reasons that mean the pod is stuck, not starting up.
-pub const STUCK_WAITING_REASONS: &[&str] = &[
-    "CrashLoopBackOff",
-    "ImagePullBackOff",
+/// Waiting-state reasons for a container that cannot start until someone acts;
+/// with `CrashLoopBackOff`, the ones that mean a pod is stuck, not starting up.
+/// `src/contracts/stuck-waiting.json` holds the frontend's colours to them.
+pub const BLOCKED_WAITING_REASONS: &[&str] = &[
     "ErrImagePull",
+    "ImagePullBackOff",
+    "ErrImageNeverPull",
+    "ImageInspectError",
+    "InvalidImageName",
+    "RegistryUnavailable",
+    "SignatureValidationFailed",
     "CreateContainerConfigError",
     "CreateContainerError",
-    "InvalidImageName",
+    "RunContainerError",
 ];
 
 /// Reason and message of the first container stuck in a back-off / image-pull
@@ -531,8 +537,7 @@ pub fn stuck_reason(pod: &Pod) -> Option<(String, Option<String>)> {
 fn stuck_waiting(cs: &ContainerStatus) -> Option<(String, Option<String>)> {
     let waiting = cs.state.as_ref()?.waiting.as_ref()?;
     let reason = waiting.reason.as_deref()?;
-    STUCK_WAITING_REASONS
-        .contains(&reason)
+    (reason == "CrashLoopBackOff" || BLOCKED_WAITING_REASONS.contains(&reason))
         .then(|| (reason.to_string(), waiting.message.clone()))
 }
 
@@ -794,6 +799,40 @@ mod tests {
         }
         assert!(!replaced(&owned("Failed", Some("Job"))));
         assert!(!replaced(&owned("Failed", None)));
+    }
+
+    /// A pod waiting on `RunContainerError` counted as starting on the
+    /// Overview while its page named the cause. Fails if the list both read
+    /// drifts from the shared file the frontend colours the words from.
+    #[test]
+    fn a_container_stuck_by_the_shared_file_reads_stuck() {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Shared {
+            backing_off: String,
+            blocked: Vec<String>,
+        }
+        let shared: Shared =
+            serde_json::from_str(include_str!("../../../../contracts/stuck-waiting.json"))
+                .expect("stuck reasons parse");
+        assert_eq!(
+            BLOCKED_WAITING_REASONS,
+            shared
+                .blocked
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+        );
+        for reason in std::iter::once(&shared.backing_off).chain(&shared.blocked) {
+            let mut p = pod("Running");
+            p.status.as_mut().expect("status").container_statuses =
+                Some(vec![status("app", waiting(reason), false)]);
+            assert_eq!(
+                stuck_reason(&p).map(|(said, _)| said).as_deref(),
+                Some(reason.as_str()),
+                "{reason}"
+            );
+        }
     }
 
     fn status(name: &str, state: ContainerState, ready: bool) -> ContainerStatus {
