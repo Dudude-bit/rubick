@@ -171,6 +171,48 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     expect(said.reason).toContain("api-tls");
   });
 
+  /**
+   * root-web's Ingress said "root-web takes no traffic" while the trace
+   * under it said why: Pod Security refuses the pods. The badge already
+   * says the backend is down, so the line leads with the Service's reason.
+   */
+  it("says why a backend takes no traffic, in its Service's words", () => {
+    const service = {
+      kind: "Service",
+      name: "web",
+      namespace: "net",
+      existence: "present",
+      facts: null,
+    } as const;
+    const said = verdict({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([
+          [
+            "web",
+            {
+              ...serving(0),
+              stop: {
+                reason: "podsRefused",
+                service,
+                selector: "app=web",
+                workloads: [{ ...service, kind: "Deployment" }],
+                said: 'pods "web-1" is forbidden: exceeded quota: two-pods, requested: pods=1, used: pods=2, limited: pods=2',
+              },
+            },
+          ],
+        ]),
+      },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendDown");
+    expect(said.reason).toBe(
+      "web: ResourceQuota two-pods refuses its pods: no room for pods."
+    );
+  });
+
   /** One dead path out of two degrades the Ingress; it does not kill it. */
   it("warns when one backend of several publishes nothing", () => {
     const said = verdict({

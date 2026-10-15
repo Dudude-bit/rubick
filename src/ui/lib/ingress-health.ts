@@ -19,6 +19,7 @@ import type {
 } from "@/generated/types";
 import {
   serviceHealthOf,
+  serviceHealthWords,
   type ServiceHealth,
   type ServiceHealthInput,
   type Verdict,
@@ -48,7 +49,8 @@ export type IngressProblem =
   | { kind: "noController"; className: string | null }
   | { kind: "backendMissing"; service: string }
   | { kind: "tlsSecretMissing"; secret: string }
-  | { kind: "backendDown"; service: string }
+  /** Its Service's verdict rides along, so the Ingress says why too. */
+  | { kind: "backendDown"; service: string; health: ServiceHealth }
   /** None ready, and every workload behind the backend is still starting its pods. */
   | { kind: "backendStarting"; service: string }
   /** None ready, and the pods the workloads behind the backend wait on were not read. */
@@ -118,7 +120,9 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
       }
       const health = serviceHealthOf(service, service, null);
       const problem = BACKEND_PROBLEM[health.state];
-      if (problem) problems.push({ kind: problem, service: name });
+      if (problem === "backendDown")
+        problems.push({ kind: problem, service: name, health });
+      else if (problem) problems.push({ kind: problem, service: name });
     }
   }
 
@@ -225,8 +229,12 @@ function problemSentence(problem: IngressProblem, t: T): string {
       return t("nav", "stopNoServiceNamed", { name: problem.service });
     case "tlsSecretMissing":
       return t("readings", "healthNoTlsSecret", { name: problem.secret });
-    case "backendDown":
-      return t("readings", "healthBackendDown", { name: problem.service });
+    case "backendDown": {
+      const why = serviceHealthWords(problem.health, t).reason;
+      return why
+        ? t("readings", "healthBackendDownWhy", { name: problem.service, why })
+        : t("readings", "healthBackendDown", { name: problem.service });
+    }
     case "backendStarting":
       return t("readings", "healthBackendStarting", { name: problem.service });
     case "backendUnconfirmed":
