@@ -134,12 +134,14 @@ const ungoverned: ResourceConnections = {
 
 function mockDetail(
   set: StatefulSetDetailInfo | undefined,
-  activeTab = "overview"
+  activeTab = "overview",
+  watched?: StatefulSetDetailInfo
 ) {
   vi.mocked(useResourceDetail).mockReturnValue({
     name: set?.name ?? "stateful-demo",
     namespace: set?.namespace ?? "k8s-gui-test",
     resource: set,
+    watched,
     isLoading: false,
     error: null,
     yaml: "kind: StatefulSet\n",
@@ -320,6 +322,28 @@ describe("StatefulSetDetail", () => {
     );
     await act(() => Promise.resolve());
     expect(screen.queryByTestId("pods-cause")).toBeNull();
+  });
+
+  /**
+   * The set's header waited for a read after its watch had already delivered
+   * the set, a read behind kubectl at every flip, as the Deployment's did.
+   * Fails if the header draws the read where the watch holds the same set,
+   * or draws the watch's set of another uid.
+   */
+  it("draws the set its watch delivered, not the read behind it", async () => {
+    const rolling = buildSet({
+      replicas: { desired: 2, ready: 1, current: 2, updated: 1 },
+      rollout: { state: "rollingOut", updated: 1, desired: 2 },
+    });
+    mockDetail(buildSet(), "overview", rolling);
+    const page = await renderPage();
+    expect(await screen.findByText("1/2 ready")).toBeInTheDocument();
+    page.unmount();
+
+    mockDetail(buildSet(), "overview", { ...rolling, uid: "another" });
+    await renderPage();
+    expect(await screen.findByText("1/1")).toBeInTheDocument();
+    expect(screen.queryByText("1/2 ready")).toBeNull();
   });
 
   /**

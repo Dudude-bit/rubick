@@ -72,7 +72,11 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { PodInfo, StatefulSetDetailInfo } from "@/generated/types";
 import { controlledBy } from "@/lib/controlled-by";
-import { readyBesideBadge, rolloutSettled } from "@/lib/workload-status";
+import {
+  readyBesideBadge,
+  rolloutSettled,
+  watchedWorkload,
+} from "@/lib/workload-status";
 import { useT } from "@/i18n/useT";
 
 export function StatefulSetDetail() {
@@ -80,7 +84,8 @@ export function StatefulSetDetail() {
   const {
     name,
     namespace,
-    resource: statefulSet,
+    resource: read,
+    watched,
     isLoading,
     error,
     yaml,
@@ -142,10 +147,11 @@ export function StatefulSetDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
     select: useCallback(
-      (pods: PodInfo[]) => controlledBy(pods, statefulSet?.uid),
-      [statefulSet?.uid]
+      (pods: PodInfo[]) => controlledBy(pods, read?.uid),
+      [read?.uid]
     ),
   });
+  const delivered = watched as StatefulSetDetailInfo | undefined;
   const {
     pods,
     error: podsError,
@@ -158,7 +164,19 @@ export function StatefulSetDetail() {
     name,
     podsQuery,
     podsKey,
-    statefulSet?.replicas.ready
+    (delivered && delivered.uid === read?.uid ? delivered : read)?.replicas
+      .ready
+  );
+  const startsNow = useStartsClock(splitPods);
+  const statefulSet = useMemo(
+    () =>
+      watchedWorkload(
+        read,
+        delivered,
+        splitPods && splitPods.map((pod) => pod.start),
+        startsNow
+      ),
+    [read, delivered, splitPods, startsNow]
   );
   useOwnedPodsWatch(
     ResourceType.StatefulSet,
@@ -248,7 +266,6 @@ export function StatefulSetDetail() {
   });
 
   const share = useStatefulSetShare(statefulSet, pods, podsError);
-  const startsNow = useStartsClock(splitPods);
 
   const tabs = useMemo(
     () => [

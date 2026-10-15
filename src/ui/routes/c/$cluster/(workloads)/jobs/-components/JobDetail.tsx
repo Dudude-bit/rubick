@@ -54,7 +54,8 @@ export function JobDetail() {
   const {
     name,
     namespace,
-    resource: job,
+    resource: read,
+    watched,
     isLoading,
     error,
     yaml,
@@ -70,6 +71,8 @@ export function JobDetail() {
     deleteResource: (name, ns) => commands.deleteJob(name, ns),
     defaultTab: "overview",
   });
+  const delivered = watched as JobDetailInfo | undefined;
+  const job = delivered && delivered.uid === read?.uid ? delivered : read;
 
   const podsKey = queryKeys.ownedPods(ResourceType.Job, namespace, name);
   // The refusal is carried rather than swallowed: an empty list from a 403

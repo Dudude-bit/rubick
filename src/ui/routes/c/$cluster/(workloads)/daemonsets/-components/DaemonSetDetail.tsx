@@ -18,6 +18,7 @@ import { useWorkloadPods } from "../../-components/workload-pods";
 import {
   readyBesideBadge,
   rolloutSettled,
+  watchedWorkload,
   workloadRole,
 } from "@/lib/workload-status";
 import { TrafficChain } from "../../../-object/TrafficChain";
@@ -68,7 +69,8 @@ export function DaemonSetDetail() {
   const {
     name,
     namespace,
-    resource: daemonSet,
+    resource: read,
+    watched,
     isLoading,
     error,
     yaml,
@@ -116,7 +118,7 @@ export function DaemonSetDetail() {
           {
             action: "restart",
             replicas: null,
-            generationBefore: daemonSet?.generation ?? null,
+            generationBefore: read?.generation ?? null,
           }
         );
       },
@@ -129,7 +131,7 @@ export function DaemonSetDetail() {
   // The DaemonSet publishes its own selector, in the API's own text form —
   // so a set-based one reaches the API server as written, where rebuilding
   // it from match labels dropped it and listed nothing.
-  const labelSelector = daemonSet?.selector || null;
+  const labelSelector = read?.selector || null;
   const podsKey = queryKeys.ownedPods(
     ResourceType.DaemonSet,
     namespace,
@@ -164,10 +166,11 @@ export function DaemonSetDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
     select: useCallback(
-      (pods: PodInfo[]) => controlledBy(pods, daemonSet?.uid),
-      [daemonSet?.uid]
+      (pods: PodInfo[]) => controlledBy(pods, read?.uid),
+      [read?.uid]
     ),
   });
+  const delivered = watched as DaemonSetDetailInfo | undefined;
   const {
     pods,
     error: podsError,
@@ -180,7 +183,18 @@ export function DaemonSetDetail() {
     name,
     podsQuery,
     podsKey,
-    daemonSet?.ready
+    (delivered && delivered.uid === read?.uid ? delivered : read)?.ready
+  );
+  const startsNow = useStartsClock(splitPods);
+  const daemonSet = useMemo(
+    () =>
+      watchedWorkload(
+        read,
+        delivered,
+        splitPods && splitPods.map((pod) => pod.start),
+        startsNow
+      ),
+    [read, delivered, splitPods, startsNow]
   );
   useOwnedPodsWatch(
     ResourceType.DaemonSet,
@@ -196,7 +210,6 @@ export function DaemonSetDetail() {
   const desired = daemonSet?.desired ?? 0;
   const current = daemonSet?.current ?? 0;
   const ready = daemonSet?.ready ?? 0;
-  const startsNow = useStartsClock(splitPods);
   const waiting = !!daemonSet && workloadRole(daemonSet.rollout) === "pending";
   const split = useMemo(
     () =>

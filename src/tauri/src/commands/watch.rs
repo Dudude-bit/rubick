@@ -20,9 +20,10 @@
 use crate::error::{Error, Result};
 use crate::resources::Selector;
 use crate::resources::{
-    ConfigMapInfo, CronJobInfo, DaemonSetInfo, DeploymentInfo, EndpointsInfo, EventInfo,
-    IngressInfo, JobInfo, NamespaceInfo, NodeInfo, PersistentVolumeClaimInfo, PersistentVolumeInfo,
-    PodInfo, PodRow, SecretInfo, ServiceInfo, StatefulSetInfo, StorageClassInfo,
+    ConfigMapInfo, CronJobInfo, DaemonSetDetailInfo, DaemonSetInfo, DeploymentInfo, EndpointsInfo,
+    EventInfo, IngressInfo, JobDetailInfo, JobInfo, NamespaceInfo, NodeInfo,
+    PersistentVolumeClaimInfo, PersistentVolumeInfo, PodInfo, PodRow, SecretInfo, ServiceInfo,
+    StatefulSetDetailInfo, StatefulSetInfo, StorageClassInfo,
 };
 use crate::state::AppState;
 use crate::watch::Narrow;
@@ -243,21 +244,21 @@ pub async fn subscribe_object_watch(
             "StatefulSet",
             &namespaced(namespace)?,
             name,
-            |o| Some(StatefulSetInfo::from(o)),
+            |o| Some(StatefulSetDetailInfo::from(o)),
         ),
         "DaemonSet" => manager.subscribe_object::<DaemonSet, _, _>(
             client,
             "DaemonSet",
             &namespaced(namespace)?,
             name,
-            |o| Some(DaemonSetInfo::from(o)),
+            |o| Some(DaemonSetDetailInfo::from(o)),
         ),
         "Job" => manager.subscribe_object::<Job, _, _>(
             client,
             "Job",
             &namespaced(namespace)?,
             name,
-            |o| Some(JobInfo::from(o)),
+            |o| Some(JobDetailInfo::from(o)),
         ),
         "Service" => manager.subscribe_object::<Service, _, _>(
             client,
