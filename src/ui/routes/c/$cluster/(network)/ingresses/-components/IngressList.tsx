@@ -212,6 +212,8 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
       floor: (_t, rows: readonly IngressInfo[]) =>
         Math.min(widestText(firstHosts(rows), "mono", 7.2), HOST_PX) +
         CELL_PAD_PX,
+      ideal: (_t, rows: readonly IngressInfo[]) =>
+        widestText(firstHosts(rows), "mono", 7.2) + CELL_PAD_PX,
     },
     cell: ({ row }) => {
       const hosts = row.original.rules
@@ -227,9 +229,11 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
       }
       return (
         <Tooltip>
-          <TooltipTrigger className="flex flex-wrap items-baseline gap-x-2 font-mono text-fg-mid">
+          <TooltipTrigger className="flex max-w-full flex-wrap items-baseline gap-x-2 font-mono text-fg-mid">
             {hosts.slice(0, 2).map((host) => (
-              <span key={host}>{host}</span>
+              <span key={host} className="min-w-0 truncate">
+                {host}
+              </span>
             ))}
             {hosts.length > 2 && (
               <span className="text-fg-fnt">
@@ -291,7 +295,14 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     size: 150,
     accessorKey: "loadBalancerIps",
     header: columnHeader("columns", "address"),
-    meta: { yields: 4, floor: IPV4_CELL_PX },
+    meta: {
+      yields: 4,
+      // An address's width held for a scope with none took Hosts' room.
+      floor: (t, rows: readonly IngressInfo[]) =>
+        rows.some((row) => row.loadBalancerIps?.length)
+          ? IPV4_CELL_PX
+          : widestText([t("empty", "noneLower")], "sans", 7) + CELL_PAD_PX,
+    },
     cell: ({ row }) => <IngressAddressCell ingress={row.original} />,
   },
   {

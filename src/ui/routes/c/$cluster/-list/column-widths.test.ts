@@ -5,6 +5,7 @@ import {
   tableLayout,
   yieldedColumns,
 } from "@/components/ui/column-shares";
+import { IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import { translate } from "@/i18n";
 import type { IngressInfo, PersistentVolumeClaimInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
@@ -236,9 +237,12 @@ describe("an address column", () => {
     PAGES.filter(([, columns]) => columns.some((c) => ADDRESS.has(nameOf(c))))
   )(
     "%s draws a whole IPv4 at every width a list is drawn at",
-    (_page, columns) => {
+    (page, columns) => {
+      // The Ingresses list holds an address's width only while a row has one.
+      const rows =
+        page === "Ingresses" ? [{ loadBalancerIps: ["10.111.219.134"] }] : [];
       for (const port of PORTS) {
-        const { px } = laidOut(columns, port);
+        const { px } = laidOut(columns, port, en, rows);
         columns.forEach((column, index) => {
           if (!ADDRESS.has(nameOf(column))) return;
           expect(px[index]).toBeGreaterThanOrEqual(WHOLE_IPV4_PX);
@@ -870,12 +874,17 @@ describe("the claims list beside a claim's cause", () => {
 });
 
 describe("the Ingresses list beside a cause", () => {
-  const ingress = (name: string, host: string) =>
+  const ingress = (
+    name: string,
+    host: string,
+    loadBalancerIps: string[] = []
+  ) =>
     ({
       name,
       namespace: "k8s-gui-test",
       className: "traefik",
       rules: [{ host, paths: [] }],
+      loadBalancerIps,
     }) as unknown as IngressInfo;
 
   /**
@@ -887,7 +896,7 @@ describe("the Ingresses list beside a cause", () => {
    */
   it("keeps a host, the TLS words and the badge whole while a cause widens Status", () => {
     const rows = [
-      ingress("checkout", "checkout.k8s-gui.test"),
+      ingress("checkout", "checkout.k8s-gui.test", ["34.1.2.3"]),
       ingress("promo-nginx", "promo.nginx.k8s-gui.test"),
     ];
     // The page adds the cause to the column's ideal; the widest it allows.
@@ -935,5 +944,38 @@ describe("the Ingresses list beside a cause", () => {
       "TLS not checked".length * 7 + 20
     );
     expect(widths(1040)("tlsHosts")).toBeNull();
+  });
+
+  /**
+   * Live at 1280, Address held an IPv4's 144px over "none" on every row and
+   * Hosts, with no ideal, stayed at its floor: "legacy.nginx.k8s-gui.t".
+   * Fails if a scope with no addresses reserves one, or Hosts stops rising.
+   */
+  it("gives the hosts the room an address nobody has would have held", () => {
+    const rows = [
+      ingress("checkout", "checkout.k8s-gui.test"),
+      ingress("promo-nginx", "promo.nginx.k8s-gui.test"),
+    ];
+    const kept = (ingresses as Column[])
+      .filter((column) => nameOf(column) !== "namespace")
+      .map((column) =>
+        nameOf(column) === "health"
+          ? { ...column, meta: { ...column.meta, ideal: () => 185 + 366 } }
+          : column
+      );
+    const specs = kept.map((c) => ({
+      id: nameOf(c),
+      size: c.size ?? 150,
+      floor: columnFloor(c, en, rows),
+      ideal: columnIdeal(c, en, rows),
+    }));
+    const layout = tableLayout(specs, 1200);
+    const at = (id: string) =>
+      (layout.shares[specs.findIndex((spec) => spec.id === id)] / 100) *
+      layout.span;
+    expect(at("loadBalancerIps")).toBeLessThan(IPV4_CELL_PX);
+    expect(at("hosts")).toBeGreaterThanOrEqual(
+      "promo.nginx.k8s-gui.test".length * 7.2 + 20
+    );
   });
 });
