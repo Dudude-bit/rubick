@@ -29,6 +29,7 @@ pub enum Rollout {
     /// serving: the controller stopped waiting for the new pods.
     Stalled {
         message: Option<String>,
+        /// Available pods of an older template, as far as the counts tell.
         serving: i32,
     },
     /// Nothing available, or `Available=False` while pods of an older
@@ -164,7 +165,7 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
     {
         return Rollout::Stalled {
             message: stalled.message.clone(),
-            serving: available,
+            serving: available.min(existing - updated).max(0),
         };
     }
     let refused = conditions
@@ -757,6 +758,31 @@ mod tests {
                 serving: 2,
             }
         );
+    }
+
+    /// Live, `capped` had one template, two pods up and a quota refusing the
+    /// other two, and its page said "2 old pods still serve". Fails if pods
+    /// of the new template are counted as old ones serving.
+    #[test]
+    fn a_stalled_rollout_with_one_template_has_no_old_pods_serving() {
+        let capped = deployment(
+            &Counts {
+                desired: 4,
+                existing: 2,
+                updated: 2,
+                available: 2,
+            },
+            vec![condition(
+                "Progressing",
+                "False",
+                DEADLINE_EXCEEDED,
+                "ReplicaSet \"capped-6d67bcbdbc\" has timed out progressing.",
+            )],
+        );
+        assert!(matches!(
+            deployment_rollout(&capped),
+            Rollout::Stalled { serving: 0, .. }
+        ));
     }
 
     /// The `checkout` case: every pod crashing, which the counts called
