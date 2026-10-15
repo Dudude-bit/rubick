@@ -278,6 +278,18 @@ export function unfitWords(unfit: Unfit, t: T): string {
       return t("cause", "unfitVolumeZone", { n: unfit.nodes });
     case "topology":
       return t("cause", "unfitTopology", { n: unfit.nodes });
+    case "topologyUnlabelled":
+      return unfit.keys.length === 1
+        ? t("cause", "unfitTopologyUnlabelled", {
+            n: unfit.nodes,
+            key: unfit.keys[0],
+          })
+        : unfit.keys.length === 0
+          ? t("cause", "unfitTopologyUnlabelledUnnamed", { n: unfit.nodes })
+          : t("cause", "unfitTopologyUnlabelledOneOf", {
+              n: unfit.nodes,
+              keys: unfit.keys.join(", "),
+            });
     case "claimsUnbound":
       return t("cause", "unfitClaimsUnbound");
     case "other":

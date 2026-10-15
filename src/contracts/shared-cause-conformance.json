@@ -564,6 +564,64 @@
       }
     },
     {
+      "name": "a spread missing another label is another cause",
+      "pods": [
+        {
+          "deleting": false,
+          "cause": {
+            "says": "unplaced",
+            "said": null,
+            "since": null,
+            "nodes": 2,
+            "why": [
+              {
+                "says": "topologyUnlabelled",
+                "nodes": 2,
+                "keys": ["example.com/rack"]
+              }
+            ]
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "unplaced",
+            "said": null,
+            "since": null,
+            "nodes": 2,
+            "why": [
+              {
+                "says": "topologyUnlabelled",
+                "nodes": 2,
+                "keys": ["topology.kubernetes.io/zone"]
+              }
+            ]
+          }
+        },
+        {
+          "deleting": false,
+          "cause": {
+            "says": "unplaced",
+            "said": null,
+            "since": null,
+            "nodes": 2,
+            "why": [
+              {
+                "says": "topologyUnlabelled",
+                "nodes": 2,
+                "keys": ["topology.kubernetes.io/zone"]
+              }
+            ]
+          }
+        }
+      ],
+      "is": {
+        "from": 1,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
       "name": "pods not ready in other containers are other causes",
       "pods": [
         {

@@ -390,3 +390,44 @@ describe("a pod the kubelet has not set up", () => {
     expect(currentCause(cause, Date.now() + 86_400_000)).toBe(cause);
   });
 });
+
+describe("a pod whose topology spread is keyed by a label no node carries", () => {
+  const unplaced = (keys: string[]): PodCause => ({
+    says: "unplaced",
+    said: "0/2 nodes are available: 2 node(s) didn't match pod topology spread constraints (missing required label).",
+    since: null,
+    nodes: 2,
+    why: [{ says: "topologyUnlabelled", nodes: 2, keys }],
+  });
+
+  /** topology-demo read "would break its topology spread" while no node had the label; fails if the missing label is not named. */
+  it("names the label the nodes lack rather than a spread they would break", () => {
+    const zone = unplaced(["topology.kubernetes.io/zone"]);
+    expect(causeText(zone, t)).toContain(
+      "2 nodes lack topology.kubernetes.io/zone, the label its topology spread is keyed by."
+    );
+    expect(causeText(zone, t)).not.toContain("would break");
+    expect(causeText(zone, ru)).toContain(
+      "у 2 узлов нет метки topology.kubernetes.io/zone, по которой его topology spread распределяет поды"
+    );
+  });
+
+  /** The scheduler does not say which key it missed; fails if one of several is named as the one. */
+  it("lists every key as one of them where the spread is keyed by several", () => {
+    expect(
+      causeText(
+        unplaced(["example.com/rack", "topology.kubernetes.io/zone"]),
+        t
+      )
+    ).toContain(
+      "2 nodes lack one of the labels its topology spread is keyed by (example.com/rack, topology.kubernetes.io/zone)."
+    );
+  });
+
+  /** Fails if a spec with no key to name prints an empty name. */
+  it("says a label is missing where the spec names no key", () => {
+    expect(causeText(unplaced([]), t)).toContain(
+      "2 nodes lack a label its topology spread is keyed by."
+    );
+  });
+});

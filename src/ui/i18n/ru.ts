@@ -7961,6 +7961,27 @@ export const ru: Catalogue = {
       many: "{n} узлов нарушили бы его topology spread",
       other: "{n} узлов нарушили бы его topology spread",
     },
+    unfitTopologyUnlabelled: {
+      one: "у {n} узла нет метки {key}, по которой его topology spread распределяет поды",
+      few: "у {n} узлов нет метки {key}, по которой его topology spread распределяет поды",
+      many: "у {n} узлов нет метки {key}, по которой его topology spread распределяет поды",
+      other:
+        "у {n} узлов нет метки {key}, по которой его topology spread распределяет поды",
+    },
+    unfitTopologyUnlabelledOneOf: {
+      one: "у {n} узла нет одной из меток, по которым его topology spread распределяет поды ({keys})",
+      few: "у {n} узлов нет одной из меток, по которым его topology spread распределяет поды ({keys})",
+      many: "у {n} узлов нет одной из меток, по которым его topology spread распределяет поды ({keys})",
+      other:
+        "у {n} узлов нет одной из меток, по которым его topology spread распределяет поды ({keys})",
+    },
+    unfitTopologyUnlabelledUnnamed: {
+      one: "у {n} узла нет метки, по которой его topology spread распределяет поды",
+      few: "у {n} узлов нет метки, по которой его topology spread распределяет поды",
+      many: "у {n} узлов нет метки, по которой его topology spread распределяет поды",
+      other:
+        "у {n} узлов нет метки, по которой его topology spread распределяет поды",
+    },
     unfitClaimsUnbound:
       "его PersistentVolumeClaim ещё не привязаны, поэтому планировщик узлы даже не рассматривал",
     unfitOther: {

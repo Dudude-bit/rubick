@@ -2612,6 +2612,7 @@ export type Unfit =
   | { says: "tooManyPods"; nodes: number }
   | { says: "volumeZone"; nodes: number }
   | { says: "topology"; nodes: number }
+  | { says: "topologyUnlabelled"; nodes: number; keys: string[] }
   | { says: "claimsUnbound" }
   | { says: "other"; text: string; nodes: number | null };
 

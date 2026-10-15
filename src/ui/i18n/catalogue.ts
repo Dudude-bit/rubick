@@ -7198,6 +7198,19 @@ export const en = {
       one: "{n} node would break its topology spread",
       other: "{n} nodes would break its topology spread",
     },
+    unfitTopologyUnlabelled: {
+      one: "{n} node lacks {key}, the label its topology spread is keyed by",
+      other: "{n} nodes lack {key}, the label its topology spread is keyed by",
+    },
+    unfitTopologyUnlabelledOneOf: {
+      one: "{n} node lacks one of the labels its topology spread is keyed by ({keys})",
+      other:
+        "{n} nodes lack one of the labels its topology spread is keyed by ({keys})",
+    },
+    unfitTopologyUnlabelledUnnamed: {
+      one: "{n} node lacks a label its topology spread is keyed by",
+      other: "{n} nodes lack a label its topology spread is keyed by",
+    },
     unfitClaimsUnbound:
       "its PersistentVolumeClaims are not bound yet, so the scheduler has not weighed a node",
     unfitOther: {

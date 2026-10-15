@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{ContainerStateTerminated, ContainerStatus, Event, Pod, Probe};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 use super::pod_display::{
     blocking_init, condition_is_true, container_restarting_until, counted, last_terminated,
@@ -168,6 +169,13 @@ pub enum Unfit {
     },
     Topology {
         nodes: i32,
+    },
+    /// The nodes carry no label its topology spread is keyed by, so no
+    /// spread can count them: the label is missing, not the room.
+    TopologyUnlabelled {
+        nodes: i32,
+        /// The keys of its `DoNotSchedule` constraints, from its spec.
+        keys: Vec<String>,
     },
     /// Its claims are not bound, so the scheduler did not weigh nodes at all.
     ClaimsUnbound,
@@ -511,12 +519,33 @@ fn unplaced(pod: &Pod) -> Option<PodCause> {
         .find(|c| c.type_ == "PodScheduled" && c.status == "False")?;
     let said = scheduled.message.clone().filter(|m| !m.is_empty());
     let (nodes, why) = said.as_deref().map(scheduler_reasons).unwrap_or_default();
+    let why = why
+        .into_iter()
+        .map(|unfit| match unfit {
+            Unfit::TopologyUnlabelled { nodes, .. } => Unfit::TopologyUnlabelled {
+                nodes,
+                keys: spread_keys(pod),
+            },
+            other => other,
+        })
+        .collect();
     Some(PodCause::Unplaced {
         said,
         since: scheduled.last_transition_time.as_ref().map(Moment::moment),
         nodes,
         why,
     })
+}
+
+fn spread_keys(pod: &Pod) -> Vec<String> {
+    let keys: BTreeSet<String> = pod
+        .spec
+        .iter()
+        .flat_map(|spec| spec.topology_spread_constraints.iter().flatten())
+        .filter(|constraint| constraint.when_unsatisfiable == "DoNotSchedule")
+        .map(|constraint| constraint.topology_key.clone())
+        .collect();
+    keys.into_iter().collect()
 }
 
 /// `0/3 nodes are available: 1 node(s) had untolerated taint {x: }, 2 Insufficient cpu. preemption: ...`
@@ -595,6 +624,11 @@ fn unfit(text: &str, nodes: i32) -> Unfit {
         Unfit::TooManyPods { nodes }
     } else if has("volume node affinity conflict") {
         Unfit::VolumeZone { nodes }
+    } else if has("topology spread constraints") && has("missing required label") {
+        Unfit::TopologyUnlabelled {
+            nodes,
+            keys: Vec::new(),
+        }
     } else if has("topology spread constraints") {
         Unfit::Topology { nodes }
     } else {
@@ -1175,6 +1209,39 @@ mod tests {
         assert!(matches!(
             pod_cause(&pending_with("0/3 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling.")),
             Some(PodCause::Unplaced { nodes: None, why, .. }) if why == vec![Unfit::ClaimsUnbound]
+        ));
+    }
+
+    /// topology-demo read "2 nodes would break its topology spread" while the
+    /// scheduler had said "(missing required label)": no node carried the
+    /// zone label, and no reshuffle would ever place it. Fails if the missing
+    /// label reads as a full spread, or the key its spec names is not given.
+    #[test]
+    fn a_spread_keyed_by_a_label_no_node_carries_says_the_label_is_missing() {
+        let message = "0/2 nodes are available: 2 node(s) didn't match pod topology spread constraints (missing required label). \
+             preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.";
+        let mut keyed = pending_with(message);
+        keyed.spec.as_mut().expect("a spec").topology_spread_constraints =
+            Some(serde_json::from_value(serde_json::json!([
+                {"maxSkew": 1, "topologyKey": "topology.kubernetes.io/zone", "whenUnsatisfiable": "DoNotSchedule"},
+                {"maxSkew": 1, "topologyKey": "kubernetes.io/hostname", "whenUnsatisfiable": "ScheduleAnyway"}
+            ])).expect("constraints"));
+        let Some(PodCause::Unplaced { why, .. }) = pod_cause(&keyed) else {
+            panic!("an unplaced pod has a cause");
+        };
+        assert_eq!(
+            why,
+            vec![Unfit::TopologyUnlabelled {
+                nodes: 2,
+                keys: vec!["topology.kubernetes.io/zone".to_string()]
+            }]
+        );
+        let full = pending_with(
+            "0/2 nodes are available: 2 node(s) didn't match pod topology spread constraints.",
+        );
+        assert!(matches!(
+            pod_cause(&full),
+            Some(PodCause::Unplaced { why, .. }) if why == vec![Unfit::Topology { nodes: 2 }]
         ));
     }
 
