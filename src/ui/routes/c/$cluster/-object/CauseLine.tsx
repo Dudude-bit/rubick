@@ -19,6 +19,7 @@ import {
   type CauseWords,
 } from "@/lib/pod-cause";
 import { causeDeadlines, workloadCause } from "@/lib/share/pod-status";
+import type { StopCause } from "@/lib/service-health";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import { useCauseEvidence, useCauseWarnings } from "./useCauseEvidence";
@@ -118,6 +119,19 @@ export function CauseLine({
         <CauseEvidence words={words} />
       </div>
     </div>
+  );
+}
+
+/** Where a Service's traffic stops, then the cause its pods share, drawn as theirs. */
+export function StopCauseLine({ cause }: { cause: StopCause }) {
+  const t = useT();
+  return (
+    <>
+      <span className="text-fg-mut">
+        {cause.lead}: {podsShare(cause.shared.pods, cause.shared.of, t)}{" "}
+      </span>
+      <CauseLine cause={cause.shared.cause} compact />
+    </>
   );
 }
 

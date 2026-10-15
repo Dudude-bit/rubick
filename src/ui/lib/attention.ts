@@ -19,7 +19,6 @@ import type {
   ProblemDetail,
   Scoped,
   ServiceHealthInputs,
-  SharedCause,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
@@ -29,9 +28,9 @@ import { parseRefusal } from "@/lib/refusal";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
 import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
 import {
-  causedStop,
   serviceHealthOf,
   serviceHealthWords,
+  type StopCause,
 } from "@/lib/service-health";
 
 export type AttentionTone = "err" | "warn";
@@ -39,7 +38,7 @@ export type AttentionTone = "err" | "warn";
 export type AttentionDetail =
   | ProblemDetail
   | { says: "ours"; text: string }
-  | { says: "stopCause"; lead: string; shared: SharedCause };
+  | ({ says: "stopCause" } & StopCause);
 
 export interface AttentionItem {
   key: string;
@@ -242,9 +241,8 @@ const serviceItems = remember(
         const words = serviceHealthWords(health, t);
         const tone = toneOf(words.role);
         if (!tone) return [];
-        const caused = causedStop(health.published, t);
-        const detail: AttentionDetail | null = caused
-          ? { says: "stopCause", ...caused }
+        const detail: AttentionDetail | null = words.cause
+          ? { says: "stopCause", ...words.cause }
           : words.reason
             ? { says: "ours", text: words.reason }
             : null;

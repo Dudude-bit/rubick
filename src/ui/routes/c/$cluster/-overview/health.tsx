@@ -14,7 +14,7 @@ import { Composition } from "@/components/object/detail-blocks";
 import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { PastObjectRef, type Past } from "../-object/PastObjectRef";
-import { CauseLine } from "../-object/CauseLine";
+import { CauseLine, StopCauseLine } from "../-object/CauseLine";
 import { podsShare } from "@/lib/pod-cause";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
@@ -169,16 +169,7 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
         )}
       </>
     );
-  if (detail.says === "stopCause")
-    return (
-      <>
-        <span className="text-fg-mut">
-          {detail.lead}:{" "}
-          {podsShare(detail.shared.pods, detail.shared.of, t)}{" "}
-        </span>
-        <CauseLine cause={detail.shared.cause} compact />
-      </>
-    );
+  if (detail.says === "stopCause") return <StopCauseLine cause={detail} />;
   if (detail.says === "said")
     return (
       <ResourceMessage

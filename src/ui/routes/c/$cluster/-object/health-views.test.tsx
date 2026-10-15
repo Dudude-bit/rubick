@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { translate } from "@/i18n";
 import { serviceHealthWords } from "@/lib/service-health";
 import { ROLE_TEXT } from "@/lib/status-role";
+import { TONE_TEXT } from "@/lib/tone";
 import { VerdictBadge } from "./health-views";
 
 const NO_ENDPOINTS = {
@@ -86,5 +87,63 @@ describe("a Service's verdict whose pods were not read", () => {
     const badge = screen.getByText("none ready");
     expect(badge).toHaveClass(ROLE_TEXT.neutral);
     expect(badge.querySelector("svg")).toHaveClass("lucide-eye-off");
+  });
+});
+
+describe("a Service's verdict whose pods share a cause", () => {
+  /**
+   * topology-demo's row in Needs attention led with its pods' cause in red
+   * while its own page said the same in grey under the badge. Fails if the
+   * page stops drawing the cause as its pods' line, or loses its colour.
+   */
+  it("draws the cause as its pods' line, in its colour, on the page", () => {
+    const verdict = serviceHealthWords(
+      {
+        state: "noneReady",
+        published: {
+          ready: 0,
+          draining: 0,
+          notReady: 2,
+          unrouted: 0,
+          stop: {
+            reason: "noneReady",
+            service: {
+              kind: "Service",
+              name: "topology-demo",
+              namespace: "k8s-gui-test",
+              existence: "present",
+              facts: null,
+            },
+            selector: "app=topology-demo",
+            pods: 2,
+            why: "unscheduled",
+            cause: {
+              cause: {
+                says: "unplaced",
+                said: null,
+                since: null,
+                nodes: 2,
+                why: [
+                  {
+                    says: "topologyUnlabelled",
+                    nodes: 2,
+                    keys: ["topology.kubernetes.io/zone"],
+                  },
+                ],
+              },
+              pods: 2,
+              of: 2,
+            },
+          },
+        },
+      },
+      (section, key, values) => translate("en", section, key, values)
+    );
+    render(<VerdictBadge verdict={verdict} />);
+    const line = screen.getByTestId("cause-line");
+    expect(line.parentElement).toHaveTextContent("2 of 2 pods:");
+    expect(
+      screen.getByText(/2 nodes lack topology\.kubernetes\.io\/zone/)
+    ).toHaveClass(TONE_TEXT.err);
   });
 });

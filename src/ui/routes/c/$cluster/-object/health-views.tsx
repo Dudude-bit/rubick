@@ -13,6 +13,7 @@ import {
   useServicePodsUnread,
 } from "@/hooks/useServiceAnswer";
 import { ResourceType } from "@/lib/resource-registry";
+import { StopCauseLine } from "./CauseLine";
 import { useOneIngressHealth } from "@/hooks/useIngressHealth";
 import { useT } from "@/i18n/useT";
 import { ingressHealthWords, type IngressInputs } from "@/lib/ingress-health";
@@ -61,7 +62,11 @@ export function VerdictBadge({
     <span className="flex flex-col items-start gap-0.5">
       {badge}
       <span className="max-w-[60ch] text-[11px] text-fg-mut">
-        {verdict.reason}
+        {verdict.cause ? (
+          <StopCauseLine cause={verdict.cause} />
+        ) : (
+          verdict.reason
+        )}
       </span>
     </span>
   );

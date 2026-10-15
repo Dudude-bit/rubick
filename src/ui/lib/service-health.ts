@@ -147,9 +147,14 @@ export interface Verdict {
   label: string;
   role: StatusRole;
   reason: string | null;
+  /** The cause its pods share, drawn as theirs where the reason is not a tooltip. */
+  cause?: StopCause;
   /** A mark of its own in place of the role's glyph. */
   glyph?: LucideIcon;
 }
+
+/** A stop whose pods share a cause: the stop's words and the cause they lead to. */
+export type StopCause = { lead: string; shared: SharedCause };
 
 /** What follows "none of them is ready": a cause, never the same words again. */
 const NONE_READY_CAUSE: Record<NotServing, keyof typeof en.empty> = {
@@ -166,36 +171,36 @@ const NONE_READY_CAUSE: Record<NotServing, keyof typeof en.empty> = {
   podsUnread: "causePodsUnread",
 };
 
-/** A stop whose pods share a cause, as the stop's words and the cause they lead to. */
-export function causedStop(
+function stopWords(
   published: PublishedCounts,
   t: T
-): { lead: string; shared: SharedCause } | null {
+): Pick<Verdict, "reason" | "cause"> {
   const stop = published.stop;
-  if (!stop || !("service" in stop)) return null;
-  const shared = stopCause(stop);
-  return shared && { lead: describeStop(stop, t).title, shared };
-}
-
-function stopReason(published: PublishedCounts, t: T): string | null {
-  const stop = published.stop;
-  if (!stop || !("service" in stop)) return null;
+  if (!stop || !("service" in stop)) return { reason: null };
   // The cause, where the stop knows one: "publishes no endpoint" beside a
   // badge reading No endpoints says nothing the badge did not.
   if (stop.reason === "publishesNothing" && stop.unnamedPorts.length > 0)
-    return t("nav", "stopUnnamedPortCause", {
-      asked: askedPorts(stop.unnamedPorts, t),
-    });
-  const caused = causedStop(published, t);
-  if (caused) return `${caused.lead}: ${sharedText(caused.shared, t)}`;
+    return {
+      reason: t("nav", "stopUnnamedPortCause", {
+        asked: askedPorts(stop.unnamedPorts, t),
+      }),
+    };
   const title = describeStop(stop, t).title;
+  const shared = stopCause(stop);
+  if (shared)
+    return {
+      reason: `${title}: ${sharedText(shared, t)}`,
+      cause: { lead: title, shared },
+    };
   const why =
     stop.reason === "noneReady"
       ? stop.why
       : stop.reason === "publishesNothingYet" && stop.podsUnread
         ? "podsUnread"
         : null;
-  return why ? `${title}: ${t("empty", NONE_READY_CAUSE[why])}` : title;
+  return {
+    reason: why ? `${title}: ${t("empty", NONE_READY_CAUSE[why])}` : title,
+  };
 }
 
 export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
@@ -254,14 +259,14 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         code: health.state,
         label: t("empty", "stopNoneReady"),
         role: "err",
-        reason: stopReason(health.published, t),
+        ...stopWords(health.published, t),
       };
     case "comingUp":
       return {
         code: health.state,
         label: t("readings", "healthComingUp"),
         role: "pending",
-        reason: stopReason(health.published, t),
+        ...stopWords(health.published, t),
       };
     case "podsUnread":
       return {
@@ -271,7 +276,7 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
             ? t("empty", "stopNoneReady")
             : t("readings", "healthNoEndpoints"),
         role: "neutral",
-        reason: stopReason(health.published, t),
+        ...stopWords(health.published, t),
         glyph: EyeOff,
       };
     case "noEndpoints":
@@ -279,7 +284,7 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         code: health.state,
         label: t("readings", "healthNoEndpoints"),
         role: "err",
-        reason: stopReason(health.published, t),
+        ...stopWords(health.published, t),
       };
     case "idle":
       return {
