@@ -153,6 +153,27 @@ describe("the chain", () => {
   });
 });
 
+describe("a stopped backend", () => {
+  /** Would break if a Service scaled to zero were filed as an outage again. */
+  it("files a route to a Service scaled to zero as a warning", () => {
+    const idle = published("shop", 0);
+    idle.stop = {
+      reason: "scaledToZero",
+      service: idle.service,
+      selector: "app=shop",
+      workloads: [],
+    };
+    const [group] = hostGroups(
+      { ...sources({ virtualServices: [healthy] }), published: [idle] },
+      t
+    );
+    expect(
+      group.findings.find((finding) => finding.kind === "stop")?.severity
+    ).toBe("warn");
+    expect(hostState(group, null, t).tone).toBe("warn");
+  });
+});
+
 describe("a host whose backends are unread", () => {
   /**
    * Would break if the host went back to green "routing" while the Services

@@ -23,6 +23,9 @@ import { delivered } from "./delivery";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
 import { clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
+import { stopMood, type StopMood } from "./stop-mood";
+
+export { stopMood, type StopMood };
 import {
   autoscalerRange,
   autoscalerReplicas,
@@ -638,28 +641,11 @@ export interface ChainHopPublished {
   tone: "on" | "warn";
 }
 
-/**
- * What a stop is: a fault; nothing running by intent (the subject is scaled
- * to zero); pods still coming up; or pods nobody could read to say which.
- */
-export type StopMood = "fault" | "idle" | "coming" | "unchecked";
-
 export interface ChainHopStop {
   at: "stop";
   title: string;
   note: string;
   mood: StopMood;
-}
-
-/** The mood of a stop no subject turns idle. */
-export function stopMood(stop: ChainStop): StopMood {
-  if (stop.reason === "scaledToZero") return "idle";
-  if (stop.reason === "podsBeingMade") return "coming";
-  if (stop.reason === "publishesNothingYet")
-    return stop.podsUnread ? "unchecked" : "fault";
-  if (stop.reason !== "noneReady") return "fault";
-  if (stop.why === "comingUp") return "coming";
-  return stop.why === "podsUnread" ? "unchecked" : "fault";
 }
 
 /** Three names at most, and how many more. */

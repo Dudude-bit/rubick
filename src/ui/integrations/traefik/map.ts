@@ -18,7 +18,12 @@ import type { T } from "@/i18n/useT";
 import { ResourceType } from "@/lib/resource-registry";
 import { hostsBrokenOfTotal } from "@/lib/two-counts";
 
-import { hostFilterLink, hostSeverity, hostTlsTag } from "../ingress";
+import {
+  hostFilterLink,
+  hostSeverity,
+  hostTlsTag,
+  stopWeight,
+} from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import {
   backingOf,
@@ -109,7 +114,11 @@ export function routingMap(
           id: serviceId,
           label: service.name,
           sub: `${service.namespace}${service.port ? ` · :${service.port}` : ""}`,
-          tone: !backing.known ? "unknown" : backing.stop ? "err" : "ok",
+          tone: !backing.known
+            ? "unknown"
+            : backing.stop
+              ? stopWeight(backing.stop).tone
+              : "ok",
           object: {
             kind: ResourceType.Service,
             name: service.name,
@@ -122,7 +131,7 @@ export function routingMap(
             : backing.stop
               ? {
                   text: t("count", "nReady", { n: 0 }),
-                  tone: "err",
+                  tone: stopWeight(backing.stop).tone,
                 }
               : {
                   text: t("count", "nReady", {
@@ -138,7 +147,7 @@ export function routingMap(
         !backing.known
           ? "unknown"
           : backing.stop
-            ? "err"
+            ? stopWeight(backing.stop).tone
             : tone === "err"
               ? "warn"
               : "ok"

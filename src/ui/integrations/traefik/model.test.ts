@@ -302,6 +302,62 @@ describe("the findings", () => {
   });
 
   /**
+   * Every request to a Service scaled to zero gets a 503, so it is worth a
+   * look; it is not an outage, and the host line said one in red.
+   */
+  it("files a route at a Service scaled to zero as a warning, not an error", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [
+          ingress("promo", "promo.example.com", { service: "promo-web" }),
+        ],
+        services: [service("promo-web", { app: "promo" })],
+        published: [
+          published("promo-web", 0, 0, {
+            stop: {
+              reason: "scaledToZero",
+              service: published("promo-web", 0).service,
+              selector: "app=promo",
+              workloads: [],
+            },
+          }),
+        ],
+      })
+    );
+
+    const stop = group.findings.find((finding) => finding.kind === "stop");
+    expect(stop?.severity).toBe("warn");
+    expect(hostState(group, null, t)).toEqual({
+      text: "nothing behind it",
+      tone: "warn",
+    });
+  });
+
+  /** A Service whose pods nobody could read is not known to be down. */
+  it("says a host whose backend's pods were not read is unknown, not broken", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [
+          ingress("promo", "promo.example.com", { service: "promo-web" }),
+        ],
+        services: [service("promo-web", { app: "promo" })],
+        published: [
+          published("promo-web", 0, 0, {
+            stop: {
+              reason: "publishesNothingYet",
+              service: published("promo-web", 0).service,
+              selector: "app=promo",
+              podsUnread: true,
+            },
+          }),
+        ],
+      })
+    );
+
+    expect(hostState(group, null, t).tone).toBe("unknown");
+  });
+
+  /**
    * Would break if Traefik's own internals were reported as a missing
    * Service. `api@internal` serves the dashboard k3d ships with, a
    * `TraefikService` fans out to several backends, and neither is a

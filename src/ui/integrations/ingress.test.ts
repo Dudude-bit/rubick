@@ -4,9 +4,17 @@ import {
   backingFrom,
   backingOf,
   hostRole,
+  stopCellLook,
+  stopsRowTone,
+  stopWeight,
   type BackingSources,
 } from "./ingress";
-import type { ServiceInfo, ServicePublished } from "@/generated/types";
+import type { StopMood } from "@/lib/connections";
+import type {
+  ChainStop,
+  ServiceInfo,
+  ServicePublished,
+} from "@/generated/types";
 
 const service = (overrides: Partial<ServiceInfo> = {}): ServiceInfo =>
   ({
@@ -169,5 +177,90 @@ describe("how a host is coloured in a shared report", () => {
 
   it("keeps a host's own worst finding", () => {
     expect(hostRole(host({ worst: "err", backendsKnown: false }))).toBe("err");
+  });
+});
+
+describe("how much a stopped backend weighs", () => {
+  const behind = published().service;
+  const stops = {
+    fault: {
+      reason: "selectsNothing",
+      service: behind,
+      selector: "app=promo",
+      near: null,
+    },
+    coming: {
+      reason: "podsBeingMade",
+      service: behind,
+      selector: "app=promo",
+      workloads: [],
+    },
+    idle: {
+      reason: "scaledToZero",
+      service: behind,
+      selector: "app=promo",
+      workloads: [],
+    },
+    unchecked: {
+      reason: "publishesNothingYet",
+      service: behind,
+      selector: "app=promo",
+      podsUnread: true,
+    },
+  } satisfies Record<StopMood, ChainStop>;
+
+  /** Every routing page filed a Service scaled to zero, still starting or
+   *  with its pods unread as an error, in red, beside a trace that drew the
+   *  same stop grey or blue. */
+  it("files only a fault as an error, and draws the rest in the trace's mood", () => {
+    expect(stopWeight(stops.fault)).toEqual({
+      severity: "err",
+      tone: "err",
+      row: "err",
+    });
+    expect(stopWeight(stops.coming)).toEqual({
+      severity: "warn",
+      tone: "warn",
+      row: "warn",
+    });
+    expect(stopWeight(stops.idle)).toEqual({
+      severity: "warn",
+      tone: "mute",
+      row: "warn",
+    });
+    expect(stopWeight(stops.unchecked)).toEqual({
+      severity: "warn",
+      tone: "unknown",
+      row: "unknown",
+    });
+  });
+
+  /** A cell over a Service whose pods were not read was struck red as down. */
+  it("draws a cell over an unread backend dashed and one scaled to zero plain", () => {
+    expect(stopCellLook(stops.unchecked)).toEqual({
+      bad: false,
+      warn: false,
+      unknown: true,
+    });
+    expect(stopCellLook(stops.idle)).toEqual({
+      bad: false,
+      warn: false,
+      unknown: false,
+    });
+    expect(stopCellLook(stops.fault)).toEqual({
+      bad: true,
+      warn: false,
+      unknown: false,
+    });
+  });
+
+  /** Would break if the first stop on a host decided its tone rather than its worst. */
+  it("colours a host line by its worst stop, and says nothing where none stopped", () => {
+    expect(stopsRowTone([stops.unchecked, stops.idle, stops.fault])).toBe(
+      "err"
+    );
+    expect(stopsRowTone([stops.unchecked, stops.coming])).toBe("warn");
+    expect(stopsRowTone([stops.unchecked])).toBe("unknown");
+    expect(stopsRowTone([])).toBeNull();
   });
 });

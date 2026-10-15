@@ -40,7 +40,7 @@ import {
   TroubleRow,
   VendorReadFailure,
 } from "../page-kit";
-import { backingFrom } from "../ingress";
+import { backingFrom, stopCellLook } from "../ingress";
 import { useBacking, useIngressSources } from "./data";
 import { useT } from "@/i18n/useT";
 import {
@@ -435,7 +435,7 @@ function RouteChain({
       <Column label="Service">
         {route.backend ? (
           <Cell
-            bad={backing?.stop !== null && backing?.stop !== undefined}
+            {...(backing?.stop && stopCellLook(backing.stop))}
             under={
               !backing?.known
                 ? t(

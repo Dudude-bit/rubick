@@ -250,6 +250,42 @@ describe("a host whose backends are unread", () => {
   });
 });
 
+describe("a stopped backend", () => {
+  /** Would break if a Service whose pods were not read were drawn down again. */
+  it("says a host whose backend's pods were not read is unknown, not broken", () => {
+    const behind = {
+      kind: "Service",
+      name: "storefront",
+      namespace: "web",
+      existence: "present",
+      facts: null,
+    } as const;
+    const [host] = hostsOf(
+      sources({
+        backingKnown: true,
+        published: [
+          {
+            service: behind,
+            ready: 0,
+            draining: 0,
+            notReady: 0,
+            stop: {
+              reason: "publishesNothingYet",
+              service: behind,
+              selector: "app=storefront",
+              podsUnread: true,
+            },
+          } as unknown as ServicePublished,
+        ],
+      })
+    );
+    expect(
+      host.findings.find((finding) => finding.kind === "stop")?.severity
+    ).toBe("warn");
+    expect(hostState(host, null, t).tone).toBe("unknown");
+  });
+});
+
 describe("what a host is joined to", () => {
   it("resolves the objects the annotations name", () => {
     const [host] = hostsOf(

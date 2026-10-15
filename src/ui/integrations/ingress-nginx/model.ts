@@ -42,6 +42,8 @@ import {
   proxyServicesBy,
   terminatedUpstreamOf,
   type EdgeTls,
+  stopWeight,
+  stopsRowTone,
 } from "../ingress";
 import type { RowTone } from "../page-kit";
 import { PREFIX, readAnnotations, type AnnotationReading } from "./annotations";
@@ -94,7 +96,12 @@ export interface NginxRoute {
 
 export type Finding =
   /** The route resolves and there is nothing behind it. */
-  | { kind: "stop"; severity: "err"; route: NginxRoute; stop: ChainStop }
+  | {
+      kind: "stop";
+      severity: "err" | "warn";
+      route: NginxRoute;
+      stop: ChainStop;
+    }
   /** Nothing serves this host over TLS at all. */
   | { kind: "clear"; severity: "warn"; redirectAnyway: boolean }
   /** Two objects claim the same host and the same path. */
@@ -457,7 +464,9 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
       const key = `${stop.reason}/${stop.service.namespace}/${stop.service.name}`;
       if (seen.has(key)) return [];
       seen.add(key);
-      return [{ kind: "stop", severity: "err", route, stop }];
+      return [
+        { kind: "stop", severity: stopWeight(stop).severity, route, stop },
+      ];
     });
 
     const tlsSecrets = [
@@ -532,8 +541,13 @@ export function hostState(
   backingError: string | null,
   t: T
 ): { text: string; tone: RowTone } {
-  const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
+  const stopped = stopsRowTone(
+    group.findings.flatMap((finding) =>
+      finding.kind === "stop" ? [finding.stop] : []
+    )
+  );
+  if (stopped === "err")
+    return { text: t("empty", "nothingBehindIt"), tone: stopped };
   const certificate = group.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
@@ -546,6 +560,7 @@ export function hostState(
       tone: "err",
     };
   }
+  if (stopped) return { text: t("empty", "nothingBehindIt"), tone: stopped };
   if (group.findings.some((finding) => finding.kind === "orphanCanary")) {
     return { text: t("empty", "canaryShadowingNothing"), tone: "warn" };
   }

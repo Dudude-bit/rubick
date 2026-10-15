@@ -45,6 +45,8 @@ import {
   proxyServicesBy,
   terminatedUpstreamOf,
   type EdgeTls,
+  stopWeight,
+  stopsRowTone,
 } from "../ingress";
 import type { T } from "@/i18n/useT";
 import type { RowTone } from "../page-kit";
@@ -141,7 +143,12 @@ export interface EntryPoint {
 
 export type Finding =
   /** The route resolves and there is nothing behind it. */
-  | { kind: "stop"; severity: "err"; route: TraefikRoute; stop: ChainStop }
+  | {
+      kind: "stop";
+      severity: "err" | "warn";
+      route: TraefikRoute;
+      stop: ChainStop;
+    }
   /** Reachable unencrypted, and nothing upgrades the connection. */
   | {
       kind: "clear";
@@ -851,7 +858,9 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
       const key = `${stop.reason}/${stop.service.namespace}/${stop.service.name}`;
       if (seenStops.has(key)) return [];
       seenStops.add(key);
-      return [{ kind: "stop", severity: "err", route, stop }];
+      return [
+        { kind: "stop", severity: stopWeight(stop).severity, route, stop },
+      ];
     });
 
     const tlsSecrets = [
@@ -936,8 +945,13 @@ export function hostState(
   backingError: string | null,
   t: T
 ): { text: string; tone: RowTone } {
-  const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
+  const stopped = stopsRowTone(
+    group.findings.flatMap((finding) =>
+      finding.kind === "stop" ? [finding.stop] : []
+    )
+  );
+  if (stopped === "err")
+    return { text: t("empty", "nothingBehindIt"), tone: stopped };
   const certificate = group.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
@@ -950,6 +964,7 @@ export function hostState(
       tone: "err",
     };
   }
+  if (stopped) return { text: t("empty", "nothingBehindIt"), tone: stopped };
   if (group.findings.some((finding) => finding.kind === "clear")) {
     return { text: t("empty", "servedInTheClear"), tone: "warn" };
   }

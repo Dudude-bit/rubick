@@ -29,6 +29,9 @@ import type { T } from "@/i18n/useT";
 import type { AppLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
+import { stopMood, type StopMood } from "@/lib/stop-mood";
+import type { MapTone } from "./routing-map";
+import type { RowTone } from "./page-kit";
 import { certificatesOf } from "@/hooks/useTlsCertificates";
 import type {
   ChainStop,
@@ -262,6 +265,42 @@ export function backingOf(
     stop: stop && "service" in stop ? stop : null,
     known,
     error,
+  };
+}
+
+/**
+ * A stopped backend's weight, in the mood the traffic chain draws the stop
+ * in. Every request still gets a 503, so each is a finding; only a fault is
+ * an error, and a Service scaled to zero, starting or unread is not one.
+ */
+const STOP_WEIGHT: Record<
+  StopMood,
+  { severity: "err" | "warn"; tone: MapTone; row: RowTone }
+> = {
+  fault: { severity: "err", tone: "err", row: "err" },
+  coming: { severity: "warn", tone: "warn", row: "warn" },
+  idle: { severity: "warn", tone: "mute", row: "warn" },
+  unchecked: { severity: "warn", tone: "unknown", row: "unknown" },
+};
+
+export const stopWeight = (stop: ChainStop) => STOP_WEIGHT[stopMood(stop)];
+
+/** A host line over stopped paths, in the worst of their tones; null when none stopped. */
+export function stopsRowTone(stops: ChainStop[]): RowTone | null {
+  const tones = new Set(stops.map((stop) => stopWeight(stop).row));
+  return (
+    (["err", "warn", "unknown"] as const).find((tone) => tones.has(tone)) ??
+    null
+  );
+}
+
+/** The `Cell` flags a stopped backend is drawn with. */
+export function stopCellLook(stop: ChainStop) {
+  const { tone } = stopWeight(stop);
+  return {
+    bad: tone === "err",
+    warn: tone === "warn",
+    unknown: tone === "unknown",
   };
 }
 

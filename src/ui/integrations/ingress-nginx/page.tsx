@@ -27,6 +27,7 @@ import {
   hostRole,
   hostSeverity,
   useRouteCertificates,
+  stopCellLook,
 } from "../ingress";
 import {
   Box,
@@ -736,7 +737,10 @@ function HostChain({
               {backing.error ? t("empty", "notReadLower") : "…"}
             </Cell>
           ) : backing.stop ? (
-            <Cell bad under={t("empty", stopUnder(backing.stop))}>
+            <Cell
+              {...stopCellLook(backing.stop)}
+              under={t("empty", stopUnder(backing.stop))}
+            >
               {t("count", "nPublished", { n: 0 })}
             </Cell>
           ) : (

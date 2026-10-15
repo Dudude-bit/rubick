@@ -16,7 +16,7 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
-import { hostFilterLink, hostSeverity } from "../ingress";
+import { hostFilterLink, hostSeverity, stopWeight } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import { backingOf, type IstioHostGroup, type IstioSources } from "./model";
 
@@ -93,7 +93,7 @@ export function routingMap(
               : unsure || !backing.known
                 ? "unknown"
                 : backing.stop
-                  ? "err"
+                  ? stopWeight(backing.stop).tone
                   : "ok",
             // Only a Service this cluster was seen to have: unread, a
             // `name.namespace` host may be a hostname, and a link would lead
@@ -115,7 +115,7 @@ export function routingMap(
                 : backing.stop
                   ? {
                       text: t("count", "nReady", { n: 0 }),
-                      tone: "err",
+                      tone: stopWeight(backing.stop).tone,
                     }
                   : {
                       text: t("count", "nReady", {
@@ -131,7 +131,7 @@ export function routingMap(
           service && !backing.known
             ? "unknown"
             : backing.stop
-              ? "err"
+              ? stopWeight(backing.stop).tone
               : tone === "err"
                 ? "warn"
                 : "ok"

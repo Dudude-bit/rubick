@@ -18,7 +18,7 @@
 import { useMemo } from "react";
 import { hostsNeedAttention } from "@/lib/two-counts";
 
-import { backingFrom, hostRole, hostSeverity } from "../ingress";
+import { backingFrom, hostRole, hostSeverity, stopCellLook } from "../ingress";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -617,7 +617,10 @@ function HostChain({
               {backing?.error ? t("empty", "notReadLower") : "…"}
             </Cell>
           ) : backing.stop ? (
-            <Cell bad under={t("empty", stopUnder(backing.stop))}>
+            <Cell
+              {...stopCellLook(backing.stop)}
+              under={t("empty", stopUnder(backing.stop))}
+            >
               {t("count", "nPublished", { n: 0 })}
             </Cell>
           ) : (

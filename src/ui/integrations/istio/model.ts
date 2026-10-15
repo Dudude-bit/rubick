@@ -32,6 +32,8 @@ import {
   worstOf,
   type Backing,
   type BackingSources,
+  stopWeight,
+  stopsRowTone,
 } from "../ingress";
 import type { RowTone } from "../page-kit";
 import { readMatches, type MatchReading } from "./match";
@@ -90,7 +92,12 @@ export interface ServingGateway {
 
 export type Finding =
   /** The route resolves and there is nothing behind it. */
-  | { kind: "stop"; severity: "err"; route: IstioRoute; stop: ChainStop }
+  | {
+      kind: "stop";
+      severity: "err" | "warn";
+      route: IstioRoute;
+      stop: ChainStop;
+    }
   /** Named gateways, and none of them serves this host. */
   | {
       kind: "noGateway";
@@ -537,7 +544,7 @@ export function hostGroups(sources: IstioSources, t: T): IstioHostGroup[] {
               seenStops.add(stopKey);
               findings.push({
                 kind: "stop",
-                severity: "err",
+                severity: stopWeight(backing.stop).severity,
                 route,
                 stop: backing.stop,
               });
@@ -625,9 +632,12 @@ export function hostState(
   if (group.findings.some((finding) => finding.kind === "noSubset")) {
     return { text: t("empty", "subsetNotDefined"), tone: "err" };
   }
-  if (group.findings.some((finding) => finding.kind === "stop")) {
-    return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  }
+  const stopped = stopsRowTone(
+    group.findings.flatMap((finding) =>
+      finding.kind === "stop" ? [finding.stop] : []
+    )
+  );
+  if (stopped) return { text: t("empty", "nothingBehindIt"), tone: stopped };
   if (group.findings.some((finding) => finding.kind === "weights")) {
     return { text: t("empty", "weightsDoNotAddUp"), tone: "warn" };
   }

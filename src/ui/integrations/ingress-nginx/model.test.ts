@@ -373,6 +373,32 @@ describe("the findings", () => {
     expect(groups[0].worst).toBe("err");
   });
 
+  /**
+   * Would break if a Service scaled to zero were filed as an outage again:
+   * every request gets a 503, worth a look, and the trace draws it idle.
+   */
+  it("files a path to a Service scaled to zero as a warning", () => {
+    const idle = published("web", 0);
+    idle.stop = {
+      reason: "scaledToZero",
+      service: idle.service,
+      selector: "app=web",
+      workloads: [],
+    };
+    const [group] = hostGroups(
+      {
+        ...sources([ingress("shop", "shop.test")]),
+        published: [idle],
+      },
+      t
+    );
+    expect(
+      group.findings.find((finding) => finding.kind === "stop")?.severity
+    ).toBe("warn");
+    expect(group.worst).toBe("warn");
+    expect(hostState(group, null, t).tone).toBe("warn");
+  });
+
   /** Would break if the page stopped putting the outage first. */
   it("orders hosts by trouble rather than by name", () => {
     const groups = hostGroups(

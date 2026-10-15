@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type {
+  ChainStop,
   IngressClassSummary,
   IngressInfo,
   ServiceInfo,
+  ServicePublished,
 } from "@/generated/types";
 
 import { mapSummary, routingMap } from "./map";
@@ -82,6 +84,33 @@ const service = (name: string): ServiceInfo => ({
   createdAt: null,
 });
 
+/** What `name` publishes where its path stops: no address, and why. */
+const stopped = (name: string, stop: (service: ObjectRefOf) => ChainStop) => {
+  const service: ObjectRefOf = {
+    kind: "Service",
+    name,
+    namespace: "shop",
+    existence: "present",
+    facts: null,
+  };
+  return {
+    service,
+    source: "slices",
+    slices: 1,
+    ready: 0,
+    draining: 0,
+    notReady: 0,
+    unrouted: 0,
+    unroutedReady: 0,
+    ports: [],
+    endpoints: [],
+    whole: true,
+    unpublished: [],
+    stop: stop(service),
+  } as ServicePublished;
+};
+type ObjectRefOf = ServicePublished["service"];
+
 function sources(over: Partial<TraefikSources> = {}): TraefikSources {
   return {
     ingresses: [],
@@ -122,6 +151,55 @@ describe("the routing map", () => {
     expect(node.tone).toBe("unknown");
     expect(node.tag?.tone).toBe("unknown");
     expect(map.edges.find((edge) => edge.to === node.id)?.tone).toBe("unknown");
+  });
+
+  /**
+   * A Service scaled to zero is idle in the trace and a Service whose pods
+   * were not read is unknown there; the map drew both red, as outages.
+   */
+  it("draws a stopped Service in the trace's mood, red only for a fault", () => {
+    const map = mapOf({
+      ingresses: [
+        ingress("idle", "idle.example.com", { service: "idle" }),
+        ingress("unread", "unread.example.com", { service: "unread" }),
+        ingress("down", "down.example.com", { service: "down" }),
+      ],
+      services: [service("idle"), service("unread"), service("down")],
+      published: [
+        stopped("idle", (behind) => ({
+          reason: "scaledToZero",
+          service: behind,
+          selector: "app=idle",
+          workloads: [],
+        })),
+        stopped("unread", (behind) => ({
+          reason: "publishesNothingYet",
+          service: behind,
+          selector: "app=unread",
+          podsUnread: true,
+        })),
+        stopped("down", (behind) => ({
+          reason: "selectsNothing",
+          service: behind,
+          selector: "app=down",
+          near: null,
+        })),
+      ],
+    });
+
+    const tones = new Map(
+      map.columns[2].nodes.map((node) => [
+        node.label,
+        [
+          node.tone,
+          node.tag?.tone,
+          map.edges.find((edge) => edge.to === node.id)?.tone,
+        ],
+      ])
+    );
+    expect(tones.get("idle")).toEqual(["mute", "mute", "mute"]);
+    expect(tones.get("unread")).toEqual(["unknown", "unknown", "unknown"]);
+    expect(tones.get("down")).toEqual(["err", "err", "err"]);
   });
 
   /**

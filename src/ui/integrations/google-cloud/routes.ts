@@ -35,6 +35,8 @@ import {
   worstOf,
   type Backing,
   type BackingSources,
+  stopWeight,
+  stopsRowTone,
 } from "../ingress";
 import type { RowTone } from "../page-kit";
 import {
@@ -160,7 +162,12 @@ export type GkeFinding =
       domain: string;
     }
   | { kind: "no-tls"; severity: "warn"; ingress: string }
-  | { kind: "stop"; severity: "err"; route: GkeRoute; backing: Backing };
+  | {
+      kind: "stop";
+      severity: "err" | "warn";
+      route: GkeRoute;
+      backing: Backing;
+    };
 
 export interface GkeHost {
   host: string | null;
@@ -470,7 +477,12 @@ function findingsFor(
       const key = `stop/${backing.stop.reason}/${route.backend?.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      findings.push({ kind: "stop", severity: "err", route, backing });
+      findings.push({
+        kind: "stop",
+        severity: stopWeight(backing.stop).severity,
+        route,
+        backing,
+      });
     }
   }
 
@@ -548,9 +560,15 @@ export function hostState(
   backingError: string | null,
   t: T
 ): { text: string; tone: RowTone } {
-  if (host.findings.some((finding) => finding.kind === "stop")) {
-    return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  }
+  const stopped = stopsRowTone(
+    host.findings.flatMap((finding) =>
+      finding.kind === "stop" && finding.backing.stop
+        ? [finding.backing.stop]
+        : []
+    )
+  );
+  if (stopped === "err")
+    return { text: t("empty", "nothingBehindIt"), tone: stopped };
   const certificate = host.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
@@ -559,6 +577,7 @@ export function hostState(
   if (host.findings.some((finding) => finding.kind === "missing-object")) {
     return { text: t("empty", "namesSomethingAbsent"), tone: "err" };
   }
+  if (stopped) return { text: t("empty", "nothingBehindIt"), tone: stopped };
   if (host.findings.length > 0)
     return { text: t("empty", "worthALook"), tone: "warn" };
   if (!host.namesKnown) {
