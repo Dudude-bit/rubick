@@ -23,7 +23,7 @@ import { delivered } from "./delivery";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
 import { clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
-import { stopMood, type StopMood } from "./stop-mood";
+import { makersUnread, stopMood, type StopMood } from "./stop-mood";
 
 export { stopMood, type StopMood };
 import {
@@ -484,7 +484,12 @@ export function describeStop(
           }
         : {
             title: t("nav", "stopNoPodCarries", { selector: stop.selector }),
-            note: t("nav", "connectionRefusedNothingBehind"),
+            note: t(
+              "nav",
+              makersUnread(stop)
+                ? "stopMakersUnreadNote"
+                : "connectionRefusedNothingBehind"
+            ),
           };
     case "scaledToZero":
       return scaledToZeroWords(

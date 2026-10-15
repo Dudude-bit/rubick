@@ -183,6 +183,7 @@ describe("the routing map", () => {
           service: behind,
           selector: "app=down",
           near: null,
+          makersRead: true,
         })),
       ],
     });

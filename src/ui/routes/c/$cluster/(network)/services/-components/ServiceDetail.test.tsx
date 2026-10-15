@@ -159,6 +159,7 @@ const noPodYet = (readAt: string): ResourceConnections => {
     service: answer.subject,
     selector: "app=big-pull",
     near: null,
+    makersRead: true,
   };
   return {
     ...answer,

@@ -188,6 +188,7 @@ describe("how much a stopped backend weighs", () => {
       service: behind,
       selector: "app=promo",
       near: null,
+      makersRead: true,
     },
     coming: {
       reason: "podsBeingMade",

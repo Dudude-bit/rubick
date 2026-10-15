@@ -182,6 +182,8 @@ export const en = {
       "{kind} routes this path to a backend that was never created, so the controller has nothing to send the request to.",
     connectionRefusedNothingBehind:
       "Anything that reaches this address gets a connection refused. The Service exists and is wired up; there is simply nothing behind it.",
+    stopMakersUnreadNote:
+      "Anything that reaches this address gets a connection refused. The Deployments and StatefulSets here could not be read, so whether one is scaled to zero or was refused its pods is not known.",
     endpointsByHandNoneWritten:
       "This Service has no selector and publishes nothing: its endpoints are written by hand, and nobody has written any.",
     ingressStatesNoBackend:
@@ -5739,6 +5741,8 @@ export const en = {
     causeOwnStatus: "their own status says why",
     causeComingUp: "still starting",
     causePodsUnread: "pods not read, so whether they are starting is not known",
+    causeMakersUnread:
+      "workloads not read, so whether one is scaled to zero is not known",
     stopComingUp: "coming up",
     causeOnServicePage: "the Service's page says why",
     stopNoPortToSendTo: "no port to send to",

@@ -277,6 +277,7 @@ describe("what Needs attention lists beyond pods", () => {
       service: at("web"),
       selector: "app=web",
       near: null,
+      makersRead: true,
     });
     const healthOf = (row: IngressHealthInput) =>
       ingressHealthOf({

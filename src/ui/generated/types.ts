@@ -2517,6 +2517,7 @@ export type ChainStop =
       service: ObjectRef;
       selector: string;
       near: NearMiss | null;
+      makersRead: boolean;
     }
   | {
       reason: "scaledToZero";

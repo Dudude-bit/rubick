@@ -964,6 +964,7 @@ describe("the traffic chain", () => {
           service: svc,
           selector: "app=tls-demo",
           near: null,
+          makersRead: true,
         },
         {
           reason: "noneReady",
@@ -997,6 +998,7 @@ describe("the traffic chain", () => {
         service: svc,
         selector: "app=checkout-api,track=stable",
         near: { pods, carries: "app=checkout-api", lacks: "track=stable" },
+        makersRead: true,
       },
       t
     );
@@ -1044,6 +1046,7 @@ describe("the traffic chain", () => {
               service: front,
               selector: "app=hello-web",
               near: null,
+              makersRead: true,
             },
           ]
         ),

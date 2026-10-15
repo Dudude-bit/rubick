@@ -192,9 +192,15 @@ impl ServicePublished {
     /// [`scaled_to_zero`] finds every workload behind it asking for none, as
     /// [`ChainStop::PodsRefused`] where [`refused_behind`] finds one refused
     /// its pods, and as [`ChainStop::PodsBeingMade`] where [`being_made`]
-    /// finds one making them.
+    /// finds one making them. A stop still selecting nothing carries
+    /// `all_read`, whether every list the makers came from was read.
     #[must_use]
-    pub fn with_makers(mut self, service: &Service, makers: &[PodMaker<'_>]) -> Self {
+    pub fn with_makers(
+        mut self,
+        service: &Service,
+        makers: &[PodMaker<'_>],
+        all_read: bool,
+    ) -> Self {
         if let Some(ChainStop::SelectsNothing {
             service: at,
             selector,
@@ -222,6 +228,9 @@ impl ServicePublished {
                     workloads,
                 });
             }
+        }
+        if let Some(ChainStop::SelectsNothing { makers_read, .. }) = self.stop.as_mut() {
+            *makers_read = all_read;
         }
         self
     }
@@ -764,6 +773,7 @@ pub fn service_stop(
             service: at,
             selector: text,
             near: None,
+            makers_read: false,
         });
     }
     let ready_pods = selected.iter().filter(|pod| counts_ready(pod)).count();
@@ -1951,7 +1961,7 @@ mod tests {
                 .collect();
             from_slices(&svc, svc_ref("web"), &[], &[])
                 .with_stop(&svc, Some(&[]))
-                .with_makers(&svc, &makers)
+                .with_makers(&svc, &makers, true)
                 .stop
         };
 
@@ -1998,7 +2008,7 @@ mod tests {
                 .collect();
             from_slices(&svc, svc_ref("web"), &[], &[])
                 .with_stop(&svc, Some(&[]))
-                .with_makers(&svc, &makers)
+                .with_makers(&svc, &makers, true)
                 .stop
         };
         let stated = |paused: bool, status: serde_json::Value| -> Deployment {
@@ -2080,7 +2090,7 @@ mod tests {
                 .collect();
             from_slices(&svc, svc_ref("web"), &[], &[])
                 .with_stop(&svc, Some(&[]))
-                .with_makers(&svc, &makers)
+                .with_makers(&svc, &makers, true)
                 .stop
         };
 
@@ -2155,7 +2165,7 @@ mod tests {
             );
             from_slices(&svc, svc_ref("web"), &[], &[])
                 .with_stop(&svc, Some(&[]))
-                .with_makers(&svc, &makers)
+                .with_makers(&svc, &makers, true)
                 .stop
         };
 
@@ -2204,7 +2214,7 @@ mod tests {
             .collect();
         let stop = from_slices(&svc, svc_ref("web"), &[], &[])
             .with_stop(&svc, None)
-            .with_makers(&svc, &makers)
+            .with_makers(&svc, &makers, true)
             .stop;
         assert!(matches!(stop, Some(ChainStop::PublishesNothingYet { .. })));
     }

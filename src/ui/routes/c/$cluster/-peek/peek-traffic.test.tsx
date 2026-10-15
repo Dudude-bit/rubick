@@ -73,6 +73,7 @@ describe("the peek names what is one label short", () => {
                 carries: "app=checkout-api",
                 lacks: "track=stable",
               },
+              makersRead: true,
             },
           },
         ],

@@ -97,6 +97,7 @@ const NO_POD = (more: Partial<ResourceConnections>) =>
       service: SERVICE,
       selector: "app=big-pull",
       near: null,
+      makersRead: true,
     },
     more
   );

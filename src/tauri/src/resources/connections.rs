@@ -417,6 +417,10 @@ pub enum ChainStop {
         /// The pods that carry the most of it, where any carries a part.
         #[serde(default)]
         near: Option<NearMiss>,
+        /// Whether the Deployments and `StatefulSets` here were read, so one
+        /// scaled to zero or refused its pods would have been seen.
+        #[serde(rename = "makersRead", default)]
+        makers_read: bool,
     },
     /// The selector matches no pod because every Deployment and `StatefulSet`
     /// whose pods it would pick is scaled to zero. Nothing runs here by

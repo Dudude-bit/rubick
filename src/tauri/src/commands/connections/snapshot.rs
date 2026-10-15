@@ -436,6 +436,11 @@ impl Snapshot {
         )
     }
 
+    /// Whether both lists [`Self::makers`] reads were read.
+    pub(super) fn makers_read(&self) -> bool {
+        self.deployments.is_ok() && self.stateful_sets.is_ok()
+    }
+
     /// What one Service publishes, from whichever object answered.
     ///
     /// The three sources produce one shape, so nothing downstream branches on
@@ -757,7 +762,8 @@ mod refused_list_tests {
 
     /// And the other half: a pod list that really answered and really holds
     /// nothing matching is a Service selecting nothing, which is worth
-    /// saying plainly and in red.
+    /// saying plainly and in red, once the workloads that could have been
+    /// scaled to zero answered too.
     #[test]
     fn a_service_whose_pods_answered_and_matched_nothing_still_says_so() {
         let svc = selecting("shop", &[("app", "shop")]);
@@ -765,16 +771,50 @@ mod refused_list_tests {
         let mut out = Neighbourhood::new();
         let answered = Snapshot {
             pods: Ok(Vec::new()),
+            deployments: Ok(Vec::new()),
+            stateful_sets: Ok(Vec::new()),
             ..all_refused()
         };
 
         note_reach(&svc, &svc_ref, &answered, &mut out, Carry::Whole);
 
         assert!(
-            out.stops
-                .iter()
-                .any(|stop| matches!(stop, ChainStop::SelectsNothing { .. })),
+            out.stops.iter().any(|stop| matches!(
+                stop,
+                ChainStop::SelectsNothing {
+                    makers_read: true,
+                    ..
+                }
+            )),
             "an answered, empty list is a real finding: {:?}",
+            out.stops
+        );
+    }
+
+    /// Marco may list pods and not Deployments: his idle-web, scaled to
+    /// zero, read in red "there is simply nothing behind it". Fails if a
+    /// refused workload list stops being carried onto the stop.
+    #[test]
+    fn a_service_selecting_nothing_says_its_workloads_were_not_read() {
+        let svc = selecting("idle-web", &[("app", "idle-web")]);
+        let svc_ref = service_ref(&svc, "shop");
+        let mut out = Neighbourhood::new();
+        let pods_only = Snapshot {
+            pods: Ok(Vec::new()),
+            ..all_refused()
+        };
+
+        note_reach(&svc, &svc_ref, &pods_only, &mut out, Carry::Whole);
+
+        assert!(
+            out.stops.iter().any(|stop| matches!(
+                stop,
+                ChainStop::SelectsNothing {
+                    makers_read: false,
+                    ..
+                }
+            )),
+            "{:?}",
             out.stops
         );
     }

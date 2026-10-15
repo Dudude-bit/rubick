@@ -310,8 +310,8 @@ async fn with_unready_cause(
         );
         let read = Behind {
             pods: pods.ok().map(|list| list.items),
-            deployments: items(deployments),
-            sets: items(sets),
+            deployments: deployments.ok().map(|list| list.items),
+            sets: sets.ok().map(|list| list.items),
             replica_sets: replica_sets.ok().map(|list| list.items),
             refusals: refusals.ok().map(|list| list.items),
         };
@@ -347,8 +347,8 @@ async fn with_unready_cause(
 /// unexplained. `None` is a list that failed.
 struct Behind {
     pods: Option<Vec<Pod>>,
-    deployments: Vec<Deployment>,
-    sets: Vec<StatefulSet>,
+    deployments: Option<Vec<Deployment>>,
+    sets: Option<Vec<StatefulSet>>,
     replica_sets: Option<Vec<ReplicaSet>>,
     refusals: Option<Vec<Event>>,
 }
@@ -406,26 +406,23 @@ fn explained(
         .as_deref()
         .zip(behind.pods.as_deref())
         .map(|(events, pods)| published::Refusals { events, pods });
-    let waiting = published::makers(
-        &behind.deployments,
-        &behind.sets,
-        behind.replica_sets.as_deref(),
-        refusals,
+    let (deployments, sets) = (
+        behind.deployments.as_deref().unwrap_or_default(),
+        behind.sets.as_deref().unwrap_or_default(),
     );
+    let waiting = published::makers(deployments, sets, behind.replica_sets.as_deref(), refusals);
     let published = published.with_workloads(svc, &waiting, selected.as_deref(), now);
     if !matches!(published.stop, Some(ChainStop::SelectsNothing { .. })) {
         return published;
     }
+    let all_read = behind.deployments.is_some() && behind.sets.is_some();
     published
         .with_makers(
             svc,
-            &published::makers(&behind.deployments, &behind.sets, None, refusals),
+            &published::makers(deployments, sets, None, refusals),
+            all_read,
         )
         .with_near_miss(svc, behind.pods.as_deref().unwrap_or_default())
-}
-
-fn items<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Vec<K> {
-    list.map(|list| list.items).unwrap_or_default()
 }
 
 fn health_inputs_of(
@@ -1330,9 +1327,10 @@ mod tests {
     }
 
     /// The Overview, the sidebar badge and the status bar counted hello-web
-    /// at zero as a Service with no endpoints. Fails if the list reader stops
-    /// asking the workloads behind an empty selector, or calls one idle whose
-    /// Deployments it could not read.
+    /// at zero as a Service with no endpoints, and Marco, who may not list
+    /// Deployments, was told in red there is nothing behind it. Fails if the
+    /// list reader stops asking the workloads behind an empty selector, calls
+    /// one idle whose Deployments it could not read, or says it looked.
     #[tokio::test]
     async fn a_service_behind_a_workload_scaled_to_zero_reads_idle_in_the_shells_count() {
         use crate::client::served::test_server::{answering, failure};
@@ -1367,8 +1365,26 @@ mod tests {
         );
         let refused = stop_with(failure(403, "Forbidden")).await;
         assert!(
-            matches!(refused, Some(ChainStop::SelectsNothing { .. })),
+            matches!(
+                refused,
+                Some(ChainStop::SelectsNothing {
+                    makers_read: false,
+                    ..
+                })
+            ),
             "{refused:?}"
+        );
+        let none = serde_json::json!({ "apiVersion": "apps/v1", "kind": "DeploymentList", "metadata": {}, "items": [] });
+        let empty = stop_with((200, none.to_string())).await;
+        assert!(
+            matches!(
+                empty,
+                Some(ChainStop::SelectsNothing {
+                    makers_read: true,
+                    ..
+                })
+            ),
+            "{empty:?}"
         );
     }
 

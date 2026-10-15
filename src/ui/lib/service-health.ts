@@ -26,6 +26,7 @@ import {
   stopCause,
   stopMood,
 } from "@/lib/connections";
+import { makersUnread } from "@/lib/stop-mood";
 import { sharedText } from "@/lib/pod-cause";
 import { errorToShow } from "@/lib/error-utils";
 import { endpointCount, publishedFor, servingCount } from "@/lib/published";
@@ -48,7 +49,7 @@ export type ServiceHealth =
   | { state: "noneReady"; published: PublishedCounts }
   /** None ready or none listed, and every workload behind it is still starting its pods. */
   | { state: "comingUp"; published: PublishedCounts }
-  /** None ready or none listed, and the pods every workload behind it waits on were not read. */
+  /** None ready or none listed, and the pods every workload behind it waits on, or the workloads that could be at zero, were not read. */
   | { state: "podsUnread"; published: PublishedCounts }
   | { state: "noEndpoints"; published: PublishedCounts }
   /** No pods by intent: every workload behind it is scaled to zero. */
@@ -135,6 +136,7 @@ function waitingOn(
   stop: ChainStop | null | undefined
 ): "comingUp" | "podsUnread" | null {
   if (stop?.reason === "podsBeingMade") return "comingUp";
+  if (stop && makersUnread(stop)) return "podsUnread";
   if (stop?.reason === "publishesNothingYet")
     return stop.podsUnread ? "podsUnread" : null;
   if (stop?.reason !== "noneReady") return null;
@@ -192,6 +194,8 @@ function stopWords(
       reason: `${title}: ${sharedText(shared, t)}`,
       cause: { lead: title, shared },
     };
+  if (makersUnread(stop))
+    return { reason: `${title}: ${t("empty", "causeMakersUnread")}` };
   const why =
     stop.reason === "noneReady"
       ? stop.why

@@ -101,6 +101,7 @@ const NO_POD = (more: Partial<ResourceConnections> = {}) =>
       service: SUBJECT,
       selector: "app=big-pull",
       near: null,
+      makersRead: true,
     },
     more
   );

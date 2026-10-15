@@ -4,12 +4,13 @@ import { EyeOff } from "lucide-react";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type {
+  ChainStop,
   NotServing,
   ObjectRef,
   ServicePublished,
   SharedCause,
 } from "@/generated/types";
-import { chainStopHop, describeStop } from "./connections";
+import { chainStopHop, describeStop, stopMood } from "./connections";
 import {
   healthFromConnections,
   serviceHealthOf,
@@ -158,11 +159,50 @@ describe("one verdict for a Service on every surface", () => {
           service: SERVICE,
           selector: "app=hello-web",
           near: null,
+          makersRead: true,
         },
       }),
       null
     );
     expect(serviceHealthWords(empty, t).role).toBe("err");
+  });
+
+  /**
+   * Marco, who may list pods and not Deployments, read idle-web at zero as
+   * red "no endpoints" and "there is simply nothing behind it". Fails if a
+   * selector matching no pod where the workloads were not read is a fault,
+   * or stops saying which read is missing.
+   */
+  it("calls a Service selecting nothing unconfirmed where its workloads were not read", () => {
+    const stop: ChainStop = {
+      reason: "selectsNothing",
+      service: SERVICE,
+      selector: "app=idle-web",
+      near: null,
+      makersRead: false,
+    };
+    const health = serviceHealthOf(
+      SELECTING,
+      published({ slices: 0, stop }),
+      null
+    );
+    expect(health.state).toBe("podsUnread");
+    expect(serviceHealthWords(health, t)).toMatchObject({
+      label: "no endpoints",
+      role: "neutral",
+      reason:
+        "No pod carries app=idle-web: workloads not read, so whether one is scaled to zero is not known",
+    });
+    expect(stopMood(stop)).toBe("unchecked");
+    expect(describeStop(stop, t).note).toBe(
+      "Anything that reaches this address gets a connection refused. The Deployments and StatefulSets here could not be read, so whether one is scaled to zero or was refused its pods is not known."
+    );
+    const near = {
+      pods: [SERVICE],
+      carries: "app=idle-web",
+      lacks: "tier=web",
+    };
+    expect(stopMood({ ...stop, near })).toBe("fault");
   });
 
   /** Lena could not tell whom "он запрашивает" meant; fails if the Service stops being the asker. */

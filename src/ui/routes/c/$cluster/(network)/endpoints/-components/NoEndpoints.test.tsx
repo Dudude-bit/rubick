@@ -78,8 +78,28 @@ describe("the Endpoints list's empty row", () => {
       service: at("Service"),
       selector: "app=hello-web",
       near: null,
+      makersRead: true,
     });
     expect(screen.getByText("no endpoints")).toHaveClass("text-err");
+  });
+
+  /**
+   * Marco, who may not list Deployments, read idle-web's Endpoints at zero
+   * as red "no endpoints". Fails if a selector matching nothing is a fault
+   * when the workloads that could be at zero were not read.
+   */
+  it("keeps a Service selecting nothing out of red when its workloads were not read", () => {
+    drawn({
+      reason: "selectsNothing",
+      service: at("Service"),
+      selector: "app=idle-web",
+      near: null,
+      makersRead: false,
+    });
+    expect(screen.getByText("no endpoints").closest(".text-err")).toBeNull();
+    expect(screen.getByTestId("verdict-reason").textContent).toContain(
+      "workloads not read"
+    );
   });
 
   /**

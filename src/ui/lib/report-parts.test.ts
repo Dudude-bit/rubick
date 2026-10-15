@@ -174,6 +174,8 @@ describe("graphSections", () => {
               facts: null,
             },
             selector: "app=db",
+            near: null,
+            makersRead: true,
           },
         ] as never,
       }),
