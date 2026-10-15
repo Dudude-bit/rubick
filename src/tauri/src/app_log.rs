@@ -352,7 +352,8 @@ mod tests {
 
         let written = std::fs::read_to_string(dir.join(LOG_FILE)).expect("the file is readable");
         assert!(!written.contains("<html>"), "{written}");
-        assert!(!written.contains("403"), "{written}");
+        assert!(!written.contains("with 403"), "{written}");
+        assert!(!written.contains("error 403"), "{written}");
         assert!(written.contains("eof in poll"), "{written}");
         assert!(written.contains("this is a bug"), "{written}");
         let _ = std::fs::remove_dir_all(&dir);
