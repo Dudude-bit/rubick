@@ -8020,6 +8020,12 @@ export const en = {
       other: "{n} pods already replaced, the newest",
     },
     podNoun: { one: "pod", other: "pods" },
+    replacedPods: {
+      one: "{n} pod its controller replaced",
+      other: "{n} pods its controller replaced",
+    },
+    replacedPodsHint:
+      "These pods failed and their controller started others in their place. The cluster keeps them as a record until someone deletes them.",
     failedInJobRows: {
       one: "{n} Failed, in its Job's row",
       other: "{n} Failed, in their Jobs' rows",

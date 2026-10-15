@@ -172,3 +172,37 @@ describe("a failed pod among a workload's pods", () => {
     expect(screen.getByTestId("ended-ago")).toHaveTextContent("ended 13h ago");
   });
 });
+
+describe("the pods a workload's controller replaced", () => {
+  /**
+   * Live, recommendations' one pod crash-looping sat seventh among 25 its
+   * ReplicaSet had replaced after an eviction, in name order. Fails if a
+   * replaced pod is listed before the pods the workload runs, or unfolded
+   * before anyone asks for it.
+   */
+  it("lists the pods the workload runs first and folds the replaced ones under their count", async () => {
+    const replaced = (name: string): PodInfo =>
+      ({
+        ...pod(name),
+        status: { display: "Evicted", phase: "Failed", gone: "replaced" },
+      }) as unknown as PodInfo;
+    await card({
+      pods: [replaced("recs-a"), pod("recs-live"), replaced("recs-b")],
+    });
+
+    expect(screen.getByText("recs-live")).toBeTruthy();
+    expect(screen.queryByText("recs-a")).toBeNull();
+    const fold = screen.getByRole("button", {
+      name: "2 pods its controller replaced",
+    });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+
+    await userEvent.click(fold);
+    expect(fold).toHaveAttribute("aria-expanded", "true");
+    const names = screen
+      .getAllByTestId("child-row-status")
+      .map((status) => status.parentElement?.textContent);
+    expect(names[0]).toContain("recs-live");
+    expect(names.slice(1).join(" ")).toContain("recs-a");
+  });
+});
