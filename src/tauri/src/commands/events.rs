@@ -2,7 +2,9 @@
 
 use crate::commands::helpers::ResourceContext;
 use crate::error::Result;
-use crate::resources::{ChainStop, EventInfo, PodCause, SetupWarning, SharedCause, Warned};
+use crate::resources::{
+    ChainStop, EventInfo, NotServing, PodCause, SetupWarning, SharedCause, Warned,
+};
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::Event;
 use kube::api::ListParams;
@@ -217,10 +219,19 @@ fn fill_warned(stops: Vec<(&str, &mut ChainStop)>, read: &HashMap<(String, Strin
         };
         if let ChainStop::NoneReady {
             cause: Some(shared),
+            why,
             ..
         } = stop
         {
             shared.cause = shared.cause.clone().warned(warned.clone());
+            let faulted = matches!(warned, Warned::Read { warnings } if !warnings.is_empty());
+            if faulted && *why == NotServing::ComingUp {
+                *why = if shared.pods == shared.of {
+                    NotServing::Starting
+                } else {
+                    NotServing::Mixed
+                };
+            }
         }
     }
 }
@@ -228,9 +239,9 @@ fn fill_warned(stops: Vec<(&str, &mut ChainStop)>, read: &HashMap<(String, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resources::{Existence, NotServing, ObjectRef, SetupFault};
+    use crate::resources::{Existence, ObjectRef, SetupFault};
 
-    fn none_ready(cause: PodCause) -> ChainStop {
+    fn none_ready(cause: PodCause, why: NotServing) -> ChainStop {
         ChainStop::NoneReady {
             service: ObjectRef::new(
                 "Service",
@@ -240,7 +251,7 @@ mod tests {
             ),
             selector: "app=web".to_string(),
             pods: 2,
-            why: NotServing::Starting,
+            why,
             cause: Some(SharedCause {
                 cause,
                 pods: 2,
@@ -295,8 +306,8 @@ mod tests {
                 warnings: vec![warning.clone()],
             },
         )]);
-        let mut named = none_ready(creating("u1"));
-        let mut unread = none_ready(creating("u2"));
+        let mut named = none_ready(creating("u1"), NotServing::Starting);
+        let mut unread = none_ready(creating("u2"), NotServing::Starting);
         fill_warned(vec![("shop", &mut named), ("shop", &mut unread)], &read);
         assert_eq!(
             kubelet_of(&named),
@@ -307,5 +318,39 @@ mod tests {
         assert_eq!(kubelet_of(&unread), Some(&Warned::NotRead));
         assert_eq!(unwarned(&named), None);
         assert_eq!(unwarned(&unread), Some("u2"));
+    }
+
+    fn why_of(stop: &ChainStop) -> Option<NotServing> {
+        match stop {
+            ChainStop::NoneReady { why, .. } => Some(*why),
+            _ => None,
+        }
+    }
+
+    /// no-config's Service said its pods were coming up, in blue, above the
+    /// kubelet's `FailedMount` it quoted. Fails if a stop whose pods the
+    /// kubelet warned about stays coming up, or one read with no warning
+    /// stops being so.
+    #[test]
+    fn a_stop_whose_pods_the_kubelet_warned_about_is_not_coming_up() {
+        let read = |warnings: Vec<SetupWarning>| {
+            HashMap::from([(
+                ("shop".to_string(), "u1".to_string()),
+                Warned::Read { warnings },
+            )])
+        };
+        let warning = SetupWarning {
+            reason: "FailedMount".to_string(),
+            said: "secret \"web-creds\" not found".to_string(),
+            count: 1,
+            at: None,
+            fault: SetupFault::Other,
+        };
+        let mut warned = none_ready(creating("u1"), NotServing::ComingUp);
+        fill_warned(vec![("shop", &mut warned)], &read(vec![warning]));
+        assert_eq!(why_of(&warned), Some(NotServing::Starting));
+        let mut quiet = none_ready(creating("u1"), NotServing::ComingUp);
+        fill_warned(vec![("shop", &mut quiet)], &read(Vec::new()));
+        assert_eq!(why_of(&quiet), Some(NotServing::ComingUp));
     }
 }
