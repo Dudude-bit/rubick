@@ -1450,6 +1450,26 @@ describe("a path whose backend is an API object", () => {
     });
   });
 
+  /**
+   * Traefik serves nothing for a path it drops, so "served in the clear: no
+   * encrypted way to reach it" under "a path is dropped" described a host
+   * that answers 404 as one that answers in plain HTTP.
+   */
+  it("does not call a host served in the clear when Traefik drops its only path", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [assets()],
+        entryPoints: [
+          { name: "web", address: ":8000", tls: false, redirectTo: null },
+        ],
+      })
+    );
+
+    expect(group.findings.map((finding) => finding.kind)).toEqual([
+      "resourceBackend",
+    ]);
+  });
+
   /** A defaultBackend naming an API object was not a route at all, so not a finding either. */
   it("is reported for a defaultBackend too", () => {
     const fallback = ingress("fallback", "x.example.com");

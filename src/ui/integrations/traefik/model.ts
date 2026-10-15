@@ -868,7 +868,10 @@ function clearFinding(
   sources: TraefikSources,
   host: string | null
 ): Finding | "tlsUnknown" | null {
-  if (routes.some((route) => route.declaresTls)) return null;
+  // A path Traefik drops serves nothing, in the clear or otherwise.
+  const served = routes.filter((route) => !route.resourceBackend);
+  if (served.length === 0) return null;
+  if (served.some((route) => route.declaresTls)) return null;
   // Something in front holds the certificate, and the inside hop is plaintext
   // by design; or what is in front could not be read and cannot be ruled out.
   const edge = edgeTls(host, sources).at;
@@ -878,7 +881,7 @@ function clearFinding(
   if (sources.entryPoints.length === 0) return "tlsUnknown";
 
   const bound = new Map<string, EntryPoint>();
-  for (const route of routes) {
+  for (const route of served) {
     // A refused reading's host is unknown, so which entry points serve "this
     // host" through it is unknown too — it proves nothing about encryption.
     if (route.rule.refused !== null) continue;
@@ -898,7 +901,7 @@ function clearFinding(
   // A redirect middleware on any route under the host upgrades it, which is
   // the other way the same problem is solved.
   const redirecting = sources.middlewares.filter(isRedirect);
-  const carriesRedirect = routes.some((route) =>
+  const carriesRedirect = served.some((route) =>
     route.middlewares.some((named) =>
       redirecting.some(
         (middleware) =>
@@ -913,7 +916,7 @@ function clearFinding(
     kind: "clear",
     severity: "warn",
     entryPoints: plain.map((entry) => entry.name),
-    loaded: routes.find((route) => route.tlsSecret)?.tlsSecret ?? null,
+    loaded: served.find((route) => route.tlsSecret)?.tlsSecret ?? null,
   };
   // What is in front could not be read: the host would be in the clear if
   // nothing there holds the certificate, so it is not known to be fine.
