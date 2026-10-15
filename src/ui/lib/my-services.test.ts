@@ -692,6 +692,49 @@ describe("more ways in", () => {
   });
 
   /**
+   * Traefik was refused at the pods and ingress-nginx admitted, on one
+   * Service; the card called both addresses shut. Fails if a stop said of
+   * one controller's addresses ends another's, or a route's refusal ends an
+   * address that route never handed out.
+   */
+  it("says of each address only what the stops on its own way say", () => {
+    const route = (name: string, host: string): ChainHop => ({
+      at: "object",
+      object: ref("Ingress", name),
+      self: false,
+      detail: null,
+      via: null,
+      urls: [`http://${host}/`],
+      address: null,
+    });
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([
+        route("shop", "shop.local"),
+        route("shop-nginx", "nginx.shop.local"),
+        { at: "stop", mood: "fault", title: "route", note: "", only: [] },
+        publishedHop({ ready: 2 }),
+        {
+          at: "stop",
+          mood: "fault",
+          shut: true,
+          title: "Traefik refused",
+          note: "",
+          only: ["http://shop.local/"],
+        },
+      ])
+    );
+    expect(
+      entries
+        .filter((entry) => entry.url)
+        .map((entry) => [entry.url, wayState(entry)])
+    ).toEqual([
+      ["http://shop.local/", "shut"],
+      ["http://nginx.shop.local/", null],
+    ]);
+  });
+
+  /**
    * The card's header read "2/2 ready" in green over two ways in a policy
    * shut. Fails if the header is told nothing serves while one does, or
    * while one was never read.

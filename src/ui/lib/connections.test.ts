@@ -514,6 +514,7 @@ describe("the traffic chain", () => {
     if (!stop || stop.at !== "stop") throw new Error("expected a stop hop");
     expect(stop.title).toBe("edge does not accept this route");
     expect(stop.note).toContain("NoMatchingListenerHostname");
+    expect(stop.only).toEqual([]);
     expect(path.broken).toBe(true);
   });
 
@@ -1067,7 +1068,35 @@ describe("the traffic chain", () => {
         })),
       },
     });
-    const chainOf = (read?: DoorRead, stop: ChainStop | null = null) =>
+    const routesTo = (from: ObjectRef, host: string): ConnectionEdge => ({
+      from,
+      to: svc,
+      relation: {
+        verb: "routes",
+        host,
+        path: "/",
+        pathType: "Prefix",
+        port: "80",
+        tls: false,
+      },
+    });
+    const routed = (resolved: string, controller: string) => ({
+      tls: [],
+      addresses: [],
+      binding: {
+        requested: null,
+        resolved,
+        controller,
+        viaDefault: true,
+        available: [],
+      },
+    });
+    const chainOf = (
+      read?: DoorRead,
+      stop: ChainStop | null = null,
+      also: ConnectionEdge[] = [],
+      reads: Record<string, DoorRead> = {}
+    ) =>
       trafficChains(
         connections(
           deployment,
@@ -1077,18 +1106,8 @@ describe("the traffic chain", () => {
               to: deployment,
               relation: { verb: "selects", selector: "app=shop" },
             },
-            {
-              from: ingress,
-              to: svc,
-              relation: {
-                verb: "routes",
-                host: "shop.local",
-                path: "/",
-                pathType: "Prefix",
-                port: "80",
-                tls: false,
-              },
-            },
+            routesTo(ingress, "shop.local"),
+            ...also,
           ],
           stop ? [stop] : [],
           [],
@@ -1105,22 +1124,18 @@ describe("the traffic chain", () => {
           routing: new Map([
             [
               "Ingress/k8s-gui-test/shop",
-              {
-                tls: [],
-                addresses: [],
-                binding: {
-                  requested: null,
-                  resolved: "traefik",
-                  controller: "traefik.io/ingress-controller",
-                  viaDefault: true,
-                  available: [],
-                },
-              },
+              routed("traefik", "traefik.io/ingress-controller"),
+            ],
+            [
+              "Ingress/k8s-gui-test/shop-nginx",
+              routed("nginx", "k8s.io/ingress-nginx"),
             ],
           ]),
           ...(read && {
             door: (controller: string) =>
-              controller === "traefik.io/ingress-controller" ? read : null,
+              controller === "traefik.io/ingress-controller"
+                ? read
+                : (reads[controller] ?? null),
           }),
         }
       )[0];
@@ -1144,6 +1159,43 @@ describe("the traffic chain", () => {
         objects: [{ kind: "NetworkPolicy", name: "allow-nginx" }],
       });
       expect(last?.at === "stop" && last.note).toContain("namespace traefik");
+    });
+
+    /**
+     * shop goes through Traefik, which allow-nginx refuses, and shop-nginx
+     * through ingress-nginx, which it admits; the pinned card called both
+     * addresses shut. Fails if the refusal is said of every address on the
+     * path rather than of the one Traefik serves.
+     */
+    it("says a controller's refusal only of the addresses that controller serves", () => {
+      const nginx: DoorRead = {
+        ...traefik(),
+        name: "ingress-nginx",
+        clients: {
+          known: true,
+          value: [
+            {
+              name: "ingress-nginx-controller-5f",
+              namespace: "ingress-nginx",
+              labels: {},
+              ip: "10.42.2.9",
+              hostNetwork: false,
+            },
+          ],
+        },
+      };
+      const stops = chainOf(
+        traefik(),
+        null,
+        [routesTo(ref("Ingress", "shop-nginx"), "nginx.shop.local")],
+        { "k8s.io/ingress-nginx": nginx }
+      ).hops.filter((hop) => hop.at === "stop");
+      expect(stops).toHaveLength(1);
+      expect(stops[0]).toMatchObject({
+        shut: true,
+        title: "NetworkPolicy allow-nginx admits no connection from Traefik",
+        only: ["http://shop.local/"],
+      });
     });
 
     /** A door the app could not settle is said as not checked, never as open or shut. */

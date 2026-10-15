@@ -696,6 +696,8 @@ export interface ChainHopStop {
   objects?: ObjectRef[];
   /** A NetworkPolicy refuses the connection: there are pods behind it. */
   shut?: boolean;
+  /** The addresses it stops, where it does not stop every one on the path. */
+  only?: string[];
 }
 
 /** Three names at most, and how many more. */
@@ -951,6 +953,37 @@ function gatewayRouteHop(
   };
 }
 
+const routeRules = (edges: ConnectionEdge[]) =>
+  edges.map((edge) => edge.relation as Extract<Relation, { verb: "routes" }>);
+
+const schemesOf = (
+  relations: ReturnType<typeof routeRules>,
+  object: ObjectRef,
+  tlsOf?: RouteTls
+) =>
+  relations.map((rule) =>
+    rule.host && tlsOf ? tlsOf(object, rule.host, rule.tls) : rule.tls
+  );
+
+/** The addresses an Ingress's rules hand out; a scheme nobody could settle is no address to hand anybody. */
+function routeUrls(
+  edges: ConnectionEdge[],
+  object: ObjectRef,
+  tlsOf?: RouteTls
+): string[] {
+  const relations = routeRules(edges);
+  const schemes = schemesOf(relations, object, tlsOf);
+  return [
+    ...new Set(
+      relations.flatMap((rule, index) =>
+        rule.host && schemes[index] !== null
+          ? [`${schemes[index] ? "https" : "http"}://${rule.host}${rule.path}`]
+          : []
+      )
+    ),
+  ];
+}
+
 function routeHop(
   edges: ConnectionEdge[],
   object: ObjectRef,
@@ -958,12 +991,8 @@ function routeHop(
   known?: RoutedIngress,
   tlsOf?: RouteTls
 ): ChainHopObject {
-  const relations = edges.map(
-    (edge) => edge.relation as Extract<Relation, { verb: "routes" }>
-  );
-  const schemes = relations.map((rule) =>
-    rule.host && tlsOf ? tlsOf(object, rule.host, rule.tls) : rule.tls
-  );
+  const relations = routeRules(edges);
+  const schemes = schemesOf(relations, object, tlsOf);
   const detail = [
     ...new Set(
       relations.map(
@@ -984,18 +1013,7 @@ function routeHop(
           : t("nav", "overHttpPlain"),
       describeFacts(object.facts, t)
     ),
-    // A scheme nobody could settle is no address to hand anybody.
-    urls: [
-      ...new Set(
-        relations.flatMap((rule, index) =>
-          rule.host && schemes[index] !== null
-            ? [
-                `${schemes[index] ? "https" : "http"}://${rule.host}${rule.path}`,
-              ]
-            : []
-        )
-      ),
-    ],
+    urls: routeUrls(edges, object, tlsOf),
     address: known
       ? {
           state: ingressAddressOf(
@@ -1163,9 +1181,10 @@ function servedUnder(
 interface DoorWay {
   controller: string | null;
   port: string | null;
+  urls: string[];
 }
 
-/** Each controller's verdict at the pods' door, once per controller and port, where there is one to say. */
+/** Each controller's verdict at the pods' door, said once, about the addresses that controller serves. */
 function doorHops(
   ways: DoorWay[],
   published: ServicePublished,
@@ -1175,7 +1194,7 @@ function doorHops(
   own: ReadonlySet<string> | null
 ): ChainHopStop[] {
   const said = new Map<string, ChainHopStop>();
-  for (const { controller, port } of ways) {
+  for (const { controller, port, urls } of ways) {
     if (controller === null) continue;
     const read = ask(controller);
     const refused = refusedStop(published, port, read);
@@ -1185,7 +1204,10 @@ function doorHops(
       : doubt
         ? doorDoubtHop(published.service, doubt, t)
         : null;
-    if (hop) said.set(`${hop.title}\n${hop.note}`, hop);
+    if (!hop) continue;
+    const key = `${hop.title}\n${hop.note}`;
+    const only = [...(said.get(key)?.only ?? []), ...urls];
+    said.set(key, { ...hop, only: [...new Set(only)] });
   }
   return [...said.values()];
 }
@@ -1270,6 +1292,7 @@ export function trafficChains(
           ways.push({
             controller: extra.controller?.controller ?? null,
             port: edge.relation.port,
+            urls: routeUrls([edge], subject, extra.tlsOf),
           });
         }
         for (const entry of tls.filter(
@@ -1320,9 +1343,11 @@ export function trafficChains(
         )) {
           const known = extra.routing?.get(refKey(edge.from));
           const host = edge.relation.host ?? "";
+          const route = routeHop([edge], edge.from, t, known, extra.tlsOf);
           ways.push({
             controller: known?.binding?.controller ?? null,
             port: edge.relation.port,
+            urls: route.urls,
           });
           for (const entry of known?.tls ?? []) {
             if (!servesAny(entry.hosts, [host])) continue;
@@ -1344,7 +1369,7 @@ export function trafficChains(
           if (known?.binding) {
             hops.push({ at: "controller", binding: known.binding });
           }
-          hops.push(routeHop([edge], edge.from, t, known, extra.tlsOf));
+          hops.push(route);
         }
         // One Gateway API route at a time, its Gateway above it, and its own
         // stops right where they happen — a refusal written by the
@@ -1374,9 +1399,10 @@ export function trafficChains(
             });
           }
           hops.push(gatewayRouteHop(mine, route, t));
+          // Its hostnames hand out no address, so it stops none an Ingress does.
           for (const entry of conns.stops) {
             if ("route" in entry && sameObject(entry.route, route)) {
-              hops.push(chainStopHop(entry, subject, t, own));
+              hops.push({ ...chainStopHop(entry, subject, t, own), only: [] });
             }
           }
         }

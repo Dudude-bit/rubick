@@ -245,11 +245,13 @@ export function entryPointsOf(
   );
   const byKey = new Map<string, EntryPoint>();
   for (const chain of chains) {
-    const end = chainEnd(chain);
     for (const hop of chain.hops) {
       const found = entryOf(hop);
       if (!found) continue;
-      const entry = found.url === null ? found : { ...found, ...end };
+      const entry =
+        found.url === null
+          ? found
+          : { ...found, ...chainEnd(chain, found.url) };
       const seen = byKey.get(entry.key);
       // The object hop and the published hop are the same Service under the
       // same key, and only the published one knows whether anything is
@@ -265,13 +267,17 @@ export function entryPointsOf(
 
 /**
  * Whether a request on an address reaches anything: what the far end of its
- * chain says, a stop before the pods first, and nothing known without either.
+ * chain says, a stop on its way before the pods first, and nothing known
+ * without either.
  */
 function chainEnd(
-  chain: ChainPath
+  chain: ChainPath,
+  url: string
 ): Pick<EntryPoint, "serving" | "servingKnown" | "shut" | "unsure"> {
   const unknown = { serving: false, servingKnown: false, shut: false };
-  const stops = chain.hops.flatMap((hop) => (hop.at === "stop" ? [hop] : []));
+  const stops = chain.hops.flatMap((hop) =>
+    hop.at === "stop" && (!hop.only || hop.only.includes(url)) ? [hop] : []
+  );
   if (stops.some((hop) => hop.mood === "unchecked"))
     return { ...unknown, unsure: true };
   if (stops.length > 0)
