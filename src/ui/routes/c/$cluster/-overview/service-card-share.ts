@@ -7,13 +7,28 @@ import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import {
   pinKey,
+  wayState,
   type EntryPoint,
   type ServicePin,
   type ServiceState,
+  type WayState,
 } from "@/lib/my-services";
 import { ASK_SHORT, type Watch } from "@/lib/tell-me-when";
 import type { T } from "@/i18n/useT";
 import type { UnexploredKind } from "@/generated/types";
+
+/** The card and its Share say the same word beside a way in. */
+export const WAY_WORDS: Record<WayState, (t: T) => string> = {
+  unread: (t) => t("services", "notReadYet"),
+  shut: (t) => t("empty", "stopPolicyShutUnder"),
+  empty: (t) => t("services", "nothingBehind"),
+};
+
+function wayWords(way: EntryPoint, t: T): string {
+  const name = way.url ?? way.label;
+  const state = wayState(way);
+  return state ? `${name} (${WAY_WORDS[state](t)})` : name;
+}
 
 function stateValue(state: ServiceState, t: T): ReportValue {
   switch (state.state) {
@@ -72,7 +87,7 @@ export function pinShare(
             ? t("services", "notReadYet")
             : ways.entries.length === 0
               ? t("services", "nothingPublishes")
-              : ways.entries.map((way) => way.url ?? way.label).join(", "),
+              : ways.entries.map((way) => wayWords(way, t)).join(", "),
         },
       ],
     },

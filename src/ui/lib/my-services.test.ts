@@ -625,6 +625,31 @@ describe("more ways in", () => {
     expect(entries[0]).toMatchObject({ serving: true, servingKnown: true });
   });
 
+  /** Ready pods behind a policy that admits nobody drew the way in as live. */
+  it("calls a way in whose ready pods a policy shuts shut, not serving", () => {
+    const service = ref("Service", "web");
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([
+        publishedHop({
+          ready: 2,
+          stop: {
+            reason: "policyRefuses",
+            service,
+            policies: ["deny-all"],
+            ports: [8080],
+            noRules: true,
+          },
+        }),
+      ])
+    );
+    expect(entries[0]).toMatchObject({
+      serving: false,
+      servingKnown: true,
+      shut: true,
+    });
+  });
+
   /** Neither the endpoints nor the pods answered: the zeros are nobody's. */
   it("does not claim nothing is behind a service nobody could read", () => {
     const { entries } = entryPointsOf(

@@ -48,7 +48,7 @@ import {
   terminatedUpstreamOf,
   type EdgeTls,
   stopWeight,
-  stopsRowTone,
+  stopsRowState,
 } from "../ingress";
 import type { T } from "@/i18n/useT";
 import type { RowTone } from "../page-kit";
@@ -529,15 +529,17 @@ export function readEmptyServices(args: string[]): EmptyServices | null {
 /**
  * What a request to a route stopped behind gets. Traefik drops the router of
  * a Service that does not exist, and of one with no endpoint unless
- * allowEmptyServices keeps it to answer 503; there is no 502 either way.
+ * allowEmptyServices keeps it to answer 503. Pods a policy shuts are still
+ * endpoints, so the router stays and its connection to them fails.
  */
-export type StopAnswer = "dropped" | "unavailable" | "unknown";
+export type StopAnswer = "dropped" | "unavailable" | "refused" | "unknown";
 
 export function stopAnswer(
   stop: ChainStop,
   route: TraefikRoute,
   kept: EmptyServices | undefined
 ): StopAnswer {
+  if (stop.reason === "policyRefuses") return "refused";
   if (stop.reason === "backendMissing") return "dropped";
   if (!kept) return "unknown";
   return kept[route.source.kind] ? "unavailable" : "dropped";
@@ -1090,13 +1092,13 @@ export function hostState(
   backingError: string | null,
   t: T
 ): { text: string; tone: RowTone } {
-  const stopped = stopsRowTone(
+  const stopped = stopsRowState(
     group.findings.flatMap((finding) =>
       finding.kind === "stop" ? [finding.stop] : []
-    )
+    ),
+    t
   );
-  if (stopped === "err")
-    return { text: t("empty", "nothingBehindIt"), tone: stopped };
+  if (stopped?.tone === "err") return stopped;
   if (group.findings.some((finding) => finding.kind === "resourceBackend")) {
     return { text: t("empty", "pathDropped"), tone: "err" };
   }
@@ -1106,7 +1108,7 @@ export function hostState(
   if (certificate?.kind === "certificate") {
     return { text: certificateStateWords(certificate, t), tone: "err" };
   }
-  if (stopped) return { text: t("empty", "nothingBehindIt"), tone: stopped };
+  if (stopped) return stopped;
   if (group.findings.some((finding) => finding.kind === "clear")) {
     return { text: t("empty", "servedInTheClear"), tone: "warn" };
   }

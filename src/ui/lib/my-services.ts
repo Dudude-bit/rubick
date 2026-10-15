@@ -196,6 +196,17 @@ export interface EntryPoint {
   /** Whether anything is behind it right now, and whether that was read. */
   serving: boolean;
   servingKnown: boolean;
+  /** Ready pods are behind it and a NetworkPolicy admits nobody to them. */
+  shut: boolean;
+}
+
+export type WayState = "unread" | "shut" | "empty";
+
+/** What a way in says beside its name; null where something serves it. */
+export function wayState(way: EntryPoint): WayState | null {
+  if (!way.servingKnown) return "unread";
+  if (way.shut) return "shut";
+  return way.serving ? null : "empty";
 }
 
 /**
@@ -248,6 +259,7 @@ function entryOf(hop: ChainHop): EntryPoint | null {
         // An address is an address: whether anything answers on it is the
         // published hop's answer, not this one's.
         servingKnown: false,
+        shut: false,
       };
     }
     if (hop.object.kind !== "Service") return null;
@@ -258,6 +270,7 @@ function entryOf(hop: ChainHop): EntryPoint | null {
       detail: hop.detail,
       serving: false,
       servingKnown: false,
+      shut: false,
     };
   }
   if (hop.at === "published") return publishedEntry(hop.published);
@@ -265,6 +278,7 @@ function entryOf(hop: ChainHop): EntryPoint | null {
 }
 
 function publishedEntry(published: ServicePublished): EntryPoint {
+  const shut = published.stop?.reason === "policyRefuses";
   return {
     key: `${published.service.namespace ?? ""}/${published.service.name}`,
     url: null,
@@ -272,12 +286,13 @@ function publishedEntry(published: ServicePublished): EntryPoint {
     detail: published.ports
       .map((port) => (port.name === null ? `${port.port}` : port.name))
       .join(", "),
-    serving: servingCount(published) > 0,
+    serving: !shut && servingCount(published) > 0,
     // `whole` is about the one address a summary keeps, not the counts. The
     // one answer that is nobody's read is a deduction from pods that matched
     // nothing — possibly because nobody could list them.
     servingKnown:
       published.source !== "podReadiness" || endpointCount(published) > 0,
+    shut,
   };
 }
 

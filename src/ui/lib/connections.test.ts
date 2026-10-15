@@ -1002,7 +1002,7 @@ describe("the traffic chain", () => {
       ],
     });
     expect(path.hops[2].at === "stop" && path.hops[2].note).toContain(
-      "502 or 504"
+      "refused or dropped"
     );
   });
 

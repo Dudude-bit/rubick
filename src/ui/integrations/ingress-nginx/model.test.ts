@@ -16,6 +16,7 @@ import { PREFIX } from "./annotations";
 import {
   hostGroups,
   hostState,
+  stopAnswerKey,
   splitOf,
   allRoutes,
   type NginxSources,
@@ -397,6 +398,39 @@ describe("the findings", () => {
     ).toBe("warn");
     expect(group.worst).toBe("warn");
     expect(hostState(group, null, t).tone).toBe("warn");
+  });
+
+  /**
+   * Pods a policy shuts are endpoints nginx connects to and is refused by,
+   * a 502; the page said 503 and "nothing behind it" over them.
+   */
+  it("says a host whose pods a policy shuts answers 502, not 503", () => {
+    const shut = published("web", 2);
+    shut.stop = {
+      reason: "policyRefuses",
+      service: shut.service,
+      policies: ["deny-all"],
+      ports: [80],
+      noRules: true,
+    };
+    const [group] = hostGroups(
+      {
+        ...sources([ingress("shop", "shop.test")]),
+        published: [shut],
+      },
+      t
+    );
+    const stop = group.findings.find((finding) => finding.kind === "stop");
+    expect(stop?.kind === "stop" && stopAnswerKey(stop.stop)).toBe(
+      "nginxUpstreamRefused"
+    );
+    expect(t("empty", "nginxUpstreamRefused", { reason: "" })).toMatch(
+      /gets a 502/
+    );
+    expect(hostState(group, null, t)).toEqual({
+      text: "shut by NetworkPolicy",
+      tone: "err",
+    });
   });
 
   /** Would break if the page stopped putting the outage first. */

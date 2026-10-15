@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type {
+  ChainStop,
   CustomResourceInfo,
   ServicePublished,
   IngressClassSummary,
@@ -11,6 +12,7 @@ import type {
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { backingFrom, hostSeverity, hostTlsWords } from "../ingress";
+import { describeFinding } from "./finding-words";
 import {
   allRoutes,
   duplicatedServiceNames,
@@ -891,6 +893,31 @@ describe("what Traefik answers for a route with nothing behind it", () => {
         emptyServices: { Ingress: false, IngressRoute: true },
       })
     ).toBe("unavailable");
+  });
+
+  /**
+   * Pods a policy shuts are still endpoints: Traefik keeps the router and
+   * answers 502, and the page said it drops the route for a 404.
+   */
+  it("keeps a route whose pods a policy shuts, whatever the flag says", () => {
+    const shut = {
+      reason: "policyRefuses",
+      service: at,
+      policies: ["deny-all"],
+      ports: [80],
+      noRules: true,
+    } satisfies ChainStop;
+    expect(
+      answer({ emptyServices: { Ingress: false, IngressRoute: false } }, shut)
+    ).toBe("refused");
+    expect(answer({}, shut)).toBe("refused");
+    const [group] = hostGroups(behind(shut));
+    expect(hostState(group, null, t)).toEqual({
+      text: "shut by NetworkPolicy",
+      tone: "err",
+    });
+    const found = group.findings.find((finding) => finding.kind === "stop");
+    expect(found && describeFinding(found, t).title).toMatch(/gets a 502/);
   });
 
   /** A Service that does not exist is skipped whatever the flag says; fails if the flag is asked about it. */

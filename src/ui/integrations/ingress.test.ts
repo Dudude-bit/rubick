@@ -5,11 +5,14 @@ import {
   backingOf,
   hostRole,
   stopCellLook,
+  stopsRowState,
   stopsRowTone,
   stopWeight,
   type BackingSources,
 } from "./ingress";
 import type { StopMood } from "@/lib/connections";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
   ServiceInfo,
@@ -263,5 +266,27 @@ describe("how much a stopped backend weighs", () => {
     expect(stopsRowTone([stops.unchecked, stops.coming])).toBe("warn");
     expect(stopsRowTone([stops.unchecked])).toBe("unknown");
     expect(stopsRowTone([])).toBeNull();
+  });
+
+  /** The host line over pods a policy shuts said "nothing behind it". */
+  it("says a host line is shut where every worst stop is a policy", () => {
+    const t: T = (section, key, values) =>
+      translate("en", section, key, values);
+    const shut = {
+      reason: "policyRefuses",
+      service: behind,
+      policies: ["deny-all"],
+      ports: [],
+      noRules: true,
+    } satisfies ChainStop;
+    expect(stopsRowState([shut, stops.idle], t)).toEqual({
+      text: "shut by NetworkPolicy",
+      tone: "err",
+    });
+    expect(stopsRowState([shut, stops.fault], t)?.text).toBe(
+      "nothing behind it"
+    );
+    expect(stopsRowState([stops.idle], t)?.text).toBe("nothing behind it");
+    expect(stopsRowState([], t)).toBeNull();
   });
 });

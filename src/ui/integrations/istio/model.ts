@@ -33,7 +33,7 @@ import {
   type Backing,
   type BackingSources,
   stopWeight,
-  stopsRowTone,
+  stopsRowState,
 } from "../ingress";
 import type { RowTone } from "../page-kit";
 import { readMatches, type MatchReading } from "./match";
@@ -632,12 +632,13 @@ export function hostState(
   if (group.findings.some((finding) => finding.kind === "noSubset")) {
     return { text: t("empty", "subsetNotDefined"), tone: "err" };
   }
-  const stopped = stopsRowTone(
+  const stopped = stopsRowState(
     group.findings.flatMap((finding) =>
       finding.kind === "stop" ? [finding.stop] : []
-    )
+    ),
+    t
   );
-  if (stopped) return { text: t("empty", "nothingBehindIt"), tone: stopped };
+  if (stopped) return stopped;
   if (group.findings.some((finding) => finding.kind === "weights")) {
     return { text: t("empty", "weightsDoNotAddUp"), tone: "warn" };
   }

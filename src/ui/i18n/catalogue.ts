@@ -120,9 +120,9 @@ export const en = {
     noNamespaceValue: "no namespace",
     servicePublishesNoEndpoint: "This Service publishes no endpoint",
     stopPolicyNoRulesNote:
-      "The pods are ready and published, and no ingress rule admits anyone, so every connection to them is dropped and the controller in front answers 502 or 504. Admit the client in an ingress rule (for an Ingress, the controller's namespace), or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
+      "The pods are ready and published, and no ingress rule admits anyone, so every connection to them is refused or dropped, and a proxy in front answers with a 502, 503 or 504. Admit the client in an ingress rule (for an Ingress, the controller's namespace), or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
     stopPolicyPortNote:
-      "The pods are ready and published, and the rules admit other ports only, so every connection to {ports} is dropped and the controller in front answers 502 or 504. Add {ports} to the rule that admits the client. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
+      "The pods are ready and published, and the rules admit other ports only, so every connection to {ports} is refused or dropped, and a proxy in front answers with a 502, 503 or 504. Add {ports} to the rule that admits the client. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
     portNumbered: "port {n}",
     stopNoSliceNote:
       "{matched}, and not one of them is in anything this Service publishes. These objects do not say why: a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.",
@@ -5760,6 +5760,8 @@ export const en = {
     stopPolicyShutUnder: "shut by NetworkPolicy",
     everyRequest503:
       "This host answers, and every request gets a 503: {reason}",
+    nginxUpstreamRefused:
+      "This host answers, and nginx's connection to the pods is refused, so a request gets a 502, or a 504 after proxy-connect-timeout where the network drops the connection rather than refusing it: {reason}",
     servedInClearTitle:
       "Served in the clear: nothing offers this host over TLS",
     nginxClearRedirectAnyway:
@@ -5813,6 +5815,8 @@ export const en = {
     notFoundInThisCluster: "not found in this cluster",
     traefikRouteDropped:
       "Traefik drops this route, so a request gets a 404, or goes to whichever other route matches it: {reason}",
+    traefikRouteRefused:
+      "Traefik keeps this route and its connection to the pods is refused, so a request gets a 502, or a 504 once the dial times out where the network drops the connection rather than refusing it: {reason}",
     traefikRouteDroppedOr503:
       "Traefik drops this route or answers it with a 503, depending on allowEmptyServices, which could not be read: {reason}",
     traefikClearLoadedNote: {

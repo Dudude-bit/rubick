@@ -270,8 +270,8 @@ export function backingOf(
 
 /**
  * A stopped backend's weight, in the mood the traffic chain draws the stop
- * in. Every request still gets a 503, so each is a finding; only a fault is
- * an error, and a Service scaled to zero, starting or unread is not one.
+ * in. Every request still fails, so each is a finding; only a fault is an
+ * error, and a Service scaled to zero, starting or unread is not one.
  */
 const STOP_WEIGHT: Record<
   StopMood,
@@ -292,6 +292,25 @@ export function stopsRowTone(stops: ChainStop[]): RowTone | null {
     (["err", "warn", "unknown"] as const).find((tone) => tones.has(tone)) ??
     null
   );
+}
+
+/**
+ * A host line over stopped paths: its worst tone, and "shut" where every
+ * stop in that tone is a policy, since there are pods behind it.
+ */
+export function stopsRowState(
+  stops: ChainStop[],
+  t: T
+): { text: string; tone: RowTone } | null {
+  const tone = stopsRowTone(stops);
+  if (!tone) return null;
+  const shut = stops
+    .filter((stop) => stopWeight(stop).row === tone)
+    .every((stop) => stop.reason === "policyRefuses");
+  return {
+    text: t("empty", shut ? "stopPolicyShutUnder" : "nothingBehindIt"),
+    tone,
+  };
 }
 
 /** The `Cell` flags a stopped backend is drawn with. */

@@ -4,7 +4,7 @@ import { ExternalLink, PinOff } from "lucide-react";
 import { ObjectLink } from "@/components/object/ResourceRef";
 import { Journal } from "../-changes/ChangesTimeline";
 import { useShareSection } from "@/components/share/screen-share";
-import { pinShare } from "./service-card-share";
+import { pinShare, WAY_WORDS } from "./service-card-share";
 import { useConnections } from "@/hooks/useConnections";
 import { useRouteTls } from "@/hooks/useRouteTls";
 import { trafficChains, unreadWhy } from "@/lib/connections";
@@ -19,13 +19,32 @@ import {
   pinKey,
   stateOf,
   waitingFor,
+  wayState,
+  type EntryPoint,
   type ServicePin,
   type ServiceState,
+  type WayState,
 } from "@/lib/my-services";
 import { ASK_SHORT } from "@/lib/tell-me-when";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { useT, type T } from "@/i18n/useT";
+
+const WAY_TONE: Record<WayState, string> = {
+  unread: "text-fg-fnt",
+  shut: "text-err",
+  empty: "text-warn",
+};
+
+function WayWord({ way, t }: { way: EntryPoint; t: T }) {
+  const state = wayState(way);
+  if (!state) return null;
+  return (
+    <span className={cn("flex-none", WAY_TONE[state])}>
+      {WAY_WORDS[state](t)}
+    </span>
+  );
+}
 
 /** How many ways in one card shows before it stops listing them. */
 const WAYS_SHOWN = 3;
@@ -141,15 +160,7 @@ export function ServiceCard({
                     — drew exactly like one confirmed to be serving, on the
                     card whose whole job is to say what is known.
                   */}
-                  {!way.servingKnown ? (
-                    <span className="flex-none text-fg-fnt">
-                      {t("services", "notReadYet")}
-                    </span>
-                  ) : !way.serving ? (
-                    <span className="flex-none text-warn">
-                      {t("services", "nothingBehind")}
-                    </span>
-                  ) : null}
+                  <WayWord way={way} t={t} />
                 </li>
               ))}
               {ways.entries.length > WAYS_SHOWN ? (

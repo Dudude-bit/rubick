@@ -195,6 +195,61 @@ describe("what a card says about a way in", () => {
 
     expect(screen.getByText(/nothing behind|ничего нет/i)).toBeVisible();
   });
+
+  /** Ready pods behind a policy that admits nobody drew the way in as live. */
+  it("says a way in a policy shuts is shut, in red", async () => {
+    const service = {
+      kind: "Service",
+      name: "payments",
+      namespace: "shop",
+      existence: "present",
+      facts: null,
+    };
+    chain.paths = [
+      {
+        key: "c",
+        broken: true,
+        hops: [
+          {
+            at: "published",
+            published: {
+              service,
+              source: "slices",
+              slices: 1,
+              ready: 2,
+              draining: 0,
+              notReady: 0,
+              unrouted: 0,
+              unroutedReady: 0,
+              ports: [],
+              endpoints: [],
+              whole: true,
+              unpublished: [],
+              stop: {
+                reason: "policyRefuses",
+                service,
+                policies: ["deny-all"],
+                ports: [8080],
+                noRules: true,
+              },
+            },
+            first: null,
+            address: null,
+            summary: "",
+            tone: "ok",
+          },
+        ],
+      },
+    ] as unknown as ChainPath[];
+
+    await mount();
+
+    const word = screen.getByText(
+      /shut by NetworkPolicy|закрыто NetworkPolicy/
+    );
+    expect(word).toHaveClass("text-err");
+    expect(screen.queryByText(/nothing behind|ничего нет/i)).toBeNull();
+  });
 });
 
 describe("what a card offers Share", () => {
@@ -218,6 +273,36 @@ describe("what a card offers Share", () => {
       ],
     });
     expect(rows[1]).toMatchObject({ values: [{ role: "ok" }] });
+  });
+
+  /** The Share listed every way in bare, beside a card that said one was
+   *  shut and another had nothing behind it. */
+  it("says beside each way in what the card says beside it", () => {
+    const way = { url: null, detail: null, servingKnown: true };
+    const section = pinShare(
+      pin,
+      { state: "ready", ready: 2, total: 2 },
+      {
+        entries: [
+          { ...way, key: "a", label: "web", serving: false, shut: true },
+          { ...way, key: "b", label: "api", serving: false, shut: false },
+          { ...way, key: "c", label: "shop", serving: true, shut: false },
+        ],
+        known: true,
+      },
+      [],
+      null,
+      [],
+      t
+    );
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    expect(rows[2]).toMatchObject({
+      values: [
+        {
+          text: "web (shut by NetworkPolicy), api (nothing behind it), shop",
+        },
+      ],
+    });
   });
 
   /** A service this app could not read at all must not offer the rest of

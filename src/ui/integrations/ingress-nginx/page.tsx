@@ -86,6 +86,7 @@ import {
   hostGroups,
   hostState,
   nginxClasses,
+  stopAnswerKey,
   type Finding,
   type NginxHostGroup,
   type NginxRoute,
@@ -913,7 +914,7 @@ function describeFinding(
     case "stop": {
       const said = describeStop(finding.stop, t);
       return {
-        title: t("empty", "everyRequest503", {
+        title: t("empty", stopAnswerKey(finding.stop), {
           reason: said.title,
         }),
         note: said.note,

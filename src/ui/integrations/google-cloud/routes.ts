@@ -36,7 +36,7 @@ import {
   type Backing,
   type BackingSources,
   stopWeight,
-  stopsRowTone,
+  stopsRowState,
 } from "../ingress";
 import type { RowTone } from "../page-kit";
 import {
@@ -560,15 +560,15 @@ export function hostState(
   backingError: string | null,
   t: T
 ): { text: string; tone: RowTone } {
-  const stopped = stopsRowTone(
+  const stopped = stopsRowState(
     host.findings.flatMap((finding) =>
       finding.kind === "stop" && finding.backing.stop
         ? [finding.backing.stop]
         : []
-    )
+    ),
+    t
   );
-  if (stopped === "err")
-    return { text: t("empty", "nothingBehindIt"), tone: stopped };
+  if (stopped?.tone === "err") return stopped;
   const certificate = host.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
@@ -577,7 +577,7 @@ export function hostState(
   if (host.findings.some((finding) => finding.kind === "missing-object")) {
     return { text: t("empty", "namesSomethingAbsent"), tone: "err" };
   }
-  if (stopped) return { text: t("empty", "nothingBehindIt"), tone: stopped };
+  if (stopped) return stopped;
   if (host.findings.length > 0)
     return { text: t("empty", "worthALook"), tone: "warn" };
   if (!host.namesKnown) {

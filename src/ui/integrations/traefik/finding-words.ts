@@ -15,6 +15,7 @@ const DEFAULT_CERTIFICATE = {
 const STOP_ANSWER: Record<StopAnswer, keyof typeof en.empty> = {
   dropped: "traefikRouteDropped",
   unavailable: "everyRequest503",
+  refused: "traefikRouteRefused",
   unknown: "traefikRouteDroppedOr503",
 };
 

@@ -45,7 +45,7 @@ import {
   terminatedUpstreamOf,
   type EdgeTls,
   stopWeight,
-  stopsRowTone,
+  stopsRowState,
 } from "../ingress";
 import type { RowTone } from "../page-kit";
 import { PREFIX, readAnnotations, type AnnotationReading } from "./annotations";
@@ -537,26 +537,35 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
   return groups.sort(compareGroups);
 }
 
+/**
+ * What a request to a host stopped behind gets: nginx answers 503 where it
+ * has no endpoint, and pods a policy shuts are endpoints it fails to reach.
+ */
+export const stopAnswerKey = (stop: ChainStop) =>
+  stop.reason === "policyRefuses"
+    ? ("nginxUpstreamRefused" as const)
+    : ("everyRequest503" as const);
+
 /** The word at the right of a host line: what is true of it right now. */
 export function hostState(
   group: NginxHostGroup,
   backingError: string | null,
   t: T
 ): { text: string; tone: RowTone } {
-  const stopped = stopsRowTone(
+  const stopped = stopsRowState(
     group.findings.flatMap((finding) =>
       finding.kind === "stop" ? [finding.stop] : []
-    )
+    ),
+    t
   );
-  if (stopped === "err")
-    return { text: t("empty", "nothingBehindIt"), tone: stopped };
+  if (stopped?.tone === "err") return stopped;
   const certificate = group.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );
   if (certificate?.kind === "certificate") {
     return { text: certificateStateWords(certificate, t), tone: "err" };
   }
-  if (stopped) return { text: t("empty", "nothingBehindIt"), tone: stopped };
+  if (stopped) return stopped;
   if (group.findings.some((finding) => finding.kind === "orphanCanary")) {
     return { text: t("empty", "canaryShadowingNothing"), tone: "warn" };
   }
