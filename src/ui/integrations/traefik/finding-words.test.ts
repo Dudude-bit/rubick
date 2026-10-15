@@ -47,6 +47,44 @@ describe("a Traefik finding in a shared file", () => {
     );
     expect(detail).toContain("web");
   });
+
+  /**
+   * The reader wrote spec.tls and expects https. Without the reason they are
+   * told their host is in the clear and left to find out why.
+   */
+  it("says why a Secret named in spec.tls does not make the host TLS", () => {
+    const detail = findingDetail(
+      {
+        kind: "clear",
+        severity: "warn",
+        entryPoints: ["web"],
+        loaded: "promo-tls",
+      } as Finding,
+      t
+    );
+    expect(detail).toContain("promo-tls");
+    expect(detail).toContain("router.tls");
+  });
+
+  /** A dropped path names its Ingress, which is the object to edit. */
+  it("names the path, the API object and the Ingress of a dropped path", () => {
+    const said = describeFinding(
+      {
+        kind: "resourceBackend",
+        severity: "err",
+        route: {
+          source: { kind: "Ingress", name: "assets", namespace: "shop" },
+          clause: { host: null, path: { kind: "prefix", value: "/assets" } },
+          resourceBackend: "StorageBucket/assets",
+        } as unknown as TraefikRoute,
+      },
+      t
+    );
+    expect(said.title).toContain("/assets");
+    expect(said.title).toContain("StorageBucket/assets");
+    expect(said.title).toContain("404");
+    expect(said.objects[0].source.name).toBe("assets");
+  });
 });
 
 describe("a Traefik finding on the page", () => {

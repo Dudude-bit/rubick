@@ -3,6 +3,7 @@ import type { T } from "@/i18n/useT";
 import { problemWords } from "@/lib/certificates";
 import { describeStop } from "@/lib/connections";
 import type { Finding, StopAnswer, TraefikRoute } from "./model";
+import { describePath } from "./rule";
 
 const STOP_ANSWER: Record<StopAnswer, keyof typeof en.empty> = {
   dropped: "traefikRouteDropped",
@@ -37,14 +38,30 @@ export function describeFinding(
         note: said.note,
       };
     }
-    case "clear":
+    case "clear": {
+      const values = {
+        n: finding.entryPoints.length,
+        list: finding.entryPoints.join(", "),
+      };
       return {
         title: t("empty", "servedInClearTitle"),
         objects: [],
-        note: t("empty", "traefikClearNote", {
-          n: finding.entryPoints.length,
-          list: finding.entryPoints.join(", "),
+        note: finding.loaded
+          ? t("empty", "traefikClearLoadedNote", {
+              ...values,
+              secret: finding.loaded,
+            })
+          : t("empty", "traefikClearNote", values),
+      };
+    }
+    case "resourceBackend":
+      return {
+        title: t("empty", "traefikResourceBackendTitle", {
+          path: describePath(finding.route.clause.path, t),
+          resource: finding.route.resourceBackend ?? "",
         }),
+        objects: [finding.route],
+        note: t("empty", "traefikResourceBackendNote"),
       };
     case "duplicate":
       return {

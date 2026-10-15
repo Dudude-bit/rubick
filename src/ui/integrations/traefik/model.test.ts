@@ -1321,3 +1321,141 @@ describe("a host whose TLS ends in front of the proxy", () => {
     });
   });
 });
+
+describe("which routers Traefik serves over TLS", () => {
+  const WEB = { name: "web", address: ":8000", tls: false, redirectTo: null };
+  const WEBSECURE = {
+    name: "websecure",
+    address: ":8443",
+    tls: true,
+    redirectTo: null,
+  };
+  const promo = (annotations: Record<string, string> = {}) =>
+    ingress("promo", "promo.example.com", {
+      secretName: "promo-tls",
+      annotations,
+    });
+
+  /**
+   * Traefik reads an Ingress's `spec.tls` for certificates and nothing else.
+   * Read as TLS, the page said "TLS from promo-tls" over a router that
+   * answers plain HTTP on `web` and nothing on 443, with no finding at all.
+   */
+  it("calls a host whose Ingress only names a Secret in spec.tls served in the clear", () => {
+    const [group] = hostGroups(
+      sources({ ingresses: [promo()], entryPoints: [WEB] })
+    );
+
+    const clear = group.findings.find((finding) => finding.kind === "clear");
+    expect(clear?.kind === "clear" && clear.loaded).toBe("promo-tls");
+    expect(group.tls).toEqual({ at: "none" });
+    expect(group.tlsSecrets).toEqual([]);
+  });
+
+  /** Would break if the annotation that does make a router TLS were not read. */
+  it.each([
+    [{ "traefik.ingress.kubernetes.io/router.tls": "true" }],
+    [
+      {
+        "traefik.ingress.kubernetes.io/router.tls.certresolver": "letsencrypt",
+      },
+    ],
+  ])("serves the host over TLS with %o", (annotations) => {
+    const [group] = hostGroups(
+      sources({ ingresses: [promo(annotations)], entryPoints: [WEB] })
+    );
+
+    expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
+    expect(group.tls).toEqual({ at: "own", secret: "promo-tls" });
+  });
+
+  it("does not read router.tls set to false as TLS", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [
+          promo({ "traefik.ingress.kubernetes.io/router.tls": "false" }),
+        ],
+        entryPoints: [WEB],
+      })
+    );
+
+    expect(group.tls).toEqual({ at: "none" });
+  });
+
+  /**
+   * A router bound to a TLS entry point is TLS there, and Traefik picks the
+   * Secret by SNI. The page said "no TLS" for it while it served https.
+   */
+  it("serves a router on a TLS entry point under the Secret named for its host", () => {
+    const [group] = hostGroups(
+      sources({ ingresses: [promo()], entryPoints: [WEB, WEBSECURE] })
+    );
+
+    expect(group.tls).toEqual({ at: "own", secret: "promo-tls" });
+    expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
+  });
+
+  /** "No encrypted way to reach it" about a host websecure serves was false. */
+  it("does not call a host in the clear when it is also bound to a TLS entry point", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [ingress("shop", "shop.example.com")],
+        entryPoints: [WEB, WEBSECURE],
+      })
+    );
+
+    expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
+    expect(group.tls).toEqual({ at: "own", secret: null });
+  });
+});
+
+describe("a path whose backend is an API object", () => {
+  const assets = () => {
+    const object = ingress("assets", "assets.example.com");
+    object.rules[0].paths[0] = {
+      path: "/assets",
+      pathType: "Prefix",
+      backendService: "",
+      backendPort: "",
+      resourceBackend: "StorageBucket/assets",
+    };
+    return object;
+  };
+
+  /**
+   * Traefik logs "Resource backends are not supported" and skips the path,
+   * so the request gets a 404. The page said only "an API object" in grey.
+   */
+  it("is reported as dropped by Traefik", () => {
+    const [group] = hostGroups(sources({ ingresses: [assets()] }));
+
+    const dropped = group.findings.filter(
+      (finding) => finding.kind === "resourceBackend"
+    );
+    expect(dropped).toHaveLength(1);
+    expect(group.worst).toBe("err");
+    expect(group.chainFor.resourceBackend).toBe("StorageBucket/assets");
+    expect(hostState(group, null, t)).toEqual({
+      text: "a path is dropped",
+      tone: "err",
+    });
+  });
+
+  /** A defaultBackend naming an API object was not a route at all, so not a finding either. */
+  it("is reported for a defaultBackend too", () => {
+    const fallback = ingress("fallback", "x.example.com");
+    fallback.rules = [];
+    fallback.defaultBackend = {
+      backendService: "",
+      backendPort: "",
+      resourceBackend: "StorageBucket/static",
+    };
+
+    const [group] = hostGroups(sources({ ingresses: [fallback] }));
+
+    expect(group.host).toBeNull();
+    expect(group.findings.map((finding) => finding.kind)).toContain(
+      "resourceBackend"
+    );
+  });
+});

@@ -85,6 +85,7 @@ import {
   PROXY_LABEL,
   backingOf,
   boundEntryPoints,
+  servedUnder,
   duplicatedServiceNames,
   hostGroups,
   hostState,
@@ -612,19 +613,23 @@ function PathRow({
         <SourceRef route={route} />
       </span>
       <span className="text-[11px] text-fg-fnt">
-        {route.resourceBackend
-          ? t("empty", "anApiObject")
-          : !route.service?.kubernetes
-            ? t("empty", "insideTheProxy")
-            : backing && !backing.known
-              ? backing.error
-                ? t("empty", "unknownLower")
-                : "…"
-              : backing?.stop
-                ? t("count", "nPublished", { n: 0 })
-                : backing
-                  ? t("count", "nReady", { n: backing.ready })
-                  : ""}
+        {route.resourceBackend ? (
+          <span className="text-err">{t("empty", "skippedByTraefik")}</span>
+        ) : !route.service?.kubernetes ? (
+          t("empty", "insideTheProxy")
+        ) : backing && !backing.known ? (
+          backing.error ? (
+            t("empty", "unknownLower")
+          ) : (
+            "…"
+          )
+        ) : backing?.stop ? (
+          t("count", "nPublished", { n: 0 })
+        ) : backing ? (
+          t("count", "nReady", { n: backing.ready })
+        ) : (
+          ""
+        )}
       </span>
     </div>
   );
@@ -682,7 +687,7 @@ function HostChain({
   const route = group.chainFor;
   const backing = backingOf(route, sources);
   const entryPoints = boundEntryPoints(route, sources.entryPoints);
-  const tls = route.tlsSecret;
+  const tls = servedUnder(group, route);
 
   return (
     <div className="flex flex-col gap-1">
@@ -791,8 +796,8 @@ function HostChain({
         </Column>
         <Column label={t("columns", "published")}>
           {route.resourceBackend ? (
-            <Cell under={t("empty", "notAService")}>
-              {t("cluster", "markUnchecked")}
+            <Cell bad under={t("empty", "notAService")}>
+              {t("empty", "skippedByTraefik")}
             </Cell>
           ) : !route.service?.kubernetes ? (
             <Cell under={t("empty", "insideTheProxy")}>

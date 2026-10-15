@@ -48,6 +48,7 @@ function group(overrides: Partial<HostGroup> = {}): HostGroup {
     findings: [],
     chainFor: route(),
     tlsSecrets: [{ namespace: "web", secretName: "shop-tls" }],
+    overTls: new Map([["web/shop/0", true]]),
     worst: null,
     backendsKnown: true,
     tls: { at: "ingress", name: "shop-tls" },
@@ -71,6 +72,24 @@ describe("the routes table registers every router with Share", () => {
     expect(section.body.rows[0].cells[4]).toMatchObject({
       text: translate("en", "empty", "tlsNotChecked"),
       role: "neutral",
+    });
+  });
+
+  /**
+   * Traefik only loads a certificate from an Ingress's `spec.tls`. The table
+   * printed that Secret as the one a plain-HTTP router is served under.
+   */
+  it("does not print a Secret as served under by a router that is not TLS", () => {
+    const plain = group({
+      tls: { at: "none" },
+      routes: [route({ declaresTls: false, entryPoints: ["web"] })],
+      overTls: new Map([["web/shop/0", false]]),
+    });
+    const section = routesTableSection([plain], false, t);
+    if (section.body.type !== "table") throw new Error("expected a table");
+    expect(section.body.rows[0].cells[4]).toMatchObject({
+      text: translate("en", "empty", "noTls"),
+      role: "warn",
     });
   });
 

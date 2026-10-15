@@ -6343,6 +6343,7 @@ export const ru: Catalogue = {
     servedInTheClear: "обслуживается без шифрования",
     splitShares: "делится {shares}",
     tlsFrom: "TLS из {name}",
+    tlsControllerCertificate: "TLS, сертификат выбирает контроллер",
     noTls: "без TLS",
     tlsEveryHost: "все хосты",
     tlsNotChecked: "TLS не проверен",
@@ -6436,6 +6437,17 @@ export const ru: Catalogue = {
       "Traefik выбрасывает этот маршрут, поэтому запрос получает 404 или уходит в другой подходящий маршрут: {reason}",
     traefikRouteDroppedOr503:
       "Traefik выбрасывает этот маршрут или отвечает на него 503, смотря по allowEmptyServices, а его прочитать не удалось: {reason}",
+    traefikClearLoadedNote: {
+      one: "{secret} указан в spec.tls, но Traefik берёт из этого поля только сертификат. Маршрут отдаётся по TLS с аннотацией router.tls или на TLS entry point, а этот хост привязан к {list}, которая не терминирует TLS и никуда не перенаправляет.",
+      few: "{secret} указан в spec.tls, но Traefik берёт из этого поля только сертификат. Маршрут отдаётся по TLS с аннотацией router.tls или на TLS entry point, а этот хост привязан к {list}, которые не терминируют TLS и никуда не перенаправляют.",
+      many: "{secret} указан в spec.tls, но Traefik берёт из этого поля только сертификат. Маршрут отдаётся по TLS с аннотацией router.tls или на TLS entry point, а этот хост привязан к {list}, которые не терминируют TLS и никуда не перенаправляют.",
+      other:
+        "{secret} указан в spec.tls, но Traefik берёт из этого поля только сертификат. Маршрут отдаётся по TLS с аннотацией router.tls или на TLS entry point, а этот хост привязан к {list}, которые не терминируют TLS и никуда не перенаправляют.",
+    },
+    traefikResourceBackendTitle:
+      "Traefik пропускает {path}: его бэкенд {resource}, API-объект, поэтому запрос получает 404 или уходит в другой подходящий маршрут",
+    traefikResourceBackendNote:
+      "Traefik ведёт Ingress только в Service и пишет «Resource backends are not supported» в свой лог, который больше нигде в кластере не виден.",
     traefikClearNote: {
       one: "Ни у одного маршрута этого хоста нет сертификата, а сам он привязан к {list}, которая не терминирует TLS и никуда не перенаправляет. Зашифрованного способа до него добраться нет, даже если клиент его просит.",
       few: "Ни у одного маршрута этого хоста нет сертификата, а сам он привязан к {list}, которые не терминируют TLS и никуда не перенаправляют. Зашифрованного способа до него добраться нет, даже если клиент его просит.",
@@ -6896,6 +6908,7 @@ export const ru: Catalogue = {
     gkeControllerServesNothing:
       ", поэтому контроллер GKE здесь ничего не обслуживает. Его CRD всё ещё могут быть установлены, и именно из-за них страница появилась в боковой панели.",
     nothingBehindIt: "за ним ничего нет",
+    pathDropped: "путь выброшен",
     certificateFailed: "сертификат не выдан",
     namesSomethingAbsent: "ссылается на отсутствующее",
     namesSomethingUnread: "ссылается на непрочитанное",
@@ -7124,6 +7137,7 @@ export const ru: Catalogue = {
     toTarget: "на",
     noServiceBackend: "нет service",
     notAService: "не Service",
+    skippedByTraefik: "Traefik его пропускает",
     canaryWhenHeader: "canary · когда {header}",
     canaryAlways: "всегда",
     canaryCookie: "canary · cookie {cookie}",

@@ -5712,6 +5712,7 @@ export const en = {
     servedInTheClear: "served in the clear",
     splitShares: "split {shares}",
     tlsFrom: "TLS from {name}",
+    tlsControllerCertificate: "TLS, certificate picked by the controller",
     noTls: "no TLS",
     tlsEveryHost: "every host",
     tlsNotChecked: "TLS not checked",
@@ -5800,6 +5801,15 @@ export const en = {
       "Traefik drops this route, so a request gets a 404, or goes to whichever other route matches it: {reason}",
     traefikRouteDroppedOr503:
       "Traefik drops this route or answers it with a 503, depending on allowEmptyServices, which could not be read: {reason}",
+    traefikClearLoadedNote: {
+      one: "{secret} is named in spec.tls, but Traefik only loads a certificate from that field. A router is served over TLS with the router.tls annotation or on a TLS entry point, and this host is bound to {list}, which terminates no TLS and carries no redirection.",
+      other:
+        "{secret} is named in spec.tls, but Traefik only loads a certificate from that field. A router is served over TLS with the router.tls annotation or on a TLS entry point, and this host is bound to {list}, which terminate no TLS and carry no redirection.",
+    },
+    traefikResourceBackendTitle:
+      "Traefik skips {path}: its backend is {resource}, an API object, so a request gets a 404 or goes to whichever other route matches it",
+    traefikResourceBackendNote:
+      'Traefik routes an Ingress only to Services, and says "Resource backends are not supported" in its own log, which nothing else in this cluster surfaces.',
     traefikClearNote: {
       one: "No route under this host carries a certificate, and it is bound to {list}, which terminates no TLS and carries no redirection. There is no encrypted way to reach it, even for a client that asks for one.",
       other:
@@ -6219,6 +6229,7 @@ export const en = {
     gkeControllerServesNothing:
       ", so GKE’s controller is serving nothing here. The CRDs it owns may still be installed, which is what put this page in the sidebar.",
     nothingBehindIt: "nothing behind it",
+    pathDropped: "a path is dropped",
     certificateFailed: "certificate failed",
     namesSomethingAbsent: "names something absent",
     namesSomethingUnread: "names something not read",
@@ -6441,6 +6452,7 @@ export const en = {
     toTarget: "to",
     noServiceBackend: "no service",
     notAService: "not a Service",
+    skippedByTraefik: "skipped by Traefik",
     canaryWhenHeader: "canary · when {header}",
     canaryAlways: "always",
     canaryCookie: "canary · cookie {cookie}",

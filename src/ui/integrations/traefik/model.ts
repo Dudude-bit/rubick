@@ -19,7 +19,7 @@
  * identically whether it was reached from a Deployment or from a hostname.
  */
 
-import { covers, type Expiry } from "@/lib/certificates";
+import type { Expiry } from "@/lib/certificates";
 import type {
   CustomResourceInfo,
   IngressClassSummary,
@@ -63,6 +63,16 @@ const ENTRYPOINTS_ANNOTATION =
 /** `namespace-name@kubernetescrd`, comma separated. */
 const MIDDLEWARES_ANNOTATION =
   "traefik.ingress.kubernetes.io/router.middlewares";
+const ROUTER_TLS_ANNOTATION = "traefik.ingress.kubernetes.io/router.tls";
+
+/** `router.tls: "true"`, or any `router.tls.*` option, which sets it too. */
+function asksRouterTls(annotations: Record<string, string>): boolean {
+  return Object.entries(annotations).some(([key, value]) =>
+    key === ROUTER_TLS_ANNOTATION
+      ? value.trim().toLowerCase() === "true"
+      : key.startsWith(`${ROUTER_TLS_ANNOTATION}.`)
+  );
+}
 
 export interface MiddlewareRef {
   name: string;
@@ -115,16 +125,22 @@ export interface TraefikRoute {
    * one is a Kubernetes object the app simply cannot see inside.
    */
   resourceBackend: string | null;
+  /**
+   * The Secret the object names for this host. Traefik loads it and picks it
+   * by SNI for a TLS router, but on its own it encrypts nothing: an
+   * Ingress's `spec.tls` is only a certificate. See {@link declaresTls}.
+   */
   tlsSecret: string | null;
   /**
-   * Whether the object asks for TLS on this host at all, which is not the
-   * same question as {@link tlsSecret}.
+   * Whether the router itself is TLS: an IngressRoute's `tls` block, or an
+   * Ingress's `router.tls` annotation. Not the same question as
+   * {@link tlsSecret} in either direction.
    *
    * An IngressRoute may write `tls: {}` and mean "serve this over TLS with
-   * whatever certificate you have" — Traefik's own default. Read through
-   * `tlsSecret` alone that is indistinguishable from an object that never
-   * mentioned TLS, and anything constructing a URL from it prints `http://`
-   * for a host that only answers on 443.
+   * whatever certificate you have", naming no Secret. An Ingress may name a
+   * Secret in `spec.tls` and still be served as plain HTTP, because Traefik
+   * reads that field for certificates and nothing else. Either way round,
+   * reading the Secret as the answer printed the wrong scheme.
    */
   declaresTls: boolean;
   /** An Ingress's `pathType` verbatim: Traefik's reading of it is Traefik's. */
@@ -155,7 +171,14 @@ export type Finding =
       kind: "clear";
       severity: "warn";
       entryPoints: string[];
-      alsoOnTls: boolean;
+      /** A Secret `spec.tls` names here, which Traefik loads and never serves. */
+      loaded: string | null;
+    }
+  /** Traefik skips a path whose backend is an API object, not a Service. */
+  | {
+      kind: "resourceBackend";
+      severity: "err";
+      route: TraefikRoute;
     }
   /** Two objects claim the same host and the same path. */
   | {
@@ -191,6 +214,8 @@ export interface HostGroup {
   chainFor: TraefikRoute;
   /** Every TLS Secret any route under this host is served under. */
   tlsSecrets: Array<{ namespace: string; secretName: string }>;
+  /** The keys of the routes served over TLS; `null` where that is not known. */
+  overTls: ReadonlyMap<string, boolean | null>;
   worst: "err" | "warn" | null;
   /** False while a Service this host routes to has not been read. */
   backendsKnown: boolean;
@@ -287,6 +312,7 @@ function routesFromIngress(
     ingress.namespace,
     known
   );
+  const routerTls = asksRouterTls(ingress.annotations);
 
   const routes = ingress.rules.flatMap((rule, ruleIndex) =>
     rule.paths.map((path, pathIndex) => {
@@ -330,13 +356,7 @@ function routesFromIngress(
           : null,
         resourceBackend: path.resourceBackend,
         tlsSecret: tlsSecretFor(ingress, host),
-        // An Ingress cannot ask for TLS without naming a Secret, so its
-        // `spec.tls` covering this host is the whole answer.
-        declaresTls:
-          ingress.hasCatchAllTls ||
-          (host !== null &&
-            (covers(ingress.tlsHosts, host) ||
-              ingress.tlsConfigs.some((config) => covers(config.hosts, host)))),
+        declaresTls: routerTls,
         pathType: path.pathType,
         priority: null,
       };
@@ -347,7 +367,7 @@ function routesFromIngress(
   // the whole object. Read through `rules` alone, the ordinary cloud edge
   // served nothing on every surface this table feeds.
   const fallback = ingress.defaultBackend;
-  if (fallback?.backendService) {
+  if (fallback?.backendService || fallback?.resourceBackend) {
     routes.push({
       key: `ingress/${ingress.namespace}/${ingress.name}/default/${index}`,
       source: {
@@ -364,16 +384,18 @@ function routesFromIngress(
       clause: { host: null, path: null },
       entryPoints,
       middlewares,
-      service: {
-        name: fallback.backendService,
-        namespace: ingress.namespace,
-        port: fallback.backendPort,
-        kubernetes: true,
-        scheme: null,
-      },
+      service: fallback.backendService
+        ? {
+            name: fallback.backendService,
+            namespace: ingress.namespace,
+            port: fallback.backendPort,
+            kubernetes: true,
+            scheme: null,
+          }
+        : null,
       resourceBackend: fallback.resourceBackend,
       tlsSecret: tlsSecretFor(ingress, null),
-      declaresTls: ingress.hasCatchAllTls,
+      declaresTls: routerTls,
       pathType: "DefaultBackend",
       priority: null,
     });
@@ -573,6 +595,34 @@ export function boundEntryPoints(
   return entryPoints.filter((entry) => route.entryPoints!.includes(entry.name));
 }
 
+/**
+ * Whether this router is served over TLS.
+ *
+ * The router's own TLS decides it first: an IngressRoute's `tls` block, even
+ * an empty one, or an Ingress's `router.tls`. Otherwise the entry points do,
+ * and those live in the proxy's start-up flags, so with none read the honest
+ * answer is that we do not know rather than "plain HTTP".
+ */
+export function routeIsSecure(
+  route: TraefikRoute,
+  entryPoints: EntryPoint[]
+): boolean | null {
+  if (route.declaresTls) return true;
+  if (entryPoints.length === 0) return null;
+  const bound = boundEntryPoints(route, entryPoints);
+  // A name the proxy does not define binds the router to nothing we can read.
+  if (bound.length === 0) return null;
+  return bound.some((entry) => entry.tls);
+}
+
+/** The Secret a route is served under, which only a TLS router has. */
+export function servedUnder(
+  group: HostGroup,
+  route: TraefikRoute
+): string | null {
+  return group.overTls.get(route.key) === true ? route.tlsSecret : null;
+}
+
 // --- what is behind a route ---------------------------------------------
 
 export function backingOf(
@@ -648,6 +698,7 @@ export function middlewareUses(
  */
 const URGENCY: Record<Finding["kind"], number> = {
   stop: 4,
+  resourceBackend: 4,
   certificate: 3,
   clear: 2,
   duplicate: 1,
@@ -815,7 +866,7 @@ function clearFinding(
   sources: TraefikSources,
   host: string | null
 ): Finding | "tlsUnknown" | null {
-  if (routes.some((route) => route.tlsSecret)) return null;
+  if (routes.some((route) => route.declaresTls)) return null;
   // Something in front holds the certificate, and the inside hop is plaintext
   // by design; or what is in front could not be read and cannot be ruled out.
   const edge = edgeTls(host, sources).at;
@@ -834,8 +885,11 @@ function clearFinding(
     }
   }
 
+  // Also bound to a TLS entry point, the host has an encrypted way in; that
+  // its plain one has no redirection is the proxy's, said on Entry points.
+  if ([...bound.values()].some((entry) => entry.tls)) return null;
   const plain = [...bound.values()].filter(
-    (entry) => !entry.tls && entry.redirectTo === null
+    (entry) => entry.redirectTo === null
   );
   if (plain.length === 0) return null;
 
@@ -857,7 +911,7 @@ function clearFinding(
     kind: "clear",
     severity: "warn",
     entryPoints: plain.map((entry) => entry.name),
-    alsoOnTls: [...bound.values()].some((entry) => entry.tls),
+    loaded: routes.find((route) => route.tlsSecret)?.tlsSecret ?? null,
   };
   // What is in front could not be read: the host would be in the clear if
   // nothing there holds the certificate, so it is not known to be fine.
@@ -911,10 +965,26 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
       ];
     });
 
+    const resourceBackends = own.flatMap((route): Finding[] =>
+      route.resourceBackend
+        ? [{ kind: "resourceBackend", severity: "err", route }]
+        : []
+    );
+
+    const overTls = new Map(
+      own.map((route) => [route.key, routeIsSecure(route, sources.entryPoints)])
+    );
+    // Traefik picks a certificate by SNI among every Secret it has loaded, so
+    // the one a TLS router for this host presents is the one named for it,
+    // whichever route named it. Where no router is TLS it presents nothing.
     const tlsSecrets = [
       ...new Map(
         own
-          .filter((route) => route.tlsSecret)
+          .filter(
+            (route) =>
+              route.tlsSecret &&
+              own.some((other) => overTls.get(other.key) !== false)
+          )
           .map((route) => [
             `${route.source.namespace}/${route.tlsSecret}`,
             { namespace: route.source.namespace, secretName: route.tlsSecret! },
@@ -925,6 +995,7 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
     const clear = clearFinding(own, sources, host === "" ? null : host);
     const findings = [
       ...stops,
+      ...resourceBackends,
       ...certificateFindings(tlsSecrets, sources.certificates),
       ...(clear && clear !== "tlsUnknown" ? [clear] : []),
       ...duplicateFindings(own),
@@ -943,15 +1014,18 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
       chainFor:
         stops[0]?.kind === "stop"
           ? stops[0].route
-          : [...own].sort(
-              (a, b) => b.middlewares.length - a.middlewares.length
-            )[0],
+          : resourceBackends[0]?.kind === "resourceBackend"
+            ? resourceBackends[0].route
+            : [...own].sort(
+                (a, b) => b.middlewares.length - a.middlewares.length
+              )[0],
       tlsSecrets,
+      overTls,
       worst: worstOf(findings),
       backendsKnown:
         sources.backingKnown || !own.some((route) => route.service?.kubernetes),
-      tls: tlsSecrets[0]
-        ? { at: "own" as const, secret: tlsSecrets[0].secretName }
+      tls: own.some((route) => overTls.get(route.key) === true)
+        ? { at: "own" as const, secret: tlsSecrets[0]?.secretName ?? null }
         : clear === "tlsUnknown"
           ? { at: "unknown" as const }
           : edgeTls(host === "" ? null : host, sources),
@@ -1000,6 +1074,9 @@ export function hostState(
   );
   if (stopped === "err")
     return { text: t("empty", "nothingBehindIt"), tone: stopped };
+  if (group.findings.some((finding) => finding.kind === "resourceBackend")) {
+    return { text: t("empty", "pathDropped"), tone: "err" };
+  }
   const certificate = group.findings.find(
     (finding) => finding.kind === "certificate" && finding.severity === "err"
   );

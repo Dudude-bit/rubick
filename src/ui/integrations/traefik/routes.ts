@@ -21,38 +21,10 @@ import {
   allRoutes,
   frontingIngresses,
   proxyServices,
+  routeIsSecure,
   terminatedUpstream,
-  type EntryPoint,
-  type TraefikRoute,
 } from "./model";
 import { BACKING_NOT_READ, frontingQuestions } from "../ingress";
-
-/**
- * Whether this route is served over TLS, or `null` where the objects do not
- * settle it.
- *
- * Read in the order the objects are authoritative. A Secret named for the
- * host is the end of the question; a `tls` block with no Secret still means
- * TLS, with Traefik's own default certificate. Only when the object says
- * nothing at all do the entry points decide it — and those live in the
- * proxy's start-up flags, so with none read the honest answer is that we do
- * not know rather than "plain HTTP".
- */
-export function routeIsSecure(
-  route: TraefikRoute,
-  entryPoints: EntryPoint[]
-): boolean | null {
-  if (route.tlsSecret !== null || route.declaresTls) return true;
-  if (entryPoints.length === 0) return null;
-  // `null` is Traefik's "every entry point", not "none of them".
-  const bound =
-    route.entryPoints === null
-      ? entryPoints
-      : entryPoints.filter((entry) => route.entryPoints?.includes(entry.name));
-  // A name the proxy does not define binds the router to nothing we can read.
-  if (bound.length === 0) return null;
-  return bound.some((entry) => entry.tls);
-}
 
 export async function serviceRoutes(input: {
   namespace: string;

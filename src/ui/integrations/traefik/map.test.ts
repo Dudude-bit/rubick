@@ -33,7 +33,12 @@ const TRAEFIK_CLASS: IngressClassSummary = {
 function ingress(
   name: string,
   host: string,
-  over: { service?: string; secretName?: string; at?: string[] } = {}
+  over: {
+    service?: string;
+    secretName?: string;
+    at?: string[];
+    annotations?: Record<string, string>;
+  } = {}
 ): IngressInfo {
   return {
     uid: "",
@@ -62,10 +67,12 @@ function ingress(
     hasCatchAllTls: false,
     defaultBackend: null,
     labels: {},
-    annotations: {},
+    annotations: over.annotations ?? {},
     createdAt: null,
   };
 }
+
+const ON_WEB = { "traefik.ingress.kubernetes.io/router.entrypoints": "web" };
 
 const service = (name: string): ServiceInfo => ({
   name,
@@ -256,8 +263,14 @@ describe("the routing map", () => {
   it("marks a host with no certificate, and one with", () => {
     const map = mapOf({
       ingresses: [
-        ingress("shop", "shop.example.com", { secretName: "shop-tls" }),
-        ingress("promo", "promo.example.com"),
+        ingress("shop", "shop.example.com", {
+          secretName: "shop-tls",
+          annotations: {
+            ...ON_WEB,
+            "traefik.ingress.kubernetes.io/router.tls": "true",
+          },
+        }),
+        ingress("promo", "promo.example.com", { annotations: ON_WEB }),
       ],
       services: [service("web")],
     });
@@ -275,7 +288,9 @@ describe("the routing map", () => {
   /** TLS ending at a load balancer in front is TLS; the page row said so and the map beside it said "no TLS" in warn. */
   it("tags a host TLS when something in front terminates it", () => {
     const map = mapOf({
-      ingresses: [ingress("promo", "promo.example.com")],
+      ingresses: [
+        ingress("promo", "promo.example.com", { annotations: ON_WEB }),
+      ],
       services: [service("web")],
       upstreamTls: () => true,
     });
@@ -286,7 +301,9 @@ describe("the routing map", () => {
   /** A supplier in front that could not say is not "no TLS"; fails if the unknown is read as none. */
   it("tags a host as not checked when what is in front could not say", () => {
     const map = mapOf({
-      ingresses: [ingress("promo", "promo.example.com")],
+      ingresses: [
+        ingress("promo", "promo.example.com", { annotations: ON_WEB }),
+      ],
       services: [service("web")],
       upstreamTls: () => "unknown",
     });

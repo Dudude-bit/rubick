@@ -102,9 +102,9 @@ export function routingMap(
       }
 
       // Only a real Service gets a node. Traefik's own internals have no
-      // endpoints by design and an API-object backend cannot be seen into;
-      // drawing either as a backend that publishes nothing would be the map
-      // inventing an outage out of a supported configuration.
+      // endpoints by design, and drawing them as a backend that publishes
+      // nothing would invent an outage. An API-object backend is one Traefik
+      // drops, which the host's own finding already says.
       const service = route.service;
       if (!service?.kubernetes) continue;
       const serviceId = `service/${service.namespace}/${service.name}`;

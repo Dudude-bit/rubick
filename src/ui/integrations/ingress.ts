@@ -539,12 +539,13 @@ export function edgeTlsOf(
  * Each used to ask its own question, and one row said "no TLS" on the left
  * and "TLS not checked" on the right.
  */
-export type HostTls = { at: "own"; secret: string } | EdgeTls;
+export type HostTls = { at: "own"; secret: string | null } | EdgeTls;
 
 export function hostTlsWords(tls: HostTls, t: T): string {
-  return tls.at === "own"
+  if (tls.at !== "own") return edgeTlsWords(tls, t);
+  return tls.secret
     ? t("empty", "tlsFrom", { name: tls.secret })
-    : edgeTlsWords(tls, t);
+    : t("empty", "tlsControllerCertificate");
 }
 
 export function hostTlsTag(

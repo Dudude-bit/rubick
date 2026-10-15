@@ -33,7 +33,8 @@ import { settleFrontedRoutes } from "@/lib/fronted-tls";
 import type { IngressInfo, ServiceInfo } from "@/generated/types";
 import type { IngressTls } from "../registry";
 import { servedGroupName } from "./data";
-import { routeIsSecure, serviceRoutes } from "./routes";
+import { routeIsSecure } from "./model";
+import { serviceRoutes } from "./routes";
 
 const WEB: EntryPoint = {
   name: "web",
@@ -71,8 +72,25 @@ const route = (overrides: Partial<TraefikRoute> = {}): TraefikRoute =>
   }) as TraefikRoute;
 
 describe("whether a route is served over TLS", () => {
-  it("takes a named Secret as the end of the question", () => {
-    expect(routeIsSecure(route({ tlsSecret: "argocd-tls" }), [])).toBe(true);
+  /** Would break if the router's own TLS waited on entry points nobody read. */
+  it("takes the router's own TLS as the end of the question", () => {
+    expect(
+      routeIsSecure(route({ tlsSecret: "argocd-tls", declaresTls: true }), [])
+    ).toBe(true);
+  });
+
+  /**
+   * An Ingress's `spec.tls` only loads a certificate into Traefik. Read as
+   * TLS, the page printed "over HTTPS" for a router that answers plain HTTP
+   * on `web` and nothing on 443.
+   */
+  it("does not take a Secret named in spec.tls for TLS on its own", () => {
+    const named = route({
+      source: { kind: "Ingress", name: "promo", namespace: "shop" },
+      tlsSecret: "promo-tls",
+    });
+    expect(routeIsSecure(named, [WEB])).toBe(false);
+    expect(routeIsSecure(named, [])).toBeNull();
   });
 
   /**

@@ -6,7 +6,7 @@ import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { T } from "@/i18n/useT";
 import { hostRole, hostTlsWords } from "../ingress";
 import type { ControllerInfo } from "./data";
-import { type HostGroup, UNNAMED_TARGET } from "./model";
+import { type HostGroup, servedUnder, UNNAMED_TARGET } from "./model";
 import { describePath } from "./rule";
 
 /**
@@ -46,8 +46,8 @@ export function routesTableSection(
         // The host's TLS as the status list reads it, not only the Secret
         // this one router names: "none" beside "TLS not checked" is two answers.
         {
-          text: route.tlsSecret ?? hostTlsWords(group.tls, t),
-          role: route.tlsSecret
+          text: servedUnder(group, route) ?? hostTlsWords(group.tls, t),
+          role: servedUnder(group, route)
             ? undefined
             : group.tls.at === "unknown"
               ? ("neutral" as const)
