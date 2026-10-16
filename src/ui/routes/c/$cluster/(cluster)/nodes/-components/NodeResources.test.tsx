@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import type { NodeBudget } from "@/generated/types";
 import { translate } from "@/i18n";
 import { useLocaleStore } from "@/stores/localeStore";
+import { MetricsAbsenceContext } from "@/lib/metrics-absence";
 import { NodeResources } from "./NodeResources";
 
 function budget(cpu: Partial<NodeBudget["resources"][number]>): NodeBudget {
@@ -141,5 +142,67 @@ describe("the table at the narrowest window", () => {
       "[&_th]:whitespace-normal"
     );
     expect(table.parentElement).toHaveClass("overflow-auto");
+  });
+});
+
+describe("what the node's Used column says without a figure", () => {
+  const withHugepages = (): NodeBudget => {
+    const base = budget({});
+    return {
+      ...base,
+      resources: [
+        ...base.resources,
+        {
+          name: "hugepages-2Mi",
+          unit: "memory",
+          capacity: 0,
+          allocatable: 0,
+          requested: 0,
+          limited: 0,
+          extended: true,
+        },
+      ],
+    };
+  };
+
+  /**
+   * Every hugepages and ephemeral-storage row said "metrics-server not
+   * installed", which no install would change. Fails if a row
+   * metrics-server never measures blames its absence.
+   */
+  it("blames a missing metrics-server only on the rows it would measure", () => {
+    render(
+      <MetricsAbsenceContext.Provider value="notInstalled">
+        <NodeResources
+          budget={withHugepages()}
+          error={null}
+          onRetry={() => {}}
+          usage={null}
+        />
+      </MetricsAbsenceContext.Provider>
+    );
+    const cells = (name: RegExp) =>
+      within(screen.getByRole("row", { name })).getAllByRole("cell");
+    expect(cells(/^cpu/).at(-1)).toHaveTextContent(
+      "metrics-server not installed"
+    );
+    expect(cells(/^hugepages-2Mi/).at(-1)).toHaveTextContent("no usage source");
+  });
+
+  /** Fails if a CPU row waiting on its first sample claims there is nothing to read it from. */
+  it("says the CPU row has no sample yet where metrics-server is there", () => {
+    render(
+      <NodeResources
+        budget={withHugepages()}
+        error={null}
+        onRetry={() => {}}
+        usage={null}
+      />
+    );
+    expect(
+      within(screen.getByRole("row", { name: /^cpu/ }))
+        .getAllByRole("cell")
+        .at(-1)
+    ).toHaveTextContent("no sample yet");
   });
 });

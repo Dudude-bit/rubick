@@ -176,6 +176,7 @@ export function NodeResources({
                   of={row.allocatable}
                   unknown={!budget?.known && row.name === "pods"}
                   noSource={used === null}
+                  metered={METERED.has(row.name)}
                 />
               </TableRow>
             );
@@ -190,6 +191,9 @@ export function NodeResources({
     </Section>
   );
 }
+
+/** The resources metrics-server measures; it says nothing of storage or hugepages, installed or not. */
+const METERED: ReadonlySet<string> = new Set(["cpu", "memory"]);
 
 /** What is in use, from the only sources that exist for it. */
 function usedOf(row: ResourceBudget, usage: NodeUsage | null): number | null {
@@ -214,6 +218,7 @@ function Figure({
   unknown = false,
   none = false,
   noSource = false,
+  metered = false,
 }: {
   unit: ResourceBudget["unit"];
   cores: boolean;
@@ -222,6 +227,7 @@ function Figure({
   unknown?: boolean;
   none?: boolean;
   noSource?: boolean;
+  metered?: boolean;
 }) {
   const t = useT();
   const absence = useMetricsAbsence();
@@ -239,17 +245,18 @@ function Figure({
       </TableCell>
     );
   }
-  if (value === null && noSource && absence !== null) {
-    return (
-      <TableCell className="text-right text-fg-fnt">
-        {t("cluster", ABSENCE_SHORT[absence])}
-      </TableCell>
-    );
-  }
   if (value === null) {
     return (
       <TableCell className="text-right text-fg-fnt">
-        {noSource ? t("empty", "noUsageSource") : <None />}
+        {!noSource ? (
+          <None />
+        ) : !metered ? (
+          t("empty", "noUsageSource")
+        ) : absence !== null ? (
+          t("cluster", ABSENCE_SHORT[absence])
+        ) : (
+          t("cluster", "metricNoSampleYet")
+        )}
       </TableCell>
     );
   }
