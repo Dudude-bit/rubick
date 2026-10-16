@@ -6799,6 +6799,8 @@ export const ru: Catalogue = {
       "{vendor} не ответил: {reason}. Это окно приложение наблюдало само; более длинные интервалы недоступны, пока он не вернётся.",
     longerNeedsPrometheus:
       "Для более длинных интервалов нужен Prometheus: {link}.",
+    historyNeedsPrometheus:
+      "Без metrics-server их за период может показать Prometheus: {link}.",
     trendsNeedPrometheus: "Для загрузки за период нужен Prometheus: {link}.",
     trendsSortNote:
       "сначала с наименьшим запасом; каждая точка показывает пик своего интервала",

@@ -363,7 +363,7 @@ export function UsageBlock({
          *  Prometheus read that failed there is nothing to draw, and this
          *  note is the only place that failure is spoken. Inside, it was
          *  the silent fallback its own doc comment warns about. */}
-        <HistoryNote state={past} />
+        <HistoryNote state={past} available={available} />
         {children}
       </div>
       {storage && <StorageRow summary={storage} />}
@@ -384,7 +384,14 @@ export function UsageBlock({
  * identical to one that was never configured, and the reader concludes the
  * feature is broken rather than their Prometheus.
  */
-function HistoryNote({ state }: { state: RangedHistory }) {
+function HistoryNote({
+  state,
+  available,
+}: {
+  state: RangedHistory;
+  /** With no live window, "longer than this" points at nothing. */
+  available: boolean;
+}) {
   const t = useT();
   if (state.status === "unreachable") {
     return (
@@ -399,16 +406,22 @@ function HistoryNote({ state }: { state: RangedHistory }) {
   if (state.status === "absent" && state.offerable) {
     return (
       <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
-        {parts(t("empty", "longerNeedsPrometheus"), {
-          link: (
-            <Link
-              {...pageLink("integrations")}
-              className="text-info hover:underline"
-            >
-              {t("action", "connectOne")}
-            </Link>
+        {parts(
+          t(
+            "empty",
+            available ? "longerNeedsPrometheus" : "historyNeedsPrometheus"
           ),
-        })}
+          {
+            link: (
+              <Link
+                {...pageLink("integrations")}
+                className="text-info hover:underline"
+              >
+                {t("action", "connectOne")}
+              </Link>
+            ),
+          }
+        )}
       </p>
     );
   }

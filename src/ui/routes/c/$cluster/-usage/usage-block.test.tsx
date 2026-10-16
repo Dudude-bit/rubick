@@ -498,6 +498,35 @@ describe("UsageBlock and a history supplier", () => {
   });
 
   /**
+   * With metrics-server not installed the offer read "Longer than this",
+   * under two rows saying there is no "this". Fails if it does again, or
+   * the offer goes.
+   */
+  it("not configured and no metrics-server: offers the history without a window to be longer than", async () => {
+    await wrap(
+      <UsageBlock
+        {...live}
+        uid="uid-10-absent"
+        cpu={null}
+        memory={null}
+        sampledAt={null}
+        status={{ status: "notInstalled", message: null }}
+      />
+    );
+
+    expect(
+      await screen.findByText(
+        /Without metrics-server, a Prometheus can still draw these over time/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Longer than this/)).toBeNull();
+    expect(screen.getByRole("link", { name: "connect one" })).toHaveAttribute(
+      "href",
+      "/c/prod/integrations"
+    );
+  });
+
+  /**
    * Would break if the ranges stopped coming alive, or if the chart stopped
    * saying where its numbers came from. A chart whose provenance is unstated
    * is a chart nobody can check.

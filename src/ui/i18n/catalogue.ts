@@ -6130,6 +6130,8 @@ export const en = {
     vendorDidNotAnswer:
       "{vendor} did not answer: {reason}. This is the window the app watched itself; the longer ranges are gone until it is back.",
     longerNeedsPrometheus: "Longer than this needs a Prometheus: {link}.",
+    historyNeedsPrometheus:
+      "Without metrics-server, a Prometheus can still draw these over time: {link}.",
     trendsNeedPrometheus: "Utilisation over time needs a Prometheus: {link}.",
     trendsSortNote: "least headroom first, each point the peak of its bucket",
     nodesFromPods:
