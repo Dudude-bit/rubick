@@ -260,7 +260,8 @@ describe("trafficDoors", () => {
 
   /**
    * A Gateway its controller did not program answers nothing on any door,
-   * and its doors read as open. Fails if the door does not wear the word.
+   * and its doors read as open. Fails if the door does not wear the word,
+   * or wears the route's refusal that follows from it instead.
    */
   it("marks a door on a Gateway its controller did not program", () => {
     const route = ref("HTTPRoute", "promo");
@@ -282,6 +283,13 @@ describe("trafficDoors", () => {
             gateway: gatewayRef("edge"),
             conditionType: "Programmed",
             conditionReason: "AddressNotAssigned",
+            message: null,
+          },
+          {
+            reason: "routeNotAccepted",
+            route,
+            gateway: gatewayRef("edge"),
+            conditionReason: "NotAllowedByListeners",
             message: null,
           },
         ],

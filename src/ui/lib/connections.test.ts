@@ -24,6 +24,7 @@ import {
 import type { DoorAsk, DoorRead } from "./policy-door";
 import type {
   ChainStop,
+  ConditionInfo,
   PolicyDoor,
   NotServing,
   PublishedEndpoint,
@@ -616,21 +617,33 @@ describe("the traffic chain", () => {
 
   /**
    * A Gateway its controller did not program serves nothing, and the chain
-   * drew the route through it unbroken. Fails if the stop is not drawn, or
-   * if it claims the route's address on a second, programmed Gateway.
+   * drew the route through it unbroken. Fails if the stop is not drawn, if
+   * it does not name the listener the controller refused, if the route's
+   * refusal under it is said again, or if it claims the route's address on a
+   * second, programmed Gateway.
    */
   it("stops a route at a Gateway its controller did not program, and only there", () => {
     const deployment = ref("Deployment", "promo");
     const svc = service("promo", "app=promo");
     const route = ref("HTTPRoute", "promo");
-    const at = (name: string, port: number) =>
+    const at = (name: string, port: number, conditions: ConditionInfo[]) =>
       ref("Gateway", name, {
         kind: "gateway",
-        listeners: [listener("web", "HTTP", port, "*.example.com")],
+        listeners: [
+          { ...listener("web", "HTTP", port, "*.example.com"), conditions },
+        ],
         className: "envoy",
       });
-    const edge = at("edge", 8000);
-    const inner = at("inner", 9000);
+    const edge = at("edge", 8000, [
+      {
+        type: "Accepted",
+        status: "False",
+        reason: "PortUnavailable",
+        message: "no entrypoint for port 8000",
+        lastTransitionTime: null,
+      },
+    ]);
+    const inner = at("inner", 9000, []);
     const attaches = (gateway: ObjectRef): ConnectionEdge => ({
       from: route,
       to: gateway,
@@ -673,16 +686,28 @@ describe("the traffic chain", () => {
             conditionReason: "AddressNotAssigned",
             message: "no address was assigned",
           },
+          {
+            reason: "routeNotAccepted",
+            route,
+            gateway: edge,
+            conditionReason: "NotAllowedByListeners",
+            message: null,
+          },
         ]
       ),
       t
     )[0];
 
-    const stop = path.hops.find((hop) => hop.at === "stop");
-    if (!stop || stop.at !== "stop") throw new Error("expected a stop hop");
+    const stops = path.hops.filter((hop) => hop.at === "stop");
+    expect(stops).toHaveLength(1);
+    const [stop] = stops;
+    if (stop.at !== "stop") throw new Error("expected a stop hop");
     expect(stop.title).toBe("edge is not programmed");
     expect(stop.note).toContain(
       "Programmed: False (AddressNotAssigned): no address was assigned."
+    );
+    expect(stop.note).toContain(
+      "Listener web: PortUnavailable: no entrypoint for port 8000."
     );
     expect(stop.only).toEqual(["http://promo.example.com:8000/"]);
     expect(path.broken).toBe(true);

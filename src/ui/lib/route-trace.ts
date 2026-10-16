@@ -32,9 +32,9 @@ import {
   type Backing,
   type BackingSources,
 } from "@/integrations";
-import { failingCondition } from "@/lib/condition-health";
+import { conditionSaid, failingCondition } from "@/lib/condition-health";
 import { describeStop, stopMood } from "@/lib/connections";
-import { pickListeners } from "@/lib/gateway-listeners";
+import { listenerRefusals, pickListeners } from "@/lib/gateway-listeners";
 import type { T } from "@/i18n/useT";
 import { doorDoubtWords, isPolicyStop, type DoorAsk } from "@/lib/policy-door";
 import { saidOf, statusesFor, verdictOf } from "@/lib/route-verdict";
@@ -390,9 +390,6 @@ export function answeredByItsController(
   return addressedToController(route, controllerName);
 }
 
-const said = (c: ConditionInfo): string =>
-  [c.reason, c.message].filter(Boolean).join(": ") || `${c.type}: ${c.status}`;
-
 /** The staleness trap: a verdict written about an older spec generation. */
 function freshnessOf(
   condition: ConditionInfo | undefined,
@@ -480,7 +477,7 @@ function classStep(
       detail: {
         title: t("empty", "gwClassUnclaimedTitle", { name: gateway.className }),
         body: refused
-          ? t("empty", "gwClassRefusedBody", { said: said(refused) })
+          ? t("empty", "gwClassRefusedBody", { said: conditionSaid(refused) })
           : t("empty", "gwClassSilentBody", {
               controller: cls.controllerName,
             }),
@@ -563,18 +560,10 @@ function gatewayStep(
       detail: {
         title: t("empty", "gwNotProgrammedTitle"),
         body: [
-          t("empty", "gwNotProgrammedBody", { said: said(programmed) }),
-          ...gateway.listeners.flatMap((listener) => {
-            const refused = failingCondition(listener.conditions);
-            return refused
-              ? [
-                  t("empty", "gwListenerRefusedSaid", {
-                    name: listener.name,
-                    said: said(refused),
-                  }),
-                ]
-              : [];
+          t("empty", "gwNotProgrammedBody", {
+            said: conditionSaid(programmed),
           }),
+          ...listenerRefusals(gateway.listeners, t),
         ].join(" "),
       },
     };
@@ -743,7 +732,7 @@ function acceptanceSteps(
     // outright, and blaming the namespace sent the reader to the wrong fix.
     const refused = listeners.flatMap((listener) => {
       const failing = failingCondition(listener.conditions);
-      return failing ? [{ name: listener.name, failing }] : [];
+      return failing ? [failing] : [];
     });
     if (
       accepted.reason === "NotAllowedByListeners" &&
@@ -756,18 +745,15 @@ function acceptanceSteps(
           state: "err",
           say: t("empty", "gwListenerRefusedSay", { label }),
           who: "infra",
-          short: refused[0].failing.reason ?? t("empty", "gwRefusedWord"),
+          short: refused[0].reason ?? t("empty", "gwRefusedWord"),
           freshness,
           detail: {
             title: t("empty", "gwListenerRefusedTitle"),
             body: [
-              t("empty", "gwListenerRefusedBody", { said: said(accepted) }),
-              ...refused.map(({ name, failing }) =>
-                t("empty", "gwListenerRefusedSaid", {
-                  name,
-                  said: said(failing),
-                })
-              ),
+              t("empty", "gwListenerRefusedBody", {
+                said: conditionSaid(accepted),
+              }),
+              ...listenerRefusals(listeners, t),
             ].join(" "),
           },
         },
@@ -802,7 +788,9 @@ function acceptanceSteps(
           freshness,
           detail: {
             title: t("empty", "gwNsNotAllowedTitle"),
-            body: t("empty", "gwNsNotAllowedBody", { said: said(accepted) }),
+            body: t("empty", "gwNsNotAllowedBody", {
+              said: conditionSaid(accepted),
+            }),
             quote: {
               asks: route.namespace,
               serves: listeners
@@ -828,7 +816,9 @@ function acceptanceSteps(
           title: hostnameMiss
             ? t("empty", "gwHostnamesTitle")
             : t("empty", "gwRouteRefusedTitle"),
-          body: t("empty", "gwRouteRefusedBody", { said: said(accepted) }),
+          body: t("empty", "gwRouteRefusedBody", {
+            said: conditionSaid(accepted),
+          }),
           quote: hostnameMiss
             ? {
                 asks: route.hostnames.join(", ") || t("empty", "anyHost"),
@@ -975,7 +965,9 @@ function refsStep(
         freshness,
         detail: {
           title: t("empty", "gwRefNotPermittedTitle", { namespace: target }),
-          body: t("empty", "gwRefNotPermittedBody", { said: said(resolved) }),
+          body: t("empty", "gwRefNotPermittedBody", {
+            said: conditionSaid(resolved),
+          }),
           scaffold: grantScaffold(route, target),
         },
       };
@@ -992,7 +984,7 @@ function refsStep(
       freshness,
       detail: {
         title: "ResolvedRefs: False",
-        body: `${said(resolved)}.`,
+        body: `${conditionSaid(resolved)}.`,
       },
     };
   }

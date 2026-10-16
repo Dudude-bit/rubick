@@ -20,7 +20,11 @@ import { rolloutLine, rolloutVerdict } from "./workload-status";
 import { exitUnreported, upBetweenCrashes } from "./share/pod-status";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
-import { pickListeners, routeUrlsOn } from "./gateway-listeners";
+import {
+  listenerRefusals,
+  pickListeners,
+  routeUrlsOn,
+} from "./gateway-listeners";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
 import type { RouteTls } from "./ingress-tls";
 import { clusterIpText } from "./cluster-ip";
@@ -1459,20 +1463,42 @@ export function trafficChains(
             });
           }
           hops.push(gatewayRouteHop(mine, route, t));
+          // Under a Gateway its controller refused, the route's own refusal
+          // is that refusal again: the trace stops at the Gateway too.
+          const refusedAt = conns.stops.flatMap((entry) =>
+            entry.reason === "gatewayNotProgrammed" &&
+            sameObject(entry.route, route)
+              ? [entry.gateway]
+              : []
+          );
           for (const entry of conns.stops) {
-            if ("route" in entry && sameObject(entry.route, route)) {
-              // A refusal by one Gateway leaves the route's addresses on another standing.
-              const only =
-                "gateway" in entry
-                  ? urlsOn
-                      .filter((on) => sameObject(on.gateway, entry.gateway))
-                      .flatMap((on) => on.urls)
-                  : routeUrls;
-              hops.push({
-                ...chainStopHop(entry, subject, t, own),
-                only: [...new Set(only)],
-              });
-            }
+            if (!("route" in entry) || !sameObject(entry.route, route))
+              continue;
+            if (
+              entry.reason === "routeNotAccepted" &&
+              refusedAt.some((gateway) => sameObject(gateway, entry.gateway))
+            )
+              continue;
+            // A refusal by one Gateway leaves the route's addresses on another standing.
+            const on =
+              "gateway" in entry
+                ? urlsOn.filter((at) => sameObject(at.gateway, entry.gateway))
+                : null;
+            const facts =
+              entry.reason === "gatewayNotProgrammed"
+                ? on?.[0]?.gateway.facts
+                : null;
+            const hop = chainStopHop(entry, subject, t, own);
+            hops.push({
+              ...hop,
+              note:
+                facts?.kind === "gateway"
+                  ? [hop.note, ...listenerRefusals(facts.listeners, t)].join(
+                      " "
+                    )
+                  : hop.note,
+              only: [...new Set(on ? on.flatMap((at) => at.urls) : routeUrls)],
+            });
           }
         }
         hops.push(serviceHop(service, subject.kind === "Service", t));

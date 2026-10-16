@@ -1,4 +1,6 @@
 import type { ListenerInfo, ObjectName } from "@/generated/types";
+import type { T } from "@/i18n/useT";
+import { conditionSaid, failingCondition } from "@/lib/condition-health";
 
 /** What a parentRef says about the listeners it means. */
 export interface ListenerPick {
@@ -73,4 +75,19 @@ export function routeUrlsOn(
       })
     ),
   ];
+}
+
+/** Each listener its controller refused, and what it said about it. */
+export function listenerRefusals(listeners: ListenerInfo[], t: T): string[] {
+  return listeners.flatMap((listener) => {
+    const failing = failingCondition(listener.conditions);
+    return failing
+      ? [
+          t("empty", "gwListenerRefusedSaid", {
+            name: listener.name,
+            said: conditionSaid(failing),
+          }),
+        ]
+      : [];
+  });
 }

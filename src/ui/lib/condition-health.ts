@@ -124,3 +124,7 @@ export function cautioningCondition(
     conditions.find((condition) => conditionRole(condition) === "warn") ?? null
   );
 }
+
+/** What the controller said, in its own words: reason and message, else type and status. */
+export const conditionSaid = (c: ConditionInfo): string =>
+  [c.reason, c.message].filter(Boolean).join(": ") || `${c.type}: ${c.status}`;

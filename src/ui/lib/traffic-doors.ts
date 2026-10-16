@@ -132,7 +132,9 @@ export function trafficDoors(
     const word = brokenWord(stop, t);
     if (!word || !("route" in stop)) continue;
     if ("gateway" in stop) {
-      brokenPerGateway.set(`${key(stop.route)}@${key(stop.gateway)}`, word);
+      // The Gateway's own refusal comes first and is the one to say.
+      const at = `${key(stop.route)}@${key(stop.gateway)}`;
+      if (!brokenPerGateway.has(at)) brokenPerGateway.set(at, word);
     } else {
       brokenPerRoute.set(key(stop.route), word);
     }
