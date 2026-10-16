@@ -548,6 +548,22 @@ describe("gapsOf", () => {
     ]);
   });
 
+  /**
+   * Two runs killed seconds apart, the second before its first heartbeat,
+   * drew "Not observed for 23 seconds" and "for 33 seconds" back to back.
+   * Fails if a span that saw no moment splits a gap.
+   */
+  it("draws one gap across a run that closed where it began", () => {
+    const gaps = gapsOf(
+      [span(T0, T0 + HOUR), span(T0 + 2 * HOUR, T0 + 2 * HOUR)],
+      T0,
+      T0 + 3 * HOUR
+    );
+    expect(gaps).toEqual([
+      { from: T0 + HOUR, to: T0 + 3 * HOUR, running: true },
+    ]);
+  });
+
   it("is the whole window when nothing was ever watched", () => {
     expect(gapsOf([], T0, T0 + HOUR)).toEqual([
       { from: T0, to: T0 + HOUR, running: true },

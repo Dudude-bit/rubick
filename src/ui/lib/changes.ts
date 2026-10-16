@@ -816,7 +816,9 @@ export function gapsOf(
   /** The namespaces the page shows, `[]` for all: a gap where some were watched says which. */
   scope: readonly string[] = []
 ): Gap[] {
+  // A run killed before its first heartbeat closes where it began: it saw no moment, and split one gap into two.
   const covered = spans
+    .filter((span) => span.to === null || span.to > span.from)
     .map((span) => ({
       from: span.from,
       to: span.to ?? Math.max(span.seenAt, to),
