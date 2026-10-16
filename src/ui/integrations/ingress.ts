@@ -162,6 +162,8 @@ export interface BackingSources {
   backingKnown: boolean;
   /** Why they were not read, where they could not be; null while reading. */
   backingError: string | null;
+  /** The namespaces read on their own where the cluster could not be; see {@link backingReadIn}. */
+  readIn?: string[];
   /** The page's own controller, judged at each backend's NetworkPolicies; absent, nobody is. */
   door?: PageDoor;
 }
@@ -192,11 +194,18 @@ export function backingFrom(
   return {
     services: data?.services ?? [],
     published: data?.published ?? [],
-    backingKnown: data !== undefined,
-    backingError: data === undefined && error ? errorToShow(error) : null,
+    backingKnown: data !== undefined && !data.partial,
+    backingError:
+      data?.partial?.refused ??
+      (data === undefined && error ? errorToShow(error) : null),
+    readIn: data?.partial?.readIn ?? [],
     door,
   };
 }
+
+/** Whether the Services of one namespace were read: with the cluster's, or on their own. */
+export const backingReadIn = (sources: BackingSources, namespace: string) =>
+  sources.backingKnown || (sources.readIn?.includes(namespace) ?? false);
 
 /**
  * A host's place in a list ordered by trouble. With nothing found and its
@@ -243,7 +252,9 @@ export function backingOf(
   from: { kind: string; name: string; namespace: string },
   sources: BackingSources
 ): Backing {
-  const known = sources.backingKnown;
+  const known = backend
+    ? backingReadIn(sources, backend.namespace)
+    : sources.backingKnown;
   const error = known ? null : sources.backingError;
   const empty: Backing = {
     service: undefined,
@@ -434,6 +445,8 @@ export interface BackingLists {
   published: ServicePublished[];
   /** When the lists were asked for, where the read says. */
   readAt?: string;
+  /** Where the cluster refused: the namespaces read instead, and the refusal for the rest. */
+  partial?: { readIn: string[]; refused: string };
 }
 
 /** A minute: routing changes with a deploy, not by the second. */
@@ -453,14 +466,59 @@ export const backingListsKey = (context: string | null) => [
   "backing",
 ];
 
+async function backingIn(
+  scope: string[],
+  refusal: unknown
+): Promise<BackingLists> {
+  const answers = await Promise.allSettled(
+    scope.map((namespace) => commands.listServiceBacking(namespace))
+  );
+  const read = answers.flatMap((answer, index) =>
+    answer.status === "fulfilled"
+      ? [{ namespace: scope[index], lists: answer.value }]
+      : []
+  );
+  if (read.length === 0) throw refusal;
+  return {
+    services: read.flatMap(({ lists }) => lists.services),
+    published: read.flatMap(({ lists }) => lists.published),
+    readAt: read.map(({ lists }) => lists.readAt).sort()[0],
+    partial: {
+      readIn: read.map(({ namespace }) => namespace),
+      refused: errorToShow(refusal),
+    },
+  };
+}
+
+/**
+ * The cluster's lists, or where the cluster refuses, the window's namespaces'.
+ * A reader bound to their namespaces was told every backend was unread while
+ * the Services under their own routes were theirs to read.
+ */
 export function useBackingLists(enabled = true) {
   const context = useClusterStore((state) => state.currentContext);
-  return useQuery({
+  const scope = useClusterStore((state) => state.namespaceScope);
+  const cluster = useQuery({
     queryKey: backingListsKey(context),
     queryFn: (): Promise<BackingLists> => commands.listServiceBacking(null),
     staleTime: ROUTING_STALE,
     enabled,
   });
+  const refusal = cluster.error;
+  const fallback = refusal !== null && isRefusal(refusal) && scope.length > 0;
+  const scoped = useQuery({
+    queryKey: [...backingListsKey(context), scope],
+    queryFn: () => backingIn(scope, refusal),
+    staleTime: ROUTING_STALE,
+    enabled: enabled && fallback,
+  });
+  const read = fallback ? scoped : cluster;
+  return {
+    data: read.data,
+    error: read.error,
+    dataUpdatedAt: read.dataUpdatedAt,
+    isPending: read.isPending,
+  };
 }
 
 /**

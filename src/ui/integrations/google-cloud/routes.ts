@@ -31,6 +31,7 @@ import { covers } from "@/lib/certificates";
 import type { T } from "@/i18n/useT";
 import type { Saying } from "@/i18n/say";
 import {
+  backingReadIn,
   backingOf,
   worstOf,
   type Backing,
@@ -534,9 +535,11 @@ export function hostsOf(sources: GkeSources): GkeHost[] {
       fronts: bucket.fronts,
       findings,
       worst: worstOf(findings),
-      backendsKnown:
-        sources.backingKnown ||
-        !bucket.routes.some((route) => route.backend !== null),
+      backendsKnown: !bucket.routes.some(
+        (route) =>
+          route.backend !== null &&
+          !backingReadIn(sources, route.ingress.namespace)
+      ),
       namesKnown: !namesUnread(bucket.routes, bucket.fronts),
     };
   });

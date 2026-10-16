@@ -27,6 +27,7 @@ import type {
   ServiceInfo,
 } from "@/generated/types";
 import {
+  backingReadIn,
   backingOf as backingOfBackend,
   SEVERITY_RANK as RANK,
   worstOf,
@@ -609,7 +610,13 @@ export function hostGroups(sources: IstioSources, t: T): IstioHostGroup[] {
           sources.backingKnown ||
           !routes.some((route) =>
             route.destinations.some(
-              (destination) => destination.external !== true
+              ({ external, service }) =>
+                external !== true &&
+                !(
+                  external === false &&
+                  service &&
+                  backingReadIn(sources, service.namespace)
+                )
             )
           ),
         tls: { at: "notJudged" },

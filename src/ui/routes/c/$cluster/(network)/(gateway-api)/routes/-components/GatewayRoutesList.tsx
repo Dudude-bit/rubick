@@ -286,6 +286,24 @@ function GroupCap({
   );
 }
 
+function UnsettledRows({ rows, why }: { rows: RouteRow[]; why: string }) {
+  if (rows.length === 0) return null;
+  return (
+    <>
+      <p className="px-0.5 pb-1.5 pt-4 text-[11px] text-fg-fnt">{why}</p>
+      <div className="border-t border-hair">
+        {rows.map((row) => (
+          <Row
+            key={`${row.kind}/${row.namespace}/${row.name}`}
+            row={row}
+            muted
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function GatewayRoutesList() {
   const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
@@ -454,7 +472,7 @@ export function GatewayRoutesList() {
           refusedKinds.length > 0 ? undefined : (
             <span className="tabular-nums">
               {total + board.mesh.length}
-              {board.verdictsKnown && board.notServing.length > 0 && (
+              {board.notServing.length > 0 && (
                 <>
                   {" · "}
                   <button
@@ -627,30 +645,38 @@ export function GatewayRoutesList() {
           </p>
         ) : !board.verdictsKnown ? (
           <>
-            <p className="px-0.5 pb-1.5 pt-4 text-[11px] text-fg-fnt">
-              {/* Still reading and could not read look the same from here —
-                  both leave `data` undefined — but they are not the same
-                  thing to wait for. */}
-              {gateways.error || classes.error
-                ? t("empty", "gwCouldNotReadVerdicts")
-                : backing.error
-                  ? t("empty", "gwCouldNotReadBacking")
-                  : t("empty", "gwReadingVerdicts")}
-            </p>
-            <div className="border-t border-hair">
-              {[
-                ...board.notServing,
-                ...board.unknown,
-                ...board.serving,
-                ...board.mesh,
-              ].map((row) => (
-                <Row
-                  key={`${row.kind}/${row.namespace}/${row.name}`}
-                  row={row}
-                  muted
+            {board.notServing.length > 0 && (
+              <>
+                <GroupCap
+                  label={t("empty", "gwNotServing")}
+                  count={board.notServing.length}
+                  tone="err"
                 />
-              ))}
-            </div>
+                <div className="border-t border-hair">
+                  {board.notServing.map((row) => (
+                    <Row
+                      key={`${row.kind}/${row.namespace}/${row.name}`}
+                      row={row}
+                      muted={false}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+            {!brokenOnly && (
+              <UnsettledRows
+                rows={[...board.unknown, ...board.serving, ...board.mesh]}
+                // Still reading and could not read both leave `data`
+                // undefined, but they are not the same thing to wait for.
+                why={
+                  gateways.error || classes.error
+                    ? t("empty", "gwCouldNotReadVerdicts")
+                    : backing.error
+                      ? t("empty", "gwCouldNotReadBacking")
+                      : t("empty", "gwReadingVerdicts")
+                }
+              />
+            )}
           </>
         ) : (
           <>

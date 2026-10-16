@@ -1167,6 +1167,38 @@ describe("routeTraces", () => {
     expect(trace.servingKnown).toBe(false);
   });
 
+  /**
+   * A reader bound to their namespaces could not list Services across the
+   * cluster, and every backend read as unread while the ones in their own
+   * namespace were theirs to read. Fails if a namespace read on its own is
+   * not judged, or if one outside it is.
+   */
+  it("judges a backend in a namespace read on its own, and leaves one outside it unread", () => {
+    const partial = (readIn: string[]) =>
+      sources({
+        gateways: [],
+        topologyKnown: false,
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: false,
+          backingError: "services is forbidden at the cluster scope",
+          readIn,
+        },
+      });
+
+    const [mine] = routeTraces(route("healthy"), partial(["gwtest"]), t);
+    expect(mine.steps[5]).toMatchObject({ id: "backend", state: "err" });
+    expect(mine.serving).toBe(false);
+    expect(mine.servingKnown).toBe(true);
+
+    const [theirs] = routeTraces(route("healthy"), partial(["other"]), t);
+    expect(theirs.steps[5].state).toBe("blind");
+    expect(theirs.steps[5].detail?.body).toBe(
+      "services is forbidden at the cluster scope"
+    );
+  });
+
   it("keeps each listener's verdict on its own trace when one gateway is named twice", () => {
     const both = route("both", {
       parentRefs: [parentRef2("edge", "http"), parentRef2("edge", "https")],

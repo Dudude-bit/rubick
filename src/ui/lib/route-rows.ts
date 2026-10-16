@@ -28,6 +28,7 @@ import {
   type TraceStepId,
 } from "@/lib/route-trace";
 import type { T } from "@/i18n/useT";
+import { backingReadIn } from "@/integrations";
 
 export interface RouteRow {
   kind: string;
@@ -101,14 +102,15 @@ export function allServing(board: RoutesBoard): boolean {
 /**
  * The routes row's one-pixel opinion for the sidebar: err while anything
  * is dead, warn while a verdict is stale or a host contested — and
- * nothing at all before the verdicts are known, because a guess in the
- * rail is worse than silence.
+ * nothing else before the verdicts are known, because a guess in the
+ * rail is worse than silence. A break is no guess: it is read, never
+ * inferred from what could not be.
  */
 export function boardMark(
   board: RoutesBoard
 ): "warn" | "err" | "unchecked" | undefined {
-  if (!board.verdictsKnown) return undefined;
   if (board.notServing.length > 0) return "err";
+  if (!board.verdictsKnown) return undefined;
   if (board.unknown.length > 0) return "unchecked";
   if (board.serving.some((row) => row.stale != null || row.contested != null)) {
     return "warn";
@@ -386,7 +388,8 @@ export function routesBoard(
     if (gatewayParents.length === 0) {
       const parent = route.parentRefs[0];
       const at = parent.namespace ?? route.namespace;
-      const settled = parent.kind === "Service" && sources.backing.backingKnown;
+      const settled =
+        parent.kind === "Service" && backingReadIn(sources.backing, at);
       const exists =
         settled &&
         sources.backing.services.some(

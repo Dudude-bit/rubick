@@ -78,7 +78,7 @@ export function useRouteBacking(
     if (!follow || speaks || listing || asked.current === data) return;
     asked.current = data;
     setTimeout(
-      () => void client.invalidateQueries({ queryKey: key, exact: true }),
+      () => void client.invalidateQueries({ queryKey: key }),
       FRESH_READ_MS
     );
   });

@@ -29,6 +29,7 @@ import type {
   TlsCertificate,
 } from "@/generated/types";
 import {
+  backingReadIn,
   backingOf as backingOfBackend,
   certificateProblems,
   certificateStateWords,
@@ -1078,8 +1079,11 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
       overTls,
       worst: worstOf(findings.filter((finding) => finding.kind !== "door")),
       doubted: doubts.length > 0,
-      backendsKnown:
-        sources.backingKnown || !own.some((route) => route.service?.kubernetes),
+      backendsKnown: !own.some(
+        (route) =>
+          route.service?.kubernetes &&
+          !backingReadIn(sources, route.service.namespace)
+      ),
       tls: own.some((route) => overTls.get(route.key) === true)
         ? ownTls(tlsSecrets, sources.certificates)
         : clear === "tlsUnknown"

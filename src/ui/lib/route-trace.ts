@@ -26,7 +26,12 @@ import type {
   RouteParentStatusInfo,
   TcpProbe,
 } from "@/generated/types";
-import { backingOf, type Backing, type BackingSources } from "@/integrations";
+import {
+  backingOf,
+  backingReadIn,
+  type Backing,
+  type BackingSources,
+} from "@/integrations";
 import { describeStop, stopMood } from "@/lib/connections";
 import { pickListeners } from "@/lib/gateway-listeners";
 import type { T } from "@/i18n/useT";
@@ -1036,7 +1041,10 @@ function backendSteps(
   }
   // A read that failed is not one still coming. Blind either way, not err:
   // nothing here says the route is broken, only that nobody could look.
-  if (!backing.backingKnown) {
+  const unread = serviceRefs.some(
+    (backend) => !backingReadIn(backing, backend.namespace ?? route.namespace)
+  );
+  if (unread) {
     const failed = backing.backingError;
     const detail = failed
       ? { title: t("empty", "gwBackendsUnread"), body: failed }

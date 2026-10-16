@@ -1154,6 +1154,7 @@ export {
   backingFrom,
   backingListsKey,
   backingOf,
+  backingReadIn,
   stopWeight,
   useBackingLists,
   ROUTING_STALE,

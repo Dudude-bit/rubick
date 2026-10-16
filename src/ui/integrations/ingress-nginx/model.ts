@@ -26,6 +26,7 @@ import type {
 } from "@/generated/types";
 import type { Expiry } from "@/lib/certificates";
 import {
+  backingReadIn,
   backingOf as backingOfBackend,
   certificateProblems,
   certificateStateWords,
@@ -548,8 +549,11 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
       tlsSecrets,
       worst: worstOf(findings.filter((finding) => finding.kind !== "door")),
       doubted: doubts.length > 0,
-      backendsKnown:
-        sources.backingKnown || !own.some((route) => route.service !== null),
+      backendsKnown: !own.some(
+        (route) =>
+          route.service !== null &&
+          !backingReadIn(sources, route.service.namespace)
+      ),
       tls: tlsSecrets[0]
         ? ownTls(tlsSecrets, sources.certificates)
         : clear === "tlsUnknown"

@@ -630,6 +630,26 @@ describe("the sidebar marks", () => {
     expect(boardMark(board)).toBeUndefined();
   });
 
+  /**
+   * A route its controller refused, on a cluster whose gateways the reader
+   * could not list: the rail stayed quiet beside a break that was read, not
+   * guessed. Fails if an unread gateway silences a read break.
+   */
+  it("goes red for a break it read while the gateways could not be", () => {
+    const dead = route("dead", {
+      parents: [parentStatus("edge", [condition("Accepted", "False")])],
+    });
+    const board = routesBoard(
+      [dead, route("healthy")],
+      sources({ gateways: [], topologyKnown: false }),
+      t
+    );
+
+    expect(board.verdictsKnown).toBe(false);
+    expect(board.notServing.map((row) => row.name)).toEqual(["dead"]);
+    expect(boardMark(board)).toBe("err");
+  });
+
   it("goes red when anything is dead, yellow for stale or contested", () => {
     const dead = route("dead", {
       parents: [parentStatus("edge", [condition("Accepted", "False")])],

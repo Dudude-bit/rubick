@@ -101,3 +101,95 @@ describe("the rail's counts over a namespace the cluster does not have", () => {
     expect(screen.queryByTestId("scope-missing-count")).toBeNull();
   });
 });
+
+describe("the Routes row of a reader bound to their namespace", () => {
+  /**
+   * marco may list HTTPRoutes in his namespace and neither GRPCRoutes nor
+   * Gateways. The routes page put his refused route under "Not serving",
+   * and the rail beside it stayed blank: a count nobody could finish took
+   * the break's dot down with it. Fails if an unknown count hides a read break.
+   */
+  it("wears the broken dot beside a count it could not finish", async () => {
+    const { commands } = await import("@/lib/commands");
+    const edge = {
+      group: "gateway.networking.k8s.io",
+      kind: "Gateway",
+      name: "edge",
+      namespace: "infra",
+      sectionName: null,
+      port: null,
+    };
+    const kind = (name: string, plural: string) => ({
+      kind: name,
+      plural,
+      versions: ["v1"],
+      readVersion: "v1",
+    });
+    vi.mocked(commands.detectGatewayApi).mockResolvedValue({
+      installed: true,
+      bundleVersion: null,
+      channel: null,
+      mixedBundle: null,
+      kinds: [
+        kind("Gateway", "gateways"),
+        kind("HTTPRoute", "httproutes"),
+        kind("GRPCRoute", "grpcroutes"),
+      ],
+    } as never);
+    vi.mocked(commands.listGateways).mockRejectedValue({
+      code: "PERMISSION_DENIED",
+      message: "gateways is forbidden",
+    });
+    vi.mocked(commands.listGatewayRoutesIn).mockImplementation((async (
+      routeKind: string
+    ) => {
+      if (routeKind === "GRPCRoute") {
+        throw { code: "PERMISSION_DENIED", message: "grpcroutes is forbidden" };
+      }
+      return {
+        rows: [
+          {
+            uid: "",
+            kind: "HTTPRoute",
+            apiVersion: "gateway.networking.k8s.io/v1",
+            name: "checkout",
+            namespace: "lena",
+            hostnames: ["checkout.example.com"],
+            parentRefs: [edge],
+            rules: [],
+            parents: [
+              {
+                parent: edge,
+                controllerName: "example.net/gateway",
+                conditions: [
+                  {
+                    type: "Accepted",
+                    status: "False",
+                    reason: "NoMatchingListenerHostname",
+                    message: null,
+                    lastTransitionTime: null,
+                    observedGeneration: 1,
+                  },
+                ],
+              },
+            ],
+            generation: 1,
+            labels: {},
+            annotations: {},
+            createdAt: null,
+          },
+        ],
+        unread: [],
+      };
+    }) as never);
+
+    await renderWithRouter(<Sidebar />, {
+      at: "/c/acme-staging",
+      route: "/c/$cluster/$",
+    });
+
+    expect(
+      await within(await row("Routes")).findByRole("img", { name: "broken" })
+    ).toBeInTheDocument();
+  });
+});

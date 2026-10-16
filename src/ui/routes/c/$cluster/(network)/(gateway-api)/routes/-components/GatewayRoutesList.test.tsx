@@ -9,6 +9,7 @@ const page = vi.hoisted(() => ({
   refused: true,
   loading: false,
   backingError: null as Error | null,
+  gateways: false,
 }));
 vi.mock("@/stores/clusterStore", () => ({
   useClusterStore: vi.fn(<T,>(selector?: (s: typeof store.state) => T) =>
@@ -33,7 +34,11 @@ vi.mock("../../../../-object/useGatewayRoutes", () => ({
     detection: { installed: true, kinds: [] },
     detectionLoading: false,
     detectionError: null,
-    served: new Set(["HTTPRoute", "TCPRoute"]),
+    served: new Set([
+      "HTTPRoute",
+      "TCPRoute",
+      ...(page.gateways ? ["Gateway"] : []),
+    ]),
     routes: page.routes,
     unread: [],
     refusedKinds: page.refused ? [{ kind: "TCPRoute", error: refused }] : [],
@@ -61,6 +66,21 @@ const web = {
   labels: {},
   annotations: {},
   createdAt: null,
+};
+
+/** A mesh route, whose verdict waits on the Services list. */
+const meshed = {
+  ...web,
+  parentRefs: [
+    {
+      group: "",
+      kind: "Service",
+      name: "app",
+      namespace: null,
+      sectionName: null,
+      port: null,
+    },
+  ],
 };
 
 const renderRoutes = (search = "") =>
@@ -97,7 +117,7 @@ describe("the routes page when the Services could not be read", () => {
   it("says the Services could not be read instead of still reading", async () => {
     page.refused = false;
     page.backingError = new Error("services is forbidden (code: 403)");
-    page.routes = [web];
+    page.routes = [meshed];
     await renderRoutes();
 
     expect(
@@ -148,5 +168,64 @@ describe("the routes page before its first answer", () => {
 
     expect(screen.queryByTestId("section-count")).toBeNull();
     page.loading = false;
+  });
+});
+
+describe("the routes page when the gateways could not be read", () => {
+  /**
+   * A developer bound to their namespace cannot list Gateways, and a route
+   * its controller refused sat muted under "no verdict below is a verdict"
+   * beside the healthy-looking rest. A refusal the controller wrote is read,
+   * not guessed. Fails if it is drawn muted with the routes nobody can judge.
+   */
+  it("still names a route its controller refused as not serving", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.listGateways).mockRejectedValue(
+      new Error("gateways is forbidden (code: 403)")
+    );
+    const edge = {
+      group: "gateway.networking.k8s.io",
+      kind: "Gateway",
+      name: "edge",
+      namespace: "infra",
+      sectionName: null,
+      port: null,
+    };
+    page.refused = false;
+    page.backingError = null;
+    page.gateways = true;
+    page.routes = [
+      {
+        ...web,
+        parentRefs: [edge],
+        parents: [
+          {
+            parent: edge,
+            controllerName: "example.net/gateway",
+            conditions: [
+              {
+                type: "Accepted",
+                status: "False",
+                reason: "NoMatchingListenerHostname",
+                message: null,
+                lastTransitionTime: null,
+                observedGeneration: 1,
+              },
+            ],
+          },
+        ],
+      },
+      { ...meshed, name: "quiet", hostnames: ["quiet.example.com"] },
+    ];
+    await renderRoutes();
+
+    expect(
+      await screen.findByText(
+        "The gateways could not be read, so no verdict below is a verdict."
+      )
+    ).toBeVisible();
+    expect(screen.getByText("Not serving")).toBeVisible();
+    vi.mocked(commands.listGateways).mockResolvedValue([]);
+    page.gateways = false;
   });
 });

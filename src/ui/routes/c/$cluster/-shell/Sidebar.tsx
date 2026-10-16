@@ -494,7 +494,7 @@ function GatewayRows() {
   // verdict computed without it is wrong. These are the same keys the routes
   // list and the trace read, so the pages share the answer. A namespace-scoped
   // token is refused them — the board reads that absence as `topologyKnown:
-  // false` and asserts nothing, rather than a red dot for what it cannot see.
+  // false` and asserts only the breaks it read, never one it cannot see.
   const gatewaysAll = useLiveQuery({
     queryKey: queryKeys.gateways(),
     queryFn: () => commands.listGateways(null),
@@ -1050,7 +1050,8 @@ function NavRow({
               <NavCount item={item} counts={counts} missing={missing} />
             ))
           ) : (
-            value !== null && (
+            // A count nobody could finish still sits beside a break that was read.
+            (value !== null || mark) && (
               <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
                 {mark && (
                   // A hollow ring for "could not be checked", the same shape
