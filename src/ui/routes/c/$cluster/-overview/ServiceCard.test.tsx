@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import {
   ScreenShareProvider,
@@ -290,6 +291,38 @@ describe("what a card says about a way in", () => {
     ).toHaveClass("text-warn");
     expect(screen.getByText("1/1 ready")).toHaveClass("text-ok");
     expect(screen.queryByText(/every way in|все входы/)).toBeNull();
+  });
+
+  /**
+   * log-demo's card ended its list on "12 more" that nothing could open, so
+   * the header counted ways in the card would not show. Fails if the line
+   * goes back to text, or opening it leaves any way in out.
+   */
+  it("opens the ways in past the first three, and closes them again", async () => {
+    chain.paths = ["a", "b", "c", "d", "e"].map((name) => {
+      const path = structuredClone(shutChain()[0]);
+      const hop = path.hops[0];
+      if (hop.at !== "published") throw new Error("published hop expected");
+      hop.published.service.name = `svc-${name}`;
+      hop.published.stop = null;
+      return { ...path, key: name, broken: false };
+    });
+
+    await mount();
+
+    expect(screen.queryByText("svc-d")).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: /^(2 more|ещё 2)$/ })
+    );
+    for (const name of ["svc-a", "svc-b", "svc-c", "svc-d", "svc-e"])
+      expect(screen.getByText(name)).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: /^(Show fewer|Показать меньше)$/ })
+    );
+    expect(screen.queryByText("svc-e")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /^(2 more|ещё 2)$/ })
+    ).toHaveAttribute("aria-expanded", "false");
   });
 });
 

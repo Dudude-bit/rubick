@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ExternalLink, PinOff } from "lucide-react";
 
 import { ObjectLink } from "@/components/object/ResourceRef";
@@ -10,6 +10,7 @@ import {
   verdictWords,
   WAY_WORDS,
 } from "./service-card-share";
+import { TOGGLE } from "./toggle";
 import { useConnections } from "@/hooks/useConnections";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
@@ -113,6 +114,8 @@ export function ServiceCard({
   const changes = useMemo(() => changesFor(entries, pin), [entries, pin]);
   const waiting = useMemo(() => waitingFor(watches, pin), [watches, pin]);
   const latest = changes[0] ?? null;
+  const [allWays, setAllWays] = useState(false);
+  const shownWays = allWays ? ways.entries : ways.entries.slice(0, WAYS_SHOWN);
 
   useShareSection(`pin:${pinKey(pin)}`, () =>
     pinShare(pin, state, ways, unread, latest, waiting, t)
@@ -158,7 +161,7 @@ export function ServiceCard({
             <span>{t("services", "nothingPublishes")}</span>
           ) : (
             <ul className="flex flex-col gap-0.5">
-              {ways.entries.slice(0, WAYS_SHOWN).map((way) => (
+              {shownWays.map((way) => (
                 <li
                   key={way.key}
                   className="flex min-w-0 items-baseline gap-1.5"
@@ -185,10 +188,19 @@ export function ServiceCard({
                 </li>
               ))}
               {ways.entries.length > WAYS_SHOWN ? (
-                <li className="text-fg-fnt">
-                  {t("services", "moreWays", {
-                    n: ways.entries.length - WAYS_SHOWN,
-                  })}
+                <li>
+                  <button
+                    type="button"
+                    aria-expanded={allWays}
+                    onClick={() => setAllWays(!allWays)}
+                    className={TOGGLE}
+                  >
+                    {allWays
+                      ? t("action", "showFewer")
+                      : t("services", "moreWays", {
+                          n: ways.entries.length - WAYS_SHOWN,
+                        })}
+                  </button>
                 </li>
               ) : null}
             </ul>

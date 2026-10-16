@@ -82,6 +82,7 @@ import { formatCount } from "@/lib/count";
 import { allocatedPercent } from "@/lib/node-amount";
 import { useAttentionExpanded } from "./attention-expanded";
 import { ANCHOR_ROWS } from "./scroll-anchor";
+import { TOGGLE } from "./toggle";
 
 /**
  * The unit rides along dimmed and a size smaller, so the number keeps the
@@ -373,9 +374,6 @@ function AttentionRow({
     </div>
   );
 }
-
-const TOGGLE =
-  "rounded text-fg-mut underline decoration-hair underline-offset-2 transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info";
 
 /**
  * The rows past the cap, by kind, each a way into its list. The count opens
