@@ -34,7 +34,7 @@ const gatewayRef = (
   name,
   namespace: "gwtest",
   existence,
-  facts: { kind: "gateway", className },
+  facts: { kind: "gateway", listeners: [], className },
 });
 
 const edge = (from: ObjectRef, to: ObjectRef, relation: Relation) => ({
@@ -46,7 +46,13 @@ const edge = (from: ObjectRef, to: ObjectRef, relation: Relation) => ({
 const ruleRoutes = (
   hostnames: string[],
   port: string | null = "8080"
-): Relation => ({ verb: "ruleRoutes", hostnames, port, weight: null });
+): Relation => ({
+  verb: "ruleRoutes",
+  paths: ["/"],
+  hostnames,
+  port,
+  weight: null,
+});
 
 const conns = (
   over: Partial<ResourceConnections> = {}
@@ -106,6 +112,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", "web"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: "http",
           }),
         ],
@@ -135,7 +143,12 @@ describe("trafficDoors", () => {
           edge(
             ref("HTTPRoute", "set-route"),
             ref("ListenerSet", "app-tls", "gwtest", "notChecked"),
-            { verb: "attachesTo", sectionName: null }
+            {
+              verb: "attachesTo",
+              port: null,
+              listenerSet: null,
+              sectionName: null,
+            }
           ),
         ],
       }),
@@ -180,6 +193,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", "healthy-route"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: "http",
           }),
         ],
@@ -221,6 +236,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", "wrong-host"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
         ],
@@ -252,6 +269,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", "no-grant"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
         ],
@@ -283,7 +302,12 @@ describe("trafficDoors", () => {
           edge(
             ref("HTTPRoute", "ghost-parent"),
             gatewayRef("ghost-gw", "envoy", "missing"),
-            { verb: "attachesTo", sectionName: null }
+            {
+              verb: "attachesTo",
+              port: null,
+              listenerSet: null,
+              sectionName: null,
+            }
           ),
         ],
         stops: [
@@ -317,6 +341,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("TCPRoute", "tcp-route"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: "tcp",
           }),
         ],
@@ -338,6 +364,47 @@ describe("trafficDoors", () => {
     expect(door.copy).toBe("203.0.113.10:9000");
   });
 
+  /**
+   * The parentRef named a port and the Gateway has two listeners; the peek
+   * guessed nothing while the trace read the listener on that port. Fails if
+   * the door picks its listener by any rule but the trace's.
+   */
+  it("keys a hostless route by the listener on the port its parentRef names", () => {
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(
+            ref("TCPRoute", "tcp-route"),
+            ref("Service", "app"),
+            ruleRoutes([], "8080")
+          ),
+          edge(ref("TCPRoute", "tcp-route"), gatewayRef("edge"), {
+            verb: "attachesTo",
+            port: 9001,
+            listenerSet: null,
+            sectionName: null,
+          }),
+        ],
+      }),
+      [
+        gateway(
+          "edge",
+          ["203.0.113.10"],
+          [
+            { name: "tcp-a", port: 9000, protocol: "TCP" },
+            { name: "tcp-b", port: 9001, protocol: "TCP" },
+          ]
+        ),
+      ],
+      t
+    );
+
+    expect(model.entries[0].doors[0]).toMatchObject({
+      host: ":9001 TCP",
+      copy: "203.0.113.10:9001",
+    });
+  });
+
   it("claims no port at all where the listener cannot be known", () => {
     const model = trafficDoors(
       conns({
@@ -349,6 +416,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("TCPRoute", "tcp-route"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
         ],
@@ -384,10 +453,14 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", "twin"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
           edge(ref("HTTPRoute", "twin"), gatewayRef("internal"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
         ],
@@ -417,10 +490,14 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", "split"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
           edge(ref("HTTPRoute", "split"), gatewayRef("internal"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
         ],
@@ -455,6 +532,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", "api", "team-a"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
           edge(
@@ -464,6 +543,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", "api", "team-b"), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
         ],
@@ -696,6 +777,8 @@ describe("trafficDoors", () => {
               ),
               edge(ref("HTTPRoute", "front"), gatewayRef("edge", "traefik"), {
                 verb: "attachesTo",
+                port: null,
+                listenerSet: null,
                 sectionName: null,
               }),
             ],
@@ -738,6 +821,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", `route-${i}`), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
         ]),
@@ -762,6 +847,8 @@ describe("trafficDoors", () => {
           ),
           edge(ref("HTTPRoute", `route-${i}`), gatewayRef("edge"), {
             verb: "attachesTo",
+            port: null,
+            listenerSet: null,
             sectionName: null,
           }),
         ]),

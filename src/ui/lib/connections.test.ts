@@ -29,6 +29,7 @@ import type {
   PublishedEndpoint,
   ServicePublished,
   ConnectionEdge,
+  ListenerInfo,
   ObjectFacts,
   ObjectRef,
   ResourceConnections,
@@ -36,6 +37,24 @@ import type {
   TlsCertificate,
   Usage,
 } from "@/generated/types";
+
+const listener = (
+  name: string,
+  protocol: string,
+  port: number,
+  hostname: string | null = null
+): ListenerInfo => ({
+  name,
+  port,
+  protocol,
+  hostname,
+  tlsMode: null,
+  certificateRefs: [],
+  allowedNamespaces: "All",
+  attachedRoutes: null,
+  conditions: [],
+  fromListenerSet: null,
+});
 
 const ref = (
   kind: string,
@@ -429,6 +448,10 @@ describe("the traffic chain", () => {
     const route = ref("HTTPRoute", "promo");
     const gateway = ref("Gateway", "edge", {
       kind: "gateway",
+      listeners: [
+        listener("http", "HTTP", 80),
+        listener("https", "HTTPS", 443),
+      ],
       className: "envoy",
     });
     const path = trafficChains(
@@ -443,6 +466,7 @@ describe("the traffic chain", () => {
           to: svc,
           relation: {
             verb: "ruleRoutes",
+            paths: ["/"],
             hostnames: ["promo.example.com"],
             port: "8080",
             weight: null,
@@ -451,7 +475,12 @@ describe("the traffic chain", () => {
         {
           from: route,
           to: gateway,
-          relation: { verb: "attachesTo", sectionName: "https" },
+          relation: {
+            verb: "attachesTo",
+            port: null,
+            listenerSet: null,
+            sectionName: "https",
+          },
         },
       ]),
       t
@@ -462,13 +491,13 @@ describe("the traffic chain", () => {
     expect(gatewayHop.object.kind).toBe("Gateway");
     expect(gatewayHop.detail).toBe("section https");
     expect(gatewayHop.via).toBe("envoy");
+    // The scheme is the listener's the route names, not every listener's.
+    expect(gatewayHop.urls).toEqual(["https://promo.example.com/"]);
 
     if (routeHopDrawn.at !== "object")
       throw new Error("expected the route hop");
     expect(routeHopDrawn.object.kind).toBe("HTTPRoute");
     expect(routeHopDrawn.detail).toBe("promo.example.com");
-    // No URL: whether that hostname is served over TLS is the listener's
-    // fact, and the chain does not invent a scheme.
     expect(routeHopDrawn.urls).toEqual([]);
     expect(path.broken).toBe(false);
   });
@@ -491,6 +520,7 @@ describe("the traffic chain", () => {
             to: svc,
             relation: {
               verb: "ruleRoutes",
+              paths: ["/"],
               hostnames: ["promo.example.com"],
               port: "8080",
               weight: null,
@@ -518,6 +548,72 @@ describe("the traffic chain", () => {
     expect(path.broken).toBe(true);
   });
 
+  /**
+   * A route its Gateway refused hands out an address that answers nothing,
+   * and the pinned card offered no address for it at all. Fails if the
+   * Gateway's listener is not followed to an address, or the refusal is not
+   * said of the addresses this route hands out.
+   */
+  it("says a route's refusal of the address its Gateway hands it out on", () => {
+    const deployment = ref("Deployment", "promo");
+    const svc = service("promo", "app=promo");
+    const route = ref("HTTPRoute", "promo");
+    const gateway = ref("Gateway", "edge", {
+      kind: "gateway",
+      listeners: [listener("web", "HTTP", 8000, "*.example.com")],
+      className: "envoy",
+    });
+    const path = trafficChains(
+      connections(
+        deployment,
+        [
+          {
+            from: svc,
+            to: deployment,
+            relation: { verb: "selects", selector: "app=promo" },
+          },
+          {
+            from: route,
+            to: svc,
+            relation: {
+              verb: "ruleRoutes",
+              paths: ["/promo"],
+              hostnames: ["promo.example.com"],
+              port: "8080",
+              weight: null,
+            },
+          },
+          {
+            from: route,
+            to: gateway,
+            relation: {
+              verb: "attachesTo",
+              port: null,
+              listenerSet: null,
+              sectionName: null,
+            },
+          },
+        ],
+        [
+          {
+            reason: "routeNotAccepted",
+            route,
+            gateway,
+            conditionReason: "NotAllowedByListeners",
+            message: null,
+          },
+        ]
+      ),
+      t
+    )[0];
+
+    const url = "http://promo.example.com:8000/promo";
+    expect(path.hops[0]).toMatchObject({ at: "object", urls: [url] });
+    expect(path.hops.find((hop) => hop.at === "stop")).toMatchObject({
+      only: [url],
+    });
+  });
+
   it("draws a missing Gateway as the missing thing, not as a healthy hop", () => {
     const deployment = ref("Deployment", "promo");
     const svc = service("promo", "app=promo");
@@ -537,6 +633,7 @@ describe("the traffic chain", () => {
             to: svc,
             relation: {
               verb: "ruleRoutes",
+              paths: ["/"],
               hostnames: [],
               port: null,
               weight: null,
@@ -545,7 +642,12 @@ describe("the traffic chain", () => {
           {
             from: route,
             to: ghost,
-            relation: { verb: "attachesTo", sectionName: null },
+            relation: {
+              verb: "attachesTo",
+              port: null,
+              listenerSet: null,
+              sectionName: null,
+            },
           },
         ],
         [{ reason: "gatewayMissing", route, gateway: ghost }]
@@ -578,6 +680,7 @@ describe("the traffic chain", () => {
           to: svc,
           relation: {
             verb: "ruleRoutes",
+            paths: ["/"],
             hostnames: ["promo.example.com"],
             port: "8080",
             weight: 0,
@@ -1316,6 +1419,7 @@ describe("the traffic chain", () => {
       const route = ref("HTTPRoute", "shop");
       const gateway = ref("Gateway", "edge", {
         kind: "gateway",
+        listeners: [listener("web", "HTTP", 8000)],
         className: "traefik",
       });
       const chain = (asking: DoorAsk) =>
@@ -1333,6 +1437,7 @@ describe("the traffic chain", () => {
                 to: svc,
                 relation: {
                   verb: "ruleRoutes",
+                  paths: ["/"],
                   hostnames: ["shop.example"],
                   port: "80",
                   weight: null,
@@ -1341,7 +1446,12 @@ describe("the traffic chain", () => {
               {
                 from: route,
                 to: gateway,
-                relation: { verb: "attachesTo", sectionName: null },
+                relation: {
+                  verb: "attachesTo",
+                  port: null,
+                  listenerSet: null,
+                  sectionName: null,
+                },
               },
             ],
             [],
@@ -1381,7 +1491,7 @@ describe("the traffic chain", () => {
         at: "stop",
         shut: true,
         title: "NetworkPolicy allow-nginx admits no connection from Traefik",
-        only: [],
+        only: ["http://shop.example:8000/"],
       });
       expect(chain(ask).hops.some((hop) => hop.at === "stop")).toBe(false);
     });
@@ -2919,6 +3029,7 @@ describe("connections read the same from both ends", () => {
         to: front,
         relation: {
           verb: "ruleRoutes",
+          paths: ["/"],
           hostnames: ["logs.k8s-gui.test"],
           port: null,
           weight: null,

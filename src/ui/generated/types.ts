@@ -77,6 +77,31 @@ export interface AutoscalerMetric {
   current: string | null;
 }
 
+export interface ListenerInfo {
+  name: string;
+  port: number;
+  protocol: string;
+  hostname: string | null;
+  tlsMode: string | null;
+  certificateRefs: CertificateRefInfo[];
+  allowedNamespaces: string | null;
+  attachedRoutes: number | null;
+  conditions: ConditionInfo[];
+  fromListenerSet: ObjectName | null;
+}
+
+export interface ObjectName {
+  name: string;
+  namespace: string;
+}
+
+export interface CertificateRefInfo {
+  group: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+}
+
 export interface ServicePortInfo {
   name: string | null;
   port: number;
@@ -792,31 +817,6 @@ export interface GatewayInfo {
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;
-}
-
-export interface ObjectName {
-  name: string;
-  namespace: string;
-}
-
-export interface ListenerInfo {
-  name: string;
-  port: number;
-  protocol: string;
-  hostname: string | null;
-  tlsMode: string | null;
-  certificateRefs: CertificateRefInfo[];
-  allowedNamespaces: string | null;
-  attachedRoutes: number | null;
-  conditions: ConditionInfo[];
-  fromListenerSet: ObjectName | null;
-}
-
-export interface CertificateRefInfo {
-  group: string;
-  kind: string;
-  name: string;
-  namespace: string | null;
 }
 
 export interface BackendTlsPolicyInfo {
@@ -2435,7 +2435,7 @@ export type ObjectFacts =
       ports: ServicePortInfo[];
     }
   | { kind: "ingress"; className: string | null }
-  | { kind: "gateway"; className: string }
+  | { kind: "gateway"; className: string; listeners: ListenerInfo[] }
   | {
       kind: "pod";
       phase: string;
@@ -2883,8 +2883,14 @@ export type Relation =
       hostnames: string[];
       port: string | null;
       weight: number | null;
+      paths: string[];
     }
-  | { verb: "attachesTo"; sectionName: string | null }
+  | {
+      verb: "attachesTo";
+      sectionName: string | null;
+      port: number | null;
+      listenerSet: ObjectName | null;
+    }
   | { verb: "runsOn" }
   | { verb: "binds" }
   | { verb: "governs"; selector: string | null };

@@ -17,6 +17,7 @@ use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::PodSpec;
 use serde::{Deserialize, Serialize};
 
+use super::gateway::{ListenerInfo, ObjectName};
 use super::published::ServicePublished;
 use super::types::{mounts_of, volume_source, ConditionInfo, ServicePortInfo};
 
@@ -116,6 +117,9 @@ pub enum ObjectFacts {
     Gateway {
         #[serde(rename = "className")]
         class_name: String,
+        /// Where it listens, so a route's address is composed from the
+        /// listener it reaches.
+        listeners: Vec<ListenerInfo>,
     },
     Pod {
         phase: String,
@@ -322,6 +326,9 @@ pub enum Relation {
         /// The backend port the rule sends to, where it names one.
         port: Option<String>,
         weight: Option<i32>,
+        /// The rule's paths a person could paste; a regular expression is
+        /// none, and a rule with no matches is `/`.
+        paths: Vec<String>,
     },
     /// A route's `parentRefs[]` names a Gateway.
     ///
@@ -331,6 +338,10 @@ pub enum Relation {
     AttachesTo {
         #[serde(rename = "sectionName")]
         section_name: Option<String>,
+        port: Option<i32>,
+        /// The `ListenerSet` the route named, where the Gateway is the set's.
+        #[serde(rename = "listenerSet")]
+        listener_set: Option<ObjectName>,
     },
     /// `spec.nodeName`.
     RunsOn,

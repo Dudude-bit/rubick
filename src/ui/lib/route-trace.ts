@@ -28,6 +28,7 @@ import type {
 } from "@/generated/types";
 import { backingOf, type Backing, type BackingSources } from "@/integrations";
 import { describeStop, stopMood } from "@/lib/connections";
+import { pickListeners } from "@/lib/gateway-listeners";
 import type { T } from "@/i18n/useT";
 import { doorDoubtWords, isPolicyStop, type DoorAsk } from "@/lib/policy-door";
 import { saidOf, statusesFor, verdictOf } from "@/lib/route-verdict";
@@ -403,25 +404,14 @@ export function candidateListeners(
   routeNamespace: string
 ): ListenerInfo[] {
   if (!gateway) return [];
-  // A route that named a ListenerSet reaches only that set's listeners. The
-  // Gateway's own and every other set's are merged into the same array, so
-  // without this a route through one team's set is checked against another
-  // team's — and a sectionName that means nothing to it can match.
-  const mine =
-    parent.kind === "ListenerSet"
-      ? gateway.listeners.filter(
-          (l) =>
-            l.fromListenerSet?.name === parent.name &&
-            l.fromListenerSet.namespace === (parent.namespace ?? routeNamespace)
-        )
-      : gateway.listeners;
-  if (parent.sectionName) {
-    return mine.filter((l) => l.name === parent.sectionName);
-  }
-  if (parent.port != null) {
-    return mine.filter((l) => l.port === parent.port);
-  }
-  return mine;
+  return pickListeners(gateway.listeners, {
+    set:
+      parent.kind === "ListenerSet"
+        ? { name: parent.name, namespace: parent.namespace ?? routeNamespace }
+        : null,
+    sectionName: parent.sectionName,
+    port: parent.port,
+  });
 }
 
 function classStep(

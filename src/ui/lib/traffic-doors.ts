@@ -9,6 +9,7 @@
  * parents are named in their own place, explicitly unjudged.
  */
 
+import { pickListeners, type ListenerPick } from "@/lib/gateway-listeners";
 import { findGateway, HOSTLESS_PROTO } from "@/lib/route-trace";
 import type { T } from "@/i18n/useT";
 import type { RouteTls } from "@/lib/ingress-tls";
@@ -139,7 +140,7 @@ export function trafficDoors(
   // door under each of them, not under whichever edge came last.
   const gatewaysOf = new Map<
     string,
-    Array<{ gateway: ObjectRef; sectionName: string | null }>
+    Array<{ gateway: ObjectRef; pick: ListenerPick }>
   >();
   // Every attachesTo target, not only the resolved ones: a route whose
   // parentRef names a ListenerSet arrives with `to.kind === "ListenerSet"`
@@ -154,7 +155,14 @@ export function trafficDoors(
       const at = key(edge.from);
       gatewaysOf.set(at, [
         ...(gatewaysOf.get(at) ?? []),
-        { gateway: edge.to, sectionName: edge.relation.sectionName },
+        {
+          gateway: edge.to,
+          pick: {
+            set: edge.relation.listenerSet,
+            sectionName: edge.relation.sectionName,
+            port: edge.relation.port,
+          },
+        },
       ]);
     }
   }
@@ -216,7 +224,7 @@ export function trafficDoors(
         mesh.set(key(edge.from), doorRef(edge.from));
         continue;
       }
-      for (const { gateway, sectionName } of attachments) {
+      for (const { gateway, pick } of attachments) {
         const className =
           gateway.facts?.kind === "gateway" ? gateway.facts.className : null;
         const entry = entryFor(
@@ -253,18 +261,16 @@ export function trafficDoors(
         } else {
           // The door is the LISTENER's port — the relation's port is the
           // backendRef's, the service side, and must never pose as the door.
-          // No sectionName and several listeners means guessing, so no claim.
+          // Several listeners the parentRef could mean is guessing, so no claim.
           const proto = HOSTLESS_PROTO[edge.from.kind];
-          const listeners =
+          const picked = pickListeners(
             (gateway.namespace != null
               ? findGateway(gateways, gateway.name, gateway.namespace)
               : undefined
-            )?.listeners ?? [];
-          const listener = sectionName
-            ? listeners.find((entry) => entry.name === sectionName)
-            : listeners.length === 1
-              ? listeners[0]
-              : undefined;
+            )?.listeners ?? [],
+            pick
+          );
+          const listener = picked.length === 1 ? picked[0] : undefined;
           const address = entry.address;
           entry.doors.push({
             host: listener

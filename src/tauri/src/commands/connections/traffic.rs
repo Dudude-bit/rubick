@@ -104,6 +104,21 @@ pub(super) fn traffic_into(
 /// for which no controller will ever write status at all. A parentRef of
 /// any other kind — `Service` is GAMMA/mesh — is recognized and left
 /// alone: not a Gateway, so never "a missing Gateway".
+/// The paths of a rule's matches, where a match without one is `/`.
+fn pasteable_paths(rule: &crate::resources::RouteRuleInfo) -> Vec<String> {
+    if rule.matches.is_empty() {
+        return vec!["/".into()];
+    }
+    let mut paths: Vec<String> = rule
+        .matches
+        .iter()
+        .filter(|m| m.path_type.as_deref() != Some("RegularExpression"))
+        .map(|m| m.path.clone().unwrap_or_else(|| "/".into()))
+        .collect();
+    paths.dedup();
+    paths
+}
+
 pub(super) fn gateway_traffic_into(
     ns: &str,
     svc_ref: &ObjectRef,
@@ -117,8 +132,8 @@ pub(super) fn gateway_traffic_into(
         let backends: Vec<_> = route
             .rules
             .iter()
-            .flat_map(|rule| &rule.backend_refs)
-            .filter(|b| {
+            .flat_map(|rule| rule.backend_refs.iter().map(move |b| (rule, b)))
+            .filter(|(_, b)| {
                 b.kind == "Service"
                     && b.group.is_empty()
                     && b.name == svc_ref.name
@@ -136,7 +151,7 @@ pub(super) fn gateway_traffic_into(
             Existence::Present,
         );
 
-        for backend in backends {
+        for (rule, backend) in backends {
             out.edge(
                 route_ref.clone(),
                 svc_ref.clone(),
@@ -144,6 +159,7 @@ pub(super) fn gateway_traffic_into(
                     hostnames: route.hostnames.clone(),
                     port: backend.port.map(|p| p.to_string()),
                     weight: backend.weight,
+                    paths: pasteable_paths(rule),
                 },
             );
         }
@@ -193,6 +209,7 @@ pub(super) fn gateway_traffic_into(
                 )
                 .with_facts(ObjectFacts::Gateway {
                     class_name: g.class_name.clone(),
+                    listeners: g.listeners.clone(),
                 }),
                 // Unresolved: point at what the route actually named. Calling
                 // a ListenerSet a Gateway would put the set's name under the
@@ -225,6 +242,11 @@ pub(super) fn gateway_traffic_into(
                 gw_ref.clone(),
                 Relation::AttachesTo {
                     section_name: parent.section_name.clone(),
+                    port: parent.port,
+                    listener_set: via_set.then(|| crate::resources::ObjectName {
+                        name: parent.name.clone(),
+                        namespace: gw_ns.clone(),
+                    }),
                 },
             );
 
@@ -579,7 +601,9 @@ status:
                 hostnames,
                 port,
                 weight,
+                paths,
             } => {
+                assert_eq!(paths, &["/"]);
                 assert_eq!(hostnames, &vec!["promo.example.com".to_string()]);
                 assert_eq!(port.as_deref(), Some("8080"));
                 assert_eq!(*weight, None);
@@ -596,11 +620,127 @@ status:
         assert!(matches!(to_gateway.to.existence, Existence::Present));
         assert!(matches!(
             &to_gateway.relation,
-            Relation::AttachesTo { section_name } if section_name.as_deref() == Some("https")
+            Relation::AttachesTo { section_name, .. } if section_name.as_deref() == Some("https")
         ));
         assert!(matches!(
             &to_gateway.to.facts,
-            Some(ObjectFacts::Gateway { class_name }) if class_name == "envoy"
+            Some(ObjectFacts::Gateway { class_name, .. }) if class_name == "envoy"
+        ));
+    }
+
+    /// A route's address is composed from these on the frontend; without
+    /// the rule's paths, the parentRef's port and the Gateway's listeners a
+    /// Gateway API route hands the chain no URL at all.
+    #[test]
+    fn a_route_edge_carries_its_pasteable_paths_and_the_gateway_its_listeners() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(
+                r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: api, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge, port: 8443 }
+  hostnames: [api.example.com]
+  rules:
+  - matches:
+    - path: { type: PathPrefix, value: /api }
+    - path: { type: RegularExpression, value: "/v[0-9]+" }
+    - headers: [{ name: x-beta, value: "1" }]
+    backendRefs:
+    - { name: promo, port: 8080 }
+"#,
+            )],
+            Some(&[gateway(
+                r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: edge, namespace: shop }
+spec:
+  gatewayClassName: envoy
+  listeners:
+  - { name: https, protocol: HTTPS, port: 8443, hostname: "*.example.com" }
+"#,
+            )]),
+            &mut out,
+        );
+
+        let edge_to = |kind: &str| {
+            out.edges
+                .iter()
+                .find(|e| e.to.kind == kind)
+                .unwrap_or_else(|| panic!("an edge to a {kind}"))
+        };
+        match &edge_to("Service").relation {
+            Relation::RuleRoutes { paths, .. } => assert_eq!(paths, &["/api", "/"]),
+            other => panic!("expected RuleRoutes, got {other:?}"),
+        }
+        let up = edge_to("Gateway");
+        match &up.relation {
+            Relation::AttachesTo {
+                port, listener_set, ..
+            } => {
+                assert_eq!(*port, Some(8443));
+                assert!(listener_set.is_none());
+            }
+            other => panic!("expected AttachesTo, got {other:?}"),
+        }
+        match &up.to.facts {
+            Some(ObjectFacts::Gateway { listeners, .. }) => {
+                assert_eq!(listeners.len(), 1);
+                assert_eq!(listeners[0].port, 8443);
+                assert_eq!(listeners[0].hostname.as_deref(), Some("*.example.com"));
+            }
+            other => panic!("expected Gateway facts, got {other:?}"),
+        }
+    }
+
+    /// A route through a `ListenerSet` reaches only the set's listeners;
+    /// without the set on the edge its address would be composed against
+    /// every listener the Gateway carries.
+    #[test]
+    fn a_route_through_a_listener_set_names_the_set_on_its_edge() {
+        let team = crate::resources::ObjectName {
+            name: "team".into(),
+            namespace: "shop".into(),
+        };
+        let mut edge = gateway(EDGE_GATEWAY);
+        edge.listener_sets = vec![team.clone()];
+        edge.listener_sets_known = true;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(
+                r"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { group: gateway.networking.k8s.io, kind: ListenerSet, name: team }
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+",
+            )],
+            Some(&[edge]),
+            &mut out,
+        );
+
+        let up = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Gateway")
+            .expect("route -> gateway edge");
+        assert_eq!(up.to.name, "edge");
+        assert!(matches!(
+            &up.relation,
+            Relation::AttachesTo { listener_set: Some(set), .. } if *set == team
         ));
     }
 

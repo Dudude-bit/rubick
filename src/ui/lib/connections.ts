@@ -20,6 +20,7 @@ import { rolloutLine, rolloutVerdict } from "./workload-status";
 import { exitUnreported, upBetweenCrashes } from "./share/pod-status";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
+import { pickListeners, routeUrlsOn } from "./gateway-listeners";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
 import type { RouteTls } from "./ingress-tls";
 import { clusterIpText } from "./cluster-ip";
@@ -1404,16 +1405,34 @@ export function trafficChains(
         }
         for (const mine of byRoute.values()) {
           const route = mine[0].from;
+          const handed = {
+            kind: route.kind,
+            hostnames: mine[0].relation.hostnames,
+            paths: [...new Set(mine.flatMap((edge) => edge.relation.paths))],
+          };
+          const routeUrls: string[] = [];
           for (const up of attaches.filter((entry) =>
             sameObject(entry.from, route)
           )) {
-            const className =
-              up.to.facts?.kind === "gateway" ? up.to.facts.className : null;
-            const controller = className
-              ? (extra.door?.classController?.(className) ?? null)
+            const facts = up.to.facts?.kind === "gateway" ? up.to.facts : null;
+            const controller = facts
+              ? (extra.door?.classController?.(facts.className) ?? null)
               : null;
+            // Where the Gateway hands this route out; whether anything there
+            // answers is the stops' and the door's to say, as for an Ingress.
+            const urls = facts
+              ? routeUrlsOn(
+                  handed,
+                  pickListeners(facts.listeners, {
+                    set: up.relation.listenerSet,
+                    sectionName: up.relation.sectionName,
+                    port: up.relation.port,
+                  })
+                )
+              : [];
+            routeUrls.push(...urls);
             for (const edge of mine) {
-              ways.push({ controller, port: edge.relation.port, urls: [] });
+              ways.push({ controller, port: edge.relation.port, urls });
             }
             hops.push({
               at: "object",
@@ -1423,15 +1442,17 @@ export function trafficChains(
                 ? t("nav", "gwSectionNamed", { name: up.relation.sectionName })
                 : null,
               via: describeFacts(up.to.facts, t),
-              urls: [],
+              urls,
               address: null,
             });
           }
           hops.push(gatewayRouteHop(mine, route, t));
-          // Its hostnames hand out no address, so it stops none an Ingress does.
           for (const entry of conns.stops) {
             if ("route" in entry && sameObject(entry.route, route)) {
-              hops.push({ ...chainStopHop(entry, subject, t, own), only: [] });
+              hops.push({
+                ...chainStopHop(entry, subject, t, own),
+                only: [...new Set(routeUrls)],
+              });
             }
           }
         }

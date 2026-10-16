@@ -163,7 +163,7 @@ async fn the_gateway_chain_arrives_and_the_stops_are_named() {
     assert!(matches!(above.to.existence, Existence::Present));
     assert!(matches!(
         &above.to.facts,
-        Some(ObjectFacts::Gateway { class_name }) if class_name == "gwtest-claimed"
+        Some(ObjectFacts::Gateway { class_name, .. }) if class_name == "gwtest-claimed"
     ));
 
     // Every route kind reaches the same Service: the chain is not an

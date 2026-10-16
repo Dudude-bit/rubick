@@ -2612,6 +2612,7 @@ describe("PeekPanel traffic chain", () => {
           to: objRef("Service", "frontend", "storefront"),
           relation: {
             verb: "ruleRoutes",
+            paths: ["/"],
             hostnames: ["shop.example.com"],
             port: "3000",
             weight: null,
@@ -2621,9 +2622,14 @@ describe("PeekPanel traffic chain", () => {
           from: objRef("HTTPRoute", "frontend-route", "storefront"),
           to: {
             ...objRef("Gateway", "edge", "infra"),
-            facts: { kind: "gateway", className: "envoy" },
+            facts: { kind: "gateway", listeners: [], className: "envoy" },
           },
-          relation: { verb: "attachesTo", sectionName: "http" },
+          relation: {
+            verb: "attachesTo",
+            port: null,
+            listenerSet: null,
+            sectionName: "http",
+          },
         },
       ])
     );
