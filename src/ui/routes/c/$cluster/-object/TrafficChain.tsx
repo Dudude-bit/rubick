@@ -720,7 +720,6 @@ export function TrafficChain({
           ))}
         </div>
       )}
-      <BlindSpots spots={blind} />
       {routed2.error && (
         <p className="max-w-[92ch] text-[11px] text-warn">
           {t("empty", "couldNotAskRoutes")}
@@ -768,6 +767,8 @@ export function TrafficChain({
           </div>
         ))}
       </div>
+      {/* Below the path: what stops traffic leads, what was not read qualifies it. */}
+      <BlindSpots spots={blind} />
     </Section>
   );
 }

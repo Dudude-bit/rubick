@@ -1318,7 +1318,7 @@ mod shared_tests {
 
     /// Marco, bound to his team's namespace, is refused every namespace's
     /// routes and may list his own, and the chain to his Service lost the
-    /// HTTPRoute in front of it. Fails if a refused cluster-wide route list
+    /// `HTTPRoute` in front of it. Fails if a refused cluster-wide route list
     /// is not read again in the subject's namespace, or if that read is
     /// taken for the whole cluster.
     #[tokio::test]

@@ -226,7 +226,7 @@ describe("TrafficChain", () => {
   /**
    * Marco's chain to checkout-api drew the Service alone, with nothing to
    * say an HTTPRoute in front of it had gone unlisted. Fails if a route kind
-   * read in one namespace stops being named under the heading with the
+   * read in one namespace stops being named below the path with the
    * cluster's refusal, or if a Deployment no Service fronts starts naming it.
    */
   it("names the route kind it could only read in one namespace", async () => {
@@ -264,6 +264,9 @@ describe("TrafficChain", () => {
       "HTTPRoute was read in k8s-gui-test only, so one in another namespace that routes here is not drawn."
     );
     expect(blind).toHaveTextContent(refused);
+    expect(
+      blind.compareDocumentPosition(screen.getByText(/No pod carries app=demo/))
+    ).toBe(Node.DOCUMENT_POSITION_PRECEDING);
     view.unmount();
 
     await wrap(
