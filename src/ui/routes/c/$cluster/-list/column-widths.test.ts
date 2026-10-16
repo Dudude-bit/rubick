@@ -13,6 +13,7 @@ import type {
   NetworkPolicyInfo,
   PersistentVolumeClaimInfo,
   PolicyDirection,
+  StorageClassInfo,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { columnFloor, columnIdeal, headerFloor } from "@/lib/column-label";
@@ -760,6 +761,9 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
       restartCount: 15,
       selects: { kind: "written", query: "app.kubernetes.io/name=traefik" },
       selected: 1,
+      provisioner: "rancher.io/local-path",
+      volumeBindingMode: "WaitForFirstConsumer",
+      isDefault: true,
       ingress: { governed: false, rules: [] },
       egress: { governed: true, rules: [] },
     },
@@ -1054,6 +1058,83 @@ describe("the Ingresses list beside a cause", () => {
       "promo.nginx.k8s-gui.test".length * 7.2 + 20
     );
   });
+});
+
+describe("the StorageClasses list", () => {
+  const cls = (
+    name: string,
+    provisioner: string,
+    volumeBindingMode: string
+  ): StorageClassInfo => ({
+    name,
+    uid: name,
+    provisioner,
+    reclaimPolicy: "Delete",
+    volumeBindingMode,
+    allowVolumeExpansion: false,
+    isDefault: false,
+    parameters: {},
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  });
+  const rows = [
+    cls("k8s-gui-hostpath", "kubernetes.io/no-provisioner", "Immediate"),
+    cls("local-path", "rancher.io/local-path", "WaitForFirstConsumer"),
+  ];
+  const said: [string, string[], number][] = [
+    ["provisioner", rows.map((r) => r.provisioner), 7.2],
+    ["volumeBindingMode", rows.map((r) => r.volumeBindingMode), 7],
+  ];
+
+  /**
+   * Live at 1280, "kubernetes.io/no-provisio…" and "WaitForFirstConsu…" were
+   * cut while Name held 280px for "local-path": only the headers held either
+   * open. Fails if a binding mode is drawn narrower than itself wherever it
+   * shows, a provisioner is where the window has the room, the room at 1280
+   * goes anywhere before the provisioner, a column is hidden there, or the
+   * list scrolls rather than give up the columns that yield.
+   */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)(
+    "keeps the provisioner and the binding mode whole in %s",
+    (_language, t) => {
+      const specs = [...(storageClasses() as Column[]), ACTIONS].map(
+        (c, index) => ({
+          id: index < storageClasses().length ? nameOf(c) : "actions",
+          size: c.size ?? 150,
+          floor: columnFloor(c, t, rows),
+          ideal: columnIdeal(c, t, rows),
+          yields: (c as Column).meta?.yields,
+        })
+      );
+      expect(yieldedColumns(specs, 1048)).toEqual([]);
+      for (const port of [560, 1048, 1208]) {
+        const hidden = yieldedColumns(specs, port);
+        const kept = specs.filter((spec) => !hidden.includes(spec.id));
+        const layout = tableLayout(kept, port);
+        expect(layout.scrolls, `at ${port}`).toBe(false);
+        const width = (at: number) => (layout.shares[at] / 100) * layout.span;
+        if (port === 1048)
+          kept.forEach((spec, at) => {
+            if (spec.id !== "provisioner")
+              expect(width(at), `${spec.id} at ${port}`).toBeCloseTo(
+                spec.floor,
+                0
+              );
+          });
+        for (const [id, words, glyph] of said) {
+          const at = kept.findIndex((spec) => spec.id === id);
+          if (at < 0 || (id === "provisioner" && port < 1208)) continue;
+          expect(width(at), `${id} at ${port}`).toBeGreaterThanOrEqual(
+            Math.max(...words.map((word) => word.length * glyph)) + 20
+          );
+        }
+      }
+    }
+  );
 });
 
 describe("the NetworkPolicies list beside the peek", () => {

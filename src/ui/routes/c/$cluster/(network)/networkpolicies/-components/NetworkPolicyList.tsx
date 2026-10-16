@@ -22,6 +22,7 @@ import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
+  wordsFloor,
   yielding,
 } from "../../../-list/columns";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
@@ -49,15 +50,6 @@ const selectsFloor = (t: T, rows: readonly NetworkPolicyInfo[]) =>
       7
     )
   ) + CELL_PADS_PX;
-
-const wordsFloor =
-  (words: (row: NetworkPolicyInfo, t: T) => string) =>
-  (t: T, rows: readonly NetworkPolicyInfo[]) =>
-    widestText(
-      rows.map((row) => words(row, t)),
-      "sans",
-      7
-    ) + CELL_PADS_PX;
 
 // Exported for `column-widths.test.ts`: a column with no declared width gets
 // an equal share of a `table-fixed` table.
@@ -89,7 +81,9 @@ export const networkPolicyColumns: ColumnDef<NetworkPolicyInfo>[] = [
         const said = reachWords(row.selected, t);
         return { text: said.text, role: said.role ?? undefined };
       },
-      floor: wordsFloor((row, t) => reachWords(row.selected, t).text),
+      floor: wordsFloor<NetworkPolicyInfo>(
+        (row, t) => reachWords(row.selected, t).text
+      ),
     },
     cell: ({ row }) => <ReachCell policy={row.original} />,
   },
@@ -103,7 +97,9 @@ export const networkPolicyColumns: ColumnDef<NetworkPolicyInfo>[] = [
         const said = directionWords(row.ingress, t);
         return { text: said.text, role: said.role ?? undefined };
       },
-      floor: wordsFloor((row, t) => directionCellWords(row.ingress, t)),
+      floor: wordsFloor<NetworkPolicyInfo>((row, t) =>
+        directionCellWords(row.ingress, t)
+      ),
     },
     cell: ({ row }) => <DirectionCell direction={row.original.ingress} />,
   },
@@ -117,7 +113,9 @@ export const networkPolicyColumns: ColumnDef<NetworkPolicyInfo>[] = [
         return { text: said.text, role: said.role ?? undefined };
       },
       yields: 3,
-      floor: wordsFloor((row, t) => directionCellWords(row.egress, t)),
+      floor: wordsFloor<NetworkPolicyInfo>((row, t) =>
+        directionCellWords(row.egress, t)
+      ),
     },
     cell: ({ row }) => <DirectionCell direction={row.original.egress} />,
   },

@@ -10,7 +10,8 @@ import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
 import type { T as Translate } from "@/i18n/useT";
 import type { MetricsAbsence } from "@/lib/metrics-absence";
-import { widestText } from "@/lib/text-width";
+import { CELL_PADS_PX } from "@/components/ui/column-shares";
+import { widestText, type TextFace } from "@/lib/text-width";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { MetricValue, UnitValue } from "@/components/ui/metric-value";
 import {
@@ -151,6 +152,25 @@ export const metricCellFloor =
         : 0
     );
   };
+
+const GLYPH_PX: Record<"sans" | "mono", number> = { sans: 7, mono: 7.2 };
+
+/** As wide as the widest of what its rows say, up to `glyphs` of it, the rest on hover. */
+export const wordsFloor =
+  <Row,>(
+    words: (row: Row, t: Translate) => string,
+    face: Extract<TextFace, "sans" | "mono"> = "sans",
+    glyphs = Infinity
+  ) =>
+  (t: Translate, rows: readonly Row[]) =>
+    Math.min(
+      widestText(
+        rows.map((row) => words(row, t)),
+        face,
+        GLYPH_PX[face]
+      ),
+      glyphs * GLYPH_PX[face]
+    ) + CELL_PADS_PX;
 
 /** "59 мин" and "999 д." are the widest ages, 41px of 12px Inter, and a cell's 20px of padding. */
 export const AGE_CELL_PX = 62;
