@@ -215,7 +215,7 @@ export const en = {
       "{route} attaches to {gateway}, which the API server does not have. No controller will ever write status for that parent, so this is the one refusal the cluster cannot state itself.",
     stopGatewayNotProgrammedTitle: "{gateway} is not programmed",
     stopGatewayNotProgrammedNote:
-      "The controller answered {condition}: False{said}. The route can be valid and accepted, and still nothing serves it: the Gateway in front of it is not configured in the data plane.",
+      "The controller answered {condition}: False{said}. Nothing behind it serves until the Gateway itself is fixed; this is upstream of every route attached to it.",
     targetPortNamed: "targetPort: {name}",
     stopUnnamedPortCause:
       "No container declares the port the Service asks for ({asked}), so nothing is published",
