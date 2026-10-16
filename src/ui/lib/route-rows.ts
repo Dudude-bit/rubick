@@ -219,7 +219,14 @@ function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
     }
     const programmed = gatewayProgrammed(gateway);
     if (programmed?.status === "False") {
-      pulse.push({ ...at, say: t("empty", "gwRowNotProgrammed") });
+      pulse.push({
+        ...at,
+        say: programmed.reason
+          ? t("empty", "gwRowNotProgrammedBecause", {
+              reason: programmed.reason,
+            })
+          : t("empty", "gwRowNotProgrammed"),
+      });
       continue;
     }
     // Same rule the trace's gateway step follows, and for the same reason:

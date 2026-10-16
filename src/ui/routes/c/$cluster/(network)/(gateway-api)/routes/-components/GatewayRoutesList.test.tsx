@@ -291,7 +291,9 @@ describe("a Gateway its controller refused, above the routes", () => {
     await renderRoutes();
 
     const line = (await screen.findByText("bad-gw")).closest("div");
-    expect(line).toHaveTextContent("is not programmed by its controller");
+    expect(line).toHaveTextContent(
+      "is not programmed by its controller: ListenersNotValid"
+    );
     expect(line).toHaveClass("border-err/45");
     vi.mocked(commands.listGateways).mockResolvedValue([]);
     vi.mocked(commands.listGatewayClasses).mockResolvedValue([]);

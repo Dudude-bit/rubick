@@ -478,6 +478,27 @@ describe("routesBoard", () => {
     expect(board.pulse[0].gateway).toBe("pending");
   });
 
+  /**
+   * The routes row through bad-gw said "stops at gateway: ListenersNotValid"
+   * under a banner that named the same Gateway with no cause. Fails if the
+   * pulse drops the reason its controller gave, or invents one it did not.
+   */
+  it("names the reason the controller gave for not programming a gateway", () => {
+    const said = (conditions: ConditionInfo[]) =>
+      routesBoard(
+        [route("healthy")],
+        sources({ gateways: [gateway("bad-gw", { conditions })] }),
+        t
+      ).pulse[0]?.say;
+
+    expect(said([condition("Accepted", "False", "ListenersNotValid")])).toBe(
+      "is not programmed by its controller: ListenersNotValid"
+    );
+    expect(said([condition("Programmed", "False")])).toBe(
+      "is not programmed by its controller"
+    );
+  });
+
   it("stays quiet on the pulse when every gateway is claimed and addressed", () => {
     const board = routesBoard([route("healthy")], sources(), t);
     expect(board.pulse).toHaveLength(0);

@@ -7106,6 +7106,7 @@ export const en = {
     gwRowClassUnclaimed:
       "nothing claims class {name}, so anything attached to it is dead",
     gwRowNotProgrammed: "is not programmed by its controller",
+    gwRowNotProgrammedBecause: "is not programmed by its controller: {reason}",
     gwRowNoAddress: "has no address yet, so traffic has nowhere to arrive",
     gwRowNoParents: "no parentRefs: attaches to nothing and serves no traffic",
     gwRowMesh: "attaches to {parent}: GAMMA, not judged here",

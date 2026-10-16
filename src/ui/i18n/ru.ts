@@ -7790,6 +7790,8 @@ export const ru: Catalogue = {
     gwRowClassUnclaimed:
       "класс {name} никто не заявил, поэтому всё привязанное к нему не работает",
     gwRowNotProgrammed: "не запрограммирован своим контроллером",
+    gwRowNotProgrammedBecause:
+      "не запрограммирован своим контроллером: {reason}",
     gwRowNoAddress: "ещё без адреса, так что трафику некуда приходить",
     gwRowNoParents:
       "нет parentRefs: ни к чему не привязан и не обслуживает трафик",
