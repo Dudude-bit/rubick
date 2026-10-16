@@ -555,6 +555,11 @@ export const queryKeys = {
     "ingress-clients",
     controller,
   ],
+  /** The NetworkPolicies over the namespaces that controller's pods run in. */
+  ingressClientPolicies: (
+    controller: string,
+    namespaces: readonly string[]
+  ): string[] => ["ingress-client-policies", controller, namespaces.join(",")],
   /** Sorted and deduplicated here, so every reader asks the same question. */
   tlsCertificates: (
     namespace: string | undefined,

@@ -473,6 +473,7 @@ describe("the count beside a namespace and the count on its Overview", () => {
             names: ["checkout-api"],
             type: "ClusterIP",
             selectorless: false,
+            targets: [],
             ready: 0,
             draining: 0,
             notReady: 0,

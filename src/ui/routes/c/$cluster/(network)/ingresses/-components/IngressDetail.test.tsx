@@ -335,6 +335,7 @@ function shopCluster(resolved: string | null) {
             draining: 0,
             notReady: 0,
             unrouted: 0,
+            targets: [8080],
           },
         ],
       },

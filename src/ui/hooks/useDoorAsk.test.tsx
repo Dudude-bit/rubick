@@ -3,7 +3,10 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 
-const answer = vi.hoisted(() => ({ classes: null as Error | null }));
+const answer = vi.hoisted(() => ({
+  classes: null as Error | null,
+  asked: [] as Array<string[] | null>,
+}));
 
 vi.mock("@/integrations", () => ({
   useCapabilities: () => [
@@ -51,6 +54,13 @@ vi.mock("@/lib/commands", () => ({
             ],
           }),
     listNamespaces: () => Promise.resolve([{ name: "traefik", labels: {} }]),
+    listNetworkPoliciesIn: (scope: string[] | null) => {
+      answer.asked.push(scope);
+      return Promise.resolve({
+        rows: [],
+        unread: [{ namespace: "traefik", code: "FORBIDDEN", message: "no" }],
+      });
+    },
   },
 }));
 
@@ -85,6 +95,26 @@ describe("who each IngressClass controller connects from", () => {
     );
   });
 
+  /**
+   * A controller's own egress policies decide whether it reaches a backend
+   * at all. Fails if they are not read, are read across the whole cluster
+   * rather than where its pods run, or lose a namespace's refusal.
+   */
+  it("reads the NetworkPolicies in the namespaces a claimed controller's pods run in", async () => {
+    answer.classes = null;
+    answer.asked = [];
+    const { result } = render();
+    await waitFor(() =>
+      expect(result.current("traefik.io/ingress-controller")).toMatchObject({
+        egress: {
+          known: true,
+          value: { unread: [{ namespace: "traefik", message: "no" }] },
+        },
+      })
+    );
+    expect(answer.asked).toEqual([["traefik"]]);
+  });
+
   /** Classes nobody may list leave the claimed controller unread, said why, never pending. */
   it("says why a claimed controller's pods are unknown where its class could not be read", async () => {
     answer.classes = new Error("ingressclasses is forbidden (code: 403)");
@@ -93,6 +123,7 @@ describe("who each IngressClass controller connects from", () => {
       expect(result.current("traefik.io/ingress-controller")).toMatchObject({
         name: "Traefik",
         clients: { known: false, why: expect.stringContaining("forbidden") },
+        egress: { known: false, why: expect.stringContaining("forbidden") },
       })
     );
   });

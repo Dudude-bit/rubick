@@ -28,6 +28,7 @@ function wrapper(
 const SERVING = {
   type: "ClusterIP",
   selectorless: false,
+  targets: [],
   ready: 2,
   draining: 0,
   notReady: 0,

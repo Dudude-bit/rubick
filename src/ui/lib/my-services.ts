@@ -25,6 +25,7 @@ import {
 } from "@/lib/connections";
 import type { JournalEntry } from "@/lib/changes";
 import type { IngressAddress } from "@/lib/ingress-health";
+import { isPolicyStop } from "@/lib/policy-door";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { endpointCount, servingCount } from "@/lib/published";
 import { isOpen, type Watch } from "@/lib/tell-me-when";
@@ -348,7 +349,7 @@ function entryOf(hop: ChainHop): EntryPoint | null {
 }
 
 function publishedEntry(published: ServicePublished): EntryPoint {
-  const shut = published.stop?.reason === "policyRefuses";
+  const shut = isPolicyStop(published.stop);
   return {
     key: `${published.service.namespace ?? ""}/${published.service.name}`,
     url: null,

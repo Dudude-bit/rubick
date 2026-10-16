@@ -28,6 +28,7 @@ import { makersUnread, stopMood, type StopMood } from "./stop-mood";
 import {
   doorDoubt,
   doorDoubtWords,
+  isPolicyStop,
   refusedStop,
   type DoorAsk,
   type DoorDoubt,
@@ -397,6 +398,7 @@ export function stopUnder(
     case "publishesNothing":
       return "stopNoPortToSendTo";
     case "policyRefuses":
+    case "policyHoldsBack":
       return "stopPolicyShutUnder";
   }
 }
@@ -591,6 +593,22 @@ export function describeStop(
         note: t("nav", "stopPolicyPortNote", { ports }),
       };
     }
+    case "policyHoldsBack": {
+      const names = stop.policies.map((policy) => policy.name).join(", ");
+      const n = stop.policies.length;
+      const client = stop.client.name;
+      const ports = stop.ports
+        .map((port) => t("nav", "portNumbered", { n: port }))
+        .join(", ");
+      return {
+        title: t("count", "policyHoldsBackClient", { n, names, client }),
+        note: t("nav", "stopPolicyEgressNote", {
+          client,
+          namespaces: stop.client.namespaces.join(", "),
+          ports,
+        }),
+      };
+    }
     case "routeNotAccepted":
       return {
         title: t("nav", "stopRouteNotAcceptedTitle", {
@@ -769,8 +787,11 @@ export function chainStopHop(
     at: "stop",
     mood: stopMood(stop),
     ...said,
-    ...(stop.reason === "policyRefuses" && {
-      objects: policyRefs(stop.policies, stop.service.namespace),
+    ...(isPolicyStop(stop) && {
+      objects:
+        stop.reason === "policyRefuses"
+          ? policyRefs(stop.policies, stop.service.namespace)
+          : stop.policies,
       shut: true,
     }),
   };
@@ -1446,7 +1467,7 @@ export function trafficChains(
           : null);
 
       // A shut door stands after the pods it shuts, which are published.
-      const shut = stop?.reason === "policyRefuses";
+      const shut = isPolicyStop(stop);
       if (said && !shut) hops.push(said);
       else if (
         subject.kind !== "Pod" &&

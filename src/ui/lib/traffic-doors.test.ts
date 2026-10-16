@@ -626,6 +626,7 @@ describe("trafficDoors", () => {
     };
     const traefik: DoorRead = {
       name: "Traefik",
+      egress: { known: true, value: { rows: [], unread: [] } },
       clients: {
         known: true,
         value: [

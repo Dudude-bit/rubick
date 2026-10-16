@@ -411,6 +411,37 @@ describe("one verdict for a Service on every surface", () => {
     ).toBe("NetworkPolicies a, b admit nothing on port 8080");
   });
 
+  /** A controller's own egress policies shut the way as surely as the pods' ingress ones. */
+  it("calls a Service shut where a controller's own policies hold it back from the pods", () => {
+    const stop: ChainStop = {
+      reason: "policyHoldsBack",
+      service: SERVICE,
+      client: { name: "Traefik", namespaces: ["traefik"] },
+      policies: [
+        {
+          kind: "NetworkPolicy",
+          name: "traefik-out",
+          namespace: "traefik",
+          existence: "present",
+          facts: null,
+        },
+      ],
+      ports: [8080],
+    };
+    const health = serviceHealthOf(
+      SELECTING,
+      published({ ready: 2, stop }),
+      null
+    );
+    expect(health.state).toBe("shut");
+    expect(serviceHealthWords(health, t)).toMatchObject({
+      role: "err",
+      label: "shut by NetworkPolicy",
+      reason:
+        "NetworkPolicy traefik-out lets no connection from Traefik out to this Service's pods",
+    });
+  });
+
   it("calls a Service ready when every address serves", () => {
     const health = serviceHealthOf(SELECTING, published({ ready: 2 }), null);
     expect(serviceHealthWords(health, t)).toMatchObject({

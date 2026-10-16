@@ -914,6 +914,14 @@ describe("what Traefik answers for a route with nothing behind it", () => {
       answer({ emptyServices: { Ingress: false, IngressRoute: false } }, shut)
     ).toBe("refused");
     expect(answer({}, shut)).toBe("refused");
+    const heldBack = {
+      reason: "policyHoldsBack",
+      service: at,
+      client: { name: "Traefik", namespaces: ["traefik"] },
+      policies: [],
+      ports: [80],
+    } satisfies ChainStop;
+    expect(answer({}, heldBack)).toBe("refused");
     const [group] = hostGroups(behind(shut));
     expect(hostState(group, null, t)).toEqual({
       text: "shut by NetworkPolicy",
@@ -987,6 +995,7 @@ describe("a host whose pods an ipBlock may or may not admit Traefik to", () => {
   };
   const read: DoorRead = {
     name: "Traefik",
+    egress: { known: true, value: { rows: [], unread: [] } },
     clients: {
       known: true,
       value: [

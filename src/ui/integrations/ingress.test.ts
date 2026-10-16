@@ -128,6 +128,7 @@ describe("what a route's backend is doing", () => {
     };
     const traefik: DoorRead = {
       name: "Traefik",
+      egress: { known: true, value: { rows: [], unread: [] } },
       clients: {
         known: true,
         value: [
@@ -195,6 +196,7 @@ describe("what a route's backend is doing", () => {
     };
     const traefik: DoorRead = {
       name: "Traefik",
+      egress: { known: true, value: { rows: [], unread: [] } },
       clients: {
         known: true,
         value: [
@@ -219,6 +221,7 @@ describe("what a route's backend is doing", () => {
     expect(doubted.doubt).toEqual({
       policies: ["allow-pod-cidr"],
       why: "ipBlock",
+      side: "pods",
       client: "Traefik",
       said: null,
     });
@@ -392,6 +395,7 @@ describe("how much a stopped backend weighs", () => {
       doubt: {
         policies: ["allow-pod-cidr"],
         why: "ipBlock" as const,
+        side: "pods" as const,
         client: "Traefik",
         said: null,
       },
@@ -455,6 +459,16 @@ describe("how much a stopped backend weighs", () => {
       text: "shut by NetworkPolicy",
       tone: "err",
     });
+    const heldBack = {
+      reason: "policyHoldsBack",
+      service: behind,
+      client: { name: "Traefik", namespaces: ["traefik"] },
+      policies: [],
+      ports: [8080],
+    } satisfies ChainStop;
+    expect(stopsRowState([shut, heldBack], t)?.text).toBe(
+      "shut by NetworkPolicy"
+    );
     expect(stopsRowState([shut, stops.fault], t)?.text).toBe(
       "nothing behind it"
     );

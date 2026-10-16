@@ -51,7 +51,7 @@ import {
   stopsRowState,
   doubtsOf,
 } from "../ingress";
-import type { DoorDoubt } from "@/lib/policy-door";
+import { isPolicyStop, type DoorDoubt } from "@/lib/policy-door";
 import type { T } from "@/i18n/useT";
 import type { RowTone } from "../page-kit";
 import { readRule, type RuleClause, type RuleReading } from "./rule";
@@ -551,7 +551,7 @@ export function stopAnswer(
   route: TraefikRoute,
   kept: EmptyServices | undefined
 ): StopAnswer {
-  if (stop.reason === "policyRefuses") return "refused";
+  if (isPolicyStop(stop)) return "refused";
   if (stop.reason === "backendMissing") return "dropped";
   if (!kept) return "unknown";
   return kept[route.source.kind] ? "unavailable" : "dropped";

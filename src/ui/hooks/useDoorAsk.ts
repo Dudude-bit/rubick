@@ -47,6 +47,19 @@ export function useDoorAsk(enabled = true): DoorAsk {
       staleTime: CLIENTS_STALE,
     })),
   });
+  const homes = reads.map((read) =>
+    read.data
+      ? [...new Set(read.data.map((client) => client.namespace))].sort()
+      : []
+  );
+  const egress = useQueries({
+    queries: claims.map(({ controller }, at) => ({
+      queryKey: queryKeys.ingressClientPolicies(controller, homes[at]),
+      queryFn: () => commands.listNetworkPoliciesIn(homes[at]),
+      enabled: homes[at].length > 0,
+      staleTime: STALE_TIMES.slow,
+    })),
+  });
   const namespaces = useQuery({
     queryKey: queryKeys.namespaces(),
     queryFn: () => commands.listNamespaces(),
@@ -54,7 +67,8 @@ export function useDoorAsk(enabled = true): DoorAsk {
     staleTime: STALE_TIMES.slow,
   });
   const answers = reads.map(knownOf);
-  const digest = JSON.stringify(answers);
+  const policies = egress.map(knownOf);
+  const digest = JSON.stringify([answers, policies]);
   const listed = knownOf(namespaces);
   const listedDigest = JSON.stringify(listed);
   const classesError = classes.error;
@@ -63,7 +77,12 @@ export function useDoorAsk(enabled = true): DoorAsk {
     const reads = new Map(
       claims.map(({ controller, claim }, at) => [
         controller,
-        { name: claim.name, clients: answers[at], namespaces: listed },
+        {
+          name: claim.name,
+          clients: answers[at],
+          namespaces: listed,
+          egress: policies[at],
+        },
       ])
     );
     return (controller) => {
@@ -74,10 +93,12 @@ export function useDoorAsk(enabled = true): DoorAsk {
         .find((found) => found !== null);
       if (!claim) return null;
       if (!classesError) return undefined;
+      const why = errorToShow(classesError);
       return {
         name: claim.name,
-        clients: { known: false, why: errorToShow(classesError) },
+        clients: { known: false, why },
         namespaces: listed,
+        egress: { known: false, why },
       };
     };
     // The answers are compared by what they say, not by the array React Query rebuilt.

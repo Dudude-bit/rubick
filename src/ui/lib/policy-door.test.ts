@@ -2,8 +2,11 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type {
   DoorRule,
+  NetworkPolicyInfo,
   PolicyDoor,
   PolicyPeer,
+  PolicyPort,
+  PolicyRule,
   ServicePublished,
 } from "@/generated/types";
 import type { Known } from "@/lib/known";
@@ -90,6 +93,7 @@ const readOf = (
   read: Known<LabeledNamespace[]> = namespaces
 ): DoorRead => ({
   name: "Traefik",
+  egress: { known: true, value: { rows: [], unread: [] } },
   clients: { known: true, value: clients },
   namespaces: read,
 });
@@ -202,6 +206,8 @@ describe("whether a controller gets through the policies over a Service's pods",
       state: "unsure",
       policies: [],
       why: "policiesUnread",
+      side: "pods",
+      said: null,
     });
     expect(verdict({ state: "open" })).toEqual({ state: "open" });
     const stopped = behind(guarded([]));
@@ -266,6 +272,7 @@ describe("a controller's way in nobody could settle", () => {
     expect(doorDoubt(doubted, "80", readOf(), "traefik.io")).toEqual({
       policies: ["allow-nginx"],
       why: "ipBlock",
+      side: "pods",
       client: "Traefik",
       said: null,
     });
@@ -284,6 +291,7 @@ describe("a controller's way in nobody could settle", () => {
     const doubt = {
       policies: ["allow-pod-cidr"],
       why: "ipBlock" as const,
+      side: "pods" as const,
       client: "Traefik",
       said: null,
     };
@@ -316,6 +324,7 @@ describe("a controller's way in nobody could settle", () => {
     expect(doubt).toEqual({
       policies: [],
       why: "policiesUnread",
+      side: "pods",
       client: "Traefik",
       said: reason,
     });
@@ -327,6 +336,305 @@ describe("a controller's way in nobody could settle", () => {
     });
     expect(doorDoubtWords(doubt, t).title).toBe(
       "The NetworkPolicies over these pods could not be read"
+    );
+  });
+});
+
+describe("whether a controller's own egress policies let it reach a Service's pods", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const tcp = (
+    port: string | null,
+    endPort: number | null = null
+  ): PolicyPort => ({
+    protocol: "TCP",
+    port,
+    endPort,
+  });
+  const out = (
+    peers: PolicyPeer[],
+    ports: PolicyPort[] = [tcp("8080")]
+  ): PolicyRule => ({ peers, ports });
+  const holding = (
+    rules: PolicyRule[],
+    over: Partial<NetworkPolicyInfo> = {}
+  ): NetworkPolicyInfo => ({
+    name: "traefik-out",
+    namespace: "traefik",
+    uid: "traefik-out",
+    selects: { kind: "everything" },
+    selected: 1,
+    ingress: {
+      governed: false,
+      rules: [],
+      opensToEverything: false,
+      deniesEverything: false,
+    },
+    egress: {
+      governed: true,
+      rules,
+      opensToEverything: false,
+      deniesEverything: rules.length === 0,
+    },
+    labels: {},
+    createdAt: null,
+    ...over,
+  });
+  const reached = (
+    door: PolicyDoor | undefined = { state: "open" }
+  ): ServicePublished => ({
+    ...behind(door),
+    ports: [{ name: "http", port: 8080, protocol: "TCP", exposed: true }],
+    endpoints: [
+      {
+        address: "10.42.2.9",
+        target: null,
+        ready: true,
+        serving: true,
+        terminating: false,
+        nodeName: null,
+        zone: null,
+        hintZones: [],
+        ports: [8080],
+      },
+    ],
+  });
+  const leaving = (
+    policies: NetworkPolicyInfo[],
+    clients: DoorClient[] = [traefik]
+  ): DoorRead => ({
+    ...readOf(clients),
+    egress: { known: true, value: { rows: policies, unread: [] } },
+  });
+  const judged = (
+    rules: PolicyRule[],
+    subject: ServicePublished = reached(),
+    backend: string | null = "80"
+  ) => doorVerdict(subject, backend, leaving([holding(rules)]));
+  const block = (cidr: string): PolicyPeer => ({
+    pods: { kind: "notSaid" },
+    namespaces: { kind: "notSaid" },
+    ipBlock: { cidr, except: [] },
+  });
+
+  /**
+   * A default-deny egress over Traefik's pods let it reach DNS and nothing
+   * else, and every Ingress through it read as served. Fails if the stop is
+   * lost, names the wrong policy, or blames the pods' end.
+   */
+  it("holds back a controller whose own egress rules reach none of the pods, naming its policies", () => {
+    expect(judged([out([fromNamespace("kube-system")], [tcp("53")])])).toEqual({
+      state: "refused",
+      stop: {
+        reason: "policyHoldsBack",
+        service: reached().service,
+        client: { name: "Traefik", namespaces: ["traefik"] },
+        policies: [
+          {
+            kind: "NetworkPolicy",
+            name: "traefik-out",
+            namespace: "traefik",
+            existence: "present",
+            facts: null,
+          },
+        ],
+        ports: [8080],
+      },
+    });
+    expect(judged([])).toMatchObject({
+      state: "refused",
+      stop: { reason: "policyHoldsBack" },
+    });
+  });
+
+  it("lets a controller out where a rule names the pods' namespace on their port, or a range holding it", () => {
+    expect(judged([out([fromNamespace("shop")])])).toEqual({
+      state: "admitted",
+    });
+    expect(judged([out([fromNamespace("shop")], [tcp("8000", 8100)])])).toEqual(
+      {
+        state: "admitted",
+      }
+    );
+    expect(judged([out([], [])])).toEqual({ state: "admitted" });
+    expect(judged([out([fromNamespace("shop")], [tcp("9090")])])).toMatchObject(
+      {
+        state: "refused",
+      }
+    );
+    expect(
+      judged([
+        out([fromNamespace("shop")], [{ ...tcp("8080"), protocol: "UDP" }]),
+      ])
+    ).toMatchObject({ state: "refused" });
+  });
+
+  /** Only a policy that selects the controller's pods says where they may go. */
+  it("holds nothing back where no policy selects the controller's pods", () => {
+    const elsewhere = holding([], {
+      selects: { kind: "written", query: "app=other" },
+    });
+    expect(doorVerdict(reached(), "80", leaving([elsewhere]))).toEqual({
+      state: "open",
+    });
+    expect(doorVerdict(reached(), "80", leaving([]))).toEqual({
+      state: "open",
+    });
+  });
+
+  /** Each egress rule this cannot settle keeps its own words, never a refusal or a pass. */
+  it("cannot say where a rule picks pods by label, names its port by name, or names the pods' addresses by ipBlock", () => {
+    const byLabel: PolicyPeer = {
+      ...fromNamespace("shop"),
+      pods: { kind: "written", query: "app=web" },
+    };
+    const cases: Array<[PolicyRule, string]> = [
+      [out([byLabel]), "egressByPods"],
+      [out([fromNamespace("shop")], [tcp("http")]), "byName"],
+      [out([block("10.42.0.0/16")]), "egressIpBlock"],
+    ];
+    for (const [rule, why] of cases)
+      expect(judged([rule])).toEqual({
+        state: "unsure",
+        policies: ["traefik-out"],
+        why,
+        side: "client",
+        said: null,
+      });
+    expect(judged([out([block("192.168.0.0/16")])])).toMatchObject({
+      state: "refused",
+    });
+    const unreadable = holding([], {
+      selects: { kind: "written", query: "app in (" },
+    });
+    expect(doorVerdict(reached(), "80", leaving([unreadable]))).toMatchObject({
+      state: "unsure",
+      why: "unevaluable",
+      policies: ["traefik-out"],
+    });
+    const unshipped = { ...reached(), endpoints: undefined };
+    expect(
+      doorVerdict(
+        unshipped,
+        "80",
+        leaving([holding([out([block("192.168.0.0/16")])])])
+      )
+    ).toMatchObject({ state: "unsure", why: "egressIpBlock" });
+  });
+
+  it("cannot say for a controller on the node's network, nor for a port the backend does not pick", () => {
+    const shut = [holding([])];
+    expect(
+      doorVerdict(
+        reached(),
+        "80",
+        leaving(shut, [{ ...traefik, hostNetwork: true }])
+      )
+    ).toMatchObject({ state: "unsure", why: "hostNetwork", side: "client" });
+    const two = {
+      ...reached(),
+      ports: [
+        { name: "http", port: 8080, protocol: "TCP", exposed: true },
+        { name: "admin", port: 9090, protocol: "TCP", exposed: true },
+      ],
+    };
+    const http = [out([fromNamespace("shop")])];
+    expect(judged(http, two, "80")).toMatchObject({
+      state: "unsure",
+      why: "noPort",
+    });
+    expect(judged(http, two, "http")).toEqual({ state: "admitted" });
+    expect(judged(http, two, "admin")).toMatchObject({ state: "refused" });
+  });
+
+  /** A refusal at either end is the answer, and the pods' end is said first. */
+  it("says a refusal at the pods' end first, and one at the controller's over a doubt at the pods'", () => {
+    const shutOut = leaving([holding([])]);
+    const refusing = reached(guarded([rule([fromNamespace("ingress-nginx")])]));
+    expect(doorVerdict(refusing, "80", shutOut)).toMatchObject({
+      stop: { reason: "policyRefuses" },
+    });
+    const doubted = reached(guarded([rule([block("10.42.0.0/16")])]));
+    expect(doorVerdict(doubted, "80", shutOut)).toMatchObject({
+      stop: { reason: "policyHoldsBack", ports: [8080] },
+    });
+    expect(doorVerdict(doubted, "80", leaving([]))).toMatchObject({
+      state: "unsure",
+      why: "ipBlock",
+      side: "pods",
+    });
+  });
+
+  /**
+   * A refused list of the policies over Traefik's own pods is not an open
+   * way out. Fails if the refusal is dropped, or said without the cluster's
+   * words.
+   */
+  it("says the policies over the controller's own pods could not be read, in the cluster's words", () => {
+    const message =
+      'networkpolicies.networking.k8s.io is forbidden: User "dev" cannot list resource "networkpolicies" in the namespace "traefik"';
+    const read: DoorRead = {
+      ...readOf(),
+      egress: {
+        known: true,
+        value: {
+          rows: [],
+          unread: [{ namespace: "traefik", code: "FORBIDDEN", message }],
+        },
+      },
+    };
+    const doubt = doorDoubt(reached(), "80", read, "traefik.io");
+    expect(doubt).toEqual({
+      policies: [],
+      why: "egressUnread",
+      side: "client",
+      client: "Traefik",
+      said: message,
+    });
+    if (!doubt) throw new Error("expected a doubt");
+    expect(doorDoubtWords(doubt, t, "door-shut")).toEqual({
+      title: "The NetworkPolicies over Traefik's own pods could not be read",
+      note: `Whether Traefik may connect is not checked: ${message}.`,
+    });
+    const failed = {
+      ...readOf(),
+      egress: { known: false as const, why: "boom" },
+    };
+    expect(doorDoubt(reached(), "80", failed, "traefik.io")).toMatchObject({
+      why: "egressUnread",
+      said: "boom",
+    });
+  });
+
+  /**
+   * Before its pods and their policies are read there is nothing to name,
+   * and a controller no integration speaks for is not judged at its own end.
+   * Fails if every backend reads as unchecked while the reads are in flight.
+   */
+  it("draws no doubt while the controller's pods or their policies are being read", () => {
+    const reading = {
+      ...readOf(),
+      egress: { known: false as const, why: null },
+    };
+    for (const read of [reading, readOf([]), undefined]) {
+      expect(doorDoubt(reached(), "80", read, "traefik.io")).toBeNull();
+      expect(refusedStop(reached(), "80", read)).toBeNull();
+    }
+    expect(doorVerdict(reached(), "80", null)).toEqual({ state: "open" });
+  });
+
+  it("names the policies over the controller's pods in a doubt's title", () => {
+    const doubt = doorDoubt(
+      reached(),
+      "80",
+      leaving([holding([out([block("10.42.0.0/16")])])]),
+      "traefik.io"
+    );
+    if (!doubt) throw new Error("expected a doubt");
+    expect(doorDoubtWords(doubt, t).title).toBe(
+      "NetworkPolicy traefik-out over Traefik's pods decides whether it may reach these pods"
+    );
+    expect(doorDoubtWords(doubt, t, "door-block").title).toBe(
+      "NetworkPolicy traefik-out over Traefik's pods decides whether it may reach the pods behind door-block"
     );
   });
 });

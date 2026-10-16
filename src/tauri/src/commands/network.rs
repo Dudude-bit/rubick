@@ -233,6 +233,9 @@ pub struct ServiceHealthGroup {
     pub unrouted: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<ChainStop>,
+    /// The TCP ports its pods take connections on, which a controller's
+    /// egress policies are judged against.
+    pub targets: Vec<i32>,
     /// Only a guarded or an unread door: an open one refuses nobody.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub door: Option<PolicyDoor>,
@@ -245,6 +248,7 @@ impl ServiceHealthGroup {
             && other.stop.is_none()
             && self.door == other.door
             && !matches!(self.door, Some(PolicyDoor::Guarded { .. }))
+            && self.targets == other.targets
             && self.type_ == other.type_
             && self.selectorless == other.selectorless
             && (self.ready, self.draining, self.not_ready, self.unrouted)
@@ -449,6 +453,14 @@ fn health_inputs_of(
             draining: published.draining,
             not_ready: published.not_ready,
             unrouted: published.unrouted,
+            targets: published
+                .ports
+                .iter()
+                .filter(|port| port.protocol == "TCP")
+                .filter_map(|port| port.port)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
             stop: published.stop,
             door: published
                 .door
@@ -979,6 +991,44 @@ mod tests {
             .iter()
             .any(|group| group.names.len() == 1
                 && matches!(group.door, Some(PolicyDoor::Unread { .. }))));
+    }
+
+    /// A controller's egress policies are judged against the TCP ports a
+    /// backend's pods take connections on. Fails if the ports are dropped, a
+    /// UDP port is counted, or two Services on different ports share a
+    /// group, and so one's ports.
+    #[test]
+    fn the_compact_answer_keeps_the_ports_each_service_is_reached_on() {
+        let (services, slices) = synthetic(51, |_| false);
+        let mut published = published_from_slices(&services, &slices);
+        let port = |port: i32| crate::resources::PublishedPort {
+            name: Some("http".to_string()),
+            port: Some(port),
+            protocol: "TCP".to_string(),
+            exposed: true,
+        };
+        published[0].ports = vec![port(8080)];
+        published[50] = ServicePublished {
+            service: published[50].service.clone(),
+            ports: vec![
+                port(9090),
+                port(8080),
+                port(9090),
+                crate::resources::PublishedPort {
+                    protocol: "UDP".to_string(),
+                    ..port(53)
+                },
+            ],
+            ..published[0].clone()
+        };
+        let groups = health_inputs_of(&services, published)
+            .into_iter()
+            .find(|ns| ns.namespace == "team-00")
+            .expect("team-00")
+            .groups;
+        assert_eq!(groups.len(), 2);
+        assert!(groups.iter().any(|group| group.targets == vec![8080]));
+        assert!(groups.iter().any(|group| group.targets == vec![8080, 9090]));
     }
 
     /// The Ingress the attention count reads is its row cut down, not a

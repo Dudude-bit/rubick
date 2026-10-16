@@ -48,7 +48,7 @@ import {
   stopsRowState,
   doubtsOf,
 } from "../ingress";
-import type { DoorDoubt } from "@/lib/policy-door";
+import { isPolicyStop, type DoorDoubt } from "@/lib/policy-door";
 import type { RowTone } from "../page-kit";
 import { PREFIX, readAnnotations, type AnnotationReading } from "./annotations";
 
@@ -566,7 +566,7 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
  * has no endpoint, and pods a policy shuts are endpoints it fails to reach.
  */
 export const stopAnswerKey = (stop: ChainStop) =>
-  stop.reason === "policyRefuses"
+  isPolicyStop(stop)
     ? ("nginxUpstreamRefused" as const)
     : ("everyRequest503" as const);
 

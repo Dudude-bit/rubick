@@ -126,6 +126,16 @@ export const ru: Catalogue = {
     doorWhyIpBlock:
       "его адрес попадает в ipBlock, а применяется ли ipBlock к трафику подов, решает сетевой плагин",
     doorWhyUnevaluable: "не удалось вычислить селектор правила",
+    doorWhyEgressUnread:
+      "не удалось прочитать NetworkPolicy над его собственными подами",
+    doorWhyEgressByPods:
+      "правило egress над его подами выбирает, к каким подам можно подключаться, по меткам, а метки этих подов здесь не читаются",
+    doorWhyEgressIpBlock:
+      "правило egress над его подами называет адреса через ipBlock, а применяется ли ipBlock к трафику подов, решает сетевой плагин",
+    doorEgressUnread:
+      "NetworkPolicy над собственными подами {client} прочитать не удалось",
+    stopPolicyEgressNote:
+      "Поды готовы и опубликованы, но правила egress над собственными подами {client} в {namespaces} не выпускают их ни к одному из этих подов на {ports}, поэтому его подключения отбрасываются, а каждый запрос через него получает 502, 503 или 504. Добавьте в эту политику правило egress, у которого to выбирает это пространство имён, а ports содержит {ports}, или удалите политику. Если сетевой плагин не применяет NetworkPolicy, она ни на что не влияет.",
     portNumbered: "порт {n}",
     stopNoSliceNote:
       "{matched}, и ни один из них не попал ни в один эндпоинт этого Service. Причину эти объекты не сообщают: под попадает в срез через мгновение после того, как становится Ready, и не попадает вовсе, пока не работает контроллер эндпоинтов.",
@@ -4860,6 +4870,8 @@ export const ru: Catalogue = {
     healthBackendIdleShort: "бэкенд простаивает",
     healthBackendPoliciesUnread:
       "{name}: NetworkPolicy над его подами прочитать не удалось, поэтому не проверено, может ли подключиться {client}: {why}",
+    healthBackendEgressUnread:
+      "{name}: NetworkPolicy над собственными подами {client} прочитать не удалось, поэтому не проверено, может ли он подключиться: {why}",
     healthMissingBackend: "нет бэкенда",
     healthMissingTlsSecret: "нет Secret для TLS",
     healthBackendDownShort: "бэкенд недоступен",
@@ -8783,11 +8795,35 @@ export const ru: Catalogue = {
       other:
         "NetworkPolicy {names} решают, кто может подключиться к этим подам",
     },
+    doorEgressDecides: {
+      one: "NetworkPolicy {names} над подами {client} решает, может ли он подключиться к этим подам",
+      few: "NetworkPolicy {names} над подами {client} решают, может ли он подключиться к этим подам",
+      other:
+        "NetworkPolicy {names} над подами {client} решают, может ли он подключиться к этим подам",
+    },
+    doorEgressDecidesFor: {
+      one: "NetworkPolicy {names} над подами {client} решает, может ли он подключиться к подам за {service}",
+      few: "NetworkPolicy {names} над подами {client} решают, может ли он подключиться к подам за {service}",
+      other:
+        "NetworkPolicy {names} над подами {client} решают, может ли он подключиться к подам за {service}",
+    },
+    policyHoldsBackClient: {
+      one: "NetworkPolicy {names} не выпускает подключения {client} к подам этого Service",
+      few: "NetworkPolicy {names} не выпускают подключения {client} к подам этого Service",
+      other:
+        "NetworkPolicy {names} не выпускают подключения {client} к подам этого Service",
+    },
     doorDecidesFor: {
       one: "NetworkPolicy {names} решает, кто может подключиться к подам за {service}",
       few: "NetworkPolicy {names} решают, кто может подключиться к подам за {service}",
       other:
         "NetworkPolicy {names} решают, кто может подключиться к подам за {service}",
+    },
+    healthBackendEgressUnchecked: {
+      one: "{name}: NetworkPolicy {names} над собственными подами {client} решает, куда он может подключаться, а может ли он подключиться к этим подам, не проверено: {why}",
+      few: "{name}: NetworkPolicy {names} над собственными подами {client} решают, куда он может подключаться, а может ли он подключиться к этим подам, не проверено: {why}",
+      other:
+        "{name}: NetworkPolicy {names} над собственными подами {client} решают, куда он может подключаться, а может ли он подключиться к этим подам, не проверено: {why}",
     },
     healthBackendDoorUnchecked: {
       one: "{name}: NetworkPolicy {names} решает, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",

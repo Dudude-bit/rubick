@@ -427,6 +427,15 @@ describe("the findings", () => {
     expect(stop?.kind === "stop" && stopAnswerKey(stop.stop)).toBe(
       "nginxUpstreamRefused"
     );
+    expect(
+      stopAnswerKey({
+        reason: "policyHoldsBack",
+        service: shut.service,
+        client: { name: "ingress-nginx", namespaces: ["ingress-nginx"] },
+        policies: [],
+        ports: [80],
+      })
+    ).toBe("nginxUpstreamRefused");
     expect(t("empty", "nginxUpstreamRefused", { reason: "" })).toMatch(
       /gets a 502/
     );
@@ -482,6 +491,7 @@ describe("the findings", () => {
           client: "ingress-nginx",
           read: {
             name: "ingress-nginx",
+            egress: { known: true, value: { rows: [], unread: [] } },
             clients: {
               known: true,
               value: [

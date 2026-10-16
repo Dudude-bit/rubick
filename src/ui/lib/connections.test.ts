@@ -1048,6 +1048,7 @@ describe("the traffic chain", () => {
     };
     const traefik = (hostNetwork = false): DoorRead => ({
       name: "Traefik",
+      egress: { known: true, value: { rows: [], unread: [] } },
       clients: {
         known: true,
         value: [
@@ -1116,7 +1117,14 @@ describe("the traffic chain", () => {
             publishes(
               "shop",
               { ready: 2 },
-              { endpoints: [endpointOf("shop-a")], door: guard, stop }
+              {
+                endpoints: [endpointOf("shop-a")],
+                ports: [
+                  { name: "http", port: 8080, protocol: "TCP", exposed: true },
+                ],
+                door: guard,
+                stop,
+              }
             ),
           ]
         ),
@@ -1211,6 +1219,70 @@ describe("the traffic chain", () => {
       });
       const note = path.hops.at(-1);
       expect(note?.at === "stop" && note.note).toContain("node's network");
+    });
+
+    /**
+     * traefik-out let Traefik's pods reach DNS and nothing else, and the
+     * chain ended on "2 published" in green over a 504. Fails if the hold is
+     * not the last hop, leaves the path whole, or names a policy in the
+     * pods' namespace rather than the controller's.
+     */
+    it("stops after the published pods where the controller's own egress policies let it reach none of them", () => {
+      const shutOut: DoorRead = {
+        ...traefik(),
+        egress: {
+          known: true,
+          value: {
+            rows: [
+              {
+                name: "traefik-out",
+                namespace: "traefik",
+                uid: "traefik-out",
+                selects: { kind: "everything" },
+                selected: 1,
+                ingress: {
+                  governed: false,
+                  rules: [],
+                  opensToEverything: false,
+                  deniesEverything: false,
+                },
+                egress: {
+                  governed: true,
+                  rules: [],
+                  opensToEverything: false,
+                  deniesEverything: true,
+                },
+                labels: {},
+                createdAt: null,
+              },
+            ],
+            unread: [],
+          },
+        },
+      };
+      const path = chainOf(shutOut, null, [], {}, { state: "open" });
+      const last = path.hops.at(-1);
+      expect(path.hops.at(-2)?.at).toBe("published");
+      expect(path.broken).toBe(true);
+      expect(last).toMatchObject({
+        at: "stop",
+        mood: "fault",
+        shut: true,
+        title:
+          "NetworkPolicy traefik-out lets no connection from Traefik out to this Service's pods",
+        objects: [
+          { kind: "NetworkPolicy", name: "traefik-out", namespace: "traefik" },
+        ],
+        only: ["http://shop.local/"],
+      });
+      expect(last?.at === "stop" && last.note).toContain(
+        "own pods in traefik let them reach none of these pods on port 8080"
+      );
+      expect(
+        chainOf(traefik(), null, [], {}, { state: "open" }).hops.some(
+          (hop) => hop.at === "stop"
+        )
+      ).toBe(false);
     });
 
     /** A refused policy list is said at the door, never passed as an open one. */

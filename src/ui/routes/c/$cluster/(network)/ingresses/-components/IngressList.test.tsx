@@ -63,6 +63,7 @@ const answers: Record<string, unknown> = {
             draining: 0,
             notReady: 0,
             unrouted: 0,
+            targets: [8080],
           },
         ],
       },

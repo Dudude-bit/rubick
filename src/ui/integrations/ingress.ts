@@ -27,6 +27,7 @@ import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import type { Saying } from "@/i18n/say";
 import {
   doorDoubt,
+  isPolicyStop,
   refusedStop,
   type DoorClaim,
   type DoorDoubt,
@@ -339,7 +340,7 @@ export function stopsRowState(
   if (!tone) return null;
   const shut = stops
     .filter((stop) => stopWeight(stop).row === tone)
-    .every((stop) => stop.reason === "policyRefuses");
+    .every(isPolicyStop);
   return {
     text: t("empty", shut ? "stopPolicyShutUnder" : "nothingBehindIt"),
     tone,

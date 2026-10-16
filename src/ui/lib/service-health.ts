@@ -17,6 +17,7 @@ import type {
   NotServing,
   ObjectRef,
   ResourceConnections,
+  ServiceHealthGroup,
   ServicePublished,
   SharedCause,
 } from "@/generated/types";
@@ -27,6 +28,7 @@ import {
   stopMood,
 } from "@/lib/connections";
 import { makersUnread } from "@/lib/stop-mood";
+import { isPolicyStop, type PolicyStop } from "@/lib/policy-door";
 import { sharedText } from "@/lib/pod-cause";
 import { errorToShow } from "@/lib/error-utils";
 import { endpointCount, publishedFor, servingCount } from "@/lib/published";
@@ -52,12 +54,8 @@ export type ServiceHealth =
   /** None ready or none listed, and the pods every workload behind it waits on, or the workloads that could be at zero, were not read. */
   | { state: "podsUnread"; published: PublishedCounts }
   | { state: "noEndpoints"; published: PublishedCounts }
-  /** Its pods are ready and a NetworkPolicy admits nobody to them. */
-  | {
-      state: "shut";
-      ready: number;
-      stop: Extract<ChainStop, { reason: "policyRefuses" }>;
-    }
+  /** Its pods are ready and a NetworkPolicy lets no connection to them through. */
+  | { state: "shut"; ready: number; stop: PolicyStop }
   /** No pods by intent: every workload behind it is scaled to zero. */
   | { state: "idle"; stop: Extract<ChainStop, { reason: "scaledToZero" }> }
   /** A DNS alias: no endpoints, by design. */
@@ -84,7 +82,9 @@ export type PublishedCounts = Pick<
   };
 
 /** One Service as its verdict reads it, the shape `listServiceHealthInputs` answers in. */
-export type ServiceHealthInput = ServiceShape & PublishedCounts;
+export type ServiceHealthInput = ServiceShape &
+  PublishedCounts &
+  Pick<ServiceHealthGroup, "targets">;
 
 export function serviceHealthOf(
   service: ServiceShape,
@@ -101,7 +101,7 @@ export function serviceHealthOf(
     return { state: "byHand", ready: published.ready, total };
   if (serving > 0) {
     const { ready, draining } = published;
-    if (published.stop?.reason === "policyRefuses")
+    if (isPolicyStop(published.stop))
       return { state: "shut", ready, stop: published.stop };
     if (ready === total) return { state: "ready", ready };
     return ready > 0

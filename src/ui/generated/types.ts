@@ -356,6 +356,7 @@ export interface ServiceHealthGroup {
   notReady: number;
   unrouted: number;
   stop?: ChainStop;
+  targets: number[];
   door?: PolicyDoor;
 }
 
@@ -2603,6 +2604,13 @@ export type ChainStop =
       ports: number[];
       noRules: boolean;
       client: RefusedClient | null;
+    }
+  | {
+      reason: "policyHoldsBack";
+      service: ObjectRef;
+      client: RefusedClient;
+      policies: ObjectRef[];
+      ports: number[];
     };
 
 export type PodCause =

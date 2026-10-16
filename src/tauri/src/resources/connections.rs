@@ -510,6 +510,17 @@ pub enum ChainStop {
         #[serde(default)]
         client: Option<RefusedClient>,
     },
+    /// A controller's own `NetworkPolicy` objects let its pods reach no pod
+    /// behind the Service on the ports it sends to. Only the frontend reads a
+    /// controller's pods and the policies over them, so only it says this.
+    PolicyHoldsBack {
+        service: ObjectRef,
+        client: RefusedClient,
+        /// The policies selecting the controller's pods for egress.
+        policies: Vec<ObjectRef>,
+        /// The target ports none of their rules lets it reach.
+        ports: Vec<i32>,
+    },
 }
 
 /// A controller a door is shut to, and the namespaces its pods connect from.

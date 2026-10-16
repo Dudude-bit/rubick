@@ -148,6 +148,16 @@ export const en = {
     doorWhyIpBlock:
       "an ipBlock holds its address, and whether an ipBlock applies to pod traffic is the network plugin's choice",
     doorWhyUnevaluable: "a rule's selector could not be evaluated",
+    doorWhyEgressUnread:
+      "the NetworkPolicies over its own pods could not be read",
+    doorWhyEgressByPods:
+      "an egress rule over its own pods picks the pods it may reach by their labels, and these pods' labels are not read here",
+    doorWhyEgressIpBlock:
+      "an egress rule over its own pods names addresses by ipBlock, and whether an ipBlock applies to pod traffic is the network plugin's choice",
+    doorEgressUnread:
+      "The NetworkPolicies over {client}'s own pods could not be read",
+    stopPolicyEgressNote:
+      "The pods are ready and published, and the egress rules over {client}'s own pods in {namespaces} let them reach none of these pods on {ports}, so its connections are dropped and every request through it gets a 502, 503 or 504. Add an egress rule to that policy whose to picks this namespace and whose ports hold {ports}, or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
     portNumbered: "port {n}",
     stopNoSliceNote:
       "{matched}, and not one of them is in anything this Service publishes. These objects do not say why: a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.",
@@ -4329,6 +4339,8 @@ export const en = {
     healthBackendIdleShort: "backend idle",
     healthBackendPoliciesUnread:
       "{name}: the NetworkPolicies over its pods could not be read, so whether {client} may connect is not checked: {why}",
+    healthBackendEgressUnread:
+      "{name}: the NetworkPolicies over {client}'s own pods could not be read, so whether it may connect is not checked: {why}",
     healthMissingBackend: "missing backend",
     healthMissingTlsSecret: "missing TLS Secret",
     healthBackendDownShort: "backend down",
@@ -7873,10 +7885,30 @@ export const en = {
       one: "NetworkPolicy {names} decides who may connect to these pods",
       other: "NetworkPolicies {names} decide who may connect to these pods",
     },
+    doorEgressDecides: {
+      one: "NetworkPolicy {names} over {client}'s pods decides whether it may reach these pods",
+      other:
+        "NetworkPolicies {names} over {client}'s pods decide whether it may reach these pods",
+    },
+    doorEgressDecidesFor: {
+      one: "NetworkPolicy {names} over {client}'s pods decides whether it may reach the pods behind {service}",
+      other:
+        "NetworkPolicies {names} over {client}'s pods decide whether it may reach the pods behind {service}",
+    },
+    policyHoldsBackClient: {
+      one: "NetworkPolicy {names} lets no connection from {client} out to this Service's pods",
+      other:
+        "NetworkPolicies {names} let no connection from {client} out to this Service's pods",
+    },
     doorDecidesFor: {
       one: "NetworkPolicy {names} decides who may connect to the pods behind {service}",
       other:
         "NetworkPolicies {names} decide who may connect to the pods behind {service}",
+    },
+    healthBackendEgressUnchecked: {
+      one: "{name}: NetworkPolicy {names} over {client}'s own pods decides where it may connect, and whether it may reach these pods is not checked: {why}",
+      other:
+        "{name}: NetworkPolicies {names} over {client}'s own pods decide where it may connect, and whether it may reach these pods is not checked: {why}",
     },
     healthBackendDoorUnchecked: {
       one: "{name}: NetworkPolicy {names} decides who may connect to its pods, and whether {client} may is not checked: {why}",

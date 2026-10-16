@@ -4,6 +4,7 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type {
   IngressClassBinding,
+  NetworkPolicyInfo,
   PolicyDoor,
   TlsCertificate,
 } from "@/generated/types";
@@ -39,6 +40,7 @@ function serving(ready: number): ServiceHealthInput {
     draining: 0,
     notReady: 0,
     unrouted: 0,
+    targets: [8080],
   };
 }
 
@@ -327,6 +329,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
   it("calls a backend whose policies refuse the class's controller down", () => {
     const nginx: DoorRead = {
       name: "ingress-nginx",
+      egress: { known: true, value: { rows: [], unread: [] } },
       clients: {
         known: true,
         value: [
@@ -389,6 +392,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     });
     const onNode: DoorRead = {
       name: "ingress-nginx",
+      egress: { known: true, value: { rows: [], unread: [] } },
       clients: {
         known: true,
         value: [
@@ -413,6 +417,82 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       "web: NetworkPolicy allow-traefik decides who may connect to its pods, and whether ingress-nginx may is not checked: it runs on the node's network, and what a policy sees of it is the network plugin's choice."
     );
     expect(verdict(inputs()).code).not.toBe("backendDoorUnchecked");
+  });
+
+  /**
+   * nginx-out let ingress-nginx's pods reach DNS only and the list called
+   * web served over a 504. Fails if the controller's own policies stop being
+   * read, if a refused list of them reads as an open way out, or if either
+   * is said in the words of the pods' end.
+   */
+  it("calls a backend down where the controller's own egress policies reach none of its pods", () => {
+    const egress = (
+      value: Extract<DoorRead["egress"], { known: true }>["value"]
+    ): DoorRead => ({
+      name: "ingress-nginx",
+      egress: { known: true, value },
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "ingress-nginx-controller-5f",
+            namespace: "ingress-nginx",
+            labels: {},
+            ip: "10.42.0.12",
+            hostNetwork: false,
+          },
+        ],
+      },
+      namespaces: { known: true, value: [] },
+    });
+    const inputs = (read: DoorRead): IngressInputs => ({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: new Map([["web", serving(2)]]) },
+      certificates: undefined,
+      door: () => read,
+    });
+    const shut: NetworkPolicyInfo = {
+      name: "nginx-out",
+      namespace: "ingress-nginx",
+      uid: "nginx-out",
+      selects: { kind: "everything" },
+      selected: 1,
+      ingress: {
+        governed: false,
+        rules: [],
+        opensToEverything: false,
+        deniesEverything: false,
+      },
+      egress: {
+        governed: true,
+        rules: [],
+        opensToEverything: false,
+        deniesEverything: true,
+      },
+      labels: {},
+      createdAt: null,
+    };
+    expect(verdict(inputs(egress({ rows: [shut], unread: [] })))).toMatchObject(
+      {
+        code: "backendDown",
+        reason:
+          "web: NetworkPolicy nginx-out lets no connection from ingress-nginx out to this Service's pods.",
+      }
+    );
+    const message = "networkpolicies.networking.k8s.io is forbidden";
+    const unread = egress({
+      rows: [],
+      unread: [{ namespace: "ingress-nginx", code: "FORBIDDEN", message }],
+    });
+    expect(verdict(inputs(unread))).toMatchObject({
+      code: "backendDoorUnchecked",
+      role: "neutral",
+      reason: `web: the NetworkPolicies over ingress-nginx's own pods could not be read, so whether it may connect is not checked: ${message}.`,
+    });
+    expect(
+      ingressHealthOf(inputs(egress({ rows: [], unread: [] }))).problems
+    ).toEqual([]);
   });
 
   /**

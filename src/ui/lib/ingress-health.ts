@@ -169,6 +169,12 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
         },
         stop: service.stop,
         door: service.door,
+        ports: service.targets.map((port) => ({
+          name: null,
+          port,
+          protocol: "TCP",
+          exposed: true,
+        })),
       };
       const ports = backendPorts(ingress, name);
       const refused = ports
@@ -318,13 +324,15 @@ function problemSentence(problem: IngressProblem, t: T): string {
         client: problem.doubt.client,
         why: doorWhy(problem.doubt, t),
       };
-      return problem.doubt.policies.length === 0
+      const n = problem.doubt.policies.length;
+      const names = problem.doubt.policies.join(", ");
+      if (problem.doubt.side === "client")
+        return n === 0
+          ? t("readings", "healthBackendEgressUnread", said)
+          : t("count", "healthBackendEgressUnchecked", { ...said, n, names });
+      return n === 0
         ? t("readings", "healthBackendPoliciesUnread", said)
-        : t("count", "healthBackendDoorUnchecked", {
-            ...said,
-            n: problem.doubt.policies.length,
-            names: problem.doubt.policies.join(", "),
-          });
+        : t("count", "healthBackendDoorUnchecked", { ...said, n, names });
     }
   }
 }
