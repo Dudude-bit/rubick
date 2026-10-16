@@ -345,6 +345,7 @@ export interface IngressClassParameters {
 export interface ServiceHealthInputs {
   namespace: string;
   groups: ServiceHealthGroup[];
+  networks: string[];
 }
 
 export interface ServiceHealthGroup {

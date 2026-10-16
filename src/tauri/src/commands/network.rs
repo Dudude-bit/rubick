@@ -217,6 +217,10 @@ pub async fn list_service_backing(
 pub struct ServiceHealthInputs {
     pub namespace: String,
     pub groups: Vec<ServiceHealthGroup>,
+    /// The /24 (IPv4) or /64 (IPv6) of every endpoint address here: a
+    /// superset of any one Service's, so an egress ipBlock that misses them
+    /// all misses its pods.
+    pub networks: Vec<String>,
 }
 
 /// What `serviceHealthOf` reads of a Service and of what it publishes, and
@@ -438,8 +442,14 @@ fn health_inputs_of(
     services: &[Service],
     published: Vec<ServicePublished>,
 ) -> Vec<ServiceHealthInputs> {
-    let mut by_namespace: BTreeMap<String, Vec<ServiceHealthGroup>> = BTreeMap::new();
+    let mut by_namespace: BTreeMap<String, (Vec<ServiceHealthGroup>, BTreeSet<String>)> =
+        BTreeMap::new();
     for (service, published) in services.iter().zip(published) {
+        let networks = published
+            .endpoints
+            .iter()
+            .filter_map(|endpoint| endpoint.address.as_deref()?.parse().ok().map(network_of))
+            .collect::<Vec<_>>();
         let spec = service.spec.as_ref();
         let read = ServiceHealthGroup {
             names: vec![service.name_any()],
@@ -466,9 +476,10 @@ fn health_inputs_of(
                 .door
                 .filter(|door| !matches!(door, PolicyDoor::Open)),
         };
-        let groups = by_namespace
+        let (groups, seen) = by_namespace
             .entry(service.namespace().unwrap_or_default())
             .or_default();
+        seen.extend(networks);
         match groups.iter_mut().find(|group| group.reads_like(&read)) {
             Some(group) => group.names.extend(read.names),
             None => groups.push(read),
@@ -476,8 +487,25 @@ fn health_inputs_of(
     }
     by_namespace
         .into_iter()
-        .map(|(namespace, groups)| ServiceHealthInputs { namespace, groups })
+        .map(|(namespace, (groups, networks))| ServiceHealthInputs {
+            namespace,
+            groups,
+            networks: networks.into_iter().collect(),
+        })
         .collect()
+}
+
+fn network_of(address: std::net::IpAddr) -> String {
+    match address {
+        std::net::IpAddr::V4(v4) => {
+            let [a, b, c, _] = v4.octets();
+            format!("{a}.{b}.{c}.0/24")
+        }
+        std::net::IpAddr::V6(v6) => {
+            let [a, b, c, d, ..] = v6.segments();
+            format!("{a:x}:{b:x}:{c:x}:{d:x}::/64")
+        }
+    }
 }
 
 async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<ServicePublished>)> {
@@ -1029,6 +1057,37 @@ mod tests {
         assert_eq!(groups.len(), 2);
         assert!(groups.iter().any(|group| group.targets == vec![8080]));
         assert!(groups.iter().any(|group| group.targets == vec![8080, 9090]));
+    }
+
+    /// An egress ipBlock is judged against the networks a namespace's pods
+    /// sit in. Fails if an address is dropped, kept whole, or counted under
+    /// another namespace.
+    #[test]
+    fn the_compact_answer_keeps_the_networks_each_namespace_s_endpoints_sit_in() {
+        let (services, slices) = synthetic(51, |_| false);
+        let mut published = published_from_slices(&services, &slices);
+        let at = |address: &str| crate::resources::PublishedEndpoint {
+            address: Some(address.to_string()),
+            target: None,
+            ready: true,
+            serving: true,
+            terminating: false,
+            node_name: None,
+            zone: None,
+            hint_zones: vec![],
+            ports: vec![8080],
+        };
+        published[0].endpoints = vec![at("10.42.1.7"), at("10.42.1.9")];
+        published[50].endpoints = vec![at("10.42.3.4"), at("fd00:10:42:3::5")];
+        let networks = health_inputs_of(&services, published)
+            .into_iter()
+            .find(|ns| ns.namespace == "team-00")
+            .expect("team-00")
+            .networks;
+        assert_eq!(
+            networks,
+            vec!["10.42.1.0/24", "10.42.3.0/24", "fd00:10:42:3::/64"]
+        );
     }
 
     /// The Ingress the attention count reads is its row cut down, not a

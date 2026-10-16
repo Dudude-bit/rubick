@@ -44,12 +44,13 @@ export function useServiceHealthInputs(
   const { dataUpdatedAt, everyMs, slowRead } = freshness;
   return useMemo(() => {
     const byNamespace = new Map<string, NamespaceBacking>(
-      (data?.rows ?? []).map(({ namespace, groups }) => [
+      (data?.rows ?? []).map(({ namespace, groups, networks }) => [
         namespace,
         new Map(
-          groups.flatMap((group) =>
-            group.names.map((name) => [name, group] as const)
-          )
+          groups.flatMap((group) => {
+            const read = { ...group, networks };
+            return group.names.map((name) => [name, read] as const);
+          })
         ),
       ])
     );

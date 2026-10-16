@@ -49,6 +49,7 @@ function services(
     answered: [
       {
         namespace: "net",
+        networks: [],
         groups: groups.map(
           ([
             names,
@@ -234,7 +235,7 @@ describe("what Needs attention lists beyond pods", () => {
     };
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", groups: [web] }],
+        answered: [{ namespace: "net", networks: [], groups: [web] }],
         unread: [],
       },
     });
@@ -276,7 +277,7 @@ describe("what Needs attention lists beyond pods", () => {
     };
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", groups: [shut] }],
+        answered: [{ namespace: "net", networks: [], groups: [shut] }],
         unread: [],
       },
     });
@@ -347,7 +348,7 @@ describe("what Needs attention lists beyond pods", () => {
       });
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", groups: [idle, empty] }],
+        answered: [{ namespace: "net", networks: [], groups: [idle, empty] }],
         unread: [],
       },
       ingresses: {
@@ -425,7 +426,10 @@ describe("what Needs attention lists beyond pods", () => {
         certificates: new Map(),
       });
     const listed = attention({
-      services: { answered: [{ namespace: "net", groups }], unread: [] },
+      services: {
+        answered: [{ namespace: "net", networks: [], groups }],
+        unread: [],
+      },
       ingresses: {
         data: {
           rows: [ingress("books", "ledger"), ingress("pull", "big-pull")],
@@ -494,7 +498,10 @@ describe("what Needs attention lists beyond pods", () => {
       empty("orphan", nothingYet("orphan", false)),
     ];
     const listed = attention({
-      services: { answered: [{ namespace: "shop", groups }], unread: [] },
+      services: {
+        answered: [{ namespace: "shop", networks: [], groups }],
+        unread: [],
+      },
     });
     expect(listed.items.map((item) => [item.name, item.reason])).toEqual([
       ["orphan", "no endpoints"],

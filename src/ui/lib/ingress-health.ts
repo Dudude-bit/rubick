@@ -175,6 +175,7 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
           protocol: "TCP",
           exposed: true,
         })),
+        networks: service.networks,
       };
       const ports = backendPorts(ingress, name);
       const refused = ports

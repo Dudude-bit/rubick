@@ -18,6 +18,7 @@ import type {
   ObjectRef,
   ResourceConnections,
   ServiceHealthGroup,
+  ServiceHealthInputs,
   ServicePublished,
   SharedCause,
 } from "@/generated/types";
@@ -84,7 +85,8 @@ export type PublishedCounts = Pick<
 /** One Service as its verdict reads it, the shape `listServiceHealthInputs` answers in. */
 export type ServiceHealthInput = ServiceShape &
   PublishedCounts &
-  Pick<ServiceHealthGroup, "targets">;
+  Pick<ServiceHealthGroup, "targets"> &
+  Partial<Pick<ServiceHealthInputs, "networks">>;
 
 export function serviceHealthOf(
   service: ServiceShape,

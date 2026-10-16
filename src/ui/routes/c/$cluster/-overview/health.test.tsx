@@ -464,7 +464,7 @@ describe("a Service row whose pods share a cause", () => {
   it("draws the cause in red like the rows of its pods, and Share says it", async () => {
     const attention = attentionFrom([], {
       services: {
-        answered: [{ namespace: "create-demo", groups: [group] }],
+        answered: [{ namespace: "create-demo", networks: [], groups: [group] }],
         unread: [],
       },
     });
@@ -2242,6 +2242,7 @@ describe("what Needs attention says it checked", () => {
           answered: [
             {
               namespace: "net",
+              networks: [],
               groups: [
                 {
                   names: ["web"],

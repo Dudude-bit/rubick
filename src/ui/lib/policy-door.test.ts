@@ -19,6 +19,7 @@ import {
   refusedStop,
   type DoorClient,
   type DoorRead,
+  type DoorSubject,
 } from "./policy-door";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -407,7 +408,7 @@ describe("whether a controller's own egress policies let it reach a Service's po
   });
   const judged = (
     rules: PolicyRule[],
-    subject: ServicePublished = reached(),
+    subject: DoorSubject = reached(),
     backend: string | null = "80"
   ) => doorVerdict(subject, backend, leaving([holding(rules)]));
   const block = (cidr: string): PolicyPeer => ({
@@ -519,6 +520,34 @@ describe("whether a controller's own egress policies let it reach a Service's po
         leaving([holding([out([block("192.168.0.0/16")])])])
       )
     ).toMatchObject({ state: "unsure", why: "egressIpBlock" });
+  });
+
+  /**
+   * The Ingresses list judged door-open from the compact answer, which
+   * carries the namespace's networks instead of addresses, and called it
+   * not checked beside a chain that said shut. Fails if a block whose except
+   * holds every network does not refuse, or one that touches a network does.
+   */
+  it("judges an egress ipBlock by the networks the pods sit in where their addresses did not come", () => {
+    const netted = (networks: string[]) => ({
+      ...reached(),
+      endpoints: undefined,
+      networks,
+    });
+    const exceptPods: PolicyPeer = {
+      ...block("0.0.0.0/0"),
+      ipBlock: { cidr: "0.0.0.0/0", except: ["10.42.0.0/16"] },
+    };
+    expect(judged([out([exceptPods])], netted(["10.42.2.0/24"]))).toMatchObject(
+      { state: "refused" }
+    );
+    expect(judged([out([exceptPods])])).toMatchObject({ state: "refused" });
+    expect(
+      judged([out([block("10.42.2.7/32")])], netted(["10.42.2.0/24"]))
+    ).toMatchObject({ state: "unsure", why: "egressIpBlock" });
+    expect(
+      judged([out([block("10.42.0.0/16")])], netted(["10.43.0.0/24"]))
+    ).toMatchObject({ state: "refused" });
   });
 
   it("cannot say for a controller on the node's network, nor for a port the backend does not pick", () => {

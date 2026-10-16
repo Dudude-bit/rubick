@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { inCidr } from "./cidr";
+import { cidrOverlap, inCidr } from "./cidr";
 
 describe("whether an address is inside an ipBlock", () => {
   /** A pod CIDR admitting the controller read as refusing it. */
@@ -24,5 +24,25 @@ describe("whether an address is inside an ipBlock", () => {
     expect(inCidr("10.0.0.300", "10.0.0.0/8")).toBeNull();
     expect(inCidr("10.0.0.1", "10.0.0.0/33")).toBeNull();
     expect(inCidr("10.0.0.1", "10.0.0.0")).toBeNull();
+  });
+});
+
+describe("how much of a network an ipBlock holds", () => {
+  /**
+   * A controller's egress ipBlock is judged against the networks a
+   * namespace's pods sit in. Fails if a network a block only touches reads
+   * as held or as missed.
+   */
+  it("holds a network inside a wider block, misses one outside it, and touches one a narrower block falls in", () => {
+    expect(cidrOverlap("10.42.1.0/24", "10.42.0.0/16")).toBe("within");
+    expect(cidrOverlap("10.42.1.0/24", "0.0.0.0/0")).toBe("within");
+    expect(cidrOverlap("10.43.1.0/24", "10.42.0.0/16")).toBe("outside");
+    expect(cidrOverlap("10.42.1.0/24", "10.42.1.7/32")).toBe("partly");
+    expect(cidrOverlap("10.42.1.0/24", "10.42.2.7/32")).toBe("outside");
+    expect(cidrOverlap("10.42.1.7/32", "10.42.1.7/32")).toBe("within");
+    expect(cidrOverlap("fd00:10:42:3::/64", "fd00:10:42::/48")).toBe("within");
+    expect(cidrOverlap("10.42.1.0/24", "::/0")).toBe("outside");
+    expect(cidrOverlap("10.42.1.0/24", "10.42.0.0")).toBeNull();
+    expect(cidrOverlap("10.42.1.0/x", "10.42.0.0/16")).toBeNull();
   });
 });

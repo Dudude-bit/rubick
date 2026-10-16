@@ -468,6 +468,7 @@ describe("the count beside a namespace and the count on its Overview", () => {
     lists.services = [
       {
         namespace: "team-checkout",
+        networks: [],
         groups: [
           {
             names: ["checkout-api"],

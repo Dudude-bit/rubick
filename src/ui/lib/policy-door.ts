@@ -25,7 +25,7 @@ import type {
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
-import { inCidr } from "@/lib/cidr";
+import { cidrOverlap, inCidr } from "@/lib/cidr";
 import type { Known } from "@/lib/known";
 import {
   peerMatch,
@@ -97,6 +97,8 @@ export const isPolicyStop = (
 export type DoorSubject = Pick<ServicePublished, "service" | "door" | "ports"> &
   Partial<Pick<ServicePublished, "endpoints">> & {
     stop?: ChainStop | null;
+    /** The networks its pods sit in, where those came instead of the addresses. */
+    networks?: string[];
   };
 
 export type DoorVerdict =
@@ -267,18 +269,23 @@ function podsVerdict(
   };
 }
 
-/** Where a connection lands: the Service's pods, by namespace and address. */
+/** Where a connection lands: the Service's pods, by namespace and the networks they sit in. */
 interface Landing {
   namespace: string;
-  /** `null` where the addresses were not shipped with the subject. */
-  addresses: string[] | null;
+  /** `null` where neither addresses nor networks came with the subject. */
+  networks: string[] | null;
 }
 
-function blockLets(block: PolicyIpBlock, addresses: string[] | null): Answer {
-  if (addresses === null || addresses.length === 0) return "egressIpBlock";
-  const holds = addresses.map((ip) => blockHolds(block, ip));
-  if (holds.includes(null)) return "unevaluable";
-  return holds.includes(true) ? "egressIpBlock" : false;
+function blockLets(block: PolicyIpBlock, networks: string[] | null): Answer {
+  if (networks === null || networks.length === 0) return "egressIpBlock";
+  let lets = false;
+  for (const network of networks) {
+    const inside = cidrOverlap(network, block.cidr);
+    const except = block.except.map((cidr) => cidrOverlap(network, cidr));
+    if (inside === null || except.includes(null)) return "unevaluable";
+    if (inside !== "outside" && !except.includes("within")) lets = true;
+  }
+  return lets ? "egressIpBlock" : false;
 }
 
 /** Whether a peer of an egress rule names the namespace the pods are in; one that also picks pods by label is not compared. */
@@ -288,7 +295,7 @@ function egressPeerLets(
   to: Landing,
   namespaces: Known<LabeledNamespace[]>
 ): Answer {
-  if (peer.ipBlock) return blockLets(peer.ipBlock, to.addresses);
+  if (peer.ipBlock) return blockLets(peer.ipBlock, to.networks);
   const match = peerMatch(
     { ...peer, pods: { kind: "everything" } },
     home,
@@ -388,10 +395,14 @@ function clientVerdict(
 
   const to: Landing = {
     namespace: published.service.namespace ?? "",
-    addresses:
-      published.endpoints?.flatMap((endpoint) =>
-        endpoint.address === null ? [] : [endpoint.address]
-      ) ?? null,
+    networks:
+      published.networks ??
+      published.endpoints?.flatMap(({ address }) =>
+        address === null
+          ? []
+          : [`${address}/${address.includes(":") ? 128 : 32}`]
+      ) ??
+      null,
   };
   const rows: PolicyRows = {
     known: true,

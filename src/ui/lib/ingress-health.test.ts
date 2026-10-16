@@ -422,8 +422,9 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
   /**
    * nginx-out let ingress-nginx's pods reach DNS only and the list called
    * web served over a 504. Fails if the controller's own policies stop being
-   * read, if a refused list of them reads as an open way out, or if either
-   * is said in the words of the pods' end.
+   * read, if a refused list of them reads as an open way out, if either is
+   * said in the words of the pods' end, or if the list leaves the networks
+   * its pods sit in out of an ipBlock the chain beside it settles.
    */
   it("calls a backend down where the controller's own egress policies reach none of its pods", () => {
     const egress = (
@@ -493,6 +494,34 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     expect(
       ingressHealthOf(inputs(egress({ rows: [], unread: [] }))).problems
     ).toEqual([]);
+    const exceptPods: NetworkPolicyInfo = {
+      ...shut,
+      egress: {
+        ...shut.egress,
+        deniesEverything: false,
+        rules: [
+          {
+            peers: [
+              {
+                pods: { kind: "notSaid" },
+                namespaces: { kind: "notSaid" },
+                ipBlock: { cidr: "0.0.0.0/0", except: ["10.42.0.0/16"] },
+              },
+            ],
+            ports: [],
+          },
+        ],
+      },
+    };
+    const netted = (networks?: string[]): IngressInputs => ({
+      ...inputs(egress({ rows: [exceptPods], unread: [] })),
+      backing: {
+        known: true,
+        value: new Map([["web", { ...serving(2), networks }]]),
+      },
+    });
+    expect(verdict(netted(["10.42.0.0/24"])).code).toBe("backendDown");
+    expect(verdict(netted()).code).toBe("backendDoorUnchecked");
   });
 
   /**

@@ -39,13 +39,18 @@ describe("the Services of a scope as their verdict reads them", () => {
   /**
    * One read for three namespaces, one refused. The refused one must read as
    * not checked, the one with no Services as none, and every Service named in
-   * a group must be found by its own name. Fails if a refused namespace is
-   * answered with an empty map, or a group is found only by its first name.
+   * a group must be found by its own name, with the namespace's networks.
+   * Fails if a refused namespace is answered with an empty map, a group is
+   * found only by its first name, or its networks are left behind.
    */
   it("keeps a refused namespace apart from one that has no Services", async () => {
     listServiceHealthInputs.mockResolvedValue({
       rows: [
-        { namespace: "net", groups: [{ ...SERVING, names: ["api", "web"] }] },
+        {
+          namespace: "net",
+          networks: ["10.42.1.0/24"],
+          groups: [{ ...SERVING, names: ["api", "web"] }],
+        },
       ],
       unread: [
         {
@@ -65,6 +70,9 @@ describe("the Services of a scope as their verdict reads them", () => {
     const net = result.current.in("net");
     expect(net.known && net.value.get("web")?.ready).toBe(2);
     expect(net.known && net.value.get("api")?.ready).toBe(2);
+    expect(net.known && net.value.get("api")?.networks).toEqual([
+      "10.42.1.0/24",
+    ]);
     expect(result.current.in("secret-ns")).toEqual({
       known: false,
       why: "services is forbidden",

@@ -67,3 +67,20 @@ export function inCidr(ip: string, cidr: string): boolean | null {
   const shift = BigInt(block.bits - prefix);
   return at.value >> shift === block.value >> shift;
 }
+
+/** How much of `network` a CIDR holds; `null` where either cannot be parsed. */
+export function cidrOverlap(
+  network: string,
+  cidr: string
+): "within" | "outside" | "partly" | null {
+  const [base, length] = network.split("/");
+  const [start, prefix] = cidr.split("/");
+  if (!/^\d{1,3}$/.test(length ?? "") || !/^\d{1,3}$/.test(prefix ?? ""))
+    return null;
+  if (Number(prefix) <= Number(length)) {
+    const held = inCidr(base, cidr);
+    return held === null ? null : held ? "within" : "outside";
+  }
+  const touches = inCidr(start, network);
+  return touches === null ? null : touches ? "partly" : "outside";
+}
