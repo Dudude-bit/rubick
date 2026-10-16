@@ -286,7 +286,7 @@ function AttentionRow({
             className="h-2.5 w-2.5 flex-none self-center"
             aria-hidden="true"
           />
-          <span className="truncate" title={reasonWord(item, t)}>
+          <span className="line-clamp-2" title={reasonWord(item, t)}>
             {reasonWord(item, t)}
           </span>
         </span>

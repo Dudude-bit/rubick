@@ -2148,10 +2148,6 @@ describe("what Needs attention says it checked", () => {
   });
 
   /**
-   * Lena read "...поэтому н…" and "...никто не подхваты…" with nothing to
-   * hover. Fails if a cut detail sentence stops carrying its whole text.
-   */
-  /**
    * At 1024 Marco's checkout-worker row read "team-…": the reason, which is
    * the point of the row, was cut to nothing. Fails if the row's sentence is
    * truncated to one line again, or the name in it is left unbounded.
@@ -2208,6 +2204,23 @@ describe("what Needs attention says it checked", () => {
     expect(kind.closest("li")).toHaveClass("grid-cols-subgrid");
   });
 
+  /**
+   * The Russian route rows read "останавливается на сетевой поли…": the
+   * reason column fits a cluster's code and cut the app's own longer words.
+   * Fails if a reason is cut to one line again.
+   */
+  it("wraps a reason in the app's own words rather than cutting it", async () => {
+    const reason = "останавливается на сетевой политике";
+    await panel(attentionFrom([{ ...problem, reason }]));
+    const word = screen.getByTitle(reason);
+    expect(word).toHaveClass("line-clamp-2");
+    expect(word).not.toHaveClass("truncate");
+  });
+
+  /**
+   * Lena read "...поэтому н…" and "...никто не подхваты…" with nothing to
+   * hover. Fails if a cut detail sentence stops carrying its whole text.
+   */
   it("keeps a detail sentence its row cuts readable on hover", async () => {
     const sentence =
       "IngressClass traefik is served by nothing in this cluster, so nothing picks this Ingress up";
