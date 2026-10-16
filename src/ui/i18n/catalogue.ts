@@ -4026,6 +4026,10 @@ export const en = {
     pdbNoRule: "no rule stated",
     pdbNoDisruption: "no disruption allowed",
     pdbRoom: "{allowed} · {healthy} healthy of {selected} selected",
+    pdbCannotAllow:
+      "{name} cannot allow any disruption: it requires {required} healthy of {selected} selected",
+    pdbCannotAllowDetail:
+      "Even with every pod healthy there is none to spare, so every eviction is refused and a node drain covering this workload does not finish. Lower what it requires, or run more replicas than it requires.",
     pdbBelowFloor:
       "{name} is below its own floor: {healthy} healthy, {required} required",
     pdbBelowFloorDetail:
@@ -5981,6 +5985,8 @@ export const en = {
       "Kubernetes refuses these for a time rather than for good: usually a disruption budget with nothing spare, sometimes the API pacing itself.",
     budgetRuleHealthyCovering:
       "{rule}, {healthy} of {expected} healthy, covering {pods} here.",
+    budgetCannotAllow:
+      "It requires as many healthy pods as it covers, so this drain does not finish until the budget or the replica count changes.",
     couldNotReadClusterState: "Could not read cluster state",
     noClusterOverviewAccess:
       "You do not have permission to read the whole cluster. Open a namespace you have access to: type its name in the namespace picker above.",

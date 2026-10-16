@@ -10,11 +10,59 @@ import {
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import type { ObjectFacts, ResourceConnections } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
 import { DrainDialog } from "./drain-dialog";
 import type { DrainReport, DrainState, RefusedPod } from "./useNodeDrain";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
+
+const neighbourhood = vi.hoisted(() => ({
+  answer: undefined as ResourceConnections | undefined,
+}));
+vi.mock("@/hooks/useConnections", () => ({
+  useConnections: () => ({ data: neighbourhood.answer, isPending: false }),
+}));
+
+const onNode = (
+  counts: Pick<
+    Extract<ObjectFacts, { kind: "budget" }>,
+    "disruptionsAllowed" | "currentHealthy" | "desiredHealthy" | "expectedPods"
+  >
+): ResourceConnections => {
+  const node = {
+    kind: "Node",
+    name: "node-7",
+    namespace: null,
+    existence: "present" as const,
+    facts: null,
+  };
+  return {
+    subject: node,
+    edges: [
+      {
+        from: {
+          kind: "PodDisruptionBudget",
+          name: "pdb-stateful",
+          namespace: "prod",
+          existence: "present",
+          facts: {
+            kind: "budget",
+            minAvailable: "1",
+            maxUnavailable: null,
+            conditions: [],
+            ...counts,
+          },
+        },
+        to: { ...node, kind: "Pod", name: "stateful-0", namespace: "prod" },
+        relation: { verb: "governs", selector: null },
+      },
+    ],
+    stops: [],
+    published: [],
+    notLookedAt: [],
+  };
+};
 
 const wrap = (ui: ReactElement) =>
   renderWithRouter(ui, {
@@ -120,6 +168,42 @@ describe("confirming a drain", () => {
       evictPodsWithEmptydir: false,
       tellMeWhen: false,
     });
+  });
+
+  /**
+   * A budget that requires every pod it covers refuses this drain for good,
+   * and "keeps asking" alone reads as a wait that ends.
+   */
+  it("says which budget this drain cannot get past", async () => {
+    neighbourhood.answer = onNode({
+      disruptionsAllowed: 0,
+      currentHealthy: 1,
+      desiredHealthy: 1,
+      expectedPods: 1,
+    });
+    await wrap(dialog({ phase: "idle" }));
+    neighbourhood.answer = undefined;
+
+    expect(screen.getByText(/prod\/pdb-stateful/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/requires as many healthy pods as it covers/)
+    ).toBeInTheDocument();
+  });
+
+  it("does not say it of a budget spent while a pod restarts", async () => {
+    neighbourhood.answer = onNode({
+      disruptionsAllowed: 0,
+      currentHealthy: 2,
+      desiredHealthy: 2,
+      expectedPods: 3,
+    });
+    await wrap(dialog({ phase: "idle" }));
+    neighbourhood.answer = undefined;
+
+    expect(screen.getByText(/prod\/pdb-stateful/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/requires as many healthy pods as it covers/)
+    ).toBeNull();
   });
 
   /** It says what will happen, and the promise is now one the backend keeps. */

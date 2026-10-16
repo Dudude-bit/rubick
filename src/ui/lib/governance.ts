@@ -32,6 +32,11 @@ import { formatAge } from "./utils";
 
 export type AutoscalerFacts = Extract<ObjectFacts, { kind: "autoscaler" }>;
 export type BudgetFacts = Extract<ObjectFacts, { kind: "budget" }>;
+/** What a budget's status counts, which is all a verdict on it reads. */
+export type BudgetCounts = Pick<
+  BudgetFacts,
+  "disruptionsAllowed" | "currentHealthy" | "desiredHealthy" | "expectedPods"
+>;
 
 export interface Autoscaler {
   object: ObjectRef;
@@ -52,9 +57,9 @@ export interface Budget {
  * How loud a finding is allowed to be.
  *
  * `neutral` is not a lesser warning, it is a different claim: the fact is
- * true and worth reading and the cluster is not in trouble. Every
- * `DisruptionAllowed=False` on a healthy two-replica workload is one, the
- * same judgement `condition-health.ts` makes about the condition itself.
+ * true and worth reading and the cluster is not in trouble. A budget spent
+ * while one of its pods restarts is one, the same judgement
+ * `condition-health.ts` makes about `DisruptionAllowed=False` itself.
  */
 export interface Finding {
   tone: "err" | "warn" | "neutral";
@@ -346,21 +351,38 @@ export function budgetRoom(facts: BudgetFacts, t: T): string {
  * treating the condition as advisory.
  *
  * So the fact is always stated and the colour is earned by whether the budget
- * is *spent* or *broken*. Exactly met is spent, and one more ready replica
- * frees it: no colour. Below its own floor is broken, because the drain
- * blocks *and* nothing will free it until the workload recovers — a warning,
- * and one about the workload rather than about the budget.
+ * is *spent*, *broken* or *unmeetable*. Exactly met is spent, and the pod
+ * that comes back frees it: no colour. Below its own floor is broken, because
+ * the drain blocks *and* nothing will free it until the workload recovers.
+ * Requiring every pod it covers is unmeetable: no recovery frees it, and a
+ * drain waits on it for good. Both warn, and the second is said first, since
+ * the first's "until the replicas come back" is not true of it.
  */
-export function budgetFinding(budget: Budget, t: T): Finding | null {
-  const facts = budget.facts;
+export function budgetFinding(
+  name: string,
+  facts: BudgetCounts,
+  t: T
+): Finding | null {
   if (facts.disruptionsAllowed > 0) return null;
+
+  if (cannotAllow(facts)) {
+    return {
+      tone: "warn",
+      title: t("readings", "pdbCannotAllow", {
+        name,
+        required: facts.desiredHealthy,
+        selected: facts.expectedPods,
+      }),
+      detail: t("readings", "pdbCannotAllowDetail"),
+    };
+  }
 
   const short = facts.currentHealthy < facts.desiredHealthy;
   if (short) {
     return {
       tone: "warn",
       title: t("readings", "pdbBelowFloor", {
-        name: budget.object.name,
+        name,
         healthy: facts.currentHealthy,
         required: facts.desiredHealthy,
       }),
@@ -370,13 +392,17 @@ export function budgetFinding(budget: Budget, t: T): Finding | null {
 
   return {
     tone: "neutral",
-    title: t("readings", "pdbExactlyMet", { name: budget.object.name }),
+    title: t("readings", "pdbExactlyMet", { name }),
     detail: t("readings", "pdbExactlyMetDetail", {
       healthy: facts.currentHealthy,
       required: facts.desiredHealthy,
     }),
   };
 }
+
+/** With every pod it covers healthy, still none to spare: a drain waits on it for good. */
+export const cannotAllow = (facts: BudgetCounts) =>
+  facts.expectedPods > 0 && facts.desiredHealthy >= facts.expectedPods;
 
 // --- the moment a budget actually matters -------------------------------
 

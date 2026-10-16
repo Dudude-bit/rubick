@@ -367,3 +367,76 @@ describe("an autoscaler's page", () => {
     ).toHaveAttribute("href", "/c/test/deployments/lena-sandbox/hello-web");
   });
 });
+
+describe("a disruption budget's page", () => {
+  const PDBS: CatalogEntry = {
+    group: "policy",
+    version: "v1",
+    kind: "PodDisruptionBudget",
+    plural: "poddisruptionbudgets",
+    namespaced: true,
+    verbs: ["get", "list"],
+    shortNames: ["pdb"],
+  };
+  const budget = (status: Record<string, number>) => ({
+    apiVersion: "policy/v1",
+    kind: "PodDisruptionBudget",
+    metadata: { name: "pdb-stateful-demo", namespace: "k8s-gui-test" },
+    spec: { minAvailable: 1 },
+    status,
+  });
+  const page = (at: string) =>
+    renderWithRouter(
+      <GenericObjectPage
+        resource="poddisruptionbudgets"
+        namespace="k8s-gui-test"
+        name="pdb-stateful-demo"
+      />,
+      { at }
+    );
+
+  beforeEach(() => {
+    answers.catalog = () => Promise.resolve({ entries: [PDBS], unread: [] });
+    answers.yaml = () => Promise.resolve("kind: PodDisruptionBudget\n");
+  });
+
+  /**
+   * Its page showed `disruptionsAllowed 0` among the raw rows and nothing
+   * else, while the workload it covers already said a drain would not
+   * finish. Fails if the page stops leading with it, on any tab.
+   */
+  it("leads every tab with a budget that requires every pod it covers", async () => {
+    answers.object = () =>
+      Promise.resolve(
+        budget({
+          disruptionsAllowed: 0,
+          currentHealthy: 1,
+          desiredHealthy: 1,
+          expectedPods: 1,
+        })
+      );
+    await page(
+      "/c/test/poddisruptionbudgets/k8s-gui-test/pdb-stateful-demo?tab=yaml"
+    );
+    expect(
+      await screen.findByText(
+        "pdb-stateful-demo cannot allow any disruption: it requires 1 healthy of 1 selected"
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("leads with nothing while the budget has room", async () => {
+    answers.object = () =>
+      Promise.resolve(
+        budget({
+          disruptionsAllowed: 1,
+          currentHealthy: 2,
+          desiredHealthy: 1,
+          expectedPods: 2,
+        })
+      );
+    await page("/c/test/poddisruptionbudgets/k8s-gui-test/pdb-stateful-demo");
+    expect(await screen.findByText("disruptionsAllowed")).toBeInTheDocument();
+    expect(screen.queryByText(/cannot allow any disruption/)).toBeNull();
+  });
+});

@@ -7,7 +7,8 @@ import type { ReactElement } from "react";
 
 import { ScaleTargetRef } from "./AutoscalerScales";
 import type { ScaleTarget } from "./scale-target";
-import { objectFacets } from "./facets";
+import { ProblemSummary } from "@/components/object/detail-blocks";
+import { objectFacets, objectFinding } from "./facets";
 
 /** The key itself, so a group is found by the catalogue key it is titled with. */
 const t = ((_section: string, key: string) => key) as never;
@@ -442,5 +443,74 @@ describe("an autoscaler that cannot read its metrics", () => {
       (item) => item.label === "desiredReplicas"
     );
     expect(row?.value).toBe("3");
+  });
+});
+
+describe("a disruption budget read on its own page and peek", () => {
+  const en: T = (section, key, values) => translate("en", section, key, values);
+  const budget = (status: Record<string, number> | undefined) => ({
+    apiVersion: "policy/v1",
+    kind: "PodDisruptionBudget",
+    metadata: { name: "pdb-stateful-demo", namespace: "k8s-gui-test" },
+    spec: { minAvailable: 1 },
+    status,
+  });
+  const unmeetable = budget({
+    disruptionsAllowed: 0,
+    currentHealthy: 1,
+    desiredHealthy: 1,
+    expectedPods: 1,
+  });
+
+  /** The workload it covers already says this; fails if the budget's own screens stop saying it. */
+  it("leads with the budget that requires every pod it covers", () => {
+    const finding = objectFinding(unmeetable, en);
+    expect(finding?.tone).toBe("warn");
+    expect(finding?.title).toBe(
+      "pdb-stateful-demo cannot allow any disruption: it requires 1 healthy of 1 selected"
+    );
+    const lead = objectFacets(unmeetable, en).lead as ReactElement<{
+      tone: string;
+      headline: string;
+    }>;
+    expect(lead.type).toBe(ProblemSummary);
+    expect(lead.props.tone).toBe("warn");
+    expect(lead.props.headline).toBe(finding?.title);
+  });
+
+  /** A count the status does not carry is not a zero; fails if a missing one reads as 0 healthy, below the floor. */
+  it("says nothing it was not told by the budget's controller", () => {
+    expect(objectFacets(budget(undefined), en).lead).toBeFalsy();
+    expect(
+      objectFinding(
+        budget({ disruptionsAllowed: 0, desiredHealthy: 1, expectedPods: 2 }),
+        en
+      )
+    ).toBeNull();
+  });
+
+  it("says nothing about a budget with room, or one spent for a moment", () => {
+    for (const status of [
+      {
+        disruptionsAllowed: 1,
+        currentHealthy: 2,
+        desiredHealthy: 1,
+        expectedPods: 2,
+      },
+      {
+        disruptionsAllowed: 0,
+        currentHealthy: 2,
+        desiredHealthy: 2,
+        expectedPods: 3,
+      },
+    ])
+      expect(objectFinding(budget(status), en)).toBeNull();
+  });
+
+  /** The verdict is the policy API's; another group's kind of the same name is not read as one. */
+  it("does not read a same-named kind from another group as a budget", () => {
+    expect(
+      objectFinding({ ...unmeetable, apiVersion: "example.com/v1" }, en)
+    ).toBeNull();
   });
 });

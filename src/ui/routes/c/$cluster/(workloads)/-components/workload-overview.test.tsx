@@ -59,12 +59,12 @@ const autoscaler = (
 const budget = (over: Partial<Extract<ObjectFacts, { kind: "budget" }>> = {}) =>
   ({
     kind: "budget",
-    minAvailable: "1",
+    minAvailable: "2",
     maxUnavailable: null,
     disruptionsAllowed: 0,
-    currentHealthy: 1,
-    desiredHealthy: 1,
-    expectedPods: 1,
+    currentHealthy: 2,
+    desiredHealthy: 2,
+    expectedPods: 3,
     conditions: [],
     ...over,
   }) as ObjectFacts;
@@ -140,10 +140,29 @@ describe("CountBlock", () => {
 
     expect(screen.getByText("A drain waits")).toBeInTheDocument();
     expect(
-      screen.getByText(/keeps at least 1 available; no disruption allowed/)
+      screen.getByText(/keeps at least 2 available; no disruption allowed/)
     ).toBeInTheDocument();
     // The three-line paragraph explaining a healthy state is what went.
     expect(screen.queryByText(/which is the budget doing its job/)).toBeNull();
+  });
+
+  it("warns about a budget that requires every pod it covers", async () => {
+    await renderBlock(
+      query(
+        conns(
+          budget({
+            minAvailable: "1",
+            currentHealthy: 1,
+            desiredHealthy: 1,
+            expectedPods: 1,
+          })
+        )
+      )
+    );
+
+    expect(
+      screen.getByText(/cannot allow any disruption: it requires 1 healthy/)
+    ).toBeInTheDocument();
   });
 
   it("keeps the sentence for a budget below its own floor", async () => {

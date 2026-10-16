@@ -1,5 +1,6 @@
 import { createElement } from "react";
 
+import { ProblemSummary } from "@/components/object/detail-blocks";
 import {
   isMachineDocument,
   type KeyValue,
@@ -7,7 +8,12 @@ import {
 import type { ConditionInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { segmentOf } from "@/lib/access-kinds";
-import { desiredComputed } from "@/lib/governance";
+import {
+  budgetFinding,
+  desiredComputed,
+  type BudgetCounts,
+  type Finding,
+} from "@/lib/governance";
 import { formatDate } from "@/lib/utils";
 import {
   conditionItem,
@@ -302,6 +308,47 @@ function writers(metadata: Json): KeyValue[] {
     }));
 }
 
+const counted = (value: unknown) =>
+  Number.isInteger(value) ? (value as number) : null;
+
+/** A budget's own status, or `null` before its controller has written one. */
+function budgetCountsOf(fields: Json): BudgetCounts | null {
+  const status = record(fields.status);
+  const disruptionsAllowed = counted(status.disruptionsAllowed);
+  const currentHealthy = counted(status.currentHealthy);
+  const desiredHealthy = counted(status.desiredHealthy);
+  const expectedPods = counted(status.expectedPods);
+  return disruptionsAllowed === null ||
+    currentHealthy === null ||
+    desiredHealthy === null ||
+    expectedPods === null
+    ? null
+    : { disruptionsAllowed, currentHealthy, desiredHealthy, expectedPods };
+}
+
+export type LoudFinding = Finding & { tone: "err" | "warn" };
+
+/**
+ * What an object's own page and peek lead with, for a kind whose verdict the
+ * app already makes elsewhere: a budget says about itself what the workload
+ * it covers says about it.
+ */
+export function objectFinding(object: unknown, t: T): LoudFinding | null {
+  const fields = record(object);
+  if (
+    fields.kind !== "PodDisruptionBudget" ||
+    !asText(fields.apiVersion)?.startsWith("policy/")
+  )
+    return null;
+  const counts = budgetCountsOf(fields);
+  const finding =
+    counts &&
+    budgetFinding(asText(record(fields.metadata).name) ?? "", counts, t);
+  return finding && finding.tone !== "neutral"
+    ? { ...finding, tone: finding.tone }
+    : null;
+}
+
 /** An autoscaler that is not computing keeps `desiredReplicas` as it was, 0 if it never got that far: said, and said why. */
 function readStatus(fields: Json, rows: KeyValue[], t: T): KeyValue[] {
   if (fields.kind !== "HorizontalPodAutoscaler") return rows;
@@ -377,9 +424,19 @@ export function objectFacets(
   // which keep their fields at the top level. "No spec" there reads as a gap.
   const specDrawn = spec.length > 0 || (enveloped && hasStatus !== false);
 
+  const finding = objectFinding(object, t);
+
   return {
     status: stateOf(fields.status),
     createdAt: asText(metadata.creationTimestamp) ?? null,
+    lead:
+      finding &&
+      createElement(ProblemSummary, {
+        tone: finding.tone,
+        headline: finding.title,
+        detail: finding.detail,
+        className: "mt-3",
+      }),
     groups: [
       ...(statusDrawn
         ? [

@@ -301,50 +301,87 @@ describe("what an autoscaler is worth saying", () => {
 });
 
 describe("the tone a disruption budget is allowed", () => {
+  const finding = (over: Partial<Extract<ObjectFacts, { kind: "budget" }>>) => {
+    const budget = budgets(conns([governs(pdb("pdb-under-test", over))]))[0];
+    return budgetFinding(budget.object.name, budget.facts, t);
+  };
+
   it("says nothing while there is room", () => {
-    expect(
-      budgetFinding(budgets(conns([governs(pdb("pdb-log"))]))[0], t)
-    ).toBeNull();
+    expect(finding({})).toBeNull();
   });
 
   /**
-   * The case `condition-health.ts` already calls advisory. A one-replica
-   * workload with `minAvailable: 1` reports `DisruptionAllowed=False` every
-   * second of its healthy life, and colouring it claims a fault the cluster
-   * never reported.
+   * The case `condition-health.ts` already calls advisory: one of three pods
+   * restarting spends a budget of two, and the pod that comes back frees it.
+   * Colouring it claims a fault the cluster never reported.
    */
-  it("states a spent budget without spending a colour on it", () => {
-    const budget = budgets(
-      conns([
-        governs(
-          pdb("pdb-stateful", {
-            disruptionsAllowed: 0,
-            currentHealthy: 1,
-            desiredHealthy: 1,
-            expectedPods: 1,
-          })
-        ),
-      ])
-    )[0];
-    const finding = budgetFinding(budget, t);
-    expect(finding?.tone).toBe("neutral");
-    expect(finding?.title).toContain("no disruption");
+  it("states a budget spent for a moment without spending a colour on it", () => {
+    const said = finding({
+      disruptionsAllowed: 0,
+      currentHealthy: 2,
+      desiredHealthy: 2,
+      expectedPods: 3,
+    });
+    expect(said?.tone).toBe("neutral");
+    expect(said?.title).toContain("no disruption right now");
   });
 
   it("colours the budget that is below its own floor", () => {
-    const budget = budgets(
-      conns([
-        governs(
-          pdb("pdb-short", {
-            disruptionsAllowed: 0,
-            currentHealthy: 1,
-            desiredHealthy: 2,
-            expectedPods: 3,
-          })
-        ),
-      ])
-    )[0];
-    expect(budgetFinding(budget, t)?.tone).toBe("warn");
+    const said = finding({
+      disruptionsAllowed: 0,
+      currentHealthy: 1,
+      desiredHealthy: 2,
+      expectedPods: 3,
+    });
+    expect(said?.tone).toBe("warn");
+    expect(said?.title).toContain("below its own floor");
+  });
+
+  /**
+   * `minAvailable: 1` over one replica, `maxUnavailable: 0`, `100%`: the
+   * budget is exactly met with every pod healthy, so nothing that recovers
+   * frees it, and a drain waits on it for good. Filed as spent, it was said
+   * in grey beside a drain that would never finish.
+   */
+  it("warns about a budget that requires every pod it covers", () => {
+    const said = finding({
+      disruptionsAllowed: 0,
+      currentHealthy: 1,
+      desiredHealthy: 1,
+      expectedPods: 1,
+    });
+    expect(said?.tone).toBe("warn");
+    expect(said?.title).toBe(
+      "pdb-under-test cannot allow any disruption: it requires 1 healthy of 1 selected"
+    );
+    expect(said?.detail).toContain("does not finish");
+  });
+
+  /**
+   * Short of its floor as well, but "until the missing replicas come back"
+   * is not true of a budget that would still allow nothing once they had.
+   */
+  it("says a budget that requires every pod cannot allow one, even while it is short", () => {
+    expect(
+      finding({
+        disruptionsAllowed: 0,
+        currentHealthy: 0,
+        desiredHealthy: 1,
+        expectedPods: 1,
+      })?.title
+    ).toContain("cannot allow any disruption");
+  });
+
+  /** No pods selected is nothing to evict, not a budget that refuses. */
+  it("does not call a budget that selects nothing one that refuses", () => {
+    expect(
+      finding({
+        disruptionsAllowed: 0,
+        currentHealthy: 0,
+        desiredHealthy: 0,
+        expectedPods: 0,
+      })?.tone
+    ).toBe("neutral");
   });
 });
 

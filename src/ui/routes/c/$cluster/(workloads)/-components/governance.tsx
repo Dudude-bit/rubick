@@ -102,7 +102,8 @@ export interface Governance {
  * Prose is what an unusual state earns. A budget that allows no disruption
  * because it is exactly met is the budget doing its job — it is a clause on
  * its own row and nothing more. A budget below its own floor blocks a drain
- * until the workload recovers, and keeps its coloured sentence.
+ * until the workload recovers, and one that requires every pod it covers
+ * blocks it for good: both keep their coloured sentence.
  */
 export function governanceRows(
   conns: ResourceConnections | null | undefined,

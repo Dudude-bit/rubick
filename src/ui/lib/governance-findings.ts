@@ -54,7 +54,7 @@ export function governanceFindings(
     if (finding) findings.push(finding);
   }
   for (const budget of budgets(conns)) {
-    const finding = budgetFinding(budget, t);
+    const finding = budgetFinding(budget.object.name, budget.facts, t);
     if (finding && finding.tone !== "neutral") findings.push(finding);
   }
   return findings;

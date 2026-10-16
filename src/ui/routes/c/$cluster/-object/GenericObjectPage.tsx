@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import { EmptyPage } from "../../../-components/NotFound";
 import { KeyValueSection } from "./detail-kv";
-import { objectFacets } from "./facets";
+import { objectFacets, objectFinding } from "./facets";
 import { OwnsPanel } from "./Owns";
 import { useLineage } from "./ownership";
 import { useOwnershipKeys } from "./ownership-keys";
@@ -21,6 +21,7 @@ import { ShareObjectAction } from "@/components/share/ShareAction";
 import { accessSegment, listTitleOf } from "@/lib/access-kinds";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
+import { ProblemSummary } from "@/components/object/detail-blocks";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
@@ -101,6 +102,12 @@ export function GenericObjectPage({
         served.state === "served" ? served.entry.hasStatus : undefined
       )
     : null;
+  const finding = object.data ? objectFinding(object.data, t) : null;
+  const verdict = finding && `${finding.title}. ${finding.detail}`;
+  const contribute = useMemo(
+    () => (verdict ? () => ({ verdict }) : undefined),
+    [verdict]
+  );
   const registryKind = isResourceType(resource) ? toKind(resource) : null;
   const kind =
     served.state === "served" ? served.entry.kind : (registryKind ?? resource);
@@ -244,17 +251,30 @@ export function GenericObjectPage({
           t={t}
         />
       ) : (
-        <DetailTabs
-          tabs={tabs}
-          activeTab={activeTab}
-          onTabChange={(tab) =>
-            setSearch({ tab: tab === "overview" ? undefined : tab })
-          }
-          subject={`${resource}/${namespace ?? ""}/${name}`}
-          actions={
-            <ShareObjectAction subject={subject} resource={object.data} />
-          }
-        />
+        <>
+          {finding && (
+            <ProblemSummary
+              tone={finding.tone}
+              headline={finding.title}
+              detail={finding.detail}
+            />
+          )}
+          <DetailTabs
+            tabs={tabs}
+            activeTab={activeTab}
+            onTabChange={(tab) =>
+              setSearch({ tab: tab === "overview" ? undefined : tab })
+            }
+            subject={`${resource}/${namespace ?? ""}/${name}`}
+            actions={
+              <ShareObjectAction
+                subject={subject}
+                resource={object.data}
+                contribute={contribute}
+              />
+            }
+          />
+        </>
       )}
     </div>
   );
