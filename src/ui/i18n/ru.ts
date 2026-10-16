@@ -452,7 +452,7 @@ export const ru: Catalogue = {
     updateStrategy: "Стратегия обновления",
     usage: "Потребление",
     allowed: "разрешено",
-    disabled: "запрещено",
+    notAllowed: "запрещено",
     value: "Значение",
     binding: "Привязка",
     identity: "Удостоверение",

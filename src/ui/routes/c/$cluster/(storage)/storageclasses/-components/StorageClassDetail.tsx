@@ -3,7 +3,10 @@ import { DeleteAction } from "../../../-object/DeleteAction";
 import { Info, SlidersHorizontal } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
-import { storageClassFactsSection } from "@/lib/share/storage-class-share";
+import {
+  storageClassFacts,
+  storageClassFactsSection,
+} from "@/lib/share/storage-class-share";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
@@ -16,7 +19,6 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { StorageClassInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-import { None } from "@/components/ui/none";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 
@@ -48,37 +50,13 @@ export function StorageClassDetail() {
 
   const parameters = sc?.parameters ?? {};
 
-  const facts: KeyValue[] = [
-    {
-      label: t("columns", "provisioner"),
-      value: sc?.provisioner ?? <None />,
-      mono: true,
-    },
-    {
-      label: t("columns", "defaultClass"),
-      // The one question people open this page to answer: does a claim that
-      // names no class land here?
-      value: sc?.isDefault
-        ? t("empty", "claimsUseThisClass")
-        : t("empty", "noLower"),
-    },
-    {
-      label: t("columns", "reclaimPolicy"),
-      value: sc?.reclaimPolicy ?? <None />,
-      mono: true,
-    },
-    {
-      label: t("columns", "bindingMode"),
-      value: sc?.volumeBindingMode ?? <None />,
-      mono: true,
-    },
-    {
-      label: t("columns", "volumeExpansion"),
-      value: sc?.allowVolumeExpansion
-        ? t("empty", "expansionAllowed")
-        : t("empty", "expansionNotAllowed"),
-    },
-  ];
+  const facts: KeyValue[] = sc
+    ? storageClassFacts(sc, t).map(({ label, text, mono }) => ({
+        label,
+        value: text,
+        mono,
+      }))
+    : [];
 
   const deliveryQuery = deliveryOfKind(ResourceType.StorageClass, sc);
   const intercept = useDeliveryIntercept(deliveryQuery);

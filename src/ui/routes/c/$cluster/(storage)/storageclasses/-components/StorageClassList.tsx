@@ -111,7 +111,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
         {row.original.allowVolumeExpansion ? (
           <T section="columns" k="allowed" />
         ) : (
-          <T section="columns" k="disabled" />
+          <T section="columns" k="notAllowed" />
         )}
       </span>
     ),

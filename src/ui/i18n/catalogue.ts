@@ -479,7 +479,7 @@ export const en = {
     updateStrategy: "Update strategy",
     usage: "Usage",
     allowed: "allowed",
-    disabled: "disabled",
+    notAllowed: "not allowed",
     value: "Value",
     binding: "Binding",
     identity: "Identity",

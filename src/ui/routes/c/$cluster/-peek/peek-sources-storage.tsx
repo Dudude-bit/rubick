@@ -9,6 +9,7 @@ import {
 } from "../-object/ClaimStatus";
 import { list, ref, source, type PeekSources } from "./peek-sources-kit";
 import { declaredQuantity } from "@/lib/metric-format";
+import { storageClassFacts } from "@/lib/share/storage-class-share";
 
 export const CONFIG_STORAGE_SOURCES: PeekSources = {
   ConfigMap: source(commands.getConfigmap, (configMap, _target, t) => ({
@@ -158,33 +159,9 @@ export const CONFIG_STORAGE_SOURCES: PeekSources = {
       groups: [
         {
           title: t("columns", "provisioning"),
-          items: [
-            {
-              label: t("columns", "provisioner"),
-              value: storageClass.provisioner,
-              mono: true,
-            },
-            {
-              label: t("columns", "reclaimPolicy"),
-              value: storageClass.reclaimPolicy,
-            },
-            {
-              label: t("columns", "bindingMode"),
-              value: storageClass.volumeBindingMode,
-            },
-            {
-              label: t("columns", "expansion"),
-              value: storageClass.allowVolumeExpansion
-                ? t("columns", "allowed")
-                : t("empty", "notAllowed"),
-            },
-            {
-              label: t("cluster", "hueDefault"),
-              value: storageClass.isDefault
-                ? t("action", "yes")
-                : t("action", "no"),
-            },
-          ],
+          items: storageClassFacts(storageClass, t).map(
+            ({ label, text, mono }) => ({ label, value: text, mono })
+          ),
         },
       ],
     })
