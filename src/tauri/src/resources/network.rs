@@ -563,10 +563,23 @@ pub struct NetworkPolicyInfo {
     /// selects nothing protects nothing, and no other screen in this app says
     /// so.
     pub selected: Option<usize>,
+    /// Where it selects none, the label its pods most likely carry instead.
+    pub nearly: Option<NearLabel>,
     pub ingress: PolicyDirection,
     pub egress: PolicyDirection,
     pub labels: std::collections::BTreeMap<String, String>,
     pub created_at: Option<String>,
+}
+
+/// A label pods carry a character or two from one a `podSelector` asks for,
+/// where the rest of the selector holds for them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NearLabel {
+    /// As the selector writes it, `key=value`.
+    pub asked: String,
+    pub carried: String,
+    pub pods: usize,
 }
 
 fn direction_of(
@@ -644,6 +657,7 @@ impl From<&k8s_openapi::api::networking::v1::NetworkPolicy> for NetworkPolicyInf
             uid: policy.uid().unwrap_or_default(),
             selects: PolicySelects::read(spec.and_then(|s| s.pod_selector.as_ref())),
             selected: None,
+            nearly: None,
             ingress: direction_of(types, "Ingress", ingress, wrote_in),
             egress: direction_of(types, "Egress", egress, wrote_out),
             labels: policy.labels().clone(),
@@ -669,17 +683,106 @@ pub fn joined_to_pods<P: kube::Resource>(
         .map(|policy| {
             let mut info = NetworkPolicyInfo::from(policy);
             let selector = policy.spec.as_ref().and_then(|s| s.pod_selector.as_ref());
-            info.selected = pods.and_then(|pods| {
+            if let Some(pods) = pods {
                 // A policy only ever acts in its own namespace, and a
                 // cluster-wide pod list carries every other one's.
-                let own = pods
+                let own: Vec<&P> = pods
                     .iter()
-                    .filter(|pod| pod.namespace() == policy.namespace());
-                selected_count(selector, own)
-            });
+                    .filter(|pod| pod.namespace() == policy.namespace())
+                    .collect();
+                info.join(selector, &own);
+            }
             info
         })
         .collect()
+}
+
+impl NetworkPolicyInfo {
+    /// Counts the pods `selector` picks out of its own namespace's `pods`, and
+    /// where it picks none, the label it most likely meant.
+    pub fn join<P: kube::Resource>(&mut self, selector: Option<&LabelSelector>, pods: &[&P]) {
+        self.selected = selected_count(selector, pods.iter().copied());
+        if self.selected == Some(0) {
+            self.nearly = nearest_label(selector, pods);
+        }
+    }
+}
+
+/// The label one or two edits from a `matchLabels` pair that the most of
+/// `pods` carry while the rest of the selector holds for them. Fewest edits
+/// first, then most pods.
+pub fn nearest_label<P: kube::Resource>(
+    selector: Option<&LabelSelector>,
+    pods: &[&P],
+) -> Option<NearLabel> {
+    let selector = selector?;
+    let mut best: Option<(usize, NearLabel)> = None;
+    for (key, value) in selector.match_labels.iter().flatten() {
+        let asked = format!("{key}={value}");
+        let limit = if asked.chars().count() <= 6 { 1 } else { 2 };
+        let mut rest = selector.clone();
+        if let Some(labels) = rest.match_labels.as_mut() {
+            labels.remove(key);
+        }
+        let mut carried: std::collections::BTreeMap<(usize, String), usize> =
+            std::collections::BTreeMap::new();
+        for pod in pods {
+            if Selector::Query(Some(&rest)).matches(pod.labels()) != Some(true) {
+                continue;
+            }
+            let closest = pod
+                .labels()
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .map(|label| (edits(&asked, &label), label))
+                .filter(|(n, _)| (1..=limit).contains(n))
+                .min();
+            if let Some(closest) = closest {
+                *carried.entry(closest).or_default() += 1;
+            }
+        }
+        for ((n, label), count) in carried {
+            if best.as_ref().is_none_or(|(m, near)| {
+                (n, std::cmp::Reverse(count)) < (*m, std::cmp::Reverse(near.pods))
+            }) {
+                best = Some((
+                    n,
+                    NearLabel {
+                        asked: asked.clone(),
+                        carried: label,
+                        pods: count,
+                    },
+                ));
+            }
+        }
+    }
+    best.map(|(_, near)| near)
+}
+
+/// Insertions, deletions, substitutions and swaps of two neighbours, each one
+/// edit: how far a typo moves a string.
+fn edits(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut rows = vec![vec![0; b.len() + 1]; a.len() + 1];
+    for (i, row) in rows.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for (j, cell) in rows[0].iter_mut().enumerate() {
+        *cell = j;
+    }
+    for i in 1..=a.len() {
+        for j in 1..=b.len() {
+            let swap = i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1];
+            let mut n = (rows[i - 1][j] + 1)
+                .min(rows[i][j - 1] + 1)
+                .min(rows[i - 1][j - 1] + usize::from(a[i - 1] != b[j - 1]));
+            if swap {
+                n = n.min(rows[i - 2][j - 2] + 1);
+            }
+            rows[i][j] = n;
+        }
+    }
+    rows[a.len()][b.len()]
 }
 
 /// How many of `pods` a `podSelector` picks, or `None` where the selector
@@ -844,6 +947,71 @@ mod network_policy_tests {
             },
         }))
         .expect("a pod is a pod")
+    }
+
+    /// selects-nothing in the test cluster asks for `app=cloud-dmeo` beside two
+    /// pods carrying `app=cloud-demo`, and its page said only "no pods".
+    /// Fails if a swapped pair of letters is not offered as the label meant.
+    #[test]
+    fn a_policy_in_front_of_nothing_names_the_label_its_pods_carry_a_typo_away() {
+        let policies = [policy(&serde_json::json!({
+            "podSelector": { "matchLabels": { "app": "cloud-dmeo" } },
+            "policyTypes": ["Ingress"],
+        }))];
+        let pods = [
+            pod("np-test", &[("app", "cloud-demo")]),
+            pod("np-test", &[("app", "cloud-demo")]),
+            pod("np-test", &[("app", "busy-demo")]),
+            pod("elsewhere", &[("app", "cloud-dmeo")]),
+        ];
+        let info = &joined_to_pods(&policies, Some(&pods))[0];
+        assert_eq!(info.selected, Some(0));
+        assert_eq!(
+            info.nearly,
+            Some(NearLabel {
+                asked: "app=cloud-dmeo".into(),
+                carried: "app=cloud-demo".into(),
+                pods: 2,
+            })
+        );
+    }
+
+    /// Fails if a near label is offered for pods the rest of the selector
+    /// would still turn away, or for a policy that does select its pods.
+    #[test]
+    fn a_near_label_is_offered_only_where_it_alone_keeps_the_pods_out() {
+        let two = [policy(&serde_json::json!({
+            "podSelector": { "matchLabels": { "app": "cloud-dmeo", "tier": "web" } },
+            "policyTypes": ["Ingress"],
+        }))];
+        let other_tier = [pod("np-test", &[("app", "cloud-demo"), ("tier", "db")])];
+        assert_eq!(joined_to_pods(&two, Some(&other_tier))[0].nearly, None);
+
+        let one = [policy(&serde_json::json!({
+            "podSelector": { "matchLabels": { "app": "cloud-demo" } },
+            "policyTypes": ["Ingress"],
+        }))];
+        let both = [
+            pod("np-test", &[("app", "cloud-demo")]),
+            pod("np-test", &[("app", "cloud-dmeo")]),
+        ];
+        let info = &joined_to_pods(&one, Some(&both))[0];
+        assert_eq!(info.selected, Some(1));
+        assert_eq!(info.nearly, None);
+    }
+
+    /// Fails if a label three edits away is offered as a typo: `app=api`
+    /// beside `app=web` is a different app, not a slip.
+    #[test]
+    fn a_label_more_than_two_edits_away_is_not_a_typo() {
+        let policies = [policy(&serde_json::json!({
+            "podSelector": { "matchLabels": { "app": "api" } },
+            "policyTypes": ["Ingress"],
+        }))];
+        let pods = [pod("np-test", &[("app", "web")])];
+        assert_eq!(joined_to_pods(&policies, Some(&pods))[0].nearly, None);
+        assert_eq!(edits("cloud-dmeo", "cloud-demo"), 1);
+        assert_eq!(edits("app=api", "app=web"), 3);
     }
 
     /// The refusal, which is the whole reason the count is an `Option`.

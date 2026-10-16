@@ -21,6 +21,7 @@ const policy = (selected: number | null): NetworkPolicyInfo => ({
   namespace: "shop",
   selects: { kind: "everything" },
   selected,
+  nearly: null,
   ingress: {
     governed: true,
     rules: [],
@@ -135,5 +136,52 @@ describe("what a NetworkPolicy's page resolves", () => {
         "Does not restrict Egress: policyTypes names Ingress only."
       )
     ).toBeInTheDocument();
+  });
+});
+
+describe("why a NetworkPolicy's page says it restricts nothing", () => {
+  const typo: NetworkPolicyInfo = {
+    ...policy(0),
+    name: "allow-demo",
+    selects: { kind: "written", query: "app=cloud-dmeo" },
+    nearly: { asked: "app=cloud-dmeo", carried: "app=cloud-demo", pods: 2 },
+  };
+
+  /**
+   * A policy over a misspelled label said only "no pods", and the reader
+   * compared labels by hand. Fails if the page stops leading with the cause
+   * and the label its pods carry instead.
+   */
+  it("leads with the label its pods carry a typo away", async () => {
+    await renderPolicy(typo, "overview");
+    expect(
+      screen.getByText("This policy restricts nothing")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No pod in shop carries app=cloud-dmeo, and 2 pods carry app=cloud-demo, a character or two away. If that is the label meant, correct the selector."
+      )
+    ).toBeInTheDocument();
+  });
+
+  /** Fails if a selector no label is near loses its sentence with the typo. */
+  it("names the selector no pod carries where no label is near", async () => {
+    await renderPolicy({ ...typo, nearly: null }, "overview");
+    expect(
+      screen.getByText(
+        "A NetworkPolicy acts only on the pods it selects, and no pod in shop carries app=cloud-dmeo."
+      )
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A refused pod list is not a policy in front of nothing. Fails if "could
+   * not look" is said as "restricts nothing".
+   */
+  it("says nothing of the kind where its pods could not be read", async () => {
+    await renderPolicy({ ...typo, selected: null, nearly: null }, "overview");
+    expect(screen.queryByText("This policy restricts nothing")).toBeNull();
+    await renderPolicy({ ...typo, selected: 2, nearly: null }, "overview");
+    expect(screen.queryByText("This policy restricts nothing")).toBeNull();
   });
 });

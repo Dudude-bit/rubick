@@ -58,6 +58,7 @@ function networkPolicy(
     selects:
       query === null ? { kind: "everything" } : { kind: "written", query },
     selected: 1,
+    nearly: null,
     ingress: direction(types.includes("Ingress")),
     egress: direction(types.includes("Egress")),
     labels: {},

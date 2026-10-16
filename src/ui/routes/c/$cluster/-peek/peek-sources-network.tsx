@@ -13,7 +13,13 @@ import {
   ServiceNotReady,
 } from "../-object/health-views";
 import { ReachCell, ResolvedPeers } from "../-object/network-policy-cells";
-import { notGovernedSentence, portText, reachOf } from "@/lib/network-policy";
+import {
+  notGovernedSentence,
+  portText,
+  reachOf,
+  selectsNothingWords,
+} from "@/lib/network-policy";
+import { ProblemSummary } from "@/components/object/detail-blocks";
 import type { PolicyDirection } from "@/generated/types";
 import {
   list,
@@ -214,12 +220,21 @@ export const NETWORK_SOURCES: PeekSources = {
     (name, namespace) => commands.getNetworkPolicy(name, namespace),
     (policy, _target, t) => {
       const reach = reachOf(policy.selected);
+      const said = selectsNothingWords(policy, t);
       const directions: ["Ingress" | "Egress", PolicyDirection, boolean][] = [
         ["Ingress", policy.ingress, false],
         ["Egress", policy.egress, true],
       ];
       return {
         createdAt: policy.createdAt,
+        lead: said && (
+          <ProblemSummary
+            tone="warn"
+            headline={said.headline}
+            detail={said.detail}
+            className="mt-3"
+          />
+        ),
         groups: [
           {
             title: t("columns", "selector"),

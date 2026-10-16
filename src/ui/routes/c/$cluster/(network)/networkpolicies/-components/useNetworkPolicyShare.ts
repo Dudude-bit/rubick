@@ -3,7 +3,13 @@ import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import { iconSvg } from "@/lib/icon-svg";
-import { namespacesOf, podsOf, portText } from "@/lib/network-policy";
+import {
+  namespacesOf,
+  podsOf,
+  portText,
+  reachWords,
+  selectsNothingWords,
+} from "@/lib/network-policy";
 import type { ReportFinding, ReportStat } from "@/lib/report";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
@@ -45,6 +51,7 @@ export function networkPolicyStats(
     policy.ingress.governed ? "Ingress" : null,
     policy.egress.governed ? "Egress" : null,
   ].filter((type): type is string => type !== null);
+  const reach = reachWords(policy.selected, t);
   return [
     {
       label: t("columns", "selector"),
@@ -54,6 +61,12 @@ export function networkPolicyStats(
           : policy.selects.kind === "everything"
             ? t("empty", "everyPodHere")
             : t("empty", "noSelectorOnPolicy"),
+    },
+    {
+      label: t("columns", "pods"),
+      value: reach.text,
+      role: reach.role ?? undefined,
+      unread: policy.selected === null,
     },
     {
       label: t("share", "netPolicyTypes"),
@@ -115,6 +128,11 @@ export function useNetworkPolicyShare(
       networkPolicyDirectionSection(policy.ingress, false, t),
       networkPolicyDirectionSection(policy.egress, true, t),
     ].filter((section): section is PlacedSection => section !== null);
-    return { stats: networkPolicyStats(policy, t), sections };
+    const said = selectsNothingWords(policy, t);
+    return {
+      stats: networkPolicyStats(policy, t),
+      verdict: said && `${said.headline}. ${said.detail}`,
+      sections,
+    };
   }, [policy, t]);
 }

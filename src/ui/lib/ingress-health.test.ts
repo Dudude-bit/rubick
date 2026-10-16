@@ -461,6 +461,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       uid: "nginx-out",
       selects: { kind: "everything" },
       selected: 1,
+      nearly: null,
       ingress: {
         governed: false,
         rules: [],

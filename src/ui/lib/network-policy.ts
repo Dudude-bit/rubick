@@ -116,6 +116,35 @@ export function reachWords(
   }
 }
 
+/**
+ * Why a policy written for some pods acts on none, cause first, with the
+ * label its pods most likely carry instead. `null` where it selects pods,
+ * its pods were not read, or it is written for every pod in an empty
+ * namespace, which is not a mistake.
+ */
+export function selectsNothingWords(
+  policy: NetworkPolicyInfo,
+  t: Translator
+): { headline: string; detail: string } | null {
+  if (policy.selects.kind !== "written") return null;
+  if (reachOf(policy.selected).kind !== "nothing") return null;
+  const near = policy.nearly;
+  return {
+    headline: t("empty", "policyRestrictsNothing"),
+    detail: near
+      ? t("count", "policyNearLabel", {
+          n: near.pods,
+          asked: near.asked,
+          carried: near.carried,
+          namespace: policy.namespace,
+        })
+      : t("empty", "policyNoPodCarries", {
+          selector: policy.selects.query,
+          namespace: policy.namespace,
+        }),
+  };
+}
+
 /** Which pods the policy is written for, in the words the list uses. */
 export function selectsWords(selects: PolicySelects, t: Translator): string {
   switch (selects.kind) {

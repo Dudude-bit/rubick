@@ -38,6 +38,7 @@ const DEFAULT_DENY: NetworkPolicyInfo = {
   namespace: "net",
   selects: { kind: "everything" },
   selected: 4,
+  nearly: null,
   ingress: {
     governed: true,
     rules: [],

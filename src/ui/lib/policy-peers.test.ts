@@ -31,6 +31,7 @@ const DEFAULT_DENY: NetworkPolicyInfo = {
   namespace: "net",
   selects: { kind: "everything" },
   selected: 4,
+  nearly: null,
   ingress: direction(true),
   egress: direction(false),
   labels: {},
@@ -48,6 +49,7 @@ const API_FROM_FRONTEND: NetworkPolicyInfo = {
   name: "api-from-frontend",
   selects: { kind: "written", query: "app=api" },
   selected: 2,
+  nearly: null,
   ingress: direction(true, [FRONTEND]),
 };
 

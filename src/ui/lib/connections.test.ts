@@ -1479,6 +1479,7 @@ describe("the traffic chain", () => {
                 uid: "traefik-out",
                 selects: { kind: "everything" },
                 selected: 1,
+                nearly: null,
                 ingress: {
                   governed: false,
                   rules: [],

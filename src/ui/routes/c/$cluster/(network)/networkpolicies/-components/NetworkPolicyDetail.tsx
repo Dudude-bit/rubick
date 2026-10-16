@@ -8,6 +8,7 @@ import {
   ReachCell,
 } from "../../../-object/network-policy-cells";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
+import { ProblemSummary } from "@/components/object/detail-blocks";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -24,6 +25,7 @@ import {
   notGovernedSentence,
   portText,
   reachOf,
+  selectsNothingWords,
 } from "@/lib/network-policy";
 import { leavesNamespace } from "@/lib/policy-peers";
 import { ResourceType } from "@/lib/resource-registry";
@@ -185,6 +187,7 @@ export function NetworkPolicyDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.NetworkPolicy, policy);
   const intercept = useDeliveryIntercept(deliveryQuery);
   const share = useNetworkPolicyShare(policy);
+  const said = policy && selectsNothingWords(policy, t);
   // Only the rules the tab draws. A policy carrying an `ingress:` block that
   // `policyTypes` does not name keeps those rules on the object, and counting
   // them promised a reader rules the tab then refuses to show.
@@ -273,6 +276,15 @@ export function NetworkPolicyDetail() {
       title={policy?.name || name || ""}
       createdAt={policy?.createdAt}
       namespace={namespace}
+      summary={
+        said && (
+          <ProblemSummary
+            tone="warn"
+            headline={said.headline}
+            detail={said.detail}
+          />
+        )
+      }
       badges={
         policy && (
           // Each half keeps its own tone: "allows all" is the one verdict

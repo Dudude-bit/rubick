@@ -21,6 +21,7 @@ const policy = (over: Partial<NetworkPolicyInfo>): NetworkPolicyInfo => ({
   namespace: "shop",
   selects: { kind: "everything" },
   selected: 3,
+  nearly: null,
   ingress: direction({}),
   egress: direction({ governed: false }),
   labels: {},
@@ -28,7 +29,7 @@ const policy = (over: Partial<NetworkPolicyInfo>): NetworkPolicyInfo => ({
   ...over,
 });
 
-const summarise = (info: NetworkPolicyInfo) =>
+const summary = (info: NetworkPolicyInfo) =>
   resolveSource({
     kind: "NetworkPolicy",
     name: "p",
@@ -37,7 +38,9 @@ const summarise = (info: NetworkPolicyInfo) =>
     info,
     { kind: "NetworkPolicy", name: "p", namespace: "shop" },
     say
-  ).groups;
+  );
+
+const summarise = (info: NetworkPolicyInfo) => summary(info).groups;
 
 describe("the NetworkPolicy the peek panel draws", () => {
   /**
@@ -115,5 +118,24 @@ describe("the NetworkPolicy the peek panel draws", () => {
     expect(refused.text).toBe("pods not read");
     expect(empty.text).toBe("no pods");
     expect(summarise(policy({ selected: 0 }))[0].items[1].tone).toBe("warn");
+  });
+
+  /**
+   * The panel said "no pods" under a misspelled selector and left the reader
+   * to find the typo. Fails if the peek stops leading with the cause the page
+   * leads with, or claims it where the pods were never read.
+   */
+  it("leads with the label its pods carry where it selects none", async () => {
+    const typo = policy({
+      selects: { kind: "written", query: "app=cloud-dmeo" },
+      selected: 0,
+      nearly: { asked: "app=cloud-dmeo", carried: "app=cloud-demo", pods: 2 },
+    });
+    const { container } = await renderWithRouter(<>{summary(typo).lead}</>);
+    expect(container.textContent).toBe(
+      "policyRestrictsNothingpolicyNearLabel:2"
+    );
+    expect(summary({ ...typo, selected: null }).lead).toBeFalsy();
+    expect(summary({ ...typo, selected: 2 }).lead).toBeFalsy();
   });
 });

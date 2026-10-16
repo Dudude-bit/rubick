@@ -494,6 +494,7 @@ export interface NetworkPolicyInfo {
   uid: string;
   selects: PolicySelects;
   selected: number | null;
+  nearly: NearLabel | null;
   ingress: PolicyDirection;
   egress: PolicyDirection;
   labels: Record<string, string>;
@@ -516,6 +517,12 @@ export interface PolicyPort {
   protocol: string;
   port: string | null;
   endPort: number | null;
+}
+
+export interface NearLabel {
+  asked: string;
+  carried: string;
+  pods: number;
 }
 
 export interface IngressInfo {

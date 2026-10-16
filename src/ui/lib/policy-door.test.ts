@@ -364,6 +364,7 @@ describe("whether a controller's own egress policies let it reach a Service's po
     uid: "traefik-out",
     selects: { kind: "everything" },
     selected: 1,
+    nearly: null,
     ingress: {
       governed: false,
       rules: [],

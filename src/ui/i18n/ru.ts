@@ -5923,6 +5923,9 @@ export const ru: Catalogue = {
     allowsAll: "разрешает всё",
     podsNotRead: "поды не прочитаны",
     selectsNoPods: "ни одного пода",
+    policyRestrictsNothing: "Эта политика ничего не ограничивает",
+    policyNoPodCarries:
+      "NetworkPolicy действует только на выбранные ею поды, а ни у одного пода в {namespace} нет метки {selector}.",
     everyPodHere: "каждый под здесь",
     noSelectorOnPolicy: "селектора нет",
     everyPodThere: "любой под",
@@ -8913,6 +8916,13 @@ export const ru: Catalogue = {
       few: "У {n} подов метка {carries}, но нет {lacks}",
       many: "У {n} подов метка {carries}, но нет {lacks}",
       other: "У {n} пода метка {carries}, но нет {lacks}",
+    },
+    policyNearLabel: {
+      one: "Ни у одного пода в {namespace} нет {asked}, а у {n} пода есть {carried}, на символ-два дальше. Если имелась в виду она, исправьте селектор.",
+      few: "Ни у одного пода в {namespace} нет {asked}, а у {n} подов есть {carried}, на символ-два дальше. Если имелась в виду она, исправьте селектор.",
+      many: "Ни у одного пода в {namespace} нет {asked}, а у {n} подов есть {carried}, на символ-два дальше. Если имелась в виду она, исправьте селектор.",
+      other:
+        "Ни у одного пода в {namespace} нет {asked}, а у {n} пода есть {carried}, на символ-два дальше. Если имелась в виду она, исправьте селектор.",
     },
     reconcilersFromSources: {
       one: "{n} реконсилятор из {sources}",

@@ -6,9 +6,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::error::{Error, Result};
 use crate::resources::{
-    published, selected_count, ChainStop, EndpointsInfo, Existence, IngressDefaultBackend,
-    IngressInfo, IngressRule, IngressTlsConfig, NetworkPolicyInfo, NotServing, ObjectRef,
-    PolicyDoor, Selector, ServiceInfo, ServicePublished,
+    published, ChainStop, EndpointsInfo, Existence, IngressDefaultBackend, IngressInfo,
+    IngressRule, IngressTlsConfig, NetworkPolicyInfo, NotServing, ObjectRef, PolicyDoor, Selector,
+    ServiceInfo, ServicePublished,
 };
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet, StatefulSet};
@@ -143,7 +143,7 @@ pub async fn get_network_policy(
             .list_metadata(&ListParams::default())
             .await
         {
-            info.selected = selected_count(selector, &pods.items);
+            info.join(selector, &pods.items.iter().collect::<Vec<_>>());
         }
         Ok(info)
     })

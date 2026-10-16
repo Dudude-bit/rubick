@@ -5332,6 +5332,9 @@ export const en = {
     allowsAll: "allows all",
     podsNotRead: "pods not read",
     selectsNoPods: "no pods",
+    policyRestrictsNothing: "This policy restricts nothing",
+    policyNoPodCarries:
+      "A NetworkPolicy acts only on the pods it selects, and no pod in {namespace} carries {selector}.",
     everyPodHere: "every pod here",
     noSelectorOnPolicy: "no selector",
     everyPodThere: "every pod",
@@ -7983,6 +7986,11 @@ export const en = {
     podsCarryPartOf: {
       one: "{n} pod carries {carries} but not {lacks}",
       other: "{n} pods carry {carries} but not {lacks}",
+    },
+    policyNearLabel: {
+      one: "No pod in {namespace} carries {asked}, and {n} pod carries {carried}, a character or two away. If that is the label meant, correct the selector.",
+      other:
+        "No pod in {namespace} carries {asked}, and {n} pods carry {carried}, a character or two away. If that is the label meant, correct the selector.",
     },
     reconcilersFromSources: {
       one: "{n} reconciler from {sources}",
