@@ -46,6 +46,7 @@ vi.mock("@/hooks/useRealtimeAge", async (original) => {
 
 vi.mock("@/lib/commands", () => ({
   commands: {
+    forgetDiscovery: vi.fn(async () => {}),
     listEvents: vi.fn(async () => []),
     getPod: vi.fn(async () => ({ containers: [] })),
     checkListAccess: vi.fn(async () => []),

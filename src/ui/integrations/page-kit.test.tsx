@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import {
   ScreenShareProvider,
@@ -294,7 +294,7 @@ describe("a vendor page whose read failed", () => {
    * name in front of the cluster's words, no way to try again, and no rule
    * to hand an administrator.
    */
-  it("gives the cluster's words, a retry and the rule to ask for", () => {
+  it("gives the cluster's words, a retry and the rule to ask for", async () => {
     const retry = vi.fn();
     render(
       <VendorReadFailure
@@ -313,7 +313,7 @@ describe("a vendor page whose read failed", () => {
       screen.getByRole("button", { name: "Copy the rule to ask for" })
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Try the read again" }));
-    expect(retry).toHaveBeenCalledOnce();
+    await waitFor(() => expect(retry).toHaveBeenCalledOnce());
   });
 });
 

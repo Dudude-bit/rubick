@@ -70,6 +70,7 @@ vi.mock("../-object/AlertsAbout", () => ({
 
 vi.mock("@/lib/commands", () => ({
   commands: {
+    forgetDiscovery: vi.fn(() => Promise.resolve()),
     getPod: vi.fn(),
     getManifest: vi.fn(),
     getServedObject: vi.fn(),

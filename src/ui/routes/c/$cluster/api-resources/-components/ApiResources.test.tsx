@@ -15,10 +15,20 @@ import { renderWithRouter } from "@/test/render";
 
 const catalog = vi.hoisted(() => ({
   answer: null as unknown as () => Promise<ApiCatalog>,
+  asked: [] as string[],
 }));
 
 vi.mock("@/lib/commands", () => ({
-  commands: { listApiCatalog: () => catalog.answer() },
+  commands: {
+    listApiCatalog: () => {
+      catalog.asked.push("catalog");
+      return catalog.answer();
+    },
+    forgetDiscovery: () => {
+      catalog.asked.push("forget");
+      return Promise.resolve();
+    },
+  },
 }));
 
 const { ApiResources } = await import("./ApiResources");
@@ -150,8 +160,36 @@ describe("the API resources page", () => {
       await screen.findByText("Could not read what this cluster serves")
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Try again" })
+      screen.getByRole("button", { name: "Try the read again" })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * A CRD applied a moment ago was "No served kind matches" with nothing to
+   * press, and the backend kept that answer two minutes. Fails if the retry
+   * goes, or asks the catalogue without dropping what discovery said first.
+   */
+  it("lists a kind installed since, once the read is asked again", async () => {
+    catalog.asked = [];
+    catalog.answer = () => Promise.resolve(SERVED);
+    await draw();
+    await screen.findByText("PriorityClass");
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter kinds" }), {
+      target: { value: "gizmo" },
+    });
+    expect(
+      screen.getByText(/No kind in the groups that answered matches gizmo/)
+    ).toBeInTheDocument();
+
+    catalog.answer = () =>
+      Promise.resolve({
+        ...SERVED,
+        entries: [...SERVED.entries, entry("traefik.io", "Gizmo", "gizmos")],
+      });
+    fireEvent.click(screen.getByRole("button", { name: "Try the read again" }));
+
+    expect(await screen.findByText("Gizmo")).toBeInTheDocument();
+    expect(catalog.asked).toEqual(["catalog", "forget", "catalog"]);
   });
 });
 

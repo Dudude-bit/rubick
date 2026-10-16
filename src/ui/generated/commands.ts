@@ -838,6 +838,10 @@ export async function listApiCatalog(): Promise<ApiCatalog> {
   return invoke<ApiCatalog>("list_api_catalog");
 }
 
+export async function forgetDiscovery(): Promise<void> {
+  return invoke<void>("forget_discovery");
+}
+
 export async function listResourceTable(
   group: string,
   plural: string,

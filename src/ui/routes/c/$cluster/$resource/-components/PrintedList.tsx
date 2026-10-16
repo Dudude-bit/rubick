@@ -13,6 +13,7 @@ import type { Catalogue } from "@/i18n/catalogue";
 import { widestText } from "@/lib/text-width";
 import { ResourceList } from "../../-list/ResourceList";
 import { servedOf, useServed } from "../../-object/served";
+import { Unserved } from "../../-object/Unserved";
 import { Button } from "@/components/ui/button";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { ObjectLink } from "@/components/object/ResourceRef";
@@ -120,20 +121,8 @@ export function PrintedList({ resource }: { resource: string }) {
   const t = useT();
   const served = useServed(servedOf(resource));
   if (served.state === "reading") return null;
-  if (served.state === "absent")
-    return (
-      <EmptyPage
-        title={t("empty", "notServed", { resource })}
-        body={t("empty", "notServedBody")}
-      />
-    );
-  if (served.state === "unknown")
-    return (
-      <EmptyPage
-        title={t("empty", "discoveryUnread", { resource })}
-        body={t("empty", "discoveryUnreadBody", { error: served.error })}
-      />
-    );
+  if (served.state === "absent" || served.state === "unknown")
+    return <Unserved served={served} resource={resource} />;
   if (!served.entry.verbs.includes("list"))
     return (
       <EmptyPage

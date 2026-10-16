@@ -2,6 +2,7 @@ import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/useT";
+import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import { forgetRefusals } from "@/lib/refusals";
 import { cn } from "@/lib/utils";
@@ -9,7 +10,8 @@ import { cn } from "@/lib/utils";
 /**
  * Asks a read that did not answer once more. A refused read is offered it
  * too, since rights change; the kept refusal is dropped first, or the
- * answer would come from the cache that holds it.
+ * answer would come from the cache that holds it. So is what discovery
+ * said, which keeps a kind installed a moment ago "not served".
  */
 export function ReadAgain({
   error,
@@ -27,7 +29,10 @@ export function ReadAgain({
       size="sm"
       onClick={() => {
         if (isRefusal(error)) forgetRefusals();
-        onRetry();
+        void commands
+          .forgetDiscovery()
+          .catch(() => undefined)
+          .then(onRetry);
       }}
       // Russian runs longer than English: the label wraps inside the button.
       className={cn(

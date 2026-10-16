@@ -21,6 +21,7 @@ import type {
 const detectInClusterExtensions = vi.fn().mockResolvedValue([]);
 vi.mock("@/lib/commands", () => ({
   commands: {
+    forgetDiscovery: () => Promise.resolve(),
     detectInClusterExtensions: () => detectInClusterExtensions(),
   },
 }));
@@ -519,6 +520,7 @@ describe("TrafficChain", () => {
       fireEvent.click(
         screen.getByRole("button", { name: /try the read again/i })
       );
+      await act(async () => {});
       expect(unanswered.refetch).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();

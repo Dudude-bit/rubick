@@ -63,6 +63,21 @@ pub async fn list_api_catalog(state: State<'_, AppState>) -> Result<ApiCatalog> 
     crate::client::clock::timed(&state.perf, "listApiCatalog", catalog(&state)).await
 }
 
+/// Drops what discovery said on the current cluster, so the next read asks
+/// it: a kind installed a moment ago is otherwise "not served" for as long
+/// as the miss is kept, a retry included.
+#[tauri::command]
+pub async fn forget_discovery(state: State<'_, AppState>) -> Result<()> {
+    forget(&state);
+    Ok(())
+}
+
+fn forget(state: &AppState) {
+    if let Some(context) = state.get_current_context() {
+        state.client_manager.served().forget(&context);
+    }
+}
+
 pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
     let client = ResourceContext::for_list(state, None)?.client;
     let (groups, short) = futures::join!(client.list_api_groups(), short_names(&client));
@@ -364,6 +379,30 @@ mod tests {
             found.entries.iter().all(|e| e.short_names.is_empty()),
             "no aggregated discovery, no short names: the frontend's table stands in"
         );
+    }
+
+    /// A CRD applied while its list page said "not served" stayed missing
+    /// on "Try the read again" for the two minutes a miss is kept.
+    #[tokio::test]
+    async fn a_kind_installed_after_the_catalogue_was_read_is_listed_once_discovery_is_forgotten() {
+        let (state, _) = connected(ServedIndex::default(), |path, nth| match path {
+            "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+            "/api/v1" => (200, resources("v1", &[])),
+            "/apis" => (200, json!({ "kind": "APIGroupList", "groups": [group("ok.example.com")] }).to_string()),
+            "/apis/ok.example.com/v1" if nth == 1 => (200, resources("ok.example.com/v1", &[("widgets", "Widget")])),
+            "/apis/ok.example.com/v1" => (200, resources("ok.example.com/v1", &[("widgets", "Widget"), ("gizmos", "Gizmo")])),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let gizmos = |found: &ApiCatalog| found.entries.iter().any(|e| e.plural == "gizmos");
+
+        assert!(!gizmos(&catalog(&state).await.expect("catalog")));
+        assert!(
+            !gizmos(&catalog(&state).await.expect("catalog")),
+            "the group's answer is kept, so the second read says what the first did"
+        );
+        forget(&state);
+        assert!(gizmos(&catalog(&state).await.expect("catalog")));
     }
 
     /// `po`, `deploy` and `sts` found nothing in the palette: kube's discovery

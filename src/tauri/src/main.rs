@@ -238,6 +238,7 @@ fn main() {
             commands::crds::get_custom_resource,
             commands::crds::get_custom_resource_yaml,
             commands::catalog::list_api_catalog,
+            commands::catalog::forget_discovery,
             commands::catalog::list_resource_table,
             commands::catalog::get_served_object,
             commands::catalog::get_served_object_yaml,

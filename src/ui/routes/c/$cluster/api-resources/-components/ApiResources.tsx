@@ -12,7 +12,7 @@ import { useMemo, useState } from "react";
 import { catalogQuery } from "../../-object/served";
 import { catalogGroups, listable, type CatalogGroup } from "./catalog-groups";
 import { KindIcon } from "@/components/object/KindIcon";
-import { Button } from "@/components/ui/button";
+import { ReadAgain } from "@/components/ui/read-again";
 import { RouteLink } from "@/components/ui/route-link";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { TextSkeleton } from "@/components/ui/skeleton";
@@ -30,6 +30,7 @@ export function ApiResources() {
   const isConnected = useClusterStore((state) => state.isConnected);
   const catalog = useQuery({ ...catalogQuery(), enabled: isConnected });
   const [filter, setFilter] = useState("");
+  const again = () => void catalog.refetch();
   const shown = useMemo(
     () => (catalog.data ? catalogGroups(catalog.data, filter) : null),
     [catalog.data, filter]
@@ -89,26 +90,23 @@ export function ApiResources() {
           <p className="text-[11px] text-fg-fnt">
             {errorToShow(catalog.error)}
           </p>
-          <Button
-            variant="link"
-            size="sm"
-            onClick={() => void catalog.refetch()}
-          >
-            {t("apiResources", "retry")}
-          </Button>
+          <ReadAgain error={catalog.error} onRetry={again} />
         </div>
       ) : !shown ? (
         <TextSkeleton lines={8} />
       ) : (
         <>
           {shown.kinds === 0 && filter.trim() !== "" && (
-            <p className="text-xs text-fg-mut">
-              {shown.unread.length > 0
-                ? t("apiResources", "noMatchAnswered", {
-                    filter: filter.trim(),
-                  })
-                : t("apiResources", "noMatch", { filter: filter.trim() })}
-            </p>
+            <div className="flex flex-col items-start gap-2">
+              <p className="text-xs text-fg-mut">
+                {shown.unread.length > 0
+                  ? t("apiResources", "noMatchAnswered", {
+                      filter: filter.trim(),
+                    })
+                  : t("apiResources", "noMatch", { filter: filter.trim() })}
+              </p>
+              <ReadAgain error={catalog.error} onRetry={again} />
+            </div>
           )}
           {shown.groups.map((group) => (
             <GroupSection

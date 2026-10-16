@@ -13,6 +13,7 @@ import { yamlTab } from "./yaml-tab";
 import { eventsTab } from "./events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { readTarget, servedOf, useServed, type Served } from "./served";
+import { Unserved } from "./Unserved";
 import { WordTable } from "./WordTable";
 import { AccessPanel } from "./AccessPanel";
 import { AutoscalerScales } from "./AutoscalerScales";
@@ -278,20 +279,8 @@ function Unread({
     return (
       <EmptyPage title={t("empty", "objectUnread")} body={errorToShow(error)} />
     );
-  if (served.state === "absent")
-    return (
-      <EmptyPage
-        title={t("empty", "notServed", { resource })}
-        body={t("empty", "notServedBody")}
-      />
-    );
-  if (served.state === "unknown")
-    return (
-      <EmptyPage
-        title={t("empty", "discoveryUnread", { resource })}
-        body={t("empty", "discoveryUnreadBody", { error: served.error })}
-      />
-    );
+  if (served.state === "absent" || served.state === "unknown")
+    return <Unserved served={served} resource={resource} />;
   return (
     <EmptyPage
       title={t("empty", "objectMissing", { kind, name })}

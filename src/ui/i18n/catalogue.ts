@@ -5224,7 +5224,6 @@ export const en = {
       "No kind in the groups that answered matches {filter}. The groups below did not answer.",
     unreadTitle: "Could not read what this cluster serves",
     notConnected: "Connect to a cluster to see what it serves.",
-    retry: "Try again",
   },
   // "What can I do here", asked of the cluster for the signed-in user.
   myAccess: {

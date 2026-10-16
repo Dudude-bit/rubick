@@ -30,6 +30,7 @@ const answers = vi.hoisted(() => ({
 
 vi.mock("@/lib/commands", () => ({
   commands: {
+    forgetDiscovery: () => Promise.resolve(),
     listApiCatalog: () => answers.catalog(),
     listResourceTable: (
       _group: string,
@@ -124,6 +125,23 @@ describe("a kind listed as the API server prints it", () => {
     await renderWithRouter(<PrintedList resource="leases" />);
     expect(await screen.findByText("holder-node-1")).toBeInTheDocument();
     expect(screen.queryByText(/serves no/)).toBeNull();
+  });
+
+  /** Fails if a kind installed while its page says "serves no" stays unlisted with nothing to press. */
+  it("lists a kind installed since it was found not served, once the read is asked again", async () => {
+    answers.catalog = () => Promise.resolve({ entries: [], unread: [] });
+    answers.table = () => Promise.resolve(table([lease("node-1")]));
+    await open();
+    expect(
+      await screen.findByText(
+        "This cluster serves no leases.coordination.k8s.io"
+      )
+    ).toBeInTheDocument();
+
+    answers.catalog = () => Promise.resolve({ entries: [LEASES], unread: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Try the read again" }));
+
+    expect(await screen.findByText("holder-node-1")).toBeInTheDocument();
   });
 
   /**
