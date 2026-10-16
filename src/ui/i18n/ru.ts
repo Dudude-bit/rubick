@@ -5282,6 +5282,7 @@ export const ru: Catalogue = {
     attentionForbidden: "запрос {verb} запрещён",
     attentionClusterWide: "во всём кластере",
     attentionFailed: "не удалось прочитать",
+    attentionStopsAt: "останавливается на {at}",
     attentionInNamespace: "в пространстве имён {namespace}",
     attentionInNamedNamespaces: "в пространствах имён {list}",
     attentionInNamespaces: {
@@ -7832,6 +7833,7 @@ export const ru: Catalogue = {
     resolvesElsewhere: "разрешается в другой адрес",
     gwProgrammedWord: "запрограммирован",
     gwNotProgrammedWord: "не запрограммирован",
+    gwNoAddressWord: "адреса пока нет",
     gwNoReadyPodBehind: "За {name} сейчас не стоит ни одного готового пода.",
     gwForwardThrough: "Пробросить этот порт через под, стоящий за {name}",
     gwNoListeners:

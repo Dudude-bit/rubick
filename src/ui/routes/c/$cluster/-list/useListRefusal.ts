@@ -1,7 +1,7 @@
 import type { ListQuery } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { isRefusal } from "@/lib/error-utils";
-import { refusedEverywhereAsked, useListableIn } from "../-shell/useListAccess";
+import { refusedEverywhereAsked, useListableIn } from "@/hooks/useListAccess";
 
 export interface ListRefusal {
   /** Refused across the whole cluster, where one namespace may still answer. */

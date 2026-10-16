@@ -28,27 +28,18 @@ import {
   type Attention,
 } from "@/lib/attention";
 import {
-  oneLock,
   refusedEverywhereAsked,
   useListLocks,
   useLocks,
   type Lock as ListLock,
-} from "./useListAccess";
+} from "@/hooks/useListAccess";
 import { useShellCounts, type ShellCounts } from "./useShellCounts";
 import { useWindowCluster } from "./useWindowCluster";
 import { useAppSearchValue } from "@/hooks/useSearchParam";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useListFollowed, useListLive } from "@/hooks/useWatchedList";
 import { useReadAt } from "@/hooks/useReadUid";
-import { useDoorAsk } from "@/hooks/useDoorAsk";
-import { useGatewayApi } from "@/hooks/useGatewayApi";
-import { GATEWAY_ROUTE_KINDS } from "../-object/useGatewayRoutes";
-import {
-  backingFrom,
-  ROUTING_STALE,
-  useBackingLists,
-  useIntegrationPages,
-} from "@/integrations";
+import { useRoutesBoard } from "@/hooks/useRoutesBoard";
+import { useIntegrationPages } from "@/integrations";
 import { wake } from "@/hooks/useClusterForwards";
 import { useClusterForwardStore } from "@/stores/clusterForwardStore";
 import { detectProvider } from "@/lib/cluster-identity";
@@ -73,17 +64,11 @@ import {
 import type { en } from "@/i18n/catalogue";
 import { T } from "@/i18n/T";
 import { cn, formatWhen } from "@/lib/utils";
-import { commands } from "@/lib/commands";
-import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
-import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
+import { queryKeys } from "@/lib/query-keys";
+import { boardMark, gatewaysMark } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
-import {
-  inScope,
-  joinScoped,
-  scopeCacheKey,
-  wireScope,
-} from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type {
@@ -451,166 +436,27 @@ export function Sidebar({
  */
 
 function GatewayRows() {
-  const t = useT();
   // The whole selection, not the collapsed `currentNamespace` — that is `""`
   // for any two-or-more namespace window, which narrows to the whole cluster
   // and put "Routes 40" in the rail above a page (migrated to read per
   // namespace) listing three. `inScope` narrows by the array for one or
   // several, and is the identity for an empty selection.
   const scope = useClusterStore((s) => s.namespaceScope);
-  const detection = useGatewayApi().data;
-  const installed = detection?.installed ?? false;
-  const served = new Set(detection?.kinds.map((k) => k.kind) ?? []);
-  // Constructed exactly the way GatewayDetail constructs it, so the two
-  // share one cache entry rather than fetching the same lists twice.
-  const routeKinds = (detection?.kinds ?? [])
-    .map((kind) => kind.kind)
-    .filter((kind) =>
-      (GATEWAY_ROUTE_KINDS as readonly string[]).includes(kind)
-    );
-
-  // The authorizer's word on our rows, same as every row above them.
-  const locks = useListLocks([
-    ...(served.has("Gateway") ? [ResourceType.Gateway] : []),
-    ...(routeKinds as ResourceKind[]),
-  ]);
-  // These pages find each kind through discovery, which every signed-in
-  // reader may read, so the list reviews are the whole question.
-  const gatewaysLock = locks[ResourceType.Gateway];
-  const gatewaysDenied = gatewaysLock !== undefined;
-  const routeLocks = routeKinds.flatMap((kind) => {
-    const lock = locks[kind as ResourceKind];
-    return lock ? [lock] : [];
-  });
-  const routesLock =
-    routeKinds.length > 0 && routeLocks.length === routeKinds.length
-      ? oneLock(routeLocks)
-      : undefined;
-
-  const cacheKey = scopeCacheKey(scope);
-
-  // Verdict sources, read cluster-wide on purpose: a route can attach to a
-  // Gateway (or a GatewayClass) in a namespace the window is not on, and a
-  // verdict computed without it is wrong. These are the same keys the routes
-  // list and the trace read, so the pages share the answer. A namespace-scoped
-  // token is refused them — the board reads that absence as `topologyKnown:
-  // false` and asserts only the breaks it read, never one it cannot see.
-  const gatewaysAll = useLiveQuery({
-    queryKey: queryKeys.gateways(),
-    queryFn: () => commands.listGateways(null),
-    staleTime: ROUTING_STALE,
-    refresh: "overview",
-    enabled: installed && served.has("Gateway") && !gatewaysDenied,
-  });
-  const classes = useLiveQuery({
-    queryKey: queryKeys.gatewayClasses(),
-    queryFn: commands.listGatewayClasses,
-    staleTime: ROUTING_STALE,
-    refresh: "overview",
-    enabled: installed && served.has("GatewayClass"),
-  });
-  // The rail's own count follows the window's namespaces, like every other
-  // row — read per namespace so a token with rights in some and not the whole
-  // cluster still gets a number instead of a blank (the routes page reads the
-  // same way). A whole-cluster window is one call per kind.
-  const routes = useLiveQuery({
-    queryKey: [
-      "gateway-rail-routes",
-      cacheKey ?? EVERY_NAMESPACE,
-      ...routeKinds,
-    ],
-    queryFn: async () => {
-      // Each served kind on its own: a token may list HTTPRoutes and not
-      // TCPRoutes, and the rows of the kinds that answered still feed the
-      // mark. A refused kind is not a kind with no routes, though, so the
-      // count stays blank beside one, as it does beside an unread namespace
-      // and as the routes page does. Every kind refused is the refusal.
-      const settled = await Promise.allSettled(
-        routeKinds.map((kind) =>
-          commands.listGatewayRoutesIn(kind, wireScope(scope))
-        )
-      );
-      const answered = settled.flatMap((r) =>
-        r.status === "fulfilled" ? [r.value] : []
-      );
-      const refused = settled.find((r) => r.status === "rejected");
-      if (refused && answered.length === 0) {
-        throw (refused as PromiseRejectedResult).reason;
-      }
-      return { ...joinScoped(answered), complete: refused === undefined };
-    },
-    staleTime: ROUTING_STALE,
-    refresh: "overview",
-    enabled: installed && routeKinds.length > 0 && !routesLock,
-  });
-  // Gateways for the COUNT, scoped like the routes. The cluster-wide read above
-  // stays the verdict source; on a whole-cluster window it already is this
-  // list, so this second read only runs once a namespace is selected.
-  const gatewaysScoped = useLiveQuery({
-    queryKey: ["gateway-rail-gateways", cacheKey ?? EVERY_NAMESPACE],
-    queryFn: () => commands.listGatewaysIn(wireScope(scope)),
-    staleTime: ROUTING_STALE,
-    refresh: "overview",
-    enabled:
-      installed && served.has("Gateway") && !gatewaysDenied && scope.length > 0,
-  });
-  const backing = useBackingLists(
-    installed && routeKinds.length > 0 && !routesLock
-  );
-  const door = useDoorAsk(installed && routeKinds.length > 0 && !routesLock);
-
-  const classesSettled =
-    classes.data !== undefined || !served.has("GatewayClass");
-  // The subject list is scoped, and now read that way rather than narrowed
-  // from a cluster-wide list — an RBAC token that cannot list cluster-wide
-  // still gets its own namespaces' rows. The verdict sources stay cluster-wide
-  // (above): a route can attach to a Gateway in a namespace the window is not
-  // on, and a verdict computed without it is wrong.
-  const scopedRoutes = useMemo(
-    () => (routes.data?.rows ?? []).filter((r) => inScope(scope, r.namespace)),
-    [routes.data, scope]
-  );
-  // The count follows the scope; on a whole-cluster window the verdict read
-  // already is that list, so reuse it and skip the second fetch.
-  const counted =
-    scope.length === 0 ? gatewaysAll.data : gatewaysScoped.data?.rows;
-  const scopedGateways = useMemo(
-    () => (counted ?? []).filter((g) => inScope(scope, g.namespace)),
-    [counted, scope]
-  );
-  const board = useMemo(
-    () =>
-      routesBoard(
-        scopedRoutes,
-        {
-          // Cluster-wide, deliberately: the verdict for a scoped route can
-          // depend on a Gateway or class in another namespace. Refused for a
-          // namespace-scoped token -> `topologyKnown` false -> no verdict.
-          gateways: gatewaysAll.data ?? [],
-          classes: classes.data ?? [],
-          // Classes count as read only once their list answered (or the
-          // kind is not served at all) — a gateway judged against an
-          // empty class list reads "class does not exist", which would
-          // put a red dot on a healthy cluster for one render.
-          topologyKnown: gatewaysAll.data !== undefined && classesSettled,
-          backing: backingFrom(backing.data, backing.error),
-          door,
-        },
-        t
-      ),
-    [
-      scopedRoutes,
-      gatewaysAll.data,
-      classes.data,
-      backing.data,
-      backing.error,
-      classesSettled,
-      door,
-      t,
-    ]
-  );
-
-  const scopedPulse = board.pulse.filter((p) => inScope(scope, p.namespace));
+  const {
+    installed,
+    served,
+    routeKinds,
+    gatewaysLock,
+    routesLock,
+    gatewaysScoped,
+    routes,
+    topologyKnown,
+    counted,
+    scopedRoutes,
+    scopedGateways,
+    board,
+    scopedPulse,
+  } = useRoutesBoard(scope);
 
   if (!installed) return null;
 
@@ -626,11 +472,7 @@ function GatewayRows() {
               ? scopedGateways.length
               : null
           }
-          mark={gatewaysMark(
-            scopedGateways,
-            scopedPulse,
-            gatewaysAll.data !== undefined && classesSettled
-          )}
+          mark={gatewaysMark(scopedGateways, scopedPulse, topologyKnown)}
           lock={gatewaysLock}
         />
       )}

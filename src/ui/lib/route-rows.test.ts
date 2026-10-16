@@ -885,6 +885,8 @@ describe("pulseFor", () => {
       gateway: name,
       namespace,
       say: "is not programmed by its controller",
+      reason: "Invalid",
+      why: null,
     });
     const gateways = [
       gateway("edge", { namespace: "infra" }),

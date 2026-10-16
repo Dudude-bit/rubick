@@ -14,10 +14,13 @@ import type {
   RouteMatchInfo,
 } from "@/generated/types";
 import {
+  classStep,
   gatewayOfParent,
   gatewayProgrammed,
+  gatewayRefusalWords,
   HOSTLESS_PROTO,
   parentCarriesTraffic,
+  programmedWord,
   redirectOnly,
   routeTraces,
   answeredByItsController,
@@ -27,8 +30,18 @@ import {
   type TraceStep,
   type TraceStepId,
 } from "@/lib/route-trace";
+import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { backingReadIn } from "@/integrations";
+import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
+
+export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
+  ResourceType.HTTPRoute,
+  ResourceType.GRPCRoute,
+  ResourceType.TLSRoute,
+  ResourceType.TCPRoute,
+  ResourceType.UDPRoute,
+];
 
 export interface RouteRow {
   kind: string;
@@ -73,7 +86,35 @@ export interface GatewayPulse {
   gateway: string;
   namespace: string;
   say: string;
+  /** The cause in a word, as the Gateway's page and peek name it. */
+  reason: string;
+  /** The cause in the sentence the Gateway's trace step says it in. */
+  why: string | null;
 }
+
+/** A route kind whose list the cluster would not give, in its words. */
+export interface RouteKindRefused {
+  kind: string;
+  code: string;
+  message: string;
+}
+
+/** The step a route row stops at, named as its column. */
+export const STEP_WORD: Record<
+  NonNullable<RouteRow["stop"]>["at"],
+  keyof typeof en.columns
+> = {
+  class: "stepClass",
+  gateway: "stepGateway",
+  listener: "stepListener",
+  namespace: "stepNamespace",
+  refs: "stepRefs",
+  backend: "stepBackend",
+  endpoints: "stepEndpoints",
+  policy: "stepPolicy",
+  reachable: "stepReachable",
+  route: "stepRoute",
+};
 
 export interface RoutesBoard {
   /** False while gateways, classes or backing are still being read —
@@ -203,17 +244,15 @@ function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
   for (const gateway of sources.gateways) {
     const at = { gateway: gateway.name, namespace: gateway.namespace };
     const cls = sources.classes.find((c) => c.name === gateway.className);
-    if (!cls) {
+    if (!cls || cls.accepted !== true) {
+      const step = classStep(gateway, sources.classes, true, t);
       pulse.push({
         ...at,
-        say: t("empty", "gwRowClassMissing", { name: gateway.className }),
-      });
-      continue;
-    }
-    if (cls.accepted !== true) {
-      pulse.push({
-        ...at,
-        say: t("empty", "gwRowClassUnclaimed", { name: gateway.className }),
+        say: t("empty", cls ? "gwRowClassUnclaimed" : "gwRowClassMissing", {
+          name: gateway.className,
+        }),
+        reason: step.short ?? step.say,
+        why: step.detail?.body ?? null,
       });
       continue;
     }
@@ -226,6 +265,8 @@ function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
               reason: programmed.reason,
             })
           : t("empty", "gwRowNotProgrammed"),
+        reason: programmedWord(gateway, t).text,
+        why: gatewayRefusalWords(gateway, programmed, t),
       });
       continue;
     }
@@ -252,6 +293,8 @@ function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
       pulse.push({
         ...at,
         say: t("empty", "gwRowNoAddress"),
+        reason: t("empty", "gwNoAddressWord"),
+        why: t("empty", "gwNoAddressBody"),
       });
     }
   }

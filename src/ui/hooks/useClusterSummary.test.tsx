@@ -56,6 +56,13 @@ setTransport(
         args?.scope
       ),
     list_persistent_volume_claims_in: () => ({ rows: [], unread: [] }),
+    detect_gateway_api: () => ({
+      installed: false,
+      bundleVersion: null,
+      channel: null,
+      mixedBundle: null,
+      kinds: [],
+    }),
   }).transport
 );
 afterAll(() => setTransport(real));

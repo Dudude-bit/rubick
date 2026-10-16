@@ -18,7 +18,9 @@ import {
   foldedWords,
   reasonWord,
   type AttentionInputs,
+  type GatewayApiInputs,
 } from "./attention";
+import type { RouteRow } from "./route-rows";
 import {
   ingressHealthOf,
   ingressHealthWords,
@@ -157,6 +159,54 @@ function claim(
 
 const NONE = { data: { rows: [], unread: [] }, error: null };
 
+/** A cluster that serves no Gateway API: nothing to list, nothing unread. */
+function gatewayApi(over: Partial<GatewayApiInputs> = {}): GatewayApiInputs {
+  return {
+    installed: { data: false, error: null },
+    served: new Set(["Gateway", "GatewayClass", "HTTPRoute", "TCPRoute"]),
+    routeKinds: ["HTTPRoute", "TCPRoute"],
+    topology: { known: true, refused: false, error: null },
+    routes: {
+      data: { unread: [], refused: [] },
+      error: null,
+      refused: false,
+    },
+    backingError: null,
+    board: {
+      verdictsKnown: true,
+      notServing: [],
+      unknown: [],
+      serving: [],
+      mesh: [],
+      pulse: [],
+    },
+    pulse: [],
+    ...over,
+  };
+}
+
+function routeRow(over: Partial<RouteRow> = {}): RouteRow {
+  return {
+    kind: "HTTPRoute",
+    name: "cart-bad",
+    namespace: "shop",
+    serves: "cart.example.test",
+    servesCopy: null,
+    more: 0,
+    stop: null,
+    tail: null,
+    stale: null,
+    via: "bad-gw",
+    viaRef: null,
+    viaGhost: null,
+    contested: null,
+    createdAt: null,
+    serving: true,
+    servingKnown: true,
+    ...over,
+  };
+}
+
 function attention(inputs: Partial<AttentionInputs> = {}) {
   return attentionOf(
     {
@@ -169,6 +219,7 @@ function attention(inputs: Partial<AttentionInputs> = {}) {
       },
       autoscalers: NONE,
       claims: NONE,
+      gatewayApi: gatewayApi(),
       now: NOW,
       ...inputs,
     },
@@ -974,6 +1025,137 @@ describe("what Needs attention could not look at", () => {
     expect(listed.items).toEqual([]);
     expect(listed.complete).toBe(true);
     expect(listed.worst).toBeNull();
+  });
+});
+
+describe("what Needs attention lists of Gateway API", () => {
+  const refused = gatewayApi({
+    installed: { data: true, error: null },
+    pulse: [
+      {
+        gateway: "bad-gw",
+        namespace: "traefik",
+        say: "is not programmed by its controller: ListenersNotValid",
+        reason: "ListenersNotValid",
+        why: "ListenersNotValid: All Listeners must be valid. Listener odd: PortUnavailable.",
+      },
+    ],
+    board: {
+      verdictsKnown: true,
+      notServing: [
+        routeRow({
+          serving: false,
+          stop: { at: "gateway", short: "ListenersNotValid" },
+        }),
+      ],
+      unknown: [],
+      serving: [routeRow({ name: "cart-good" })],
+      mesh: [],
+      pulse: [],
+    },
+  });
+
+  /**
+   * bad-gw's controller refused it and the rail went red, while the Overview
+   * and the status bar said "0 problems in traefik". Fails if a refused
+   * Gateway or a route it stops is left out of the count, or counted in a
+   * namespace other than its own.
+   */
+  it("lists a Gateway its controller refused and the route it stops, each in its own namespace", () => {
+    const found = attention({ gatewayApi: refused });
+
+    expect(
+      found.items.map((item) => [item.kind, item.name, item.reason])
+    ).toEqual([
+      ["Gateway", "bad-gw", "ListenersNotValid"],
+      ["HTTPRoute", "cart-bad", "stops at gateway"],
+    ]);
+    expect(found.items[0]).toMatchObject({
+      tone: "err",
+      detail: {
+        says: "ours",
+        text: expect.stringMatching(/^ListenersNotValid: All Listeners/),
+      },
+    });
+    expect(found.items[1].detail).toEqual({
+      says: "ours",
+      text: "ListenersNotValid",
+    });
+    expect(found.byNamespace.get("traefik")).toBe(1);
+    expect(found.byNamespace.get("shop")).toBe(1);
+    expect(found.total).toBe(2);
+    expect(found.complete).toBe(true);
+  });
+
+  /**
+   * A token refused the Gateways read "0 problems" over routes nobody could
+   * judge. Fails if a Gateway API read that did not answer leaves the count
+   * whole, or a verdict still being read is called unread.
+   */
+  it("calls the count a floor where Gateway API could not be read", () => {
+    const check = (input: GatewayApiInputs, kind: string) =>
+      attention({ gatewayApi: input }).checks.find((c) => c.kind === kind);
+    const installed = { data: true, error: null };
+
+    expect(
+      check(
+        gatewayApi({
+          installed,
+          topology: { known: false, refused: true, error: null },
+        }),
+        "Gateway"
+      )
+    ).toMatchObject({
+      state: "unread",
+      unread: [{ namespace: null, code: "PERMISSION_DENIED" }],
+    });
+    expect(
+      check(
+        gatewayApi({
+          installed,
+          routes: {
+            data: {
+              unread: [],
+              refused: [
+                {
+                  kind: "TCPRoute",
+                  code: "PERMISSION_DENIED",
+                  message: "tcproutes is forbidden",
+                },
+              ],
+            },
+            error: null,
+            refused: false,
+          },
+        }),
+        "TCPRoute"
+      )
+    ).toMatchObject({
+      state: "unread",
+      unread: [{ message: "tcproutes is forbidden" }],
+    });
+    const untold = {
+      ...refused.board,
+      notServing: [],
+      unknown: [routeRow({ servingKnown: false })],
+    };
+    expect(
+      check(gatewayApi({ installed, board: untold }), "HTTPRoute")
+    ).toMatchObject({ state: "unread", unread: [{ namespace: "shop" }] });
+    expect(
+      check(
+        gatewayApi({ installed, board: { ...untold, verdictsKnown: false } }),
+        "HTTPRoute"
+      )
+    ).toMatchObject({ state: "reading", unread: [] });
+    expect(
+      attention({
+        gatewayApi: gatewayApi({ installed: { data: undefined, error: null } }),
+      }).complete
+    ).toBe(false);
+    expect(
+      attention({ gatewayApi: gatewayApi() }).checks.map((c) => c.kind)
+    ).not.toContain("Gateway");
   });
 });
 

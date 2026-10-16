@@ -32,7 +32,7 @@ import { holdScroll } from "./scroll-anchor";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import type { ReportStat } from "@/lib/report";
 import { useT, type T } from "@/i18n/useT";
-import { useListableIn } from "../-shell/useListAccess";
+import { useListableIn } from "@/hooks/useListAccess";
 import type { ListQuery } from "@/generated/types";
 
 /** What reading a namespace's overview needs first: its pods. */

@@ -35,6 +35,13 @@ import { parseRefusal } from "@/lib/refusal";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
 import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
 import {
+  STEP_WORD,
+  type GatewayPulse,
+  type RouteKindRefused,
+  type RouteRow,
+  type RoutesBoard,
+} from "@/lib/route-rows";
+import {
   serviceHealthOf,
   serviceHealthWords,
   type ServiceHealth,
@@ -69,6 +76,24 @@ export interface AttentionItem {
   opens: { kind: string; name: string; namespace: string | null };
   /** The IngressClass it asks for that nothing serves, and what else is wrong with it. */
   unservedClass?: { name: string; rest: string | null };
+}
+
+/** What Gateway API has to say about a scope, as the rail's marks read it. */
+export interface GatewayApiInputs {
+  /** Whether the cluster serves Gateway API at all: unknown until discovery answers. */
+  installed: Answer<boolean>;
+  served: ReadonlySet<string>;
+  routeKinds: readonly string[];
+  /** The Gateways and classes every verdict rests on, read across the cluster. */
+  topology: { known: boolean; refused: boolean; error: unknown };
+  routes: Answer<{
+    unread: readonly Unread[];
+    refused: readonly RouteKindRefused[];
+  }> & { refused: boolean };
+  backingError: unknown;
+  board: RoutesBoard;
+  /** Each Gateway in scope that leaves everything through it dead. */
+  pulse: readonly GatewayPulse[];
 }
 
 /** A reach, or one object's input, that could not be read. */
@@ -420,6 +445,140 @@ const claimItems = remember(
     })
 );
 
+const gatewayItems = remember((pulse: readonly GatewayPulse[]) =>
+  pulse.map((at) => {
+    const subject = {
+      kind: "Gateway",
+      name: at.gateway,
+      namespace: at.namespace,
+    };
+    return withKey({
+      ...subject,
+      tone: "err",
+      reason: at.reason,
+      detail: at.why ? { says: "ours", text: at.why } : null,
+      since: null,
+      restarts: null,
+      foldedPods: null,
+      replaced: false,
+      opens: subject,
+    });
+  })
+);
+
+const routeItems = remember(
+  (rows: readonly RouteRow[], t: T): AttentionItem[] =>
+    rows.flatMap((row) => {
+      if (!row.stop) return [];
+      const subject = {
+        kind: row.kind,
+        name: row.name,
+        namespace: row.namespace,
+      };
+      return [
+        withKey({
+          ...subject,
+          tone: "err",
+          reason: t("cluster", "attentionStopsAt", {
+            at: t("columns", STEP_WORD[row.stop.at]),
+          }),
+          detail: { says: "ours", text: row.stop.short },
+          since: null,
+          restarts: null,
+          foldedPods: null,
+          replaced: false,
+          opens: subject,
+        }),
+      ];
+    })
+);
+
+const refusedIn = (scope: readonly string[] | null): Unread[] =>
+  (scope ?? [null]).map((namespace) => ({
+    namespace,
+    code: ERROR_CODES.PERMISSION,
+    message: "",
+  }));
+
+/**
+ * One check for the Gateways and one per served route kind. A route whose
+ * verdict could not be told is a reach not read, as an Ingress's is: the
+ * count beside it is a floor, never "nothing wrong".
+ */
+function gatewayApiChecks(
+  input: GatewayApiInputs,
+  scope: readonly string[] | null
+): AttentionCheck[] {
+  const { installed, topology, routes, board } = input;
+  if (installed.error)
+    return [
+      {
+        kind: "Gateway",
+        state: "unread",
+        unread: failedWhole(null, installed.error),
+      },
+    ];
+  if (installed.data === undefined)
+    return [{ kind: "Gateway", state: "reading", unread: [] }];
+  if (!installed.data) return [];
+  const topologyFailed = topology.refused || !!topology.error;
+  const gateways: AttentionCheck[] = input.served.has("Gateway")
+    ? [
+        topology.refused
+          ? { kind: "Gateway", state: "unread", unread: refusedIn(null) }
+          : topology.error
+            ? {
+                kind: "Gateway",
+                state: "unread",
+                unread: failedWhole(null, topology.error),
+              }
+            : {
+                kind: "Gateway",
+                state: topology.known ? "read" : "reading",
+                unread: [],
+              },
+      ]
+    : [];
+  const settled = board.verdictsKnown || topologyFailed || !!input.backingError;
+  const why = input.backingError
+    ? {
+        code: errorCode(input.backingError),
+        message: errorToShow(input.backingError),
+      }
+    : { code: "", message: "" };
+  return [
+    ...gateways,
+    ...input.routeKinds.map((kind): AttentionCheck => {
+      const refused = routes.data?.refused.find((entry) => entry.kind === kind);
+      const untold = settled
+        ? board.unknown.flatMap((row) =>
+            row.kind === kind ? [{ namespace: row.namespace, ...why }] : []
+          )
+        : [];
+      const unread: Unread[] = routes.refused
+        ? refusedIn(scope)
+        : routes.error
+          ? failedWhole(scope, routes.error)
+          : refused
+            ? (scope ?? [null]).map((namespace) => ({
+                namespace,
+                code: refused.code,
+                message: refused.message,
+              }))
+            : [...(routes.data?.unread ?? []), ...untold];
+      if (unread.length > 0) return { kind, state: "unread", unread };
+      const reading =
+        routes.data === undefined ||
+        routes.overdue ||
+        (!settled &&
+          [...board.notServing, ...board.unknown, ...board.serving].some(
+            (row) => row.kind === kind
+          ));
+      return { kind, state: reading ? "reading" : "read", unread: [] };
+    }),
+  ];
+}
+
 /** A list read across the scope: still reading, failed whole, or the reaches it lost. */
 function checkOf<V>(
   kind: string,
@@ -453,6 +612,7 @@ export interface AttentionInputs {
   ingressHealth: (ingress: IngressHealthInput) => IngressHealth;
   autoscalers: Answer<Scoped<AutoscalerInfo>>;
   claims: Answer<Scoped<PersistentVolumeClaimInfo>>;
+  gatewayApi: GatewayApiInputs;
   /** The StorageClasses, read only while a claim is Pending: a class's binding mode decides whether that is news. */
   classes?: ClassesRead;
   now: number;
@@ -641,6 +801,8 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
       input.now,
       t
     ),
+    ...gatewayItems(input.gatewayApi.pulse),
+    ...routeItems(input.gatewayApi.board.notServing, t),
   ];
   const items = ranked([...backend, ...ours]);
 
@@ -670,6 +832,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     ),
     checkOf("HorizontalPodAutoscaler", input.autoscalers, input.scope),
     checkOf("PersistentVolumeClaim", input.claims, input.scope),
+    ...gatewayApiChecks(input.gatewayApi, input.scope),
   ];
 
   return {

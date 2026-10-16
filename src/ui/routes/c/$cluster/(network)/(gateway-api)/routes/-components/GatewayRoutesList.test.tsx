@@ -29,7 +29,6 @@ vi.mock("@/integrations", async (original) => ({
 
 const refused = new Error("tcproutes is forbidden (code: 403)");
 vi.mock("../../../../-object/useGatewayRoutes", () => ({
-  GATEWAY_ROUTE_KINDS: ["HTTPRoute", "TCPRoute"],
   useGatewayRoutes: () => ({
     detection: { installed: true, kinds: [] },
     detectionLoading: false,

@@ -85,7 +85,21 @@ export function useDoorAsk(enabled = true): DoorAsk {
   const classesError = classes.error ?? gatewayClasses.error;
   const gatewayData = gatewayClasses.data;
 
-  return useMemo<DoorAsk>(() => {
+  const claimed = claims
+    .map(({ controller, claim }) => `${controller}:${claim.name}`)
+    .join();
+  return useMemo<DoorAsk>(
+    () =>
+      sharedAsk(
+        [claimed, digest, listedDigest, classesError, gatewayData],
+        () => askOf()
+      ),
+    // The answers are compared by what they say, not by the array React Query rebuilt.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [claimed, digest, listedDigest, classesError, gatewayData]
+  );
+
+  function askOf(): DoorAsk {
     const reads = new Map(
       claims.map(({ controller, claim }, at) => [
         controller,
@@ -119,7 +133,16 @@ export function useDoorAsk(enabled = true): DoorAsk {
     return Object.assign(ask, {
       classController: named ? (name: string) => named.get(name) : undefined,
     });
-    // The answers are compared by what they say, not by the array React Query rebuilt.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [claims, digest, listedDigest, classesError, gatewayData]);
+  }
+}
+
+let lastAsk: { inputs: readonly unknown[]; ask: DoorAsk } | null = null;
+
+/** One ask for every reader of the same answers, so what is cached on it holds across them. */
+function sharedAsk(inputs: readonly unknown[], make: () => DoorAsk): DoorAsk {
+  if (lastAsk?.inputs.every((input, at) => Object.is(input, inputs[at])))
+    return lastAsk.ask;
+  const ask = make();
+  lastAsk = { inputs, ask };
+  return ask;
 }

@@ -4715,6 +4715,7 @@ export const en = {
     attentionForbidden: "{verb} is forbidden",
     attentionClusterWide: "across the cluster",
     attentionFailed: "could not be read",
+    attentionStopsAt: "stops at {at}",
     attentionInNamespace: "in {namespace}",
     attentionInNamedNamespaces: "in {list}",
     attentionInNamespaces: {
@@ -7144,6 +7145,7 @@ export const en = {
     resolvesElsewhere: "resolves elsewhere",
     gwProgrammedWord: "programmed",
     gwNotProgrammedWord: "not programmed",
+    gwNoAddressWord: "no address yet",
     gwNoReadyPodBehind: "No ready pod stands behind {name} right now.",
     gwForwardThrough: "Forward this port through a pod behind {name}",
     gwNoListeners:

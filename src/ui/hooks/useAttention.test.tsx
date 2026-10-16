@@ -10,7 +10,11 @@ import {
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import type { ClusterOverview } from "@/generated/types";
+import type {
+  ClusterOverview,
+  GatewayApiDetection,
+  GatewayInfo,
+} from "@/generated/types";
 
 const commands = vi.hoisted(() => ({
   getClusterOverview: vi.fn(),
@@ -20,6 +24,13 @@ const commands = vi.hoisted(() => ({
   listPersistentVolumeClaimsIn: vi.fn(),
   resolveIngressClass: vi.fn(),
   getTlsCertificates: vi.fn(),
+  detectGatewayApi: vi.fn(),
+  checkListAccess: vi.fn(),
+  listGateways: vi.fn(),
+  listGatewayClasses: vi.fn(),
+  listGatewayRoutesIn: vi.fn(),
+  listGatewaysIn: vi.fn(),
+  listServiceBacking: vi.fn(),
 }));
 
 vi.mock("@/lib/commands", () => ({ commands }));
@@ -38,6 +49,14 @@ const OVERVIEW = {
 
 const EMPTY = { rows: [], unread: [] };
 
+const NO_GATEWAY_API: GatewayApiDetection = {
+  installed: false,
+  bundleVersion: null,
+  channel: null,
+  mixedBundle: null,
+  kinds: [],
+};
+
 function wrapper(
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 ) {
@@ -53,6 +72,8 @@ beforeEach(() => {
   commands.listIngressHealthInputs.mockResolvedValue(EMPTY);
   commands.listAutoscalersIn.mockResolvedValue(EMPTY);
   commands.listPersistentVolumeClaimsIn.mockResolvedValue(EMPTY);
+  commands.detectGatewayApi.mockResolvedValue(NO_GATEWAY_API);
+  commands.checkListAccess.mockResolvedValue([]);
   useClusterStore.setState({
     isConnected: true,
     currentContext: "prod",
@@ -111,6 +132,88 @@ describe("the reads behind Needs attention", () => {
 
     answer(EMPTY);
     await waitFor(() => expect(result.current!.complete).toBe(true));
+  });
+
+  /**
+   * The rail went red over bad-gw while the count every screen keeps said
+   * nothing of it. Fails if the Gateways the rail reads stop reaching the
+   * count, or discovery that has not answered lets the count call itself
+   * whole.
+   */
+  it("counts a Gateway its controller refused, once Gateway API has answered", async () => {
+    const said = (type: string, status: string, reason: string) => ({
+      type,
+      status,
+      reason,
+      message: null,
+      lastTransitionTime: null,
+    });
+    const badGw = {
+      uid: "",
+      name: "bad-gw",
+      namespace: "shop",
+      apiVersion: "gateway.networking.k8s.io/v1",
+      className: "traefik",
+      listenerSets: [],
+      listenerSetsKnown: true,
+      listeners: [],
+      addresses: [],
+      conditions: [said("Accepted", "False", "ListenersNotValid")],
+      generation: 1,
+      labels: {},
+      annotations: {},
+      createdAt: null,
+    } as unknown as GatewayInfo;
+    let discovered: (value: GatewayApiDetection) => void = () => {};
+    commands.detectGatewayApi.mockReturnValue(
+      new Promise((resolve) => (discovered = resolve))
+    );
+    commands.listGateways.mockResolvedValue([badGw]);
+    commands.listGatewaysIn.mockResolvedValue({ rows: [badGw], unread: [] });
+    commands.listGatewayClasses.mockResolvedValue([
+      {
+        name: "traefik",
+        controllerName: "traefik.io/gateway-controller",
+        accepted: true,
+        conditions: [],
+      },
+    ]);
+
+    const { result } = renderHook(() => useAttention(), { wrapper: wrapper() });
+
+    await waitFor(() =>
+      expect(result.current?.checks).toContainEqual({
+        kind: "Gateway",
+        state: "reading",
+        unread: [],
+      })
+    );
+    expect(result.current!.complete).toBe(false);
+
+    discovered({
+      ...NO_GATEWAY_API,
+      installed: true,
+      kinds: [
+        {
+          kind: "Gateway",
+          plural: "gateways",
+          versions: ["v1"],
+          readVersion: "v1",
+        },
+        {
+          kind: "GatewayClass",
+          plural: "gatewayclasses",
+          versions: ["v1"],
+          readVersion: "v1",
+        },
+      ],
+    });
+    await waitFor(() =>
+      expect(
+        result.current!.items.map((item) => [item.kind, item.name, item.reason])
+      ).toEqual([["Gateway", "bad-gw", "ListenersNotValid"]])
+    );
+    expect(result.current!.byNamespace.get("shop")).toBe(1);
   });
 });
 

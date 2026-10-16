@@ -462,7 +462,7 @@ export function candidateListeners(
   });
 }
 
-function classStep(
+export function classStep(
   gateway: GatewayInfo | undefined,
   classes: GatewayClassInfo[],
   topologyKnown: boolean,

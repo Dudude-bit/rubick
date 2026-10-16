@@ -38,10 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { gatewayTopology } from "./gateway-topology";
-import {
-  GATEWAY_ROUTE_KINDS as ROUTE_KINDS,
-  useGatewayRoutes,
-} from "../../../../-object/useGatewayRoutes";
+import { useGatewayRoutes } from "../../../../-object/useGatewayRoutes";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -59,11 +56,12 @@ import { hrefOf, listLink, objectLink } from "@/lib/links";
 import { KIND_TONE } from "@/lib/route-kind-tone";
 import {
   allServing,
+  GATEWAY_ROUTE_KINDS as ROUTE_KINDS,
   pulseFor,
   routesBoard,
+  STEP_WORD,
   type RouteRow,
 } from "@/lib/route-rows";
-import type { en } from "@/i18n/catalogue";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -77,22 +75,6 @@ import type { RouteInfo } from "@/generated/types";
 const ALL_KINDS = "__all__";
 
 /** The step a break lands on, in the reader's language. */
-const STEP_WORD: Record<
-  NonNullable<RouteRow["stop"]>["at"],
-  keyof typeof en.columns
-> = {
-  class: "stepClass",
-  gateway: "stepGateway",
-  listener: "stepListener",
-  namespace: "stepNamespace",
-  refs: "stepRefs",
-  backend: "stepBackend",
-  endpoints: "stepEndpoints",
-  policy: "stepPolicy",
-  reachable: "stepReachable",
-  route: "stepRoute",
-};
-
 /** One template for every row, so the columns align across rows. */
 const ROW_GRID =
   "grid grid-cols-[14px_minmax(200px,255px)_1fr_84px_minmax(140px,170px)_105px_38px] items-baseline gap-x-3";

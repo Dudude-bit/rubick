@@ -27,21 +27,10 @@ import {
   wireScope,
 } from "@/lib/namespace-scope";
 import { STALE_TIMES } from "@/lib/refresh";
+import { GATEWAY_ROUTE_KINDS } from "@/lib/route-rows";
 import { useT } from "@/i18n/useT";
-import {
-  ResourceType,
-  toPlural,
-  type ResourceKind,
-} from "@/lib/resource-registry";
+import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import type { RouteInfo, Scoped } from "@/generated/types";
-
-export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
-  ResourceType.HTTPRoute,
-  ResourceType.GRPCRoute,
-  ResourceType.TLSRoute,
-  ResourceType.TCPRoute,
-  ResourceType.UDPRoute,
-];
 
 /** One kind's list and its watch, alive only where the kind is served.
  *  The failure flag is the kind's OWN: five watches share a page, and one

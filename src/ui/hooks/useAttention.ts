@@ -4,6 +4,8 @@ import { useClusterOverview } from "@/hooks/useClusterOverview";
 import { useIngressHealth } from "@/hooks/useIngressHealth";
 import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
+import { useRoutesBoard } from "@/hooks/useRoutesBoard";
+import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
 import { useStorageClasses } from "@/hooks/useStorageClasses";
 import { useT } from "@/i18n/useT";
@@ -103,6 +105,54 @@ export function useAttention({
       : null;
   // A clock that moves in steps, so the cached answer holds between them.
   const now = useNow();
+  const detection = useGatewayApi();
+  const routing = useRoutesBoard(asked, reading);
+  const gatewaysError = routing.gatewaysAll.error;
+  const gatewayClassesError = routing.classes.error;
+  const routesData = routing.routes.data;
+  const routesError = routing.routes.error;
+  const routesLate = late(routing.routes.freshness, now);
+  const gatewayApi = useMemo(
+    () => ({
+      installed: {
+        data: detection.data?.installed,
+        error: detection.error,
+      },
+      served: routing.served,
+      routeKinds: routing.routeKinds,
+      topology: {
+        known: routing.topologyKnown,
+        refused: routing.gatewaysLock !== undefined,
+        error: gatewaysError ?? gatewayClassesError,
+      },
+      routes: {
+        data: routesData,
+        error: routesError,
+        overdue: routesLate,
+        refused: routing.routesLock !== undefined,
+      },
+      backingError: routing.backingError,
+      board: routing.board,
+      pulse: routing.scopedPulse,
+    }),
+    [
+      detection.data,
+      detection.error,
+      routing.served,
+      routing.routeKinds,
+      routing.topologyKnown,
+      routing.gatewaysLock,
+      routing.routesLock,
+      gatewaysError,
+      gatewayClassesError,
+      routesData,
+      routesError,
+      routesLate,
+      routing.backingError,
+      routing.board,
+      routing.scopedPulse,
+    ]
+  );
   const ingressData = ingresses.data;
   const ingressError = ingresses.error;
   const ingressLate = late(ingresses.freshness, now);
@@ -139,6 +189,7 @@ export function useAttention({
           },
           claims: { data: claimData, error: claimError, overdue: claimLate },
           classes,
+          gatewayApi,
           now,
         },
         t
@@ -159,6 +210,7 @@ export function useAttention({
       claimError,
       claimLate,
       classes,
+      gatewayApi,
       now,
       t,
     ]
