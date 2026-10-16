@@ -175,6 +175,13 @@ export const GATEWAY_SOURCES: PeekSources = {
         : programmed.status === "True"
           ? "Programmed"
           : (programmed.reason ?? programmed.status),
+      // A controller's reason is in no status table, and a refusal read as neutral is grey.
+      statusRole:
+        programmed?.status === "False"
+          ? "err"
+          : programmed?.status === "True"
+            ? "ok"
+            : "pending",
       createdAt: gateway.createdAt,
       lead: programmed?.status === "False" && (
         <ProblemSummary

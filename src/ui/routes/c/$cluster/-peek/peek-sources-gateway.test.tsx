@@ -60,14 +60,15 @@ const gateway = (conditions: ConditionInfo[]): GatewayInfo => ({
   createdAt: null,
 });
 
-const lead = (conditions: ConditionInfo[]) => {
-  const summary = GATEWAY_SOURCES.Gateway!.summarise(
+const peek = (conditions: ConditionInfo[]) =>
+  GATEWAY_SOURCES.Gateway!.summarise(
     gateway(conditions),
     { kind: "Gateway", name: "bad-gw", namespace: "traefik" },
     t
   );
-  render(<>{summary.lead}</>);
-};
+
+const lead = (conditions: ConditionInfo[]) =>
+  render(<>{peek(conditions).lead}</>);
 
 describe("the Gateway peek against the Gateway page", () => {
   /**
@@ -93,6 +94,23 @@ describe("the Gateway peek against the Gateway page", () => {
         /^ListenersNotValid: All Listeners must be valid\. Listener odd: PortUnavailable: no matching entryPoint for port 9999\. Nothing behind it serves/
       )
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The peek's header drew "ListenersNotValid" beside a grey circle: a
+   * controller's reason is in no status table, so the lookup fell to
+   * neutral. Fails if a refusal is painted in anything but a break's tone.
+   */
+  it("paints the controller's reason in the tone of its answer", () => {
+    expect(
+      peek([said("Accepted", "False", "ListenersNotValid")]).statusRole
+    ).toBe("err");
+    expect(peek([said("Programmed", "Unknown", "Pending")]).statusRole).toBe(
+      "pending"
+    );
+    expect(peek([said("Programmed", "True", "Programmed")]).statusRole).toBe(
+      "ok"
+    );
   });
 
   it("leads with nothing over a programmed Gateway", () => {
