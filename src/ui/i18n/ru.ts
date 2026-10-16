@@ -89,6 +89,7 @@ export const ru: Catalogue = {
     servesTlsForHosts: "обслуживает TLS для всех хостов этого Ingress",
     noSelector: "без селектора",
     notInThisNamespace: "в этом пространстве имён не существует",
+    notInCluster: "не существует",
     notChecked: "не проверялось",
     nobodyDoes: "никто",
     overHttps: "по HTTPS",
@@ -8177,6 +8178,14 @@ export const ru: Catalogue = {
       "Его StorageClass прочитать не удалось, поэтому неизвестно, ждёт ли он под по замыслу",
     claimNamesVolume:
       "Он запрашивает PersistentVolume {volume}, который к нему не привязался",
+    claimVolumeMissing:
+      "Он запрашивает PersistentVolume {volume}, которого не существует, так что останется Pending, пока том с таким именем не создадут",
+    claimVolumeTaken:
+      "Он запрашивает PersistentVolume {volume}, который привязан к PersistentVolumeClaim {claim}, так что к этому он не привяжется",
+    claimVolumeReleased:
+      "Он запрашивает PersistentVolume {volume} в состоянии Released: тот всё ещё держит удалённый PersistentVolumeClaim {claim} и не привяжется ни к кому другому, пока не очищен его claimRef",
+    claimVolumeUnread:
+      "Он запрашивает PersistentVolume {volume}, который прочитать не удалось, поэтому неизвестно, почему он не привязался",
     claimWaitsForPod:
       "StorageClass {name} привязывает том только после того, как запланирован под, который его монтирует",
     claimNoProvisioner:

@@ -34,7 +34,10 @@ const lists: [string, ColumnDef<never>[]][] = [
   ["PersistentVolume", persistentVolumeColumns() as ColumnDef<never>[]],
   [
     "PersistentVolumeClaim",
-    persistentVolumeClaimColumns([]) as ColumnDef<never>[],
+    persistentVolumeClaimColumns({
+      classes: [],
+      volumes: [],
+    }) as ColumnDef<never>[],
   ],
   ["StorageClass", storageClassColumns() as ColumnDef<never>[]],
   ["Namespace", namespaceColumns as ColumnDef<never>[]],

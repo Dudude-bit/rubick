@@ -7,9 +7,10 @@ import { useNow } from "@/hooks/useNow";
 import { useRoutesBoard } from "@/hooks/useRoutesBoard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
-import { useStorageClasses } from "@/hooks/useStorageClasses";
+import { useClaimReads } from "@/hooks/useStorageClasses";
 import { useT } from "@/i18n/useT";
 import { attentionOf, type Attention } from "@/lib/attention";
+import { claimNeeds } from "@/lib/claim-cause";
 import { commands } from "@/lib/commands";
 import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
@@ -94,10 +95,8 @@ export function useAttention({
     refresh,
   });
 
-  const anyPending = !!claims.data?.rows.some(
-    (claim) => claim.status === "Pending"
-  );
-  const classes = useStorageClasses(reading && anyPending);
+  const needs = claimNeeds(reading ? (claims.data?.rows ?? []) : []);
+  const claimReads = useClaimReads(needs);
 
   const answered =
     enabled && overview.data !== undefined && !overview.isPlaceholderData
@@ -192,7 +191,7 @@ export function useAttention({
             overdue: autoscalerLate,
           },
           claims: { data: claimData, error: claimError, overdue: claimLate },
-          classes,
+          claimReads,
           gatewayApi,
           now,
         },
@@ -213,7 +212,7 @@ export function useAttention({
       claimData,
       claimError,
       claimLate,
-      classes,
+      claimReads,
       gatewayApi,
       now,
       t,

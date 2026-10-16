@@ -98,7 +98,10 @@ const PAGES: [string, Column[]][] = [
   ["Namespaces", namespaces],
   ["NetworkPolicies", networkPolicyColumns],
   ["Nodes", nodes(new Map())],
-  ["PersistentVolumeClaims", persistentVolumeClaims([])],
+  [
+    "PersistentVolumeClaims",
+    persistentVolumeClaims({ classes: [], volumes: [] }),
+  ],
   ["PersistentVolumes", persistentVolumes()],
   ["Pods", pods],
   ["Secrets", secrets()],
@@ -926,7 +929,10 @@ describe("the claims list beside a claim's cause", () => {
         storageClass: "fast-ssd-missing",
       }),
     ];
-    const columns = [...persistentVolumeClaims([]), ACTIONS] as Column[];
+    const columns = [
+      ...persistentVolumeClaims({ classes: [], volumes: [] }),
+      ACTIONS,
+    ] as Column[];
     const layout = tableLayout(
       columns.map((c) => ({
         size: c.size ?? 150,

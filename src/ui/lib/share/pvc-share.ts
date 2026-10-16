@@ -60,16 +60,23 @@ export function pvcFactsSection(
     {
       label: t("columns", "volume"),
       values: [
-        pvc.volume
+        cause?.says === "volumeMissing"
           ? {
-              text: pvc.volume,
-              ref: refOf({
-                kind: "PersistentVolume",
-                name: pvc.volume,
-                namespace: null,
+              text: t("readings", "envObjectNotThere", {
+                object: cause.volume,
               }),
+              role: "err",
             }
-          : unboundValue(pvc, cause, now, t),
+          : pvc.volume
+            ? {
+                text: pvc.volume,
+                ref: refOf({
+                  kind: "PersistentVolume",
+                  name: pvc.volume,
+                  namespace: null,
+                }),
+              }
+            : unboundValue(pvc, cause, now, t),
       ],
     },
     {

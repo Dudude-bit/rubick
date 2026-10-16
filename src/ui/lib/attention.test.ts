@@ -683,7 +683,10 @@ describe("what Needs attention lists beyond pods", () => {
     const claims = { data: { rows, unread: [] }, error: null };
     const read = attention({
       claims,
-      classes: [cls("local-path", "WaitForFirstConsumer", true)],
+      claimReads: {
+        classes: [cls("local-path", "WaitForFirstConsumer", true)],
+        volumes: [],
+      },
     });
     expect(read.items.map((item) => item.name)).toEqual(["orphan"]);
     expect(read.items[0]).toMatchObject({

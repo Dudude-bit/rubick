@@ -86,6 +86,30 @@ describe("a claim's status", () => {
     });
   });
 
+  /** Fails if the file links a volume the claim asks for that the cluster lacks, where the page says it does not exist. */
+  it("says a volume the cluster lacks in red, where the page does", () => {
+    const asks = pvc({
+      status: "Pending",
+      volume: "pv-that-is-not-there",
+      capacity: null,
+      createdAt: "2026-10-13T12:00:00Z",
+    });
+    const section = pvcFactsSection(
+      asks,
+      t,
+      { says: "volumeMissing", volume: "pv-that-is-not-there" },
+      NOW
+    );
+    if (section.body.type !== "facts") throw new Error("expected facts");
+    const volume = section.body.rows.find(
+      (row) => row.label === t("columns", "volume")
+    );
+    expect(volume?.values[0]).toEqual({
+      text: "pv-that-is-not-there does not exist",
+      role: "err",
+    });
+  });
+
   /** Fails if a claim that waits for its pod by design is filed as unsatisfied. */
   it("files a claim that waits for its pod as a wait, not as a fault", () => {
     const waiting = pvc({ status: "Pending", volume: null, capacity: null });

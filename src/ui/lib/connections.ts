@@ -324,7 +324,8 @@ export function describeExistence(
   t: T,
   verifiable = true
 ): string | null {
-  if (ref.existence === "missing") return t("nav", "notInThisNamespace");
+  if (ref.existence === "missing")
+    return t("nav", ref.namespace ? "notInThisNamespace" : "notInCluster");
   if (ref.existence === "notChecked" && verifiable)
     return t("nav", "notChecked");
   return null;
@@ -2354,15 +2355,16 @@ const GOVERNS_VERB: Record<string, "scalesVerb" | "protectsVerb"> = {
 
 function bindings(conns: ResourceConnections, t: T): ConnRow[] {
   return labelled(
-    verb(conns.edges, "binds").map((edge) =>
-      rowFor(
+    verb(conns.edges, "binds").map((edge) => ({
+      ...rowFor(
         edge.to.kind === "StorageClass"
           ? t("columns", "storageClass")
           : t("columns", "volume"),
         edge.to,
         t
-      )
-    )
+      ),
+      verifiable: true,
+    }))
   );
 }
 

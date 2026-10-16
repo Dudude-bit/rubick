@@ -30,6 +30,7 @@ use k8s_openapi::api::core::v1::{
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::{HTTPIngressPath, Ingress, IngressBackend};
 use k8s_openapi::api::policy::v1::PodDisruptionBudget;
+use k8s_openapi::api::storage::v1::StorageClass;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, OwnerReference};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::api::{Api, ListParams};

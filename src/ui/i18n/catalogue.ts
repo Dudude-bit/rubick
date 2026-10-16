@@ -111,6 +111,7 @@ export const en = {
     servesTlsForHosts: "serves TLS for every host on this Ingress",
     noSelector: "no selector",
     notInThisNamespace: "does not exist in this namespace",
+    notInCluster: "does not exist",
     notChecked: "not checked",
     nobodyDoes: "nobody does",
     overHttps: "over HTTPS",
@@ -7398,6 +7399,14 @@ export const en = {
       "Its StorageClass could not be read, so whether it waits for a pod by design is not known",
     claimNamesVolume:
       "It asks for PersistentVolume {volume}, which has not bound to it",
+    claimVolumeMissing:
+      "It asks for PersistentVolume {volume}, which does not exist, so it stays Pending until one by that name is made",
+    claimVolumeTaken:
+      "It asks for PersistentVolume {volume}, which is bound to PersistentVolumeClaim {claim}, so it never binds to this one",
+    claimVolumeReleased:
+      "It asks for PersistentVolume {volume}, which is Released: it still holds PersistentVolumeClaim {claim}, deleted since, and binds to no other claim until its claimRef is cleared",
+    claimVolumeUnread:
+      "It asks for PersistentVolume {volume}, which could not be read, so why it has not bound is not known",
     claimWaitsForPod:
       "StorageClass {name} binds a volume only once a pod that mounts it is scheduled",
     claimNoProvisioner:

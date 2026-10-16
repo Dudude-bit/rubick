@@ -581,7 +581,7 @@ describe("the detail line on a problem row", () => {
         },
         error: null,
       },
-      classes: [],
+      claimReads: { classes: [], volumes: [] },
     });
     const panel = await wrap(
       <AttentionPanel

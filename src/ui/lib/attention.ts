@@ -25,7 +25,7 @@ import {
   claimCause,
   claimCauseText,
   causeRole,
-  type ClassesRead,
+  type ClaimReads,
 } from "@/lib/claim-cause";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { autoscalerVerdict } from "@/lib/governance";
@@ -428,15 +428,17 @@ const autoscalerItems = remember((rows: AutoscalerInfo[]): AttentionItem[] =>
   })
 );
 
+const UNREAD_CLAIM_READS: ClaimReads = { classes: "unread", volumes: "unread" };
+
 const claimItems = remember(
   (
     rows: PersistentVolumeClaimInfo[],
-    classes: ClassesRead,
+    reads: ClaimReads,
     now: number,
     t: T
   ): AttentionItem[] =>
     rows.flatMap((claim) => {
-      const cause = claimCause(claim, classes);
+      const cause = claimCause(claim, reads);
       if (!cause) return [];
       const role = causeRole(claim, cause, now);
       // Pending by design until a pod mounts it, or still inside the seconds provisioning takes.
@@ -630,8 +632,8 @@ export interface AttentionInputs {
   autoscalers: Answer<Scoped<AutoscalerInfo>>;
   claims: Answer<Scoped<PersistentVolumeClaimInfo>>;
   gatewayApi: GatewayApiInputs;
-  /** The StorageClasses, read only while a claim is Pending: a class's binding mode decides whether that is news. */
-  classes?: ClassesRead;
+  /** What explains a Pending claim, read only while one is: a class's binding mode decides whether that is news. */
+  claimReads?: ClaimReads;
   now: number;
 }
 
@@ -841,7 +843,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     ...autoscalerItems(input.autoscalers.data?.rows ?? []),
     ...claimItems(
       input.claims.data?.rows ?? [],
-      input.classes ?? "unread",
+      input.claimReads ?? UNREAD_CLAIM_READS,
       input.now,
       t
     ),

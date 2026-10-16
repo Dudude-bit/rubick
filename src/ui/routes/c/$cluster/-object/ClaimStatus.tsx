@@ -3,6 +3,7 @@ import { Unlink } from "lucide-react";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
 import { ProblemSummary } from "@/components/object/detail-blocks";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { None } from "@/components/ui/none";
 import { PhaseBadge, StatusBadge } from "@/components/ui/status-badge";
 import { useNow } from "@/hooks/useNow";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
@@ -17,7 +18,7 @@ import {
   claimWarning,
   type ClaimCause,
   type ClaimCauseRole,
-  type ClassesRead,
+  type ClaimReads,
 } from "@/lib/claim-cause";
 import { ResourceType } from "@/lib/resource-registry";
 import { ROLE_TEXT } from "@/lib/status-role";
@@ -56,16 +57,10 @@ export function ClaimBadge({ claim, cause: given }: ClaimProps) {
 }
 
 /** A list row's badge with the cause after it, the badge kept whole. */
-export function ClaimStatusCell({
-  claim,
-  classes,
-}: {
-  claim: PersistentVolumeClaimInfo;
-  classes: ClassesRead;
-}) {
+export function ClaimStatusCell({ claim, reads }: CellProps) {
   const t = useT();
   const now = useNow();
-  const cause = claimCause(claim, classes);
+  const cause = claimCause(claim, reads);
   const badge = <ClaimBadge claim={claim} cause={cause} />;
   if (!cause) return badge;
   const text = claimCauseText(cause, t);
@@ -86,33 +81,70 @@ export function ClaimStatusCell({
   );
 }
 
-/** The class a list row's claim names, a missing one marked rather than linked. */
-export function ClaimClassCell({
-  claim,
-  classes,
-}: {
+interface CellProps {
   claim: PersistentVolumeClaimInfo;
-  classes: ClassesRead;
-}) {
-  const t = useT();
-  const cause = claimCause(claim, classes);
-  if (cause?.says !== "classMissing")
-    return (
-      <StorageClassRef
-        name={claim.storageClass}
-        fallback={
-          claim.storageClass === "" ? t("empty", "noneLower") : "default"
-        }
-      />
-    );
+  reads: ClaimReads;
+}
+
+/** A name a list row's claim gives that the cluster does not have, marked where a link to nothing would stand. */
+function MissingCell({ name, title }: { name: string; title: string }) {
   return (
     <span
       className="inline-flex min-w-0 max-w-full items-center gap-1 text-err"
-      title={claimCauseText(cause, t)}
+      title={title}
+      data-testid="claim-missing"
     >
       <Unlink className="h-3 w-3 flex-none" aria-hidden="true" />
-      <span className="truncate font-mono">{cause.name}</span>
+      <span className="truncate font-mono">{name}</span>
     </span>
+  );
+}
+
+/** The same on a page or a peek, said in words. */
+function MissingLine({ name }: { name: string }) {
+  const t = useT();
+  return (
+    <span
+      className="inline-flex items-start gap-1 text-err"
+      data-testid="claim-missing"
+    >
+      <Unlink className="mt-0.5 h-3 w-3 flex-none" aria-hidden="true" />
+      <span className="min-w-0">
+        {parts(t("readings", "envObjectNotThere"), {
+          object: <span className="font-mono">{name}</span>,
+        })}
+      </span>
+    </span>
+  );
+}
+
+/** The class a list row's claim names, a missing one marked rather than linked. */
+export function ClaimClassCell({ claim, reads }: CellProps) {
+  const t = useT();
+  const cause = claimCause(claim, reads);
+  if (cause?.says === "classMissing")
+    return <MissingCell name={cause.name} title={claimCauseText(cause, t)} />;
+  return (
+    <StorageClassRef
+      name={claim.storageClass}
+      fallback={claim.storageClass === "" ? t("empty", "noneLower") : "default"}
+    />
+  );
+}
+
+/** The volume a list row's claim names, a missing one marked rather than linked. */
+export function ClaimVolumeCell({ claim, reads }: CellProps) {
+  const t = useT();
+  if (!claim.volume) return <None />;
+  const cause = claimCause(claim, reads);
+  if (cause?.says === "volumeMissing")
+    return <MissingCell name={cause.volume} title={claimCauseText(cause, t)} />;
+  return (
+    <ResourceRef
+      kind={ResourceType.PersistentVolume}
+      name={claim.volume}
+      showKind={false}
+    />
   );
 }
 
@@ -121,6 +153,8 @@ export function ClaimVolume({ claim, cause: given }: ClaimProps) {
   const t = useT();
   const now = useNow();
   const cause = useCauseOf(claim, given);
+  if (cause?.says === "volumeMissing")
+    return <MissingLine name={cause.volume} />;
   if (claim.volume)
     return (
       <ResourceRef
@@ -141,17 +175,7 @@ export function ClaimVolume({ claim, cause: given }: ClaimProps) {
 export function ClaimClass({ claim, cause: given }: ClaimProps) {
   const t = useT();
   const cause = useCauseOf(claim, given);
-  if (cause?.says === "classMissing")
-    return (
-      <span className="inline-flex items-start gap-1 text-err">
-        <Unlink className="mt-0.5 h-3 w-3 flex-none" aria-hidden="true" />
-        <span className="min-w-0">
-          {parts(t("readings", "envObjectNotThere"), {
-            object: <span className="font-mono">{cause.name}</span>,
-          })}
-        </span>
-      </span>
-    );
+  if (cause?.says === "classMissing") return <MissingLine name={cause.name} />;
   if (claim.storageClass)
     return (
       <ResourceRef

@@ -1,6 +1,7 @@
 import type {
   EventInfo,
   PersistentVolumeClaimInfo,
+  PersistentVolumeInfo,
   StorageClassInfo,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
@@ -9,8 +10,25 @@ import { statusRole, type StatusRole } from "@/lib/status-role";
 /** Longest a claim may sit Pending before it counts: provisioning takes seconds. */
 export const CLAIM_GRACE_MS = 60_000;
 
-/** The StorageClasses as a reader holds them: still reading, could not read, or read. */
-export type ClassesRead = "reading" | "unread" | readonly StorageClassInfo[];
+/** A list as a reader holds it: still reading, could not read, or read. */
+type Read<Row> = "reading" | "unread" | readonly Row[];
+export type ClassesRead = Read<StorageClassInfo>;
+export type VolumesRead = Read<PersistentVolumeInfo>;
+
+/** What a claim's cause is read from: the classes it may name, and the volumes it may name. */
+export interface ClaimReads {
+  classes: ClassesRead;
+  volumes: VolumesRead;
+}
+
+const isPending = (claim: PersistentVolumeClaimInfo) =>
+  claim.status === "Pending";
+
+/** Which reads `claims` need: the classes while one is Pending, the volumes while one of those names its own. */
+export const claimNeeds = (claims: readonly PersistentVolumeClaimInfo[]) => ({
+  classes: claims.some(isPending),
+  volumes: claims.some((claim) => isPending(claim) && !!claim.volume),
+});
 
 /** Why a claim is Pending, as far as what it names tells. */
 export type ClaimCause =
@@ -18,6 +36,10 @@ export type ClaimCause =
   | { says: "noDefaultClass" }
   | { says: "classUnread" }
   | { says: "namesVolume"; volume: string }
+  | { says: "volumeMissing"; volume: string }
+  | { says: "volumeTaken"; volume: string; claim: string }
+  | { says: "volumeReleased"; volume: string; claim: string }
+  | { says: "volumeUnread"; volume: string }
   | { says: "staticOnly" }
   | { says: "waitsForPod"; name: string }
   | { says: "noProvisioner"; name: string }
@@ -31,6 +53,10 @@ const CAUSE_ROLE: Record<ClaimCause["says"], ClaimCauseRole> = {
   noDefaultClass: "err",
   classUnread: "warn",
   namesVolume: "warn",
+  volumeMissing: "err",
+  volumeTaken: "err",
+  volumeReleased: "err",
+  volumeUnread: "warn",
   staticOnly: "warn",
   waitsForPod: "pending",
   noProvisioner: "warn",
@@ -40,14 +66,35 @@ const CAUSE_ROLE: Record<ClaimCause["says"], ClaimCauseRole> = {
 /** What a class names as its provisioner when volumes are made by hand. */
 const NO_PROVISIONER = "kubernetes.io/no-provisioner";
 
-/** Why `claim` is Pending; `null` for a claim that is not, or while its classes are still being read. */
+/**
+ * Why a claim that names `volume` has not bound to it, as the volume
+ * controller decides: a missing volume leaves the claim Pending with no event
+ * at all, and a volume holding another claim, or a deleted one, never binds.
+ */
+function namedVolumeCause(
+  claim: PersistentVolumeClaimInfo,
+  volume: string,
+  volumes: VolumesRead
+): ClaimCause | null {
+  if (volumes === "reading") return null;
+  if (volumes === "unread") return { says: "volumeUnread", volume };
+  const named = volumes.find((each) => each.name === volume);
+  if (!named) return { says: "volumeMissing", volume };
+  if (named.claim && named.status === "Released")
+    return { says: "volumeReleased", volume, claim: named.claim };
+  if (named.claim && named.claim !== `${claim.namespace}/${claim.name}`)
+    return { says: "volumeTaken", volume, claim: named.claim };
+  return { says: "namesVolume", volume };
+}
+
+/** Why `claim` is Pending; `null` for a claim that is not, or while what explains it is still being read. */
 export function claimCause(
   claim: PersistentVolumeClaimInfo,
-  classes: ClassesRead
+  { classes, volumes }: ClaimReads
 ): ClaimCause | null {
-  if (claim.status !== "Pending") return null;
+  if (!isPending(claim)) return null;
   // A claim that names its volume is never provisioned for, whatever its class.
-  if (claim.volume) return { says: "namesVolume", volume: claim.volume };
+  if (claim.volume) return namedVolumeCause(claim, claim.volume, volumes);
   // Asking for no class is asking for a volume made by hand, never provisioned.
   if (claim.storageClass === "") return { says: "staticOnly" };
   if (classes === "reading") return null;
@@ -101,6 +148,20 @@ export function claimCauseText(cause: ClaimCause, t: T): string {
       return t("cause", "claimClassUnread");
     case "namesVolume":
       return t("cause", "claimNamesVolume", { volume: cause.volume });
+    case "volumeMissing":
+      return t("cause", "claimVolumeMissing", { volume: cause.volume });
+    case "volumeTaken":
+      return t("cause", "claimVolumeTaken", {
+        volume: cause.volume,
+        claim: cause.claim,
+      });
+    case "volumeReleased":
+      return t("cause", "claimVolumeReleased", {
+        volume: cause.volume,
+        claim: cause.claim,
+      });
+    case "volumeUnread":
+      return t("cause", "claimVolumeUnread", { volume: cause.volume });
     case "staticOnly":
       return t("cause", "claimStaticOnly");
     case "waitsForPod":

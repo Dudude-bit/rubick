@@ -662,23 +662,41 @@ pub(super) async fn claim_connections(
     out.subject = Some(subject.clone());
 
     let spec = claim.spec.as_ref();
-    if let Some(volume) = spec.and_then(|s| s.volume_name.clone()) {
-        out.edge(
-            subject.clone(),
-            ObjectRef::unchecked("PersistentVolume", &volume, None),
-            Relation::Binds,
-        );
-    }
-    if let Some(class) = spec.and_then(|s| s.storage_class_name.clone()) {
-        out.edge(
-            subject.clone(),
-            ObjectRef::unchecked("StorageClass", &class, None),
-            Relation::Binds,
-        );
+    let (volume, class) = tokio::join!(
+        named_in_cluster::<PersistentVolume>(
+            ctx,
+            "PersistentVolume",
+            spec.and_then(|s| s.volume_name.clone()),
+        ),
+        named_in_cluster::<StorageClass>(
+            ctx,
+            "StorageClass",
+            spec.and_then(|s| s.storage_class_name.clone()),
+        ),
+    );
+    for to in [volume?, class?].into_iter().flatten() {
+        out.edge(subject.clone(), to, Relation::Binds);
     }
 
     users_of(ctx, ns, &subject, out).await?;
     Ok(())
+}
+
+/// A cluster-scoped object a claim or a volume names, looked up so the graph
+/// says what the claim's own page says of it. An empty name asks for none.
+async fn named_in_cluster<K>(
+    ctx: &ResourceContext,
+    kind: &str,
+    name: Option<String>,
+) -> Result<Option<ObjectRef>>
+where
+    K: kube::Resource<DynamicType = ()> + Clone + serde::de::DeserializeOwned + std::fmt::Debug,
+{
+    let Some(name) = name.filter(|name| !name.is_empty()) else {
+        return Ok(None);
+    };
+    let existence = existence_of(Api::<K>::all(ctx.client.clone()), &name).await?;
+    Ok(Some(ObjectRef::new(kind, &name, None, existence)))
 }
 
 /// A `ConfigMap` or a Secret: the objects that draw on it, and nothing else.
@@ -860,12 +878,9 @@ pub(super) async fn volume_connections(
             out.edge(subject.clone(), to, Relation::Binds);
         }
     }
-    if let Some(class) = spec.and_then(|s| s.storage_class_name.clone()) {
-        out.edge(
-            subject.clone(),
-            ObjectRef::unchecked("StorageClass", &class, None),
-            Relation::Binds,
-        );
+    let class = spec.and_then(|s| s.storage_class_name.clone());
+    if let Some(class) = named_in_cluster::<StorageClass>(ctx, "StorageClass", class).await? {
+        out.edge(subject.clone(), class, Relation::Binds);
     }
 
     out.not_looked_at.extend(UnexploredKind::on_a_volume());
@@ -1483,6 +1498,105 @@ mod ingress_tests {
                 "{status}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod claim_tests {
+    use super::*;
+    use crate::client::served::test_server::{failure, server};
+    use serde_json::json;
+
+    fn bound_claim(spec: serde_json::Value) -> String {
+        json!({
+            "apiVersion": "v1", "kind": "PersistentVolumeClaim",
+            "metadata": { "name": "asks", "namespace": "shop" },
+            "spec": spec,
+            "status": { "phase": "Pending" },
+        })
+        .to_string()
+    }
+
+    /// Live, asks-for-volume named pv-that-is-not-there: its page said the
+    /// volume does not exist while Connections drew it as a link it never
+    /// checked. Fails if the graph stops asking for the claim's volume and
+    /// class, or reads a refusal as gone.
+    #[tokio::test]
+    async fn a_claims_volume_and_class_read_the_same_on_connections_as_on_its_page() {
+        for (status, reason, existence) in [
+            (404, "NotFound", Existence::Missing),
+            (403, "Forbidden", Existence::NotChecked),
+        ] {
+            let class = json!({
+                "apiVersion": "storage.k8s.io/v1", "kind": "StorageClass",
+                "metadata": { "name": "local-path" },
+                "provisioner": "rancher.io/local-path",
+            });
+            let answer = failure(status, reason);
+            let (client, _) = server(vec![
+                (
+                    "/api/v1/namespaces/shop/persistentvolumeclaims/asks",
+                    200,
+                    bound_claim(json!({
+                        "volumeName": "pv-gone",
+                        "storageClassName": "local-path",
+                    })),
+                ),
+                ("/api/v1/persistentvolumes/pv-gone", answer.0, answer.1),
+                (
+                    "/apis/storage.k8s.io/v1/storageclasses/local-path",
+                    200,
+                    class.to_string(),
+                ),
+            ])
+            .await;
+            let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+            let page = connections_of(&ctx, "PersistentVolumeClaim", "asks", None)
+                .await
+                .expect("a page");
+            let bound = |kind: &str| {
+                page.edges
+                    .iter()
+                    .find(|edge| edge.to.kind == kind && matches!(edge.relation, Relation::Binds))
+                    .unwrap_or_else(|| panic!("no {kind} under Bound to"))
+            };
+            assert_eq!(
+                bound("PersistentVolume").to.existence,
+                existence,
+                "{status}"
+            );
+            assert_eq!(
+                bound("StorageClass").to.existence,
+                Existence::Present,
+                "{status}"
+            );
+        }
+    }
+
+    /// `storageClassName: ""` asks for no class at all, and the graph drew an
+    /// edge to a `StorageClass` with no name. Fails if it draws one again.
+    #[tokio::test]
+    async fn a_claim_that_asks_for_no_class_is_bound_to_none() {
+        let (client, _) = server(vec![(
+            "/api/v1/namespaces/shop/persistentvolumeclaims/asks",
+            200,
+            bound_claim(json!({ "storageClassName": "" })),
+        )])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+        let page = connections_of(&ctx, "PersistentVolumeClaim", "asks", None)
+            .await
+            .expect("a page");
+        assert!(
+            !page
+                .edges
+                .iter()
+                .any(|edge| matches!(edge.relation, Relation::Binds)),
+            "{:?}",
+            page.edges
+        );
     }
 }
 

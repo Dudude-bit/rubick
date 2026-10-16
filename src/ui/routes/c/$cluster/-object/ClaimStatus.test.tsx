@@ -15,8 +15,14 @@ import type {
   StorageClassInfo,
 } from "@/generated/types";
 import { useWindowActivity } from "@/lib/window-activity";
-import { renderWithProviders } from "@/test/render";
-import { ClaimClassCell, ClaimStatusCell, ClaimSummary } from "./ClaimStatus";
+import { renderWithProviders, renderWithRouter } from "@/test/render";
+import {
+  ClaimClassCell,
+  ClaimStatusCell,
+  ClaimSummary,
+  ClaimVolume,
+  ClaimVolumeCell,
+} from "./ClaimStatus";
 
 const claim: PersistentVolumeClaimInfo = {
   uid: "u1",
@@ -59,7 +65,10 @@ describe("a claim's row in the list", () => {
    */
   it("says why it is Pending after the badge, in the colour of the cause", () => {
     const { unmount } = renderWithProviders(
-      <ClaimStatusCell claim={claim} classes={[localPath]} />
+      <ClaimStatusCell
+        claim={claim}
+        reads={{ classes: [localPath], volumes: [] }}
+      />
     );
     const missing = screen.getByTestId("claim-cause");
     expect(missing.textContent).toBe(
@@ -71,7 +80,7 @@ describe("a claim's row in the list", () => {
     renderWithProviders(
       <ClaimStatusCell
         claim={{ ...claim, storageClass: "local-path" }}
-        classes={[localPath]}
+        reads={{ classes: [localPath], volumes: [] }}
       />
     );
     expect(screen.getByTestId("claim-cause").className).toContain("text-info");
@@ -79,17 +88,65 @@ describe("a claim's row in the list", () => {
 
   /** Fails if the row's Storage class cell links a class the cluster lacks, as if it could be opened. */
   it("marks a class the cluster lacks rather than linking it", () => {
-    renderWithProviders(<ClaimClassCell claim={claim} classes={[localPath]} />);
+    renderWithProviders(
+      <ClaimClassCell
+        claim={claim}
+        reads={{ classes: [localPath], volumes: [] }}
+      />
+    );
     const named = screen.getByText("fast-ssd-missing");
     expect(named.closest("a")).toBeNull();
     expect(named.parentElement?.className).toContain("text-err");
   });
 
+  /** Fails if the row's Volume cell links a volume the cluster lacks, as if it could be opened, or stops linking one it has. */
+  it("marks a volume the cluster lacks rather than linking it", async () => {
+    const asks = { ...claim, volume: "pv-that-is-not-there" };
+    const { unmount } = renderWithProviders(
+      <ClaimVolumeCell claim={asks} reads={{ classes: [], volumes: [] }} />
+    );
+    const named = screen.getByText("pv-that-is-not-there");
+    expect(named.closest("a")).toBeNull();
+    expect(screen.getByTestId("claim-missing").className).toContain("text-err");
+    unmount();
+
+    await renderWithRouter(
+      <ClaimVolumeCell
+        claim={asks}
+        reads={{ classes: [], volumes: "unread" }}
+      />
+    );
+    expect(screen.queryByTestId("claim-missing")).toBeNull();
+    expect(
+      screen.getByText("pv-that-is-not-there").closest("a")
+    ).not.toBeNull();
+  });
+
   /** Fails if a row whose classes are still being read guesses a cause. */
   it("says no cause while the classes are still being read", () => {
-    renderWithProviders(<ClaimStatusCell claim={claim} classes="reading" />);
+    renderWithProviders(
+      <ClaimStatusCell
+        claim={claim}
+        reads={{ classes: "reading", volumes: [] }}
+      />
+    );
     expect(screen.queryByTestId("claim-cause")).toBeNull();
     expect(screen.getByText("Pending")).toBeTruthy();
+  });
+});
+
+describe("a claim's Volume row on its page and peek", () => {
+  /** Fails if the row links a volume the cause found missing instead of saying it does not exist. */
+  it("says a volume the cluster lacks does not exist", () => {
+    renderWithProviders(
+      <ClaimVolume
+        claim={{ ...claim, volume: "pv-that-is-not-there" }}
+        cause={{ says: "volumeMissing", volume: "pv-that-is-not-there" }}
+      />
+    );
+    const line = screen.getByTestId("claim-missing");
+    expect(line).toHaveTextContent("pv-that-is-not-there does not exist");
+    expect(line.querySelector("a")).toBeNull();
   });
 });
 

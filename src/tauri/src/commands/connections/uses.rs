@@ -193,6 +193,21 @@ async fn look_up(
     }
 }
 
+/// Whether the API server has `name`, and `NotChecked` where it would not say.
+pub(super) async fn existence_of<K>(api: Api<K>, name: &str) -> Result<Existence>
+where
+    K: kube::Resource + Clone + serde::de::DeserializeOwned + std::fmt::Debug,
+{
+    match is_there(api, name).await {
+        Ok(true) => Ok(Existence::Present),
+        Ok(false) => Ok(Existence::Missing),
+        Err(err) => match Error::from(err) {
+            expired @ Error::CredentialsExpired(_) => Err(expired),
+            _ => Ok(Existence::NotChecked),
+        },
+    }
+}
+
 async fn is_there<K>(api: Api<K>, name: &str) -> kube::Result<bool>
 where
     K: kube::Resource + Clone + serde::de::DeserializeOwned + std::fmt::Debug,

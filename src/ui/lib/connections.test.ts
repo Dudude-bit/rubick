@@ -14,6 +14,7 @@ import {
   connectionCount,
   connectionGroups,
   dependentsOf,
+  describeExistence,
   describeStop,
   describeUsages,
   hopTone,
@@ -2362,6 +2363,36 @@ describe("the groups", () => {
     ]);
     expect(needsOf(false)?.missingKeys).toEqual(usedByOf(false)?.missingKeys);
     expect(needsOf(null)?.missingKeys).toBeUndefined();
+  });
+});
+
+describe("what a claim is bound to", () => {
+  const claim = ref("PersistentVolumeClaim", "asks");
+  const bound = (existence: ObjectRef["existence"]) => {
+    const volume = {
+      ...ref("PersistentVolume", "pv-gone", null, existence),
+      namespace: null,
+    };
+    const group = connectionGroups(
+      connections(claim, [
+        { from: claim, to: volume, relation: { verb: "binds" } },
+      ]),
+      t
+    ).find((each) => each.key === "binds");
+    const [row] = group!.rows;
+    return describeExistence(row.object!, t, row.verifiable ?? false);
+  };
+
+  /**
+   * Live, asks-for-volume's page said pv-that-is-not-there does not exist
+   * while Connections drew it as a plain link. Fails if a missing volume is
+   * said to be missing "in this namespace", which a volume is never in, or a
+   * volume the cluster would not tell about reads as one it has.
+   */
+  it("says a missing volume does not exist, and an unread one is not checked", () => {
+    expect(bound("missing")).toBe("does not exist");
+    expect(bound("notChecked")).toBe("not checked");
+    expect(bound("present")).toBeNull();
   });
 });
 
