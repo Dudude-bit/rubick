@@ -34,6 +34,7 @@ import {
   TooltipTrigger,
 } from "./tooltip";
 import { helmReleaseLink, hrefOf, objectLink } from "@/lib/links";
+import { MetricsAbsenceContext } from "@/lib/metrics-absence";
 import { usePeek } from "@/hooks/usePeek";
 import { renderWithRouter, settle } from "@/test/render";
 import { useShortcuts } from "@/routes/c/$cluster/-shell/useShortcuts";
@@ -1544,6 +1545,36 @@ describe("column widths", () => {
       expect(
         (Number.parseFloat(widthOf("Name")) / 100) *
           Number.parseFloat(screen.getByRole("table").style.minWidth)
+      ).toBeGreaterThanOrEqual(800);
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /** Fails if a floor stops being told what its metric cells are told, so a column of "n/a" keeps the room of "no sample". */
+  it("hands a floor why the metrics under it are missing", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    const byAbsence = {
+      ...columns[0],
+      size: 300,
+      meta: {
+        floor: (_t: unknown, _rows: readonly Item[], absence: unknown) =>
+          absence === "notInstalled" ? 800 : 0,
+      },
+    };
+    try {
+      await wrap(
+        <MetricsAbsenceContext.Provider value="notInstalled">
+          <DataTable<Item>
+            columns={[byAbsence, { ...columns[1], size: 100 }]}
+            data={DATA}
+          />
+        </MetricsAbsenceContext.Provider>
+      );
+      expect(
+        Number.parseFloat(screen.getByRole("table").style.minWidth)
       ).toBeGreaterThanOrEqual(800);
     } finally {
       width.mockRestore();

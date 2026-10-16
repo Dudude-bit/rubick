@@ -69,6 +69,7 @@ import {
 import { controlAt } from "@/lib/row-control";
 import { holdTitles } from "@/lib/hold-titles";
 import { columnFloor, columnIdeal, columnLabel } from "@/lib/column-label";
+import { useMetricsAbsence } from "@/lib/metrics-absence";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
@@ -901,18 +902,19 @@ function DataTableInner<TData extends RowData>({
 
   // Per column, from every row the table holds rather than the ones a
   // search leaves, so typing does not move the columns.
+  const absence = useMetricsAbsence();
   const dataBounds = React.useMemo(() => {
     void fonts;
     return new Map(
       dataColumns.map((column) => [
         columnIdOf(column),
         {
-          floor: columnFloor(column, t, data),
+          floor: columnFloor(column, t, data, absence),
           ideal: columnIdeal(column, t, data),
         },
       ])
     );
-  }, [dataColumns, data, t, fonts]);
+  }, [dataColumns, data, t, fonts, absence]);
 
   // A filled table's port draws its own scrollbar in a lane, so only a table
   // the page scrolls keeps the room the page's overlay scrollbar reaches over.

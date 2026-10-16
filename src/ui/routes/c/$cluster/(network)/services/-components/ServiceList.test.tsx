@@ -168,7 +168,9 @@ describe("the room a Services list leaves its reasons", () => {
         ("accessorKey" in candidate && candidate.accessorKey === id)
     );
     const floor = column?.meta?.floor;
-    return (typeof floor === "function" ? floor(t, rows as never) : floor) ?? 0;
+    return (
+      (typeof floor === "function" ? floor(t, rows as never, null) : floor) ?? 0
+    );
   };
   const port = (
     name: string | null,

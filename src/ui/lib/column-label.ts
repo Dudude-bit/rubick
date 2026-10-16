@@ -1,6 +1,7 @@
 import type { AppColumnMeta } from "@/components/ui/table-features";
 import type { HeaderSaying } from "@/i18n/column-header";
 import type { T } from "@/i18n/useT";
+import type { MetricsAbsence } from "@/lib/metrics-absence";
 import { textWidth } from "@/lib/text-width";
 
 interface LabelledColumn {
@@ -48,20 +49,25 @@ export function headerFloor(column: LabelledColumn, t: T): number {
 const pixels = (
   declared: AppColumnMeta["floor"],
   t: T,
-  rows: readonly unknown[]
+  rows: readonly unknown[],
+  absence: MetricsAbsence | null = null
 ) =>
   typeof declared === "function"
-    ? declared(t, rows as readonly never[])
+    ? declared(t, rows as readonly never[], absence)
     : (declared ?? 0);
 
 /** The narrowest a column is drawn: what its cells declare for `rows`, and its header's words. */
 export function columnFloor(
   column: LabelledColumn,
   t: T,
-  rows: readonly unknown[] = []
+  rows: readonly unknown[] = [],
+  absence: MetricsAbsence | null = null
 ): number {
   const meta = column.meta as AppColumnMeta | undefined;
-  return Math.max(pixels(meta?.floor, t, rows), headerFloor(column, t));
+  return Math.max(
+    pixels(meta?.floor, t, rows, absence),
+    headerFloor(column, t)
+  );
 }
 
 /** The width a column keeps while the table has room for every column's. */

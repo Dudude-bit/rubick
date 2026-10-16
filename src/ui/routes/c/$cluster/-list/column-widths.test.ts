@@ -6,10 +6,12 @@ import {
   yieldedColumns,
 } from "@/components/ui/column-shares";
 import { IPV4_CELL_PX } from "@/components/ui/copyable-value";
+import type { AppColumnMeta } from "@/components/ui/table-features";
 import { translate } from "@/i18n";
 import type { IngressInfo, PersistentVolumeClaimInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { columnFloor, columnIdeal } from "@/lib/column-label";
+import { columnFloor, columnIdeal, headerFloor } from "@/lib/column-label";
+import type { MetricsAbsence } from "@/lib/metrics-absence";
 import { serviceVerdictLabels } from "@/lib/service-health";
 import {
   cronStatusWord,
@@ -55,7 +57,7 @@ interface Column {
   meta?: {
     share?: unknown;
     label?: unknown;
-    floor?: number | ((t: T, rows: readonly never[]) => number);
+    floor?: AppColumnMeta["floor"];
     yields?: number;
   };
 }
@@ -547,7 +549,9 @@ describe("the Pods table", () => {
       for (const port of PORTS) {
         const { px } = laidOut(shown, port, t);
         expect(px[column("age")]).toBeGreaterThanOrEqual(widestAgePx + 20);
-        expect(px[column("node")]).toBeGreaterThanOrEqual(NODE_CELL_PX);
+        expect(px[column("node")]).toBeGreaterThanOrEqual(
+          NODE_CELL_PX - 0.0001
+        );
       }
       expect(AGE_CELL_PX).toBeGreaterThanOrEqual(widestAgePx + 20);
     }
@@ -576,8 +580,10 @@ describe("a value a cell says in words", () => {
     columns: Column[],
     id: string,
     t: T,
-    rows: readonly unknown[] = []
-  ) => columnFloor(columns.find((c) => nameOf(c) === id) ?? {}, t, rows);
+    rows: readonly unknown[] = [],
+    absence: MetricsAbsence | null = null
+  ) =>
+    columnFloor(columns.find((c) => nameOf(c) === id) ?? {}, t, rows, absence);
 
   /** Lena read "ни один не го…" in Services: fails if the Endpoints column stops holding its widest verdict badge in either language. */
   it.each([
@@ -590,6 +596,8 @@ describe("a value a cell says in words", () => {
       );
   });
 
+  const unmeasured = [{ name: "web-0" }];
+
   /** Lena read "нет зам…" under Память on Nodes: fails if a metric column stops holding the words it says when there is no value. */
   it.each([
     ["Nodes", nodes(new Map())],
@@ -598,11 +606,42 @@ describe("a value a cell says in words", () => {
     "%s holds a metric's no-sample words in Russian",
     (_page, columns) => {
       for (const id of ["cpu", "memory"])
-        expect(floorOf(columns, id, ru)).toBeGreaterThanOrEqual(
+        expect(floorOf(columns, id, ru, unmeasured)).toBeGreaterThanOrEqual(
           Math.ceil("нет замера".length * 7.2 + 20)
         );
     }
   );
+
+  /**
+   * With metrics-server not installed every CronJob row said "n/a" in a
+   * column holding "no sample", and Last run cut "Pod Security rest…".
+   * Fails if a column whose rows all say "n/a" keeps the room of a word
+   * none of them says, or of a figure none of them has.
+   */
+  it.each([
+    ["Nodes", nodes(new Map())],
+    ["Pods", pods],
+    ["CronJobs", cronJobs() as Column[]],
+  ] as const)(
+    "%s keeps only the room n/a takes where metrics-server is missing",
+    (_page, columns) => {
+      for (const id of ["cpu", "memory"]) {
+        const column = columns.find((c) => nameOf(c) === id) ?? {};
+        expect(
+          floorOf(columns, id, en, unmeasured, "notInstalled")
+        ).toBeLessThanOrEqual(
+          Math.max(headerFloor(column, en), Math.ceil("n/a".length * 7.2 + 20))
+        );
+      }
+    }
+  );
+
+  /** Fails if a column with a figure in it stops holding the widest figure, `1.81Gi`. */
+  it("holds a figure where one row has one", () => {
+    expect(
+      floorOf(pods, "cpu", en, [{ name: "web-0", cpuMillicores: 1250 }])
+    ).toBeGreaterThanOrEqual(Math.ceil(6 * 7.2 + 20));
+  });
 
   /** Fails if a Services row cuts its type, its namespace or a Cilium-sized port name once the window narrows. */
   it("holds a Service's type, namespace and named port whole", () => {

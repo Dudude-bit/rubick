@@ -30,6 +30,7 @@ import {
 
 import type { HeaderSaying } from "@/i18n/column-header";
 import type { T } from "@/i18n/useT";
+import type { MetricsAbsence } from "@/lib/metrics-absence";
 import type { ReportValue } from "@/lib/report";
 
 /**
@@ -43,8 +44,14 @@ export interface AppColumnMeta {
   share?: (row: never, t: T) => ReportValue | string | null;
   /** The header's words, where the header is a control rather than `columnHeader`. */
   label?: HeaderSaying;
-  /** Pixels the column is never drawn under, whatever the table's width; a function where it depends on the reader's language or on the rows the table holds. */
-  floor?: number | ((t: T, rows: readonly never[]) => number);
+  /** Pixels the column is never drawn under, whatever the table's width; a function where it depends on the reader's language, the rows the table holds or why their metrics are missing. */
+  floor?:
+    | number
+    | ((
+        t: T,
+        rows: readonly never[],
+        absence: MetricsAbsence | null
+      ) => number);
   /** Pixels it is drawn at while the port has room for every column's. */
   ideal?: number | ((t: T, rows: readonly never[]) => number);
   /** Where a port too narrow for every floor hides it, the lowest first; never hidden without one. */

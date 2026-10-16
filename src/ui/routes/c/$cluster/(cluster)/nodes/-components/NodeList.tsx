@@ -161,7 +161,9 @@ export const columns = (
     header: columnHeader("columns", "cpuUsage"),
     meta: {
       yields: 3,
-      floor: metricCellFloor,
+      floor: metricCellFloor(
+        (row: NodeInfo) => nodeMetricsByName.get(row.name)?.cpuMillicores
+      ),
       share: (row: NodeInfo, t) => {
         const used = nodeMetricsByName.get(row.name)?.cpuMillicores;
         return typeof used === "number"
@@ -187,7 +189,9 @@ export const columns = (
     header: columnHeader("columns", "memoryUsage"),
     meta: {
       yields: 2,
-      floor: metricCellFloor,
+      floor: metricCellFloor(
+        (row: NodeInfo) => nodeMetricsByName.get(row.name)?.memoryBytes
+      ),
       share: (row: NodeInfo, t) => {
         const used = nodeMetricsByName.get(row.name)?.memoryBytes;
         return typeof used === "number"

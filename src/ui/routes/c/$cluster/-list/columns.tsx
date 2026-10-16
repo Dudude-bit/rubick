@@ -9,6 +9,7 @@ import { AgeHeader } from "@/components/ui/sortable-header";
 import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
 import type { T as Translate } from "@/i18n/useT";
+import type { MetricsAbsence } from "@/lib/metrics-absence";
 import { widestText } from "@/lib/text-width";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { MetricValue, UnitValue } from "@/components/ui/metric-value";
@@ -128,16 +129,28 @@ export const causeTextPx = (said: readonly string[]) =>
 /** `1.81Gi` (6 glyphs at 7.2px) and a cell's padding; the bar beside a limit is the part that goes first. */
 export const METRIC_CELL_PX = Math.ceil(6 * 7.2 + 20);
 
-/** A metric cell, or the words it says when there is no value, whichever is wider. */
-export const metricCellFloor = (t: Translate) =>
-  Math.max(
-    METRIC_CELL_PX,
-    widestText(
-      [t("cluster", "metricNoSample"), t("cluster", "metricNotAvailable")],
-      "sans",
-      7.2
-    ) + 20
-  );
+/** As wide as what its rows say: a figure where one has one, and the one word the rest say, as `MetricValue` picks it. */
+export const metricCellFloor =
+  <Row,>(valueOf: (row: Row) => number | null | undefined) =>
+  (t: Translate, rows: readonly Row[], absence: MetricsAbsence | null) => {
+    const figure = rows.some((row) => typeof valueOf(row) === "number");
+    const word = rows.some((row) => typeof valueOf(row) !== "number");
+    return Math.max(
+      figure ? METRIC_CELL_PX : 0,
+      word
+        ? widestText(
+            [
+              t(
+                "cluster",
+                absence === null ? "metricNoSample" : "metricNotAvailable"
+              ),
+            ],
+            "sans",
+            7.2
+          ) + 20
+        : 0
+    );
+  };
 
 /** "59 мин" and "999 д." are the widest ages, 41px of 12px Inter, and a cell's 20px of padding. */
 export const AGE_CELL_PX = 62;
@@ -235,7 +248,7 @@ export function createCpuColumn<
     id: "cpu",
     header: columnHeader("columns", "cpu"),
     meta: {
-      floor: metricCellFloor,
+      floor: metricCellFloor((row: Row) => row.cpuMillicores),
       share: (row: Row, t) =>
         typeof row.cpuMillicores === "number"
           ? formatUsage(row.cpuMillicores, "cpu")
@@ -268,7 +281,7 @@ export function createMemoryColumn<
     id: "memory",
     header: columnHeader("columns", "memory"),
     meta: {
-      floor: metricCellFloor,
+      floor: metricCellFloor((row: Row) => row.memoryBytes),
       share: (row: Row, t) =>
         typeof row.memoryBytes === "number"
           ? formatUsage(row.memoryBytes, "memory")
