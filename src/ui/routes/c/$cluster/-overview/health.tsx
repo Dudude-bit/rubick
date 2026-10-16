@@ -1,4 +1,10 @@
-import { Fragment, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   CircleSlash,
@@ -45,6 +51,7 @@ import {
   checkRefused,
   foldedWords,
   reasonWord,
+  shuttingPolicy,
   refusedVerb,
   unreadWhere,
   type Attention,
@@ -53,7 +60,7 @@ import {
   type AttentionItem,
 } from "@/lib/attention";
 import { ERROR_CODES } from "@/lib/error-utils";
-import { namedListLink, objectLink } from "@/lib/links";
+import { namedListLink, objectLink, type AppLink } from "@/lib/links";
 import {
   ROLE_DOT,
   ROLE_ICON,
@@ -215,8 +222,9 @@ function ShutRow({ head, members }: { head: AttentionItem; members: number }) {
   const SeverityIcon = ROLE_ICON[head.tone];
   const { Icon: ReasonIcon } = eventReasonMark(head.reason);
   const tone = ROLE_TEXT[head.tone];
+  const policy = shuttingPolicy(head);
   return (
-    <div className={ROW} data-testid="attention-shut">
+    <OpensRow link={policy && objectLink(policy)} testId="attention-shut">
       <SeverityIcon className={cn(MARK, tone)} aria-hidden="true" />
       <span
         className={cn(
@@ -242,7 +250,7 @@ function ShutRow({ head, members }: { head: AttentionItem; members: number }) {
       <span />
       <span />
       <span />
-    </div>
+    </OpensRow>
   );
 }
 
@@ -287,7 +295,6 @@ function AttentionRow({
   sameCause?: boolean;
 }) {
   const t = useT();
-  const navigate = useNavigate();
   const tone = ROLE_TEXT[item.tone];
   const SeverityIcon = ROLE_ICON[item.tone];
   const link = objectLink(item.opens);
@@ -327,7 +334,7 @@ function AttentionRow({
             aria-hidden="true"
           />
           <span className="line-clamp-2" title={reasonWord(item, t)}>
-            {shut ? shut.policies : reasonWord(item, t)}
+            {shut ? shut.policies.join(", ") : reasonWord(item, t)}
           </span>
         </span>
       )}
@@ -394,12 +401,32 @@ function AttentionRow({
     </>
   );
 
-  if (link === null) return <div className={ROW}>{body}</div>;
   // The row opens the object's page; the name inside it opens the peek.
+  return <OpensRow link={link}>{body}</OpensRow>;
+}
+
+/** A row that opens `link`, where a link inside it still opens its own. */
+function OpensRow({
+  link,
+  testId,
+  children,
+}: {
+  link: AppLink | null;
+  testId?: string;
+  children: ReactNode;
+}) {
+  const navigate = useNavigate();
+  if (link === null)
+    return (
+      <div className={ROW} data-testid={testId}>
+        {children}
+      </div>
+    );
   return (
     <div
       role="link"
       tabIndex={0}
+      data-testid={testId}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("a")) return;
         navigate(link);
@@ -410,7 +437,7 @@ function AttentionRow({
       }}
       className={cn(ROW, "cursor-pointer hover:bg-hover")}
     >
-      {body}
+      {children}
     </div>
   );
 }

@@ -78,7 +78,7 @@ export interface AttentionItem {
   /** The IngressClass it asks for that nothing serves, and what else is wrong with it. */
   unservedClass?: { name: string; rest: string | null };
   /** The NetworkPolicies that shut a Service, keyed by the sentence other Services here may share. */
-  shutBy?: { key: string; policies: string };
+  shutBy?: { key: string; policies: string[] };
 }
 
 /** What Gateway API has to say about a scope, as the rail's marks read it. */
@@ -300,7 +300,7 @@ const serviceItems = remember(
           health.state === "shut"
             ? {
                 key: `${namespace}\n${words.reason}`,
-                policies: policyNamesOf(health.stop).join(", "),
+                policies: policyNamesOf(health.stop),
               }
             : undefined;
         return group.names.map((name) => {
@@ -741,6 +741,18 @@ export function attentionLines(items: AttentionItem[]): AttentionLine[] {
   }
   return lines;
 }
+
+/** The one NetworkPolicy a group of shut Services opens on, where one alone shuts them. */
+export const shuttingPolicy = (
+  head: AttentionItem
+): { kind: string; name: string; namespace: string | null } | null =>
+  head.shutBy?.policies.length === 1
+    ? {
+        kind: "NetworkPolicy",
+        name: head.shutBy.policies[0],
+        namespace: head.namespace,
+      }
+    : null;
 
 /** "2 failed pods" where a row stands for runs it folded, or the replaced pods it stands for, or "already replaced" on one alone. */
 export const foldedWords = (item: AttentionItem, t: T): string | null =>

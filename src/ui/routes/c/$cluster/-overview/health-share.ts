@@ -26,6 +26,7 @@ import {
   checkSaid,
   foldedWords,
   reasonWord,
+  shuttingPolicy,
   unreadWhere,
   type Attention,
   type AttentionCheck,
@@ -193,7 +194,8 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
         detail: t("empty", "nothingPickedThemUp"),
         role: "err",
       };
-    if (line.at === "shut")
+    if (line.at === "shut") {
+      const policy = shuttingPolicy(line.head);
       return {
         title: reasonWord(line.head, t),
         detail: t("count", "servicesShut", {
@@ -202,11 +204,13 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
           said: detailWords(line.head.detail, t, null) ?? "",
         }),
         role: line.head.tone,
+        ...(policy && { ref: refOf(policy) }),
       };
+    }
     const { item } = line;
     const marked = line.under === "class" ? item.unservedClass : undefined;
     const shut = line.under === "policy" ? item.shutBy : undefined;
-    const tag = marked?.name ?? shut?.policies;
+    const tag = marked?.name ?? shut?.policies.join(", ");
     return {
       title: tag ? `${reasonWord(item, t)} · ${tag}` : reasonWord(item, t),
       detail:

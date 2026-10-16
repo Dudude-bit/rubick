@@ -2691,12 +2691,13 @@ describe("Services one NetworkPolicy shuts", () => {
    * to these pods" on a row of its own for each of seven Services in
    * k8s-gui-test. Fails if a Service under the line says the sentence again
    * or loses the policy, if another policy or namespace joins the group, if
-   * grouping changes the count, or if Share groups it otherwise.
+   * grouping changes the count, if the line stops opening the policy behind
+   * it, or if Share groups it otherwise.
    */
   it("says one policy's verdict once over the Services it shuts, and Share does too", async () => {
     const read = attention();
     expect(read.total).toBe(5);
-    await wrap(
+    const { router } = await wrap(
       <AttentionPanel
         attention={read}
         pods={RUNNING}
@@ -2735,8 +2736,20 @@ describe("Services one NetworkPolicy shuts", () => {
       "web · net: NetworkPolicy deny-all-ingress admits no connection"
     );
 
+    await userEvent.click(screen.getByTestId("attention-shut"));
+    expect(router.state.location.pathname).toBe(
+      "/c/prod/networkpolicies/k8s-gui-test/deny-all-ingress"
+    );
+
     const share = attentionShare(read, t);
     const items = share.body.type === "findings" ? share.body.items : [];
+    expect(items[0].ref).toMatchObject({
+      kind: "NetworkPolicy",
+      namespace: "k8s-gui-test",
+    });
+    expect(`${items[0].ref?.stem ?? ""}${items[0].ref?.tail ?? ""}`).toBe(
+      "deny-all-ingress"
+    );
     expect(items.map((item) => [item.title, item.detail])).toEqual([
       [
         "shut by NetworkPolicy",
