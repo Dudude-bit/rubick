@@ -6,12 +6,15 @@ import { QueryClientProvider } from "@tanstack/react-query";
 const answer = vi.hoisted(() => ({
   classes: null as Error | null,
   asked: [] as Array<string[] | null>,
+  gatewayApi: false,
 }));
 
 vi.mock("@/integrations", () => ({
+  ROUTING_STALE: 60_000,
   useCapabilities: () => [
     (controller: string) =>
-      controller === "traefik.io/ingress-controller"
+      controller === "traefik.io/ingress-controller" ||
+      controller === "traefik.io/gateway-controller"
         ? {
             name: "Traefik",
             read: async () => [
@@ -28,8 +31,20 @@ vi.mock("@/integrations", () => ({
   ],
 }));
 
+vi.mock("@/hooks/useGatewayApi", () => ({
+  useGatewayApi: () => ({
+    data: answer.gatewayApi
+      ? { installed: true, kinds: [{ kind: "GatewayClass" }] }
+      : undefined,
+  }),
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
+    listGatewayClasses: () =>
+      Promise.resolve([
+        { name: "traefik", controllerName: "traefik.io/gateway-controller" },
+      ]),
     resolveIngressClass: () =>
       answer.classes
         ? Promise.reject(answer.classes)
@@ -75,7 +90,7 @@ const render = () => {
   return renderHook(() => useDoorAsk(), { wrapper });
 };
 
-describe("who each IngressClass controller connects from", () => {
+describe("who each IngressClass and GatewayClass controller connects from", () => {
   /**
    * A controller no integration claims is not one whose pods are still
    * being read. Fails if it reads as pending for good, or if a claimed one
@@ -113,6 +128,31 @@ describe("who each IngressClass controller connects from", () => {
       })
     );
     expect(answer.asked).toEqual([["traefik"]]);
+  });
+
+  /**
+   * Traefik's Gateway provider runs in the same pods under a controllerName
+   * of its own. Fails if a GatewayClass's controller is never asked about,
+   * or a Gateway's class does not lead to the controller to ask.
+   */
+  it("reads the controller a GatewayClass names and says which one a class names", async () => {
+    answer.classes = null;
+    answer.gatewayApi = false;
+    expect(render().result.current.classController).toBeUndefined();
+
+    answer.gatewayApi = true;
+    const { result } = render();
+    await waitFor(() =>
+      expect(result.current("traefik.io/gateway-controller")).toMatchObject({
+        name: "Traefik",
+        clients: { known: true, value: [{ name: "traefik-7d9" }] },
+      })
+    );
+    expect(result.current.classController?.("traefik")).toBe(
+      "traefik.io/gateway-controller"
+    );
+    expect(result.current.classController?.("envoy")).toBeUndefined();
+    answer.gatewayApi = false;
   });
 
   /** Classes nobody may list leave the claimed controller unread, said why, never pending. */

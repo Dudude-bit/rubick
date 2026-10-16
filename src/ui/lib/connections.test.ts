@@ -21,7 +21,7 @@ import {
   type ChainHopCertificate,
   type RoutedIngress,
 } from "./connections";
-import type { DoorRead } from "./policy-door";
+import type { DoorAsk, DoorRead } from "./policy-door";
 import type {
   ChainStop,
   PolicyDoor,
@@ -1303,6 +1303,87 @@ describe("the traffic chain", () => {
         note: `Whether Traefik may connect is not checked: ${reason}.`,
         only: ["http://shop.local/"],
       });
+    });
+
+    /**
+     * Traefik's Gateway provider served an HTTPRoute that allow-nginx shut it
+     * out of, and the chain ended on "2 published" in green: a Gateway API
+     * route asked nobody at the door. Fails if the Gateway's class is not
+     * followed to its controller, or the refusal is said of the addresses an
+     * Ingress hands out.
+     */
+    it("judges a Gateway API route at the door of the controller its Gateway's class names", () => {
+      const route = ref("HTTPRoute", "shop");
+      const gateway = ref("Gateway", "edge", {
+        kind: "gateway",
+        className: "traefik",
+      });
+      const chain = (asking: DoorAsk) =>
+        trafficChains(
+          connections(
+            deployment,
+            [
+              {
+                from: svc,
+                to: deployment,
+                relation: { verb: "selects", selector: "app=shop" },
+              },
+              {
+                from: route,
+                to: svc,
+                relation: {
+                  verb: "ruleRoutes",
+                  hostnames: ["shop.example"],
+                  port: "80",
+                  weight: null,
+                },
+              },
+              {
+                from: route,
+                to: gateway,
+                relation: { verb: "attachesTo", sectionName: null },
+              },
+            ],
+            [],
+            [],
+            [
+              publishes(
+                "shop",
+                { ready: 2 },
+                {
+                  endpoints: [endpointOf("shop-a")],
+                  ports: [
+                    {
+                      name: "http",
+                      port: 8080,
+                      protocol: "TCP",
+                      exposed: true,
+                    },
+                  ],
+                  door,
+                }
+              ),
+            ]
+          ),
+          t,
+          { door: asking }
+        )[0];
+      const ask = (controller: string) =>
+        controller === "traefik.io/gateway-controller" ? traefik() : null;
+      const path = chain(
+        Object.assign((controller: string) => ask(controller), {
+          classController: (name: string) =>
+            name === "traefik" ? "traefik.io/gateway-controller" : undefined,
+        })
+      );
+      expect(path.broken).toBe(true);
+      expect(path.hops.at(-1)).toMatchObject({
+        at: "stop",
+        shut: true,
+        title: "NetworkPolicy allow-nginx admits no connection from Traefik",
+        only: [],
+      });
+      expect(chain(ask).hops.some((hop) => hop.at === "stop")).toBe(false);
     });
 
     /** Nobody asked about the controller, or a stop already said, adds nothing. */

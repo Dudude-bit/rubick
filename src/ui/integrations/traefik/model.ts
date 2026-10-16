@@ -61,6 +61,9 @@ export type { Backing } from "../ingress";
 /** Every version of Traefik writes this into an IngressClass's `spec.controller`. */
 export const CONTROLLER = "traefik.io/ingress-controller";
 
+/** What Traefik's Gateway API provider answers to in a GatewayClass's `controllerName`, from the same pods. */
+export const GATEWAY_CONTROLLER = "traefik.io/gateway-controller";
+
 /** Which entry points an Ingress's router is bound to, when it says so. */
 const ENTRYPOINTS_ANNOTATION =
   "traefik.ingress.kubernetes.io/router.entrypoints";

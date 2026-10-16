@@ -1269,7 +1269,7 @@ export function trafficChains(
      * in an annotation and a Traefik router both contradict.
      */
     tlsOf?: RouteTls;
-    /** Who each Ingress's controller connects from, to judge the NetworkPolicies over the pods. */
+    /** Who each Ingress's and Gateway's controller connects from, to judge the NetworkPolicies over the pods. */
     door?: DoorAsk;
   } = {}
 ): ChainPath[] {
@@ -1407,6 +1407,14 @@ export function trafficChains(
           for (const up of attaches.filter((entry) =>
             sameObject(entry.from, route)
           )) {
+            const className =
+              up.to.facts?.kind === "gateway" ? up.to.facts.className : null;
+            const controller = className
+              ? (extra.door?.classController?.(className) ?? null)
+              : null;
+            for (const edge of mine) {
+              ways.push({ controller, port: edge.relation.port, urls: [] });
+            }
             hops.push({
               at: "object",
               object: up.to,

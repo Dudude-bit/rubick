@@ -8,6 +8,7 @@ const t = ((section, key, values) =>
   translate("en", section, key, values)) as T;
 
 import { gatewayTopology } from "./gateway-topology";
+import type { DoorRead } from "@/lib/policy-door";
 import type {
   ConditionInfo,
   GatewayInfo,
@@ -403,6 +404,161 @@ describe("the gateway topology map", () => {
       backingError: "forbidden",
     });
     expect(refused.get("idle")).toEqual(["unknown", "unknown"]);
+  });
+
+  /**
+   * Two routes reach shop: one through a Gateway nobody can judge, one
+   * through Traefik's, which allow-nginx shuts out. The node took whichever
+   * route drew it first. Fails if the refusal is lost to the earlier route,
+   * or one route's verdict paints the other's edge.
+   */
+  it("draws a backend in the worst door any route meets there, and each edge in its own", () => {
+    const TRAEFIK = "traefik.io/gateway-controller";
+    const viaGateway = (name: string, on: string) =>
+      route(name, {
+        parentRefs: [
+          {
+            group: "gateway.networking.k8s.io",
+            kind: "Gateway",
+            name: on,
+            namespace: null,
+            sectionName: null,
+            port: null,
+          },
+        ],
+        rules: [
+          {
+            matches: [],
+            backendRefs: [
+              {
+                group: "",
+                kind: "Service",
+                name: "shop",
+                namespace: null,
+                port: 8080,
+                weight: null,
+              },
+            ],
+            hasRedirect: false,
+            extensionRefs: [],
+          },
+        ],
+      });
+    const gatewayClass = (name: string, controllerName: string) => ({
+      uid: "",
+      name,
+      controllerName,
+      description: null,
+      accepted: true,
+      conditions: [],
+      labels: {},
+      annotations: {},
+      createdAt: null,
+    });
+    const shop = { kind: "Service", name: "shop", namespace: "gwtest" };
+    const backing = {
+      services: [{ name: "shop", namespace: "gwtest", type: "ClusterIP" }],
+      published: [
+        {
+          service: shop,
+          ready: 1,
+          draining: 0,
+          notReady: 0,
+          stop: null,
+          ports: [{ name: null, port: 8080, protocol: "TCP", exposed: true }],
+          door: {
+            state: "guarded",
+            isolating: ["allow-nginx"],
+            unsettled: [],
+            ports: [
+              {
+                name: null,
+                servicePort: 8080,
+                port: 8080,
+                protocol: "TCP",
+                rules: [
+                  {
+                    policy: "allow-nginx",
+                    byName: false,
+                    peers: [
+                      {
+                        pods: { kind: "notSaid" },
+                        namespaces: {
+                          kind: "written",
+                          query: "kubernetes.io/metadata.name=ingress-nginx",
+                        },
+                        ipBlock: null,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      backingKnown: true,
+      backingError: null,
+    };
+    const traefik: DoorRead = {
+      name: "Traefik",
+      egress: { known: true, value: { rows: [], unread: [] } },
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "traefik-7d9",
+            namespace: "traefik",
+            labels: {},
+            ip: "10.42.1.7",
+            hostNetwork: false,
+          },
+        ],
+      },
+      namespaces: {
+        known: true,
+        value: [
+          {
+            name: "traefik",
+            labels: { "kubernetes.io/metadata.name": "traefik" },
+          },
+        ],
+      },
+    };
+    const routes = [
+      viaGateway("unjudged", "edge"),
+      viaGateway("refused", "tr"),
+    ];
+    for (const drawn of [routes, [...routes].reverse()]) {
+      const data = gatewayTopology(
+        [gateway("edge"), { ...gateway("tr"), className: "traefik" }],
+        drawn,
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        backing as any,
+        t,
+        undefined,
+        {
+          classes: [
+            gatewayClass("envoy", "example.net/gw"),
+            gatewayClass("traefik", TRAEFIK),
+          ],
+          ask: (controller) => (controller === TRAEFIK ? traefik : null),
+        }
+      );
+      const node = data.columns.at(-1)!.nodes[0];
+      expect(node).toMatchObject({
+        tone: "err",
+        sub: "NetworkPolicy allow-nginx admits no connection from Traefik",
+      });
+      const into = (from: string) =>
+        data.edges.find(
+          (edge) =>
+            edge.from === `route/HTTPRoute/gwtest/${from}` &&
+            edge.to === node.id
+        )?.tone;
+      expect(into("unjudged")).toBe("unknown");
+      expect(into("refused")).toBe("err");
+    }
   });
 
   it("funnels routes through per-gateway kind nodes once kinds differ", () => {

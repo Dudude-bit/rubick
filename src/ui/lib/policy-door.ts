@@ -59,7 +59,11 @@ export interface DoorRead {
 }
 
 /** A controller's read: `null` where no integration speaks for it, `undefined` while asking. */
-export type DoorAsk = (controller: string) => DoorRead | null | undefined;
+export interface DoorAsk {
+  (controller: string): DoorRead | null | undefined;
+  /** The controller a GatewayClass names, where the classes were read. */
+  classController?: (gatewayClass: string) => string | undefined;
+}
 
 export type DoorUnsure =
   | "policiesUnread"

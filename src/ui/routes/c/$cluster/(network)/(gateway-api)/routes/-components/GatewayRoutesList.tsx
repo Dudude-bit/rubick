@@ -42,6 +42,7 @@ import {
   GATEWAY_ROUTE_KINDS as ROUTE_KINDS,
   useGatewayRoutes,
 } from "../../../../-object/useGatewayRoutes";
+import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
@@ -335,6 +336,7 @@ export function GatewayRoutesList() {
     enabled: served.has("GatewayClass"),
   });
   const backing = useBackingLists();
+  const door = useDoorAsk();
 
   const filtered = useMemo(
     () =>
@@ -356,6 +358,7 @@ export function GatewayRoutesList() {
             gateways.data !== undefined &&
             (classes.data !== undefined || !served.has("GatewayClass")),
           backing: backingFrom(backing.data, backing.error),
+          door,
         },
         t
       ),
@@ -366,6 +369,7 @@ export function GatewayRoutesList() {
       backing.data,
       backing.error,
       served,
+      door,
       t,
     ]
   );
@@ -407,9 +411,19 @@ export function GatewayRoutesList() {
         t,
         pods.data && deployments.data
           ? { pods: pods.data, deployments: deployments.data.rows }
-          : undefined
+          : undefined,
+        { classes: classes.data ?? [], ask: door }
       ),
-    [gateways.data, filtered, backing.data, t, pods.data, deployments.data]
+    [
+      gateways.data,
+      filtered,
+      backing.data,
+      t,
+      pods.data,
+      deployments.data,
+      classes.data,
+      door,
+    ]
   );
 
   if (!isConnected) {

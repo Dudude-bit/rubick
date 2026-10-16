@@ -29,6 +29,7 @@ import type {
 import { backingOf, type Backing, type BackingSources } from "@/integrations";
 import { describeStop, stopMood } from "@/lib/connections";
 import type { T } from "@/i18n/useT";
+import { doorDoubtWords, type DoorAsk } from "@/lib/policy-door";
 import { saidOf, statusesFor, verdictOf } from "@/lib/route-verdict";
 
 export interface TraceQuote {
@@ -131,6 +132,62 @@ export interface TraceSources {
   /** False while gateways and classes are still being read — or cannot be. */
   topologyKnown: boolean;
   backing: BackingSources;
+  /** Who each Gateway's controller connects from, judged at the NetworkPolicies over the backends; absent, nobody is. */
+  door?: DoorAsk;
+}
+
+const portOf = (backend: BackendRefInfo) =>
+  backend.port === null ? null : String(backend.port);
+
+/** The backends as the controller of this Gateway's class meets them. */
+function backingAt(
+  gateway: GatewayInfo | undefined,
+  sources: TraceSources
+): BackingSources {
+  const controller =
+    gateway &&
+    sources.classes.find((cls) => cls.name === gateway.className)
+      ?.controllerName;
+  return sources.door && controller
+    ? {
+        ...sources.backing,
+        door: { client: controller, read: sources.door(controller) },
+      }
+    : sources.backing;
+}
+
+/** What is behind a backend, met by the controller of every Gateway the route rides; the worst of them. */
+export function routeBackingOf(
+  route: RouteInfo,
+  backend: BackendRefInfo,
+  sources: TraceSources
+): Backing {
+  const from = {
+    kind: route.kind,
+    name: route.name,
+    namespace: route.namespace,
+  };
+  const met = route.parentRefs
+    .filter(parentCarriesTraffic)
+    .map((parent) =>
+      backingAt(
+        gatewayOfParent(sources.gateways, parent, route.namespace),
+        sources
+      )
+    );
+  const ref = {
+    name: backend.name,
+    namespace: backend.namespace ?? route.namespace,
+    port: portOf(backend),
+  };
+  const states = (met.length > 0 ? met : [sources.backing]).map((backing) =>
+    backingOf(ref, from, backing)
+  );
+  return (
+    states.find((state) => state.stop) ??
+    states.find((state) => state.doubt) ??
+    states[0]
+  );
 }
 
 /** The Programmed verdict, with the legacy `Ready` fallback some
@@ -1014,7 +1071,11 @@ function backendSteps(
     backend,
     namespace: backend.namespace ?? route.namespace,
     state: backingOf(
-      { name: backend.name, namespace: backend.namespace ?? route.namespace },
+      {
+        name: backend.name,
+        namespace: backend.namespace ?? route.namespace,
+        port: portOf(backend),
+      },
       { kind: route.kind, name: route.name, namespace: route.namespace },
       backing
     ),
@@ -1145,6 +1206,29 @@ function backendSteps(
     ];
   }
 
+  // Published and not refused, but whether its controller gets past the
+  // NetworkPolicies nobody could settle: not serving, not broken.
+  const doubted = verdicts.find((v) => v.state.doubt);
+  if (doubted?.state.doubt) {
+    const words = doorDoubtWords(doubted.state.doubt, t);
+    return [
+      backendStep,
+      {
+        id: "endpoints",
+        state: "blind",
+        say: `${doubted.backend.name}: ${words.title}`,
+        who: "yours",
+        short: words.title,
+        subject: {
+          kind: "Service",
+          name: doubted.backend.name,
+          namespace: doubted.namespace,
+        },
+        detail: { title: words.title, body: words.note },
+      },
+    ];
+  }
+
   const external = verdicts.every(
     (v) => v.state.service?.type === "ExternalName"
   );
@@ -1216,7 +1300,7 @@ function traceFor(
   );
   const [backend, endpoints] = backendSteps(
     route,
-    sources.backing,
+    backingAt(gateway, sources),
     entries[0]?.controllerName,
     t
   );

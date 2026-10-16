@@ -587,13 +587,7 @@ describe("trafficDoors", () => {
     expect(doorsWith(() => null)).toBe("/ · TLS not checked");
   });
 
-  /**
-   * The peek drew door-shut's host as an unjudged door while the page beside
-   * it said allow-nginx-only refuses Traefik. Fails if the peek stops asking
-   * the Ingress's controller at the pods' door, or calls a door it could not
-   * judge broken rather than not checked.
-   */
-  it("calls an Ingress door shut where the pods' policies refuse its controller", () => {
+  describe("at the pods' NetworkPolicies", () => {
     const service = ref("Service", "app");
     const published: ServicePublished = {
       service,
@@ -641,35 +635,94 @@ describe("trafficDoors", () => {
       },
       namespaces: { known: true, value: [] },
     };
-    const doorWith = (read: DoorRead | null) =>
-      trafficDoors(
-        conns({
-          published: [published],
-          edges: [
-            edge(ref("Ingress", "front"), service, {
-              verb: "routes",
-              host: "shop.example.com",
-              path: "/",
-              pathType: "Prefix",
-              port: "3000",
-              tls: false,
-            }),
-          ],
-        }),
-        [],
-        t,
-        undefined,
-        { controllerOf: () => "traefik.io/ingress-controller", ask: () => read }
-      ).entries[0].doors[0];
 
-    expect(doorWith(traefik)).toMatchObject({
-      broken: "shut by NetworkPolicy",
-      note: "/",
+    /**
+     * The peek drew door-shut's host as an unjudged door while the page beside
+     * it said allow-nginx-only refuses Traefik. Fails if the peek stops asking
+     * the Ingress's controller at the pods' door, or calls a door it could not
+     * judge broken rather than not checked.
+     */
+    it("calls an Ingress door shut where the pods' policies refuse its controller", () => {
+      const doorWith = (read: DoorRead | null) =>
+        trafficDoors(
+          conns({
+            published: [published],
+            edges: [
+              edge(ref("Ingress", "front"), service, {
+                verb: "routes",
+                host: "shop.example.com",
+                path: "/",
+                pathType: "Prefix",
+                port: "3000",
+                tls: false,
+              }),
+            ],
+          }),
+          [],
+          t,
+          undefined,
+          {
+            controllerOf: () => "traefik.io/ingress-controller",
+            ask: () => read,
+          }
+        ).entries[0].doors[0];
+
+      expect(doorWith(traefik)).toMatchObject({
+        broken: "shut by NetworkPolicy",
+        note: "/",
+      });
+      expect(doorWith(null)).toMatchObject({
+        broken: null,
+        checked: false,
+        note: "/ · NetworkPolicy not checked",
+      });
     });
-    expect(doorWith(null)).toMatchObject({
-      broken: null,
-      checked: false,
-      note: "/ · NetworkPolicy not checked",
+
+    /**
+     * An HTTPRoute through Traefik's Gateway provider to the same pods drew
+     * as a judged, healthy door. Fails if the Gateway's class is not
+     * followed to its controller at the pods' door.
+     */
+    it("calls a Gateway door shut where the pods' policies refuse the controller its class names", () => {
+      const doorWith = (read: DoorRead | null) =>
+        trafficDoors(
+          conns({
+            published: [published],
+            edges: [
+              edge(
+                ref("HTTPRoute", "front"),
+                service,
+                ruleRoutes(["shop.example.com"], "3000")
+              ),
+              edge(ref("HTTPRoute", "front"), gatewayRef("edge", "traefik"), {
+                verb: "attachesTo",
+                sectionName: null,
+              }),
+            ],
+          }),
+          [gateway("edge", [])],
+          t,
+          undefined,
+          {
+            controllerOf: () => undefined,
+            ask: Object.assign(() => read, {
+              classController: (name: string) =>
+                name === "traefik"
+                  ? "traefik.io/gateway-controller"
+                  : undefined,
+            }),
+          }
+        ).entries[0].doors[0];
+
+      expect(doorWith(traefik)).toMatchObject({
+        broken: "shut by NetworkPolicy",
+        checked: true,
+        note: null,
+      });
+      expect(doorWith(null)).toMatchObject({
+        broken: null,
+        note: "NetworkPolicy not checked",
+      });
     });
   });
 

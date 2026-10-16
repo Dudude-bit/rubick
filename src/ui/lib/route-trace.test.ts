@@ -8,7 +8,9 @@ import {
   selfAnswered,
   candidateListeners,
   servingSay,
+  routeBackingOf,
 } from "./route-trace";
+import type { DoorRead } from "./policy-door";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 
@@ -20,6 +22,7 @@ import type {
   ConditionInfo,
   GatewayClassInfo,
   GatewayInfo,
+  PolicyDoor,
   RouteInfo,
   RouteParentStatusInfo,
   ServiceInfo,
@@ -1643,5 +1646,172 @@ describe("a route configured by an annotation its controller reads", () => {
         undefined
       )
     ).toEqual([]);
+  });
+});
+
+describe("a route's Gateway controller at the door of the pods", () => {
+  const TRAEFIK = "traefik.io/gateway-controller";
+  const behind = (door: PolicyDoor): ServicePublished => ({
+    ...published("healthy", 1),
+    ports: [
+      { name: null, port: 8080, protocol: "TCP", exposed: true },
+      { name: "metrics", port: 9090, protocol: "TCP", exposed: true },
+    ],
+    door,
+  });
+  const nginxOnly: PolicyDoor = {
+    state: "guarded",
+    isolating: ["allow-nginx"],
+    unsettled: [],
+    ports: [8080, 9090].map((port) => ({
+      name: null,
+      servicePort: port,
+      port,
+      protocol: "TCP",
+      rules: [
+        {
+          policy: "allow-nginx",
+          byName: false,
+          peers: [
+            {
+              pods: { kind: "notSaid" },
+              namespaces: {
+                kind: "written",
+                query: "kubernetes.io/metadata.name=ingress-nginx",
+              },
+              ipBlock: null,
+            },
+          ],
+        },
+      ],
+    })),
+  };
+  const traefik = (hostNetwork = false): DoorRead => ({
+    name: "Traefik",
+    egress: { known: true, value: { rows: [], unread: [] } },
+    clients: {
+      known: true,
+      value: [
+        {
+          name: "traefik-7d9",
+          namespace: "traefik",
+          labels: {},
+          ip: "10.42.1.7",
+          hostNetwork,
+        },
+      ],
+    },
+    namespaces: {
+      known: true,
+      value: ["traefik", "ingress-nginx"].map((name) => ({
+        name,
+        labels: { "kubernetes.io/metadata.name": name },
+      })),
+    },
+  });
+  const judged = (
+    read: DoorRead | null,
+    over: Partial<Parameters<typeof routeTraces>[1]> = {}
+  ) =>
+    sources({
+      gateways: [gateway("edge", { className: "traefik" })],
+      classes: [{ ...gatewayClass("traefik", true), controllerName: TRAEFIK }],
+      backing: {
+        services: [service("healthy", [8080, 9090])],
+        published: [behind(nginxOnly)],
+        backingKnown: true,
+        backingError: null,
+      },
+      door: (controller: string) => (controller === TRAEFIK ? read : null),
+      ...over,
+    });
+
+  /**
+   * Traefik's Gateway provider served an HTTPRoute that allow-nginx shut it
+   * out of, and the trace called it serving over a 502. Fails if the
+   * Gateway's class is not followed to its controller, or the refusal is not
+   * the endpoints step's in red naming the policy and the controller.
+   */
+  it("stops at the endpoints where no rule admits the controller its Gateway's class names", () => {
+    const [trace] = routeTraces(route("healthy"), judged(traefik()), t);
+    expect(trace.serving).toBe(false);
+    expect(trace.servingKnown).toBe(true);
+    expect(trace.stopStep).toBe(7);
+    expect(trace.steps[6]).toMatchObject({
+      state: "err",
+      say: "healthy: NetworkPolicy allow-nginx admits no connection from Traefik",
+    });
+  });
+
+  /**
+   * The route names port 8080 of a Service with two ports. Without it the
+   * door could not tell which port's rules to read and doubted every such
+   * route. Fails if the backendRef's port is not handed to the door.
+   */
+  it("reads the rules of the port the backendRef names", () => {
+    const [trace] = routeTraces(route("healthy"), judged(traefik()), t);
+    expect(trace.steps[6].say).not.toContain("decides");
+  });
+
+  /** A door nobody could settle is said as unknown, never as serving or broken. */
+  it("leaves the verdict unknown where the controller's way through cannot be settled", () => {
+    const [trace] = routeTraces(route("healthy"), judged(traefik(true)), t);
+    expect(trace.stopStep).toBeNull();
+    expect(trace.servingKnown).toBe(false);
+    expect(trace.unknownBecause).toBe("unread");
+    expect(trace.steps[6]).toMatchObject({
+      state: "blind",
+      say: "healthy: NetworkPolicy allow-nginx decides who may connect to these pods",
+    });
+  });
+
+  /**
+   * An Envoy Gateway route to pods allow-nginx guards: nothing here knows
+   * which pods Envoy connects from. Fails if that reads as serving.
+   */
+  it("says the door is not checked for a controller no integration knows the pods of", () => {
+    const [trace] = routeTraces(route("healthy"), judged(null), t);
+    expect(trace.servingKnown).toBe(false);
+    expect(trace.steps[6].state).toBe("blind");
+    expect(trace.steps[6].detail?.body).toBe(
+      "Whether traefik.io/gateway-controller may connect is not checked: no integration here knows which pods this controller connects from."
+    );
+  });
+
+  /** A screen that asks nobody about the door says what it said before. */
+  it("judges no door without a door to ask", () => {
+    const [trace] = routeTraces(
+      route("healthy"),
+      judged(traefik(), { door: undefined }),
+      t
+    );
+    expect(trace.steps[6].state).toBe("ok");
+    expect(trace.serving).toBe(true);
+  });
+
+  /**
+   * The Rules tab reads one backend for a route on two Gateways, one of
+   * them Traefik's and refused. Fails if the cell says the other
+   * controller's unjudged answer and calls the backend ready.
+   */
+  it("gives a backend the worst door among the Gateways the route rides", () => {
+    const both = route("healthy", {
+      parentRefs: [parentRef2("edge", null), parentRef2("other", null)],
+    });
+    const state = routeBackingOf(
+      both,
+      both.rules[0].backendRefs[0],
+      judged(traefik(), {
+        gateways: [gateway("edge"), gateway("other", { className: "traefik" })],
+        classes: [
+          gatewayClass("envoy", true),
+          { ...gatewayClass("traefik", true), controllerName: TRAEFIK },
+        ],
+      })
+    );
+    expect(state.stop).toMatchObject({
+      reason: "policyRefuses",
+      client: { name: "Traefik" },
+    });
   });
 });

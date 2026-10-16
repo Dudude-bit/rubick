@@ -18,8 +18,8 @@
  */
 
 import {
-  backingOf,
   stopWeight,
+  type Backing,
   type BackingSources,
   type RoutingMapData,
   type MapEdge,
@@ -33,15 +33,18 @@ import type { T } from "@/i18n/useT";
 import { KIND_TEXT } from "@/lib/route-kind-tone";
 import { statusesFor, verdictOf } from "@/lib/route-verdict";
 import type {
+  GatewayClassInfo,
   GatewayInfo,
   ParentRefInfo,
   PodInfo,
   RouteInfo,
 } from "@/generated/types";
+import { doorDoubtWords, type DoorAsk } from "@/lib/policy-door";
 import {
   gatewayOfParent,
   gatewayProgrammed,
   parentCarriesTraffic,
+  routeBackingOf,
 } from "@/lib/route-trace";
 
 /** What the last column is built from — handed over only once both lists
@@ -106,6 +109,31 @@ function refusedBy(route: RouteInfo, parent: ParentRefInfo): boolean {
   return verdictOf(statusesFor(route, parent), "Accepted").state === "false";
 }
 
+/** A backend Service's tone: unread, stopped, behind a door nobody settled, or reached. */
+function backendTone(state: Backing | null): MapTone {
+  if (!state) return "mute";
+  // Endpoints not read are unknown, as every routing map draws them.
+  if (!state.known || state.doubt) return "unknown";
+  return state.stop ? stopWeight(state.stop).tone : "ok";
+}
+
+function backendSub(state: Backing | null, t: T): string | undefined {
+  if (!state?.known) return undefined;
+  if (state.stop) return describeStop(state.stop, t).title;
+  if (state.doubt) return doorDoubtWords(state.doubt, t).title;
+  if (state.service?.type === "ExternalName")
+    return t("empty", "resolvesElsewhere");
+  return (
+    t("count", "nReady", { n: state.ready }) +
+    (state.draining > 0
+      ? `, ${t("count", "nDraining", { n: state.draining })}`
+      : "")
+  );
+}
+
+const weight = (state: Backing | null | undefined): number =>
+  state?.stop ? 2 : state?.doubt ? 1 : 0;
+
 export function gatewayTopology(
   /**
    * `undefined` while the list has not been read — the same shape `backing`
@@ -117,7 +145,9 @@ export function gatewayTopology(
   routes: RouteInfo[],
   backing: BackingSources | undefined,
   t: T,
-  workloads?: WorkloadSources
+  workloads?: WorkloadSources,
+  /** The classes naming each Gateway's controller, and who those connect from. */
+  door?: { classes: GatewayClassInfo[]; ask: DoorAsk }
 ): RoutingMapData {
   const gatewaysKnown = gateways !== undefined;
   const drawn = gateways ?? [];
@@ -128,6 +158,7 @@ export function gatewayTopology(
   const kindRouteCount = new Map<string, number>();
   const routeNodes: MapNode[] = [];
   const backendNodes = new Map<string, MapNode>();
+  const backendStates = new Map<string, Backing | null>();
   const edges: MapEdge[] = [];
   const linked = new Set<string>();
   // One funnel node per kind is only honest while it cannot merge flows.
@@ -223,8 +254,8 @@ export function gatewayTopology(
       for (const backend of rule.backendRefs) {
         const ns = backend.namespace ?? route.namespace;
         const backendId = `backend/${backend.kind}/${ns}/${backend.name}`;
-        if (!backendNodes.has(backendId)) {
-          if (backend.kind !== "Service") {
+        if (backend.kind !== "Service") {
+          if (!backendNodes.has(backendId)) {
             backendNodes.set(backendId, {
               id: backendId,
               label: backend.name,
@@ -232,46 +263,33 @@ export function gatewayTopology(
               tone: "mute",
               tag: { text: backend.kind, tone: "mute" },
             });
-          } else {
-            const state = backing
-              ? backingOf(
-                  { name: backend.name, namespace: ns },
-                  {
-                    kind: route.kind,
-                    name: route.name,
-                    namespace: route.namespace,
-                  },
-                  backing
-                )
-              : null;
-            const stop = state?.known ? state.stop : null;
-            // Endpoints not read are unknown, as every routing map draws them.
-            const tone: MapTone = stop
-              ? stopWeight(stop).tone
-              : state?.known
-                ? "ok"
-                : state
-                  ? "unknown"
-                  : "mute";
-            backendNodes.set(backendId, {
-              id: backendId,
-              label: backend.name,
-              sub: stop
-                ? describeStop(stop, t).title
-                : state?.known
-                  ? state.service?.type === "ExternalName"
-                    ? t("empty", "resolvesElsewhere")
-                    : t("count", "nReady", { n: state.ready }) +
-                      (state.draining > 0
-                        ? `, ${t("count", "nDraining", { n: state.draining })}`
-                        : "")
-                  : undefined,
-              tone,
-              object: { kind: "Service", name: backend.name, namespace: ns },
-            });
           }
+          link(routeId, backendId, "mute");
+          continue;
         }
-        const into = backendNodes.get(backendId)?.tone ?? "mute";
+        const state = backing
+          ? routeBackingOf(route, backend, {
+              gateways: drawn,
+              classes: door?.classes ?? [],
+              topologyKnown: gatewaysKnown,
+              backing,
+              door: door?.ask,
+            })
+          : null;
+        // The node is the worst any route meets there: a door refused to
+        // one controller is still refused when another route got through.
+        const prior = backendStates.get(backendId);
+        if (!backendNodes.has(backendId) || weight(state) > weight(prior)) {
+          backendStates.set(backendId, state);
+          backendNodes.set(backendId, {
+            id: backendId,
+            label: backend.name,
+            sub: backendSub(state, t),
+            tone: backendTone(state),
+            object: { kind: "Service", name: backend.name, namespace: ns },
+          });
+        }
+        const into = backendTone(state);
         link(routeId, backendId, into === "ok" ? "mute" : into);
       }
     }

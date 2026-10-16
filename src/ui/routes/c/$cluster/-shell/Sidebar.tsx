@@ -40,6 +40,7 @@ import { useAppSearchValue } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useListFollowed, useListLive } from "@/hooks/useWatchedList";
 import { useReadAt } from "@/hooks/useReadUid";
+import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "../-object/useGatewayRoutes";
 import {
@@ -556,6 +557,7 @@ function GatewayRows() {
   const backing = useBackingLists(
     installed && routeKinds.length > 0 && !routesLock
   );
+  const door = useDoorAsk(installed && routeKinds.length > 0 && !routesLock);
 
   const classesSettled =
     classes.data !== undefined || !served.has("GatewayClass");
@@ -592,6 +594,7 @@ function GatewayRows() {
           // put a red dot on a healthy cluster for one render.
           topologyKnown: gatewaysAll.data !== undefined && classesSettled,
           backing: backingFrom(backing.data, backing.error),
+          door,
         },
         t
       ),
@@ -602,6 +605,7 @@ function GatewayRows() {
       backing.data,
       backing.error,
       classesSettled,
+      door,
       t,
     ]
   );

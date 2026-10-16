@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { ROUTING_STALE } from "@/integrations";
-import { useRouteBacking } from "./useRouteBacking";
+import { useTraceSources } from "./useTraceSources";
 import {
   routeTraces,
   probedReachable,
@@ -738,22 +738,7 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
     [detection]
   );
 
-  // Unscoped on purpose, twice over: routes attach to Gateways in other
-  // namespaces, and the class claim is cluster-scoped. Same key as the
-  // routes list's map, so table → detail reuses one cache entry.
-  const gateways = useQuery({
-    queryKey: queryKeys.gateways(),
-    queryFn: () => commands.listGateways(null),
-    staleTime: ROUTING_STALE,
-    enabled: served.has("Gateway"),
-  });
-  const classes = useQuery({
-    queryKey: queryKeys.gatewayClasses(),
-    queryFn: commands.listGatewayClasses,
-    staleTime: ROUTING_STALE,
-    enabled: served.has("GatewayClass"),
-  });
-  const backing = useRouteBacking(route, false).sources;
+  const sources = useTraceSources(route);
 
   // GEP-713 reverse lookup: the policy names the Service, never the other
   // way round, so the trace scans the namespace's policies once.
@@ -766,20 +751,8 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
   const policies = policiesQuery.data ?? [];
 
   const traces = useMemo(
-    () =>
-      routeTraces(
-        route,
-        {
-          gateways: gateways.data ?? [],
-          classes: classes.data ?? [],
-          topologyKnown:
-            gateways.data !== undefined &&
-            (classes.data !== undefined || !served.has("GatewayClass")),
-          backing,
-        },
-        t
-      ),
-    [route, gateways.data, classes.data, backing, served, t]
+    () => routeTraces(route, sources, t),
+    [route, sources, t]
   );
 
   // A ListenerSet parent is a gateway attachment that went the long way;

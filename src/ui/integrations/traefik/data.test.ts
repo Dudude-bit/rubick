@@ -12,7 +12,12 @@ vi.mock("@/lib/commands", () => ({
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
-import { fetchController, listTraefik, servedGroupName } from "./data";
+import {
+  fetchController,
+  ingressClients,
+  listTraefik,
+  servedGroupName,
+} from "./data";
 
 const deployments = vi.mocked(commands.listDeployments);
 const daemonSets = vi.mocked(commands.listDaemonsets);
@@ -86,5 +91,24 @@ describe("the API group Traefik's kinds are read from", () => {
 
     onCluster("new");
     expect(servedGroupName()).toBe("traefik.io");
+  });
+});
+
+describe("the controllers Traefik's pods answer for", () => {
+  /**
+   * Traefik's Gateway API provider runs in the pods its Ingress provider
+   * does. Fails if an HTTPRoute through a Traefik GatewayClass finds nobody
+   * to judge at the pods' NetworkPolicies, or another vendor is claimed.
+   */
+  it("claims its Ingress and Gateway API controllers and nothing else", () => {
+    expect(ingressClients("traefik.io/ingress-controller")?.name).toBe(
+      "Traefik"
+    );
+    expect(ingressClients("traefik.io/gateway-controller")?.name).toBe(
+      "Traefik"
+    );
+    expect(
+      ingressClients("gateway.envoyproxy.io/gatewayclass-controller")
+    ).toBeNull();
   });
 });

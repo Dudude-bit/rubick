@@ -113,7 +113,7 @@ export function trafficDoors(
   t: T,
   /** Whether an Ingress host is served over TLS once its controller spoke. */
   tlsOf?: RouteTls,
-  /** Who serves each Ingress, to judge its controller at the pods' NetworkPolicies. */
+  /** Who serves each Ingress, and who each Gateway's class names, to judge them at the pods' NetworkPolicies. */
   door?: {
     controllerOf: (ingress: ObjectRef) => string | null | undefined;
     ask: DoorAsk;
@@ -158,6 +158,23 @@ export function trafficDoors(
       ]);
     }
   }
+
+  // Whether the controller behind a door gets past the NetworkPolicies over
+  // the backend's pods: shut, nobody could settle it, or neither.
+  const doorAt = (
+    controller: string | null | undefined,
+    service: ObjectRef,
+    port: string | null
+  ) => {
+    if (!door || !controller) return { shut: null, doubt: null };
+    const read = door.ask(controller);
+    const published = publishedFor(conns, service);
+    const shut = refusedStop(published, port, read);
+    return {
+      shut,
+      doubt: shut ? null : doorDoubt(published, port, read, controller),
+    };
+  };
 
   const entries = new Map<string, TrafficEntry>();
   // One name per route, not one per edge: the backend fan-out emits an
@@ -208,12 +225,20 @@ export function trafficDoors(
             ? t("empty", "gwDoorGatewayClass", { name: className })
             : "Gateway"
         );
+        const { shut, doubt } = doorAt(
+          className ? door?.ask.classController?.(className) : null,
+          edge.to,
+          edge.relation.port
+        );
         const broken =
           brokenPerGateway.get(`${key(edge.from)}@${key(gateway)}`) ??
           brokenPerRoute.get(key(edge.from)) ??
           (gateway.existence === "missing"
             ? t("empty", "gwGatewayMissingWord")
-            : null);
+            : shut
+              ? t("empty", "stopPolicyShutUnder")
+              : null);
+        const note = doubt && !broken ? t("empty", "doorNotChecked") : null;
         if (edge.relation.hostnames.length > 0) {
           for (const host of edge.relation.hostnames) {
             entry.doors.push({
@@ -222,7 +247,7 @@ export function trafficDoors(
               broken,
               checked: true,
               route: doorRef(edge.from),
-              note: null,
+              note,
             });
           }
         } else {
@@ -251,7 +276,7 @@ export function trafficDoors(
             broken,
             checked: true,
             route: doorRef(edge.from),
-            note: null,
+            note,
           });
         }
       }
@@ -264,15 +289,11 @@ export function trafficDoors(
         host && tlsOf
           ? tlsOf(edge.from, host, edge.relation.tls)
           : edge.relation.tls;
-      const controller = door?.controllerOf(edge.from);
-      const read = door && controller ? door.ask(controller) : undefined;
-      const published = publishedFor(conns, edge.to);
-      const shut =
-        controller && refusedStop(published, edge.relation.port, read);
-      const doubt =
-        controller &&
-        !shut &&
-        doorDoubt(published, edge.relation.port, read, controller);
+      const { shut, doubt } = doorAt(
+        door?.controllerOf(edge.from),
+        edge.to,
+        edge.relation.port
+      );
       entry.doors.push({
         host: edge.relation.host ?? t("empty", "gwAllHosts"),
         copy: edge.relation.host,

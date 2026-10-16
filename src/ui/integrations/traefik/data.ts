@@ -42,6 +42,7 @@ import {
 import {
   allRoutes,
   CONTROLLER as TRAEFIK_CONTROLLER,
+  GATEWAY_CONTROLLER,
   readEmptyServices,
   readEntryPoints,
   type EmptyServices,
@@ -60,7 +61,7 @@ export const GROUPS: readonly string[] = ["traefik.io", "traefik.containo.us"];
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=traefik";
 
 export const ingressClients = (controller: string) =>
-  controller === TRAEFIK_CONTROLLER
+  controller === TRAEFIK_CONTROLLER || controller === GATEWAY_CONTROLLER
     ? controllerClients("Traefik", CONTROLLER_SELECTOR)
     : null;
 
