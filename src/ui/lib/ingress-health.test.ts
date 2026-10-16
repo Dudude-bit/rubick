@@ -2,6 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
+import { en } from "@/i18n/catalogue";
+import { ru } from "@/i18n/ru";
 import type {
   IngressClassBinding,
   NetworkPolicyInfo,
@@ -244,7 +246,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     });
     expect(said.code).toBe("backendDown");
     expect(said.reason).toBe(
-      "web: ResourceQuota two-pods refuses its pods: no room for pods."
+      "Service web: ResourceQuota two-pods refuses its pods: no room for pods."
     );
   });
 
@@ -286,7 +288,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     });
     expect(said.code).toBe("backendDown");
     expect(said.reason).toBe(
-      "web: NetworkPolicy deny-all-ingress admits no connection to these pods."
+      "Service web: NetworkPolicy deny-all-ingress admits no connection to these pods."
     );
   });
 
@@ -367,7 +369,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     );
     expect(said.code).toBe("backendDown");
     expect(said.reason).toBe(
-      "web: NetworkPolicy allow-traefik admits no connection from ingress-nginx on port 8080."
+      "Service web: NetworkPolicy allow-traefik admits no connection from ingress-nginx on port 8080."
     );
     expect(verdict(inputs()).code).not.toBe("backendDown");
     expect(verdict(inputs(() => null)).code).not.toBe("backendDown");
@@ -414,7 +416,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       role: "neutral",
     });
     expect(said.reason).toBe(
-      "web: NetworkPolicy allow-traefik decides who may connect to its pods, and whether ingress-nginx may is not checked: it runs on the node's network, and what a policy sees of it is the network plugin's choice."
+      "Service web: NetworkPolicy allow-traefik decides who may connect to its pods, and whether ingress-nginx may is not checked: it runs on the node's network, and what a policy sees of it is the network plugin's choice."
     );
     expect(verdict(inputs()).code).not.toBe("backendDoorUnchecked");
   });
@@ -478,7 +480,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       {
         code: "backendDown",
         reason:
-          "web: NetworkPolicy nginx-out lets no connection from ingress-nginx out to this Service's pods.",
+          "Service web: NetworkPolicy nginx-out lets no connection from ingress-nginx out to this Service's pods.",
       }
     );
     const message = "networkpolicies.networking.k8s.io is forbidden";
@@ -489,7 +491,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     expect(verdict(inputs(unread))).toMatchObject({
       code: "backendDoorUnchecked",
       role: "neutral",
-      reason: `web: the NetworkPolicies over ingress-nginx's own pods could not be read, so whether it may connect is not checked: ${message}.`,
+      reason: `Service web: the NetworkPolicies over ingress-nginx's own pods could not be read, so whether it may connect is not checked: ${message}.`,
     });
     expect(
       ingressHealthOf(inputs(egress({ rows: [], unread: [] }))).problems
@@ -546,7 +548,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     expect(said).toMatchObject({
       code: "backendDoorUnchecked",
       role: "neutral",
-      reason: `web: the NetworkPolicies over its pods could not be read, so whether ${SERVED.controller} may connect is not checked: ${reason}.`,
+      reason: `Service web: the NetworkPolicies over its pods could not be read, so whether ${SERVED.controller} may connect is not checked: ${reason}.`,
     });
   });
 
@@ -588,7 +590,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     });
     expect(said.code).toBe("backendUnconfirmed");
     expect(said.reason).toBe(
-      "web: No pod carries app=web: workloads not read, so whether one is scaled to zero is not known."
+      "Service web: No pod carries app=web: workloads not read, so whether one is scaled to zero is not known."
     );
   });
 
@@ -644,5 +646,37 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       certificates: undefined,
     });
     expect(said).toMatchObject({ code: "serving", role: "ok" });
+  });
+});
+
+describe("how a backend is named", () => {
+  const SENTENCES = [
+    en.readings.healthBackendDown,
+    en.readings.healthBackendWhy,
+    en.readings.healthBackendIdle,
+    en.readings.healthBackendStarting,
+    en.readings.healthBackendUnconfirmed,
+    en.readings.healthBackendPoliciesUnread,
+    en.readings.healthBackendEgressUnread,
+    ...Object.values(en.count.healthBackendEgressUnchecked),
+    ...Object.values(en.count.healthBackendDoorUnchecked),
+    ru.readings.healthBackendDown,
+    ru.readings.healthBackendWhy,
+    ru.readings.healthBackendIdle,
+    ru.readings.healthBackendStarting,
+    ru.readings.healthBackendUnconfirmed,
+    ru.readings.healthBackendPoliciesUnread,
+    ru.readings.healthBackendEgressUnread,
+    ...Object.values(ru.count.healthBackendEgressUnchecked),
+    ...Object.values(ru.count.healthBackendDoorUnchecked),
+  ];
+
+  /**
+   * An Ingress and its Service usually share a name, a Helm release names
+   * both, so a row read "door-port · port-demo: door-port: NetworkPolicy...".
+   * Fails if a backend sentence stops saying which kind the name is.
+   */
+  it.each(SENTENCES)("says the backend is a Service: %s", (sentence) => {
+    expect(sentence).toContain("Service {name}");
   });
 });

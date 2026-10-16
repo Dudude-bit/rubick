@@ -4333,8 +4333,8 @@ export const en = {
     healthNoClassNoDefault:
       "It names no IngressClass and the cluster has no default, so nothing picks it up",
     healthNoTlsSecret: "No Secret named {name} for its TLS",
-    healthBackendDown: "{name} takes no traffic",
-    healthBackendWhy: "{name}: {why}",
+    healthBackendDown: "Service {name} takes no traffic",
+    healthBackendWhy: "Service {name}: {why}",
     healthNoController: "no controller",
     healthNoEndpoints: "no endpoints",
     healthComingUp: "coming up",
@@ -4342,17 +4342,18 @@ export const en = {
     healthDrainingWhy:
       "None of its addresses is ready, so its traffic goes to the ones still finishing their connections until they are gone",
     healthBackendIdle:
-      "{name} has no pods by intent: what runs behind it is scaled to zero",
-    healthBackendStarting: "{name} is coming up: its pods are still starting",
+      "Service {name} has no pods by intent: what runs behind it is scaled to zero",
+    healthBackendStarting:
+      "Service {name} is coming up: its pods are still starting",
     healthBackendStartingShort: "backend coming up",
     healthBackendUnconfirmed:
-      "{name} has no ready address, and its pods could not be read to tell whether they are still starting",
+      "Service {name} has no ready address, and its pods could not be read to tell whether they are still starting",
     healthBackendUnconfirmedShort: "backend not checked",
     healthBackendIdleShort: "backend idle",
     healthBackendPoliciesUnread:
-      "{name}: the NetworkPolicies over its pods could not be read, so whether {client} may connect is not checked: {why}",
+      "Service {name}: the NetworkPolicies over its pods could not be read, so whether {client} may connect is not checked: {why}",
     healthBackendEgressUnread:
-      "{name}: the NetworkPolicies over {client}'s own pods could not be read, so whether it may connect is not checked: {why}",
+      "Service {name}: the NetworkPolicies over {client}'s own pods could not be read, so whether it may connect is not checked: {why}",
     healthMissingBackend: "missing backend",
     healthMissingTlsSecret: "missing TLS Secret",
     healthBackendDownShort: "backend down",
@@ -7937,14 +7938,14 @@ export const en = {
         "NetworkPolicies {names} decide who may connect to the pods behind {service}",
     },
     healthBackendEgressUnchecked: {
-      one: "{name}: NetworkPolicy {names} over {client}'s own pods decides where it may connect, and whether it may reach these pods is not checked: {why}",
+      one: "Service {name}: NetworkPolicy {names} over {client}'s own pods decides where it may connect, and whether it may reach these pods is not checked: {why}",
       other:
-        "{name}: NetworkPolicies {names} over {client}'s own pods decide where it may connect, and whether it may reach these pods is not checked: {why}",
+        "Service {name}: NetworkPolicies {names} over {client}'s own pods decide where it may connect, and whether it may reach these pods is not checked: {why}",
     },
     healthBackendDoorUnchecked: {
-      one: "{name}: NetworkPolicy {names} decides who may connect to its pods, and whether {client} may is not checked: {why}",
+      one: "Service {name}: NetworkPolicy {names} decides who may connect to its pods, and whether {client} may is not checked: {why}",
       other:
-        "{name}: NetworkPolicies {names} decide who may connect to its pods, and whether {client} may is not checked: {why}",
+        "Service {name}: NetworkPolicies {names} decide who may connect to its pods, and whether {client} may is not checked: {why}",
     },
     podsMatchAllReady: {
       one: "{n} pod matches its selector and it is Ready",

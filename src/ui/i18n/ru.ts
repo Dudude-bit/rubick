@@ -4866,8 +4866,8 @@ export const ru: Catalogue = {
     healthNoClassNoDefault:
       "IngressClass не указан, а класса по умолчанию в кластере нет, и этот Ingress никто не обрабатывает",
     healthNoTlsSecret: "Нет Secret с именем {name} для его TLS",
-    healthBackendDown: "{name} не принимает трафик",
-    healthBackendWhy: "{name}: {why}",
+    healthBackendDown: "Service {name} не принимает трафик",
+    healthBackendWhy: "Service {name}: {why}",
     healthNoController: "нет контроллера",
     healthNoEndpoints: "нет эндпоинтов",
     healthComingUp: "запускается",
@@ -4875,17 +4875,17 @@ export const ru: Catalogue = {
     healthDrainingWhy:
       "Ни один его адрес не готов, поэтому трафик идёт на те, что дорабатывают свои соединения, пока они не исчезнут",
     healthBackendIdle:
-      "У {name} нет подов намеренно: нагрузка за ним масштабирована до нуля",
-    healthBackendStarting: "{name} запускается: его поды ещё стартуют",
+      "У Service {name} нет подов намеренно: нагрузка за ним масштабирована до нуля",
+    healthBackendStarting: "Service {name} запускается: его поды ещё стартуют",
     healthBackendStartingShort: "бэкенд запускается",
     healthBackendUnconfirmed:
-      "У {name} нет готовых адресов, а его поды прочитать не удалось, поэтому неизвестно, запускаются ли они ещё",
+      "У Service {name} нет готовых адресов, а его поды прочитать не удалось, поэтому неизвестно, запускаются ли они ещё",
     healthBackendUnconfirmedShort: "бэкенд не проверен",
     healthBackendIdleShort: "бэкенд простаивает",
     healthBackendPoliciesUnread:
-      "{name}: NetworkPolicy над его подами прочитать не удалось, поэтому не проверено, может ли подключиться {client}: {why}",
+      "Service {name}: NetworkPolicy над его подами прочитать не удалось, поэтому не проверено, может ли подключиться {client}: {why}",
     healthBackendEgressUnread:
-      "{name}: NetworkPolicy над собственными подами {client} прочитать не удалось, поэтому не проверено, может ли он подключиться: {why}",
+      "Service {name}: NetworkPolicy над собственными подами {client} прочитать не удалось, поэтому не проверено, может ли он подключиться: {why}",
     healthMissingBackend: "нет бэкенда",
     healthMissingTlsSecret: "нет Secret для TLS",
     healthBackendDownShort: "бэкенд недоступен",
@@ -8855,16 +8855,16 @@ export const ru: Catalogue = {
         "NetworkPolicy {names} решают, кто может подключиться к подам за {service}",
     },
     healthBackendEgressUnchecked: {
-      one: "{name}: NetworkPolicy {names} над собственными подами {client} решает, куда он может подключаться, а может ли он подключиться к этим подам, не проверено: {why}",
-      few: "{name}: NetworkPolicy {names} над собственными подами {client} решают, куда он может подключаться, а может ли он подключиться к этим подам, не проверено: {why}",
+      one: "Service {name}: NetworkPolicy {names} над собственными подами {client} решает, куда он может подключаться, а может ли он подключиться к этим подам, не проверено: {why}",
+      few: "Service {name}: NetworkPolicy {names} над собственными подами {client} решают, куда он может подключаться, а может ли он подключиться к этим подам, не проверено: {why}",
       other:
-        "{name}: NetworkPolicy {names} над собственными подами {client} решают, куда он может подключаться, а может ли он подключиться к этим подам, не проверено: {why}",
+        "Service {name}: NetworkPolicy {names} над собственными подами {client} решают, куда он может подключаться, а может ли он подключиться к этим подам, не проверено: {why}",
     },
     healthBackendDoorUnchecked: {
-      one: "{name}: NetworkPolicy {names} решает, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",
-      few: "{name}: NetworkPolicy {names} решают, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",
+      one: "Service {name}: NetworkPolicy {names} решает, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",
+      few: "Service {name}: NetworkPolicy {names} решают, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",
       other:
-        "{name}: NetworkPolicy {names} решают, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",
+        "Service {name}: NetworkPolicy {names} решают, кто может подключиться к его подам, а может ли {client}, не проверено: {why}",
     },
     podsMatchAllReady: {
       one: "{n} под подходит под его селектор, и он Ready",
