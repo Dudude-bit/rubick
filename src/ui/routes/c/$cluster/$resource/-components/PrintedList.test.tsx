@@ -273,12 +273,14 @@ describe("an access kind on the generic list", () => {
         [column("Name"), AGE],
         [
           row("default", "lena-sandbox", ["default", "2h0m"]),
+          row("builder", "lena-sandbox", ["builder", "2h0m"]),
           row("default", "team-checkout", ["default", "2h0m"]),
+          row("builder", "team-checkout", ["builder", "2h0m"]),
         ]
       )
     );
-    expect(await screen.findByText("2 объекта ServiceAccount")).toBeVisible();
-    expect(screen.getAllByText("· 1 объект ServiceAccount")).toHaveLength(2);
+    expect(await screen.findByText("4 объекта ServiceAccount")).toBeVisible();
+    expect(screen.getAllByText("· 2 объекта ServiceAccount")).toHaveLength(2);
     expect(
       screen.getByRole("heading", { name: "ServiceAccounts" })
     ).toBeVisible();
@@ -286,7 +288,7 @@ describe("an access kind on the generic list", () => {
     expect(screen.getByText("Подробнее")).toBeVisible();
     expect(screen.getByText("Имя")).toBeVisible();
     expect(screen.getByText("Возраст")).toBeVisible();
-    expect(screen.getAllByText("2 ч")).toHaveLength(2);
+    expect(screen.getAllByText("2 ч")).toHaveLength(4);
     expect(screen.queryByText("2h0m")).toBeNull();
     expect(screen.queryByText(/serviceaccounts/)).toBeNull();
   });

@@ -740,11 +740,17 @@ function DataTableInner<TData extends RowData>({
   const groupingActive = React.useMemo(() => {
     if (!grouping) return false;
     const seen = new Set<string>();
+    let keyed = 0;
     for (const item of data) {
       const key = grouping.keyOf(item);
-      if (key) seen.add(key);
+      if (!key) continue;
+      seen.add(key);
+      keyed += 1;
     }
-    return seen.size >= (grouping.minGroups ?? 1);
+    return (
+      seen.size >= (grouping.minGroups ?? 1) &&
+      keyed >= seen.size * (grouping.minRowsPerGroup ?? 1)
+    );
   }, [data, grouping]);
 
   // One namespace chosen is the same word on every row, and the scope bar

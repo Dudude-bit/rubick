@@ -28,6 +28,12 @@ export interface RowGrouping<TData> {
    * because the machine type and the zones in it are stated nowhere else.
    */
   minGroups?: number;
+  /**
+   * Below this many rows per group, on average, a caption costs about a line
+   * for every row it heads: thirty namespaces holding one ConfigMap each drew
+   * sixty lines for thirty objects, while a column says the same in place.
+   */
+  minRowsPerGroup?: number;
 }
 
 /** Namespaces are the one grouping key every namespaced resource shares. */
@@ -54,5 +60,6 @@ export function byNamespace<TData>(noun: KindNoun): RowGrouping<TData> {
     // the same word on every row.
     hides: ["namespace"],
     minGroups: 2,
+    minRowsPerGroup: 2,
   };
 }

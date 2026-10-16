@@ -21,10 +21,11 @@ import type { AnyRouter } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
+import { kindNoun } from "@/lib/resource-registry";
 import { actionsColumnSize } from "./column-shares";
 import { buildTableRows } from "./data-table-rows";
 import { DataTable } from "./data-table";
-import type { RowGrouping } from "./row-grouping";
+import { byNamespace, type RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
@@ -1231,6 +1232,40 @@ describe("row grouping", () => {
     expect(screen.queryByText(/one/)).toBeNull();
     await grouped(DATA, { ...byLetter, keyOf: () => "one" });
     expect(screen.getByText("one · 2")).toBeInTheDocument();
+  });
+
+  /**
+   * Thirty namespaces holding one ConfigMap each drew a caption over every
+   * row, half the screen spent on the word the Namespace column says in
+   * place. Fails if captions are drawn at about one row each.
+   */
+  it("draws a flat list where the groups would hold about one row each", async () => {
+    const spread = {
+      ...byLetter,
+      keyOf: (row: Item) => row.name,
+      minRowsPerGroup: 2,
+    };
+    await grouped(DATA, spread);
+    expect(screen.getAllByRole("row")).toHaveLength(1 + DATA.length);
+    await grouped(DATA, { ...spread, keyOf: () => "one" });
+    expect(screen.getByText("one · 2")).toBeInTheDocument();
+  });
+
+  it("captions namespaces only where each holds two rows on average", async () => {
+    const namespaces = byNamespace<Item>(kindNoun("ConfigMaps"));
+    const spread = [
+      { name: "kube-root-ca.crt", namespace: "shop" },
+      { name: "kube-root-ca.crt", namespace: "web" },
+      { name: "nginx-conf", namespace: "web" },
+    ];
+    const flat = await grouped(spread, namespaces);
+    expect(screen.getAllByRole("row")).toHaveLength(1 + spread.length);
+    flat.unmount();
+    await grouped(
+      [...spread, { name: "checkout-env", namespace: "shop" }],
+      namespaces
+    );
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 4 + 2);
   });
 
   /**
