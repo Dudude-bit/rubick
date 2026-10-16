@@ -209,6 +209,43 @@ function ClassMarker({ name }: { name: string }) {
   );
 }
 
+/** One line for the Services one NetworkPolicy shuts the same way, said once. */
+function ShutRow({ head, members }: { head: AttentionItem; members: number }) {
+  const t = useT();
+  const SeverityIcon = ROLE_ICON[head.tone];
+  const { Icon: ReasonIcon } = eventReasonMark(head.reason);
+  const tone = ROLE_TEXT[head.tone];
+  return (
+    <div className={ROW} data-testid="attention-shut">
+      <SeverityIcon className={cn(MARK, tone)} aria-hidden="true" />
+      <span
+        className={cn(
+          "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
+          tone
+        )}
+      >
+        <ReasonIcon
+          className="mt-[3px] h-2.5 w-2.5 flex-none self-start"
+          aria-hidden="true"
+        />
+        <span className="line-clamp-2">{reasonWord(head, t)}</span>
+      </span>
+      <span className={SAID}>
+        {parts(
+          t("count", "servicesShut", {
+            n: members,
+            namespace: head.namespace ?? "",
+          }),
+          { said: <AttentionDetailText item={head} /> }
+        )}
+      </span>
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
 /** One line for every Ingress asking for a class this cluster does not have. */
 function UnservedRow({
   className,
@@ -259,13 +296,16 @@ function AttentionRow({
   const elsewhere =
     item.opens.kind !== item.kind || item.opens.name !== item.name;
   const marked = under === "class" ? item.unservedClass : undefined;
-  const pod = under === "workload";
+  const shut = under === "policy" ? item.shutBy : undefined;
+  const pod = under === "workload" || shut !== undefined;
   const folded = foldedWords(item, t);
-  const detail: AttentionItem["detail"] = !marked
-    ? item.detail
-    : marked.rest
-      ? { says: "ours", text: marked.rest }
-      : null;
+  const detail: AttentionItem["detail"] = shut
+    ? null
+    : !marked
+      ? item.detail
+      : marked.rest
+        ? { says: "ours", text: marked.rest }
+        : null;
 
   const body = (
     <>
@@ -287,7 +327,7 @@ function AttentionRow({
             aria-hidden="true"
           />
           <span className="line-clamp-2" title={reasonWord(item, t)}>
-            {reasonWord(item, t)}
+            {shut ? shut.policies : reasonWord(item, t)}
           </span>
         </span>
       )}
@@ -561,10 +601,10 @@ const SUMMARY_LABEL: Record<
   err: "attentionOverall",
 };
 
-/** The first rows, never ending on a missing-class line with none of its Ingresses under it. */
+/** The first rows, never ending on a group's line with none of the group under it. */
 function capped(lines: AttentionLine[]): AttentionLine[] {
   const head = lines.slice(0, VISIBLE);
-  return head.at(-1)?.at === "unserved" ? head.slice(0, -1) : head;
+  return head.at(-1)?.at === "item" ? head : head.slice(0, -1);
 }
 
 /** Not-running pods by phase, in the words the composition bar uses, one count and its words each. */
@@ -686,6 +726,12 @@ export function AttentionPanel({
               item={line.item}
               under={line.under}
               sameCause={line.under === "workload" && line.sameCause}
+            />
+          ) : line.at === "shut" ? (
+            <ShutRow
+              key={`shut/${line.head.key}`}
+              head={line.head}
+              members={line.members}
             />
           ) : (
             <UnservedRow

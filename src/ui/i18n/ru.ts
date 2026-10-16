@@ -8554,6 +8554,12 @@ export const ru: Catalogue = {
       other:
         "Читаем виды ресурсов, за которыми можно следить: прочитано {n} из {total}",
     },
+    servicesShut: {
+      one: "{n} объект Service в {namespace}: {said}",
+      few: "{n} объекта Service в {namespace}: {said}",
+      many: "{n} объектов Service в {namespace}: {said}",
+      other: "{n} объекта Service в {namespace}: {said}",
+    },
     ingressesUnserved: {
       one: "{n} Ingress здесь запрашивает IngressClass, которого в кластере нет: {classes}",
       few: "{n} Ingress здесь запрашивают IngressClass, которого в кластере нет: {classes}",

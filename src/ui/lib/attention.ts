@@ -31,6 +31,7 @@ import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { autoscalerVerdict } from "@/lib/governance";
 import { namespacesWhere } from "@/lib/namespace-scope";
 import { sameCause } from "@/lib/pod-cause";
+import { policyNamesOf } from "@/lib/policy-door";
 import { parseRefusal } from "@/lib/refusal";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
 import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
@@ -76,6 +77,8 @@ export interface AttentionItem {
   opens: { kind: string; name: string; namespace: string | null };
   /** The IngressClass it asks for that nothing serves, and what else is wrong with it. */
   unservedClass?: { name: string; rest: string | null };
+  /** The NetworkPolicies that shut a Service, keyed by the sentence other Services here may share. */
+  shutBy?: { key: string; policies: string };
 }
 
 /** What Gateway API has to say about a scope, as the rail's marks read it. */
@@ -293,6 +296,13 @@ const serviceItems = remember(
           : words.reason
             ? ours(words.reason)
             : null;
+        const shutBy =
+          health.state === "shut"
+            ? {
+                key: `${namespace}\n${words.reason}`,
+                policies: policyNamesOf(health.stop).join(", "),
+              }
+            : undefined;
         return group.names.map((name) => {
           const subject = { kind: "Service", name, namespace };
           return withKey({
@@ -305,6 +315,7 @@ const serviceItems = remember(
             foldedPods: null,
             replaced: false,
             opens: subject,
+            ...(shutBy && { shutBy }),
           });
         });
       })
@@ -639,7 +650,7 @@ function ranked(items: AttentionItem[]): AttentionItem[] {
 }
 
 export type AttentionLine =
-  | { at: "item"; item: AttentionItem; under: null | "class" }
+  | { at: "item"; item: AttentionItem; under: null | "class" | "policy" }
   | {
       at: "item";
       item: AttentionItem;
@@ -647,7 +658,8 @@ export type AttentionLine =
       /** The pod's cause is the one its workload's row already tells. */
       sameCause: boolean;
     }
-  | { at: "unserved"; className: string; members: number };
+  | { at: "unserved"; className: string; members: number }
+  | { at: "shut"; head: AttentionItem; members: number };
 
 const workloadKey = (kind: string, name: string, namespace: string | null) =>
   `${kind}/${namespace ?? "-"}/${name}`;
@@ -661,14 +673,18 @@ function causeTold(head: AttentionItem, row: AttentionItem): boolean {
 /**
  * The list as it is drawn, each group where the first of it ranked:
  * Ingresses asking for the same missing IngressClass under one line that says
- * so, and a workload's pods under the workload's own row.
+ * so, Services one NetworkPolicy shuts the same way under one line that says
+ * that, and a workload's pods under the workload's own row.
  */
 export function attentionLines(items: AttentionItem[]): AttentionLine[] {
   const byClass = new Map<string, AttentionItem[]>();
+  const byShut = new Map<string, AttentionItem[]>();
   const heads = new Map<string, AttentionItem>();
   for (const item of items) {
     const name = item.unservedClass?.name;
     if (name) byClass.set(name, [...(byClass.get(name) ?? []), item]);
+    const shut = item.shutBy?.key;
+    if (shut) byShut.set(shut, [...(byShut.get(shut) ?? []), item]);
     const key = workloadKey(item.kind, item.name, item.namespace);
     if (!item.workload && !heads.has(key)) heads.set(key, item);
   }
@@ -699,6 +715,16 @@ export function attentionLines(items: AttentionItem[]): AttentionLine[] {
           under: "workload",
           sameCause: causeTold(head, row),
         });
+      continue;
+    }
+    const shut = item.shutBy?.key;
+    const behind = shut ? (byShut.get(shut) ?? []) : [];
+    if (shut && behind.length > 1) {
+      if (placed.has(shut)) continue;
+      placed.add(shut);
+      lines.push({ at: "shut", head: item, members: behind.length });
+      for (const member of behind)
+        lines.push({ at: "item", item: member, under: "policy" });
       continue;
     }
     const name = item.unservedClass?.name;

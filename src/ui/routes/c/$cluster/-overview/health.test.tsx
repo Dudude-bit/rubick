@@ -2636,3 +2636,123 @@ describe("a workload whose pods the API server refuses", () => {
     );
   });
 });
+
+describe("Services one NetworkPolicy shuts", () => {
+  const shut = (
+    name: string,
+    namespace: string,
+    policies = ["deny-all-ingress"]
+  ): ServiceHealthGroup => ({
+    names: [name],
+    type: "ClusterIP",
+    selectorless: false,
+    targets: [],
+    ready: 2,
+    draining: 0,
+    notReady: 0,
+    unrouted: 0,
+    stop: {
+      reason: "policyRefuses",
+      service: {
+        kind: "Service",
+        name,
+        namespace,
+        existence: "present",
+        facts: null,
+      },
+      policies,
+      ports: [8080],
+      noRules: true,
+      client: null,
+    },
+  });
+  const attention = () =>
+    attentionFrom([], {
+      services: {
+        answered: [
+          {
+            namespace: "k8s-gui-test",
+            networks: [],
+            groups: [
+              shut("draining-demo", "k8s-gui-test"),
+              shut("headless-demo", "k8s-gui-test"),
+              shut("log-demo", "k8s-gui-test"),
+              shut("api", "k8s-gui-test", ["api-only"]),
+            ],
+          },
+          { namespace: "net", networks: [], groups: [shut("web", "net")] },
+        ],
+        unread: [],
+      },
+    });
+
+  /**
+   * The Overview printed "NetworkPolicy deny-all-ingress admits no connection
+   * to these pods" on a row of its own for each of seven Services in
+   * k8s-gui-test. Fails if a Service under the line says the sentence again
+   * or loses the policy, if another policy or namespace joins the group, if
+   * grouping changes the count, or if Share groups it otherwise.
+   */
+  it("says one policy's verdict once over the Services it shuts, and Share does too", async () => {
+    const read = attention();
+    expect(read.total).toBe(5);
+    await wrap(
+      <AttentionPanel
+        attention={read}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+
+    expect(
+      screen.getAllByTestId("attention-shut").map((line) => line.textContent)
+    ).toEqual([
+      "shut by NetworkPolicy3 Services in k8s-gui-test: NetworkPolicy deny-all-ingress admits no connection to these pods.",
+    ]);
+    expect(
+      screen
+        .getAllByTitle("shut by NetworkPolicy")
+        .map((reason) => reason.textContent)
+    ).toEqual([
+      "deny-all-ingress",
+      "deny-all-ingress",
+      "deny-all-ingress",
+      "shut by NetworkPolicy",
+      "shut by NetworkPolicy",
+    ]);
+    const said = screen
+      .getAllByTestId("attention-said")
+      .map((row) => row.textContent?.trim());
+    expect(said.slice(0, 3)).toEqual([
+      "Service draining-demo",
+      "Service headless-demo",
+      "Service log-demo",
+    ]);
+    expect(said[3]).toContain("NetworkPolicy api-only admits no connection");
+    expect(said[4]).toContain(
+      "web · net: NetworkPolicy deny-all-ingress admits no connection"
+    );
+
+    const share = attentionShare(read, t);
+    const items = share.body.type === "findings" ? share.body.items : [];
+    expect(items.map((item) => [item.title, item.detail])).toEqual([
+      [
+        "shut by NetworkPolicy",
+        "3 Services in k8s-gui-test: NetworkPolicy deny-all-ingress admits no connection to these pods.",
+      ],
+      ["shut by NetworkPolicy · deny-all-ingress", null],
+      ["shut by NetworkPolicy · deny-all-ingress", null],
+      ["shut by NetworkPolicy · deny-all-ingress", null],
+      [
+        "shut by NetworkPolicy",
+        "NetworkPolicy api-only admits no connection to these pods.",
+      ],
+      [
+        "shut by NetworkPolicy",
+        "NetworkPolicy deny-all-ingress admits no connection to these pods.",
+      ],
+    ]);
+  });
+});

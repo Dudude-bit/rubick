@@ -193,16 +193,30 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
         detail: t("empty", "nothingPickedThemUp"),
         role: "err",
       };
+    if (line.at === "shut")
+      return {
+        title: reasonWord(line.head, t),
+        detail: t("count", "servicesShut", {
+          n: line.members,
+          namespace: line.head.namespace ?? "",
+          said: detailWords(line.head.detail, t, null) ?? "",
+        }),
+        role: line.head.tone,
+      };
     const { item } = line;
     const marked = line.under === "class" ? item.unservedClass : undefined;
+    const shut = line.under === "policy" ? item.shutBy : undefined;
+    const tag = marked?.name ?? shut?.policies;
     return {
-      title: marked
-        ? `${reasonWord(item, t)} · ${marked.name}`
-        : reasonWord(item, t),
+      title: tag ? `${reasonWord(item, t)} · ${tag}` : reasonWord(item, t),
       detail:
         [
           foldedWords(item, t),
-          marked ? marked.rest : detailWords(item.detail, t, item.foldedPods),
+          shut
+            ? null
+            : marked
+              ? marked.rest
+              : detailWords(item.detail, t, item.foldedPods),
         ]
           .filter((part) => part !== null)
           .join(" · ") || null,

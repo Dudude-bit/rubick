@@ -7755,6 +7755,10 @@ export const en = {
       one: "Reading the kinds that can be watched: {n} of {total}",
       other: "Reading the kinds that can be watched: {n} of {total}",
     },
+    servicesShut: {
+      one: "{n} Service in {namespace}: {said}",
+      other: "{n} Services in {namespace}: {said}",
+    },
     ingressesUnserved: {
       one: "{n} Ingress here asks for an IngressClass this cluster does not have: {classes}",
       other:
