@@ -4,7 +4,7 @@ import { ExternalLink } from "lucide-react";
 import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { PortsDisplay } from "../../-components";
+import { PortsDisplay, portsCellPx } from "../../-components";
 import { AddressCell, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import { BalancerAddress } from "../../../-object/BalancerAddress";
 import { ClusterIpValue } from "../../../-object/ClusterIpValue";
@@ -133,8 +133,16 @@ export const columns = ({
     size: 180,
     accessorKey: "externalIps",
     header: columnHeader("columns", "externalIps"),
-    // The address and the 16px icon before it.
-    meta: { yields: 2, floor: IPV4_CELL_PX + 16 },
+    // The address and the 16px icon before it, held only while a row can show one.
+    meta: {
+      yields: 2,
+      floor: (t, rows: readonly ServiceInfo[]) =>
+        rows.some(
+          (row) => row.externalIps?.length || row.type === "LoadBalancer"
+        )
+          ? IPV4_CELL_PX + 16
+          : widestText([t("empty", "noneLower")], "sans", 7) + 20,
+    },
     cell: ({ row }) => {
       const service = row.original;
       if (service.externalIps.length === 0 && service.type !== "LoadBalancer")
@@ -159,11 +167,7 @@ export const columns = ({
     id: "ports",
     meta: {
       yields: 5,
-      floor: () =>
-        widestText(["9964→9964"], "mono", 7.2) +
-        4 +
-        widestText(["envoy-metrics · TCP"], "caption", 6.2) +
-        20,
+      floor: (_t, rows: readonly ServiceInfo[]) => portsCellPx(rows, 2),
     },
     accessorFn: (row) =>
       row.ports

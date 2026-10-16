@@ -7,4 +7,5 @@ export {
   type VendorTlsAnswer,
 } from "../../-object/vendor-tls";
 export { PortsDisplay } from "./PortsDisplay";
+export { portsCellPx } from "./ports-width";
 export { ServiceAccessInfo } from "./ServiceAccessInfo";

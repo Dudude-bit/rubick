@@ -238,9 +238,13 @@ describe("an address column", () => {
   )(
     "%s draws a whole IPv4 at every width a list is drawn at",
     (page, columns) => {
-      // The Ingresses list holds an address's width only while a row has one.
+      // Ingresses and Services' External IPs hold an address's width only while a row has one.
       const rows =
-        page === "Ingresses" ? [{ loadBalancerIps: ["10.111.219.134"] }] : [];
+        page === "Ingresses"
+          ? [{ loadBalancerIps: ["10.111.219.134"] }]
+          : page === "Services"
+            ? [{ externalIps: ["10.111.219.134"] }]
+            : [];
       for (const port of PORTS) {
         const { px } = laidOut(columns, port, en, rows);
         columns.forEach((column, index) => {
@@ -568,8 +572,12 @@ describe("the Pods table", () => {
 });
 
 describe("a value a cell says in words", () => {
-  const floorOf = (columns: Column[], id: string, t: T) =>
-    columnFloor(columns.find((c) => nameOf(c) === id) ?? {}, t);
+  const floorOf = (
+    columns: Column[],
+    id: string,
+    t: T,
+    rows: readonly unknown[] = []
+  ) => columnFloor(columns.find((c) => nameOf(c) === id) ?? {}, t, rows);
 
   /** Lena read "ни один не го…" in Services: fails if the Endpoints column stops holding its widest verdict badge in either language. */
   it.each([
@@ -604,7 +612,20 @@ describe("a value a cell says in words", () => {
     expect(floorOf(services(), "namespace", en)).toBeGreaterThanOrEqual(
       Math.ceil("ingress-nginx".length * 7.2 + 20)
     );
-    expect(floorOf(services(), "ports", en)).toBeGreaterThanOrEqual(
+    const cilium = [
+      {
+        ports: [
+          {
+            name: "envoy-metrics",
+            port: 9964,
+            targetPort: "9964",
+            nodePort: null,
+            protocol: "TCP",
+          },
+        ],
+      },
+    ];
+    expect(floorOf(services(), "ports", en, cilium)).toBeGreaterThanOrEqual(
       Math.ceil(
         "9964→9964".length * 7.2 + 4 + "envoy-metrics · TCP".length * 6.2 + 20
       )

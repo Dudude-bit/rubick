@@ -6,7 +6,10 @@ import type { ServiceInfo, ServicePublished } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { renderWithRouter } from "@/test/render";
-import { CopyableAddresses } from "@/components/ui/copyable-value";
+import {
+  CopyableAddresses,
+  IPV4_CELL_PX,
+} from "@/components/ui/copyable-value";
 import { columns } from "./ServiceList";
 
 vi.mock("@/lib/commands", () => ({
@@ -153,5 +156,83 @@ describe("the Services list's Endpoints column", () => {
       role: "err",
       unread: false,
     });
+  });
+});
+
+describe("the room a Services list leaves its reasons", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const floorOf = (id: string, rows: ServiceInfo[]) => {
+    const column = columns().find(
+      (candidate) =>
+        candidate.id === id ||
+        ("accessorKey" in candidate && candidate.accessorKey === id)
+    );
+    const floor = column?.meta?.floor;
+    return (typeof floor === "function" ? floor(t, rows as never) : floor) ?? 0;
+  };
+  const port = (
+    name: string | null,
+    number: number,
+    targetPort: string
+  ): ServiceInfo["ports"][number] => ({
+    name,
+    port: number,
+    targetPort,
+    nodePort: null,
+    protocol: "TCP",
+  });
+
+  /**
+   * One ClusterIP Service cut "2 pods car…" beside an External IPs column
+   * kept an address wide to say "none". Fails if a column of "none" keeps
+   * an address's room, or a row with an address loses it.
+   */
+  it("keeps an address's room in External IPs only where a row can show one", () => {
+    expect(floorOf("externalIps", [headlessDemo])).toBeLessThan(
+      IPV4_CELL_PX + 16
+    );
+    expect(
+      floorOf("externalIps", [{ ...headlessDemo, type: "LoadBalancer" }])
+    ).toBe(IPV4_CELL_PX + 16);
+    expect(
+      floorOf("externalIps", [
+        { ...headlessDemo, externalIps: ["203.0.113.7"] },
+      ])
+    ).toBe(IPV4_CELL_PX + 16);
+  });
+
+  /**
+   * Ports kept Cilium's `9964→9964 envoy-metrics · TCP` wide for a list
+   * whose one port is `80→http`. Fails if the floor stops following the
+   * lines the rows show, or a long name widens it past that line.
+   */
+  it("sizes Ports by the widest line its rows show, up to Cilium's widest", () => {
+    const short = floorOf("ports", [
+      { ...headlessDemo, ports: [port("http", 80, "http")] },
+    ]);
+    const cilium = floorOf("ports", [
+      { ...headlessDemo, ports: [port("envoy-metrics", 9964, "9964")] },
+    ]);
+    expect(short).toBeLessThan(cilium);
+    expect(
+      floorOf("ports", [
+        {
+          ...headlessDemo,
+          ports: [
+            port("http", 80, "http"),
+            port("http", 81, "http"),
+            port("a-much-longer-port-name", 8443, "8443"),
+          ],
+        },
+      ])
+    ).toBe(short);
+    expect(
+      floorOf("ports", [
+        {
+          ...headlessDemo,
+          ports: [port("a-much-longer-port-name", 18443, "18443")],
+        },
+      ])
+    ).toBe(cilium);
   });
 });

@@ -6,6 +6,7 @@ import {
 import type { ServicePortInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { None } from "@/components/ui/none";
+import { qualifierOf } from "./ports-width";
 
 /**
  * A service's ports inside a list row.
@@ -35,7 +36,7 @@ function formatPortFull(port: ServicePortInfo): string {
 }
 
 function PortText({ port }: { port: ServicePortInfo }) {
-  const qualifier = [port.name, port.protocol].filter(Boolean).join(" · ");
+  const qualifier = qualifierOf(port);
   return (
     <span className="cursor-default">
       <span className="font-mono text-fg">{port.port}</span>
