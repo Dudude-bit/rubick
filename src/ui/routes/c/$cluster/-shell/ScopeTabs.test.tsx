@@ -19,8 +19,16 @@ const nsAccess = vi.hoisted(() => ({
   }>,
 }));
 
+const discovery = vi.hoisted(() => ({
+  entries: [] as Array<Record<string, unknown>>,
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
+    listApiCatalog: vi.fn(async () => ({
+      entries: discovery.entries,
+      unread: [],
+    })),
     connectCluster: vi.fn(async (context: string) => ({ context })),
     disconnectCluster: vi.fn(async () => undefined),
     focusCluster: vi.fn(async () => null),
@@ -283,6 +291,37 @@ describe("what a tab says", () => {
     expect(screen.queryByText("k3d-dev")).not.toBeInTheDocument();
     expect(within(tabs()[0]).getByText("Overview")).toBeInTheDocument();
     expect(within(tabs()[1]).getByText("Pods")).toBeInTheDocument();
+  });
+
+  /**
+   * A kind the registry does not hold was headed "PriorityClasses" on its
+   * page and "priorityclasses" on its tab. Fails if the tab stops asking
+   * discovery for the name.
+   */
+  it("names a served kind's list as its page does", async () => {
+    discovery.entries = [
+      {
+        group: "scheduling.k8s.io",
+        version: "v1",
+        kind: "PriorityClass",
+        plural: "priorityclasses",
+        namespaced: false,
+        verbs: ["get", "list"],
+        shortNames: ["pc"],
+      },
+    ];
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", href: "/c/k3d-dev/priorityclasses" })],
+      activeId: "a",
+      pendingHref: null,
+    });
+    await mount();
+    discovery.entries = [];
+
+    expect(
+      await within(tabs()[0]).findByText("PriorityClasses")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("priorityclasses")).toBeNull();
   });
 
   it("names every cluster the moment a second one is open", async () => {

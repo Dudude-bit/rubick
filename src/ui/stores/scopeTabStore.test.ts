@@ -528,6 +528,17 @@ describe("titles", () => {
     expect(tabRouteLabel("/c/prod/pods", ru)).toBe("Pods");
   });
 
+  /** The registry's word stands; discovery names only what it does not hold, and the segment is the last resort. */
+  it("asks discovery only for a list the registry cannot name", () => {
+    const named = (segment: string) =>
+      segment === "priorityclasses" ? "PriorityClasses" : "Wrong";
+    expect(tabRouteLabel("/c/prod/priorityclasses", t, named)).toBe(
+      "PriorityClasses"
+    );
+    expect(tabRouteLabel("/c/prod/pods", t, named)).toBe("Pods");
+    expect(tabRouteLabel("/c/prod/priorityclasses", t)).toBe("priorityclasses");
+  });
+
   /** The cluster is the tab's own name; its route must not repeat it. */
   it("never names the cluster as the route", () => {
     expect(tabRouteLabel("/c/pods", t)).toBe("Overview");

@@ -586,9 +586,10 @@ holdClusters(() => {
  * A detail route is named by the object it shows, not by its kind: the
  * reader opened `api-7f9`, not "pods". A peek never renames the tab; it is
  * a glance from the page, and the tab names the page. A list or page is
- * named the way the sidebar names it.
+ * named the way the sidebar names it, and a served kind the registry does
+ * not hold the way its own page does, by discovery's word for it.
  */
-export function tabRouteLabel(href: string, t: T): string {
+export function tabRouteLabel(href: string, t: T, named?: ListNamer): string {
   const [path] = href.split("?");
   const segments = path.split("/").filter(Boolean).map(decoded);
   // The cluster is said by the tab's own name, not by its route.
@@ -604,9 +605,13 @@ export function tabRouteLabel(href: string, t: T): string {
     [...ACCESS_KINDS, ...RESOURCE_REGISTRY].find(
       (entry) => segmentOf(entry) === page
     )?.displayPlural ??
+    named?.(page) ??
     page
   );
 }
+
+/** What discovery calls the kind a list segment addresses, where it has answered. */
+export type ListNamer = (segment: string) => string | undefined;
 
 function decoded(segment: string): string {
   try {
@@ -660,7 +665,12 @@ function listOf(path: string): string | null {
  * strip with a name that matches nothing they can act on, or a name that
  * matches nothing they can see.
  */
-export function tabTitle(tab: ScopeTab, t: T, alias?: string): string {
+export function tabTitle(
+  tab: ScopeTab,
+  t: T,
+  alias?: string,
+  listNamer?: ListNamer
+): string {
   const name = tab.context ?? t("cluster", "noCluster");
   const cluster = alias ? `${alias} (${name})` : name;
   const named = tab.missing
@@ -671,5 +681,5 @@ export function tabTitle(tab: ScopeTab, t: T, alias?: string): string {
     namespaces.length === 0
       ? t("nav", "allNamespacesLower")
       : namespaces.join(", ")
-  } · ${tabRouteLabel(tab.href, t)}`;
+  } · ${tabRouteLabel(tab.href, t, listNamer)}`;
 }

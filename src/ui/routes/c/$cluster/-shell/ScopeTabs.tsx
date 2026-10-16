@@ -61,6 +61,7 @@ import {
   attentionWords,
   type NamespaceAttention,
 } from "@/lib/attention";
+import { useListNamer } from "../-object/served";
 import { useNamespaceAccess } from "./useNamespaceAccess";
 import { useWindowCluster } from "./useWindowCluster";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
@@ -336,6 +337,7 @@ function HiddenScopeTabs({
   buttonRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const t = useT();
+  const named = useListNamer();
   const activateTab = useScopeTabStore((s) => s.activateTab);
   const open = tabs.find((tab) => tab.id === activeId);
   const label = t("action", "tabsMoreLabel", { n: tabs.length });
@@ -347,7 +349,7 @@ function HiddenScopeTabs({
           type="button"
           aria-label={
             open
-              ? `${label}. ${t("action", "tabsMoreHoldsOpen", { tab: tabRouteLabel(open.href, t) })}`
+              ? `${label}. ${t("action", "tabsMoreHoldsOpen", { tab: tabRouteLabel(open.href, t, named) })}`
               : label
           }
           className={cn(
@@ -386,6 +388,7 @@ function HiddenScopeTab({
   onPick: () => void;
 }) {
   const t = useT();
+  const named = useListNamer();
   const mark = useClusterMark(tab.context);
   const alias = mark.alias?.trim();
   const keepsShell = useKeptShellStore((s) =>
@@ -395,7 +398,7 @@ function HiddenScopeTab({
     <DropdownMenuItem
       onSelect={onPick}
       aria-current={open ? "true" : undefined}
-      aria-label={tabTitle(tab, t, alias)}
+      aria-label={tabTitle(tab, t, alias, named)}
       className={cn("gap-1.5", open && "font-medium text-fg")}
     >
       <span
@@ -428,7 +431,7 @@ function HiddenScopeTab({
           aria-hidden="true"
         />
       )}
-      <RouteName name={tabRouteLabel(tab.href, t)} className="min-w-0" />
+      <RouteName name={tabRouteLabel(tab.href, t, named)} className="min-w-0" />
       {open && (
         <Check className="ml-auto h-3 w-3 flex-none" aria-hidden="true" />
       )}
@@ -585,6 +588,7 @@ function ScopeTabItem({
   overflow: boolean;
 }) {
   const t = useT();
+  const named = useListNamer();
   const { context } = tab;
   const scope = tabScope(tab);
   const setNamespaceScope = useClusterStore((s) => s.setNamespaceScope);
@@ -615,7 +619,7 @@ function ScopeTabItem({
   const color = active ? "var(--cluster)" : clusterColor(context, mark.hue);
   // A filled dot read as live, so it is filled only where it is.
   const connected = active ? windowLive : parkedLive;
-  const route = tabRouteLabel(tab.href, t);
+  const route = tabRouteLabel(tab.href, t, named);
   // Closing a tab ends the shell it keeps, so the tab says it keeps one.
   const shell = useKeptShellStore((s) =>
     s.shells.find((each) => each.tab === tab.id)
@@ -625,7 +629,7 @@ function ScopeTabItem({
         target: `${shell.pod}/${shell.container}`,
       })
     : null;
-  const title = tabTitle(tab, t, alias);
+  const title = tabTitle(tab, t, alias, named);
   // A cluster the kubeconfig has lost is the odd one out however many
   // clusters are open — that is exactly when the name is the fact the
   // reader needs.

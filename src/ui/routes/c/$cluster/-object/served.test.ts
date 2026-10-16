@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { ApiCatalog, CatalogEntry } from "@/generated/types";
-import { servedIn, servedOf } from "./served";
+import { servedIn, servedListTitle, servedOf } from "./served";
 
 const LEASES: CatalogEntry = {
   group: "coordination.k8s.io",
@@ -85,5 +85,31 @@ describe("whether the cluster serves a kind", () => {
         plural: "pods",
       }).state
     ).toBe("unknown");
+  });
+});
+
+describe("what a list is called where its address is all there is", () => {
+  const priority: CatalogEntry = {
+    group: "scheduling.k8s.io",
+    version: "v1",
+    kind: "PriorityClass",
+    plural: "priorityclasses",
+    namespaced: false,
+    verbs: ["get", "list"],
+    shortNames: ["pc"],
+  };
+
+  it("names a bare plural by the kind discovery serves it as", () => {
+    expect(
+      servedListTitle({ entries: [priority], unread: [] }, "priorityclasses")
+    ).toBe("PriorityClasses");
+  });
+
+  /** Unread is not a name; the caller keeps the address rather than guess. */
+  it("names nothing before discovery has answered, or where it lacks the kind", () => {
+    expect(servedListTitle(undefined, "priorityclasses")).toBeUndefined();
+    expect(
+      servedListTitle({ entries: [], unread: [] }, "priorityclasses")
+    ).toBeUndefined();
   });
 });

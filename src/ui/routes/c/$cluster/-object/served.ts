@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
 
 import type { ApiCatalog, CatalogEntry } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { listTitleOf } from "@/lib/access-kinds";
 import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { getResourceDefinition, isResourceType } from "@/lib/resource-registry";
@@ -36,6 +38,25 @@ export function servedIn(
   return unread
     ? { state: "unknown", error: unread.message }
     : { state: "absent" };
+}
+
+/** A list segment named as its page heads it, once discovery has served the kind. */
+export function servedListTitle(
+  catalog: ApiCatalog | undefined,
+  segment: string
+): string | undefined {
+  const served = servedIn(catalog, null, servedOf(segment));
+  return served.state === "served" ? listTitleOf(served.entry) : undefined;
+}
+
+/** The catalogue's word for every list segment, as a tab or a menu names one. */
+export function useListNamer(): (segment: string) => string | undefined {
+  const isConnected = useClusterStore((state) => state.isConnected);
+  const catalog = useQuery({ ...catalogQuery(), enabled: isConnected }).data;
+  return useCallback(
+    (segment: string) => servedListTitle(catalog, segment),
+    [catalog]
+  );
 }
 
 /**
