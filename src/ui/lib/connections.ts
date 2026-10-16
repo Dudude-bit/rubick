@@ -802,6 +802,24 @@ export function chainStopHop(
     };
   }
   const said = describeStop(stop, t);
+  if (stop.reason === "podsRefused") {
+    const others = stop.workloads.filter(
+      (workload) => !sameObject(workload, subject)
+    );
+    return {
+      at: "stop",
+      mood: stopMood(stop),
+      ...said,
+      ...(others.length === 0
+        ? {
+            note: t("nav", "stopPodsRefusedHereNote", {
+              selector: stop.selector,
+              kind: subject.kind,
+            }),
+          }
+        : { objects: others }),
+    };
+  }
   // Big-pull counted the terminating pods of a Deployment deleted under its
   // name as "its pods": the selector's count is not the workload's.
   if (

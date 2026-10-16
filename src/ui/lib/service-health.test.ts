@@ -623,7 +623,29 @@ describe("a Service whose workloads wait on their pods", () => {
       mood: "fault",
       title: "Pod Security restricted refuses its pods: 2 checks fail",
       note: "No pod carries app=root-web: the API server will not create the pods of Deployment root-web, so connections to this address are refused. Open Deployment root-web for why and what to change.",
+      objects: [stop.workloads[0]],
     });
+  });
+
+  /**
+   * On root-web's own page its chain said "Open Deployment root-web for
+   * why", the page the reader was on. Fails if the workload's own chain
+   * sends the reader to itself or offers itself as a link.
+   */
+  it("says the reason is above on the page of the workload whose pods are refused", () => {
+    const workload = { ...SERVICE, kind: "Deployment", name: "root-web" };
+    const stop = {
+      reason: "podsRefused" as const,
+      service: SERVICE,
+      selector: "app=root-web",
+      workloads: [workload],
+      said: 'pods "root-web-7d9-x" is forbidden: violates PodSecurity "restricted:latest": runAsNonRoot != true (pod or container "app" must set securityContext.runAsNonRoot=true)',
+    };
+    const hop = chainStopHop(stop, workload, t);
+    expect(hop.note).toBe(
+      "No pod carries app=root-web: the API server will not create this Deployment's pods, so connections to this address are refused. The reason and what to change are above."
+    );
+    expect(hop.objects).toBeUndefined();
   });
 
   /**

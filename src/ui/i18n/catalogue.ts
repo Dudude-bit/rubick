@@ -178,6 +178,8 @@ export const en = {
       "They have only just been asked for and have no address yet, so connections to this address are refused for now. It is a fault only if no pod comes.",
     stopPodsRefusedNote:
       "No pod carries {selector}: the API server will not create the pods of {workloads}, so connections to this address are refused. Open {workloads} for why and what to change.",
+    stopPodsRefusedHereNote:
+      "No pod carries {selector}: the API server will not create this {kind}'s pods, so connections to this address are refused. The reason and what to change are above.",
     stopNearMissNote:
       "Closest: {pods}. Connections to this address are refused until a pod carries the whole selector: add {lacks} to their template, or drop it from the selector.",
     stopScaledToZeroNote:
