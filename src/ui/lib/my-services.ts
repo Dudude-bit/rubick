@@ -233,15 +233,27 @@ const UNSERVED: Record<WayState, boolean> = {
   unsure: false,
 };
 
-/** Every way in read and none serving; null where one serves or one was not read. */
-export function noWayServes(ways: {
+/** What the header says of the ways in: every one read as down, some of them, or nothing. */
+export type WaysVerdict =
+  | { says: "shut" | "empty" }
+  | { says: "some"; down: number; of: number };
+
+/**
+ * Null where no way in was read as down. "Some" covers the rest serving and
+ * the rest unread alike: three dead addresses beside one nobody checked
+ * said nothing, under a green count.
+ */
+export function waysVerdict(ways: {
   entries: EntryPoint[];
   known: boolean;
-}): "shut" | "empty" | null {
-  if (!ways.known || ways.entries.length === 0) return null;
+}): WaysVerdict | null {
+  if (!ways.known) return null;
   const states = ways.entries.map(wayState);
-  if (!states.every((state) => state !== null && UNSERVED[state])) return null;
-  return states.every((state) => state === "shut") ? "shut" : "empty";
+  const down = states.filter((state) => state !== null && UNSERVED[state]);
+  if (down.length === 0) return null;
+  if (down.length < states.length)
+    return { says: "some", down: down.length, of: states.length };
+  return { says: down.every((state) => state === "shut") ? "shut" : "empty" };
 }
 
 /**

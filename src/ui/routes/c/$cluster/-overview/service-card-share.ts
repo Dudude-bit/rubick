@@ -6,12 +6,13 @@ import { rolloutVerdict } from "@/lib/workload-status";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import {
-  noWayServes,
   pinKey,
+  waysVerdict,
   wayState,
   type EntryPoint,
   type ServicePin,
   type ServiceState,
+  type WaysVerdict,
   type WayState,
 } from "@/lib/my-services";
 import { ASK_SHORT, type Watch } from "@/lib/tell-me-when";
@@ -28,13 +29,25 @@ export const WAY_WORDS: Record<WayState, (t: T) => string> = {
   empty: (t) => t("services", "nothingBehind"),
 };
 
-/** What the header says beside the count where no way in serves. */
-export const CUT_WORDS: Record<
-  NonNullable<ReturnType<typeof noWayServes>>,
-  (t: T) => string
-> = {
-  shut: (t) => t("services", "everyWayShut"),
-  empty: (t) => t("services", "noWayServes"),
+/** What the header says beside the count where ways in were read as down. */
+export function verdictWords(verdict: WaysVerdict, t: T): string {
+  switch (verdict.says) {
+    case "shut":
+      return t("services", "everyWayShut");
+    case "empty":
+      return t("services", "noWayServes");
+    case "some":
+      return t("services", "someWaysDown", {
+        n: verdict.down,
+        of: verdict.of,
+      });
+  }
+}
+
+export const VERDICT_ROLE: Record<WaysVerdict["says"], "err" | "warn"> = {
+  shut: "err",
+  empty: "err",
+  some: "warn",
 };
 
 function wayWords(way: EntryPoint, t: T): string {
@@ -45,12 +58,16 @@ function wayWords(way: EntryPoint, t: T): string {
 
 function stateValue(
   state: ServiceState,
-  cut: ReturnType<typeof noWayServes>,
+  verdict: WaysVerdict | null,
   t: T
 ): ReportValue {
   const cutOff = (value: ReportValue): ReportValue =>
-    cut
-      ? { ...value, text: `${value.text} · ${CUT_WORDS[cut](t)}`, role: "err" }
+    verdict
+      ? {
+          ...value,
+          text: `${value.text} · ${verdictWords(verdict, t)}`,
+          role: value.role === "err" ? "err" : VERDICT_ROLE[verdict.says],
+        }
       : value;
   switch (state.state) {
     case "ready":
@@ -101,7 +118,7 @@ export function pinShare(
     },
     {
       label: t("columns", "status"),
-      values: [stateValue(state, noWayServes(ways), t)],
+      values: [stateValue(state, waysVerdict(ways), t)],
     },
     {
       label: t("services", "wayIn"),

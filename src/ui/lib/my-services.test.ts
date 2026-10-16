@@ -6,13 +6,13 @@ import {
   entryPointsOf,
   MAX_PINNED_PER_CONTEXT,
   isPinned,
-  noWayServes,
   openQuestionsOf,
   pinKey,
   pinsOf,
   stateOf,
   waitingFor,
   wayState,
+  waysVerdict,
 } from "./my-services";
 import { REFRESH_INTERVALS } from "./refresh";
 import type { ChainHop, ChainPath } from "./connections";
@@ -771,10 +771,11 @@ describe("more ways in", () => {
 
   /**
    * The card's header read "2/2 ready" in green over two ways in a policy
-   * shut. Fails if the header is told nothing serves while one does, or
-   * while one was never read.
+   * shut, and later over three dead addresses beside one that served. Fails
+   * if the header is told nothing serves while one does or was never read,
+   * or is told nothing where some were read as down.
    */
-  it("says no way in serves only where every one was read and none does", () => {
+  it("says how many ways in were read as down, and none only where every one was", () => {
     const entry = (
       state:
         | "serving"
@@ -803,14 +804,21 @@ describe("more ways in", () => {
       entries: states.map(entry),
       known: true,
     });
-    expect(noWayServes(ways("shut", "shut"))).toBe("shut");
-    expect(noWayServes(ways("shut", "empty"))).toBe("empty");
-    expect(noWayServes(ways("shut", "serving"))).toBeNull();
-    expect(noWayServes(ways("shut", "unread"))).toBeNull();
-    expect(noWayServes(ways("shut", "unserved"))).toBe("empty");
-    expect(noWayServes(ways("shut", "unaddressed"))).toBe("empty");
-    expect(noWayServes(ways())).toBeNull();
-    expect(noWayServes({ ...ways("shut"), known: false })).toBeNull();
+    const some = (down: number, of: number) => ({ says: "some", down, of });
+    expect(waysVerdict(ways("shut", "shut"))).toEqual({ says: "shut" });
+    expect(waysVerdict(ways("shut", "empty"))).toEqual({ says: "empty" });
+    expect(waysVerdict(ways("shut", "serving"))).toEqual(some(1, 2));
+    expect(waysVerdict(ways("shut", "unread"))).toEqual(some(1, 2));
+    expect(waysVerdict(ways("shut", "unserved"))).toEqual({ says: "empty" });
+    expect(waysVerdict(ways("shut", "unaddressed"))).toEqual({
+      says: "empty",
+    });
+    expect(
+      waysVerdict(ways("unaddressed", "unaddressed", "shut", "serving"))
+    ).toEqual(some(3, 4));
+    expect(waysVerdict(ways("serving", "unread"))).toBeNull();
+    expect(waysVerdict(ways())).toBeNull();
+    expect(waysVerdict({ ...ways("shut"), known: false })).toBeNull();
   });
 
   /** Neither the endpoints nor the pods answered: the zeros are nobody's. */

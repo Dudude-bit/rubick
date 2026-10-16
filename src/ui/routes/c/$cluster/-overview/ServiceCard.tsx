@@ -4,12 +4,18 @@ import { ExternalLink, PinOff } from "lucide-react";
 import { ObjectLink } from "@/components/object/ResourceRef";
 import { Journal } from "../-changes/ChangesTimeline";
 import { useShareSection } from "@/components/share/screen-share";
-import { CUT_WORDS, pinShare, WAY_WORDS } from "./service-card-share";
+import {
+  pinShare,
+  VERDICT_ROLE,
+  verdictWords,
+  WAY_WORDS,
+} from "./service-card-share";
 import { useConnections } from "@/hooks/useConnections";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useRouteTls } from "@/hooks/useRouteTls";
 import { trafficChains, unreadWhy } from "@/lib/connections";
+import { ROLE_TEXT } from "@/lib/status-role";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { RolloutBadge } from "../-object/RolloutSummary";
@@ -17,15 +23,16 @@ import {
   CARD_REFRESH,
   changesFor,
   entryPointsOf,
-  noWayServes,
   openQuestionsOf,
   pinKey,
   stateOf,
   waitingFor,
+  waysVerdict,
   wayState,
   type EntryPoint,
   type ServicePin,
   type ServiceState,
+  type WaysVerdict,
   type WayState,
 } from "@/lib/my-services";
 import { ASK_SHORT } from "@/lib/tell-me-when";
@@ -128,7 +135,7 @@ export function ServiceCard({
         <span className="truncate font-mono text-[11px] text-fg-fnt">
           {pin.namespace}
         </span>
-        <StateWords state={state} cut={noWayServes(ways)} t={t} />
+        <StateWords state={state} verdict={waysVerdict(ways)} t={t} />
         <button
           type="button"
           aria-label={t("services", "unpin")}
@@ -240,11 +247,11 @@ export function ServiceCard({
  */
 function StateWords({
   state,
-  cut,
+  verdict,
   t,
 }: {
   state: ServiceState;
-  cut: ReturnType<typeof noWayServes>;
+  verdict: WaysVerdict | null;
   t: T;
 }) {
   if (state.state === "gone") {
@@ -275,7 +282,11 @@ function StateWords({
     <span
       className={cn(
         "flex-none font-mono text-[11px] tabular-nums",
-        cut ? "text-fg-mut" : state.state === "ready" ? "text-ok" : "text-warn"
+        verdict && verdict.says !== "some"
+          ? "text-fg-mut"
+          : state.state === "ready"
+            ? "text-ok"
+            : "text-warn"
       )}
     >
       {t("services", "readyOf", { ready: state.ready, total: state.total })}
@@ -287,9 +298,14 @@ function StateWords({
         <RolloutBadge rollout={state.rollout} />
       ) : null}
       {count}
-      {cut ? (
-        <span className="truncate text-[11px] text-err">
-          {CUT_WORDS[cut](t)}
+      {verdict ? (
+        <span
+          className={cn(
+            "truncate text-[11px]",
+            ROLE_TEXT[VERDICT_ROLE[verdict.says]]
+          )}
+        >
+          {verdictWords(verdict, t)}
         </span>
       ) : null}
     </span>

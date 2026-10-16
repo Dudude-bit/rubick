@@ -267,6 +267,30 @@ describe("what a card says about a way in", () => {
     ).toHaveClass("text-err");
     expect(screen.getByText("1/1 ready")).not.toHaveClass("text-ok");
   });
+
+  /**
+   * door-shut's header read "1/1 ready" in green and nothing else over three
+   * dead ways in, because a fourth one served. Fails if some ways read as
+   * down leave the header silent, or paint it as though none served.
+   */
+  it("says in the header how many ways in do not serve where another does", async () => {
+    const serving = structuredClone(shutChain()[0]);
+    const hop = serving.hops[0];
+    if (hop.at !== "published") throw new Error("published hop expected");
+    hop.published.service.name = "payments-internal";
+    hop.published.stop = null;
+    chain.paths = [...shutChain(), { ...serving, key: "d", broken: false }];
+
+    await mount();
+
+    expect(
+      screen.getByText(
+        /^(1 of 2 ways in does not serve|1 из 2 входов не обслуживается)$/
+      )
+    ).toHaveClass("text-warn");
+    expect(screen.getByText("1/1 ready")).toHaveClass("text-ok");
+    expect(screen.queryByText(/every way in|все входы/)).toBeNull();
+  });
 });
 
 describe("what a card offers Share", () => {
@@ -341,6 +365,38 @@ describe("what a card offers Share", () => {
         {
           text: "web (shut by NetworkPolicy), api (nothing behind it), shop, edge (not checked), cold (nothing serves its class)",
         },
+      ],
+    });
+  });
+
+  /** The Share filed a service with one way in shut beside one serving as ready, in green. */
+  it("says in the status how many ways in do not serve, in warning", () => {
+    const way = {
+      url: null,
+      detail: null,
+      servingKnown: true,
+      unsure: false,
+      address: null,
+    };
+    const section = pinShare(
+      pin,
+      { state: "ready", ready: 2, total: 2 },
+      {
+        entries: [
+          { ...way, key: "a", label: "web", serving: false, shut: true },
+          { ...way, key: "b", label: "api", serving: true, shut: false },
+        ],
+        known: true,
+      },
+      [],
+      null,
+      [],
+      t
+    );
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    expect(rows[1]).toMatchObject({
+      values: [
+        { text: "2/2 ready · 1 of 2 ways in does not serve", role: "warn" },
       ],
     });
   });

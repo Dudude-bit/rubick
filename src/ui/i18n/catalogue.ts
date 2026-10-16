@@ -2022,6 +2022,10 @@ export const en = {
     nothingBehind: "nothing behind it",
     everyWayShut: "every way in shut by NetworkPolicy",
     noWayServes: "no way in serves",
+    someWaysDown: {
+      one: "{n} of {of} ways in does not serve",
+      other: "{n} of {of} ways in do not serve",
+    },
     noControllerServes: "nothing serves its class",
     noAddressPublished: "no address published",
     moreWays: "{n} more",

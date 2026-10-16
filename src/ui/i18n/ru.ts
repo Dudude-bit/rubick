@@ -2107,6 +2107,12 @@ export const ru: Catalogue = {
     nothingBehind: "за ним ничего нет",
     everyWayShut: "все входы закрыты NetworkPolicy",
     noWayServes: "ни один вход не обслуживается",
+    someWaysDown: {
+      one: "{n} из {of} входов не обслуживается",
+      few: "{n} из {of} входов не обслуживаются",
+      many: "{n} из {of} входов не обслуживаются",
+      other: "{n} из {of} входов не обслуживаются",
+    },
     noControllerServes: "его класс никто не обслуживает",
     noAddressPublished: "адрес не опубликован",
     moreWays: "ещё {n}",
