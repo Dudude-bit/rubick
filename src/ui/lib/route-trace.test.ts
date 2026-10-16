@@ -1412,7 +1412,8 @@ describe("a gateway that publishes no address", () => {
   /**
    * Traefik refuses a Gateway with `Accepted: False` and writes no
    * Programmed, and the trace called it a controller that had not spoken
-   * yet. Fails if a Gateway its controller did not accept reads as pending.
+   * yet. Fails if a Gateway its controller did not accept reads as pending,
+   * or if the routes row says less than the controller's reason.
    */
   it("stops at a gateway its controller did not accept, though Programmed was never written", () => {
     const trace = routeTraces(
@@ -1450,6 +1451,7 @@ describe("a gateway that publishes no address", () => {
 
     const step = trace.steps.find((s) => s.id === "gateway");
     expect(step?.state).toBe("err");
+    expect(step?.short).toBe("ListenersNotValid");
     // The Gateway's own words, then the listener's, which name the cause.
     expect(step?.detail?.body).toContain(
       "ListenersNotValid: All Listeners must be valid"

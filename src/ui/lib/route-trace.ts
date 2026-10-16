@@ -560,7 +560,10 @@ function gatewayStep(
       state: "err",
       say: t("empty", "gwNotProgrammedSay", { name: gateway.name }),
       who: "infra",
-      short: t("empty", "gwNotProgrammedShort", { name: gateway.name }),
+      // The row names the Gateway beside it; the controller's reason is the news.
+      short:
+        programmed.reason ??
+        t("empty", "gwNotProgrammedShort", { name: gateway.name }),
       subject,
       detail: {
         title: t("empty", "gwNotProgrammedTitle"),
