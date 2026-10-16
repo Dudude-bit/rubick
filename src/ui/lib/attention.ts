@@ -466,6 +466,9 @@ const gatewayItems = remember((pulse: readonly GatewayPulse[]) =>
   })
 );
 
+// The trace says this as a headline; beside the Ingress rows it is a sentence.
+const endSentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+
 const routeItems = remember(
   (rows: readonly RouteRow[], t: T): AttentionItem[] =>
     rows.flatMap((row) => {
@@ -482,7 +485,7 @@ const routeItems = remember(
           reason: t("cluster", "attentionStopsAt", {
             at: t("columns", STEP_WORD[row.stop.at]),
           }),
-          detail: { says: "ours", text: row.stop.say },
+          detail: { says: "ours", text: endSentence(row.stop.say) },
           since: null,
           restarts: null,
           foldedPods: null,
