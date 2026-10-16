@@ -6967,6 +6967,11 @@ export const en = {
     gwNotProgrammedBody:
       "{said}. Nothing behind it serves until the Gateway itself is fixed; this is upstream of every route attached to it.",
     gwListenerRefusedSaid: "Listener {name}: {said}.",
+    gwListenerRefusedSay: "{label} was refused by its controller",
+    gwListenerRefusedTitle:
+      "The controller refused the listener, not the route",
+    gwListenerRefusedBody:
+      "{said}. No listener this route names is in service, so it is refused whatever its namespace or kind. The fix is on the Gateway.",
     gwNoAddressPublishedSay: "Gateway {name} publishes no address",
     gwNoAddressPublishedShort: "{name} publishes no address",
     gwNoAddressPublishedTitle: "No address to read",

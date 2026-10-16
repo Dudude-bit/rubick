@@ -7654,6 +7654,10 @@ export const ru: Catalogue = {
     gwNotProgrammedBody:
       "{said}. Ничего за ним не обслуживается, пока не починен сам Gateway: проблема стоит выше всех привязанных к нему маршрутов.",
     gwListenerRefusedSaid: "Слушатель {name}: {said}.",
+    gwListenerRefusedSay: "{label}: контроллер отказал самому слушателю",
+    gwListenerRefusedTitle: "Контроллер отказал слушателю, а не маршруту",
+    gwListenerRefusedBody:
+      "{said}. Ни один слушатель, который называет маршрут, не работает, поэтому маршрут отклонён при любом namespace и виде. Чинить нужно Gateway.",
     gwNoAddressPublishedSay: "Gateway {name} не публикует адрес",
     gwNoAddressPublishedShort: "{name} не публикует адрес",
     gwNoAddressPublishedTitle: "Адреса не прочитать",

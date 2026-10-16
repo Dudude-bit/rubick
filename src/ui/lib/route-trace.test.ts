@@ -710,6 +710,51 @@ describe("routeTraces", () => {
     expect(trace.steps[3].detail?.body).toContain("namespace not allowed");
   });
 
+  /**
+   * Traefik answers NotAllowedByListeners for a listener it refused outright,
+   * with no entrypoint for its port, and the trace sent the reader to the
+   * namespace. Fails if the namespace is blamed where every listener the
+   * route names was itself refused.
+   */
+  it("blames the listener, not the namespace, where the controller refused the listener itself", () => {
+    const outsider = route("outsider", {
+      parents: [
+        parentStatus("edge", [
+          condition("Accepted", "False", "NotAllowedByListeners"),
+        ]),
+      ],
+    });
+    const edge = gateway("edge");
+    const [trace] = routeTraces(
+      outsider,
+      sources({
+        gateways: [
+          {
+            ...edge,
+            listeners: edge.listeners.map((listener) => ({
+              ...listener,
+              conditions: [
+                condition(
+                  "Accepted",
+                  "False",
+                  "PortUnavailable",
+                  "no matching entryPoint for port 9999"
+                ),
+              ],
+            })),
+          },
+        ],
+      }),
+      t
+    );
+
+    expect(trace.steps[2].state).toBe("err");
+    expect(trace.steps[2].detail?.body).toContain(
+      "Listener http: PortUnavailable: no matching entryPoint for port 9999."
+    );
+    expect(trace.steps[3].state).toBe("off");
+  });
+
   it("writes the exact ReferenceGrant that would fix RefNotPermitted", () => {
     const denied = route("no-grant", {
       rules: [

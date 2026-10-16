@@ -739,6 +739,41 @@ function acceptanceSteps(
   }
 
   if (accepted.status === "False") {
+    // Traefik answers NotAllowedByListeners for a listener it refused
+    // outright, and blaming the namespace sent the reader to the wrong fix.
+    const refused = listeners.flatMap((listener) => {
+      const failing = failingCondition(listener.conditions);
+      return failing ? [{ name: listener.name, failing }] : [];
+    });
+    if (
+      accepted.reason === "NotAllowedByListeners" &&
+      refused.length > 0 &&
+      refused.length === listeners.length
+    ) {
+      return [
+        {
+          id: "listener",
+          state: "err",
+          say: t("empty", "gwListenerRefusedSay", { label }),
+          who: "infra",
+          short: refused[0].failing.reason ?? t("empty", "gwRefusedWord"),
+          freshness,
+          detail: {
+            title: t("empty", "gwListenerRefusedTitle"),
+            body: [
+              t("empty", "gwListenerRefusedBody", { said: said(accepted) }),
+              ...refused.map(({ name, failing }) =>
+                t("empty", "gwListenerRefusedSaid", {
+                  name,
+                  said: said(failing),
+                })
+              ),
+            ].join(" "),
+          },
+        },
+        namespaceQuiet(route, listeners, "off", t),
+      ];
+    }
     if (accepted.reason === "NotAllowedByListeners") {
       return [
         {
