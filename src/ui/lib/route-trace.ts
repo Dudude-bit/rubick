@@ -32,6 +32,7 @@ import {
   type Backing,
   type BackingSources,
 } from "@/integrations";
+import { failingCondition } from "@/lib/condition-health";
 import { describeStop, stopMood } from "@/lib/connections";
 import { pickListeners } from "@/lib/gateway-listeners";
 import type { T } from "@/i18n/useT";
@@ -199,13 +200,18 @@ export function routeBackingOf(
 
 /** The Programmed verdict, with the legacy `Ready` fallback some
  *  controllers still write — one rule, so the trace, the pulse and the
- *  topology map can never drift apart on it again. */
+ *  topology map can never drift apart on it again. A Gateway its controller
+ *  did not accept is not programmed: Traefik says so with `Accepted: False`
+ *  and writes no Programmed at all. */
 export function gatewayProgrammed(
   gateway: GatewayInfo
 ): ConditionInfo | undefined {
+  const of = (type: string) => gateway.conditions.find((c) => c.type === type);
+  const refused = of("Accepted");
   return (
-    gateway.conditions.find((c) => c.type === "Programmed") ??
-    gateway.conditions.find((c) => c.type === "Ready")
+    (refused?.status === "False" ? refused : undefined) ??
+    of("Programmed") ??
+    of("Ready")
   );
 }
 
@@ -556,7 +562,20 @@ function gatewayStep(
       subject,
       detail: {
         title: t("empty", "gwNotProgrammedTitle"),
-        body: t("empty", "gwNotProgrammedBody", { said: said(programmed) }),
+        body: [
+          t("empty", "gwNotProgrammedBody", { said: said(programmed) }),
+          ...gateway.listeners.flatMap((listener) => {
+            const refused = failingCondition(listener.conditions);
+            return refused
+              ? [
+                  t("empty", "gwListenerRefusedSaid", {
+                    name: listener.name,
+                    said: said(refused),
+                  }),
+                ]
+              : [];
+          }),
+        ].join(" "),
       },
     };
   }

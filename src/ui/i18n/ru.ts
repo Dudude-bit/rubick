@@ -193,6 +193,9 @@ export const ru: Catalogue = {
     stopGatewayMissingTitle: "Ссылается на Gateway, которого нет",
     stopGatewayMissingNote:
       "{route} привязан к {gateway}, которого нет в API-сервере. Статус для такого родителя не напишет ни один контроллер, поэтому об этом отказе кластер сам сказать не может.",
+    stopGatewayNotProgrammedTitle: "{gateway} не запрограммирован",
+    stopGatewayNotProgrammedNote:
+      "Контроллер ответил {condition}: False{said}. Маршрут может быть корректным и принятым, и всё равно его никто не обслуживает: Gateway перед ним не настроен в плоскости данных.",
     targetPortNamed: "targetPort: {name}",
     stopUnnamedPortCause:
       "Ни один контейнер не объявляет порт, который запрашивает Service ({asked}), поэтому ничего не публикуется",
@@ -7650,6 +7653,7 @@ export const ru: Catalogue = {
     gwNotProgrammedTitle: "Контроллер отвергает этот Gateway",
     gwNotProgrammedBody:
       "{said}. Ничего за ним не обслуживается, пока не починен сам Gateway: проблема стоит выше всех привязанных к нему маршрутов.",
+    gwListenerRefusedSaid: "Слушатель {name}: {said}.",
     gwNoAddressPublishedSay: "Gateway {name} не публикует адрес",
     gwNoAddressPublishedShort: "{name} не публикует адрес",
     gwNoAddressPublishedTitle: "Адреса не прочитать",

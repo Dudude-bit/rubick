@@ -637,6 +637,16 @@ export function describeStop(
             : stop.gateway.name,
         }),
       };
+    case "gatewayNotProgrammed":
+      return {
+        title: t("nav", "stopGatewayNotProgrammedTitle", {
+          gateway: stop.gateway.name,
+        }),
+        note: t("nav", "stopGatewayNotProgrammedNote", {
+          condition: stop.conditionType,
+          said: saidBy(stop),
+        }),
+      };
   }
 }
 
@@ -1411,6 +1421,7 @@ export function trafficChains(
             paths: [...new Set(mine.flatMap((edge) => edge.relation.paths))],
           };
           const routeUrls: string[] = [];
+          const urlsOn: { gateway: ObjectRef; urls: string[] }[] = [];
           for (const up of attaches.filter((entry) =>
             sameObject(entry.from, route)
           )) {
@@ -1431,6 +1442,7 @@ export function trafficChains(
                 )
               : [];
             routeUrls.push(...urls);
+            urlsOn.push({ gateway: up.to, urls });
             for (const edge of mine) {
               ways.push({ controller, port: edge.relation.port, urls });
             }
@@ -1449,9 +1461,16 @@ export function trafficChains(
           hops.push(gatewayRouteHop(mine, route, t));
           for (const entry of conns.stops) {
             if ("route" in entry && sameObject(entry.route, route)) {
+              // A refusal by one Gateway leaves the route's addresses on another standing.
+              const only =
+                "gateway" in entry
+                  ? urlsOn
+                      .filter((on) => sameObject(on.gateway, entry.gateway))
+                      .flatMap((on) => on.urls)
+                  : routeUrls;
               hops.push({
                 ...chainStopHop(entry, subject, t, own),
-                only: [...new Set(routeUrls)],
+                only: [...new Set(only)],
               });
             }
           }

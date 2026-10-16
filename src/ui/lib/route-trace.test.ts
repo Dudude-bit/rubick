@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -265,23 +267,35 @@ const ids = (trace: { steps: { id: string }[] }) =>
  * all called programmed — one cluster, two answers.
  */
 describe("gatewayProgrammed", () => {
-  it("reads the legacy Ready condition when Programmed is absent", () => {
-    const legacy = {
-      ...gateway("edge"),
-      conditions: [condition("Ready", "True", "Ready")],
+  /** The connections graph reads the same corpus, so the chain and the trace stop at the same Gateways. */
+  it("reads a Gateway as the shared corpus says", () => {
+    const corpus = JSON.parse(
+      readFileSync(
+        resolve(
+          process.cwd(),
+          "src/contracts/gateway-programmed-conformance.json"
+        ),
+        "utf8"
+      )
+    ) as {
+      cases: {
+        name: string;
+        conditions: { type: string; status: string; reason?: string }[];
+        said: { type: string; status: string } | null;
+      }[];
     };
-    expect(gatewayProgrammed(legacy)?.type).toBe("Ready");
-  });
-
-  it("prefers Programmed where a controller writes both", () => {
-    const both = {
-      ...gateway("edge"),
-      conditions: [
-        condition("Ready", "True", "Ready"),
-        condition("Programmed", "False", "Pending"),
-      ],
-    };
-    expect(gatewayProgrammed(both)?.type).toBe("Programmed");
+    for (const { name, conditions, said } of corpus.cases) {
+      const answer = gatewayProgrammed({
+        ...gateway("edge"),
+        conditions: conditions.map((c) =>
+          condition(c.type, c.status, c.reason ?? null)
+        ),
+      });
+      expect(
+        answer ? { type: answer.type, status: answer.status } : null,
+        name
+      ).toEqual(said);
+    }
   });
 });
 
@@ -1347,6 +1361,58 @@ describe("a gateway that publishes no address", () => {
     )[0];
 
     expect(trace.steps.find((s) => s.id === "gateway")?.state).toBe("err");
+    expect(trace.servingKnown).toBe(true);
+  });
+
+  /**
+   * Traefik refuses a Gateway with `Accepted: False` and writes no
+   * Programmed, and the trace called it a controller that had not spoken
+   * yet. Fails if a Gateway its controller did not accept reads as pending.
+   */
+  it("stops at a gateway its controller did not accept, though Programmed was never written", () => {
+    const trace = routeTraces(
+      route("healthy"),
+      sources({
+        gateways: [
+          gateway("edge", {
+            conditions: [
+              condition(
+                "Accepted",
+                "False",
+                "ListenersNotValid",
+                "All Listeners must be valid"
+              ),
+            ],
+            listeners: [
+              {
+                ...gateway("edge").listeners[0],
+                name: "odd",
+                conditions: [
+                  condition(
+                    "Accepted",
+                    "False",
+                    "PortUnavailable",
+                    "no matching entryPoint for port 9999"
+                  ),
+                ],
+              },
+            ],
+          }),
+        ],
+      }),
+      t
+    )[0];
+
+    const step = trace.steps.find((s) => s.id === "gateway");
+    expect(step?.state).toBe("err");
+    // The Gateway's own words, then the listener's, which name the cause.
+    expect(step?.detail?.body).toContain(
+      "ListenersNotValid: All Listeners must be valid"
+    );
+    expect(step?.detail?.body).toContain(
+      "Listener odd: PortUnavailable: no matching entryPoint for port 9999."
+    );
+    expect(trace.serving).toBe(false);
     expect(trace.servingKnown).toBe(true);
   });
 });

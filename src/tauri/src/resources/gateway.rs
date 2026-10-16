@@ -197,6 +197,19 @@ fn fits<T: PartialEq>(said: Option<&T>, asked: Option<&T>) -> bool {
     said.is_none() || asked.is_none() || said == asked
 }
 
+/// A Gateway's `Programmed` condition, else the legacy `Ready` some
+/// controllers still write, and `Accepted: False` before either: Traefik
+/// refuses a Gateway with it alone. `gatewayProgrammed` on the frontend,
+/// held to it by `src/contracts/gateway-programmed-conformance.json`.
+#[must_use]
+pub fn programmed(conditions: &[ConditionInfo]) -> Option<&ConditionInfo> {
+    let of = |type_: &str| conditions.iter().find(|c| c.type_ == type_);
+    of("Accepted")
+        .filter(|c| c.status == "False")
+        .or_else(|| of("Programmed"))
+        .or_else(|| of("Ready"))
+}
+
 /// One refusal decides, wherever it sits; True only when every entry says
 /// True, and then the one about the oldest generation speaks. Reading the
 /// first entry alone drew a route two controllers disagreed about as
@@ -1264,6 +1277,31 @@ mod tests {
                 }
                 assert_eq!(got, case[key], "{name}: {condition}");
             }
+        }
+    }
+
+    /// The trace and the Gateway pages read this in TypeScript and the
+    /// connections graph here. Fails if the two pick a different condition
+    /// for one Gateway, so one screen stops at it and the other does not.
+    #[test]
+    fn a_gateway_reads_as_programmed_as_the_shared_corpus_says() {
+        let corpus: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../contracts/gateway-programmed-conformance.json"
+        ))
+        .expect("the corpus parses");
+        let cases = corpus["cases"].as_array().expect("cases");
+        assert!(cases.len() > 5);
+        for case in cases {
+            let name = case["name"].as_str().expect("a name");
+            let conditions: Vec<ConditionInfo> =
+                serde_json::from_value(case["conditions"].clone()).expect("conditions");
+            let got = programmed(&conditions)
+                .map(|said| serde_json::json!({ "type": said.type_, "status": said.status }));
+            assert_eq!(
+                got.unwrap_or(serde_json::Value::Null),
+                case["said"],
+                "{name}"
+            );
         }
     }
 

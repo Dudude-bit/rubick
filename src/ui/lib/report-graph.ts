@@ -98,6 +98,7 @@ function stopSubject(stop: ChainStop) {
     case "routeRefsUnresolved":
       return stop.route;
     case "gatewayMissing":
+    case "gatewayNotProgrammed":
       return stop.gateway;
     case "selectsNothing":
     case "scaledToZero":

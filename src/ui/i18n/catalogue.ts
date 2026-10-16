@@ -213,6 +213,9 @@ export const en = {
     stopGatewayMissingTitle: "Names a Gateway that does not exist",
     stopGatewayMissingNote:
       "{route} attaches to {gateway}, which the API server does not have. No controller will ever write status for that parent, so this is the one refusal the cluster cannot state itself.",
+    stopGatewayNotProgrammedTitle: "{gateway} is not programmed",
+    stopGatewayNotProgrammedNote:
+      "The controller answered {condition}: False{said}. The route can be valid and accepted, and still nothing serves it: the Gateway in front of it is not configured in the data plane.",
     targetPortNamed: "targetPort: {name}",
     stopUnnamedPortCause:
       "No container declares the port the Service asks for ({asked}), so nothing is published",
@@ -6963,6 +6966,7 @@ export const en = {
     gwNotProgrammedTitle: "The controller refuses this Gateway",
     gwNotProgrammedBody:
       "{said}. Nothing behind it serves until the Gateway itself is fixed; this is upstream of every route attached to it.",
+    gwListenerRefusedSaid: "Listener {name}: {said}.",
     gwNoAddressPublishedSay: "Gateway {name} publishes no address",
     gwNoAddressPublishedShort: "{name} publishes no address",
     gwNoAddressPublishedTitle: "No address to read",

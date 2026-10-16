@@ -258,6 +258,41 @@ describe("trafficDoors", () => {
     expect(model.entries[0].doors[0].broken).toBe("refused");
   });
 
+  /**
+   * A Gateway its controller did not program answers nothing on any door,
+   * and its doors read as open. Fails if the door does not wear the word.
+   */
+  it("marks a door on a Gateway its controller did not program", () => {
+    const route = ref("HTTPRoute", "promo");
+    const model = trafficDoors(
+      conns({
+        edges: [
+          edge(route, ref("Service", "app"), ruleRoutes(["promo.example.com"])),
+          edge(route, gatewayRef("edge"), {
+            verb: "attachesTo",
+            port: null,
+            listenerSet: null,
+            sectionName: null,
+          }),
+        ],
+        stops: [
+          {
+            reason: "gatewayNotProgrammed",
+            route,
+            gateway: gatewayRef("edge"),
+            conditionType: "Programmed",
+            conditionReason: "AddressNotAssigned",
+            message: null,
+          },
+        ],
+      }),
+      [gateway("edge", [])],
+      t
+    );
+
+    expect(model.entries[0].doors[0].broken).toBe("not programmed");
+  });
+
   it("says refs are the break where ResolvedRefs failed", () => {
     const model = trafficDoors(
       conns({

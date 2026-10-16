@@ -126,7 +126,7 @@ pub(super) fn gateway_traffic_into(
     gateways: Option<&[crate::resources::GatewayInfo]>,
     out: &mut Neighbourhood,
 ) {
-    use crate::resources::{verdict_of, Verdict, GATEWAY_API_GROUP};
+    use crate::resources::{programmed, verdict_of, Verdict, GATEWAY_API_GROUP};
 
     for route in routes {
         let backends: Vec<_> = route
@@ -235,6 +235,19 @@ pub(super) fn gateway_traffic_into(
                 out.stops.push(ChainStop::GatewayMissing {
                     route: route_ref.clone(),
                     gateway: gw_ref.clone(),
+                });
+            }
+            if let Some(said) = found
+                .flatten()
+                .and_then(|g| programmed(&g.conditions))
+                .filter(|said| said.status == "False")
+            {
+                out.stops.push(ChainStop::GatewayNotProgrammed {
+                    route: route_ref.clone(),
+                    gateway: gw_ref.clone(),
+                    condition_type: said.type_.clone(),
+                    condition_reason: said.reason.clone(),
+                    message: said.message.clone(),
                 });
             }
             out.edge(
@@ -950,6 +963,67 @@ spec:
             .find(|e| e.to.kind == "Gateway")
             .expect("the edge is still drawn, to a missing ref");
         assert!(matches!(to_gateway.to.existence, Existence::Missing));
+    }
+
+    /// A Gateway its controller refused: the chain drew the route's address
+    /// on it, unbroken, while the trace stopped at "not programmed". Fails
+    /// if a refusal, written as `Programmed` or as the legacy `Ready`, does
+    /// not stop the route, or if a programmed Gateway does.
+    #[test]
+    fn a_gateway_its_controller_refused_stops_the_routes_on_it() {
+        let edge = |conditions: &str| {
+            gateway(&format!(
+                "{EDGE_GATEWAY}status:\n  conditions:\n{conditions}"
+            ))
+        };
+        let stops = |gw: GatewayInfo| {
+            let mut out = Neighbourhood::new();
+            gateway_traffic_into(
+                "shop",
+                &service("shop", "promo"),
+                &[route(HEALTHY_ROUTE)],
+                Some(&[gw]),
+                &mut out,
+            );
+            out.stops
+        };
+
+        let refused = stops(edge(
+            "  - { type: Programmed, status: \"False\", reason: AddressNotAssigned, message: no address }\n",
+        ));
+        match refused.as_slice() {
+            [ChainStop::GatewayNotProgrammed {
+                route,
+                gateway,
+                condition_type,
+                condition_reason,
+                ..
+            }] => {
+                assert_eq!(route.name, "promo");
+                assert_eq!(gateway.name, "edge");
+                assert_eq!(condition_type, "Programmed");
+                assert_eq!(condition_reason.as_deref(), Some("AddressNotAssigned"));
+            }
+            other => panic!("expected GatewayNotProgrammed, got {other:?}"),
+        }
+        assert!(matches!(
+            stops(edge(
+                "  - { type: Ready, status: \"False\", reason: Invalid }\n"
+            ))
+            .as_slice(),
+            [ChainStop::GatewayNotProgrammed { .. }]
+        ));
+        assert!(matches!(
+            stops(edge(
+                "  - { type: Accepted, status: \"False\", reason: ListenersNotValid }\n"
+            ))
+            .as_slice(),
+            [ChainStop::GatewayNotProgrammed { condition_type, .. }] if condition_type == "Accepted"
+        ));
+        assert!(stops(edge(
+            "  - { type: Programmed, status: \"True\", reason: Programmed }\n  - { type: Ready, status: \"False\" }\n"
+        ))
+        .is_empty());
     }
 
     /// The list that was read and did not hold it says "missing". A list

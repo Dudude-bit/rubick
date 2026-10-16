@@ -414,6 +414,18 @@ pub enum ChainStop {
         route: ObjectRef,
         gateway: ObjectRef,
     },
+    /// The controller wrote `Programmed: False`, or the legacy `Ready:
+    /// False`, on the Gateway a route attaches to: nothing through it
+    /// serves, however healthy the route and its backends read.
+    GatewayNotProgrammed {
+        route: ObjectRef,
+        gateway: ObjectRef,
+        #[serde(rename = "conditionType")]
+        condition_type: String,
+        #[serde(rename = "conditionReason")]
+        condition_reason: Option<String>,
+        message: Option<String>,
+    },
     /// A Service's selector matches no pod in its namespace.
     ///
     /// Only a reader that listed the pods may say this. A reader holding the

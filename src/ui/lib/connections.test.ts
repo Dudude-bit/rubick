@@ -614,6 +614,80 @@ describe("the traffic chain", () => {
     });
   });
 
+  /**
+   * A Gateway its controller did not program serves nothing, and the chain
+   * drew the route through it unbroken. Fails if the stop is not drawn, or
+   * if it claims the route's address on a second, programmed Gateway.
+   */
+  it("stops a route at a Gateway its controller did not program, and only there", () => {
+    const deployment = ref("Deployment", "promo");
+    const svc = service("promo", "app=promo");
+    const route = ref("HTTPRoute", "promo");
+    const at = (name: string, port: number) =>
+      ref("Gateway", name, {
+        kind: "gateway",
+        listeners: [listener("web", "HTTP", port, "*.example.com")],
+        className: "envoy",
+      });
+    const edge = at("edge", 8000);
+    const inner = at("inner", 9000);
+    const attaches = (gateway: ObjectRef): ConnectionEdge => ({
+      from: route,
+      to: gateway,
+      relation: {
+        verb: "attachesTo",
+        port: null,
+        listenerSet: null,
+        sectionName: null,
+      },
+    });
+    const path = trafficChains(
+      connections(
+        deployment,
+        [
+          {
+            from: svc,
+            to: deployment,
+            relation: { verb: "selects", selector: "app=promo" },
+          },
+          {
+            from: route,
+            to: svc,
+            relation: {
+              verb: "ruleRoutes",
+              paths: ["/"],
+              hostnames: ["promo.example.com"],
+              port: "8080",
+              weight: null,
+            },
+          },
+          attaches(edge),
+          attaches(inner),
+        ],
+        [
+          {
+            reason: "gatewayNotProgrammed",
+            route,
+            gateway: edge,
+            conditionType: "Programmed",
+            conditionReason: "AddressNotAssigned",
+            message: "no address was assigned",
+          },
+        ]
+      ),
+      t
+    )[0];
+
+    const stop = path.hops.find((hop) => hop.at === "stop");
+    if (!stop || stop.at !== "stop") throw new Error("expected a stop hop");
+    expect(stop.title).toBe("edge is not programmed");
+    expect(stop.note).toContain(
+      "Programmed: False (AddressNotAssigned): no address was assigned."
+    );
+    expect(stop.only).toEqual(["http://promo.example.com:8000/"]);
+    expect(path.broken).toBe(true);
+  });
+
   it("draws a missing Gateway as the missing thing, not as a healthy hop", () => {
     const deployment = ref("Deployment", "promo");
     const svc = service("promo", "app=promo");
