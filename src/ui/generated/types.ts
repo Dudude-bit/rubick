@@ -1501,7 +1501,7 @@ export interface GatewayApiDetection {
   installed: boolean;
   bundleVersion: string | null;
   channel: string | null;
-  mixedBundle: boolean;
+  mixedBundle: boolean | null;
   kinds: ServedGatewayKind[];
 }
 

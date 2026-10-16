@@ -384,14 +384,15 @@ pub struct GatewayApiDetection {
     pub installed: bool,
     /// The `gateway.networking.k8s.io/bundle-version` annotation, where
     /// every Gateway API CRD agrees on one. `None` with `mixed_bundle`
-    /// false means the annotation is absent — an old or repackaged
+    /// `Some(false)` means the annotation is absent — an old or repackaged
     /// install, "unknown", not an error.
     pub bundle_version: Option<String>,
     /// The `.../channel` annotation — `standard` or `experimental` — under
     /// the same agreement rule.
     pub channel: Option<String>,
-    /// A partial upgrade left CRDs from different bundles behind.
-    pub mixed_bundle: bool,
+    /// A partial upgrade left CRDs from different bundles behind. `None`
+    /// where the CRDs could not be listed.
+    pub mixed_bundle: Option<bool>,
     pub kinds: Vec<ServedGatewayKind>,
 }
 
@@ -611,17 +612,24 @@ pub async fn discover_gateway_api(
         crds.list_metadata(&params),
         index.kinds(context, client, GATEWAY_API_GROUP),
     );
-    let metas = metas?;
+    // Every signed-in reader may read discovery and few may list CRDs, so
+    // a refusal costs the bundle stamps, never which kinds are served.
+    let metas = match metas.map_err(crate::error::Error::from) {
+        Ok(list) => Some(list.items),
+        Err(error) if error.is_refusal() => None,
+        Err(error) => return Err(error),
+    };
     let suffix = format!(".{GATEWAY_API_GROUP}");
     let stamps = metas
-        .items
         .iter()
+        .flatten()
         .filter(|crd| crd.name_any().ends_with(&suffix))
         .map(ResourceExt::annotations);
-    Ok(GatewayApiDetection::read(
-        stamps,
-        &served?.unwrap_or_default(),
-    ))
+    let mut detection = GatewayApiDetection::read(stamps, &served?.unwrap_or_default());
+    if metas.is_none() {
+        detection.mixed_bundle = None;
+    }
+    Ok(detection)
 }
 
 impl GatewayApiDetection {
@@ -666,7 +674,7 @@ impl GatewayApiDetection {
             installed: !kinds.is_empty(),
             bundle_version,
             channel,
-            mixed_bundle,
+            mixed_bundle: Some(mixed_bundle),
             kinds,
         }
     }
@@ -1731,7 +1739,7 @@ status:
         assert!(detection.installed);
         assert_eq!(detection.bundle_version.as_deref(), Some("v1.6.1"));
         assert_eq!(detection.channel.as_deref(), Some("standard"));
-        assert!(!detection.mixed_bundle);
+        assert_eq!(detection.mixed_bundle, Some(false));
 
         let gateway = detection
             .kinds
@@ -1774,7 +1782,7 @@ status:
         assert_eq!(tcp.read_version, "v1alpha2");
         assert_eq!(tcp.versions, vec!["v1alpha2"]);
 
-        assert!(detection.mixed_bundle);
+        assert_eq!(detection.mixed_bundle, Some(true));
         assert_eq!(detection.bundle_version, None);
     }
 
@@ -1784,7 +1792,36 @@ status:
         assert!(!detection.installed);
         assert!(detection.kinds.is_empty());
         assert_eq!(detection.bundle_version, None);
-        assert!(!detection.mixed_bundle);
+        assert_eq!(detection.mixed_bundle, Some(false));
+    }
+
+    /// marco, bound per namespace, got "Could not check whether Gateway API
+    /// is installed" on the routes page: the CRD list is cluster-scoped and
+    /// refused him, though discovery said what is served.
+    #[tokio::test]
+    async fn a_refused_crd_list_leaves_the_served_kinds_and_unreads_the_bundle() {
+        use crate::client::served::test_server::{groups, resources, server};
+        let (client, _) = server(vec![
+            ("/apis", 200, groups("v1", &["v1"])),
+            (
+                "/apis/gateway.networking.k8s.io/v1",
+                200,
+                resources("v1", &[("httproutes", "HTTPRoute", true)]),
+            ),
+            (
+                "/apis/apiextensions.k8s.io/v1/customresourcedefinitions",
+                403,
+                serde_json::json!({"kind": "Status", "apiVersion": "v1", "status": "Failure", "reason": "Forbidden", "code": 403, "message": "customresourcedefinitions.apiextensions.k8s.io is forbidden"}).to_string(),
+            ),
+        ])
+        .await;
+        let index = crate::client::served::ServedIndex::default();
+        let detection = discover_gateway_api(&client, &index, "ctx")
+            .await
+            .expect("discovery answers without the CRD list");
+        assert!(detection.installed);
+        assert_eq!(detection.kinds[0].kind, "HTTPRoute");
+        assert_eq!(detection.mixed_bundle, None);
     }
 
     #[test]

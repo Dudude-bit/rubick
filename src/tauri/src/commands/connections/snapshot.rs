@@ -1245,7 +1245,7 @@ mod shared_tests {
             installed: true,
             bundle_version: None,
             channel: None,
-            mixed_bundle: false,
+            mixed_bundle: Some(false),
             kinds: vec![crate::resources::ServedGatewayKind {
                 kind: "HTTPRoute".into(),
                 plural: "httproutes".into(),

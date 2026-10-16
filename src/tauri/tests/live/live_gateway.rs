@@ -115,7 +115,7 @@ async fn the_gateway_chain_arrives_and_the_stops_are_named() {
     assert!(detection.installed, "the CRDs are installed");
     assert_eq!(detection.bundle_version.as_deref(), Some("v1.6.1"));
     assert_eq!(detection.channel.as_deref(), Some("standard"));
-    assert!(!detection.mixed_bundle);
+    assert_eq!(detection.mixed_bundle, Some(false));
     for kind in [
         "GatewayClass",
         "Gateway",

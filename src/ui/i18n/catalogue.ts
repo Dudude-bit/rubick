@@ -7144,6 +7144,8 @@ export const en = {
     couldNotAskRoutes:
       "Could not ask the integrations which of their routes reach these Services, so a way in may be missing below.",
     nonePublished: "none published",
+    crdBundleUnread:
+      "not read: the CRDs cannot be listed with these rights, so whether an upgrade left them mixed is not known",
     mixedCrdBundle:
       "mixed versions: a partial upgrade left Gateway API CRDs from different releases",
     gwNoRouteKinds:

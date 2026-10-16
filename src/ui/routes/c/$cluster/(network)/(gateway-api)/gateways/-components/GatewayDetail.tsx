@@ -427,6 +427,14 @@ export function GatewayDetail() {
           },
         ]
       : []),
+    ...(detection?.installed && detection.mixedBundle === null
+      ? [
+          {
+            label: t("columns", "crdBundle"),
+            value: t("empty", "crdBundleUnread"),
+          },
+        ]
+      : []),
   ];
 
   const tabs = [

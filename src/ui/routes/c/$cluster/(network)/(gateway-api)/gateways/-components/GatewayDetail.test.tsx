@@ -22,6 +22,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { useResourceDetail } from "@/hooks";
 import type { ConditionInfo, GatewayInfo } from "@/generated/types";
+import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { GatewayDetail } from "./GatewayDetail";
 
@@ -153,5 +154,32 @@ describe("a Gateway's Routes tab", () => {
     expect(screen.getByRole("tab", { name: /Routes/ }).textContent).not.toMatch(
       /\d/
     );
+  });
+});
+
+describe("a Gateway's CRD bundle", () => {
+  afterEach(() => {
+    for (const name of Object.keys(answers)) delete answers[name];
+    useClusterStore.setState({ isConnected: false, currentContext: null });
+  });
+
+  /**
+   * A reader bound per namespace cannot list CRDs, and the page said nothing
+   * about the bundle, which is what it says when the bundle is whole. Fails if
+   * a bundle nobody could read is left unsaid.
+   */
+  it("says the bundle was not read where the CRDs could not be listed", async () => {
+    answers.detectGatewayApi = async () => ({
+      installed: true,
+      bundleVersion: null,
+      channel: null,
+      mixedBundle: null,
+      kinds: [],
+    });
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    await open(edge([said("Accepted", "True", "Accepted")]));
+
+    expect(await screen.findByText(/^not read: the CRDs/)).toBeTruthy();
+    expect(screen.queryByText(/^mixed versions/)).toBeNull();
   });
 });
