@@ -1216,6 +1216,38 @@ describe("the traffic chain", () => {
   });
 
   describe("a controller at the door of the pods", () => {
+    /**
+     * door-port's policy admits namespace traefik on 9090 and the Ingress
+     * sends to 8080; the note said "no ingress rule admits" the namespace and
+     * told the reader to admit it, which it already was. Fails if a refusal
+     * whose port is known stops naming it in the cause and the fix.
+     */
+    it("names the port a controller is refused on, and the fix on that port", () => {
+      const refusal = (ports: number[]) =>
+        describeStop(
+          {
+            reason: "policyRefuses",
+            service: ref("Service", "door-port"),
+            policies: ["traefik-admin-only"],
+            ports,
+            noRules: false,
+            client: { name: "Traefik", namespaces: ["traefik"] },
+          },
+          t
+        );
+
+      const known = refusal([8080]);
+      expect(known.title).toBe(
+        "NetworkPolicy traefik-admin-only admits no connection from Traefik on port 8080"
+      );
+      expect(known.note).toMatch(
+        /namespace traefik, which no ingress rule admits on port 8080, .* Admit that namespace on port 8080: /
+      );
+      expect(refusal([]).note).toMatch(
+        /namespace traefik, which no ingress rule admits, so /
+      );
+    });
+
     const deployment = ref("Deployment", "shop");
     const svc = service("shop", "app=shop");
     const ingress = ref("Ingress", "shop", {
@@ -1369,7 +1401,8 @@ describe("the traffic chain", () => {
         at: "stop",
         mood: "fault",
         shut: true,
-        title: "NetworkPolicy allow-nginx admits no connection from Traefik",
+        title:
+          "NetworkPolicy allow-nginx admits no connection from Traefik on port 8080",
         objects: [{ kind: "NetworkPolicy", name: "allow-nginx" }],
       });
       expect(last?.at === "stop" && last.note).toContain("namespace traefik");
@@ -1407,7 +1440,8 @@ describe("the traffic chain", () => {
       expect(stops).toHaveLength(1);
       expect(stops[0]).toMatchObject({
         shut: true,
-        title: "NetworkPolicy allow-nginx admits no connection from Traefik",
+        title:
+          "NetworkPolicy allow-nginx admits no connection from Traefik on port 8080",
         only: ["http://shop.local/"],
       });
     });
@@ -1592,7 +1626,8 @@ describe("the traffic chain", () => {
       expect(path.hops.at(-1)).toMatchObject({
         at: "stop",
         shut: true,
-        title: "NetworkPolicy allow-nginx admits no connection from Traefik",
+        title:
+          "NetworkPolicy allow-nginx admits no connection from Traefik on port 8080",
         only: ["http://shop.example:8000/"],
       });
       expect(chain(ask).hops.some((hop) => hop.at === "stop")).toBe(false);

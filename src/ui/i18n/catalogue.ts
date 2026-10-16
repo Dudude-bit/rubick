@@ -123,6 +123,8 @@ export const en = {
       "The pods are ready and published, and no ingress rule admits anyone, so every connection to them is refused or dropped, and a proxy in front answers with a 502, 503 or 504. Admit the client in an ingress rule (for an Ingress, the controller's namespace), or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
     stopPolicyPortNote:
       "The pods are ready and published, and the rules admit other ports only, so every connection to {ports} is refused or dropped, and a proxy in front answers with a 502, 503 or 504. Add {ports} to the rule that admits the client. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
+    stopPolicyClientPortNote:
+      "The pods are ready and published, and {client} connects from namespace {namespaces}, which no ingress rule admits on {ports}, so its connections are refused or dropped and every request through it gets a 502, 503 or 504. Admit that namespace on {ports}: a rule whose from has a namespaceSelector on kubernetes.io/metadata.name and whose ports hold {ports}, or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
     stopPolicyClientNote:
       "The pods are ready and published, and {client} connects from namespace {namespaces}, which no ingress rule admits, so its connections are refused or dropped and every request through it gets a 502, 503 or 504. Admit that namespace in an ingress rule's from, with a namespaceSelector on kubernetes.io/metadata.name, or delete the policy. Where the network plugin does not enforce NetworkPolicy, it has no effect.",
     doorUnsureNote: "Whether {client} may connect is not checked: {why}.",
@@ -7905,6 +7907,11 @@ export const en = {
     policyRefusesClient: {
       one: "NetworkPolicy {names} admits no connection from {client}",
       other: "NetworkPolicies {names} admit no connection from {client}",
+    },
+    policyRefusesClientOnPort: {
+      one: "NetworkPolicy {names} admits no connection from {client} on {ports}",
+      other:
+        "NetworkPolicies {names} admit no connection from {client} on {ports}",
     },
     doorDecides: {
       one: "NetworkPolicy {names} decides who may connect to these pods",

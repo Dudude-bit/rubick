@@ -574,26 +574,38 @@ export function describeStop(
     case "policyRefuses": {
       const names = policyNamesOf(stop).join(", ");
       const n = stop.policies.length;
-      if (stop.client)
-        return {
-          title: t("count", "policyRefusesClient", {
-            n,
-            names,
-            client: stop.client.name,
-          }),
-          note: t("nav", "stopPolicyClientNote", {
-            client: stop.client.name,
-            namespaces: stop.client.namespaces.join(", "),
-          }),
-        };
+      const ports = stop.ports
+        .map((port) => t("nav", "portNumbered", { n: port }))
+        .join(", ");
+      // Rules are per port: "no rule admits Traefik" over a rule that names
+      // its namespace on another port sent the reader to fix the wrong half.
+      if (stop.client) {
+        const client = stop.client.name;
+        const namespaces = stop.client.namespaces.join(", ");
+        return ports
+          ? {
+              title: t("count", "policyRefusesClientOnPort", {
+                n,
+                names,
+                client,
+                ports,
+              }),
+              note: t("nav", "stopPolicyClientPortNote", {
+                client,
+                namespaces,
+                ports,
+              }),
+            }
+          : {
+              title: t("count", "policyRefusesClient", { n, names, client }),
+              note: t("nav", "stopPolicyClientNote", { client, namespaces }),
+            };
+      }
       if (stop.noRules)
         return {
           title: t("count", "policyShutsPods", { n, names }),
           note: t("nav", "stopPolicyNoRulesNote"),
         };
-      const ports = stop.ports
-        .map((port) => t("nav", "portNumbered", { n: port }))
-        .join(", ");
       return {
         title: t("count", "policyShutsPort", { n, names, ports }),
         note: t("nav", "stopPolicyPortNote", { ports }),

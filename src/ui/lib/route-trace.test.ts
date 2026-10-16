@@ -1915,7 +1915,7 @@ describe("a route's Gateway controller at the door of the pods", () => {
     expect(trace.steps[6]).toMatchObject({
       id: "policy",
       state: "err",
-      say: "healthy: NetworkPolicy allow-nginx admits no connection from Traefik",
+      say: "healthy: NetworkPolicy allow-nginx admits no connection from Traefik on port 8080",
       short: "allow-nginx",
     });
   });

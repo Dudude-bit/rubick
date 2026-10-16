@@ -548,7 +548,7 @@ describe("the gateway topology map", () => {
       const node = data.columns.at(-1)!.nodes[0];
       expect(node).toMatchObject({
         tone: "err",
-        sub: "NetworkPolicy allow-nginx admits no connection from Traefik",
+        sub: "NetworkPolicy allow-nginx admits no connection from Traefik on port 8080",
       });
       const into = (from: string) =>
         data.edges.find(

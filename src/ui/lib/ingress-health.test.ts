@@ -367,7 +367,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     );
     expect(said.code).toBe("backendDown");
     expect(said.reason).toBe(
-      "web: NetworkPolicy allow-traefik admits no connection from ingress-nginx."
+      "web: NetworkPolicy allow-traefik admits no connection from ingress-nginx on port 8080."
     );
     expect(verdict(inputs()).code).not.toBe("backendDown");
     expect(verdict(inputs(() => null)).code).not.toBe("backendDown");
