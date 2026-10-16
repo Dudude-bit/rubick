@@ -562,12 +562,13 @@ export function GatewayRoutesList() {
           ))}
       </div>
 
+      {/* Every pulse is a break upstream of the routes: the sidebar's dot says err. */}
       {board.pulse.map((entry) => (
         <div
           key={`${entry.namespace}/${entry.gateway}`}
-          className="mt-3 flex items-baseline gap-2 rounded-lg border border-warn/40 bg-warn/5 px-3 py-1.5 text-xs"
+          className="mt-3 flex items-baseline gap-2 rounded-lg border border-err/45 bg-err/7 px-3 py-1.5 text-xs"
         >
-          <span className="text-[9px] text-warn">●</span>
+          <span className="text-[9px] text-err">●</span>
           <span className="text-fg-mid">
             {parts(t("empty", "gwPulseLine", { say: entry.say }), {
               name: <span className="font-mono text-fg">{entry.gateway}</span>,
