@@ -112,6 +112,10 @@ export function useAttention({
   const routesData = routing.routes.data;
   const routesError = routing.routes.error;
   const routesLate = late(routing.routes.freshness, now);
+  // A lock is a new object on every render; the count every screen keeps is
+  // written to a store on change, so depending on one looped the shell.
+  const gatewaysRefused = routing.gatewaysLock !== undefined;
+  const routesRefused = routing.routesLock !== undefined;
   const gatewayApi = useMemo(
     () => ({
       installed: {
@@ -122,14 +126,14 @@ export function useAttention({
       routeKinds: routing.routeKinds,
       topology: {
         known: routing.topologyKnown,
-        refused: routing.gatewaysLock !== undefined,
+        refused: gatewaysRefused,
         error: gatewaysError ?? gatewayClassesError,
       },
       routes: {
         data: routesData,
         error: routesError,
         overdue: routesLate,
-        refused: routing.routesLock !== undefined,
+        refused: routesRefused,
       },
       backingError: routing.backingError,
       board: routing.board,
@@ -141,8 +145,8 @@ export function useAttention({
       routing.served,
       routing.routeKinds,
       routing.topologyKnown,
-      routing.gatewaysLock,
-      routing.routesLock,
+      gatewaysRefused,
+      routesRefused,
       gatewaysError,
       gatewayClassesError,
       routesData,

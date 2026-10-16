@@ -135,6 +135,50 @@ describe("the reads behind Needs attention", () => {
   });
 
   /**
+   * marco, refused the Gateways list, got "Something went wrong": a lock is
+   * a new object on every render, the count depended on it, and the shell
+   * writes a changed count to a store, which renders again. Fails if a
+   * refused Gateway API read gives the count a new identity per render.
+   */
+  it("keeps one answer across renders where Gateway API is refused", async () => {
+    commands.detectGatewayApi.mockResolvedValue({
+      ...NO_GATEWAY_API,
+      installed: true,
+      kinds: [
+        {
+          kind: "Gateway",
+          plural: "gateways",
+          versions: ["v1"],
+          readVersion: "v1",
+        },
+        {
+          kind: "HTTPRoute",
+          plural: "httproutes",
+          versions: ["v1"],
+          readVersion: "v1",
+        },
+      ],
+    });
+    commands.checkListAccess.mockResolvedValue([
+      { resource: "gateways", allowed: false },
+      { resource: "httproutes", allowed: false },
+    ]);
+
+    const { result, rerender } = renderHook(() => useAttention(), {
+      wrapper: wrapper(),
+    });
+
+    await waitFor(() =>
+      expect(result.current?.checks).toContainEqual(
+        expect.objectContaining({ kind: "Gateway", state: "unread" })
+      )
+    );
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
+  });
+
+  /**
    * The rail went red over bad-gw while the count every screen keeps said
    * nothing of it. Fails if the Gateways the rail reads stop reaching the
    * count, or discovery that has not answered lets the count call itself
