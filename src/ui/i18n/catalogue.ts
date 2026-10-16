@@ -6865,6 +6865,8 @@ export const en = {
       "Usage is summed from this {kind}'s pods, and they could not be read, so what they use is not known.",
     usageIdleNote:
       "Usage is summed from running pods, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
+    usageNoPodsNote:
+      "Usage is summed from running pods, so there is no line rather than a line at zero.",
     kindScaledToZero: "This {kind} is scaled to zero.",
     kindNoPodsRunning: "None of this {kind}'s pods is running.",
     daemonSetNoNodeMatches:

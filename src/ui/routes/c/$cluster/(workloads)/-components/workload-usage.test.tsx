@@ -102,6 +102,22 @@ describe("WorkloadUsage with nothing running", () => {
     expect(dom.querySelector("svg")).toBeNull();
   });
 
+  /**
+   * root-db's pods were never created, and its Usage said "metrics-server
+   * keeps nothing about a pod that has exited". Fails if a workload with no
+   * pod at all is told about exited ones, or one whose pods exited is not.
+   */
+  it("speaks of exited pods only where a pod exited", () => {
+    const { unmount } = view({ kind: "StatefulSet", idle: "None running." });
+    expect(screen.queryByText(/a pod that has exited/)).toBeNull();
+    expect(
+      screen.getByText(/no line rather than a line at zero/)
+    ).toBeInTheDocument();
+    unmount();
+    view({ kind: "Job", pods: [pod("job-demo-abc", "Succeeded")] });
+    expect(screen.getByText(/a pod that has exited/)).toBeInTheDocument();
+  });
+
   it("asks metrics-server nothing about a workload with no live pod", () => {
     view({ pods: [pod("cron-demo-1-x", "Succeeded")] });
     expect(commands.getPodsMetrics).not.toHaveBeenCalled();

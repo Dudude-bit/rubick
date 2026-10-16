@@ -129,7 +129,7 @@ export function WorkloadUsage({
   // right that nothing is running; only one of them still holds what ran.
   if (running.length === 0) {
     if (past.state !== "ready" || scope === undefined) {
-      return <IdleUsage says={idle} />;
+      return <IdleUsage says={idle} exited={pods.length > 0} />;
     }
     return (
       <UsageBlock
@@ -187,7 +187,7 @@ export function WorkloadUsage({
  * the difference is the whole point: a line along the floor invites someone
  * to ask why the workload is idle, when the answer is that it is not there.
  */
-function IdleUsage({ says }: { says: string }) {
+function IdleUsage({ says, exited }: { says: string; exited: boolean }) {
   const t = useT();
   return (
     <Section>
@@ -196,7 +196,7 @@ function IdleUsage({ says }: { says: string }) {
         count={t("empty", "nothingRunning")}
       />
       <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
-        {says} {t("empty", "usageIdleNote")}
+        {says} {t("empty", exited ? "usageIdleNote" : "usageNoPodsNote")}
       </p>
     </Section>
   );
