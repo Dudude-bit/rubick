@@ -5,6 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   routeTraces,
   gatewayProgrammed,
+  programmedWord,
   addressedToController,
   answeredByItsController,
   selfAnswered,
@@ -296,6 +297,36 @@ describe("gatewayProgrammed", () => {
         name
       ).toEqual(said);
     }
+  });
+});
+
+describe("programmedWord", () => {
+  const word = (conditions: ConditionInfo[]) =>
+    programmedWord({ ...gateway("edge"), conditions }, t);
+
+  /**
+   * The list, the page, the peek and Share each wrote their own: the list
+   * greyed a Gateway nobody had answered for while the page and Share
+   * warned, and the peek said nothing. Fails if a state loses its role, a
+   * refusal its reason, or Unknown is called a break.
+   */
+  it("gives every state of Programmed one word and one role", () => {
+    expect(word([])).toEqual({ text: "no controller answered", role: "warn" });
+    expect(word([condition("Programmed", "True", "Programmed")])).toEqual({
+      text: "programmed",
+      role: "ok",
+    });
+    expect(word([condition("Accepted", "False", "ListenersNotValid")])).toEqual(
+      { text: "ListenersNotValid", role: "err" }
+    );
+    expect(word([condition("Programmed", "False", null)])).toEqual({
+      text: "not programmed",
+      role: "err",
+    });
+    expect(word([condition("Programmed", "Unknown", "Pending")])).toEqual({
+      text: "Pending",
+      role: "pending",
+    });
   });
 });
 

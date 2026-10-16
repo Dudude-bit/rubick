@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { T } from "@/i18n/useT";
 import { TONE_TEXT, type Tone } from "@/lib/tone";
+import type { StatusRole } from "@/lib/status-role";
 
 /**
  * The data behind a metadata block. Kept apart from the components that
@@ -12,6 +13,15 @@ export type KeyValueTone = Exclude<Tone, "unknown">;
 
 /** The one place a tone becomes a colour, shared by every block that takes one. */
 export const TONE_CLASS: Record<KeyValueTone, string> = TONE_TEXT;
+
+/** The five roles, folded to the tones a key-value row can carry —
+ *  `neutral` deliberately stays uncoloured, and `pending` reads as info. */
+export const ROLE_TONE: Partial<Record<StatusRole, KeyValueTone>> = {
+  ok: "ok",
+  warn: "warn",
+  err: "err",
+  pending: "info",
+};
 
 export interface KeyValue {
   /**

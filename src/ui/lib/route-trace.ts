@@ -36,6 +36,7 @@ import { conditionSaid, failingCondition } from "@/lib/condition-health";
 import { describeStop, stopMood } from "@/lib/connections";
 import { listenerRefusals, pickListeners } from "@/lib/gateway-listeners";
 import type { T } from "@/i18n/useT";
+import type { StatusRole } from "@/lib/status-role";
 import {
   doorDoubtWords,
   isPolicyStop,
@@ -218,6 +219,27 @@ export function gatewayProgrammed(
     of("Programmed") ??
     of("Ready")
   );
+}
+
+/**
+ * Whether a Gateway is programmed, as one word and a role: the list, its
+ * page, its peek and Share say it alike. Only False is a break; Unknown is
+ * the controller still deciding, and nobody having said is worth a look.
+ */
+export function programmedWord(
+  gateway: GatewayInfo,
+  t: T
+): { text: string; role: StatusRole } {
+  const said = gatewayProgrammed(gateway);
+  if (!said) return { text: t("empty", "gwNoControllerShort"), role: "warn" };
+  if (said.status === "True")
+    return { text: t("empty", "gwProgrammedWord"), role: "ok" };
+  if (said.status === "False")
+    return {
+      text: said.reason ?? t("empty", "gwNotProgrammedWord"),
+      role: "err",
+    };
+  return { text: said.reason ?? said.status, role: "pending" };
 }
 
 /** Why a Gateway its controller refused serves nothing: the trace step and the Gateway's own page say it alike. */

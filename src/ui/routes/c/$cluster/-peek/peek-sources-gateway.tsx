@@ -13,6 +13,7 @@ import {
   selfAnswered,
   gatewayProgrammed,
   gatewayRefusalWords,
+  programmedWord,
 } from "@/lib/route-trace";
 import type { KeyValue } from "@/components/object/key-values";
 import { ProblemSummary } from "@/components/object/detail-blocks";
@@ -169,19 +170,10 @@ function gatewayRouteSource(kind: string): PeekSource {
 export const GATEWAY_SOURCES: PeekSources = {
   Gateway: source(commands.getGateway, (gateway, _target, t) => {
     const programmed = gatewayProgrammed(gateway);
+    const word = programmedWord(gateway, t);
     return {
-      status: !programmed
-        ? null
-        : programmed.status === "True"
-          ? "Programmed"
-          : (programmed.reason ?? programmed.status),
-      // A controller's reason is in no status table, and a refusal read as neutral is grey.
-      statusRole:
-        programmed?.status === "False"
-          ? "err"
-          : programmed?.status === "True"
-            ? "ok"
-            : "pending",
+      status: word.text,
+      statusRole: word.role,
       createdAt: gateway.createdAt,
       lead: programmed?.status === "False" && (
         <ProblemSummary

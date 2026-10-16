@@ -4,38 +4,24 @@ import { BadgeCheck, RadioTower } from "lucide-react";
 import type { ShareContribution } from "@/components/share/contribution";
 import { conditionRole, failingCondition } from "@/lib/condition-health";
 import { iconSvg } from "@/lib/icon-svg";
-import { gatewayProgrammed } from "@/lib/route-trace";
+import { programmedWord } from "@/lib/route-trace";
 import type { ReportStat } from "@/lib/report";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
 import type { GatewayInfo, ListenerInfo } from "@/generated/types";
 
 export function gatewayStats(gateway: GatewayInfo, t: T): ReportStat[] {
-  const programmed = gatewayProgrammed(gateway);
+  const programmed = programmedWord(gateway, t);
   return [
     {
       label: t("columns", "class"),
       value: gateway.className || t("empty", "noneLower"),
     },
-    programmed
-      ? {
-          label: t("columns", "programmed"),
-          value:
-            programmed.status === "True"
-              ? t("columns", "programmed")
-              : (programmed.reason ?? programmed.status),
-          role:
-            programmed.status === "True"
-              ? "ok"
-              : programmed.status === "False"
-                ? "err"
-                : "warn",
-        }
-      : {
-          label: t("columns", "programmed"),
-          value: t("empty", "gwNoControllerShort"),
-          role: "warn",
-        },
+    {
+      label: t("columns", "programmed"),
+      value: programmed.text,
+      role: programmed.role,
+    },
     {
       label: t("columns", "addresses"),
       value:

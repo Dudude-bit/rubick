@@ -35,6 +35,7 @@ import { readCountMark, viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { ProblemSummary } from "@/components/object/detail-blocks";
 import { KeyValueSection, type KeyValue } from "../../../../-object/detail-kv";
+import { ROLE_TONE } from "@/components/object/key-values";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { CertificateLine } from "../../../../-object/CertificateFacts";
 import { useResourceDetail } from "@/hooks";
@@ -54,6 +55,7 @@ import {
   gatewayProgrammed,
   gatewayRefusalWords,
   parentIsGateway,
+  programmedWord,
 } from "@/lib/route-trace";
 import { ROUTING_STALE } from "@/integrations";
 import type { GatewayInfo, ListenerInfo, RouteInfo } from "@/generated/types";
@@ -329,6 +331,7 @@ export function GatewayDetail() {
   });
 
   const programmed = gateway ? gatewayProgrammed(gateway) : undefined;
+  const word = gateway ? programmedWord(gateway, t) : null;
 
   const classFact: KeyValue = (() => {
     // The name is a reference only where the object is there to open —
@@ -382,25 +385,15 @@ export function GatewayDetail() {
 
   const facts: KeyValue[] = [
     classFact,
-    {
-      label: t("columns", "programmed"),
-      value: programmed
-        ? programmed.status === "True"
-          ? t("action", "yes")
-          : (programmed.reason ?? programmed.status)
-        : t("empty", "gwNoControllerShort"),
-      // `Unknown` is the API's third answer — the controller has taken this
-      // and not decided — and red is the wrong end of the scale for it. The
-      // list column, the map and the trace all keep it neutral or amber; this
-      // page was the one still calling a Gateway mid-provisioning broken.
-      tone: !programmed
-        ? ("warn" as const)
-        : programmed.status === "True"
-          ? undefined
-          : programmed.status === "False"
-            ? ("err" as const)
-            : ("warn" as const),
-    },
+    ...(word
+      ? [
+          {
+            label: t("columns", "programmed"),
+            value: word.text,
+            tone: ROLE_TONE[word.role],
+          },
+        ]
+      : []),
     {
       label: t("columns", "addresses"),
       value: (

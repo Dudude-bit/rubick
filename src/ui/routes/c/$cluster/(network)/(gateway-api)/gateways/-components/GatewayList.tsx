@@ -17,33 +17,15 @@ import { useT, type T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayInfo } from "@/generated/types";
-import { gatewayProgrammed } from "@/lib/route-trace";
+import { programmedWord } from "@/lib/route-trace";
+import { ROLE_TEXT } from "@/lib/status-role";
 import { None } from "@/components/ui/none";
-
-/** The controller's reason is quoted raw; only this app's own words are
- *  spoken through the catalogue. */
-function programmedOf(
-  gateway: GatewayInfo,
-  t: T
-): { text: string; tone: "ok" | "err" | "mute" } {
-  const condition = gatewayProgrammed(gateway);
-  return !condition
-    ? { text: t("empty", "gwNoControllerShort"), tone: "mute" }
-    : condition.status === "True"
-      ? { text: t("empty", "gwProgrammedWord"), tone: "ok" }
-      : condition.status === "False"
-        ? {
-            text: condition.reason ?? t("empty", "gwNotProgrammedWord"),
-            tone: "err",
-          }
-        : { text: t("empty", "gwPolicyUnknown"), tone: "mute" };
-}
 
 // oxlint-disable-next-line react-refresh/only-export-components
 function ProgrammedCell({ gateway }: { gateway: GatewayInfo }) {
   const t = useT();
-  const said = programmedOf(gateway, t);
-  return <span className={TONE_CLASS[said.tone]}>{said.text}</span>;
+  const said = programmedWord(gateway, t);
+  return <span className={ROLE_TEXT[said.role]}>{said.text}</span>;
 }
 
 function listenersOf(gateway: GatewayInfo, t: T): string {
@@ -78,12 +60,6 @@ function AddressesCell({ gateway }: { gateway: GatewayInfo }) {
     </span>
   );
 }
-
-const TONE_CLASS = {
-  ok: "text-ok",
-  err: "text-err",
-  mute: "text-fg-fnt",
-} as const;
 
 export const GatewayList = createResourceListPage<GatewayInfo>({
   resourceType: ResourceType.Gateway,
@@ -135,13 +111,7 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
       id: "programmed",
       header: columnHeader("columns", "programmed"),
       meta: {
-        share: (row: GatewayInfo, t) => {
-          const said = programmedOf(row, t);
-          return {
-            text: said.text,
-            role: said.tone === "mute" ? "neutral" : said.tone,
-          };
-        },
+        share: (row: GatewayInfo, t) => programmedWord(row, t),
       },
       size: 170,
       cell: ({ row }) => <ProgrammedCell gateway={row.original} />,

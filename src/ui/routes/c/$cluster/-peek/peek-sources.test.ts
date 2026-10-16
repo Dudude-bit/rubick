@@ -217,12 +217,17 @@ describe("the peek's Overview against the detail pages", () => {
     lastTransitionTime: null,
   });
 
-  /** A Gateway no controller has written Programmed on had no badge at all. */
+  /**
+   * A Gateway no controller has written Programmed on had no badge in the
+   * peek while its page said "no controller answered". Fails if the two
+   * stop saying the same word.
+   */
   it("says a Gateway nobody has programmed has reported nothing", () => {
-    expect(gatewayPeek(gateway([])).status).toBeNull();
+    expect(gatewayPeek(gateway([])).status).toBe("gwNoControllerShort");
+    expect(gatewayPeek(gateway([])).statusRole).toBe("warn");
     expect(
       gatewayPeek(gateway([said("Programmed", "True", "Programmed")])).status
-    ).toBe("Programmed");
+    ).toBe("gwProgrammedWord");
   });
 
   /**

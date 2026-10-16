@@ -6,7 +6,7 @@ import type { T as Translate } from "@/i18n/useT";
 import { conditionRole } from "@/lib/condition-health";
 import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
-import type { KeyValue, KeyValueTone } from "@/components/object/key-values";
+import { ROLE_TONE, type KeyValue } from "@/components/object/key-values";
 import type { ConditionInfo } from "@/generated/types";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { OwnerRef, type Owner } from "./OwnerRef";
@@ -125,15 +125,6 @@ export function conditionItem(condition: ConditionInfo): KeyValue {
     tone: ROLE_TONE[role],
   };
 }
-
-/** The five roles, folded to the tones a key-value row can carry —
- *  `neutral` deliberately stays uncoloured, and `pending` reads as info. */
-const ROLE_TONE: Partial<Record<StatusRole, KeyValueTone>> = {
-  ok: "ok",
-  warn: "warn",
-  err: "err",
-  pending: "info",
-};
 
 export const ref = (
   kind: string,
