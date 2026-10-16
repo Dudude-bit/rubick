@@ -26,7 +26,7 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { ResourceListHeader } from "../../../../-list/ResourceListHeader";
 import { UnreadNamespaces } from "../../../../-list/UnreadNamespaces";
 import { Unknown } from "@/components/ui/unknown";
-import { noneWhereAnswered } from "@/lib/namespace-scope";
+import { inScope, noneWhereAnswered } from "@/lib/namespace-scope";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { controlAt } from "@/lib/row-control";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,12 @@ import { queryKeys } from "@/lib/query-keys";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { hrefOf, listLink, objectLink } from "@/lib/links";
 import { KIND_TONE } from "@/lib/route-kind-tone";
-import { allServing, routesBoard, type RouteRow } from "@/lib/route-rows";
+import {
+  allServing,
+  pulseFor,
+  routesBoard,
+  type RouteRow,
+} from "@/lib/route-rows";
 import type { en } from "@/i18n/catalogue";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
@@ -392,6 +397,15 @@ export function GatewayRoutesList() {
     ]
   );
 
+  // A Gateway another team broke is not news on a window none of its routes cross.
+  const pulse = useMemo(
+    () =>
+      pulseFor(board.pulse, filtered, gateways.data ?? [], (namespace) =>
+        inScope(scope.scope, namespace)
+      ),
+    [board.pulse, filtered, gateways.data, scope.scope]
+  );
+
   // The map's outer columns: pods and deployments, read only while the
   // map is open — the list alone never pays for them.
   const pods = useLiveQuery({
@@ -571,7 +585,7 @@ export function GatewayRoutesList() {
       </div>
 
       {/* Every pulse is a break upstream of the routes: the sidebar's dot says err. */}
-      {board.pulse.map((entry) => (
+      {pulse.map((entry) => (
         <div
           key={`${entry.namespace}/${entry.gateway}`}
           className="mt-3 flex items-baseline gap-2 rounded-lg border border-err/45 bg-err/7 px-3 py-1.5 text-xs"

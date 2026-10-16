@@ -7,7 +7,13 @@ import type { T } from "@/i18n/useT";
 const t = ((section, key, values) =>
   translate("en", section, key, values)) as T;
 
-import { allServing, boardMark, gatewaysMark, routesBoard } from "./route-rows";
+import {
+  allServing,
+  boardMark,
+  gatewaysMark,
+  pulseFor,
+  routesBoard,
+} from "./route-rows";
 import type {
   ConditionInfo,
   GatewayClassInfo,
@@ -843,5 +849,39 @@ describe("two routes claiming one hostname on one Gateway", () => {
     const marked = rows.filter((row) => row.contested != null);
     expect(marked).toHaveLength(1);
     expect(marked[0].contested?.by).not.toBe(marked[0].name);
+  });
+});
+
+describe("pulseFor", () => {
+  /**
+   * A routes window on door-demo carried a banner about bad-gw, another
+   * team's Gateway none of its routes ride. Fails if a pulse outside the
+   * window is kept with no route riding it, or if one a route rides from
+   * outside the window is dropped.
+   */
+  it("keeps the Gateways in the window and those its routes ride, and no other", () => {
+    const at = (name: string, namespace: string) => ({
+      gateway: name,
+      namespace,
+      say: "is not programmed by its controller",
+    });
+    const gateways = [
+      gateway("edge", { namespace: "infra" }),
+      gateway("bad", { namespace: "traefik" }),
+      gateway("local", { namespace: "shop" }),
+    ];
+    const rides = route("cart", {
+      namespace: "shop",
+      parentRefs: [parentRef("edge", { namespace: "infra" })],
+    });
+
+    const kept = pulseFor(
+      [at("edge", "infra"), at("bad", "traefik"), at("local", "shop")],
+      [rides],
+      gateways,
+      (namespace) => namespace === "shop"
+    );
+
+    expect(kept.map((entry) => entry.gateway)).toEqual(["edge", "local"]);
   });
 });

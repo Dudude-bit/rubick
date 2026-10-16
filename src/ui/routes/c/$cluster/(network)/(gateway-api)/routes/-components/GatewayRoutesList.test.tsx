@@ -235,6 +235,43 @@ describe("the routes page when the gateways could not be read", () => {
   });
 });
 
+const refusedGateway = (name: string, namespace: string) => ({
+  name,
+  namespace,
+  uid: "",
+  apiVersion: "gateway.networking.k8s.io/v1",
+  className: "traefik",
+  listeners: [],
+  listenerSets: [],
+  listenerSetsKnown: true,
+  addresses: ["10.0.0.1"],
+  conditions: [
+    {
+      type: "Accepted",
+      status: "False",
+      reason: "ListenersNotValid",
+      message: null,
+      lastTransitionTime: null,
+    },
+  ],
+  generation: 1,
+  labels: {},
+  annotations: {},
+  createdAt: null,
+});
+
+const traefik = {
+  name: "traefik",
+  uid: "",
+  controllerName: "traefik.io/gateway-controller",
+  description: null,
+  accepted: true,
+  conditions: [],
+  labels: {},
+  annotations: {},
+  createdAt: null,
+};
+
 describe("a Gateway its controller refused, above the routes", () => {
   /**
    * The sidebar's dot for a Gateway its controller refused is red, and the
@@ -244,44 +281,9 @@ describe("a Gateway its controller refused, above the routes", () => {
   it("names the Gateway in the tone of a break", async () => {
     const { commands } = await import("@/lib/commands");
     vi.mocked(commands.listGateways).mockResolvedValue([
-      {
-        name: "bad-gw",
-        namespace: "infra",
-        uid: "",
-        apiVersion: "gateway.networking.k8s.io/v1",
-        className: "traefik",
-        listeners: [],
-        listenerSets: [],
-        listenerSetsKnown: true,
-        addresses: ["10.0.0.1"],
-        conditions: [
-          {
-            type: "Accepted",
-            status: "False",
-            reason: "ListenersNotValid",
-            message: null,
-            lastTransitionTime: null,
-          },
-        ],
-        generation: 1,
-        labels: {},
-        annotations: {},
-        createdAt: null,
-      },
+      refusedGateway("bad-gw", "infra"),
     ]);
-    vi.mocked(commands.listGatewayClasses).mockResolvedValue([
-      {
-        name: "traefik",
-        uid: "",
-        controllerName: "traefik.io/gateway-controller",
-        description: null,
-        accepted: true,
-        conditions: [],
-        labels: {},
-        annotations: {},
-        createdAt: null,
-      },
-    ]);
+    vi.mocked(commands.listGatewayClasses).mockResolvedValue([traefik]);
     page.refused = false;
     page.backingError = null;
     page.gateways = true;
@@ -291,6 +293,33 @@ describe("a Gateway its controller refused, above the routes", () => {
     const line = (await screen.findByText("bad-gw")).closest("div");
     expect(line).toHaveTextContent("is not programmed by its controller");
     expect(line).toHaveClass("border-err/45");
+    vi.mocked(commands.listGateways).mockResolvedValue([]);
+    vi.mocked(commands.listGatewayClasses).mockResolvedValue([]);
+    page.gateways = false;
+  });
+
+  /**
+   * A window on one team's namespace carried a banner about another team's
+   * Gateway that none of its routes ride. Fails if the banner is not held
+   * to the window and the Gateways its routes cross.
+   */
+  it("leaves out a Gateway outside the window that none of its routes ride", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.listGateways).mockResolvedValue([
+      refusedGateway("theirs", "infra"),
+      refusedGateway("ours", "shop"),
+    ]);
+    vi.mocked(commands.listGatewayClasses).mockResolvedValue([traefik]);
+    store.state.namespaceScope = ["shop"];
+    page.refused = false;
+    page.backingError = null;
+    page.gateways = true;
+    page.routes = [web];
+    await renderRoutes();
+
+    expect(await screen.findByText("ours")).toBeVisible();
+    expect(screen.queryByText("theirs")).toBeNull();
+    store.state.namespaceScope = [];
     vi.mocked(commands.listGateways).mockResolvedValue([]);
     vi.mocked(commands.listGatewayClasses).mockResolvedValue([]);
     page.gateways = false;

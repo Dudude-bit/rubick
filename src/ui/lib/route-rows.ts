@@ -251,6 +251,28 @@ function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
   return pulse;
 }
 
+/** The pulse a list of routes answers to: Gateways in its window, and those its routes ride from outside it. */
+export function pulseFor(
+  pulse: GatewayPulse[],
+  routes: RouteInfo[],
+  gateways: GatewayInfo[],
+  inWindow: (namespace: string) => boolean
+): GatewayPulse[] {
+  const ridden = new Set(
+    routes.flatMap((route) =>
+      route.parentRefs.flatMap((parent) => {
+        const gateway = gatewayOfParent(gateways, parent, route.namespace);
+        return gateway ? [`${gateway.namespace}/${gateway.name}`] : [];
+      })
+    )
+  );
+  return pulse.filter(
+    (entry) =>
+      inWindow(entry.namespace) ||
+      ridden.has(`${entry.namespace}/${entry.gateway}`)
+  );
+}
+
 /**
  * Whether two routes can both answer one request on a hostname they share.
  *
