@@ -58,7 +58,12 @@ export interface RouteRow {
   /** Where it stops, as a step id — the word is the renderer's business.
    *  A table of words here meant one of them ("references") could never be
    *  matched by the switch that translates them. */
-  stop: { at: TraceStepId | "route"; short: string } | null;
+  stop: {
+    at: TraceStepId | "route";
+    short: string;
+    /** The step's whole sentence, for a reader with room for the cause. */
+    say: string;
+  } | null;
   /** A quiet configuration note on a serving row (redirect-only, mesh). */
   tail: string | null;
   stale: { observed: number; current: number } | null;
@@ -445,6 +450,7 @@ export function routesBoard(
           stop: {
             at: "route",
             short: t("empty", "gwRowNoParents"),
+            say: t("empty", "gwNoParentRefsPage"),
           },
           via: t("empty", "noneLower"),
           viaRef: null,
@@ -496,7 +502,7 @@ export function routesBoard(
       ...base,
       ...servesOf(route, worst),
       stop: broken
-        ? { at: broken.id, short: broken.short ?? broken.say }
+        ? { at: broken.id, short: broken.short ?? broken.say, say: broken.say }
         : null,
       tail: redirectOnly(route)
         ? t("empty", "gwRowRedirects")

@@ -1045,7 +1045,11 @@ describe("what Needs attention lists of Gateway API", () => {
       notServing: [
         routeRow({
           serving: false,
-          stop: { at: "gateway", short: "ListenersNotValid" },
+          stop: {
+            at: "gateway",
+            short: "ListenersNotValid",
+            say: "Gateway bad-gw is not programmed",
+          },
         }),
       ],
       unknown: [],
@@ -1079,7 +1083,7 @@ describe("what Needs attention lists of Gateway API", () => {
     });
     expect(found.items[1].detail).toEqual({
       says: "ours",
-      text: "ListenersNotValid",
+      text: "Gateway bad-gw is not programmed",
     });
     expect(found.byNamespace.get("traefik")).toBe(1);
     expect(found.byNamespace.get("shop")).toBe(1);

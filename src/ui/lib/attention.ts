@@ -482,7 +482,7 @@ const routeItems = remember(
           reason: t("cluster", "attentionStopsAt", {
             at: t("columns", STEP_WORD[row.stop.at]),
           }),
-          detail: { says: "ours", text: row.stop.short },
+          detail: { says: "ours", text: row.stop.say },
           since: null,
           restarts: null,
           foldedPods: null,

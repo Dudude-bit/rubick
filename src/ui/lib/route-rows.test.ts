@@ -223,6 +223,11 @@ const sources = (over: Partial<Parameters<typeof routesBoard>[1]> = {}) => ({
 });
 
 describe("routesBoard", () => {
+  /**
+   * The row keeps the compact words and the sentence the trace says them in,
+   * so a count that lists the route can say the cause whole. Fails if the
+   * sentence is dropped or is not the trace's own.
+   */
   it("splits serving from not-serving in the trace's own words", () => {
     const refused = route("wrong-host", {
       hostnames: ["wrong.example.org"],
@@ -247,6 +252,7 @@ describe("routesBoard", () => {
     expect(row.stop).toEqual({
       at: "listener",
       short: "hostnames don't intersect",
+      say: "Listener :http does not accept this route",
     });
     expect(row.via).toBe("edge :http");
     // The way in is an object that exists — so the row can offer its peek.
@@ -307,6 +313,7 @@ describe("routesBoard", () => {
     expect(board.notServing[1].stop).toEqual({
       at: "refs",
       short: "needs a ReferenceGrant in gwtest-other",
+      say: "Reference to gwtest-other/private is not permitted",
     });
   });
 
