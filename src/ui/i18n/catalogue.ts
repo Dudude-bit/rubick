@@ -3621,6 +3621,8 @@ export const en = {
     withheldKeyName: "named like a private key, which the app never shows",
     unreadUnanswered:
       "the app asked for {version} and the cluster did not answer ({said}), so it cannot say whether one applies here",
+    unreadNamespaceOnly:
+      "the cluster refused the list across namespaces ({said}), so only {namespace} was read and one in another namespace may still apply here",
     unreadNodeClaims:
       "the app does not read the claims the pods on this node hold, so it cannot say which volumes would have to detach before those pods start elsewhere",
     unreadVolumeMounts:
@@ -7150,6 +7152,9 @@ export const en = {
     meshGamma: "mesh (GAMMA)",
     backendWeight: "weight {n}",
     storedVersion: "{version} (stored)",
+    chainReadHereOnly:
+      "{kind} was read in {namespace} only, so one in another namespace that routes here is not drawn.",
+    chainNotRead: "{kind} was not read, so one that routes here is not drawn.",
     couldNotAskRoutes:
       "Could not ask the integrations which of their routes reach these Services, so a way in may be missing below.",
     nonePublished: "none published",

@@ -475,6 +475,8 @@ impl Snapshot {
     }
 }
 
+const ROUTE_KINDS: [&str; 5] = ["HTTPRoute", "GRPCRoute", "TLSRoute", "TCPRoute", "UDPRoute"];
+
 /// The Gateway API halves of a snapshot, where the caller brought the
 /// cluster's detection along.
 ///
@@ -507,12 +509,37 @@ pub(super) async fn gateway_lists(
     // gateway may live in a third namespace still. Scoping either list to
     // the subject's namespace silently hid both. Kinds list concurrently —
     // six serial round trips were pure latency.
+    //
+    // A reader bound to a namespace is refused both, and can often still
+    // list the routes in its own: those are read so the chain keeps the way
+    // in it can see, and the kind stays unread for the namespaces it cannot.
+    // Not the Gateways: a partial list would read as "this Gateway does not
+    // exist" for every one outside it.
     let fetches = detection.kinds.iter().map(|served| {
         let api_resource = served.api_resource();
         let kind = served.kind.clone();
-        let api = ctx.dynamic_api_for_resource(&api_resource, true);
+        let everywhere = ctx.dynamic_api_for_resource(&api_resource, true);
+        let here = ctx
+            .namespace
+            .clone()
+            .filter(|_| ROUTE_KINDS.contains(&kind.as_str()))
+            .map(|ns| {
+                let api = kube::Api::<kube::core::DynamicObject>::namespaced_with(
+                    ctx.client.clone(),
+                    &ns,
+                    &api_resource,
+                );
+                (ns, api)
+            });
         let params = params.clone();
-        async move { (kind, api_resource, api.list(&params).await) }
+        async move {
+            let list = everywhere.list(&params).await.map_err(Error::from);
+            let here = match (list.as_ref().is_err_and(Error::is_refusal), here) {
+                (true, Some((ns, api))) => Some((ns, api.list(&params).await.map_err(Error::from))),
+                _ => None,
+            };
+            (kind, api_resource, list, here)
+        }
     });
     let mut routes = Vec::new();
     let mut gateways: Option<Vec<crate::resources::GatewayInfo>> = None;
@@ -521,20 +548,33 @@ pub(super) async fn gateway_lists(
     // Gateway missing on the strength of the second.
     let mut sets: Option<Vec<ListenerSetInfo>> = None;
     let mut unread = Vec::new();
-    for (kind, api_resource, list) in futures::future::join_all(fetches).await {
-        let items = match read_live(list)? {
-            Ok(items) => items,
-            Err(said) => {
+    for (kind, api_resource, list, here) in futures::future::join_all(fetches).await {
+        let items = match (list, here) {
+            (Ok(list), _) => list.items,
+            (Err(expired @ Error::CredentialsExpired(_)), _)
+            | (Err(_), Some((_, Err(expired @ Error::CredentialsExpired(_))))) => {
+                return Err(expired)
+            }
+            (Err(refused), Some((ns, Ok(list)))) => {
+                unread.push(UnexploredKind::namespace_only(
+                    &kind,
+                    &api_resource.api_version,
+                    &ns,
+                    &refused.said(),
+                ));
+                list.items
+            }
+            (Err(failed), _) => {
                 unread.push(UnexploredKind::unanswered(
                     &kind,
                     &api_resource.api_version,
-                    &said,
+                    &failed.said(),
                 ));
                 continue;
             }
         };
         match kind.as_str() {
-            "HTTPRoute" | "GRPCRoute" | "TLSRoute" | "TCPRoute" | "UDPRoute" => {
+            kind if ROUTE_KINDS.contains(&kind) => {
                 routes.extend(items.into_iter().map(|obj| {
                     RouteInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
                 }));
@@ -1241,20 +1281,10 @@ mod shared_tests {
         ))
         .await;
         let ctx = ResourceContext::from_client(client, NS.to_string());
-        let detection = crate::resources::GatewayApiDetection {
-            installed: true,
-            bundle_version: None,
-            channel: None,
-            mixed_bundle: Some(false),
-            kinds: vec![crate::resources::ServedGatewayKind {
-                kind: "HTTPRoute".into(),
-                plural: "httproutes".into(),
-                versions: vec!["v1".into()],
-                read_version: "v1".into(),
-            }],
-        };
 
-        let snapshot = Snapshot::of(&ctx, Some(&detection)).await.expect("a read");
+        let snapshot = Snapshot::of(&ctx, Some(&detecting("HTTPRoute", "httproutes")))
+            .await
+            .expect("a read");
         assert!(snapshot.any_unread());
         let unread = unanswered(&snapshot);
         let route = unread
@@ -1266,6 +1296,95 @@ mod shared_tests {
             crate::resources::Unread::Unanswered { version, .. }
                 if version == "gateway.networking.k8s.io/v1"
         ));
+    }
+
+    fn detecting(kind: &str, plural: &str) -> crate::resources::GatewayApiDetection {
+        crate::resources::GatewayApiDetection {
+            installed: true,
+            bundle_version: None,
+            channel: None,
+            mixed_bundle: Some(false),
+            kinds: vec![crate::resources::ServedGatewayKind {
+                kind: kind.into(),
+                plural: plural.into(),
+                versions: vec!["v1".into()],
+                read_version: "v1".into(),
+            }],
+        }
+    }
+
+    const ROUTES_EVERYWHERE: &str = "/apis/gateway.networking.k8s.io/v1/httproutes";
+    const ROUTES_HERE: &str = "/apis/gateway.networking.k8s.io/v1/namespaces/shop/httproutes";
+
+    /// Marco, bound to his team's namespace, is refused every namespace's
+    /// routes and may list his own, and the chain to his Service lost the
+    /// HTTPRoute in front of it. Fails if a refused cluster-wide route list
+    /// is not read again in the subject's namespace, or if that read is
+    /// taken for the whole cluster.
+    #[tokio::test]
+    async fn a_route_kind_refused_cluster_wide_is_read_in_the_subjects_namespace() {
+        let mine =
+            serde_json::json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [{
+            "apiVersion": "gateway.networking.k8s.io/v1",
+            "kind": "HTTPRoute",
+            "metadata": { "name": "checkout", "namespace": NS },
+            "spec": {},
+        }] })
+            .to_string();
+        let mut table = with(ROUTES_EVERYWHERE, failure(403, "Forbidden"));
+        table.push((ROUTES_HERE, 200, mine));
+        let (client, _) = server(table).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+
+        let snapshot = Snapshot::of(&ctx, Some(&detecting("HTTPRoute", "httproutes")))
+            .await
+            .expect("a read");
+        let names: Vec<_> = snapshot
+            .gateway_routes
+            .iter()
+            .map(|r| r.name.as_str())
+            .collect();
+        assert_eq!(names, ["checkout"]);
+        let route = unanswered(&snapshot)
+            .into_iter()
+            .find(|entry| entry.kind == "HTTPRoute")
+            .expect("the other namespaces are still unread");
+        assert!(matches!(
+            &route.why,
+            crate::resources::Unread::NamespaceOnly { namespace, .. } if namespace == NS
+        ));
+    }
+
+    /// Fails if a list that failed for any reason but a refusal is asked
+    /// again in one namespace, or if the Gateways are: a Gateway list that
+    /// answered is what lets the graph call a route's Gateway missing.
+    #[tokio::test]
+    async fn only_a_refused_route_list_is_read_again_in_one_namespace() {
+        const GATEWAYS_EVERYWHERE: &str = "/apis/gateway.networking.k8s.io/v1/gateways";
+        const GATEWAYS_HERE: &str = "/apis/gateway.networking.k8s.io/v1/namespaces/shop/gateways";
+        let mut table = with(ROUTES_EVERYWHERE, failure(500, "InternalError"));
+        table.push((ROUTES_HERE, 200, empty()));
+        table.push((GATEWAYS_EVERYWHERE, 403, failure(403, "Forbidden").1));
+        table.push((GATEWAYS_HERE, 200, empty()));
+        let (client, hits) = server(table).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+
+        for (kind, plural) in [("HTTPRoute", "httproutes"), ("Gateway", "gateways")] {
+            let snapshot = Snapshot::of(&ctx, Some(&detecting(kind, plural)))
+                .await
+                .expect("a read");
+            assert!(matches!(
+                unanswered(&snapshot)
+                    .iter()
+                    .find(|entry| entry.kind == kind)
+                    .map(|e| &e.why),
+                Some(crate::resources::Unread::Unanswered { .. })
+            ));
+            assert!(snapshot.gateways.is_none());
+        }
+        let hits = hits.lock().unwrap();
+        assert_eq!(hits.get(ROUTES_HERE), None);
+        assert_eq!(hits.get(GATEWAYS_HERE), None);
     }
 
     /// Sam's big-pull page drew "1 ready" from the Service deleted before it

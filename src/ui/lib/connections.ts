@@ -1839,6 +1839,11 @@ export function unreadWhy(why: Unread, t: T): string {
         version: why.version,
         said: why.said,
       });
+    case "namespaceOnly":
+      return t("readings", "unreadNamespaceOnly", {
+        namespace: why.namespace,
+        said: why.said,
+      });
     case "nodeClaimsNotRead":
       return t("readings", "unreadNodeClaims");
     case "volumeMountsNotRead":
@@ -1862,6 +1867,54 @@ const ROUTE_KINDS = [
   "TCPRoute",
   "UDPRoute",
 ];
+
+export interface ChainBlindSpot {
+  kind: string;
+  words: string;
+  said: string;
+}
+
+/**
+ * The ways in the chain could not list, each in a sentence: a route nobody
+ * read is a hop missing from the drawing, not one missing from the cluster.
+ * The page and Share both draw these.
+ */
+export function chainBlindSpots(
+  conns: ResourceConnections,
+  t: T
+): ChainBlindSpot[] {
+  const subject = conns.subject;
+  // An Ingress is its own way in, and a workload no Service fronts has no
+  // way in for an unread route to be.
+  const fronted =
+    subject.kind === "Service" ||
+    verb(conns.edges, "selects").some(
+      (edge) => edge.from.kind === "Service" && sameObject(edge.to, subject)
+    );
+  if (!fronted) return [];
+  return conns.notLookedAt.flatMap(({ kind, why }) => {
+    if (kind !== "Ingress" && !ROUTE_KINDS.includes(kind)) return [];
+    switch (why.says) {
+      case "namespaceOnly":
+        return [
+          {
+            kind,
+            words: t("empty", "chainReadHereOnly", {
+              kind,
+              namespace: why.namespace,
+            }),
+            said: why.said,
+          },
+        ];
+      case "unanswered":
+        return [
+          { kind, words: t("empty", "chainNotRead", { kind }), said: why.said },
+        ];
+      default:
+        return [];
+    }
+  });
+}
 
 /** What a group read to say it is empty, by group. */
 const EMPTY_READS = {

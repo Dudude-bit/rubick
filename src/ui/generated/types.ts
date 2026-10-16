@@ -2869,6 +2869,7 @@ export type ContextAuth =
 
 export type Unread =
   | { says: "unanswered"; version: string; said: string }
+  | { says: "namespaceOnly"; version: string; namespace: string; said: string }
   | { says: "nodeClaimsNotRead" }
   | { says: "volumeMountsNotRead" }
   | { says: "policiesOnTheirTab" }

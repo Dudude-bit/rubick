@@ -223,6 +223,63 @@ describe("TrafficChain", () => {
     expect(screen.queryByText("How traffic gets here")).not.toBeInTheDocument();
   });
 
+  /**
+   * Marco's chain to checkout-api drew the Service alone, with nothing to
+   * say an HTTPRoute in front of it had gone unlisted. Fails if a route kind
+   * read in one namespace stops being named under the heading with the
+   * cluster's refusal, or if a Deployment no Service fronts starts naming it.
+   */
+  it("names the route kind it could only read in one namespace", async () => {
+    const refused =
+      'httproutes.gateway.networking.k8s.io is forbidden: User "marco" cannot list resource "httproutes"';
+    const notLookedAt: ResourceConnections["notLookedAt"] = [
+      {
+        kind: "HTTPRoute",
+        why: {
+          says: "namespaceOnly",
+          version: "gateway.networking.k8s.io/v1",
+          namespace: "k8s-gui-test",
+          said: refused,
+        },
+      },
+    ];
+    const view = await wrap(
+      <TrafficChain
+        query={query({
+          ...answered([
+            {
+              reason: "selectsNothing",
+              service,
+              selector: "app=demo",
+              near: null,
+              makersRead: true,
+            },
+          ]),
+          notLookedAt,
+        })}
+      />
+    );
+    const blind = screen.getByTestId("chain-blind-spots");
+    expect(blind).toHaveTextContent(
+      "HTTPRoute was read in k8s-gui-test only, so one in another namespace that routes here is not drawn."
+    );
+    expect(blind).toHaveTextContent(refused);
+    view.unmount();
+
+    await wrap(
+      <TrafficChain
+        query={query({
+          subject: { ...service, kind: "Deployment", facts: null },
+          edges: [],
+          stops: [],
+          published: [],
+          notLookedAt,
+        })}
+      />
+    );
+    expect(screen.queryByTestId("chain-blind-spots")).not.toBeInTheDocument();
+  });
+
   it("carries the certificate above the Ingress, and reads without one", async () => {
     /** The certificate is the first thing a browser consults, so it is the
      *  top of the chain. And it is core: a cluster with nothing installed

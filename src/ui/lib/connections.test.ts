@@ -9,6 +9,7 @@ import type { RouteTls } from "@/lib/ingress-tls";
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 import {
+  chainBlindSpots,
   chainSilence,
   connectionCount,
   connectionGroups,
@@ -18,6 +19,7 @@ import {
   hopTone,
   stopUnder,
   trafficChains,
+  unreadWhy,
   type ChainHopCertificate,
   type RoutedIngress,
 } from "./connections";
@@ -3057,6 +3059,82 @@ describe("a list the cluster refused", () => {
 
   it("still says so when the Services really were read", () => {
     expect(chainSilence(pod(), t)).not.toBeNull();
+  });
+});
+
+describe("chainBlindSpots", () => {
+  const refused =
+    'httproutes.gateway.networking.k8s.io is forbidden: User "marco" cannot list resource "httproutes" at the cluster scope';
+  const unread = (
+    kind: string,
+    why: ResourceConnections["notLookedAt"][number]["why"]
+  ) => ({ kind, why });
+
+  /**
+   * Marco's chain to checkout-api drew the Service alone and said nothing
+   * of the HTTPRoute in front of it, which his token could not list across
+   * namespaces. Fails if a route kind read in one namespace, or not read at
+   * all, stops being named beside the chain with the cluster's own words.
+   */
+  it("names a route kind read in one namespace and one not read at all", () => {
+    const conns = connections(
+      service("checkout-api", "app=checkout"),
+      [],
+      [],
+      [
+        unread("HTTPRoute", {
+          says: "namespaceOnly",
+          version: "gateway.networking.k8s.io/v1",
+          namespace: "team-checkout",
+          said: refused,
+        }),
+        unread("GRPCRoute", {
+          says: "unanswered",
+          version: "gateway.networking.k8s.io/v1",
+          said: refused,
+        }),
+        unread("HorizontalPodAutoscaler", {
+          says: "unanswered",
+          version: "autoscaling/v2",
+          said: refused,
+        }),
+      ]
+    );
+    expect(chainBlindSpots(conns, t)).toEqual([
+      {
+        kind: "HTTPRoute",
+        words:
+          "HTTPRoute was read in team-checkout only, so one in another namespace that routes here is not drawn.",
+        said: refused,
+      },
+      {
+        kind: "GRPCRoute",
+        words: "GRPCRoute was not read, so one that routes here is not drawn.",
+        said: refused,
+      },
+    ]);
+  });
+
+  /** Fails if a kind read whole, which leaves notLookedAt empty, is said to be missing. */
+  it("says nothing when every way in was read", () => {
+    expect(
+      chainBlindSpots(connections(service("checkout-api", "app=x"), []), t)
+    ).toEqual([]);
+  });
+
+  /** Fails if the "Not looked at" row loses the namespace the routes were read in. */
+  it("words a read in one namespace with the namespace it covered", () => {
+    expect(
+      unreadWhy(
+        {
+          says: "namespaceOnly",
+          version: "gateway.networking.k8s.io/v1",
+          namespace: "team-checkout",
+          said: refused,
+        },
+        t
+      )
+    ).toContain("only team-checkout was read");
   });
 });
 

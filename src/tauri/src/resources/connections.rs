@@ -660,6 +660,13 @@ pub struct UnexploredKind {
 pub enum Unread {
     /// The app asked for this version and got no usable answer.
     Unanswered { version: String, said: String },
+    /// Refused cluster-wide and read in `namespace` alone, so whatever sits
+    /// in the others is still unknown.
+    NamespaceOnly {
+        version: String,
+        namespace: String,
+        said: String,
+    },
     /// The claims held by the pods on a node — one list per namespace, not
     /// made here.
     NodeClaimsNotRead,
@@ -693,6 +700,19 @@ impl UnexploredKind {
             kind,
             Unread::Unanswered {
                 version: version.to_string(),
+                said: why.to_string(),
+            },
+        )
+    }
+
+    /// A kind refused cluster-wide whose list in `namespace` answered.
+    #[must_use]
+    pub fn namespace_only(kind: &str, version: &str, namespace: &str, why: &str) -> Self {
+        Self::new(
+            kind,
+            Unread::NamespaceOnly {
+                version: version.to_string(),
+                namespace: namespace.to_string(),
                 said: why.to_string(),
             },
         )

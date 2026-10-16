@@ -11,6 +11,7 @@ import {
   chainStopHop,
   ownPods,
   hopTone,
+  chainBlindSpots,
   trafficChains,
   type ChainHop,
   type HopTone,
@@ -226,6 +227,11 @@ export function graphSections(
               title: t("share", "sectionTraffic"),
               icon: iconSvg(Route),
               unread,
+              partial: data
+                ? chainBlindSpots(data, t)
+                    .map((spot) => `${spot.words} ${spot.said}`)
+                    .join(" ") || null
+                : null,
               body: {
                 type: "traffic" as const,
                 paths,

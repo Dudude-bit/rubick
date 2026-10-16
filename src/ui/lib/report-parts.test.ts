@@ -131,6 +131,41 @@ describe("graphSections", () => {
   });
 
   /**
+   * Marco's page now names the HTTPRoute it could read in his namespace
+   * only; the file he shares from it must not hand over the same chain as
+   * the whole. Fails if the traffic section stops saying so above its paths.
+   */
+  it("says above the paths which ways in were read in one namespace only", () => {
+    const service = {
+      kind: "Service",
+      name: "checkout-api",
+      namespace: "shop",
+      existence: "present",
+      facts: null,
+    } as const;
+    const traffic = (notLookedAt: ResourceConnections["notLookedAt"]) =>
+      graphSections(
+        read({ subject: service, notLookedAt }),
+        t,
+        true
+      ).sections.find((section) => section.id === "traffic")!.partial;
+    expect(
+      traffic([
+        {
+          kind: "HTTPRoute",
+          why: {
+            says: "namespaceOnly",
+            version: "gateway.networking.k8s.io/v1",
+            namespace: "shop",
+            said: "forbidden",
+          },
+        },
+      ])
+    ).toBe("empty.chainReadHereOnly(kind=HTTPRoute,namespace=shop) forbidden");
+    expect(traffic([])).toBeNull();
+  });
+
+  /**
    * An empty chain and a chain nobody could read are opposite answers. The
    * file printed "Nothing here." for both, so a colleague concluded nothing
    * is wired to this pod at the moment the page said it could not read.

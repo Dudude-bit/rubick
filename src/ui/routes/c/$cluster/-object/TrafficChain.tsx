@@ -35,6 +35,7 @@ import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useRouteTls } from "@/hooks/useRouteTls";
 import { cn } from "@/lib/utils";
 import {
+  chainBlindSpots,
   chainSilence,
   closestSelector,
   nearMissWords,
@@ -44,6 +45,7 @@ import {
   stopUnder,
   trafficChains,
   unservedIngresses,
+  type ChainBlindSpot,
   type ChainHop,
   type ChainHopStop,
   type HopTone,
@@ -335,6 +337,22 @@ function EdgeNote({
  * the core does not draw: a route the capability read off a plain Ingress is
  * the same way in the chain already shows as a hop, said twice.
  */
+function BlindSpots({ spots }: { spots: ChainBlindSpot[] }) {
+  if (spots.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="chain-blind-spots">
+      {spots.map((spot) => (
+        <p key={spot.kind} className="max-w-[92ch] text-[11px] text-warn">
+          {spot.words}
+          <span className="block select-text wrap-break-word font-mono text-fg-mut">
+            {spot.said}
+          </span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
   const t = useT();
   const vendors = (routes ?? []).filter(
@@ -649,11 +667,21 @@ export function TrafficChain({
     );
   }
 
+  const blind = chainBlindSpots(data, t);
+
   if (paths.length === 0) {
     if (closestSelector(data)) return <NearMissLine conns={data} />;
     const silence = chainSilence(data, t);
     // A quiet single line, and no heading over it: a heading plus one
     // sentence is two lines spent saying that nothing is there.
+    if (blind.length > 0) {
+      return (
+        <div className="flex flex-col gap-1.5">
+          {silence && <p className="text-xs text-fg-fnt">{silence}</p>}
+          <BlindSpots spots={blind} />
+        </div>
+      );
+    }
     return silence ? <p className="text-xs text-fg-fnt">{silence}</p> : null;
   }
 
@@ -692,6 +720,7 @@ export function TrafficChain({
           ))}
         </div>
       )}
+      <BlindSpots spots={blind} />
       {routed2.error && (
         <p className="max-w-[92ch] text-[11px] text-warn">
           {t("empty", "couldNotAskRoutes")}
