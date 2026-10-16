@@ -590,6 +590,7 @@ export const ru: Catalogue = {
     stepRoute: "маршруте",
     stepBackend: "бэкенде",
     stepEndpoints: "эндпоинтах",
+    stepPolicy: "сетевой политике",
     stepReachable: "достижимости",
     missingTag: "отсутствует",
     backends: "Бэкенды",

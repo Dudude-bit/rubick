@@ -1730,14 +1730,15 @@ describe("a route's Gateway controller at the door of the pods", () => {
    * Traefik's Gateway provider served an HTTPRoute that allow-nginx shut it
    * out of, and the trace called it serving over a 502. Fails if the
    * Gateway's class is not followed to its controller, or the refusal is not
-   * the endpoints step's in red naming the policy and the controller.
+   * the policy step's, in red, naming the policy and the controller.
    */
-  it("stops at the endpoints where no rule admits the controller its Gateway's class names", () => {
+  it("stops at the policy where no rule admits the controller its Gateway's class names", () => {
     const [trace] = routeTraces(route("healthy"), judged(traefik()), t);
     expect(trace.serving).toBe(false);
     expect(trace.servingKnown).toBe(true);
     expect(trace.stopStep).toBe(7);
     expect(trace.steps[6]).toMatchObject({
+      id: "policy",
       state: "err",
       say: "healthy: NetworkPolicy allow-nginx admits no connection from Traefik",
     });
@@ -1760,6 +1761,7 @@ describe("a route's Gateway controller at the door of the pods", () => {
     expect(trace.servingKnown).toBe(false);
     expect(trace.unknownBecause).toBe("unread");
     expect(trace.steps[6]).toMatchObject({
+      id: "policy",
       state: "blind",
       say: "healthy: NetworkPolicy allow-nginx decides who may connect to these pods",
     });
@@ -1785,7 +1787,7 @@ describe("a route's Gateway controller at the door of the pods", () => {
       judged(traefik(), { door: undefined }),
       t
     );
-    expect(trace.steps[6].state).toBe("ok");
+    expect(trace.steps[6]).toMatchObject({ id: "endpoints", state: "ok" });
     expect(trace.serving).toBe(true);
   });
 

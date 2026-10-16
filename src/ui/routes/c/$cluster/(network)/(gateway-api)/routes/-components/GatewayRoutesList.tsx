@@ -58,7 +58,8 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { hrefOf, listLink, objectLink } from "@/lib/links";
 import { KIND_TONE } from "@/lib/route-kind-tone";
 import { allServing, routesBoard, type RouteRow } from "@/lib/route-rows";
-import { useT, type T } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
+import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -71,30 +72,21 @@ import type { RouteInfo } from "@/generated/types";
 const ALL_KINDS = "__all__";
 
 /** The step a break lands on, in the reader's language. */
-function stepWord(at: string, t: T): string {
-  switch (at) {
-    case "class":
-      return t("columns", "stepClass");
-    case "gateway":
-      return t("columns", "stepGateway");
-    case "listener":
-      return t("columns", "stepListener");
-    case "namespace":
-      return t("columns", "stepNamespace");
-    case "refs":
-      return t("columns", "stepRefs");
-    case "backend":
-      return t("columns", "stepBackend");
-    case "endpoints":
-      return t("columns", "stepEndpoints");
-    case "reachable":
-      return t("columns", "stepReachable");
-    case "route":
-      return t("columns", "stepRoute");
-    default:
-      return at;
-  }
-}
+const STEP_WORD: Record<
+  NonNullable<RouteRow["stop"]>["at"],
+  keyof typeof en.columns
+> = {
+  class: "stepClass",
+  gateway: "stepGateway",
+  listener: "stepListener",
+  namespace: "stepNamespace",
+  refs: "stepRefs",
+  backend: "stepBackend",
+  endpoints: "stepEndpoints",
+  policy: "stepPolicy",
+  reachable: "stepReachable",
+  route: "stepRoute",
+};
 
 /** One template for every row, so the columns align across rows. */
 const ROW_GRID =
@@ -199,7 +191,7 @@ function Row({
           ? parts(t("empty", "gwStopsAtPhrase", { short: row.stop.short }), {
               at: (
                 <span className="font-semibold">
-                  {stepWord(row.stop.at, t)}
+                  {t("columns", STEP_WORD[row.stop.at])}
                 </span>
               ),
             })

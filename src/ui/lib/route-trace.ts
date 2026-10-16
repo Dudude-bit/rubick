@@ -29,7 +29,7 @@ import type {
 import { backingOf, type Backing, type BackingSources } from "@/integrations";
 import { describeStop, stopMood } from "@/lib/connections";
 import type { T } from "@/i18n/useT";
-import { doorDoubtWords, type DoorAsk } from "@/lib/policy-door";
+import { doorDoubtWords, isPolicyStop, type DoorAsk } from "@/lib/policy-door";
 import { saidOf, statusesFor, verdictOf } from "@/lib/route-verdict";
 
 export interface TraceQuote {
@@ -53,6 +53,7 @@ export type TraceStepId =
   | "refs"
   | "backend"
   | "endpoints"
+  | "policy"
   | "reachable";
 
 export type TraceStepState = "ok" | "err" | "warn" | "off" | "blind";
@@ -1189,7 +1190,7 @@ function backendSteps(
     return [
       backendStep,
       {
-        id: "endpoints",
+        id: isPolicyStop(down.state.stop) ? "policy" : "endpoints",
         state:
           mood === "coming" ? "warn" : mood === "unchecked" ? "blind" : "err",
         pending: mood === "coming" || undefined,
@@ -1214,7 +1215,7 @@ function backendSteps(
     return [
       backendStep,
       {
-        id: "endpoints",
+        id: "policy",
         state: "blind",
         say: `${doubted.backend.name}: ${words.title}`,
         who: "yours",

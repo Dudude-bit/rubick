@@ -619,6 +619,7 @@ export const en = {
     stepRoute: "route",
     stepBackend: "backend",
     stepEndpoints: "endpoints",
+    stepPolicy: "network policy",
     stepReachable: "reachable",
     missingTag: "missing",
     backends: "Backends",
