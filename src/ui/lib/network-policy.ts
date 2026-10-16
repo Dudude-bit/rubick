@@ -83,6 +83,16 @@ export function directionWords(
   }
 }
 
+/** What a list row says of a direction, under a header that already names it. */
+export function directionCellWords(
+  direction: PolicyDirection,
+  t: Translator
+): string {
+  return verdictOf(direction) === "notGoverned"
+    ? t("empty", "notRestricted")
+    : directionWords(direction, t).text;
+}
+
 /** How many pods the policy picks, with the read that never happened kept. */
 export type Reach =
   | { kind: "cannotSay" }

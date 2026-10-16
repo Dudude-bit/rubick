@@ -8,10 +8,16 @@ import {
 import { IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import type { AppColumnMeta } from "@/components/ui/table-features";
 import { translate } from "@/i18n";
-import type { IngressInfo, PersistentVolumeClaimInfo } from "@/generated/types";
+import type {
+  IngressInfo,
+  NetworkPolicyInfo,
+  PersistentVolumeClaimInfo,
+  PolicyDirection,
+} from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { columnFloor, columnIdeal, headerFloor } from "@/lib/column-label";
 import type { MetricsAbsence } from "@/lib/metrics-absence";
+import { directionCellWords, reachWords } from "@/lib/network-policy";
 import { serviceVerdictLabels } from "@/lib/service-health";
 import {
   cronStatusWord,
@@ -749,6 +755,10 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
       nodeName: "k3d-rubick-live-agent-0",
       version: "v1.35.5+k3s1",
       restartCount: 15,
+      selects: { kind: "written", query: "app.kubernetes.io/name=traefik" },
+      selected: 1,
+      ingress: { governed: false, rules: [] },
+      egress: { governed: true, rules: [] },
     },
   ];
 
@@ -1038,4 +1048,80 @@ describe("the Ingresses list beside a cause", () => {
       "promo.nginx.k8s-gui.test".length * 7.2 + 20
     );
   });
+});
+
+describe("the NetworkPolicies list beside the peek", () => {
+  const direction = (governed: boolean): PolicyDirection => ({
+    governed,
+    rules: [],
+    opensToEverything: false,
+    deniesEverything: governed,
+  });
+  const row = (
+    name: string,
+    selected: number | null,
+    over: Partial<NetworkPolicyInfo> = {}
+  ): NetworkPolicyInfo => ({
+    uid: "",
+    name,
+    namespace: "k8s-gui-test",
+    selects: { kind: "written", query: "app.kubernetes.io/name=traefik" },
+    selected,
+    nearly: null,
+    ingress: direction(true),
+    egress: direction(false),
+    labels: {},
+    createdAt: null,
+    ...over,
+  });
+  const rows = [
+    row("default-deny-ingress", 27, { selects: { kind: "everything" } }),
+    row("selects-nothing", 0),
+    row("traefik-out", null, { ingress: direction(false) }),
+  ];
+
+  /**
+   * Beside the peek every column but the name read "1 ...", "no ..." and
+   * "not r...": only their headers held them open. Fails if Pods, Ingress or
+   * Egress is hidden or drawn narrower than what its rows say there, in
+   * either language, or the list scrolls rather than give up its Age and its
+   * selector, which the peek draws for the row it shows.
+   */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)(
+    "keeps what a row says of its pods and directions whole in %s",
+    (_language, t) => {
+      const shown = (networkPolicyColumns as Column[]).filter(
+        (c) => nameOf(c) !== "namespace"
+      );
+      const folded = { size: 1, meta: { floor: actionsColumnSize(1, 10) } };
+      const specs = [...shown, folded].map((c, index) => ({
+        id: index < shown.length ? nameOf(c) : "actions",
+        size: c.size ?? 150,
+        floor: columnFloor(c, t, rows),
+        yields: (c as Column).meta?.yields,
+      }));
+      const hidden = yieldedColumns(specs, 640);
+      const kept = specs.filter((spec) => !hidden.includes(spec.id));
+      const layout = tableLayout(kept, 640);
+      expect(layout.scrolls).toBe(false);
+      const said: [string, string[]][] = [
+        ["behind", rows.map((r) => reachWords(r.selected, t).text)],
+        ["ingress", rows.map((r) => directionCellWords(r.ingress, t))],
+        ["egress", rows.map((r) => directionCellWords(r.egress, t))],
+      ];
+      for (const [id, words] of said) {
+        const at = kept.findIndex((spec) => spec.id === id);
+        expect(at, id).toBeGreaterThanOrEqual(0);
+        expect(
+          (layout.shares[at] / 100) * layout.span,
+          id
+        ).toBeGreaterThanOrEqual(
+          Math.max(...words.map((word) => word.length * 7)) + 10
+        );
+      }
+    }
+  );
 });

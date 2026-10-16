@@ -22,6 +22,7 @@ import { T } from "@/i18n/T";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 import {
+  directionCellWords,
   directionWords,
   namespacesOf,
   podsOf,
@@ -58,7 +59,7 @@ export function DirectionCell({ direction }: { direction: PolicyDirection }) {
   const words = directionWords(direction, t).text;
   return (
     <span className={VERDICT_TONE[verdict]} title={words}>
-      {verdict === "notGoverned" ? t("empty", "notRestricted") : words}
+      {directionCellWords(direction, t)}
     </span>
   );
 }
@@ -223,7 +224,10 @@ const SELECTS_TONE: Record<PolicySelects["kind"], string> = {
 export function SelectsCell({ policy }: { policy: NetworkPolicyInfo }) {
   const t = useT();
   return (
-    <span className={SELECTS_TONE[policy.selects.kind]}>
+    <span
+      className={SELECTS_TONE[policy.selects.kind]}
+      title={selectsWords(policy.selects, t)}
+    >
       {selectsWords(policy.selects, t)}
     </span>
   );
