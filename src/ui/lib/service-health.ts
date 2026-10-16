@@ -30,7 +30,7 @@ import {
 } from "@/lib/connections";
 import { makersUnread } from "@/lib/stop-mood";
 import { isPolicyStop, type PolicyStop } from "@/lib/policy-door";
-import { sharedText } from "@/lib/pod-cause";
+import { sharedAfterCount } from "@/lib/pod-cause";
 import { errorToShow } from "@/lib/error-utils";
 import { endpointCount, publishedFor, servingCount } from "@/lib/published";
 import type { StatusRole } from "@/lib/status-role";
@@ -165,8 +165,12 @@ export interface Verdict {
   glyph?: LucideIcon;
 }
 
-/** A stop whose pods share a cause: the stop's words and the cause they lead to. */
-export type StopCause = { lead: string; shared: SharedCause };
+/** A stop whose pods share a cause: the stop's words, the pods they count, and the cause they lead to. */
+export type StopCause = { lead: string; counted: number; shared: SharedCause };
+
+/** A stop cause as plain words. */
+export const stopCauseText = (cause: StopCause, t: T): string =>
+  `${cause.lead}: ${sharedAfterCount(cause.shared, cause.counted, t)}`;
 
 /** What follows "none of them is ready": a cause, never the same words again. */
 const NONE_READY_CAUSE: Record<NotServing, keyof typeof en.empty> = {
@@ -199,11 +203,10 @@ function stopWords(
     };
   const title = describeStop(stop, t).title;
   const shared = stopCause(stop);
-  if (shared)
-    return {
-      reason: `${title}: ${sharedText(shared, t)}`,
-      cause: { lead: title, shared },
-    };
+  if (shared && stop.reason === "noneReady") {
+    const cause = { lead: title, counted: stop.pods, shared };
+    return { reason: stopCauseText(cause, t), cause };
+  }
   if (makersUnread(stop))
     return { reason: `${title}: ${t("empty", "causeMakersUnread")}` };
   const why =

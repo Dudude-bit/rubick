@@ -75,7 +75,7 @@ import type {
   Usage,
 } from "@/generated/types";
 import { declaredQuantity } from "./metric-format";
-import { currentCause, sharedText } from "./pod-cause";
+import { currentCause, sharedAfterCount } from "./pod-cause";
 
 type Named = Pick<ObjectRef, "kind" | "name" | "namespace">;
 
@@ -567,7 +567,7 @@ export function describeStop(
           { n: stop.pods, selector: stop.selector }
         ),
         note: cause
-          ? sharedText(cause, t)
+          ? sharedAfterCount(cause, stop.pods, t)
           : t("nav", NONE_READY_NOTE[stop.why]),
       };
     }

@@ -465,6 +465,27 @@ export function sharedText(shared: SharedCause, t: T): string {
   return `${podsShare(shared.pods, shared.of, t)} ${causeText(shared.cause, t)}`;
 }
 
+/** How many pods share it, unless the words before it already counted every one of `counted`. */
+export function shareAfterCount(
+  shared: SharedCause,
+  counted: number,
+  t: T
+): string | null {
+  return shared.pods === counted && shared.of === counted
+    ? null
+    : podsShare(shared.pods, shared.of, t);
+}
+
+/** {@link sharedText} after words that already counted `counted` pods. */
+export function sharedAfterCount(
+  shared: SharedCause,
+  counted: number,
+  t: T
+): string {
+  const share = shareAfterCount(shared, counted, t);
+  return `${share ? `${share} ` : ""}${causeText(shared.cause, t)}`;
+}
+
 /** Two pods share a cause when it is the same mechanism in the same container. */
 function causeKey(cause: PodCause): string {
   switch (cause.says) {

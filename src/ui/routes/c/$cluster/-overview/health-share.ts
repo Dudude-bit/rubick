@@ -55,7 +55,8 @@ import { splitUnit } from "@/lib/metric-format";
 import { formatAge, formatDecimal } from "@/lib/utils";
 import { formatCount } from "@/lib/count";
 import { withRestartsBy } from "@/lib/pod-status";
-import { causeText, podsShare, sharedText } from "@/lib/pod-cause";
+import { causeText, podsShare } from "@/lib/pod-cause";
+import { stopCauseText } from "@/lib/service-health";
 import { refusalText } from "@/lib/create-refusal";
 
 /**
@@ -129,8 +130,7 @@ export function detailWords(
   folded: number | null = null
 ): string | null {
   if (detail === null) return null;
-  if (detail.says === "stopCause")
-    return `${detail.lead}: ${sharedText(detail.shared, t)}`;
+  if (detail.says === "stopCause") return stopCauseText(detail, t);
   return detail.says === "said" || detail.says === "ours"
     ? detail.text
     : composedDetail(detail, t, folded);

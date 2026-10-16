@@ -141,7 +141,9 @@ describe("a Service's verdict whose pods share a cause", () => {
     );
     render(<VerdictBadge verdict={verdict} />);
     const line = screen.getByTestId("cause-line");
-    expect(line.parentElement).toHaveTextContent("2 of 2 pods:");
+    expect(line.parentElement).toHaveTextContent(
+      "2 pods carry app=topology-demo, and none of them is ready: None of the 2 nodes"
+    );
     expect(
       screen.getByText(/2 nodes lack topology\.kubernetes\.io\/zone/)
     ).toHaveClass(TONE_TEXT.err);

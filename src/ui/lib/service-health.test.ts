@@ -15,6 +15,7 @@ import {
   healthFromConnections,
   serviceHealthOf,
   serviceHealthWords,
+  stopCauseText,
 } from "./service-health";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -762,7 +763,7 @@ describe("a Service none of whose pods is ready", () => {
    */
   it("follows its verdict with the cause its pods share", () => {
     expect(failing("crashLooping").reason).toContain(
-      "2 of 2 pods: web exited (exit 1, Error). Its exit message: Error: DATABASE_URL is not set"
+      "none of them is ready: web exited (exit 1, Error). Its exit message: Error: DATABASE_URL is not set"
     );
     const stop = published({
       stop: {
@@ -774,7 +775,37 @@ describe("a Service none of whose pods is ready", () => {
         cause: exits,
       },
     }).stop!;
-    expect(describeStop(stop, t).note).toContain("2 of 2 pods: web exited");
+    expect(describeStop(stop, t).note).toMatch(/^web exited/);
+  });
+
+  /**
+   * no-config read "2 pods carry app=no-config, and none of them is ready:
+   * 2 of 2 pods: ConfigMap web-config does not exist", the count said twice.
+   * Fails if the share comes back where every counted pod has the cause, or
+   * goes where only some do, in the verdict, the chain's note or Share.
+   */
+  it("counts the pods once, and says how many share the cause only where some do not", () => {
+    expect(failing("crashLooping").reason).not.toContain("2 of 2");
+    const some = { ...exits, pods: 1 };
+    const stop = published({
+      stop: {
+        reason: "noneReady",
+        service: SERVICE,
+        selector: "app=web",
+        pods: 2,
+        why: "crashLooping",
+        cause: some,
+      },
+    }).stop!;
+    expect(describeStop(stop, t).note).toMatch(/^1 of 2 pods: web exited/);
+    const words = serviceHealthWords(
+      serviceHealthOf(SELECTING, published({ notReady: 2, stop }), null),
+      t
+    );
+    expect(words.reason).toContain(
+      "none of them is ready: 1 of 2 pods: web exited"
+    );
+    expect(words.cause && stopCauseText(words.cause, t)).toBe(words.reason);
   });
 
   /** Fails if pods still coming up, or never read, are said to have a cause. */

@@ -17,6 +17,7 @@ import {
   currentCause,
   kubeletWarned,
   podsShare,
+  shareAfterCount,
   type CauseWords,
 } from "@/lib/pod-cause";
 import { causeDeadlines, workloadCause } from "@/lib/share/pod-status";
@@ -127,10 +128,11 @@ export function CauseLine({
 /** Where a Service's traffic stops, then the cause its pods share, drawn as theirs. */
 export function StopCauseLine({ cause }: { cause: StopCause }) {
   const t = useT();
+  const share = shareAfterCount(cause.shared, cause.counted, t);
   return (
     <>
       <span className="text-fg-mut">
-        {cause.lead}: {podsShare(cause.shared.pods, cause.shared.of, t)}{" "}
+        {cause.lead}: {share && `${share} `}
       </span>
       <CauseLine cause={cause.shared.cause} compact />
     </>
