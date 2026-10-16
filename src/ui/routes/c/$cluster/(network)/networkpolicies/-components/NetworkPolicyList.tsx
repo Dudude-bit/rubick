@@ -116,6 +116,7 @@ export const networkPolicyColumns: ColumnDef<NetworkPolicyInfo>[] = [
         const said = directionWords(row.egress, t);
         return { text: said.text, role: said.role ?? undefined };
       },
+      yields: 3,
       floor: wordsFloor((row, t) => directionCellWords(row.egress, t)),
     },
     cell: ({ row }) => <DirectionCell direction={row.original.egress} />,

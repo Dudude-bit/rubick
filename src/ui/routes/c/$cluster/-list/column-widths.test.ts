@@ -1082,10 +1082,12 @@ describe("the NetworkPolicies list beside the peek", () => {
 
   /**
    * Beside the peek every column but the name read "1 ...", "no ..." and
-   * "not r...": only their headers held them open. Fails if Pods, Ingress or
-   * Egress is hidden or drawn narrower than what its rows say there, in
-   * either language, or the list scrolls rather than give up its Age and its
-   * selector, which the peek draws for the row it shows.
+   * "not r...": only their headers held them open, and once they held the
+   * words, Russian at 1280 scrolled the row's menu out of reach. Fails if
+   * Pods or Ingress is hidden, or a column it keeps is drawn narrower than
+   * what its rows say, in either language at 1280 or 1440, or if the list
+   * scrolls rather than give up Age, the selector and Egress, which the peek
+   * draws for the row it shows.
    */
   it.each([
     ["English", en],
@@ -1103,24 +1105,29 @@ describe("the NetworkPolicies list beside the peek", () => {
         floor: columnFloor(c, t, rows),
         yields: (c as Column).meta?.yields,
       }));
-      const hidden = yieldedColumns(specs, 640);
-      const kept = specs.filter((spec) => !hidden.includes(spec.id));
-      const layout = tableLayout(kept, 640);
-      expect(layout.scrolls).toBe(false);
       const said: [string, string[]][] = [
         ["behind", rows.map((r) => reachWords(r.selected, t).text)],
         ["ingress", rows.map((r) => directionCellWords(r.ingress, t))],
         ["egress", rows.map((r) => directionCellWords(r.egress, t))],
       ];
-      for (const [id, words] of said) {
-        const at = kept.findIndex((spec) => spec.id === id);
-        expect(at, id).toBeGreaterThanOrEqual(0);
-        expect(
-          (layout.shares[at] / 100) * layout.span,
-          id
-        ).toBeGreaterThanOrEqual(
-          Math.max(...words.map((word) => word.length * 7)) + 20
+      for (const port of [560, 640]) {
+        const hidden = yieldedColumns(specs, port);
+        const kept = specs.filter((spec) => !hidden.includes(spec.id));
+        const layout = tableLayout(kept, port);
+        expect(layout.scrolls, `at ${port}`).toBe(false);
+        expect(hidden, `at ${port}`).not.toEqual(
+          expect.arrayContaining([expect.stringMatching(/^(behind|ingress)$/)])
         );
+        for (const [id, words] of said) {
+          const at = kept.findIndex((spec) => spec.id === id);
+          if (at < 0) continue;
+          expect(
+            (layout.shares[at] / 100) * layout.span,
+            `${id} at ${port}`
+          ).toBeGreaterThanOrEqual(
+            Math.max(...words.map((word) => word.length * 7)) + 20
+          );
+        }
       }
     }
   );
