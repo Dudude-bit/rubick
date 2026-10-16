@@ -1,4 +1,4 @@
-import { CELL_PAD_PX } from "@/components/ui/column-shares";
+import { CELL_PADS_PX } from "@/components/ui/column-shares";
 import type { ColumnDef } from "@/components/ui/table-features";
 
 import type { NetworkPolicyInfo } from "@/generated/types";
@@ -48,7 +48,7 @@ const selectsFloor = (t: T, rows: readonly NetworkPolicyInfo[]) =>
       "sans",
       7
     )
-  ) + CELL_PAD_PX;
+  ) + CELL_PADS_PX;
 
 const wordsFloor =
   (words: (row: NetworkPolicyInfo, t: T) => string) =>
@@ -57,7 +57,7 @@ const wordsFloor =
       rows.map((row) => words(row, t)),
       "sans",
       7
-    ) + CELL_PAD_PX;
+    ) + CELL_PADS_PX;
 
 // Exported for `column-widths.test.ts`: a column with no declared width gets
 // an equal share of a `table-fixed` table.

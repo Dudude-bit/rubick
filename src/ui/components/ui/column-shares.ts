@@ -3,6 +3,8 @@ export const SCROLLBAR_REACH = 24;
 export const ACTIONS_CELL_GUTTER = { paddingRight: SCROLLBAR_REACH };
 /** A cell's own padding on either side. */
 export const CELL_PAD_PX = 10;
+/** Both sides of it: what a cell adds to the text it draws. */
+export const CELL_PADS_PX = 2 * CELL_PAD_PX;
 
 /**
  * The width the actions cell needs, from what it actually holds: a 20px icon

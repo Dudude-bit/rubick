@@ -1119,7 +1119,7 @@ describe("the NetworkPolicies list beside the peek", () => {
           (layout.shares[at] / 100) * layout.span,
           id
         ).toBeGreaterThanOrEqual(
-          Math.max(...words.map((word) => word.length * 7)) + 10
+          Math.max(...words.map((word) => word.length * 7)) + 20
         );
       }
     }

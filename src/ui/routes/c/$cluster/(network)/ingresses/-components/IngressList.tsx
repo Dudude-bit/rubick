@@ -1,3 +1,4 @@
+import { CELL_PADS_PX } from "@/components/ui/column-shares";
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
@@ -145,9 +146,6 @@ function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
   );
 }
 
-/** A cell's own padding on both sides. */
-const CELL_PAD_PX = 20;
-
 /** `checkout.example.com`, 20 glyphs of mono; a longer host ends in an ellipsis, whole on hover. */
 const HOST_PX = Math.ceil(20 * 7.2);
 
@@ -195,7 +193,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
             7
           ),
           HOST_PX / 2
-        ) + CELL_PAD_PX,
+        ) + CELL_PADS_PX,
     },
   },
   {
@@ -216,9 +214,9 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     meta: {
       floor: (_t, rows: readonly IngressInfo[]) =>
         Math.min(widestText(firstHosts(rows), "mono", 7.2), HOST_PX) +
-        CELL_PAD_PX,
+        CELL_PADS_PX,
       ideal: (_t, rows: readonly IngressInfo[]) =>
-        widestText(firstHosts(rows), "mono", 7.2) + CELL_PAD_PX,
+        widestText(firstHosts(rows), "mono", 7.2) + CELL_PADS_PX,
     },
     cell: ({ row }) => {
       const hosts = row.original.rules
@@ -268,7 +266,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     header: columnHeader("columns", "paths"),
     meta: {
       floor: (t) =>
-        widestText([t("count", "paths", { n: 99 })], "sans", 7) + CELL_PAD_PX,
+        widestText([t("count", "paths", { n: 99 })], "sans", 7) + CELL_PADS_PX,
       share: (row: IngressInfo, t) => {
         const paths = row.rules.flatMap((rule) => rule.paths).length;
         return paths === 0
@@ -306,7 +304,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
       floor: (t, rows: readonly IngressInfo[]) =>
         rows.some((row) => row.loadBalancerIps?.length)
           ? IPV4_CELL_PX
-          : widestText([t("empty", "noneLower")], "sans", 7) + CELL_PAD_PX,
+          : widestText([t("empty", "noneLower")], "sans", 7) + CELL_PADS_PX,
     },
     cell: ({ row }) => <IngressAddressCell ingress={row.original} />,
   },
@@ -317,7 +315,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     cell: ({ row }) => <VendorTlsCell ingress={row.original} />,
     meta: {
       yields: 1,
-      floor: (t) => widestText(tlsWords(t), "sans", 7) + CELL_PAD_PX,
+      floor: (t) => widestText(tlsWords(t), "sans", 7) + CELL_PADS_PX,
     },
   },
   yielding(createAgeColumn<IngressInfo>(), 3),
