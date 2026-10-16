@@ -283,7 +283,7 @@ function AttentionRow({
           )}
         >
           <ReasonIcon
-            className="h-2.5 w-2.5 flex-none self-center"
+            className="mt-[3px] h-2.5 w-2.5 flex-none self-start"
             aria-hidden="true"
           />
           <span className="line-clamp-2" title={reasonWord(item, t)}>

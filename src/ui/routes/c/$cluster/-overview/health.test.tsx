@@ -2207,7 +2207,7 @@ describe("what Needs attention says it checked", () => {
   /**
    * The Russian route rows read "останавливается на сетевой поли…": the
    * reason column fits a cluster's code and cut the app's own longer words.
-   * Fails if a reason is cut to one line again.
+   * Fails if a reason is cut to one line again, or its mark leaves the first.
    */
   it("wraps a reason in the app's own words rather than cutting it", async () => {
     const reason = "останавливается на сетевой политике";
@@ -2215,6 +2215,7 @@ describe("what Needs attention says it checked", () => {
     const word = screen.getByTitle(reason);
     expect(word).toHaveClass("line-clamp-2");
     expect(word).not.toHaveClass("truncate");
+    expect(word.previousElementSibling).toHaveClass("self-start");
   });
 
   /**
