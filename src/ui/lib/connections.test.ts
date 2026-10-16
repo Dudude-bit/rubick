@@ -708,8 +708,9 @@ describe("the traffic chain", () => {
     expect(stop.note).toContain(
       "Programmed: False (AddressNotAssigned): no address was assigned."
     );
-    expect(stop.note).toContain(
-      "Listener web: PortUnavailable: no entrypoint for port 8000."
+    // The listener is the cause, so it comes before what the refusal means.
+    expect(stop.note).toMatch(
+      /no address was assigned\. Listener web: PortUnavailable: no entrypoint for port 8000\. Nothing behind it serves/
     );
     expect(stop.only).toEqual(["http://promo.example.com:8000/"]);
     expect(path.broken).toBe(true);

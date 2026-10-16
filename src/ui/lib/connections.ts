@@ -647,12 +647,25 @@ export function describeStop(
         title: t("nav", "stopGatewayNotProgrammedTitle", {
           gateway: stop.gateway.name,
         }),
-        note: t("nav", "stopGatewayNotProgrammedNote", {
-          condition: stop.conditionType,
-          said: saidBy(stop),
-        }),
+        note: gatewayRefusalNote(stop, [], t),
       };
   }
+}
+
+/** The controller's answer, then the listeners it refused under it, then what that means for every route. */
+export function gatewayRefusalNote(
+  stop: Extract<ChainStop, { reason: "gatewayNotProgrammed" }>,
+  listeners: string[],
+  t: T
+): string {
+  return [
+    t("nav", "stopGatewayNotProgrammedNote", {
+      condition: stop.conditionType,
+      said: saidBy(stop),
+    }),
+    ...listeners,
+    t("empty", "gwNotProgrammedUpstream"),
+  ].join(" ");
 }
 
 /** The controller's own words after its condition, left as it wrote them. */
@@ -1485,17 +1498,17 @@ export function trafficChains(
               "gateway" in entry
                 ? urlsOn.filter((at) => sameObject(at.gateway, entry.gateway))
                 : null;
-            const facts =
-              entry.reason === "gatewayNotProgrammed"
-                ? on?.[0]?.gateway.facts
-                : null;
+            const facts = on?.[0]?.gateway.facts;
             const hop = chainStopHop(entry, subject, t, own);
             hops.push({
               ...hop,
               note:
+                entry.reason === "gatewayNotProgrammed" &&
                 facts?.kind === "gateway"
-                  ? [hop.note, ...listenerRefusals(facts.listeners, t)].join(
-                      " "
+                  ? gatewayRefusalNote(
+                      entry,
+                      listenerRefusals(facts.listeners, t),
+                      t
                     )
                   : hop.note,
               only: [...new Set(on ? on.flatMap((at) => at.urls) : routeUrls)],

@@ -195,7 +195,7 @@ export const ru: Catalogue = {
       "{route} привязан к {gateway}, которого нет в API-сервере. Статус для такого родителя не напишет ни один контроллер, поэтому об этом отказе кластер сам сказать не может.",
     stopGatewayNotProgrammedTitle: "{gateway} не запрограммирован",
     stopGatewayNotProgrammedNote:
-      "Контроллер ответил {condition}: False{said}. Ничего за ним не обслуживается, пока не починен сам Gateway: проблема стоит выше всех привязанных к нему маршрутов.",
+      "Контроллер ответил {condition}: False{said}.",
     targetPortNamed: "targetPort: {name}",
     stopUnnamedPortCause:
       "Ни один контейнер не объявляет порт, который запрашивает Service ({asked}), поэтому ничего не публикуется",
@@ -7653,8 +7653,9 @@ export const ru: Catalogue = {
     gwNotProgrammedSay: "Gateway {name} не запрограммирован",
     gwNotProgrammedShort: "{name} не запрограммирован",
     gwNotProgrammedTitle: "Контроллер отвергает этот Gateway",
-    gwNotProgrammedBody:
-      "{said}. Ничего за ним не обслуживается, пока не починен сам Gateway: проблема стоит выше всех привязанных к нему маршрутов.",
+    gwNotProgrammedBody: "{said}.",
+    gwNotProgrammedUpstream:
+      "Ничего за ним не обслуживается, пока не починен сам Gateway: проблема стоит выше всех привязанных к нему маршрутов.",
     gwListenerRefusedSaid: "Слушатель {name}: {said}.",
     gwListenerRefusedSay: "{label}: контроллер отказал самому слушателю",
     gwListenerRefusedTitle: "Контроллер отказал слушателю, а не маршруту",

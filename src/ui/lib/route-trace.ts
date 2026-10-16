@@ -572,6 +572,7 @@ function gatewayStep(
             said: conditionSaid(programmed),
           }),
           ...listenerRefusals(gateway.listeners, t),
+          t("empty", "gwNotProgrammedUpstream"),
         ].join(" "),
       },
     };

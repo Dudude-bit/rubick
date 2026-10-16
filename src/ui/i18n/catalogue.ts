@@ -215,7 +215,7 @@ export const en = {
       "{route} attaches to {gateway}, which the API server does not have. No controller will ever write status for that parent, so this is the one refusal the cluster cannot state itself.",
     stopGatewayNotProgrammedTitle: "{gateway} is not programmed",
     stopGatewayNotProgrammedNote:
-      "The controller answered {condition}: False{said}. Nothing behind it serves until the Gateway itself is fixed; this is upstream of every route attached to it.",
+      "The controller answered {condition}: False{said}.",
     targetPortNamed: "targetPort: {name}",
     stopUnnamedPortCause:
       "No container declares the port the Service asks for ({asked}), so nothing is published",
@@ -6966,8 +6966,9 @@ export const en = {
     gwNotProgrammedSay: "Gateway {name} is not programmed",
     gwNotProgrammedShort: "{name} is not programmed",
     gwNotProgrammedTitle: "The controller refuses this Gateway",
-    gwNotProgrammedBody:
-      "{said}. Nothing behind it serves until the Gateway itself is fixed; this is upstream of every route attached to it.",
+    gwNotProgrammedBody: "{said}.",
+    gwNotProgrammedUpstream:
+      "Nothing behind it serves until the Gateway itself is fixed; this is upstream of every route attached to it.",
     gwListenerRefusedSaid: "Listener {name}: {said}.",
     gwListenerRefusedSay: "{label} was refused by its controller",
     gwListenerRefusedTitle:

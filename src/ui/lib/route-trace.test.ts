@@ -1452,12 +1452,10 @@ describe("a gateway that publishes no address", () => {
     const step = trace.steps.find((s) => s.id === "gateway");
     expect(step?.state).toBe("err");
     expect(step?.short).toBe("ListenersNotValid");
-    // The Gateway's own words, then the listener's, which name the cause.
-    expect(step?.detail?.body).toContain(
-      "ListenersNotValid: All Listeners must be valid"
-    );
-    expect(step?.detail?.body).toContain(
-      "Listener odd: PortUnavailable: no matching entryPoint for port 9999."
+    // The Gateway's own words, then the listener's, which name the cause,
+    // then what that means for the routes.
+    expect(step?.detail?.body).toMatch(
+      /^ListenersNotValid: All Listeners must be valid.*\. Listener odd: PortUnavailable: no matching entryPoint for port 9999\. Nothing behind it serves/
     );
     expect(trace.serving).toBe(false);
     expect(trace.servingKnown).toBe(true);
