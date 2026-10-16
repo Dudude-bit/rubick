@@ -186,6 +186,14 @@ function Row({
           "truncate text-xs",
           row.stop && !muted ? "text-err" : "text-fg-fnt"
         )}
+        title={
+          row.stop
+            ? t("empty", "gwStopsAtPhrase", {
+                short: row.stop.short,
+                at: t("columns", STEP_WORD[row.stop.at]),
+              })
+            : (row.tail ?? undefined)
+        }
       >
         {row.stop
           ? parts(t("empty", "gwStopsAtPhrase", { short: row.stop.short }), {

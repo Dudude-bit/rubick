@@ -34,6 +34,7 @@ import {
   doorDoubt,
   doorDoubtWords,
   isPolicyStop,
+  policyNamesOf,
   refusedStop,
   type DoorAsk,
   type DoorDoubt,
@@ -571,7 +572,7 @@ export function describeStop(
       };
     }
     case "policyRefuses": {
-      const names = stop.policies.join(", ");
+      const names = policyNamesOf(stop).join(", ");
       const n = stop.policies.length;
       if (stop.client)
         return {
@@ -599,7 +600,7 @@ export function describeStop(
       };
     }
     case "policyHoldsBack": {
-      const names = stop.policies.map((policy) => policy.name).join(", ");
+      const names = policyNamesOf(stop).join(", ");
       const n = stop.policies.length;
       const client = stop.client.name;
       const ports = stop.ports

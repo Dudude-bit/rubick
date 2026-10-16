@@ -97,6 +97,12 @@ export const isPolicyStop = (
 ): stop is PolicyStop =>
   stop?.reason === "policyRefuses" || stop?.reason === "policyHoldsBack";
 
+/** The NetworkPolicies a policy stop names. */
+export const policyNamesOf = (stop: PolicyStop): string[] =>
+  stop.reason === "policyRefuses"
+    ? stop.policies
+    : stop.policies.map((policy) => policy.name);
+
 /** What the verdict reads of a Service: its door, the ports and addresses its pods take connections on, and the stop already said about it. */
 export type DoorSubject = Pick<ServicePublished, "service" | "door" | "ports"> &
   Partial<Pick<ServicePublished, "endpoints">> & {

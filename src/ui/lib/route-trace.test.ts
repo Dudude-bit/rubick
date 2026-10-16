@@ -1873,7 +1873,8 @@ describe("a route's Gateway controller at the door of the pods", () => {
    * Traefik's Gateway provider served an HTTPRoute that allow-nginx shut it
    * out of, and the trace called it serving over a 502. Fails if the
    * Gateway's class is not followed to its controller, or the refusal is not
-   * the policy step's, in red, naming the policy and the controller.
+   * the policy step's, in red, naming the policy and the controller, or the
+   * routes row repeats the kind its step word already says.
    */
   it("stops at the policy where no rule admits the controller its Gateway's class names", () => {
     const [trace] = routeTraces(route("healthy"), judged(traefik()), t);
@@ -1884,6 +1885,7 @@ describe("a route's Gateway controller at the door of the pods", () => {
       id: "policy",
       state: "err",
       say: "healthy: NetworkPolicy allow-nginx admits no connection from Traefik",
+      short: "allow-nginx",
     });
   });
 

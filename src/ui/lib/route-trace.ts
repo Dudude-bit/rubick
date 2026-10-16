@@ -36,7 +36,12 @@ import { conditionSaid, failingCondition } from "@/lib/condition-health";
 import { describeStop, stopMood } from "@/lib/connections";
 import { listenerRefusals, pickListeners } from "@/lib/gateway-listeners";
 import type { T } from "@/i18n/useT";
-import { doorDoubtWords, isPolicyStop, type DoorAsk } from "@/lib/policy-door";
+import {
+  doorDoubtWords,
+  isPolicyStop,
+  policyNamesOf,
+  type DoorAsk,
+} from "@/lib/policy-door";
 import { saidOf, statusesFor, verdictOf } from "@/lib/route-verdict";
 
 export interface TraceQuote {
@@ -1227,20 +1232,24 @@ function backendSteps(
     (v) => v.state.stop != null && v.state.stop.reason !== "backendMissing"
   );
   if (down) {
-    const stop = describeStop(down.state.stop!, t);
+    const stopped = down.state.stop!;
+    const stop = describeStop(stopped, t);
     // Pods on their way are not a broken path, nor are pods nobody could
     // read: the first is undecided until they are ready, the second unknown.
-    const mood = stopMood(down.state.stop!);
+    const mood = stopMood(stopped);
     return [
       backendStep,
       {
-        id: isPolicyStop(down.state.stop) ? "policy" : "endpoints",
+        id: isPolicyStop(stopped) ? "policy" : "endpoints",
         state:
           mood === "coming" ? "warn" : mood === "unchecked" ? "blind" : "err",
         pending: mood === "coming" || undefined,
         say: `${down.backend.name}: ${stop.title}`,
         who: "yours",
-        short: stop.title,
+        // The row already says "network policy": the names are what is left to say.
+        short: isPolicyStop(stopped)
+          ? policyNamesOf(stopped).join(", ")
+          : stop.title,
         subject: {
           kind: "Service",
           name: down.backend.name,

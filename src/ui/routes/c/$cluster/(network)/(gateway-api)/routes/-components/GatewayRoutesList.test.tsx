@@ -176,7 +176,8 @@ describe("the routes page when the gateways could not be read", () => {
    * A developer bound to their namespace cannot list Gateways, and a route
    * its controller refused sat muted under "no verdict below is a verdict"
    * beside the healthy-looking rest. A refusal the controller wrote is read,
-   * not guessed. Fails if it is drawn muted with the routes nobody can judge.
+   * not guessed. Fails if it is drawn muted with the routes nobody can judge,
+   * or if its truncated sentence cannot be read whole.
    */
   it("still names a route its controller refused as not serving", async () => {
     const { commands } = await import("@/lib/commands");
@@ -225,6 +226,10 @@ describe("the routes page when the gateways could not be read", () => {
       )
     ).toBeVisible();
     expect(screen.getByText("Not serving")).toBeVisible();
+    // The cell truncates; its whole sentence is one hover away.
+    expect(
+      screen.getByTitle(/^stops at .+: hostnames don't intersect$/)
+    ).toBeVisible();
     vi.mocked(commands.listGateways).mockResolvedValue([]);
     page.gateways = false;
   });
