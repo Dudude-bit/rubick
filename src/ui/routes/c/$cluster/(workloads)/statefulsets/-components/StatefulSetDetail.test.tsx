@@ -1,0 +1,469 @@
+import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
+import { act, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type {
+  ResourceConnections,
+  StatefulSetDetailInfo,
+} from "@/generated/types";
+
+vi.mock("@/hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks")>()),
+  useResourceDetail: vi.fn(),
+}));
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    getStatefulset: vi.fn(async () => buildSet()),
+    deleteStatefulset: vi.fn(),
+    scaleStatefulset: vi.fn(async () => undefined),
+    listPods: vi.fn(async () => []),
+    // Read at call time so a test can put this workload in a different
+    // neighbourhood before it renders.
+    getResourceConnections: vi.fn(async () => connections),
+    detectInClusterExtensions: vi.fn(async () => []),
+    getPrometheusConnection: vi.fn(async () => null),
+    getLokiConnection: vi.fn(async () => null),
+    getPodSetupWarnings: vi.fn(async () => []),
+  },
+}));
+
+import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
+import { renderWithRouter, testQueryClient } from "@/test/render";
+import { useClusterStore } from "@/stores/clusterStore";
+import { StatefulSetDetail } from "./StatefulSetDetail";
+
+function buildSet(
+  overrides: Partial<StatefulSetDetailInfo> = {}
+): StatefulSetDetailInfo {
+  return {
+    name: "stateful-demo",
+    namespace: "k8s-gui-test",
+    uid: "sts-uid",
+    replicas: { desired: 1, ready: 1, current: 1, updated: 1 },
+    rollout: { state: "ready" },
+    rolloutPlan: {
+      strategy: "ordered",
+      replicas: 1,
+      start: 0,
+      partition: 0,
+      unavailable: 1,
+    },
+    serviceName: "stateful-demo",
+    podManagementPolicy: "OrderedReady",
+    updateStrategy: "RollingUpdate",
+    containers: [],
+    initContainers: [],
+    serviceAccountName: null,
+    podResources: { requests: {}, limits: {} },
+    replica: {
+      cpuRequests: null,
+      cpuLimits: null,
+      memoryRequests: null,
+      memoryLimits: null,
+      known: true,
+    },
+    labels: {},
+    annotations: {},
+    conditions: [],
+    ownerReferences: [],
+    generation: null,
+    observedGeneration: null,
+    createdAt: "2026-01-01T00:00:00Z",
+    claimTemplates: [],
+    claimsWhenDeleted: null,
+    ...overrides,
+  };
+}
+
+/**
+ * An HPA that names the StatefulSet, exactly as the connections call returns
+ * it. The warning has to survive the whole path — the page's `useConnections`
+ * on the StatefulSet kind, `scaleWarnings`, and the dialog.
+ */
+let connections: ResourceConnections;
+
+const governed: ResourceConnections = {
+  subject: {
+    kind: "StatefulSet",
+    name: "stateful-demo",
+    namespace: "k8s-gui-test",
+    existence: "present",
+    facts: null,
+  },
+  edges: [
+    {
+      from: {
+        kind: "HorizontalPodAutoscaler",
+        name: "hpa-stateful",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: {
+          kind: "autoscaler",
+          minReplicas: 1,
+          maxReplicas: 3,
+          currentReplicas: 1,
+          desiredReplicas: 1,
+          metrics: [
+            { name: "cpu", source: "resource", target: "80%", current: "2%" },
+          ],
+          conditions: [],
+          lastScaleTime: null,
+        },
+      },
+      to: {
+        kind: "StatefulSet",
+        name: "stateful-demo",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: null,
+      },
+      relation: { verb: "governs", selector: null },
+    },
+  ],
+  stops: [],
+  published: [],
+  notLookedAt: [],
+};
+
+/** The common case: nothing scales it and nothing guards it. */
+const ungoverned: ResourceConnections = {
+  ...governed,
+  edges: [],
+};
+
+function mockDetail(
+  set: StatefulSetDetailInfo | undefined,
+  activeTab = "overview",
+  watched?: StatefulSetDetailInfo
+) {
+  vi.mocked(useResourceDetail).mockReturnValue({
+    name: set?.name ?? "stateful-demo",
+    namespace: set?.namespace ?? "k8s-gui-test",
+    resource: set,
+    watched,
+    isLoading: false,
+    error: null,
+    yaml: "kind: StatefulSet\n",
+    copyYaml: vi.fn(),
+    activeTab,
+    setActiveTab: vi.fn(),
+    goBack: vi.fn(),
+    refetch: vi.fn(),
+    deleteMutation: { mutate: vi.fn(), isPending: false },
+  } as unknown as ReturnType<typeof useResourceDetail>);
+}
+
+function renderPage() {
+  return renderWithRouter(<StatefulSetDetail />, {
+    at: "/c/prod/statefulsets/k8s-gui-test/stateful-demo",
+    route: "/c/$cluster/statefulsets/$namespace/$name",
+  });
+}
+
+describe("StatefulSetDetail", () => {
+  beforeEach(() => {
+    connections = governed;
+    mockDetail(buildSet());
+  });
+
+  /**
+   * The peek's Pods tab finds a set's pods the same way and keeps them in the
+   * same entry. Fails if the page keys them apart: the list is read twice,
+   * and a mutation from the peek leaves this pane behind.
+   */
+  it("keeps its pods where the peek's Pods tab reads them", async () => {
+    const pod = (name: string) => ({
+      name,
+      namespace: "k8s-gui-test",
+      uid: name,
+      status: {
+        phase: "Running",
+        display: "Running",
+        ready: true,
+        conditions: [],
+        message: null,
+        reason: null,
+      },
+      nodeName: null,
+      containers: [],
+      initContainers: [],
+      restartCount: 0,
+      createdAt: null,
+      labels: {},
+      annotations: {},
+      ownerReferences: [],
+      podIp: null,
+      hostIp: null,
+    });
+    vi.mocked(commands.listPods).mockResolvedValueOnce([
+      pod("stateful-demo-0"),
+      pod("stateful-demo-web"),
+    ] as never);
+    const { client } = await renderPage();
+    await waitFor(() =>
+      expect(
+        client.getQueryData(
+          queryKeys.ownedPods("StatefulSet", "k8s-gui-test", "stateful-demo")
+        )
+      ).toEqual([pod("stateful-demo-0")])
+    );
+  });
+
+  /** Two pods of the set the kubelet is setting up, inside their wait, and what it warned of them. */
+  function mockSettingUp(
+    warnings: Awaited<ReturnType<typeof commands.getPodSetupWarnings>>
+  ) {
+    mockDetail(
+      buildSet({
+        replicas: { desired: 2, ready: 0, current: 2, updated: 2 },
+        rollout: { state: "short", available: 0, desired: 2 },
+      })
+    );
+    const pod = (name: string) => ({
+      name,
+      namespace: "k8s-gui-test",
+      uid: name,
+      status: {
+        phase: "Pending",
+        display: "ContainerCreating",
+        ready: false,
+        conditions: [],
+        message: null,
+        reason: null,
+        cause: {
+          says: "creating",
+          uid: name,
+          since: null,
+          sandbox: false,
+          kubelet: { says: "notRead" },
+        },
+      },
+      nodeName: "k3d-agent-0",
+      containers: [],
+      initContainers: [],
+      restartCount: 0,
+      createdAt: null,
+      labels: {},
+      annotations: {},
+      ownerReferences: [
+        {
+          apiVersion: "apps/v1",
+          kind: "StatefulSet",
+          name: "stateful-demo",
+          uid: "sts-uid",
+          controller: true,
+        },
+      ],
+      podIp: null,
+      hostIp: null,
+      start: {
+        state: "starting",
+        until: new Date(Date.now() + 5 * 60_000).toISOString(),
+      },
+    });
+    vi.mocked(commands.listPods).mockResolvedValue([
+      pod("stateful-demo-0"),
+      pod("stateful-demo-1"),
+    ] as never);
+    vi.mocked(commands.getPodSetupWarnings).mockResolvedValue(warnings);
+  }
+
+  /**
+   * Only the Deployment page led with its pods' cause: a StatefulSet whose
+   * pods waited on a missing ConfigMap said "0 of 2 ready" and nothing
+   * more. Fails if the cause they share does not lead, with the kubelet's
+   * warning it reads for the pod the cause names, while they are still
+   * inside the wait every pod gets.
+   */
+  it("leads with the cause its pods share, in the kubelet's words", async () => {
+    mockSettingUp([
+      {
+        reason: "FailedMount",
+        said: 'MountVolume.SetUp failed for volume "cfg" : configmap "web-config" not found',
+        count: 7,
+        at: null,
+        fault: {
+          says: "missing",
+          volume: "cfg",
+          kind: "ConfigMap",
+          name: "web-config",
+        },
+      },
+    ]);
+    await renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pods-cause")).toHaveTextContent(
+        "2 of 2 pods: ConfigMap web-config does not exist, so the kubelet cannot mount it"
+      )
+    );
+    expect(commands.getPodSetupWarnings).toHaveBeenCalledWith(
+      "k8s-gui-test",
+      "stateful-demo-0"
+    );
+  });
+
+  /**
+   * The page led with the kubelet's warning in red over a strip that counted
+   * the same pods blue, starting, for the rest of their wait. Fails if pods
+   * the overview found warned about are counted as starting, or pods it did
+   * not name stop being.
+   */
+  it("counts the pods its kubelet warned about as failing, not starting", async () => {
+    mockSettingUp([]);
+    const strip = async (warned: string[]) => {
+      const client = testQueryClient();
+      const { currentContext, namespaceScope } = useClusterStore.getState();
+      client.setQueryData(
+        queryKeys.clusterOverview(currentContext, namespaceScope),
+        { podsWarned: warned }
+      );
+      const { unmount } = await renderWithRouter(<StatefulSetDetail />, {
+        client,
+        at: "/c/prod/statefulsets/k8s-gui-test/stateful-demo",
+        route: "/c/$cluster/statefulsets/$namespace/$name",
+      });
+      const segment = (word: string) => new RegExp(`^\\d+ ${word}$`);
+      await screen.findByText(
+        segment(warned.length > 0 ? "failing" : "starting")
+      );
+      const words = ["failing", "starting"].filter((word) =>
+        screen.queryByText(segment(word))
+      );
+      unmount();
+      return words;
+    };
+    expect(await strip(["stateful-demo-0", "stateful-demo-1"])).toEqual([
+      "failing",
+    ]);
+    expect(await strip([])).toEqual(["starting"]);
+  });
+
+  /**
+   * Every pod is set up for a second or two on every start, and a line put
+   * above the page for it moved everything under it, twice. Fails if a set
+   * whose pods are being set up inside their wait, with nothing from the
+   * kubelet, leads with them.
+   */
+  it("says nothing of pods being set up that the kubelet has no word against", async () => {
+    mockSettingUp([]);
+    await renderPage();
+
+    await waitFor(() =>
+      expect(commands.getPodSetupWarnings).toHaveBeenCalledWith(
+        "k8s-gui-test",
+        "stateful-demo-0"
+      )
+    );
+    await act(() => Promise.resolve());
+    expect(screen.queryByTestId("pods-cause")).toBeNull();
+  });
+
+  /**
+   * The set's header waited for a read after its watch had already delivered
+   * the set, a read behind kubectl at every flip, as the Deployment's did.
+   * Fails if the header draws the read where the watch holds the same set,
+   * or draws the watch's set of another uid.
+   */
+  it("draws the set its watch delivered, not the read behind it", async () => {
+    const rolling = buildSet({
+      replicas: { desired: 2, ready: 1, current: 2, updated: 1 },
+      rollout: { state: "rollingOut", updated: 1, desired: 2 },
+    });
+    mockDetail(buildSet(), "overview", rolling);
+    const page = await renderPage();
+    expect(await screen.findByText("1/2 ready")).toBeInTheDocument();
+    page.unmount();
+
+    mockDetail(buildSet(), "overview", { ...rolling, uid: "another" });
+    await renderPage();
+    expect(await screen.findByText("1/1")).toBeInTheDocument();
+    expect(screen.queryByText("1/2 ready")).toBeNull();
+  });
+
+  /**
+   * The Logs tab of a set scaled to 0 said "No pods to read from yet." beside
+   * an Overview saying scaled to zero. Fails if the page stops handing the
+   * pane the reason its Usage block gives.
+   */
+  it("says on its Logs tab that it is scaled to zero, as its Overview does", async () => {
+    mockDetail(
+      buildSet({ replicas: { desired: 0, ready: 0, current: 0, updated: 0 } }),
+      "logs"
+    );
+    await renderPage();
+    expect((await screen.findByTestId("log-idle")).textContent).toBe(
+      "This StatefulSet is scaled to zero."
+    );
+  });
+
+  it("offers Scale — a StatefulSet has a replica count like any other", async () => {
+    await renderPage();
+    expect(screen.getByRole("button", { name: "Scale" })).toBeInTheDocument();
+  });
+
+  it("names the autoscaler that will put the number back", async () => {
+    await renderPage();
+    await userEvent.click(screen.getByRole("button", { name: "Scale" }));
+
+    expect(
+      await screen.findByText(/hpa-stateful will put this number back/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/keeps this between 1 and 3/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Scale anyway" })
+    ).toBeInTheDocument();
+  });
+
+  it("lays the Overview out as blocks in one column, never a page-level grid", async () => {
+    const { container } = await renderPage();
+    await screen.findByText("Set by");
+
+    // A grid is allowed *inside* a block — a bar beside its rows, a short
+    // fact table in two columns. What is not allowed back is the page-level
+    // auto-flow that put "who sets the replica count" and "what a drain must
+    // respect" in opposite columns: a grid whose items are the page's blocks.
+    for (const grid of container.querySelectorAll('[class*="grid-cols"]')) {
+      expect(grid.querySelectorAll("section").length).toBeLessThan(2);
+    }
+  });
+
+  it("states the replica count once — the bar owns it", async () => {
+    mockDetail(
+      buildSet({ replicas: { desired: 3, ready: 3, current: 3, updated: 3 } })
+    );
+    connections = {
+      ...governed,
+      edges: governed.edges.map((edge) => ({
+        ...edge,
+        from: {
+          ...edge.from,
+          facts:
+            edge.from.facts?.kind === "autoscaler"
+              ? { ...edge.from.facts, currentReplicas: 3, desiredReplicas: 3 }
+              : edge.from.facts,
+        },
+      })),
+    };
+
+    await renderPage();
+    await screen.findByText("Set by");
+
+    // The header's `3/3 ready` is identity and exempt; inside the page's own
+    // blocks the number is stated by the composition and by nothing else.
+    expect(screen.getAllByText("3")).toHaveLength(1);
+    expect(screen.queryByText(/3 running/)).toBeNull();
+  });
+
+  it("draws no empty Set by row for a workload nothing scales", async () => {
+    connections = ungoverned;
+    await renderPage();
+
+    // The bar is what a workload with no autoscaler and no budget shows.
+    await screen.findByText("replica wanted");
+    expect(screen.queryByText("Set by")).toBeNull();
+    expect(screen.queryByText("A drain waits")).toBeNull();
+  });
+});

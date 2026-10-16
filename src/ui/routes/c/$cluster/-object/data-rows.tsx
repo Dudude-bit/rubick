@@ -1,0 +1,351 @@
+import { valuesCopiedWithBinary } from "@/lib/two-counts";
+import { useEffect, useMemo, useState } from "react";
+import { Copy, Eye, EyeOff, Pencil } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { Textarea } from "@/components/ui/textarea";
+import { useCopyToClipboard } from "@/hooks";
+import { formatBytes } from "@/lib/k8s-quantity";
+import { cn } from "@/lib/utils";
+import {
+  DetailAction,
+  ReasonedAction,
+} from "@/components/object/detail-blocks";
+import type { BinaryValue, Withheld } from "@/generated/types";
+import { withheldWords } from "@/lib/certificates";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
+import { useT } from "@/i18n/useT";
+import { T } from "@/i18n/T";
+
+/**
+ * The body of a ConfigMap or a Secret.
+ *
+ * On these two pages the data *is* the page — everything else is context — so
+ * it gets the full width and no competing surface. Each key is a heading with
+ * its value indented behind a hairline rule, which is how a flat canvas marks
+ * a block without drawing a box around it.
+ */
+
+export interface DataSectionProps {
+  title?: string;
+  /** Decoded key/value pairs. Empty while loading, or when access is refused. */
+  data: Record<string, string>;
+  /**
+   * Keys taken from the object itself. A Secret's values need a second,
+   * separately-authorised read, so the list of keys can be known while the
+   * values are not — showing the keys beats showing "no data".
+   */
+  keys?: string[];
+  /** Mask every value until the reader asks for it. */
+  sensitive?: boolean;
+  /**
+   * Keys the backend refuses to hand over, and why — a private key, and
+   * nothing else so far. Said in the row rather than left to read as "not
+   * readable with this access", which would be a different and untrue claim.
+   */
+  withheld?: Record<string, Withheld>;
+  /**
+   * Keys whose bytes are not text. Described by size rather than rendered:
+   * a keystore run through a lossy decode is a screenful of replacement
+   * characters that reads exactly like a value someone typed. The base64 is
+   * offered for copying because `base64 -d` is what the reader wants next.
+   */
+  binary?: Record<string, BinaryValue>;
+  isLoading?: boolean;
+  emptyMessage?: string;
+  /**
+   * Write one key back, where the surface allows it.
+   *
+   * Optional, and opt-in per page rather than per row: a `ConfigMap` passes
+   * it, a `Secret` does not. Asked for in #107 — the YAML editor can already
+   * change these, but a value that is itself JSON becomes an indentation
+   * puzzle inside a YAML string, and one mis-typed space rewrites a key
+   * nobody touched.
+   *
+   * Only text values are offered. A binary key is bytes and a textarea is
+   * not the way to edit bytes; a withheld one is not ours to write.
+   */
+  onEditKey?: (key: string, value: string) => Promise<void>;
+  /** Why the cluster will not take an edit from this user; each Edit stays, greyed, and says so. */
+  editDenied?: string;
+}
+
+export function DataSection({
+  title,
+  data,
+  keys = [],
+  sensitive = false,
+  withheld = {},
+  binary = {},
+  isLoading = false,
+  emptyMessage,
+  onEditKey,
+  editDenied,
+}: DataSectionProps) {
+  const t = useT();
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  // Editing a key writes live config the cluster's workloads read, so on a
+  // cluster marked critical the Save waits on the cluster's own name. Cleared
+  // whenever the edited key changes, so a match never carries to the next key.
+  const gate = useCriticalGate();
+  const gateReset = gate.reset;
+  useEffect(() => {
+    gateReset();
+  }, [editing, gateReset]);
+  const copyToClipboard = useCopyToClipboard();
+
+  const entries = useMemo(() => {
+    const names = new Set([
+      ...Object.keys(data),
+      ...Object.keys(withheld),
+      ...Object.keys(binary),
+      ...keys,
+    ]);
+    return [...names]
+      .sort((a, b) => a.localeCompare(b))
+      .map((key) => ({
+        key,
+        value: data[key] as string | undefined,
+        refusal: withheld[key] as Withheld | undefined,
+        blob: binary[key] as BinaryValue | undefined,
+      }));
+  }, [data, keys, withheld, binary]);
+
+  const toggle = (key: string) =>
+    setRevealed((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+
+  const readable = entries.filter((entry) => entry.value !== undefined);
+  const blobCount = entries.filter((entry) => entry.blob !== undefined).length;
+  const allRevealed =
+    readable.length > 0 && readable.every((entry) => revealed.has(entry.key));
+
+  // Binary goes in as its base64, never as the lossy text it is not, and the
+  // toast says so — a silent substitution is the same lie in a new place.
+  const copyAll = () => {
+    const payload = {
+      ...data,
+      ...Object.fromEntries(
+        Object.entries(binary).map(([key, blob]) => [key, blob.base64])
+      ),
+    };
+    copyToClipboard(
+      JSON.stringify(payload, null, 2),
+      blobCount > 0
+        ? valuesCopiedWithBinary(readable.length, blobCount, t)
+        : t("count", "allValuesCopied", { n: readable.length })
+    );
+  };
+
+  if (entries.length === 0) {
+    return (
+      <Section>
+        <SectionHeader title={title ?? t("columns", "data")} count={0} />
+        <p className="py-1 text-xs text-fg-fnt">
+          {isLoading
+            ? t("action", "readingEllipsis")
+            : (emptyMessage ?? <T section="empty" k="noDataKeys" />)}
+        </p>
+      </Section>
+    );
+  }
+
+  return (
+    <Section>
+      <SectionHeader
+        title={title ?? t("columns", "data")}
+        count={
+          <>
+            {t("count", "keys", { n: entries.length })}
+            {sensitive && (
+              <span className="text-fg-fnt">
+                {" · "}
+                {t("empty", "valuesHiddenByDefault")}
+              </span>
+            )}
+          </>
+        }
+        actions={
+          readable.length + blobCount > 0 && (
+            <>
+              {sensitive && readable.length > 0 && (
+                <DetailAction
+                  label={
+                    allRevealed
+                      ? t("action", "hideAll")
+                      : t("action", "revealAll")
+                  }
+                  icon={allRevealed ? EyeOff : Eye}
+                  onClick={() =>
+                    setRevealed(
+                      allRevealed
+                        ? new Set()
+                        : new Set(readable.map((entry) => entry.key))
+                    )
+                  }
+                />
+              )}
+              <DetailAction
+                label={t("action", "copyAll")}
+                icon={Copy}
+                onClick={copyAll}
+              />
+            </>
+          )
+        }
+      />
+      <div className="flex flex-col">
+        {entries.map(({ key, value, refusal, blob }) => {
+          const isRevealed = !sensitive || revealed.has(key);
+          return (
+            <div
+              key={key}
+              className="border-b border-hair py-2 last:border-b-0"
+            >
+              <div className="flex items-baseline gap-2">
+                <span className="min-w-0 break-all font-mono text-xs font-medium text-fg">
+                  {key}
+                </span>
+                <span
+                  className={cn(
+                    "text-[11px]",
+                    refusal || blob ? "text-fg-mut" : "text-fg-fnt"
+                  )}
+                >
+                  {refusal
+                    ? withheldWords(refusal, t)
+                    : blob
+                      ? t("empty", "binaryNotText", {
+                          size: formatBytes(blob.bytes, { decimals: 0 }),
+                        })
+                      : value === undefined
+                        ? isLoading
+                          ? t("action", "readingInline")
+                          : t("empty", "notReadableWithAccess")
+                        : t("count", "chars", { n: value.length })}
+                </span>
+                {(value !== undefined || blob) && (
+                  <div className="ml-auto flex items-center gap-1">
+                    {sensitive && value !== undefined && (
+                      // The word stays on the control: an eye glyph alone is
+                      // the difference between "this is hidden" and "this is
+                      // empty", and that guess is expensive on a Secret.
+                      <DetailAction
+                        label={
+                          isRevealed
+                            ? t("action", "hide")
+                            : t("action", "reveal")
+                        }
+                        icon={isRevealed ? EyeOff : Eye}
+                        onClick={() => toggle(key)}
+                      />
+                    )}
+                    {onEditKey && value !== undefined && !blob && !refusal && (
+                      <ReasonedAction
+                        label={t("action", "edit")}
+                        // Named by its key, or a list of ten offers ten
+                        // identical "Edit" buttons and nothing but position
+                        // says which is which.
+                        aria-label={t("action", "editKeyLabel", { key })}
+                        icon={Pencil}
+                        reason={editDenied}
+                        onClick={() => {
+                          setEditing(key);
+                          setDraft(value);
+                        }}
+                      />
+                    )}
+                    {/* Named, because a Copy that silently hands over base64
+                        where every other row hands over the value is a
+                        surprise the reader finds out about in a shell. */}
+                    <DetailAction
+                      label={
+                        blob ? t("action", "copyBase64") : t("action", "copy")
+                      }
+                      icon={Copy}
+                      onClick={() =>
+                        blob
+                          ? copyToClipboard(
+                              blob.base64,
+                              t("action", "base64Copied", {
+                                key,
+                                size: formatBytes(blob.bytes, { decimals: 0 }),
+                              })
+                            )
+                          : copyToClipboard(
+                              value as string,
+                              t("action", "valueCopied", { label: key })
+                            )
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+              {editing === key && onEditKey ? (
+                // The value on its own, without the YAML around it — which is
+                // the whole request: a JSON blob inside a YAML string is an
+                // indentation puzzle, and the puzzle is not the point.
+                <div className="mt-1 border-l border-hair pl-3">
+                  {gate.notice}
+                  <Textarea
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    rows={Math.min(20, draft.split("\n").length + 1)}
+                    className="mt-2 font-mono text-xs"
+                    aria-label={t("action", "editKeyLabel", { key })}
+                  />
+                  {gate.input}
+                  <div className="mt-2 flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={saving || draft === value || gate.blocked}
+                      onClick={async () => {
+                        setSaving(true);
+                        try {
+                          await onEditKey(key, draft);
+                          setEditing(null);
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                    >
+                      {t("action", "save")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={saving}
+                      onClick={() => setEditing(null)}
+                    >
+                      {t("action", "cancel")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                value !== undefined && (
+                  <pre
+                    className={cn(
+                      "mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all border-l border-hair pl-3 font-mono text-xs",
+                      isRevealed ? "text-fg-mid" : "text-fg-fnt"
+                    )}
+                  >
+                    {isRevealed
+                      ? value
+                      : "•".repeat(Math.min(value.length, 32))}
+                  </pre>
+                )
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}

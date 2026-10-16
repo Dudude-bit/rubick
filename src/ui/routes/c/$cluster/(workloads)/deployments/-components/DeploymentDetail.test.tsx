@@ -1,0 +1,737 @@
+import { screen, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+vi.mock("@/hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks")>()),
+  useResourceDetail: vi.fn(),
+}));
+
+import { useResourceDetail } from "@/hooks";
+import type { AccessQuery, DeploymentInfo } from "@/generated/types";
+import { queryKeys } from "@/lib/query-keys";
+import { forgetRefusals } from "@/lib/refusals";
+import { useClusterStore } from "@/stores/clusterStore";
+import { renderWithRouter, testQueryClient } from "@/test/render";
+import { DeploymentDetail } from "./DeploymentDetail";
+
+const ledger = {
+  name: "ledger",
+  namespace: "team-blind",
+  uid: "uid",
+  replicas: { desired: 1, ready: 1, available: 1, updated: 1 },
+  rollout: { state: "ready" },
+  rolloutPlan: { strategy: "rolling", replicas: 1, surge: 1, unavailable: 0 },
+  strategy: "RollingUpdate",
+  containers: [],
+  initContainers: [],
+  serviceAccountName: null,
+  podResources: { requests: {}, limits: {} },
+  replica: {
+    cpuRequests: null,
+    cpuLimits: null,
+    memoryRequests: null,
+    memoryLimits: null,
+    known: true,
+  },
+  labels: {},
+  annotations: {},
+  templateAnnotations: {},
+  generation: 1,
+  observedGeneration: 1,
+  createdAt: "2026-10-01T00:00:00Z",
+  conditions: [],
+  ownerReferences: [],
+} as unknown as DeploymentInfo;
+
+/** How the cluster answers for the Deployment's ReplicaSets, per test. */
+const replicaSets = vi.hoisted(() => ({
+  answer: (): Promise<unknown> => Promise.resolve([]),
+}));
+
+beforeEach(() => {
+  forgetRefusals();
+  useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+  vi.mocked(useResourceDetail).mockReturnValue({
+    name: "ledger",
+    namespace: "team-blind",
+    resource: ledger,
+    isLoading: false,
+    error: null,
+    yaml: "",
+    copyYaml: vi.fn(),
+    activeTab: "replicasets",
+    setActiveTab: vi.fn(),
+    goBack: vi.fn(),
+    refetch: vi.fn(),
+    deleteMutation: { mutate: vi.fn(), isPending: false },
+  } as unknown as ReturnType<typeof useResourceDetail>);
+  vi.mocked(invoke).mockImplementation(async (command: string, args) => {
+    if (command === "get_deployment_replicasets") return replicaSets.answer();
+    if (command === "check_access")
+      return (args as { queries: AccessQuery[] }).queries.map((query) => ({
+        ...query,
+        allowed: true,
+      }));
+    if (
+      command === "list_service_health_inputs" ||
+      (command.startsWith("list_") && command.endsWith("_in"))
+    )
+      return { rows: [], unread: [] };
+    if (command.startsWith("list_") || command.endsWith("_pods")) return [];
+    return undefined;
+  });
+});
+
+const open = (client = testQueryClient()) =>
+  renderWithRouter(<DeploymentDetail />, {
+    at: "/c/prod/deployments/team-blind/ledger",
+    route: "/c/$cluster/deployments/$namespace/$name",
+    client,
+  });
+
+/** The answers below for two commands, every other one as `beforeEach` gives it. */
+function answering(
+  connections: () => Promise<unknown>,
+  pods: () => Promise<unknown> = () => Promise.resolve([])
+) {
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
+    if (command === "get_resource_connections") return connections();
+    if (command === "get_deployment_pods") return pods();
+    return base(command, args);
+  });
+}
+
+const CREATING = {
+  name: "ledger-6d9f7-x2",
+  namespace: "team-blind",
+  uid: "pod-uid",
+  status: {
+    phase: "Pending",
+    display: "ContainerCreating",
+    exitUnreported: false,
+    ready: false,
+    loopingUntil: null,
+    conditions: [],
+    message: null,
+    reason: null,
+  },
+  nodeName: "k3d-agent-0",
+  podIp: null,
+  hostIp: null,
+  containers: [],
+  initContainers: [],
+  labels: {},
+  annotations: {},
+  createdAt: null,
+  restartCount: 0,
+  lastRestartAt: null,
+  cpuRequests: null,
+  cpuLimits: null,
+  memoryRequests: null,
+  memoryLimits: null,
+  ownerReferences: [],
+  volumes: [],
+  serviceAccountName: null,
+  start: {
+    state: "starting",
+    until: new Date(Date.now() + 600_000).toISOString(),
+  },
+  workload: null,
+};
+
+const onOverview = () =>
+  vi.mocked(useResourceDetail).mockReturnValue({
+    ...vi.mocked(useResourceDetail)(
+      {} as Parameters<typeof useResourceDetail>[0]
+    ),
+    activeTab: "overview",
+  });
+
+/** The page's own read of the Deployment landing, which is what the page holds. */
+const read = (client: ReturnType<typeof testQueryClient>) =>
+  client.setQueryData(
+    queryKeys.detail("Deployment", "team-blind", "ledger"),
+    ledger
+  );
+
+describe("the Overview", () => {
+  /**
+   * Sam's big-pull page said "Could not read what connects to this:
+   * Resource not found: Deployment/big-pull" beside the Deployment it had
+   * just read as Ready: the neighbourhood was asked before it was created.
+   * Fails if a NotFound older than the page's read of its Deployment is
+   * drawn, or is not asked again.
+   */
+  it("reads a NotFound older than the Deployment it holds as still reading, and asks again", async () => {
+    let asked = 0;
+    answering(() => {
+      asked += 1;
+      return asked === 1
+        ? Promise.reject({
+            code: "NOT_FOUND",
+            message:
+              "Resource not found: Deployment/ledger in namespace team-blind",
+          })
+        : new Promise(() => {});
+    });
+    onOverview();
+    const client = testQueryClient();
+    await open(client);
+    expect(
+      await screen.findByText("Could not read what connects to this.")
+    ).toBeInTheDocument();
+
+    read(client);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Could not read what connects to this.")
+      ).toBeNull()
+    );
+    await waitFor(() => expect(asked).toBe(2));
+  });
+
+  /**
+   * At 17:31:09.163 the same page's header said Ready while its Replicas bar
+   * still said blue "1 starting": the pods were read before the Deployment
+   * was. Fails if a pods read older than the page's read of its Deployment
+   * splits the bar against the header, or is not asked again.
+   */
+  it("splits its Replicas bar by no pods read before the Deployment that count another number ready", async () => {
+    let asked = 0;
+    answering(
+      () => new Promise(() => {}),
+      () => {
+        asked += 1;
+        return asked === 1
+          ? Promise.resolve({ uid: "uid", pods: [CREATING] })
+          : new Promise(() => {});
+      }
+    );
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+    expect(await screen.findByText("1 starting")).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    read(client);
+
+    expect(await screen.findByText("1 ready")).toBeInTheDocument();
+    expect(screen.queryByText("1 starting")).toBeNull();
+    await waitFor(() => expect(asked).toBe(2));
+  });
+});
+
+describe("the Replicas block", () => {
+  /**
+   * Lena's page read "1 готова" above "1 обновлено · 1 доступно": both counts
+   * in one string, so neither could take the form its own number and
+   * "реплика" ask for. Fails if the note stops counting each number with its
+   * own plural.
+   */
+  it("counts the up to date and the available replicas each in its own words", async () => {
+    answering(() => new Promise(() => {}));
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    expect(
+      await screen.findByText("1 up to date · 1 available")
+    ).toBeInTheDocument();
+  });
+});
+
+describe("the rollout line", () => {
+  const rolling = (rollout: unknown) =>
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      resource: { ...ledger, rollout },
+    });
+
+  /**
+   * Every drain of Sam's big-pull moved the page 28 px down and back as
+   * "Pods coming up" came and went above the tabs. Fails if a state a
+   * rollout passes through on a drain is said anywhere but the header row.
+   */
+  it("says a rollout coming up in the header row, so nothing under it moves when it ends", async () => {
+    rolling({ state: "comingUp", available: 0, desired: 1 });
+    await open();
+
+    const line = await screen.findByTestId("rollout-summary");
+    expect(line).toHaveTextContent("Pods coming up: 0 of 1 pod is available");
+    expect(line.closest("[data-header-note]")).not.toBeNull();
+  });
+
+  /**
+   * Sam's drains: the header followed the pods while the Overview followed
+   * the Deployment's status, so for up to half a second the page was ahead
+   * of kubectl get deploy and of the Overview card. Fails if the header's
+   * verdict stops being the controller's, or the pods' answer ahead of it
+   * stops being said beside it.
+   */
+  it("keeps the controller's verdict in its header and says beside it what the pods say", async () => {
+    answering(
+      () => new Promise(() => {}),
+      () => Promise.resolve({ uid: "uid", pods: [CREATING] })
+    );
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    expect(await screen.findByText("1 starting")).toBeInTheDocument();
+    expect(await screen.findByTestId("pods-ahead")).toHaveTextContent(
+      "its pods say coming up, 0 of 1 ready"
+    );
+    expect(screen.getByText("Ready")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+    expect(screen.queryByTestId("rollout-summary")).toBeNull();
+  });
+
+  /**
+   * Sam's header trailed kubectl get deploy by 0.2 to 0.6 s at every flip:
+   * it waited for a read after its watch had already delivered the object.
+   * Fails if the header draws the read where the watch holds the same
+   * object, or draws the watch's object of another uid.
+   */
+  it("draws the object its watch delivered, not the read behind it", async () => {
+    const draining = {
+      ...ledger,
+      replicas: { desired: 1, ready: 0, available: 0, updated: 1 },
+      rollout: { state: "comingUp", available: 0, desired: 1 },
+    };
+    answering(() => new Promise(() => {}));
+    const delivering = (watched: unknown) =>
+      vi.mocked(useResourceDetail).mockReturnValue({
+        ...vi.mocked(useResourceDetail)(
+          {} as Parameters<typeof useResourceDetail>[0]
+        ),
+        activeTab: "overview",
+        watched,
+      });
+
+    delivering(draining);
+    const page = await open();
+    expect(await screen.findByText("Progressing")).toBeInTheDocument();
+    expect(screen.getByText("0/1 ready")).toBeInTheDocument();
+    page.unmount();
+
+    delivering({ ...draining, uid: "another" });
+    await open();
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+  });
+
+  /**
+   * Sam's d2 and d4: "its pods say coming up" 290 to 440 ms before the
+   * ReplicaSet had made a replacement, while the only pod was terminating.
+   * Fails if a drain with no new pod yet is said to be coming up, or the
+   * terminating pod is not named.
+   */
+  it("names the pod terminating, and nothing coming up, before a replacement exists", async () => {
+    answering(
+      () => new Promise(() => {}),
+      () =>
+        Promise.resolve({
+          uid: "uid",
+          pods: [
+            {
+              ...CREATING,
+              status: {
+                ...CREATING.status,
+                phase: "Running",
+                display: "Terminating",
+                ready: true,
+              },
+              start: { state: "settled" },
+            },
+          ],
+        })
+    );
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    expect(await screen.findByTestId("pods-ahead")).toHaveTextContent(
+      "its pods say 1 terminating, 0 of 1 ready"
+    );
+    expect(screen.queryByText(/coming up/)).toBeNull();
+  });
+
+  /** Fails if the note is drawn where the pods agree with the controller. */
+  it("says nothing beside the verdict where the pods agree with it", async () => {
+    answering(
+      () => new Promise(() => {}),
+      () =>
+        Promise.resolve({
+          uid: "uid",
+          pods: [
+            {
+              ...CREATING,
+              status: {
+                ...CREATING.status,
+                phase: "Running",
+                display: "Running",
+                ready: true,
+              },
+              start: { state: "settled" },
+            },
+          ],
+        })
+    );
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+    expect(await screen.findByText("1 ready")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+    expect(screen.queryByTestId("pods-ahead")).toBeNull();
+  });
+
+  /** Fails if a fault, and the controller's words with it, is squeezed into the header row too. */
+  it("keeps a fault on its own line above the tabs", async () => {
+    rolling({
+      state: "unavailable",
+      reason: "MinimumReplicasUnavailable",
+      message: "Deployment does not have minimum availability.",
+      available: 0,
+      desired: 1,
+    });
+    await open();
+
+    const line = await screen.findByTestId("rollout-summary");
+    expect(line.closest("[data-header-note]")).toBeNull();
+    expect(line).toHaveTextContent(
+      "Deployment does not have minimum availability."
+    );
+  });
+});
+
+describe("the cause its pods share", () => {
+  const rolling = (rollout: unknown) =>
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      resource: {
+        ...ledger,
+        replicas: { desired: 2, ready: 0, available: 0, updated: 2 },
+        rollout,
+      },
+    });
+
+  /**
+   * The page said "Deployment does not have minimum availability", the
+   * symptom. Fails if the cause most of its pods share does not lead, with
+   * how many of them share it.
+   */
+  it("leads with the cause most of its pods share above the verdict", async () => {
+    rolling({
+      state: "unavailable",
+      reason: "MinimumReplicasUnavailable",
+      message: "Deployment does not have minimum availability.",
+      available: 0,
+      desired: 2,
+    });
+    const blocked = {
+      says: "blocked",
+      container: "api",
+      reason: "ErrImagePull",
+      said: "docker.io/library/busybox:no-such-tag: not found",
+      image: "busybox:no-such-tag",
+      pull: "notFound",
+      secrets: [],
+    };
+    answering(
+      () => Promise.resolve(null),
+      () =>
+        Promise.resolve({
+          uid: "uid",
+          pods: ["a", "b"].map((name) => ({
+            ...CREATING,
+            name: `ledger-6d9f7-${name}`,
+            uid: name,
+            status: {
+              ...CREATING.status,
+              display: "ErrImagePull",
+              cause: blocked,
+            },
+          })),
+        })
+    );
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    const lead = await screen.findByTestId("pods-cause");
+    expect(lead).toHaveTextContent(
+      "2 of 2 pods: api cannot start: its image busybox:no-such-tag does not exist in the registry"
+    );
+  });
+});
+
+describe("a Deployment whose pods the API server refuses", () => {
+  /**
+   * Live, root-web read "Rollout stalled: the controller stopped waiting for
+   * the new pods" over a strip saying "1 not ready", with no pod at all:
+   * PodSecurity refused every one. Fails if the refusal does not lead with
+   * the API server's words, or the pod never made is counted not ready.
+   */
+  it("leads with the refusal and counts the pod never made as not created", async () => {
+    const said =
+      'pods "ledger-6d9f7-x2" is forbidden: violates PodSecurity "restricted:latest"';
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      resource: {
+        ...ledger,
+        replicas: { desired: 1, ready: 0, available: 0, updated: 0 },
+        rollout: {
+          state: "stalled",
+          message: 'ReplicaSet "ledger-6d9f7" has timed out progressing.',
+          serving: 0,
+        },
+        podsRefused: said,
+      },
+      activeTab: "overview",
+    });
+    answering(
+      () => Promise.resolve(null),
+      () => Promise.resolve({ uid: "uid", pods: [] })
+    );
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    const lead = await screen.findByTestId("refused-line");
+    expect(lead).toHaveTextContent(
+      `The API server refuses to create its pods. The API server answered: ${said}`
+    );
+    expect(await screen.findByText("1 not created")).toBeInTheDocument();
+    expect(screen.queryByText("1 not ready")).toBeNull();
+  });
+});
+
+describe("the Pods tab", () => {
+  /**
+   * Sam deleted big-pull and applied it again: the new Deployment's Pods tab
+   * counted 1 and listed the old one's pod green "Running" while kubectl had
+   * it Terminating and no pod owned by the new one. Fails if pods read for
+   * another Deployment of its name are listed or counted under this one, or
+   * are not asked for again.
+   */
+  it("lists none of the pods read for the Deployment deleted before this one, and asks again", async () => {
+    let asked = 0;
+    answering(
+      () => new Promise(() => {}),
+      () => {
+        asked += 1;
+        return asked === 1
+          ? Promise.resolve({
+              uid: "the-one-deleted",
+              pods: [
+                {
+                  ...CREATING,
+                  name: "ledger-6d9f7-old",
+                  status: { ...CREATING.status, display: "Running" },
+                },
+              ],
+            })
+          : new Promise(() => {});
+      }
+    );
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      activeTab: "pods",
+    });
+    const client = testQueryClient();
+    await open(client);
+    await waitFor(() => expect(asked).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByText("ledger-6d9f7-old")).toBeNull();
+
+    read(client);
+
+    await waitFor(() => expect(asked).toBe(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByText("ledger-6d9f7-old")).toBeNull();
+    expect(screen.getByRole("tab", { name: /Pods/ }).textContent).not.toMatch(
+      /\d/
+    );
+  });
+  /**
+   * Sam's quick delete and apply: "Pods 0" and "No pods for this workload"
+   * for two seconds beside a header reading Ready 1/1, from a list asked a
+   * moment before the ReplicaSet was made. Fails if none read before the
+   * page's read of a Deployment that counts a pod ready is drawn as none,
+   * or is not asked again.
+   */
+  it("counts none read before the Deployment it holds counts a pod ready as still reading, and asks again", async () => {
+    let asked = 0;
+    answering(
+      () => new Promise(() => {}),
+      () => {
+        asked += 1;
+        return asked === 1
+          ? Promise.resolve({ uid: "uid", pods: [] })
+          : new Promise(() => {});
+      }
+    );
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      activeTab: "pods",
+    });
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+    expect(
+      await screen.findByText("No pods for this workload")
+    ).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    read(client);
+
+    await waitFor(() =>
+      expect(screen.queryByText("No pods for this workload")).toBeNull()
+    );
+    expect(screen.getByRole("tab", { name: /Pods/ }).textContent).not.toMatch(
+      /\d/
+    );
+    await waitFor(() => expect(asked).toBe(2));
+  });
+});
+
+describe("the Revisions tab", () => {
+  /**
+   * A refused ReplicaSet list was answered with none: "Revisions 0" over
+   * "This Deployment has no ReplicaSets". Fails if either the tab or its
+   * body states none for a list nobody could read.
+   */
+  it("says the ReplicaSets could not be read, on the tab and in it", async () => {
+    replicaSets.answer = () =>
+      Promise.reject({ code: "PERMISSION_DENIED", message: "forbidden" });
+    await open();
+
+    expect(
+      await screen.findByText("Could not read this Deployment's ReplicaSets.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("This Deployment has no ReplicaSets")).toBeNull();
+    const tab = screen.getByRole("tab", { name: /Revisions/ });
+    expect(tab.textContent).not.toMatch(/\d/);
+    expect(tab).toHaveAccessibleName(
+      "Revisions: Could not read this Deployment's ReplicaSets."
+    );
+  });
+
+  /**
+   * Sam opened big-pull's page before applying it: the Revisions tab kept
+   * "Could not read this Deployment's ReplicaSets: deployments.apps
+   * big-pull not found" beside the Deployment Ready 1/1 until he asked
+   * again. Fails if a NotFound from before the page read its Deployment is
+   * drawn once it has, or is not asked again.
+   */
+  it("reads a NotFound from before the Deployment was made as still reading, and asks again", async () => {
+    let asked = 0;
+    replicaSets.answer = () => {
+      asked += 1;
+      return asked === 1
+        ? Promise.reject({
+            code: "NOT_FOUND",
+            message: 'deployments.apps "ledger" not found',
+          })
+        : new Promise(() => {});
+    };
+    const client = testQueryClient();
+    await open(client);
+    expect(
+      await screen.findByText("Could not read this Deployment's ReplicaSets.")
+    ).toBeInTheDocument();
+
+    read(client);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Could not read this Deployment's ReplicaSets.")
+      ).toBeNull()
+    );
+    await waitFor(() => expect(asked).toBe(2));
+    expect(screen.getByText("reading…")).toBeInTheDocument();
+    expect(screen.queryByText("This Deployment has no ReplicaSets")).toBeNull();
+  });
+
+  /**
+   * Sam's quick delete and apply: "Revisions 0" over "This Deployment has
+   * no ReplicaSets" for two seconds beside a header reading Ready 1/1, from
+   * a list asked a moment before the ReplicaSet was made. Fails if none
+   * read before the page's read of a Deployment that counts its pods is
+   * drawn as none, or is not asked again.
+   */
+  it("reads none from before the Deployment it holds counts pods as still reading, and asks again", async () => {
+    let asked = 0;
+    replicaSets.answer = () => {
+      asked += 1;
+      return asked === 1 ? Promise.resolve([]) : new Promise(() => {});
+    };
+    const client = testQueryClient();
+    await open(client);
+    expect(
+      await screen.findByText("This Deployment has no ReplicaSets")
+    ).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    read(client);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("This Deployment has no ReplicaSets")
+      ).toBeNull()
+    );
+    expect(screen.getByText("reading…")).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /Revisions/ }).textContent
+    ).not.toMatch(/\d/);
+    await waitFor(() => expect(asked).toBe(2));
+  });
+
+  /** Fails if a list still on its way is counted as none. */
+  it("wears no number while the ReplicaSets are still being read", async () => {
+    replicaSets.answer = () => new Promise(() => {});
+    await open();
+
+    expect(
+      screen.getByRole("tab", { name: /Revisions/ }).textContent
+    ).not.toMatch(/\d/);
+  });
+});
+
+describe("a Deployment page before its read has answered", () => {
+  /**
+   * Lena's deep link to big-pull drew the content pane blank: with no object,
+   * no failure and no fetch in flight, as a read reset or called off leaves
+   * it, the page returned nothing. Fails if it draws anything but its
+   * placeholder then.
+   */
+  it("draws its placeholder rather than nothing", async () => {
+    const held = vi.mocked(useResourceDetail)({} as never);
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...held,
+      resource: undefined,
+      isLoading: false,
+      error: null,
+    });
+    await open();
+    expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
+  });
+});

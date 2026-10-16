@@ -1,0 +1,76 @@
+//! Secret commands — list / get / get-data (decoded) / delete.
+//! YAML goes through the generic `get_manifest`, which redacts
+//! private keys for every kind.
+
+use super::data::ConfigData;
+use crate::commands::helpers::{get_resource_info, list_in_scope};
+use crate::error::Result;
+use crate::resources::SecretInfo;
+use crate::state::AppState;
+use k8s_openapi::api::core::v1::Secret;
+use tauri::State;
+
+list_in_scope!(list_secrets_in, Secret, SecretInfo);
+
+/// Get a Secret by name
+#[tauri::command]
+pub async fn get_secret(
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<SecretInfo> {
+    crate::client::clock::timed(
+        &state.perf,
+        "getSecret",
+        get_resource_info::<Secret, SecretInfo>(name, namespace, state.clone()),
+    )
+    .await
+}
+
+/// Get decoded Secret data.
+///
+/// A PEM private key is perfectly valid UTF-8, so decoding every value and
+/// offering it for reveal and copy put `tls.key` one click from the
+/// clipboard. Withholding happens in `ConfigData::take`, at the one door the
+/// values come through, rather than in the component that draws them.
+#[tauri::command]
+pub async fn get_secret_data(
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ConfigData> {
+    let secret: Secret = crate::client::clock::timed(
+        &state.perf,
+        "getSecretData",
+        crate::commands::helpers::get_resource(name, namespace, state.clone()),
+    )
+    .await?;
+    let secret_type = secret.type_.clone().unwrap_or_default();
+
+    let mut out = ConfigData::default();
+
+    if let Some(data) = secret.data {
+        for (key, value) in data {
+            out.take(&secret_type, key, &value.0);
+        }
+    }
+
+    // Also include stringData if present (already strings)
+    if let Some(string_data) = secret.string_data {
+        for (key, value) in string_data {
+            out.take(&secret_type, key, value.as_bytes());
+        }
+    }
+
+    Ok(out)
+}
+
+/// Delete Secret
+#[tauri::command]
+pub async fn delete_secret(
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    crate::commands::helpers::delete_resource::<Secret>(name, namespace, state, None).await
+}

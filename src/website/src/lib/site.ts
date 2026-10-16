@@ -1,0 +1,114 @@
+export const SITE = {
+  name: "Rubick",
+  title: "Rubick, a desktop Kubernetes client that tries not to lie to you",
+  description:
+    "A crashlooping pod says Running. A dead Service draws green. Rubick reads what the cluster actually does and tells you that instead. Free, GPLv3, no account, no telemetry.",
+  url: "https://rubick.tech",
+};
+
+const GH = "https://github.com/Dudude-bit/rubick";
+
+export const LINKS = {
+  github: GH,
+  releases: `${GH}/releases/latest`,
+  issues: `${GH}/issues`,
+  contributing: `${GH}/blob/main/CONTRIBUTING.md`,
+  security: `${GH}/blob/main/SECURITY.md`,
+  license: `${GH}/blob/main/LICENSE`,
+  aur: "https://aur.archlinux.org/packages/rubick-kubernetes-bin",
+  kubetools: "https://github.com/collabnix/kubetools",
+  brew: "brew install --cask Dudude-bit/tap/rubick",
+  lies: "https://rubick.tech/lies.yaml",
+  reportLie: `${GH}/issues/new?${new URLSearchParams({
+    title: "A status Rubick got wrong: ",
+    body: [
+      "**What the cluster reported**",
+      "",
+      "**What Rubick showed**",
+      "",
+      "**What was actually true**",
+      "",
+      "**Rubick version, Kubernetes version**",
+      "",
+      "**Smallest manifest that reproduces it** (no kubeconfigs, no secrets)",
+      "",
+      "```yaml",
+      "```",
+    ].join("\n"),
+  })}`,
+};
+
+export const OG_IMAGE = {
+  url: `${SITE.url}/og.png`,
+  width: "1200",
+  height: "630",
+  alt: "Your cluster is lying to you: Running, struck out, next to CrashLoopBackOff",
+};
+
+export const JSON_LD = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: SITE.name,
+  alternateName: ["Rubick Kubernetes client", "Rubick for Kubernetes"],
+  description: SITE.description,
+  url: SITE.url,
+  image: `${SITE.url}/logo.svg`,
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "macOS, Windows, Linux",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  isAccessibleForFree: true,
+  license: "https://www.gnu.org/licenses/gpl-3.0.html",
+  downloadUrl: `${GH}/releases/latest`,
+  screenshot: OG_IMAGE.url,
+  sameAs: [GH],
+  subjectOf: {
+    "@type": "CreativeWork",
+    name: "Kubetools, a curated list of Kubernetes tools by Collabnix",
+    url: LINKS.kubetools,
+  },
+});
+
+export type Shot = { src: string; width: number; height: number };
+
+export const IMG = {
+  hero: { src: "/images/hero-workload-detail.webp", width: 1400, height: 900 },
+  logs: {
+    src: "/images/logs-failing-init-container.webp",
+    width: 1190,
+    height: 350,
+  },
+  connections: {
+    src: "/images/connections-tab.webp",
+    width: 1190,
+    height: 380,
+  },
+  chain: { src: "/images/traffic-chain-stops.webp", width: 1190, height: 255 },
+  scale: { src: "/images/scale-interception.webp", width: 512, height: 220 },
+  cilium: { src: "/images/cilium-coverage.webp", width: 1150, height: 420 },
+} satisfies Record<string, Shot>;
+
+/**
+ * A page that explains one thing in depth, as structured data. Built from the
+ * same title and description the page's meta tags carry, so the two cannot
+ * say different things.
+ */
+export function articleLd(page: {
+  title: string;
+  description: string;
+  url: string;
+  image: string;
+}) {
+  return {
+    type: "application/ld+json",
+    children: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "TechArticle",
+      headline: page.title,
+      description: page.description,
+      url: page.url,
+      image: page.image,
+      about: { "@type": "SoftwareApplication", name: SITE.name, url: SITE.url },
+      isPartOf: { "@type": "WebSite", name: SITE.name, url: SITE.url },
+    }),
+  };
+}

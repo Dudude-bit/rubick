@@ -1,0 +1,455 @@
+/**
+ * The routing layer's shape, first mile to last:
+ * IP → Gateways → Kinds → Routes → Backends → Workloads.
+ *
+ * Nothing here is inferred. A Gateway column node is a Gateway that exists
+ * — or one a parentRef names and the API server does not have, drawn as
+ * the missing thing. An edge is one object naming another; a tone is a
+ * verdict somebody wrote (`Programmed`, `Accepted`) or what the Service's
+ * own slices publish. A mesh parentRef (`kind: Service`) draws no Gateway
+ * node: the route simply has no entry point on this map, which is the
+ * truth of it.
+ *
+ * The outer layers exist only where they say something: the IP column when
+ * a gateway published an address, the kind funnel when the routes span
+ * more than one kind, the workloads when the pod lists have answered. A
+ * kind node is per (gateway, kind), never shared — one funnel for two
+ * gateways would merge their flows and lose which route enters where.
+ */
+
+import {
+  stopWeight,
+  type Backing,
+  type BackingSources,
+  type RoutingMapData,
+  type MapEdge,
+  type MapNode,
+  type MapTone,
+} from "@/integrations";
+import { describeStop } from "@/lib/connections";
+import { labelSelectorMatches } from "@/lib/label-selector";
+import { hasTerminated } from "@/lib/pod-status";
+import type { T } from "@/i18n/useT";
+import { KIND_TEXT } from "@/lib/route-kind-tone";
+import { statusesFor, verdictOf } from "@/lib/route-verdict";
+import type {
+  GatewayClassInfo,
+  GatewayInfo,
+  ParentRefInfo,
+  PodInfo,
+  RouteInfo,
+} from "@/generated/types";
+import { doorDoubtWords, type DoorAsk } from "@/lib/policy-door";
+import {
+  gatewayOfParent,
+  gatewayProgrammed,
+  parentCarriesTraffic,
+  routeBackingOf,
+} from "@/lib/route-trace";
+
+/** What the last column is built from — handed over only once both lists
+ *  have answered, because a workload column guessed from half the pods
+ *  would draw missing workloads that are merely unread. */
+export interface WorkloadSources {
+  pods: PodInfo[];
+  deployments: Array<{ name: string; namespace: string }>;
+}
+
+/** The controller that owns a pod, with the ReplicaSet hop collapsed into
+ *  its Deployment — but only when that Deployment actually exists, never
+ *  by trusting the name's shape alone. */
+function ownerOf(
+  pod: PodInfo,
+  deployments: Map<string, Set<string>>
+): { kind: string; name: string } | null {
+  const owner =
+    pod.ownerReferences.find((ref) => ref.controller) ?? pod.ownerReferences[0];
+  if (!owner) return null;
+  if (owner.kind === "ReplicaSet") {
+    const cut = owner.name.lastIndexOf("-");
+    const candidate = cut > 0 ? owner.name.slice(0, cut) : null;
+    if (candidate && deployments.get(pod.namespace)?.has(candidate)) {
+      return { kind: "Deployment", name: candidate };
+    }
+  }
+  return { kind: owner.kind, name: owner.name };
+}
+
+function gatewayTone(gateway: GatewayInfo): { tone: MapTone; sub?: string } {
+  const programmed = gatewayProgrammed(gateway);
+  const sub = [gateway.className, gateway.addresses[0]]
+    .filter(Boolean)
+    .join(" · ");
+  if (!programmed) return { tone: "mute", sub: sub || undefined };
+  if (programmed.status === "True")
+    return { tone: "ok", sub: sub || undefined };
+  // Only `False` is a break. `Unknown` — the controller has taken this and
+  // not decided — was painting the node red, which is the opposite lie to
+  // the green one the trace used to tell about the same condition.
+  // `routeTone` below has always drawn this distinction; this one did not.
+  if (programmed.status !== "False")
+    return { tone: "mute", sub: programmed.reason ?? (sub || undefined) };
+  return { tone: "err", sub: programmed.reason ?? (sub || undefined) };
+}
+
+/** The Accepted verdicts this route's Gateway parents wrote. */
+function routeTone(route: RouteInfo): MapTone {
+  const verdict = verdictOf(route.parents, "Accepted");
+  if (verdict.state === "false") return "err";
+  if (verdict.state === "true") return "ok";
+  return "mute";
+}
+
+/**
+ * Whether this parentRef's own status entries refuse it. Matched against the
+ * parentRef, not the Gateway it resolved to: a ListenerSet's entry carries
+ * the set's namespace, which need not be its Gateway's.
+ */
+function refusedBy(route: RouteInfo, parent: ParentRefInfo): boolean {
+  return verdictOf(statusesFor(route, parent), "Accepted").state === "false";
+}
+
+/** A backend Service's tone: unread, stopped, behind a door nobody settled, or reached. */
+function backendTone(state: Backing | null): MapTone {
+  if (!state) return "mute";
+  // Endpoints not read are unknown, as every routing map draws them.
+  if (!state.known || state.doubt) return "unknown";
+  return state.stop ? stopWeight(state.stop).tone : "ok";
+}
+
+function backendSub(state: Backing | null, t: T): string | undefined {
+  if (!state?.known) return undefined;
+  if (state.stop) return describeStop(state.stop, t).title;
+  if (state.doubt) return doorDoubtWords(state.doubt, t).title;
+  if (state.service?.type === "ExternalName")
+    return t("empty", "resolvesElsewhere");
+  return (
+    t("count", "nReady", { n: state.ready }) +
+    (state.draining > 0
+      ? `, ${t("count", "nDraining", { n: state.draining })}`
+      : "")
+  );
+}
+
+const weight = (state: Backing | null | undefined): number =>
+  state?.stop ? 2 : state?.doubt ? 1 : 0;
+
+export function gatewayTopology(
+  /**
+   * `undefined` while the list has not been read — the same shape `backing`
+   * uses, and for the same reason. A route names a parent this map has to
+   * draw either way; whether that parent is *missing* is a claim only a list
+   * that was actually read can make.
+   */
+  gateways: GatewayInfo[] | undefined,
+  routes: RouteInfo[],
+  backing: BackingSources | undefined,
+  t: T,
+  workloads?: WorkloadSources,
+  /** The classes naming each Gateway's controller, and who those connect from. */
+  door?: { classes: GatewayClassInfo[]; ask: DoorAsk }
+): RoutingMapData {
+  const gatewaysKnown = gateways !== undefined;
+  const drawn = gateways ?? [];
+  const gatewayNodes = new Map<string, MapNode>();
+  const kindNodes = new Map<string, MapNode>();
+  // The worst verdict flowing into each funnel node, for its gateway edge.
+  const kindEdgeTone = new Map<string, { gatewayId: string; tone: MapTone }>();
+  const kindRouteCount = new Map<string, number>();
+  const routeNodes: MapNode[] = [];
+  const backendNodes = new Map<string, MapNode>();
+  const backendStates = new Map<string, Backing | null>();
+  const edges: MapEdge[] = [];
+  const linked = new Set<string>();
+  // One funnel node per kind is only honest while it cannot merge flows.
+  const drawKinds = new Set(routes.map((route) => route.kind)).size >= 2;
+
+  const link = (from: string, to: string, tone: MapTone) => {
+    const key = `${from}->${to}`;
+    if (linked.has(key)) return;
+    linked.add(key);
+    edges.push({ from, to, tone });
+  };
+
+  for (const gateway of drawn) {
+    const { tone, sub } = gatewayTone(gateway);
+    gatewayNodes.set(`gw/${gateway.namespace}/${gateway.name}`, {
+      id: `gw/${gateway.namespace}/${gateway.name}`,
+      label: gateway.name,
+      sub,
+      tone,
+      object: {
+        kind: "Gateway",
+        name: gateway.name,
+        namespace: gateway.namespace,
+      },
+    });
+  }
+
+  for (const route of routes) {
+    const routeId = `route/${route.kind}/${route.namespace}/${route.name}`;
+    routeNodes.push({
+      id: routeId,
+      label: route.name,
+      sub: route.hostnames.length > 0 ? route.hostnames.join(", ") : undefined,
+      tone: routeTone(route),
+      object: {
+        kind: route.kind,
+        name: route.name,
+        namespace: route.namespace,
+      },
+      tag: {
+        text: route.kind,
+        tone: "mute",
+        className: KIND_TEXT[route.kind],
+      },
+    });
+
+    for (const parent of route.parentRefs) {
+      // GAMMA/mesh and any other parent that is no way into a gateway: no
+      // entry point on this map, and above all no "missing Gateway" invented
+      // for it. A ListenerSet *is* a way in — the set names its Gateway on
+      // itself — so it draws an edge to that Gateway, not to a node named
+      // after the set.
+      if (!parentCarriesTraffic(parent)) continue;
+      const resolved = gatewayOfParent(drawn, parent, route.namespace);
+      const ns = resolved?.namespace ?? parent.namespace ?? route.namespace;
+      const gatewayId = `gw/${ns}/${resolved?.name ?? parent.name}`;
+      if (!gatewayNodes.has(gatewayId)) {
+        // Only a list that was read can say the gateway is not in it. Unread,
+        // the node still gets drawn — the route does name it — but muted and
+        // unlabelled, the way an unread backend is.
+        gatewayNodes.set(gatewayId, {
+          id: gatewayId,
+          label: parent.name,
+          sub: ns,
+          tone: gatewaysKnown ? "err" : "mute",
+          tag: gatewaysKnown
+            ? { text: t("columns", "missingTag"), tone: "err" }
+            : undefined,
+        });
+      }
+      const verdict: MapTone = refusedBy(route, parent) ? "err" : "mute";
+      if (!drawKinds) {
+        link(gatewayId, routeId, verdict);
+      } else {
+        const kindId = `kind/${gatewayId}/${route.kind}`;
+        if (!kindNodes.has(kindId)) {
+          kindNodes.set(kindId, {
+            id: kindId,
+            label: route.kind,
+            labelClassName: KIND_TEXT[route.kind],
+            tone: "mute",
+          });
+          kindEdgeTone.set(kindId, { gatewayId, tone: verdict });
+        } else if (verdict === "err") {
+          kindEdgeTone.get(kindId)!.tone = "err";
+        }
+        kindRouteCount.set(kindId, (kindRouteCount.get(kindId) ?? 0) + 1);
+        link(kindId, routeId, verdict);
+      }
+    }
+
+    for (const rule of route.rules) {
+      for (const backend of rule.backendRefs) {
+        const ns = backend.namespace ?? route.namespace;
+        const backendId = `backend/${backend.kind}/${ns}/${backend.name}`;
+        if (backend.kind !== "Service") {
+          if (!backendNodes.has(backendId)) {
+            backendNodes.set(backendId, {
+              id: backendId,
+              label: backend.name,
+              sub: ns,
+              tone: "mute",
+              tag: { text: backend.kind, tone: "mute" },
+            });
+          }
+          link(routeId, backendId, "mute");
+          continue;
+        }
+        const state = backing
+          ? routeBackingOf(route, backend, {
+              gateways: drawn,
+              classes: door?.classes ?? [],
+              topologyKnown: gatewaysKnown,
+              backing,
+              door: door?.ask,
+            })
+          : null;
+        // The node is the worst any route meets there: a door refused to
+        // one controller is still refused when another route got through.
+        const prior = backendStates.get(backendId);
+        if (!backendNodes.has(backendId) || weight(state) > weight(prior)) {
+          backendStates.set(backendId, state);
+          backendNodes.set(backendId, {
+            id: backendId,
+            label: backend.name,
+            sub: backendSub(state, t),
+            tone: backendTone(state),
+            object: { kind: "Service", name: backend.name, namespace: ns },
+          });
+        }
+        const into = backendTone(state);
+        link(routeId, backendId, into === "ok" ? "mute" : into);
+      }
+    }
+  }
+
+  for (const [kindId, edge] of kindEdgeTone) {
+    const node = kindNodes.get(kindId)!;
+    node.sub = t("count", "nRoutes", { n: kindRouteCount.get(kindId) ?? 0 });
+    link(edge.gatewayId, kindId, edge.tone);
+  }
+
+  // The first mile: every address a drawn gateway publishes, deduplicated —
+  // two gateways behind one LB are two edges out of one node.
+  const ipNodes = new Map<string, MapNode>();
+  for (const gateway of drawn) {
+    const gatewayId = `gw/${gateway.namespace}/${gateway.name}`;
+    if (!gatewayNodes.has(gatewayId)) continue;
+    for (const address of gateway.addresses) {
+      const ipId = `ip/${address}`;
+      if (!ipNodes.has(ipId)) {
+        ipNodes.set(ipId, { id: ipId, label: address, tone: "mute" });
+      }
+      link(ipId, gatewayId, "mute");
+    }
+  }
+
+  // The last: what actually runs behind each backend Service — the pods its
+  // selector picks, grouped by their controllers. Not its published
+  // endpoints: the routing pages carry a summary with one address in it, and
+  // five replicas drew as "1 of 1 ready".
+  const workloadNodes = new Map<string, MapNode>();
+  if (workloads && backing) {
+    const podsIn = new Map<string, PodInfo[]>();
+    for (const pod of workloads.pods) {
+      const at = podsIn.get(pod.namespace) ?? [];
+      at.push(pod);
+      podsIn.set(pod.namespace, at);
+    }
+    const deploymentNames = new Map<string, Set<string>>();
+    for (const deployment of workloads.deployments) {
+      const at = deploymentNames.get(deployment.namespace) ?? new Set();
+      at.add(deployment.name);
+      deploymentNames.set(deployment.namespace, at);
+    }
+
+    for (const node of backendNodes.values()) {
+      if (node.object?.kind !== "Service" || node.object.namespace == null) {
+        continue;
+      }
+      const service = {
+        name: node.object.name,
+        namespace: node.object.namespace,
+      };
+      const selector = backing.services.find(
+        (entry) =>
+          entry.name === service.name && entry.namespace === service.namespace
+      )?.selector;
+      // No selector: its endpoints are written by hand, and no pod is
+      // "behind" it by any rule this map can apply.
+      if (!selector || Object.keys(selector).length === 0) continue;
+
+      const behind = new Map<
+        string,
+        {
+          kind: string | null;
+          name: string | null;
+          ready: number;
+          total: number;
+        }
+      >();
+      for (const pod of podsIn.get(service.namespace) ?? []) {
+        if (
+          hasTerminated(pod) ||
+          labelSelectorMatches({ matchLabels: selector }, pod.labels) !== true
+        )
+          continue;
+        const owner = ownerOf(pod, deploymentNames);
+        // Pods with no controller group into one quiet node instead of
+        // vanishing.
+        const key = owner
+          ? `${owner.kind}/${owner.name}`
+          : `bare/${service.name}`;
+        const entry = behind.get(key) ?? {
+          kind: owner?.kind ?? null,
+          name: owner?.name ?? null,
+          ready: 0,
+          total: 0,
+        };
+        entry.total += 1;
+        if (pod.status.ready) entry.ready += 1;
+        behind.set(key, entry);
+      }
+
+      for (const [key, entry] of behind) {
+        const wlId =
+          entry.kind != null
+            ? `wl/${entry.kind}/${service.namespace}/${entry.name}`
+            : `wl/bare/${service.namespace}/${key}`;
+        if (!workloadNodes.has(wlId)) {
+          workloadNodes.set(wlId, {
+            id: wlId,
+            label: entry.name ?? t("count", "nBarePods", { n: entry.total }),
+            sub: t("count", "ofTotalReady", {
+              n: entry.ready,
+              total: entry.total,
+            }),
+            tone: entry.ready > 0 ? "ok" : entry.total > 0 ? "err" : "mute",
+            ...(entry.kind != null && entry.name != null
+              ? {
+                  object: {
+                    kind: entry.kind,
+                    name: entry.name,
+                    namespace: service.namespace,
+                  },
+                  tag: { text: entry.kind, tone: "mute" as MapTone },
+                }
+              : {}),
+          });
+        }
+        link(
+          node.id,
+          wlId,
+          workloadNodes.get(wlId)?.tone === "err" ? "err" : "mute"
+        );
+      }
+    }
+  }
+
+  const columns = [];
+  if (ipNodes.size > 0) {
+    columns.push({
+      label: t("columns", "ip"),
+      nodes: [...ipNodes.values()],
+      width: 150,
+    });
+  }
+  columns.push({
+    label: t("columns", "gateways"),
+    nodes: [...gatewayNodes.values()],
+  });
+  if (drawKinds) {
+    columns.push({
+      label: t("columns", "kinds"),
+      nodes: [...kindNodes.values()],
+      width: 130,
+    });
+  }
+  const spine = columns.length;
+  columns.push({ label: t("nav", "routes"), nodes: routeNodes, width: 240 });
+  columns.push({
+    label: t("columns", "backends"),
+    nodes: [...backendNodes.values()],
+  });
+  if (workloadNodes.size > 0) {
+    columns.push({
+      label: t("nav", "workloads"),
+      nodes: [...workloadNodes.values()],
+      width: 200,
+    });
+  }
+
+  return { columns, edges, spine };
+}

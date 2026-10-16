@@ -1,0 +1,614 @@
+import { sayWords, type Saying } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
+import type {
+  CustomResourceInfo,
+  DaemonSetInfo,
+  DeploymentInfo,
+  JobInfo,
+  PodInfo,
+  Rollout,
+  StatefulSetInfo,
+} from "@/generated/types";
+
+/**
+ * "Tell me when": one object, one question, one answer.
+ *
+ * Not alerting. Nothing here scans a cluster; a watch exists because a
+ * person pointed at one thing and asked, and it ends the moment it has an
+ * answer. What it can answer is fixed by the kind, so the ask is implied by
+ * the click and never configured.
+ */
+
+/** How many can be open on one cluster before adding asks which to drop. */
+export const MAX_WATCHES_PER_CLUSTER = 12;
+/** A question nobody has answered in a day is no longer being waited on. */
+export const WATCH_TTL_MS = 24 * 60 * 60 * 1000;
+/** Answers arriving this close together go out as one notification. */
+export const COALESCE_MS = 1_000;
+/** After one goes out, the next waits this long: a stream of answers is not a stream of notifications. */
+export const QUIET_MS = 10_000;
+/** A stream down this long is a fact worth reporting, not a hiccup. */
+export const LOST_SIGHT_MS = 2 * 60 * 1000;
+
+export type Ask =
+  | "rollout"
+  | "podReady"
+  | "jobOutcome"
+  | "drain"
+  | "renewed"
+  | "forwardAlive";
+
+export type WatchKind =
+  | "Deployment"
+  | "StatefulSet"
+  | "DaemonSet"
+  | "Pod"
+  | "Job"
+  | "Node"
+  | "Certificate"
+  | "PortForward";
+
+/** Every kind answers exactly one question. */
+export const ASK_OF: Record<WatchKind, Ask> = {
+  Deployment: "rollout",
+  StatefulSet: "rollout",
+  DaemonSet: "rollout",
+  Pod: "podReady",
+  Job: "jobOutcome",
+  Node: "drain",
+  Certificate: "renewed",
+  PortForward: "forwardAlive",
+};
+
+export type Says =
+  | "rolledOut"
+  | "alreadyRolledOut"
+  // Said as "stalled"; answered watches are persisted under this name.
+  | "rolloutFailed"
+  | "rolloutPaused"
+  | "ready"
+  | "crashedAgain"
+  | "succeeded"
+  | "failed"
+  | "drained"
+  | "drainStopped"
+  | "drainCancelled"
+  | "drainFailed"
+  | "renewed"
+  | "issuanceFailed"
+  | "forwardDied"
+  | "gone"
+  | "lostSight"
+  | "timedOut";
+
+export interface Verdict {
+  says: Says;
+  /**
+   * What the answer carries under it: the cluster's own words as a string,
+   * kept whole and never translated, or a sentence of ours as a `Saying`,
+   * which becomes words in the reader's language at render. The two are
+   * told apart by their type, because they are not the same kind of thing
+   * and one of them was going out in English to every reader.
+   */
+  detail: string | Saying | null;
+}
+
+/**
+ * The tone each verdict is shown in, total over `Says` so a new answer cannot
+ * fall through to a default. Success is `bg-ok`, a real failure `bg-err`; an
+ * ending that is neither — a drain the reader stopped, an object that merely
+ * went away, a lost stream — is neutral or a caution, never red. This is the
+ * honesty classification the third-state rule turns on; the tokens match
+ * `status-role.ts`.
+ */
+export const SAYS_TONE: Record<Says, string> = {
+  rolledOut: "bg-ok",
+  alreadyRolledOut: "bg-ok",
+  rolloutFailed: "bg-err",
+  // Nothing broke: the rollout waits for somebody to resume it.
+  rolloutPaused: "bg-warn",
+  ready: "bg-ok",
+  crashedAgain: "bg-err",
+  succeeded: "bg-ok",
+  failed: "bg-err",
+  drained: "bg-ok",
+  drainStopped: "bg-warn",
+  drainCancelled: "bg-fg-fnt",
+  drainFailed: "bg-err",
+  renewed: "bg-ok",
+  issuanceFailed: "bg-err",
+  forwardDied: "bg-err",
+  gone: "bg-fg-fnt",
+  lostSight: "bg-warn",
+  // Out of time is not a failure: the action may have worked and the app
+  // stopped being able to say. Red would call it broken.
+  timedOut: "bg-warn",
+};
+
+/**
+ * What the last look established, so the next one can tell movement from
+ * standing still.
+ */
+export interface Baseline {
+  /** The ask has seen the object in motion, so settling now is an answer. */
+  armed: boolean;
+  restarts?: number;
+  notAfter?: string | null;
+  revision?: number;
+  /** The spec generation at the first look, for a watch that follows an action. */
+  generation?: number | null;
+  /** The object was seen mid-rollout at least once. */
+  unsettledSeen?: boolean;
+  /** The last look, for a verdict that has to say what it saw. */
+  seen?: Saying | null;
+}
+
+/**
+ * The action a watch follows. "Did it work" is only ever answered after the
+ * object confirmed the action reached it: a generation past the one before
+ * the click, or the replica count the click asked for.
+ */
+export interface After {
+  action: "restart" | "scale" | "apply" | "image";
+  replicas: number | null;
+  /** `metadata.generation` as the page saw it before the action; `null` when it did not know. */
+  generationBefore: number | null;
+  /**
+   * When the reader asked, so a condition older than the question can be
+   * told from one the question caused. Optional only because the callers
+   * that cannot know the generation cannot always know this either.
+   */
+  askedAt?: number;
+}
+
+/** How long an action is given before "no answer" is the answer. */
+export const OUTCOME_DEADLINE_MS = 2 * 60 * 1000;
+
+/**
+ * What a watch that ran out of time has to say. Both deadlines are two
+ * minutes, so a watch whose stream went down races its own timeout, and
+ * "no answer within two minutes" would be said about a window nobody
+ * watched. A watch that lost sight knows why it has nothing, and says that.
+ */
+export function outOfTimeVerdict(watch: Watch): Verdict {
+  return watch.status.state === "lost"
+    ? { says: "lostSight", detail: null }
+    : { says: "timedOut", detail: watch.baseline?.seen ?? null };
+}
+
+export type WatchStatus =
+  | { state: "watching" }
+  | { state: "lost"; since: number; told: boolean }
+  | { state: "done"; verdict: Verdict; at: number }
+  | { state: "expired" };
+
+export interface Watch {
+  id: string;
+  context: string;
+  kind: WatchKind;
+  namespace: string | null;
+  name: string;
+  ask: Ask;
+  startedAt: number;
+  status: WatchStatus;
+  baseline: Baseline | null;
+  /** PortForward only: the session the question is about. */
+  sessionId?: string;
+  /** Certificate only: where the CRD is served. */
+  crd?: { group: string; version: string; plural: string };
+  after?: After | null;
+  /** When "no answer" becomes the answer; `null` for a watch with the day-long default. */
+  deadline?: number | null;
+}
+
+/**
+ * A verdict's detail in words. The cluster's own string is handed back as
+ * it was written; ours is a key and becomes the reader's language here.
+ */
+export function detailWords(
+  detail: string | Saying | null | undefined,
+  t: T
+): string | null {
+  if (detail === null || detail === undefined) return null;
+  return typeof detail === "string" ? detail : sayWords(detail, t);
+}
+
+/**
+ * The short name of each question, for a surface with one line to say it in.
+ *
+ * Beside the `Ask` union rather than in the panel that first needed it: two
+ * surfaces naming the same question differently is the drift this file exists
+ * to prevent, and a new ask fails to compile here.
+ */
+export const ASK_SHORT: Record<Ask, keyof typeof en.tell> = {
+  rollout: "askRolloutShort",
+  podReady: "askPodShort",
+  jobOutcome: "askJobShort",
+  drain: "askDrainShort",
+  renewed: "askRenewedShort",
+  forwardAlive: "askForwardShort",
+};
+
+export function isOpen(watch: Watch): boolean {
+  return watch.status.state === "watching" || watch.status.state === "lost";
+}
+
+/** The kinds a peek row can ask about; the rest are asked from their own controls. */
+export function askableKind(kind: string): WatchKind | null {
+  switch (kind) {
+    case "Deployment":
+    case "StatefulSet":
+    case "DaemonSet":
+    case "Pod":
+    case "Job":
+      return kind;
+    default:
+      return null;
+  }
+}
+
+export interface Judgement {
+  verdict: Verdict | null;
+  baseline: Baseline;
+}
+
+/**
+ * What one look at the object says, given what the last look established.
+ * Pure: the hook feeds it watch events and stores whatever comes back.
+ */
+export function judge(
+  watch: Watch,
+  op: "applied" | "deleted",
+  resource: unknown
+): Judgement {
+  const was = watch.baseline ?? { armed: false };
+  if (op === "deleted") {
+    return { verdict: { says: "gone", detail: null }, baseline: was };
+  }
+  switch (watch.ask) {
+    case "rollout":
+      return watch.after
+        ? judgeOutcome(watch.kind, resource, was, watch.after)
+        : judgeRollout(watch.kind, resource, was);
+    case "podReady":
+      return judgePod(resource as PodInfo, was);
+    case "jobOutcome":
+      return judgeJob(resource as JobInfo);
+    case "renewed":
+      return judgeCertificate(resource as CustomResourceInfo, was);
+    case "drain":
+    case "forwardAlive":
+      return { verdict: null, baseline: was };
+  }
+}
+
+/**
+ * One look at a workload, judged by the rollout verdict its badge, peek and
+ * list print, so the answer here never disagrees with the word beside it.
+ */
+interface Look {
+  /** Ready, with every pod on the newest template: under `OnDelete` the verdict is Ready before anything rolls. */
+  settled: boolean;
+  /** Stalled: the controller stopped waiting, in its own words. */
+  failed: string | null;
+  /** When the failing condition last changed, as the cluster stamped it. */
+  failedAt: number | null;
+  paused: boolean;
+  desired: number;
+  ready: number;
+  generation: number | null;
+  observedGeneration: number | null;
+  /** The Deployment's revision counter, where the object carries one. */
+  revision: string | null;
+}
+
+const DEADLINE_EXCEEDED = "ProgressDeadlineExceeded";
+
+function stamp(at: string | null | undefined): number | null {
+  const parsed = at ? Date.parse(at) : Number.NaN;
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function lookOf(kind: WatchKind, resource: unknown): Look {
+  const counts =
+    kind === "Deployment"
+      ? (resource as DeploymentInfo).replicas
+      : kind === "StatefulSet"
+        ? (resource as StatefulSetInfo).replicas
+        : (resource as DaemonSetInfo);
+  const { rollout, generation, observedGeneration } = resource as {
+    rollout: Rollout;
+    generation?: number | null;
+    observedGeneration?: number | null;
+  };
+  const progressing =
+    kind === "Deployment"
+      ? (resource as DeploymentInfo).conditions.find(
+          (c) => c.type === "Progressing"
+        )
+      : undefined;
+  return {
+    settled:
+      (rollout.state === "ready" || rollout.state === "idle") &&
+      counts.updated === counts.desired,
+    failed:
+      rollout.state === "stalled"
+        ? rollout.message
+          ? `${DEADLINE_EXCEEDED}: ${rollout.message}`
+          : DEADLINE_EXCEEDED
+        : null,
+    failedAt:
+      rollout.state === "stalled"
+        ? stamp(progressing?.lastTransitionTime)
+        : null,
+    paused: rollout.state === "paused",
+    desired: counts.desired,
+    ready: counts.ready,
+    generation: generation ?? null,
+    observedGeneration: observedGeneration ?? null,
+    revision:
+      kind === "Deployment"
+        ? ((resource as DeploymentInfo).annotations?.[
+            "deployment.kubernetes.io/revision"
+          ] ?? null)
+        : null,
+  };
+}
+
+/** The controller has read the newest spec, so the counts describe it and not the one before. */
+function caughtUp(now: Look): boolean {
+  return (
+    now.generation === null ||
+    now.observedGeneration === null ||
+    now.observedGeneration >= now.generation
+  );
+}
+
+/** "3 of 3 ready, revision 8": what the last look said, for a verdict to carry. */
+function seenWords(now: Look): Saying {
+  return now.revision === null
+    ? { key: "rolloutSeen", values: { ready: now.ready, desired: now.desired } }
+    : {
+        key: "rolloutSeenRevision",
+        values: {
+          ready: now.ready,
+          desired: now.desired,
+          revision: now.revision,
+        },
+      };
+}
+
+/**
+ * Whether the object has acknowledged the action at all. Nothing is said
+ * about the outcome before this is true, however settled the object looks:
+ * a Deployment that was fine before the click looks fine for a second after
+ * it too.
+ */
+function acknowledged(now: Look, was: Baseline, after: After): boolean {
+  if (after.action === "scale") return now.desired === after.replicas;
+  if (after.generationBefore !== null && now.generation !== null) {
+    return now.generation > after.generationBefore;
+  }
+  const first = was.generation ?? null;
+  if (first !== null && now.generation !== null && now.generation > first) {
+    return true;
+  }
+  return was.unsettledSeen === true;
+}
+
+function judgeOutcome(
+  kind: WatchKind,
+  resource: unknown,
+  was: Baseline,
+  after: After
+): Judgement {
+  const now = lookOf(kind, resource);
+  const baseline: Baseline = {
+    ...was,
+    armed: true,
+    generation: was.generation === undefined ? now.generation : was.generation,
+    unsettledSeen: (was.unsettledSeen ?? false) || !now.settled,
+    seen: seenWords(now),
+  };
+  if (!acknowledged(now, baseline, after)) return { verdict: null, baseline };
+  if (now.failed !== null) {
+    // The same suspicion the success arm applies, and for the same reason.
+    // The apiserver bumps `generation` the moment the action lands, while
+    // the status still describes the rollout before it — so a Deployment
+    // already stuck with `Progressing=False` answered "failed" within a
+    // second of the click, with the *previous* revision's message, and the
+    // watch closed before the fix it was following could succeed.
+    //
+    // A stamp settles it where the cluster wrote one: a condition that last
+    // changed before the reader asked is about something they did not do.
+    // Without a stamp, falling back to "has the controller looked yet" is
+    // still better than believing whatever was there.
+    const ours =
+      now.failedAt !== null && after.askedAt !== undefined
+        ? now.failedAt >= after.askedAt
+        : caughtUp(now);
+    if (ours) {
+      return {
+        verdict: { says: "rolloutFailed", detail: now.failed },
+        baseline,
+      };
+    }
+    return { verdict: null, baseline };
+  }
+  if (now.paused) {
+    return {
+      verdict: { says: "rolloutPaused", detail: seenWords(now) },
+      baseline,
+    };
+  }
+  if (now.settled && caughtUp(now)) {
+    return {
+      verdict: { says: "rolledOut", detail: seenWords(now) },
+      baseline,
+    };
+  }
+  return { verdict: null, baseline };
+}
+
+function judgeRollout(
+  kind: WatchKind,
+  resource: unknown,
+  was: Baseline
+): Judgement {
+  const now = lookOf(kind, resource);
+  // A paused rollout moves for nobody until it is resumed, so waiting on it
+  // is waiting for ever.
+  if (now.paused) {
+    return {
+      verdict: { says: "rolloutPaused", detail: seenWords(now) },
+      baseline: was,
+    };
+  }
+  if (!was.armed) {
+    if (now.settled && caughtUp(now)) {
+      return {
+        verdict: { says: "alreadyRolledOut", detail: seenWords(now) },
+        baseline: was,
+      };
+    }
+    return { verdict: null, baseline: { armed: true } };
+  }
+  if (now.failed !== null) {
+    return {
+      verdict: { says: "rolloutFailed", detail: now.failed },
+      baseline: was,
+    };
+  }
+  if (now.settled) {
+    return { verdict: { says: "rolledOut", detail: null }, baseline: was };
+  }
+  return { verdict: null, baseline: was };
+}
+
+const CRASHED = new Set(["CrashLoopBackOff", "Error", "OOMKilled"]);
+
+function judgePod(pod: PodInfo, was: Baseline): Judgement {
+  const restarts = pod.restartCount;
+  if (was.restarts === undefined) {
+    // A pod already Ready is asked about because it might fall over; one
+    // that is not is asked about because it might come up. Either way the
+    // first look only remembers.
+    return { verdict: null, baseline: { armed: !pod.status.ready, restarts } };
+  }
+  if (restarts > was.restarts || CRASHED.has(pod.status.display)) {
+    return {
+      verdict: {
+        says: "crashedAgain",
+        detail: pod.status.message ?? pod.status.reason ?? pod.status.display,
+      },
+      baseline: was,
+    };
+  }
+  if (was.armed && pod.status.ready) {
+    return { verdict: { says: "ready", detail: null }, baseline: was };
+  }
+  if (!pod.status.ready) {
+    return { verdict: null, baseline: { ...was, armed: true } };
+  }
+  return { verdict: null, baseline: was };
+}
+
+function judgeJob(job: JobInfo): Judgement {
+  // A job never goes back to running, so a finished one is its own answer.
+  if (job.status === "Complete") {
+    return {
+      verdict: { says: "succeeded", detail: null },
+      baseline: { armed: true },
+    };
+  }
+  if (job.status === "Failed") {
+    return {
+      verdict: { says: "failed", detail: job.failure?.reason ?? null },
+      baseline: { armed: true },
+    };
+  }
+  return { verdict: null, baseline: { armed: true } };
+}
+
+function text(value: unknown, path: string): string | null {
+  let cursor: unknown = value;
+  for (const key of path.split(".")) {
+    if (cursor === null || typeof cursor !== "object") return null;
+    cursor = (cursor as Record<string, unknown>)[key];
+  }
+  return typeof cursor === "string" ? cursor : null;
+}
+
+function judgeCertificate(cert: CustomResourceInfo, was: Baseline): Judgement {
+  const notAfter = text(cert.status, "notAfter");
+  const revision = Number(
+    cert.annotations["cert-manager.io/certificate-revision"] ?? "0"
+  );
+  const conditions = (
+    cert.status as { conditions?: Array<Record<string, unknown>> } | null
+  )?.conditions;
+  const ready = conditions?.find((c) => c.type === "Ready");
+  const issuing = conditions?.find((c) => c.type === "Issuing");
+  if (was.notAfter === undefined) {
+    return { verdict: null, baseline: { armed: true, notAfter, revision } };
+  }
+  const moved =
+    (was.revision !== undefined && revision > was.revision) ||
+    (notAfter !== null && was.notAfter !== null && notAfter > was.notAfter);
+  if (moved && ready?.status === "True") {
+    return { verdict: { says: "renewed", detail: notAfter }, baseline: was };
+  }
+  if (issuing?.status === "False" && typeof issuing.message === "string") {
+    return {
+      verdict: { says: "issuanceFailed", detail: issuing.message },
+      baseline: was,
+    };
+  }
+  return { verdict: null, baseline: was };
+}
+
+/**
+ * Answers inside one `COALESCE_MS` window go out together, soon enough to
+ * arrive with the control that stopped watching. Whatever lands in the
+ * `QUIET_MS` after a notification waits for the end of it.
+ */
+export class Coalescer<A> {
+  private pending: A[] = [];
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    private readonly flush: (answers: A[]) => void,
+    private readonly windowMs: number = COALESCE_MS,
+    private readonly quietMs: number = QUIET_MS
+  ) {}
+
+  push(answer: A): void {
+    this.pending.push(answer);
+    if (this.timer === null) {
+      this.timer = setTimeout(() => this.send(), this.windowMs);
+    }
+  }
+
+  /** The answer to a click just made: said now, with anything waiting, whatever the windows. */
+  now(answer: A): void {
+    this.pending.push(answer);
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.send();
+  }
+
+  private send(): void {
+    this.timer = null;
+    if (this.pending.length === 0) return;
+    const batch = this.pending;
+    this.pending = [];
+    this.flush(batch);
+    this.timer = setTimeout(() => this.send(), this.quietMs);
+  }
+
+  dispose(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    this.pending = [];
+  }
+}

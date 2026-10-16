@@ -1,0 +1,293 @@
+import type { ReactElement } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { screen } from "@testing-library/react";
+
+import type {
+  CronJobDetailInfo,
+  DeploymentInfo,
+  JobInfo,
+  ObjectRef,
+  PodInfo,
+  ResourceConnections,
+} from "@/generated/types";
+import type { T } from "@/i18n/useT";
+import type { PeekTarget } from "@/hooks/usePeek";
+import { renderWithRouter } from "@/test/render";
+
+const subject: ObjectRef = {
+  kind: "Deployment",
+  name: "cart",
+  namespace: "shop",
+  existence: "present",
+  facts: null,
+};
+
+const neighbourhood: { current: ResourceConnections | undefined } = {
+  current: undefined,
+};
+
+vi.mock("@/hooks/useConnections", () => ({
+  useConnections: () => ({ data: neighbourhood.current }),
+  useObjectConnections: () => ({ data: neighbourhood.current }),
+}));
+
+vi.mock("@/lib/commands", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/commands")>();
+  return {
+    commands: { ...real.commands, listJobs: vi.fn(), listEvents: vi.fn() },
+  };
+});
+
+import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
+import { WORKLOAD_SOURCES } from "./peek-sources-workloads";
+import { LastRunValue } from "./peek-workload-diagnosis";
+
+const blind: ResourceConnections = {
+  subject,
+  edges: [
+    {
+      from: {
+        kind: "HorizontalPodAutoscaler",
+        name: "cart",
+        namespace: "shop",
+        existence: "present",
+        facts: {
+          kind: "autoscaler",
+          minReplicas: 2,
+          maxReplicas: 5,
+          currentReplicas: 2,
+          desiredReplicas: 0,
+          metrics: [
+            { name: "cpu", source: "resource", target: "60%", current: null },
+          ],
+          conditions: [
+            {
+              type: "ScalingActive",
+              status: "False",
+              reason: "FailedGetResourceMetric",
+              message: "the HPA was unable to compute the replica count",
+              lastTransitionTime: null,
+            },
+          ],
+          lastScaleTime: null,
+        },
+      },
+      to: subject,
+      relation: { verb: "governs", selector: null },
+    },
+  ],
+  stops: [],
+  published: [],
+  notLookedAt: [],
+};
+
+function deployment(over: Partial<DeploymentInfo>): DeploymentInfo {
+  return {
+    name: "cart",
+    namespace: "shop",
+    replicas: { desired: 2, ready: 2, available: 2, updated: 2 },
+    rollout: { state: "ready" },
+    strategy: "RollingUpdate",
+    containers: [],
+    initContainers: [],
+    ownerReferences: [],
+    createdAt: null,
+    ...over,
+  } as DeploymentInfo;
+}
+
+const target: PeekTarget = {
+  kind: "Deployment",
+  name: "cart",
+  namespace: "shop",
+};
+const t = ((section: string, key: string, values?: Record<string, unknown>) =>
+  values?.name
+    ? `${section}.${key}:${String(values.name)}`
+    : `${section}.${key}`) as T;
+
+async function lead(info: DeploymentInfo) {
+  const summary = WORKLOAD_SOURCES.Deployment!.summarise(info, target, t);
+  await renderWithRouter(summary.lead as ReactElement);
+  return summary;
+}
+
+describe("the peek says what the workload's page says first", () => {
+  /**
+   * Dana's `cart`: green Ready in the peek while the page said its HPA could
+   * not read metrics. The finding has to arrive through the page's reader,
+   * in its amber: the workload still serves at its size.
+   */
+  it("names an autoscaler that cannot read its metrics over a Ready rollout", async () => {
+    neighbourhood.current = blind;
+    const summary = await lead(deployment({}));
+    expect(summary.status).toBe("Ready");
+    expect(await screen.findByText(/cart is not scaling this/)).toHaveClass(
+      "text-warn"
+    );
+    expect(screen.queryByTestId("rollout-summary")).toBeNull();
+  });
+
+  /** The stuck `search` rollout read Ready in the peek with no hint of the new ReplicaSet. */
+  it("says a stalled rollout is stalled, in the controller's own words", async () => {
+    neighbourhood.current = { ...blind, edges: [] };
+    const summary = await lead(
+      deployment({
+        rollout: {
+          state: "stalled",
+          message: 'ReplicaSet "search-6df9f694b5" has timed out progressing.',
+          serving: 2,
+        },
+      })
+    );
+    expect(summary.status).toBe("Stalled");
+    const line = await screen.findByTestId("rollout-summary");
+    expect(line.textContent).toContain("2 old pods still serve");
+    expect(line).toHaveClass("text-err");
+    expect(line.textContent).toContain("has timed out progressing");
+  });
+});
+
+describe("the peek's Replicas line", () => {
+  const replicasTone = (rollout: DeploymentInfo["rollout"]) =>
+    WORKLOAD_SOURCES.Deployment!.summarise(
+      deployment({
+        replicas: { desired: 1, ready: 0, available: 0, updated: 1 },
+        rollout,
+      }),
+      target,
+      t
+    )
+      .groups?.flatMap((group) => group.items)
+      .find((item) => item.label === "columns.replicas")?.tone;
+
+  /**
+   * big-pull's peek said blue "Pods coming up" above an amber "0 of 1
+   * ready". Fails if a count its own verdict calls coming up is a warning,
+   * one its pods left unread takes a colour, or a real shortfall loses its
+   * amber.
+   */
+  it("reads a short count in the verdict's own terms", () => {
+    expect(replicasTone({ state: "comingUp", available: 0, desired: 1 })).toBe(
+      "info"
+    );
+    expect(
+      replicasTone({
+        state: "podsUnread",
+        controller: {
+          state: "unavailable",
+          reason: null,
+          message: null,
+          available: 0,
+          desired: 1,
+        },
+      })
+    ).toBeUndefined();
+    expect(
+      replicasTone({
+        state: "unavailable",
+        reason: null,
+        message: null,
+        available: 0,
+        desired: 1,
+      })
+    ).toBe("warn");
+  });
+});
+
+describe("the peek of a pod the node evicted", () => {
+  /**
+   * Dana's init-demo peek put the node's message last, without the word
+   * Evicted, under a badge naming an init container. Fails if the pod-level
+   * reason stops leading the peek or loses its word or its message.
+   */
+  it("leads with the reason and the node's message", () => {
+    const pod = {
+      name: "init-demo",
+      namespace: "k8s-gui-test",
+      nodeName: "agent-0",
+      podIp: null,
+      restartCount: 17,
+      status: {
+        phase: "Failed",
+        display: "Init:ContainerStatusUnknown",
+        ready: false,
+        conditions: [],
+        reason: "Evicted",
+        message: "The node was low on resource: ephemeral-storage.",
+      },
+      containers: [],
+      initContainers: [],
+      ownerReferences: [],
+      createdAt: null,
+    } as unknown as PodInfo;
+    const summary = WORKLOAD_SOURCES.Pod!.summarise(
+      pod,
+      { kind: "Pod", name: "init-demo", namespace: "k8s-gui-test" },
+      t
+    );
+    const first = summary.groups?.[0]?.items[0];
+    expect(first?.label).toBe("columns.reason");
+    expect(first?.value).toBe(
+      "Evicted: The node was low on resource: ephemeral-storage."
+    );
+    expect(first?.tone).toBe("err");
+  });
+});
+
+describe("the peek's Last run row", () => {
+  /**
+   * Live, root-cron's peek said "running" in blue while its lead quoted the
+   * refusal of that run's pods. Fails if the row does not read the run's
+   * refusal, or calls the refused run running.
+   */
+  it("says a run whose pods are refused has not started, in red", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    vi.mocked(commands.listJobs).mockResolvedValue([
+      {
+        name: "nightly-29000000",
+        namespace: "ops",
+        uid: "run",
+        status: "Pending",
+        createdAt: "2026-10-15T05:00:00Z",
+      } as JobInfo,
+    ]);
+    vi.mocked(commands.listEvents).mockResolvedValue([
+      {
+        name: "e",
+        namespace: "ops",
+        uid: "e",
+        type: "Warning",
+        reason: "FailedCreate",
+        message:
+          'Error creating: pods "nightly-29000000-x" is forbidden: exceeded quota: two-pods',
+        source: "job-controller",
+        involvedObject: {
+          kind: "Job",
+          name: "nightly-29000000",
+          namespace: "ops",
+          uid: "run",
+        },
+        count: 3,
+        firstTimestamp: null,
+        lastTimestamp: "2026-10-15T05:01:00Z",
+      },
+    ]);
+    await renderWithRouter(
+      <LastRunValue
+        cron={
+          {
+            name: "nightly",
+            namespace: "ops",
+            active: 1,
+            lastSchedule: null,
+            lastSuccessfulTime: null,
+          } as CronJobDetailInfo
+        }
+      />
+    );
+    expect(await screen.findByText("not started")).toHaveClass("text-err");
+    expect(screen.queryByText("running")).toBeNull();
+  });
+});

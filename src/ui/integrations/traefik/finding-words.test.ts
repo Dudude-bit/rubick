@@ -1,0 +1,187 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { describeFinding, findingDetail } from "./finding-words";
+import type { Finding, TraefikRoute } from "./model";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+const route = (name: string, priority: number | null = null) =>
+  ({
+    source: { kind: "IngressRoute", name, namespace: "shop" },
+    priority,
+  }) as unknown as TraefikRoute;
+
+describe("a Traefik finding in a shared file", () => {
+  /**
+   * The page names the two objects claiming a path and which one wins; the
+   * file said "Two objects claim /api" and stopped, which is the half of
+   * the finding nobody can act on.
+   */
+  it("names the objects a finding is about, and what the page says of them", () => {
+    const detail = findingDetail(
+      {
+        kind: "duplicate",
+        severity: "warn",
+        path: "/api",
+        routes: [route("api-v1"), route("api-v2", 10)],
+        winner: route("api-v2", 10),
+        tied: false,
+      } as unknown as Finding,
+      t
+    );
+    expect(detail).toContain("IngressRoute shop/api-v2");
+    expect(detail).toContain("10");
+  });
+
+  /** "Served in clear" without the entry points is a finding with no place to look. */
+  it("names the entry points a host is served in clear on", () => {
+    const detail = findingDetail(
+      {
+        kind: "clear",
+        severity: "warn",
+        entryPoints: ["web"],
+      } as unknown as Finding,
+      t
+    );
+    expect(detail).toContain("web");
+  });
+
+  /**
+   * The reader wrote spec.tls and expects https. Without the reason they are
+   * told their host is in the clear and left to find out why.
+   */
+  it("says why a Secret named in spec.tls does not make the host TLS", () => {
+    const detail = findingDetail(
+      {
+        kind: "clear",
+        severity: "warn",
+        entryPoints: ["web"],
+        loaded: "promo-tls",
+      } as Finding,
+      t
+    );
+    expect(detail).toContain("promo-tls");
+    expect(detail).toContain("router.tls");
+  });
+
+  /** A dropped path names its Ingress, which is the object to edit. */
+  it("names the path, the API object and the Ingress of a dropped path", () => {
+    const said = describeFinding(
+      {
+        kind: "resourceBackend",
+        severity: "err",
+        route: {
+          source: { kind: "Ingress", name: "assets", namespace: "shop" },
+          clause: { host: null, path: { kind: "prefix", value: "/assets" } },
+          resourceBackend: "StorageBucket/assets",
+        } as unknown as TraefikRoute,
+      },
+      t
+    );
+    expect(said.title).toContain("/assets");
+    expect(said.title).toContain("StorageBucket/assets");
+    expect(said.title).toContain("404");
+    expect(said.objects[0].source.name).toBe("assets");
+  });
+});
+
+describe("a Traefik finding on the page", () => {
+  /**
+   * Every row on the page opened with the same thirty words of what Traefik
+   * answers, and the cause that differs row to row came last, after a colon
+   * that left "ResourceQuota" capitalised mid-sentence. Fails if the cause
+   * stops leading, or loses the case a reader greps their terminal for.
+   */
+  it("leads with the cause in its own case, then says what Traefik answers", () => {
+    const said = describeFinding(
+      {
+        kind: "stop",
+        severity: "err",
+        route: route("web"),
+        stop: {
+          reason: "podsRefused",
+          service: {
+            kind: "Service",
+            name: "web",
+            namespace: "shop",
+            existence: "present",
+            facts: null,
+          },
+          selector: "app=web",
+          workloads: [],
+          said: 'pods "web-1" is forbidden: exceeded quota: two-pods, requested: pods=1, used: pods=2, limited: pods=2',
+        },
+        answer: "dropped",
+      } as unknown as Finding,
+      t
+    );
+    expect(said.title).toMatch(
+      /^ResourceQuota two-pods refuses its pods: no room for pods\. Traefik drops/
+    );
+  });
+
+  /**
+   * Every stopped route read "every request gets a 502", a status Traefik
+   * never answers for it: it drops the router, or answers 503 where
+   * allowEmptyServices keeps it. Fails if any answer names a 502 again or
+   * the three stop being told apart.
+   */
+  it("says what Traefik answers for a stopped route, and when it cannot tell", () => {
+    const title = (answer: string) =>
+      describeFinding(
+        {
+          kind: "stop",
+          severity: "err",
+          route: route("web"),
+          stop: {
+            reason: "selectsNothing",
+            service: { kind: "Service", name: "web", namespace: "shop" },
+            selector: "app=web",
+            near: null,
+            makersRead: true,
+          },
+          answer,
+        } as unknown as Finding,
+        t
+      ).title;
+    expect(title("dropped")).toBe(
+      "No pod carries app=web. Traefik drops this route, so a request gets a 404, or goes to whichever other route matches it."
+    );
+    expect(title("unavailable")).toBe(
+      "No pod carries app=web. This host answers, and every request gets a 503."
+    );
+    expect(title("unknown")).toContain(
+      "depending on allowEmptyServices, which could not be read"
+    );
+  });
+});
+
+describe("a missing TLS Secret in words", () => {
+  /**
+   * The finding said the Secret "could not be read as a certificate", which
+   * reads as a broken file, not as a name that points at nothing, and never
+   * said what a client is then given instead.
+   */
+  it("says the Secret does not exist and that Traefik serves its own certificate", () => {
+    const said = describeFinding(
+      {
+        kind: "certificate",
+        severity: "err",
+        namespace: "shop",
+        secretName: "checkout-tls",
+        read: {
+          secretName: "checkout-tls",
+          certificate: null,
+          problem: { says: "noSecret" },
+        },
+        expiry: null,
+      },
+      t
+    );
+    expect(said.title).toBe("Secret checkout-tls does not exist");
+    expect(said.note).toContain("TRAEFIK DEFAULT CERT");
+    expect(said.note).toContain("shop/checkout-tls");
+  });
+});

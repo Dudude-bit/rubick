@@ -1,0 +1,123 @@
+import { describe, expect, it } from "vite-plus/test";
+import { render, screen } from "@testing-library/react";
+
+import type { ChainStop, EndpointsInfo, ObjectRef } from "@/generated/types";
+import type { ServiceBackingRead } from "@/hooks/useServiceBacking";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Backing } from "../../-components/service-backing";
+import { NoEndpoints } from "./NoEndpoints";
+
+const HELLO = {
+  name: "hello-web",
+  namespace: "lena-sandbox",
+  subsets: [],
+} as unknown as EndpointsInfo;
+
+const at = (kind: string): ObjectRef => ({
+  kind,
+  name: "hello-web",
+  namespace: "lena-sandbox",
+  existence: "present",
+  facts: null,
+});
+
+function drawn(stop: ChainStop) {
+  const read: ServiceBackingRead = {
+    published: () =>
+      ({
+        stop,
+        ready: 0,
+        draining: 0,
+        notReady: 0,
+        unrouted: 0,
+      }) as ReturnType<ServiceBackingRead["published"]>,
+    why: () => null,
+  };
+  render(
+    <TooltipProvider>
+      <Backing.Provider value={read}>
+        <NoEndpoints endpoints={HELLO} />
+      </Backing.Provider>
+    </TooltipProvider>
+  );
+}
+
+describe("the Endpoints list's empty row", () => {
+  /** hello-web at zero read red "no endpoints" here while its Deployment read Idle; fails if the idle stop is ignored. */
+  it("says an Endpoints object behind a workload scaled to zero is idle, not empty", () => {
+    drawn({
+      reason: "scaledToZero",
+      service: at("Service"),
+      selector: "app=hello-web",
+      workloads: [at("Deployment")],
+    });
+    expect(screen.getByText("idle")).toBeTruthy();
+    expect(screen.queryByText("no endpoints")).toBeNull();
+  });
+
+  /**
+   * Sam's big-pull in the tenth of a second before its Deployment made a
+   * pod read red "no endpoints"; fails if a workload making its pods is
+   * drawn as the fault.
+   */
+  it("says an Endpoints object whose workload is making its pods is coming up", () => {
+    drawn({
+      reason: "podsBeingMade",
+      service: at("Service"),
+      selector: "app=hello-web",
+      workloads: [at("Deployment")],
+    });
+    expect(screen.getByText("coming up")).toBeTruthy();
+    expect(screen.queryByText("no endpoints")).toBeNull();
+  });
+
+  /** A selector matching nothing is still the fault this column exists to show. */
+  it("keeps a Service that selects nothing red", () => {
+    drawn({
+      reason: "selectsNothing",
+      service: at("Service"),
+      selector: "app=hello-web",
+      near: null,
+      makersRead: true,
+    });
+    expect(screen.getByText("no endpoints")).toHaveClass("text-err");
+  });
+
+  /**
+   * Marco, who may not list Deployments, read idle-web's Endpoints at zero
+   * as red "no endpoints". Fails if a selector matching nothing is a fault
+   * when the workloads that could be at zero were not read.
+   */
+  it("keeps a Service selecting nothing out of red when its workloads were not read", () => {
+    drawn({
+      reason: "selectsNothing",
+      service: at("Service"),
+      selector: "app=idle-web",
+      near: null,
+      makersRead: false,
+    });
+    expect(screen.getByText("no endpoints").closest(".text-err")).toBeNull();
+    expect(screen.getByTestId("verdict-reason").textContent).toContain(
+      "workloads not read"
+    );
+  });
+
+  /**
+   * hello-web's Endpoints row read only red "no endpoints" while its
+   * Service led with the API server refusing its Deployment's pods. Fails
+   * if the fault loses its Service's reason beside it.
+   */
+  it("says beside a fault why its Service publishes nothing", () => {
+    drawn({
+      reason: "podsRefused",
+      service: at("Service"),
+      selector: "app=hello-web",
+      workloads: [at("Deployment")],
+      said: 'pods "hello-web-7d9-x" is forbidden: exceeded quota: two-pods, requested: pods=1, used: pods=2, limited: pods=2',
+    });
+    expect(screen.getByText("no endpoints")).toHaveClass("text-err");
+    expect(screen.getByTestId("verdict-reason")).toHaveTextContent(
+      "ResourceQuota two-pods refuses its pods: no room for pods"
+    );
+  });
+});

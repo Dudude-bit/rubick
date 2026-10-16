@@ -21,8 +21,8 @@ class Plan(unittest.TestCase):
     def test_a_new_toolchain_builds_every_platform(self):
         """Would merge a rustc that breaks macOS having built Linux only."""
         self.assertEqual(pull_request(["rust-toolchain.toml"]), EVERYTHING)
-        self.assertEqual(pull_request(["src-tauri/tauri.macos.conf.json"]), EVERYTHING)
-        self.assertEqual(pull_request(["src-tauri/src/lib.rs"]), ["linux-x64"])
+        self.assertEqual(pull_request(["src/tauri/tauri.macos.conf.json"]), EVERYTHING)
+        self.assertEqual(pull_request(["src/tauri/src/lib.rs"]), ["linux-x64"])
 
     def test_adding_build_all_builds_every_platform(self):
         """Would leave the label doing nothing until the next push."""

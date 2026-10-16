@@ -1,0 +1,187 @@
+/**
+ * Updater Store
+ *
+ * Manages application update state and settings with persistence via backend.
+ * Handles automatic update checks and manual update operations.
+ *
+ * @module stores/updaterStore
+ */
+
+import { translate } from "@/i18n";
+import { currentLocale } from "./localeStore";
+import { create } from "zustand";
+import { checkForUpdate, relaunch, type Update } from "@/lib/host";
+import { commands } from "@/lib/commands";
+
+/** Updater store state and actions */
+interface UpdaterState {
+  // Update status
+  available: boolean;
+  version?: string;
+  notes?: string;
+  checking: boolean;
+  /** When a check last got an answer, found or not; `null` until one has. */
+  checkedAt: number | null;
+  downloading: boolean;
+  progress: number;
+  error?: string;
+
+  // Settings
+  autoCheckEnabled: boolean;
+  settingsLoaded: boolean;
+  /**
+   * Whether this build can install an update it downloads, or `null` while
+   * nobody has asked. Three states on purpose: an answer we failed to get
+   * is not the same as "it cannot".
+   */
+  canInstall: boolean | null;
+
+  // Internal state
+  update: Update | null;
+
+  // Actions
+  loadSettings: () => Promise<void>;
+  setAutoCheckEnabled: (enabled: boolean) => Promise<void>;
+  checkForUpdates: () => Promise<Update | null>;
+  downloadAndInstall: () => Promise<void>;
+  dismissUpdate: () => void;
+}
+
+/**
+ * Zustand store for update management
+ *
+ * @example
+ * ```tsx
+ * const { available, version, checkForUpdates } = useUpdaterStore();
+ * if (available) {
+ *   console.log(`Update ${version} available!`);
+ * }
+ * ```
+ */
+export const useUpdaterStore = create<UpdaterState>((set, get) => ({
+  // Initial state
+  available: false,
+  version: undefined,
+  notes: undefined,
+  checking: false,
+  checkedAt: null,
+  downloading: false,
+  progress: 0,
+  error: undefined,
+  autoCheckEnabled: true,
+  settingsLoaded: false,
+  canInstall: null,
+  update: null,
+
+  loadSettings: async () => {
+    try {
+      const settings = await commands.getUpdaterSettings();
+      set({
+        autoCheckEnabled: settings.autoCheckEnabled,
+        settingsLoaded: true,
+      });
+    } catch (error) {
+      console.error("Failed to load updater settings:", error);
+      set({ settingsLoaded: true });
+    }
+    try {
+      set({ canInstall: await commands.updaterCanInstall() });
+    } catch (error) {
+      // Left unknown rather than assumed; the checks behave as they did.
+      console.error("Failed to ask whether updates can be installed:", error);
+    }
+  },
+
+  setAutoCheckEnabled: async (enabled: boolean) => {
+    set({ autoCheckEnabled: enabled });
+    try {
+      await commands.saveUpdaterSettings({ autoCheckEnabled: enabled });
+    } catch (error) {
+      console.error("Failed to save updater settings:", error);
+    }
+  },
+
+  checkForUpdates: async () => {
+    set({ checking: true, error: undefined });
+    try {
+      const updateResult = await checkForUpdate();
+      if (updateResult) {
+        set({
+          update: updateResult,
+          checking: false,
+          checkedAt: Date.now(),
+          available: true,
+          version: updateResult.version,
+          notes: updateResult.body ?? undefined,
+        });
+        return updateResult;
+      } else {
+        set({ checking: false, checkedAt: Date.now(), available: false });
+        return null;
+      }
+    } catch (error) {
+      set({
+        checking: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      return null;
+    }
+  },
+
+  downloadAndInstall: async () => {
+    const state = get();
+    let currentUpdate = state.update;
+
+    if (!currentUpdate) {
+      currentUpdate = await checkForUpdate();
+      if (!currentUpdate) return;
+      set({ update: currentUpdate });
+    }
+
+    set({ downloading: true, progress: 0 });
+
+    let downloaded = 0;
+    let contentLength = 0;
+
+    try {
+      await currentUpdate.downloadAndInstall((event) => {
+        switch (event.event) {
+          case "Started":
+            contentLength = event.data.contentLength ?? 0;
+            break;
+          case "Progress": {
+            downloaded += event.data.chunkLength;
+            const progress =
+              contentLength > 0
+                ? Math.round((downloaded / contentLength) * 100)
+                : 0;
+            set({ progress });
+            break;
+          }
+          case "Finished":
+            set({ downloading: false, progress: 100 });
+            break;
+        }
+      });
+
+      await relaunch();
+    } catch (error) {
+      set({
+        downloading: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : translate(currentLocale(), "settings", "installationFailed"),
+      });
+    }
+  },
+
+  dismissUpdate: () => {
+    set({
+      available: false,
+      version: undefined,
+      notes: undefined,
+      update: null,
+    });
+  },
+}));

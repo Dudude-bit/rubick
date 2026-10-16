@@ -1,0 +1,267 @@
+import { useQuery } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  Ban,
+  FolderOpen,
+  Globe,
+  Search,
+  XCircle,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+
+import { catalogQuery } from "../../-object/served";
+import { catalogGroups, listable, type CatalogGroup } from "./catalog-groups";
+import { KindIcon } from "@/components/object/KindIcon";
+import { ReadAgain } from "@/components/ui/read-again";
+import { RouteLink } from "@/components/ui/route-link";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { TextSkeleton } from "@/components/ui/skeleton";
+import type { CatalogEntry, UnreadGroup } from "@/generated/types";
+import { useT } from "@/i18n/useT";
+import { errorToShow } from "@/lib/error-utils";
+import { servedListLink } from "@/lib/links";
+import { textWidth, type TextFace } from "@/lib/text-width";
+import { cn } from "@/lib/utils";
+import { useClusterStore } from "@/stores/clusterStore";
+
+/** Every kind the cluster serves, by API group, each a way to its list. */
+export function ApiResources() {
+  const t = useT();
+  const isConnected = useClusterStore((state) => state.isConnected);
+  const catalog = useQuery({ ...catalogQuery(), enabled: isConnected });
+  const [filter, setFilter] = useState("");
+  const again = () => void catalog.refetch();
+  const shown = useMemo(
+    () => (catalog.data ? catalogGroups(catalog.data, filter) : null),
+    [catalog.data, filter]
+  );
+  // From every kind, not the ones a filter leaves, so typing keeps the columns.
+  const rowPx = useMemo(
+    () =>
+      catalog.data
+        ? Math.max(
+            0,
+            ...catalogGroups(catalog.data, "").groups.flatMap((group) =>
+              group.entries.map((entry) => kindRowPx(entry, t))
+            )
+          )
+        : 0,
+    [catalog.data, t]
+  );
+
+  return (
+    <div className="flex max-w-6xl flex-col gap-[18px]">
+      <SectionHeader
+        title={t("nav", "apiResources")}
+        count={
+          shown
+            ? `${t("count", "servedKinds", { n: shown.kinds })} · ${t("count", "apiGroups", { n: shown.groups.length })}`
+            : undefined
+        }
+        description={t("apiResources", "description")}
+        actions={
+          <div className="flex h-6 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
+            <Search className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <input
+              type="text"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              aria-label={t("apiResources", "filter")}
+              placeholder={t("apiResources", "filter")}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              className="w-44 bg-transparent text-[11px] text-fg outline-hidden placeholder:text-fg-fnt"
+            />
+          </div>
+        }
+      />
+      {!isConnected ? (
+        <p className="text-xs text-fg-mut">
+          {t("apiResources", "notConnected")}
+        </p>
+      ) : catalog.isError && !catalog.data ? (
+        <div className="flex flex-col items-start gap-1.5">
+          <p className="flex items-center gap-2 text-xs font-medium text-err">
+            <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("apiResources", "unreadTitle")}
+          </p>
+          <p className="text-[11px] text-fg-fnt">
+            {errorToShow(catalog.error)}
+          </p>
+          <ReadAgain error={catalog.error} onRetry={again} />
+        </div>
+      ) : !shown ? (
+        <TextSkeleton lines={8} />
+      ) : (
+        <>
+          {shown.kinds === 0 && filter.trim() !== "" && (
+            <div className="flex flex-col items-start gap-2">
+              <p className="text-xs text-fg-mut">
+                {shown.unread.length > 0
+                  ? t("apiResources", "noMatchAnswered", {
+                      filter: filter.trim(),
+                    })
+                  : t("apiResources", "noMatch", { filter: filter.trim() })}
+              </p>
+              <ReadAgain error={catalog.error} onRetry={again} />
+            </div>
+          )}
+          {shown.groups.map((group) => (
+            <GroupSection
+              key={group.group || "core"}
+              group={group}
+              rowPx={rowPx}
+            />
+          ))}
+          {shown.unread.map((group) => (
+            <UnreadSection key={group.group} group={group} />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+const groupName = (group: string, t: ReturnType<typeof useT>) =>
+  group || t("apiResources", "core");
+
+const drawn = (text: string, face: TextFace, perGlyph: number) =>
+  Math.ceil(textWidth(text, face) ?? text.length * perGlyph);
+
+/** The row's padding, the kind's icon and the gaps around the version and the scope. */
+const ROW_CHROME_PX = 8 + 14 + 3 * 8;
+/** A scope mark's icon and gap, and the gap before it. */
+const MARK_CHROME_PX = 12 + 4 + 8;
+/** Past half the widest page two columns never fit, and the longest kinds end in an ellipsis instead. */
+const ROW_CAP_PX = 564;
+
+/** What a kind's row takes with its name, version and scope words whole. */
+function kindRowPx(entry: CatalogEntry, t: ReturnType<typeof useT>): number {
+  const marks = [
+    ...(listable(entry) ? [] : [t("apiResources", "notListable")]),
+    t("apiResources", entry.namespaced ? "namespaced" : "clusterWide"),
+  ];
+  return Math.min(
+    ROW_CAP_PX,
+    ROW_CHROME_PX +
+      drawn(entry.kind, "mono", 7.2) +
+      drawn(entry.version, "badge", 6.6) +
+      marks.reduce(
+        (sum, mark) => sum + MARK_CHROME_PX + drawn(mark, "caption", 6),
+        0
+      )
+  );
+}
+
+function GroupSection({
+  group,
+  rowPx,
+}: {
+  group: CatalogGroup;
+  rowPx: number;
+}) {
+  const t = useT();
+  return (
+    <Section aria-label={groupName(group.group, t)}>
+      <h3 className="flex items-baseline gap-2 border-b border-hair pb-1 font-mono text-xs text-fg-mid">
+        {groupName(group.group, t)}
+        <span className="font-sans text-[11px] tabular-nums text-fg-fnt">
+          {group.entries.length}
+        </span>
+      </h3>
+      {/* Two columns only where each holds the longest row whole: in Russian
+          at 1024 they cut "Binding" and its scope words. */}
+      <ul
+        className="grid gap-x-6"
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, max(${rowPx}px, calc((100% - 1.5rem) / 2))), 1fr))`,
+        }}
+      >
+        {group.entries.map((entry) => (
+          <KindRow key={`${entry.group}/${entry.plural}`} entry={entry} />
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+function KindRow({ entry }: { entry: CatalogEntry }) {
+  const t = useT();
+  const apiVersion = entry.group
+    ? `${entry.group}/${entry.version}`
+    : entry.version;
+  const ScopeIcon = entry.namespaced ? FolderOpen : Globe;
+  const scope = entry.namespaced
+    ? t("apiResources", "namespaced")
+    : t("apiResources", "clusterWide");
+  const name = (
+    <>
+      <KindIcon kind={entry.kind} className="h-3.5 w-3.5" />
+      <span className="truncate font-mono text-xs text-fg" title={entry.kind}>
+        {entry.kind}
+      </span>
+    </>
+  );
+  return (
+    <li className="flex min-h-7 items-center gap-2 px-1">
+      {listable(entry) ? (
+        <RouteLink
+          {...servedListLink(entry)}
+          className="-mx-1 flex min-w-0 items-center gap-2 rounded px-1 hover:bg-hover"
+        >
+          {name}
+        </RouteLink>
+      ) : (
+        <span className="flex min-w-0 items-center gap-2">{name}</span>
+      )}
+      <span
+        // The group is the section's heading; repeating it pushed the version
+        // itself off the end of a long kind's row.
+        className="flex-none font-mono text-[11px] text-fg-fnt"
+        title={apiVersion}
+      >
+        {entry.version}
+      </span>
+      {/* The scope's words give way first, down to their icons, and the
+          version never: "ValidatingAdmissionPolicyBinding v." in Russian. */}
+      <span className="ml-auto flex min-w-0 shrink-[100] items-center gap-2 text-[11px]">
+        {!listable(entry) && (
+          <span
+            className="inline-flex min-w-0 items-center gap-1 text-fg-fnt"
+            title={t("apiResources", "notListable")}
+          >
+            <Ban className="h-3 w-3 flex-none" aria-hidden="true" />
+            <span className="truncate">{t("apiResources", "notListable")}</span>
+          </span>
+        )}
+        <span
+          className={cn(
+            "inline-flex min-w-0 items-center gap-1",
+            entry.namespaced ? "text-fg-mut" : "text-info"
+          )}
+          title={scope}
+        >
+          <ScopeIcon className="h-3 w-3 flex-none" aria-hidden="true" />
+          <span className="truncate">{scope}</span>
+        </span>
+      </span>
+    </li>
+  );
+}
+
+/** A group nobody could read stays on the page, with why. */
+function UnreadSection({ group }: { group: UnreadGroup }) {
+  const t = useT();
+  return (
+    <Section aria-label={group.group}>
+      <h3 className="flex items-center gap-2 border-b border-hair pb-1 font-mono text-xs text-warn">
+        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+        {group.group}
+      </h3>
+      <p className="text-xs text-fg-mut">{t("apiResources", "groupUnread")}</p>
+      <p className="font-mono text-[11px] text-fg-fnt">{group.message}</p>
+    </Section>
+  );
+}

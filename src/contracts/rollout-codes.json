@@ -1,0 +1,15 @@
+{
+  "codes": {
+    "idle": "Idle",
+    "stalled": "Stalled",
+    "unavailable": "Unavailable",
+    "paused": "Paused",
+    "unobserved": "Waiting",
+    "rollingOut": "Progressing",
+    "comingUp": "Progressing",
+    "scalingDown": "Progressing",
+    "short": "Degraded",
+    "ready": "Ready"
+  },
+  "needsAttention": ["stalled", "unavailable", "short"]
+}

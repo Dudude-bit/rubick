@@ -1,0 +1,433 @@
+import { CircleOff, History, Monitor, Moon, Sun } from "lucide-react";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useAttention } from "@/hooks/useAttention";
+import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { attentionWords, type Attention } from "@/lib/attention";
+import { useClusterSummary } from "@/hooks/useClusterSummary";
+import { useRenewal } from "@/hooks/useCredentialRenewal";
+import type { OverviewUnread, Renewal } from "@/generated/types";
+import { scopeLabel } from "@/lib/namespace-scope";
+import { formatShortcut } from "@/lib/platform";
+import { cn, formatWhen } from "@/lib/utils";
+import { useShownPath } from "@/lib/hide-paths";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useThemeStore } from "@/stores/themeStore";
+import { podTotal } from "../-overview/health-share";
+import { ActivityPanel } from "./ActivityPanel";
+import { useShellCounts } from "./useShellCounts";
+import { NOTHING_MISSING, type ScopeMissing } from "@/hooks/useScopeMissing";
+import { listWords } from "@/i18n/say";
+import { useWindowCluster } from "./useWindowCluster";
+import { LinkOpenedNote } from "./DeepLinkBanner";
+import { StallIndicator } from "./StallIndicator";
+import { useT, type T } from "@/i18n/useT";
+
+/**
+ * Which renewal states put a sign-in hint in the strip, as a total map.
+ *
+ * Total, not a ternary chain ending in `null`: a chain paints every state it
+ * has not heard of as "nothing to say", and `lastChance` — one attempt left,
+ * landing after the deadline — would have arrived silently.
+ */
+const SIGN_IN_HINT: Record<
+  Renewal,
+  "renewalNeedsYouHint" | "renewalRanOutHint" | null
+> = {
+  needsYou: "renewalNeedsYouHint",
+  ranOut: "renewalRanOutHint",
+  // Coming, and nothing to do about it yet — the refusal lifts itself when
+  // the attempt after the deadline lands.
+  lastChance: "renewalRanOutHint",
+  scheduled: null,
+  noDeadline: null,
+  passed: null,
+  failed: null,
+  delegated: null,
+  unknown: null,
+};
+
+/**
+ * The window's bottom line: what the keyboard does on the left, what is
+ * true of the connection on the right. It is the only always-visible place
+ * that carries a live problem count, so the number is red the moment it
+ * is non-zero — the user should never have to open a page to learn that
+ * something broke.
+ *
+ * It reports states, never names. The cluster used to be spelled out here
+ * as well as in the sidebar and in the tab, three times in one window for
+ * a fact that does not change while you read it; now that a tab carries a
+ * route as well as a scope, the strip and the sidebar are enough. What is
+ * left here is the only thing this line knew that they did not: whether
+ * the connection behind them is actually up.
+ */
+export function StatusBar({
+  missing = NOTHING_MISSING,
+}: {
+  /** The namespaces of the scope the cluster does not have. */
+  missing?: ScopeMissing;
+}) {
+  const t = useT();
+  const show = useShownPath();
+  const { context: currentContext, live: connected } = useWindowCluster();
+  const connectedThrough = useClusterStore((s) => s.connectedThrough);
+  const isLoading = useClusterStore((s) => s.isLoading);
+  const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
+  const error = useClusterStore((s) => s.error);
+  const errorContext = useClusterStore((s) => s.errorContext);
+  const pendingContext = useClusterStore((s) => s.pendingContext);
+  const connect = useClusterStore((s) => s.connect);
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const counts = useShellCounts();
+  // A placeholder is the last scope's answer, and under this scope's label it
+  // would count the wrong namespaces; it has no attention, so it stays out.
+  const here =
+    counts.overview && counts.attention
+      ? {
+          pods: counts.overview.pods,
+          unread: counts.overview.unread,
+          attention: counts.attention,
+        }
+      : null;
+  // The two worth a line that is always up — both predict the sign-in screen,
+  // and they differ in why. Everything else is quiet, and a chip that is
+  // permanently lit stops being read.
+  const renewal = useRenewal();
+  const signInHint = SIGN_IN_HINT[renewal];
+
+  const connecting = isLoading || isAuthenticating;
+
+  return (
+    <footer className="@container flex h-6 flex-none items-center gap-3.5 overflow-hidden whitespace-nowrap border-t border-hair px-3 text-[11px] text-fg-fnt">
+      {/* Gives way first. A hint with no room wraps onto the clipped second
+          line; reversed, so the note never does. The note keeps its whole
+          sentence up to its cap, and the controls give way to it. The empty
+          item holds line one when there is no note. */}
+      <div
+        data-testid="status-hints"
+        className="flex h-6 min-w-0 flex-1 flex-row-reverse flex-wrap items-center justify-end gap-x-3.5 overflow-hidden has-[[data-link-note]]:min-w-min"
+      >
+        <LinkOpenedNote />
+        <span aria-hidden="true" className="-ml-3.5 h-6" />
+        <span className="leading-6">
+          {formatShortcut("mod+K")} {t("action", "hintSearch")}
+        </span>
+        <span className="leading-6">
+          {"↑↓"} {t("action", "hintMove")}
+        </span>
+        <span className="leading-6">
+          {"↵"} {t("action", "hintOpen")}
+        </span>
+      </div>
+
+      {/* Gives way next, the theme first, so the counts never do. The empty
+          item holds line one, so a control that cannot fit wraps too. */}
+      <div
+        data-testid="status-controls"
+        className="flex h-6 min-w-0 flex-wrap items-center justify-end gap-x-3.5 overflow-hidden"
+      >
+        <span aria-hidden="true" className="-mr-3.5 h-6" />
+        <StallIndicator />
+        <ActivityPanel />
+        <ThemeControl />
+      </div>
+      {/* The app's own chrome to the left, the cluster's health to the right. */}
+      <span aria-hidden="true" className="h-3 w-px flex-none bg-hair" />
+
+      {connecting ? (
+        // The one place a name still belongs: mid-connect the sidebar and
+        // the tab are still showing the cluster being left behind.
+        <span className="truncate">
+          {t("cluster", "connectingToLower", {
+            context: pendingContext ?? currentContext ?? "",
+          })}
+        </span>
+      ) : error ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() =>
+                connect(errorContext ?? currentContext ?? undefined)
+              }
+              className="text-err transition-colors hover:text-fg"
+            >
+              {t("cluster", "connectFailedRetry", {
+                failed: t("cluster", "connectFailed"),
+              })}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" align="end" className="max-w-[420px]">
+            {show(error)}
+          </TooltipContent>
+        </Tooltip>
+      ) : connected ? (
+        <>
+          {connectedThrough === "kubectl_proxy" && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-default text-warn">
+                    {t("cluster", "throughProxy")}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  align="end"
+                  className="max-w-[420px]"
+                >
+                  {t("cluster", "throughProxyHint")}
+                </TooltipContent>
+              </Tooltip>
+              <span>·</span>
+            </>
+          )}
+          {signInHint && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-default text-warn">
+                    {t("cluster", "renewalNeedsYou")}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  align="end"
+                  className="max-w-[420px]"
+                >
+                  {t("cluster", signInHint)}
+                </TooltipContent>
+              </Tooltip>
+              <span>·</span>
+            </>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                data-testid="scope-counts"
+                className={cn(
+                  "flex cursor-default items-center gap-1.5",
+                  (counts.heldAt !== null || counts.late || counts.failed) &&
+                    "opacity-60"
+                )}
+              >
+                {counts.heldAt !== null && (
+                  <History
+                    role="img"
+                    aria-label={t("cluster", "countsHeld")}
+                    className="h-3 w-3 flex-none"
+                  />
+                )}
+                {(counts.late || counts.failed) && (
+                  <span
+                    role="img"
+                    aria-label={t(
+                      "cluster",
+                      counts.late ? "freshBehind" : "freshStale"
+                    )}
+                    className="h-1.5 w-1.5 flex-none rounded-full border border-warn"
+                  />
+                )}
+                {missing.whole ? null : here === null ? (
+                  // Refused, failed or still reading: the count is unknown,
+                  // and "0 pods · 0 problems" would say the opposite of the
+                  // Overview page's own "no access".
+                  <span className="text-fg-fnt">
+                    {t("cluster", "countsUnread")}
+                  </span>
+                ) : (
+                  <>
+                    {here.pods && (
+                      <span>
+                        {t("cluster", "podCount", {
+                          n: podTotal(here.pods.read),
+                        })}
+                      </span>
+                    )}
+                    {here.pods && !here.pods.complete && <span>·</span>}
+                    {!here.pods?.complete && (
+                      <span className="text-fg-fnt">
+                        {t("cluster", "podsNotCounted", {
+                          where: podsUnreadIn(here.unread, t),
+                        })}
+                      </span>
+                    )}
+                    <span>·</span>
+                    <ProblemCount attention={here.attention} />
+                  </>
+                )}
+                {!missing.whole && (
+                  <span className="text-fg-fnt">
+                    {scope.length === 0
+                      ? t("cluster", "countsInAll")
+                      : scope.length > 2
+                        ? t("cluster", "countsInMany", { n: scope.length })
+                        : t("cluster", "countsIn", {
+                            scope: scopeLabel(scope, t),
+                          })}
+                  </span>
+                )}
+                {missing.missing.length > 0 && (
+                  <span
+                    data-testid="scope-missing-status"
+                    className="inline-flex items-center gap-1 text-warn"
+                  >
+                    {!missing.whole && <span className="text-fg-fnt">·</span>}
+                    <CircleOff
+                      className="h-3 w-3 flex-none"
+                      aria-hidden="true"
+                    />
+                    {t("cluster", "scopeMissingStatus", {
+                      n: missing.missing.length,
+                      names: listWords(missing.missing, t),
+                    })}
+                  </span>
+                )}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" align="end" className="max-w-[320px]">
+              {counts.heldAt !== null && <HeldAt at={counts.heldAt} />}
+              {(counts.late || counts.failed) && counts.readAt !== null && (
+                <p className="mb-1 text-warn">
+                  {t(
+                    "cluster",
+                    counts.late ? "countsLateAll" : "countsFailedAll",
+                    {
+                      at: formatWhen(counts.readAt, "clock"),
+                    }
+                  )}
+                </p>
+              )}
+              <ClusterWide />
+            </TooltipContent>
+          </Tooltip>
+        </>
+      ) : (
+        <span>{t("cluster", "notConnectedLower")}</span>
+      )}
+    </footer>
+  );
+}
+
+/** How old the counts standing in for the cluster's own are. */
+function HeldAt({ at }: { at: number }) {
+  const t = useT();
+  const age = useRealtimeAge(new Date(at).toISOString());
+  return (
+    <p className="mb-1">
+      {t("cluster", "countsHeldAt", { ago: t("action", "agoSuffix", { age }) })}
+    </p>
+  );
+}
+
+/** Where the pods went unread, in the strip's own short words. */
+function podsUnreadIn(unread: readonly OverviewUnread[], t: T): string {
+  const named = [
+    ...new Set(
+      unread.flatMap((entry) =>
+        entry.kind === "Pod" && entry.namespace ? [entry.namespace] : []
+      )
+    ),
+  ];
+  return named.length === 0
+    ? t("cluster", "countsInAll")
+    : t("cluster", "countsIn", { scope: scopeLabel(named, t) });
+}
+
+/** The count the Overview's panel heads, in the colour of its worst row. */
+function ProblemCount({ attention }: { attention: Attention }) {
+  const t = useT();
+  const { total, complete, worst } = attention;
+  return (
+    <span
+      className={cn(
+        worst === "err" && "text-err",
+        worst === "warn" && "text-warn"
+      )}
+    >
+      {attentionWords({ total, complete }, t)}
+    </span>
+  );
+}
+
+const WHOLE_CLUSTER: readonly string[] = [];
+
+/**
+ * The cluster-wide figure, read only while the tooltip is open: the same
+ * attention the Overview counts, for every namespace instead of the scope.
+ * Not asked at all once the whole cluster refused this connection.
+ */
+function ClusterWide() {
+  const t = useT();
+  const { podCount, refused } = useClusterSummary();
+  if (refused || podCount === null)
+    return <>{t("cluster", "clusterWideUnread")}</>;
+  return <ClusterWideCounts podCount={podCount} />;
+}
+
+function ClusterWideCounts({ podCount }: { podCount: number }) {
+  const t = useT();
+  const attention = useAttention({ scope: WHOLE_CLUSTER });
+  return (
+    <>
+      {t("cluster", "clusterWideCounts", {
+        pods: t("cluster", "podCount", { n: podCount }),
+        problems: attention
+          ? attentionWords(attention, t)
+          : t("cluster", "countsUnread"),
+      })}
+    </>
+  );
+}
+
+const THEMES = [
+  { value: "light", k: "themeLight", icon: Sun },
+  { value: "dark", k: "themeDark", icon: Moon },
+  { value: "system", k: "themeSystem", icon: Monitor },
+] as const;
+
+function ThemeControl() {
+  const t = useT();
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
+  const current = THEMES.find((t) => t.value === theme) ?? THEMES[2];
+  const Icon = current.icon;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={t("settings", "themeNamed", {
+            theme: t("settings", current.k),
+          })}
+          className="flex items-center gap-1.5 rounded px-1.5 text-[11px] text-fg-fnt transition-colors hover:text-fg"
+        >
+          <Icon className="h-3 w-3" />
+          {t("settings", current.k).toLowerCase()}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" side="top">
+        {THEMES.map((option) => (
+          <DropdownMenuItem
+            key={option.value}
+            onClick={() => setTheme(option.value)}
+          >
+            <option.icon className="mr-2 h-4 w-4" />
+            {t("settings", option.k)}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

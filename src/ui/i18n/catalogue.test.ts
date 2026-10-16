@@ -1,0 +1,245 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import { RESOURCE_REGISTRY, toPlural } from "@/lib/resource-registry";
+import { en } from "./catalogue";
+import { translate } from "./index";
+import { ru } from "./ru";
+
+/**
+ * The one rule about catalogue content that a type cannot state.
+ *
+ * A nav row names a destination, and most of them are resource kinds whose
+ * labels come from the registry — `getDisplayPlural(kind)` — because a
+ * Kubernetes kind is a proper noun: "Pods" is the same word in Moscow, and
+ * `kubectl get поды` answers nothing. The tempting contribution is
+ * `pods: "Поды"` here, with the rail wired to it.
+ *
+ * Checked against English only, because English is the gate: the `Catalogue`
+ * type is derived from `en`, so a key cannot reach any other language without
+ * being spelled out here first — in the kind's own name, which is the spelling
+ * this catches. Scanning `ru.nav` instead would never match anything: it holds
+ * "Поды", and the kind names it is compared against are English.
+ *
+ * Scoped to `nav` on purpose: elsewhere a collision is ordinary English
+ * (`columns.ready` is a column of replica counts, `activity.jobs` is the app's
+ * own background work). The status side of the rule is an ESLint guard
+ * rejecting `<StatusBadge status={t(...)}>`, because a status is only
+ * dangerous once it is passed as one.
+ */
+describe("what may not be put in the nav catalogue", () => {
+  const kinds = new Set<string>();
+  for (const definition of RESOURCE_REGISTRY) {
+    kinds.add(definition.kind.toLowerCase());
+    kinds.add(toPlural(definition.kind).toLowerCase());
+  }
+
+  it("names no resource kind", () => {
+    const offenders = Object.entries(en.nav).filter(([, text]) =>
+      kinds.has(text.toLowerCase())
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * The settings search matches on a row's label, its hint, and a string of
+ * synonyms nobody sees. Those synonyms are the only catalogue entries whose
+ * translation must *keep* the English: somebody looking for the theme row
+ * types "тема", somebody looking for the tools row types `kubectl`, and it is
+ * the same person on the same day. Replacing the technical words takes the
+ * second search away with nothing on screen changing to show it.
+ */
+describe("the words the settings search matches on", () => {
+  const keys = Object.keys(en.settings).filter(
+    (key) => key.startsWith("search") && key.endsWith("Words")
+  ) as Array<keyof typeof en.settings>;
+
+  it("has some", () => {
+    expect(keys.length).toBeGreaterThan(5);
+  });
+
+  it.each(keys)("keeps every English term in ru.%s", (key) => {
+    const english = String(en.settings[key]).split(/\s+/);
+    const russian = String(ru.settings[key]);
+    for (const word of english) {
+      expect(russian).toContain(word);
+    }
+  });
+
+  it.each(keys)("adds Russian to ru.%s", (key) => {
+    expect(String(ru.settings[key])).toMatch(/[а-яё]/i);
+  });
+});
+
+describe("counting in a language with more than two forms", () => {
+  /**
+   * A number followed by a noun has to be a `Plural`, or the translation
+   * cannot say "1 алерт / 2 алерта / 5 алертов" — the key accepts one
+   * string and Russian gets whichever form the writer happened to pick.
+   * Seven of these shipped: "2 горит", "1 объектов", "названо 1".
+   *
+   * The scan looks for `{n}` followed by a word, which is the shape that
+   * needs agreement. `{n} of {total}` and a bare `{n}` beside a label do
+   * not, and are not flagged.
+   */
+  it("keeps a counted noun out of a flat string", () => {
+    const flat: string[] = [];
+    for (const [section, keys] of Object.entries(en)) {
+      for (const [key, value] of Object.entries(
+        keys as Record<string, unknown>
+      )) {
+        if (typeof value !== "string") continue;
+        if (value.includes("{total}")) continue;
+        if (/\{n\}\s+[a-zA-Zа-яА-Я]+s\b/.test(value))
+          flat.push(`${section}.${key}: ${value}`);
+      }
+    }
+    expect(flat).toEqual([]);
+  });
+});
+
+describe("the Russian word for a pod", () => {
+  /**
+   * "Перезапустить под shop/web-1?" and "под {pod} удалён" read as the
+   * preposition "under" with a name after it. Fails on "под" right before an
+   * object's name, where the kind's own name, Pod, belongs.
+   */
+  it("never stands right before a pod's name", () => {
+    const beforeName = /(^|[^А-Яа-яЁё])[Пп]од «?\{(name|pod)\}/;
+    const found = Object.entries(ru).flatMap(([section, keys]) =>
+      Object.entries(keys as Record<string, unknown>).flatMap(([key, value]) =>
+        Object.values(typeof value === "string" ? { value } : (value as object))
+          .filter((text) => beforeName.test(String(text)))
+          .map(() => `${section}.${key}`)
+      )
+    );
+    expect(found).toEqual([]);
+  });
+
+  /**
+   * "Найден под на замену" and "когда пропадает под или соединение" made
+   * Lena read "under" and stumble: a bare "под" before "или", "за" or "на
+   * замену" has no word to be the noun. Fails if one comes back.
+   */
+  it("is never left bare before a word that makes it read as 'under'", () => {
+    const bare = /(^|[^А-Яа-яЁё])[Пп]од (или|за|на замену)([^А-Яа-яЁё]|$)/;
+    const found = Object.entries(ru).flatMap(([section, keys]) =>
+      Object.entries(keys as Record<string, unknown>).flatMap(([key, value]) =>
+        Object.values(typeof value === "string" ? { value } : (value as object))
+          .filter((text) => bare.test(String(text)))
+          .map(() => `${section}.${key}`)
+      )
+    );
+    expect(found).toEqual([]);
+  });
+});
+
+describe("the Watching tab's empty hint", () => {
+  /**
+   * Lena read "Попросите сообщить о..." and could not tell what to press.
+   * Fails if the hint stops quoting the first words every ask control
+   * starts with, in either language.
+   */
+  it.each([
+    ["en", en],
+    ["ru", ru],
+  ] as const)(
+    "names the %s ask controls by their label",
+    (_locale, catalogue) => {
+      const { askPod, askJob, askRollout, askDrain, askForward, emptyHint } =
+        catalogue.tell;
+      const asks = [askPod, askJob, askRollout, askDrain, askForward];
+      const lead = asks[0].split(/[ ,]/)[0];
+      for (const ask of asks) expect(ask.startsWith(lead)).toBe(true);
+      expect(emptyHint).toMatch(new RegExp(`[“«]${lead}`));
+    }
+  );
+});
+
+describe("Russian copy that read wrong to a Russian reader", () => {
+  const say = (section: keyof typeof ru, key: string, values = {}) =>
+    translate("ru", section as never, key as never, values);
+
+  /** "Service типа ClusterIP доступны" disagreed in number with the one Service it is about. */
+  it("agrees a Service with its verb", () => {
+    expect(say("empty", "clusterIpOnlyInside", { type: "ClusterIP" })).toMatch(
+      /^Service типа ClusterIP доступен только изнутри кластера\./
+    );
+  });
+
+  /** "Показать все" next to "Копировать всё" for one pair of buttons. */
+  it("words the reveal and copy buttons as a pair", () => {
+    expect(say("action", "revealAll")).toBe("Показать всё");
+    expect(say("action", "copyAll")).toBe("Копировать всё");
+  });
+
+  /** "Поиск CRDs…" put an English plural s on an acronym; the column heads were abbreviations. */
+  it("searches CRDs without an English plural and spells out the plural column", () => {
+    expect(say("action", "searchCrdsPlaceholder")).toBe("Поиск по CRD…");
+    expect(say("columns", "plural")).toBe("Множественное число");
+    expect(say("columns", "singular")).toBe("Единственное число");
+  });
+});
+
+describe("Russian sentences that read machine-made or pointed at nothing", () => {
+  const say = (section: keyof typeof ru, key: string, values = {}) =>
+    translate("ru", section as never, key as never, values);
+
+  /** "изменено 0 переменных, снято 0": a bare number after "снято" had no noun. */
+  it("names what the login shell changed and removed, each with its number after the colon", () => {
+    expect(
+      say("settings", "shellEnvImported", {
+        shell: "/bin/bash",
+        n: 0,
+        removed: 0,
+      })
+    ).toBe(
+      "Прочитано из /bin/bash, запущенного как интерактивный login-shell, как это делает терминал. Переменных изменено: 0, удалено: 0. PATH объединён."
+    );
+  });
+
+  /** "Ни одному контексту он не нужен": the "он" had nothing before it to be. */
+  it("says what no context needs, in full", () => {
+    expect(say("empty", "noContextNeedsPlugin")).toBe(
+      "Ни одному контексту не нужен плагин аутентификации."
+    );
+  });
+
+  /** "чьи они" pointed at pods that were never named in the sentence. */
+  it("names the owner the controller events do not name", () => {
+    expect(say("readings", "groupedByName")).toMatch(
+      /не называет владельца этих подов\.$/
+    );
+  });
+
+  /** A healthy Deployment's Share dialog was titled as an investigation. */
+  it("titles the Share dialog by what it shares, not by a fault", () => {
+    expect(say("share", "shareThis")).toBe("Поделиться этой страницей");
+    expect(translate("en", "share", "shareThis")).toBe("Share this page");
+  });
+});
+
+describe("the shell's name", () => {
+  /**
+   * Lena's container card offered "Терминал" beside a tab called "Оболочка",
+   * one shell under two names. Fails if the button, the tab, Activity and
+   * its count stop calling it the same thing in either language.
+   */
+  it.each([
+    ["en", "shell"],
+    ["ru", "оболоч"],
+  ] as const)(
+    "is one word in %s, wherever the shell is offered",
+    (locale, stem) => {
+      const say = (section: "action" | "columns" | "activity", key: string) =>
+        translate(locale, section as never, key as never, { n: 5 });
+      expect(say("action", "shell")).toBe(say("columns", "shell"));
+      for (const text of [
+        say("action", "shell"),
+        say("activity", "terminals"),
+        say("activity", "terminalCount"),
+      ])
+        expect(text.toLowerCase()).toContain(stem);
+    }
+  );
+});

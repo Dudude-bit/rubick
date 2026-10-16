@@ -1,5 +1,5 @@
 [input]
-source_dir = "src-tauri/src"
+source_dir = "src/tauri/src"
 exclude = [
     "tests",
     "target",
@@ -7,8 +7,8 @@ exclude = [
 use_cargo_expand = true
 
 [output]
-types_file = "src/generated/types.ts"
-commands_file = "src/generated/commands.ts"
+types_file = "src/ui/generated/types.ts"
+commands_file = "src/ui/generated/commands.ts"
 
 [naming]
 type_prefix = ""

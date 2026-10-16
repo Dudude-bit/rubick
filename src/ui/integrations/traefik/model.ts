@@ -1,0 +1,1178 @@
+/**
+ * What this cluster's Traefik serves, pivoted the way the question is
+ * asked: the unit is a host and the routes under it, from whichever kind of
+ * object — nobody asks "list the IngressRoutes", they ask *what serves this
+ * hostname* and *why is this URL not working*.
+ *
+ * Plain `Ingress` objects count, not only the CRDs: k3d ships Traefik as
+ * *the* ingress controller, so they are the majority of what it serves.
+ * Which ones are Traefik's is read rather than guessed — an `IngressClass`
+ * carries the controller that claims it, so an Ingress belongs here when it
+ * names a class whose controller is Traefik's, or names none and this
+ * cluster's default class is Traefik's. Every other Ingress is not drawn.
+ *
+ * The findings are why the page exists; none is visible anywhere else in
+ * this app. A Service with no endpoints reads healthy on every list page, a
+ * host on a plain-HTTP entry point looks like a normal route, a certificate
+ * two objects away is nobody's column. {@link ChainStop} is the same union
+ * the traffic chain already speaks, so "no pod carries app=promo" reads
+ * identically whether it was reached from a Deployment or from a hostname.
+ */
+
+import type { Expiry } from "@/lib/certificates";
+import type {
+  CustomResourceInfo,
+  IngressClassSummary,
+  IngressInfo,
+  ChainStop,
+  ServiceInfo,
+  TlsCertificate,
+} from "@/generated/types";
+import {
+  backingReadIn,
+  backingOf as backingOfBackend,
+  certificateProblems,
+  certificateStateWords,
+  claimsIngress as classClaims,
+  classesOf,
+  SEVERITY_RANK as RANK,
+  tlsSecretFor,
+  worstOf,
+  type Backing,
+  type BackingSources,
+  type SecretRef,
+  edgeTlsOf,
+  type HostTls,
+  frontingIngressesOf,
+  ownTls,
+  proxyServicesBy,
+  terminatedUpstreamOf,
+  type EdgeTls,
+  stopWeight,
+  stopsRowState,
+  doubtsOf,
+} from "../ingress";
+import { isPolicyStop, type DoorDoubt } from "@/lib/policy-door";
+import type { T } from "@/i18n/useT";
+import type { RowTone } from "../page-kit";
+import { readRule, type RuleClause, type RuleReading } from "./rule";
+
+export type { Backing } from "../ingress";
+
+/** Every version of Traefik writes this into an IngressClass's `spec.controller`. */
+export const CONTROLLER = "traefik.io/ingress-controller";
+
+/** What Traefik's Gateway API provider answers to in a GatewayClass's `controllerName`, from the same pods. */
+export const GATEWAY_CONTROLLER = "traefik.io/gateway-controller";
+
+/** Which entry points an Ingress's router is bound to, when it says so. */
+const ENTRYPOINTS_ANNOTATION =
+  "traefik.ingress.kubernetes.io/router.entrypoints";
+/** `namespace-name@kubernetescrd`, comma separated. */
+const MIDDLEWARES_ANNOTATION =
+  "traefik.ingress.kubernetes.io/router.middlewares";
+const ROUTER_TLS_ANNOTATION = "traefik.ingress.kubernetes.io/router.tls";
+
+/** `router.tls: "true"`, or any `router.tls.*` option, which sets it too. */
+function asksRouterTls(annotations: Record<string, string>): boolean {
+  return Object.entries(annotations).some(([key, value]) =>
+    key === ROUTER_TLS_ANNOTATION
+      ? value.trim().toLowerCase() === "true"
+      : key.startsWith(`${ROUTER_TLS_ANNOTATION}.`)
+  );
+}
+
+export interface MiddlewareRef {
+  name: string;
+  namespace: string;
+}
+
+export interface RouteService {
+  name: string;
+  namespace: string;
+  port: string;
+  /**
+   * Whether this names a Kubernetes Service at all.
+   *
+   * Traefik routes to its own internals too — `api@internal` serves the
+   * dashboard, and a `TraefikService` is a CRD that fans out to several
+   * backends. Neither is a Service, neither has endpoints, and reporting
+   * "no Service named api@internal in this namespace" about the dashboard
+   * this cluster ships with is the page inventing an outage.
+   */
+  kubernetes: boolean;
+  /**
+   * The `scheme` the route pins for talking to the backend — `h2c` is the
+   * one that matters, because it marks a gRPC way in that no browser can
+   * use. Only an IngressRoute can state one.
+   */
+  scheme: string | null;
+}
+
+export interface TraefikRoute {
+  key: string;
+  source: {
+    kind: "Ingress" | "IngressRoute";
+    name: string;
+    namespace: string;
+  };
+  rule: RuleReading;
+  /** This row's own alternative of the rule. */
+  clause: RuleClause;
+  /**
+   * The entry points the router is bound to, or `null` where the object names
+   * none — which for Traefik means *every* entry point, not none of them.
+   */
+  entryPoints: string[] | null;
+  middlewares: MiddlewareRef[];
+  service: RouteService | null;
+  /**
+   * `Kind/name` where an Ingress path routes to an API object rather than a
+   * Service — `backend.resource`. A different thing from {@link service}
+   * being null on a Traefik internal: that one lives inside the proxy, this
+   * one is a Kubernetes object the app simply cannot see inside.
+   */
+  resourceBackend: string | null;
+  /**
+   * The Secret the object names for this host. Traefik loads it and picks it
+   * by SNI for a TLS router, but on its own it encrypts nothing: an
+   * Ingress's `spec.tls` is only a certificate. See {@link declaresTls}.
+   */
+  tlsSecret: string | null;
+  /**
+   * Whether the router itself is TLS: an IngressRoute's `tls` block, or an
+   * Ingress's `router.tls` annotation. Not the same question as
+   * {@link tlsSecret} in either direction.
+   *
+   * An IngressRoute may write `tls: {}` and mean "serve this over TLS with
+   * whatever certificate you have", naming no Secret. An Ingress may name a
+   * Secret in `spec.tls` and still be served as plain HTTP, because Traefik
+   * reads that field for certificates and nothing else. Either way round,
+   * reading the Secret as the answer printed the wrong scheme.
+   */
+  declaresTls: boolean;
+  /** An Ingress's `pathType` verbatim: Traefik's reading of it is Traefik's. */
+  pathType: string | null;
+  /** An IngressRoute may state one; an Ingress never does. */
+  priority: number | null;
+}
+
+export interface EntryPoint {
+  name: string;
+  address: string | null;
+  tls: boolean;
+  /** Where plain requests on it are sent instead, where a redirection is set. */
+  redirectTo: string | null;
+}
+
+export type Finding =
+  /** The route resolves and there is nothing behind it. */
+  | {
+      kind: "stop";
+      severity: "err" | "warn";
+      route: TraefikRoute;
+      stop: ChainStop;
+      answer: StopAnswer;
+    }
+  /** NetworkPolicies guard the pods, and whether Traefik gets through is not known. */
+  | {
+      kind: "door";
+      severity: "warn";
+      route: TraefikRoute;
+      service: string;
+      doubt: DoorDoubt;
+    }
+  /** Reachable unencrypted, and nothing upgrades the connection. */
+  | {
+      kind: "clear";
+      severity: "warn";
+      entryPoints: string[];
+      /** A Secret `spec.tls` names here, which Traefik loads and never serves. */
+      loaded: string | null;
+    }
+  /** Traefik skips a path whose backend is an API object, not a Service. */
+  | {
+      kind: "resourceBackend";
+      severity: "err";
+      route: TraefikRoute;
+    }
+  /** Two objects claim the same host and the same path. */
+  | {
+      kind: "duplicate";
+      severity: "warn";
+      path: string;
+      routes: TraefikRoute[];
+      /** `null` where the objects do not settle it, which is said out loud. */
+      winner: TraefikRoute | null;
+      /**
+       * Every priority was computable and the top one is shared — the one
+       * no-winner case where the objects were read and still do not settle
+       * it, which reads differently from "this app cannot see the rule".
+       */
+      tied: boolean;
+    }
+  /** The certificate this host is served under is running out, or unreadable. */
+  | {
+      kind: "certificate";
+      severity: "err" | "warn";
+      namespace: string;
+      secretName: string;
+      read: TlsCertificate | undefined;
+      expiry: Expiry | null;
+    };
+
+export interface HostGroup {
+  /** `null` is a route with no host term — a catch-all, drawn last. */
+  host: string | null;
+  routes: TraefikRoute[];
+  findings: Finding[];
+  /** The route the chain is drawn for: the one worth looking at. */
+  chainFor: TraefikRoute;
+  /** Every TLS Secret any route under this host is served under. */
+  tlsSecrets: Array<{ namespace: string; secretName: string }>;
+  /** The keys of the routes served over TLS; `null` where that is not known. */
+  overTls: ReadonlyMap<string, boolean | null>;
+  worst: "err" | "warn" | null;
+  /** False while a Service this host routes to has not been read. */
+  backendsKnown: boolean;
+  /** Whether the controller gets through to a backend's pods is not known. */
+  doubted: boolean;
+  /** The one answer to "is this host served over TLS"; see `HostTls`. */
+  tls: HostTls;
+}
+
+export interface TraefikSources extends BackingSources {
+  ingresses: IngressInfo[];
+  ingressRoutes: CustomResourceInfo[];
+  classes: IngressClassSummary[];
+  middlewares: CustomResourceInfo[];
+  /** Empty where the controller's own configuration could not be read. */
+  entryPoints: EntryPoint[];
+  /** Absent where the controller's own configuration could not be read. */
+  emptyServices?: EmptyServices;
+  /** Certificates already read off the TLS Secrets, by `namespace/name`. */
+  certificates?: Map<string, TlsCertificate>;
+  /**
+   * Whether something outside these objects terminates TLS for a host before
+   * it reaches the proxy — a cloud load balancer holding the certificate in
+   * an annotation rather than in `spec.tls`.
+   *
+   * A function rather than a list because the page answers it from the
+   * `service.routes` capability, which is asked per Service and knows nothing
+   * about this model. Absent on a cluster with no such vendor, which is the
+   * ordinary case and where {@link terminatedUpstream} is the whole answer.
+   */
+  upstreamTls?: (host: string | null) => boolean | "unknown";
+}
+
+// --- which Ingresses are this Traefik's ---------------------------------
+
+/** The IngressClasses whose controller is Traefik. */
+export function traefikClasses(
+  classes: IngressClassSummary[]
+): IngressClassSummary[] {
+  return classesOf(classes, CONTROLLER);
+}
+
+export function claimsIngress(
+  ingress: IngressInfo,
+  classes: IngressClassSummary[]
+): boolean {
+  return classClaims(ingress, classes, CONTROLLER);
+}
+
+// --- reading the two kinds of object ------------------------------------
+
+/**
+ * `namespace-name@kubernetescrd` is Traefik's own spelling, and the separator
+ * between the two halves is the same hyphen a namespace and a name may both
+ * contain: `k8s-gui-test-strip-prefix` splits six ways and only one of them
+ * is right. So it is not split at all — it is *matched* against the
+ * middlewares this cluster actually has, and a reference that matches none of
+ * them keeps the string as written rather than being cut at a guess.
+ */
+function middlewaresFromAnnotation(
+  value: string | undefined,
+  fallbackNamespace: string,
+  known: CustomResourceInfo[]
+): MiddlewareRef[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((entry) => entry.trim().split("@")[0])
+    .filter(Boolean)
+    .map((bare) => {
+      const match = known.find(
+        (middleware) =>
+          `${middleware.namespace ?? ""}-${middleware.name}` === bare
+      );
+      if (match) {
+        return { name: match.name, namespace: match.namespace ?? "" };
+      }
+      return { name: bare, namespace: fallbackNamespace };
+    });
+}
+
+function routesFromIngress(
+  ingress: IngressInfo,
+  index: number,
+  known: CustomResourceInfo[]
+): TraefikRoute[] {
+  const entryAnnotation = ingress.annotations[ENTRYPOINTS_ANNOTATION];
+  const entryPoints = entryAnnotation
+    ? entryAnnotation
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean)
+    : null;
+  const middlewares = middlewaresFromAnnotation(
+    ingress.annotations[MIDDLEWARES_ANNOTATION],
+    ingress.namespace,
+    known
+  );
+  const routerTls = asksRouterTls(ingress.annotations);
+
+  const routes = ingress.rules.flatMap((rule, ruleIndex) =>
+    rule.paths.map((path, pathIndex) => {
+      const host = rule.host || null;
+      const clause: RuleClause = {
+        host,
+        // Traefik's Ingress provider reads `Exact` as `Path` and everything
+        // else as `PathPrefix`. The word as written is kept beside it rather
+        // than dropped, because that mapping is the controller's and a reader
+        // comparing this page with their YAML has to see their own word.
+        path: {
+          kind: path.pathType === "Exact" ? "exact" : "prefix",
+          value: path.path || "/",
+        },
+      };
+      return {
+        key: `ingress/${ingress.namespace}/${ingress.name}/${ruleIndex}/${pathIndex}/${index}`,
+        source: {
+          kind: "Ingress" as const,
+          name: ingress.name,
+          namespace: ingress.namespace,
+        },
+        // An Ingress states its host and path in fields. There is no rule
+        // text to misread, so there is none to fall back to either.
+        rule: { raw: null, clauses: [clause], unread: [], refused: null },
+        clause,
+        entryPoints,
+        middlewares,
+        // An Ingress may name an API object instead of a Service —
+        // `backend.resource` — and then the Service name is empty. Reading it
+        // through would report "no Service named  in this namespace" about a
+        // configuration that works, with a blank where the name goes.
+        service: path.backendService
+          ? {
+              name: path.backendService,
+              namespace: ingress.namespace,
+              port: path.backendPort,
+              kubernetes: true,
+              scheme: null,
+            }
+          : null,
+        resourceBackend: path.resourceBackend,
+        tlsSecret: tlsSecretFor(ingress, host),
+        declaresTls: routerTls,
+        pathType: path.pathType,
+        priority: null,
+      };
+    })
+  );
+
+  // `spec.defaultBackend` is a route too — for a rules-less Ingress it is
+  // the whole object. Read through `rules` alone, the ordinary cloud edge
+  // served nothing on every surface this table feeds.
+  const fallback = ingress.defaultBackend;
+  if (fallback?.backendService || fallback?.resourceBackend) {
+    routes.push({
+      key: `ingress/${ingress.namespace}/${ingress.name}/default/${index}`,
+      source: {
+        kind: "Ingress" as const,
+        name: ingress.name,
+        namespace: ingress.namespace,
+      },
+      rule: {
+        raw: null,
+        clauses: [{ host: null, path: null }],
+        unread: [],
+        refused: null,
+      },
+      clause: { host: null, path: null },
+      entryPoints,
+      middlewares,
+      service: fallback.backendService
+        ? {
+            name: fallback.backendService,
+            namespace: ingress.namespace,
+            port: fallback.backendPort,
+            kubernetes: true,
+            scheme: null,
+          }
+        : null,
+      resourceBackend: fallback.resourceBackend,
+      tlsSecret: tlsSecretFor(ingress, null),
+      declaresTls: routerTls,
+      pathType: "DefaultBackend",
+      priority: null,
+    });
+  }
+
+  return routes;
+}
+
+interface IngressRouteSpec {
+  entryPoints?: string[];
+  routes?: Array<{
+    match?: string;
+    priority?: number;
+    services?: Array<{
+      name?: string;
+      namespace?: string;
+      port?: unknown;
+      kind?: string;
+      scheme?: string;
+    }>;
+    middlewares?: Array<{ name?: string; namespace?: string }>;
+  }>;
+  tls?: { secretName?: string };
+}
+
+function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
+  const spec = (object.spec ?? {}) as IngressRouteSpec;
+  const namespace = object.namespace ?? "";
+  const entryPoints = spec.entryPoints?.length ? spec.entryPoints : null;
+  const tlsSecret = spec.tls?.secretName ?? null;
+  // The block's presence, not its contents: `tls: {}` is Traefik's "serve
+  // this over TLS with the default certificate" and names no Secret.
+  const declaresTls = spec.tls !== undefined && spec.tls !== null;
+
+  return (spec.routes ?? []).flatMap((route, routeIndex) => {
+    const reading = readRule(route.match ?? "");
+    const service = route.services?.[0];
+    const common = {
+      source: {
+        kind: "IngressRoute" as const,
+        name: object.name,
+        namespace,
+      },
+      rule: reading,
+      entryPoints,
+      middlewares: (route.middlewares ?? []).flatMap((middleware) =>
+        middleware.name
+          ? [
+              {
+                name: middleware.name,
+                namespace: middleware.namespace ?? namespace,
+              },
+            ]
+          : []
+      ),
+      service: service?.name
+        ? {
+            name: service.name,
+            namespace: service.namespace ?? namespace,
+            port: service.port === undefined ? "" : String(service.port),
+            // `@` is Traefik's own provider qualifier and can never appear in
+            // a Kubernetes object name, so it is an unambiguous marker.
+            kubernetes:
+              service.kind !== "TraefikService" && !service.name.includes("@"),
+            scheme: service.scheme ?? null,
+          }
+        : null,
+      // Only an Ingress can name one; an IngressRoute has no such field.
+      resourceBackend: null,
+      tlsSecret,
+      declaresTls,
+      pathType: null,
+      priority: route.priority ?? null,
+    };
+
+    // A rule that could not be read still gets a row: it is a route this
+    // cluster is serving, and hiding it would be the page lying by omission.
+    // It is filed under no host, which is where a rule with no readable host
+    // honestly belongs.
+    const clauses: RuleClause[] =
+      reading.clauses.length > 0
+        ? reading.clauses
+        : [{ host: null, path: null }];
+
+    return clauses.map((clause, clauseIndex) => ({
+      ...common,
+      key: `ingressroute/${namespace}/${object.name}/${routeIndex}/${clauseIndex}`,
+      clause,
+    }));
+  });
+}
+
+// --- entry points, read off the controller's own arguments --------------
+//
+// Static configuration: they exist only in the flags the proxy was started
+// with, which is why nothing in a cluster can answer "what does this listen
+// on" without reading the workload itself.
+
+/**
+ * The target of a redirection that names none.
+ *
+ * A sentinel rather than a sentence: this is read in a query, and the page
+ * says it in the reader's language.
+ */
+export const UNNAMED_TARGET = "\u0000unnamed";
+
+/** Whether each provider keeps a route to a Service with no endpoint, `allowEmptyServices`, by the kind it reads. */
+export type EmptyServices = Record<TraefikRoute["source"]["kind"], boolean>;
+
+const EMPTY_SERVICES_FLAG: Record<string, keyof EmptyServices> = {
+  "providers.kubernetesingress.allowemptyservices": "Ingress",
+  "providers.kubernetescrd.allowemptyservices": "IngressRoute",
+};
+
+/** `null` where the flags are not the whole configuration: none, or a file. */
+export function readEmptyServices(args: string[]): EmptyServices | null {
+  if (args.length === 0) return null;
+  const kept: EmptyServices = { Ingress: false, IngressRoute: false };
+  for (const arg of args) {
+    const [rawKey, value = "true"] = arg.replace(/^-+/, "").split("=", 2);
+    const key = rawKey.toLowerCase();
+    if (key === "configfile") return null;
+    const kind = EMPTY_SERVICES_FLAG[key];
+    if (kind) kept[kind] = value.toLowerCase() !== "false";
+  }
+  return kept;
+}
+
+/**
+ * What a request to a route stopped behind gets. Traefik drops the router of
+ * a Service that does not exist, and of one with no endpoint unless
+ * allowEmptyServices keeps it to answer 503. Pods a policy shuts are still
+ * endpoints, so the router stays and its connection to them fails.
+ */
+export type StopAnswer = "dropped" | "unavailable" | "refused" | "unknown";
+
+export function stopAnswer(
+  stop: ChainStop,
+  route: TraefikRoute,
+  kept: EmptyServices | undefined
+): StopAnswer {
+  if (isPolicyStop(stop)) return "refused";
+  if (stop.reason === "backendMissing") return "dropped";
+  if (!kept) return "unknown";
+  return kept[route.source.kind] ? "unavailable" : "dropped";
+}
+
+export function readEntryPoints(args: string[]): EntryPoint[] {
+  const found = new Map<string, EntryPoint>();
+
+  const at = (name: string): EntryPoint => {
+    const existing = found.get(name);
+    if (existing) return existing;
+    const made: EntryPoint = {
+      name,
+      address: null,
+      tls: false,
+      redirectTo: null,
+    };
+    found.set(name, made);
+    return made;
+  };
+
+  for (const arg of args) {
+    const [rawKey, rawValue] = arg.replace(/^-+/, "").split("=", 2);
+    const parts = rawKey.split(".");
+    if (parts.length < 3) continue;
+    if (parts[0].toLowerCase() !== "entrypoints") continue;
+
+    const name = parts[1];
+    const tail = parts
+      .slice(2)
+      .map((part) => part.toLowerCase())
+      .join(".");
+    const value = rawValue ?? "true";
+
+    if (tail === "address") at(name).address = value.split("/")[0];
+    else if (tail === "http.tls" || tail.startsWith("http.tls.")) {
+      if (value !== "false") at(name).tls = true;
+    } else if (tail === "http.redirections.entrypoint.to") {
+      at(name).redirectTo = value;
+    } else if (tail.startsWith("http.redirections.")) {
+      // A redirection block with only a scheme still redirects; the target
+      // is unknown, and saying "somewhere" beats saying nothing.
+      const entry = at(name);
+      entry.redirectTo = entry.redirectTo ?? UNNAMED_TARGET;
+    }
+  }
+
+  return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** The entry points a route is actually bound to. */
+export function boundEntryPoints(
+  route: TraefikRoute,
+  entryPoints: EntryPoint[]
+): EntryPoint[] {
+  if (!route.entryPoints) return entryPoints;
+  return entryPoints.filter((entry) => route.entryPoints!.includes(entry.name));
+}
+
+/**
+ * Whether this router is served over TLS.
+ *
+ * The router's own TLS decides it first: an IngressRoute's `tls` block, even
+ * an empty one, or an Ingress's `router.tls`. Otherwise the entry points do,
+ * and those live in the proxy's start-up flags, so with none read the honest
+ * answer is that we do not know rather than "plain HTTP".
+ */
+export function routeIsSecure(
+  route: TraefikRoute,
+  entryPoints: EntryPoint[]
+): boolean | null {
+  if (route.declaresTls) return true;
+  if (entryPoints.length === 0) return null;
+  const bound = boundEntryPoints(route, entryPoints);
+  // A name the proxy does not define binds the router to nothing we can read.
+  if (bound.length === 0) return null;
+  return bound.some((entry) => entry.tls);
+}
+
+/** The Secret a route is served under, which only a TLS router has. */
+export function servedUnder(
+  group: HostGroup,
+  route: TraefikRoute
+): string | null {
+  return group.overTls.get(route.key) === true ? route.tlsSecret : null;
+}
+
+// --- what is behind a route ---------------------------------------------
+
+export function backingOf(
+  route: TraefikRoute,
+  sources: BackingSources
+): Backing {
+  // Nothing is claimed about a backend that is not a Kubernetes object: it
+  // has no endpoints by design, and the app cannot see inside it.
+  const backend =
+    route.service && route.service.kubernetes
+      ? {
+          name: route.service.name,
+          namespace: route.service.namespace,
+          port: route.service.port,
+        }
+      : null;
+  return backingOfBackend(backend, route.source, sources);
+}
+
+// --- middlewares --------------------------------------------------------
+
+/** The one middleware type that turns a plain-HTTP route into a secure one. */
+export function isRedirect(middleware: CustomResourceInfo): boolean {
+  const spec = (middleware.spec ?? {}) as Record<string, unknown>;
+  if (spec.redirectScheme) return true;
+  if (spec.redirectRegex) return true;
+  return false;
+}
+
+/** What kind of middleware this is, from the one key its spec carries. */
+export function middlewareType(middleware: CustomResourceInfo): string | null {
+  const spec = (middleware.spec ?? {}) as Record<string, unknown>;
+  const keys = Object.keys(spec);
+  return keys.length > 0 ? keys[0] : null;
+}
+
+export interface MiddlewareUse {
+  middleware: CustomResourceInfo;
+  type: string | null;
+  /** Every route that names it. Empty is the finding. */
+  usedBy: TraefikRoute[];
+}
+
+export function middlewareUses(
+  middlewares: CustomResourceInfo[],
+  routes: TraefikRoute[]
+): MiddlewareUse[] {
+  const uses = middlewares.map((middleware) => ({
+    middleware,
+    type: middlewareType(middleware),
+    usedBy: routes.filter((route) =>
+      route.middlewares.some(
+        (named) =>
+          named.name === middleware.name &&
+          named.namespace === (middleware.namespace ?? "")
+      )
+    ),
+  }));
+  // Unused first: it is the only row on the tab that is a finding rather
+  // than inventory.
+  return uses.sort((a, b) => {
+    if (a.usedBy.length !== b.usedBy.length) {
+      return a.usedBy.length - b.usedBy.length;
+    }
+    return a.middleware.name.localeCompare(b.middleware.name);
+  });
+}
+
+// --- the hosts ----------------------------------------------------------
+
+/**
+ * How far up the page a finding pulls its host, within one severity.
+ *
+ * A path that stops is an outage happening now; a certificate with three
+ * days left is an outage on Thursday. Both are `err`, and printing them in
+ * alphabetical order would put Thursday first about half the time.
+ */
+const URGENCY: Record<Finding["kind"], number> = {
+  stop: 4,
+  resourceBackend: 4,
+  door: 4,
+  certificate: 3,
+  clear: 2,
+  duplicate: 1,
+};
+
+function urgencyOf(findings: Finding[]): number {
+  return findings.reduce(
+    (worst, finding) =>
+      Math.max(worst, RANK[finding.severity] * 10 + URGENCY[finding.kind]),
+    0
+  );
+}
+
+/** Every route this Traefik serves, from both kinds of object. */
+export function allRoutes(sources: TraefikSources): TraefikRoute[] {
+  const fromIngresses = sources.ingresses
+    .filter((ingress) => claimsIngress(ingress, sources.classes))
+    .flatMap((ingress, index) =>
+      routesFromIngress(ingress, index, sources.middlewares)
+    );
+  const fromCrds = sources.ingressRoutes.flatMap(routesFromIngressRoute);
+  return [...fromIngresses, ...fromCrds];
+}
+
+/**
+ * Two objects serving the same host *and the same path*, which is the case
+ * where one of them silently never fires.
+ *
+ * Only exact duplicates. `/` and `/api` on one host overlap and are meant to
+ * — that is how a route is made more specific — and calling it a finding
+ * would bury the real one under every well-configured site in the cluster.
+ *
+ * Who wins is stated whenever the objects settle it. Traefik orders routers
+ * by priority; an unset priority defaults to the length of the router's
+ * rule. For an IngressRoute that rule is the match string held here
+ * verbatim, so a declared priority against a defaulted one is still an
+ * answer — the pair every migration leaves behind. For an Ingress the rule
+ * is one *Traefik generated* and this app never sees, so any pair with an
+ * Ingress in it is reported as ambiguous rather than guessed.
+ */
+function effectivePriority(route: TraefikRoute): number | null {
+  if (route.priority !== null) return route.priority;
+  if (route.source.kind === "IngressRoute" && route.rule.raw !== null) {
+    return route.rule.raw.length;
+  }
+  return null;
+}
+
+function duplicateFindings(routes: TraefikRoute[]): Finding[] {
+  const byPath = new Map<string, TraefikRoute[]>();
+  for (const route of routes) {
+    // A row born from a reading the parser refused is not a claim. Its real
+    // host and path are unknown — filing it under "every path" and warning
+    // that it collides with another such row is a collision that exists
+    // only in the parser.
+    if (route.rule.refused !== null) continue;
+    const path = route.clause.path
+      ? `${route.clause.path.kind}:${route.clause.path.value}`
+      : "any";
+    byPath.set(path, [...(byPath.get(path) ?? []), route]);
+  }
+
+  const findings: Finding[] = [];
+  for (const [path, sharing] of byPath) {
+    const objects = new Set(
+      sharing.map(
+        (route) =>
+          `${route.source.kind}/${route.source.namespace}/${route.source.name}`
+      )
+    );
+    if (objects.size < 2) continue;
+
+    const scores = sharing.map(effectivePriority);
+    const top = scores.every((score) => score !== null)
+      ? Math.max(...(scores as number[]))
+      : null;
+    // A tie is between *objects*: two routers of one object sharing the top
+    // weight is that object winning either way, not an open question.
+    const holders = new Set(
+      sharing
+        .filter((_, index) => scores[index] === top)
+        .map(
+          (route) =>
+            `${route.source.kind}/${route.source.namespace}/${route.source.name}`
+        )
+    );
+    const tied = top !== null && holders.size > 1;
+    const winner = top !== null && !tied ? sharing[scores.indexOf(top)] : null;
+
+    findings.push({
+      kind: "duplicate",
+      severity: "warn",
+      path: path.startsWith("exact:")
+        ? `${path.slice(6)} (exact)`
+        : path === "any"
+          ? "every path"
+          : path.slice(7),
+      routes: sharing,
+      winner,
+      tied,
+    });
+  }
+  return findings;
+}
+
+/**
+ * The label every Traefik chart puts on its own pods, which is how its own
+ * Service is recognised without asking the cluster anything extra.
+ */
+export const PROXY_LABEL = ["app.kubernetes.io/name", "traefik"] as const;
+
+/** The Services that send traffic to this Traefik's own pods. */
+export function proxyServices(sources: TraefikSources): ServiceInfo[] {
+  return proxyServicesBy(sources.services, PROXY_LABEL);
+}
+
+/**
+ * What terminates TLS for this host *before* it reaches Traefik.
+ *
+ * The ordinary case on a managed cluster: a cloud load balancer holds the
+ * certificate and forwards plaintext to the proxy's `web` entry point on
+ * purpose. Traefik is the second hop, the client-facing hop is encrypted, and
+ * calling that "served in the clear" is wrong on every host at once.
+ *
+ * Evidence rather than inference: an Ingress in this cluster whose backend is
+ * a Service that selects Traefik's own pods, and whose `spec.tls` covers this
+ * host. Anything less specific would silence the finding on a cluster where
+ * nothing terminates anything. TLS held in an *annotation* instead — GKE's
+ * `ManagedCertificate`, a pre-shared certificate — is not visible from here
+ * and is the `service.routes` capability's job, asked separately.
+ */
+export function frontingIngresses(sources: TraefikSources): IngressInfo[] {
+  return frontingIngressesOf(
+    sources.ingresses,
+    proxyServicesBy(sources.services, PROXY_LABEL)
+  );
+}
+
+export function terminatedUpstream(
+  host: string | null,
+  sources: TraefikSources
+): { kind: "Ingress"; name: string; namespace: string } | null {
+  return terminatedUpstreamOf(host, frontingIngresses(sources));
+}
+
+export function edgeTls(host: string | null, sources: TraefikSources): EdgeTls {
+  return edgeTlsOf(host, sources, frontingIngresses(sources));
+}
+
+/**
+ * A host served with no encryption at all.
+ *
+ * Narrower than "reachable over plain HTTP", deliberately: Traefik's Ingress
+ * provider binds a router with no declared entry point to *every* entry
+ * point, so on a cluster whose `web` carries no redirection every host is
+ * also reachable unencrypted — one fact about the proxy, stated once on the
+ * Entry points tab, not eighty findings about eighty hosts.
+ *
+ * What is a finding about *this* host is that nothing serves it over TLS at
+ * all: no route under it carries a certificate, **and nothing in front of the
+ * proxy holds one either** — no encrypted way in, even for a client asking.
+ */
+function clearFinding(
+  routes: TraefikRoute[],
+  sources: TraefikSources,
+  host: string | null,
+  dropped: ReadonlySet<string>
+): Finding | "tlsUnknown" | null {
+  const served = routes.filter((route) => !dropped.has(route.key));
+  if (served.some((route) => route.declaresTls)) return null;
+  // Something in front holds the certificate, and the inside hop is plaintext
+  // by design; or what is in front could not be read and cannot be ruled out.
+  const edge = edgeTls(host, sources).at;
+  if (edge === "ingress" || edge === "edge") return null;
+  // An empty list is entry points that could not be read, not a controller
+  // listening on nothing: whether this host is in the clear is unknown.
+  if (sources.entryPoints.length === 0) return "tlsUnknown";
+  // A path Traefik drops serves nothing, in the clear or otherwise.
+  if (served.length === 0) return null;
+
+  const bound = new Map<string, EntryPoint>();
+  for (const route of served) {
+    // A refused reading's host is unknown, so which entry points serve "this
+    // host" through it is unknown too — it proves nothing about encryption.
+    if (route.rule.refused !== null) continue;
+    for (const entry of boundEntryPoints(route, sources.entryPoints)) {
+      bound.set(entry.name, entry);
+    }
+  }
+
+  // Also bound to a TLS entry point, the host has an encrypted way in; that
+  // its plain one has no redirection is the proxy's, said on Entry points.
+  if ([...bound.values()].some((entry) => entry.tls)) return null;
+  const plain = [...bound.values()].filter(
+    (entry) => entry.redirectTo === null
+  );
+  if (plain.length === 0) return null;
+
+  // A redirect middleware on any route under the host upgrades it, which is
+  // the other way the same problem is solved.
+  const redirecting = sources.middlewares.filter(isRedirect);
+  const carriesRedirect = served.some((route) =>
+    route.middlewares.some((named) =>
+      redirecting.some(
+        (middleware) =>
+          middleware.name === named.name &&
+          (middleware.namespace ?? "") === named.namespace
+      )
+    )
+  );
+  if (carriesRedirect) return null;
+
+  const finding: Finding = {
+    kind: "clear",
+    severity: "warn",
+    entryPoints: plain.map((entry) => entry.name),
+    loaded: served.find((route) => route.tlsSecret)?.tlsSecret ?? null,
+  };
+  // What is in front could not be read: the host would be in the clear if
+  // nothing there holds the certificate, so it is not known to be fine.
+  return edge === "unknown" ? "tlsUnknown" : finding;
+}
+
+function certificateFindings(
+  secrets: SecretRef[],
+  certificates: Map<string, TlsCertificate> | undefined
+): Finding[] {
+  return certificateProblems(secrets, certificates).map((problem) => ({
+    kind: "certificate",
+    ...problem,
+  }));
+}
+
+/**
+ * The page: one group per host, ordered by trouble.
+ *
+ * By trouble rather than by name, because the reader who opens this has a
+ * URL that is not working and eighty hosts that are. Alphabetical order puts
+ * the answer wherever the alphabet happens to put it.
+ */
+export function hostGroups(sources: TraefikSources): HostGroup[] {
+  const routes = allRoutes(sources);
+  const byHost = new Map<string, TraefikRoute[]>();
+  for (const route of routes) {
+    const key = route.clause.host ?? "";
+    byHost.set(key, [...(byHost.get(key) ?? []), route]);
+  }
+
+  const groups: HostGroup[] = [...byHost.entries()].map(([host, own]) => {
+    // One stop per broken backend, not per route that names it: three paths
+    // pointing at the same missing Service is one repair, and printing the
+    // same sentence three times spends the reader's attention on nothing.
+    const seenStops = new Set<string>();
+    const backings = new Map(
+      own.map((route) => [route.key, backingOf(route, sources)])
+    );
+    const stopOf = new Map(
+      own.map((route) => [route.key, backings.get(route.key)!.stop])
+    );
+    const dropped = new Set(
+      own.flatMap((route) => {
+        const stop = stopOf.get(route.key);
+        return route.resourceBackend ||
+          (stop && stopAnswer(stop, route, sources.emptyServices) === "dropped")
+          ? [route.key]
+          : [];
+      })
+    );
+    const stops = own.flatMap((route): Finding[] => {
+      const stop = stopOf.get(route.key);
+      if (!stop) return [];
+      const key = `${stop.reason}/${stop.service.namespace}/${stop.service.name}`;
+      if (seenStops.has(key)) return [];
+      seenStops.add(key);
+      return [
+        {
+          kind: "stop",
+          severity: stopWeight(stop).severity,
+          route,
+          stop,
+          answer: stopAnswer(stop, route, sources.emptyServices),
+        },
+      ];
+    });
+
+    const doubts = doubtsOf(own, (route) => backings.get(route.key)!).map(
+      (doubt): Finding => ({ kind: "door", severity: "warn", ...doubt })
+    );
+
+    const resourceBackends = own.flatMap((route): Finding[] =>
+      route.resourceBackend
+        ? [{ kind: "resourceBackend", severity: "err", route }]
+        : []
+    );
+
+    const overTls = new Map(
+      own.map((route) => [route.key, routeIsSecure(route, sources.entryPoints)])
+    );
+    // Traefik picks a certificate by SNI among every Secret it has loaded, so
+    // the one a TLS router for this host presents is the one named for it,
+    // whichever route named it. Where no router is TLS it presents nothing.
+    const tlsSecrets = [
+      ...new Map(
+        own
+          .filter(
+            (route) =>
+              route.tlsSecret &&
+              own.some((other) => overTls.get(other.key) !== false)
+          )
+          .map((route) => [
+            `${route.source.namespace}/${route.tlsSecret}`,
+            { namespace: route.source.namespace, secretName: route.tlsSecret! },
+          ])
+      ).values(),
+    ];
+
+    const clear = clearFinding(
+      own,
+      sources,
+      host === "" ? null : host,
+      dropped
+    );
+    const findings = [
+      ...stops,
+      ...doubts,
+      ...resourceBackends,
+      ...certificateFindings(tlsSecrets, sources.certificates),
+      ...(clear && clear !== "tlsUnknown" ? [clear] : []),
+      ...duplicateFindings(own),
+    ];
+
+    return {
+      host: host === "" ? null : host,
+      routes: own,
+      findings,
+      // The route the chain is drawn for: the one that stopped, or failing
+      // that the one with the most to show. Drawing one chain per path would
+      // turn a host with twenty paths into a wall, and the reader came for
+      // either the broken path or the one with something in the middle of it
+      // — a bare `/` straight to a Service is the one the path rows above
+      // already say in full.
+      chainFor:
+        stops[0]?.kind === "stop"
+          ? stops[0].route
+          : resourceBackends[0]?.kind === "resourceBackend"
+            ? resourceBackends[0].route
+            : doubts[0]?.kind === "door"
+              ? doubts[0].route
+              : [...own].sort(
+                  (a, b) => b.middlewares.length - a.middlewares.length
+                )[0],
+      tlsSecrets,
+      overTls,
+      worst: worstOf(findings.filter((finding) => finding.kind !== "door")),
+      doubted: doubts.length > 0,
+      backendsKnown: !own.some(
+        (route) =>
+          route.service?.kubernetes &&
+          !backingReadIn(sources, route.service.namespace)
+      ),
+      tls: own.some((route) => overTls.get(route.key) === true)
+        ? ownTls(tlsSecrets, sources.certificates)
+        : clear === "tlsUnknown"
+          ? { at: "unknown" as const }
+          : edgeTls(host === "" ? null : host, sources),
+    };
+  });
+
+  return groups.sort(compareGroups);
+}
+
+/**
+ * Service names that appear in more than one namespace across the table.
+ *
+ * Two Services named `frontend` render as the same word on every row, and
+ * the reader mid-migration cannot tell the old one from the new — the exact
+ * moment they are looking. The rows print the namespace for these names
+ * only, so the common case stays one word wide.
+ */
+export function duplicatedServiceNames(groups: HostGroup[]): Set<string> {
+  const namespaces = new Map<string, Set<string>>();
+  for (const group of groups) {
+    for (const route of group.routes) {
+      const service = route.service;
+      if (!service?.kubernetes) continue;
+      const seen = namespaces.get(service.name) ?? new Set<string>();
+      seen.add(service.namespace);
+      namespaces.set(service.name, seen);
+    }
+  }
+  return new Set(
+    [...namespaces]
+      .filter(([, spread]) => spread.size > 1)
+      .map(([name]) => name)
+  );
+}
+
+/** The word at the right of a host line: what is true of it right now. */
+export function hostState(
+  group: HostGroup,
+  backingError: string | null,
+  t: T
+): { text: string; tone: RowTone } {
+  const stopped = stopsRowState(
+    group.findings.flatMap((finding) =>
+      finding.kind === "stop" ? [finding.stop] : []
+    ),
+    t
+  );
+  if (stopped?.tone === "err") return stopped;
+  if (group.findings.some((finding) => finding.kind === "resourceBackend")) {
+    return { text: t("empty", "pathDropped"), tone: "err" };
+  }
+  const certificate = group.findings.find(
+    (finding) => finding.kind === "certificate" && finding.severity === "err"
+  );
+  if (certificate?.kind === "certificate") {
+    return { text: certificateStateWords(certificate, t), tone: "err" };
+  }
+  if (stopped) return stopped;
+  if (group.findings.some((finding) => finding.kind === "door")) {
+    return { text: t("empty", "doorNotChecked"), tone: "unknown" };
+  }
+  if (group.findings.some((finding) => finding.kind === "clear")) {
+    return { text: t("empty", "servedInTheClear"), tone: "warn" };
+  }
+  if (group.findings.length > 0) {
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  }
+  if (!group.backendsKnown) {
+    return {
+      text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
+      tone: "unknown",
+    };
+  }
+  if (group.tls.at === "unknown") {
+    return { text: t("empty", "tlsNotChecked"), tone: "unknown" };
+  }
+  return { text: t("empty", "serving"), tone: "ok" };
+}
+
+function compareGroups(a: HostGroup, b: HostGroup): number {
+  const rank = (group: HostGroup) => urgencyOf(group.findings);
+  if (rank(a) !== rank(b)) return rank(b) - rank(a);
+  if (a.findings.length !== b.findings.length) {
+    return b.findings.length - a.findings.length;
+  }
+  // A catch-all sorts after every named host: it is the least specific
+  // answer to "what serves this hostname".
+  if ((a.host === null) !== (b.host === null)) return a.host === null ? 1 : -1;
+  return (a.host ?? "").localeCompare(b.host ?? "");
+}

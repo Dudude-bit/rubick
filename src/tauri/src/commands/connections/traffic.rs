@@ -1,0 +1,1236 @@
+//! The traffic chain: which Services, Ingresses and routes reach an object,
+//! and where a path into it stops.
+
+use super::*;
+
+pub(super) fn service_ref(svc: &Service, ns: &str) -> ObjectRef {
+    let spec = svc.spec.as_ref();
+    let selector = spec.and_then(|s| s.selector.clone()).unwrap_or_default();
+    ObjectRef::new(
+        "Service",
+        &svc.name_any(),
+        Some(ns.to_string()),
+        Existence::Present,
+    )
+    .with_facts(ObjectFacts::Service {
+        type_: spec
+            .and_then(|s| s.type_.clone())
+            .unwrap_or_else(|| "ClusterIP".to_string()),
+        cluster_ip: spec.and_then(|s| s.cluster_ip.clone()),
+        external_name: spec.and_then(|s| s.external_name.clone()),
+        selector: Selector::Equality(&selector).query_text(),
+        ports: crate::resources::ServiceInfo::from(svc).ports,
+    })
+}
+
+pub(super) use crate::resources::published::pod_ref;
+
+pub(super) fn service_selector(svc: &Service) -> BTreeMap<String, String> {
+    svc.spec
+        .as_ref()
+        .and_then(|s| s.selector.clone())
+        .unwrap_or_default()
+}
+
+/// Every Service in the namespace whose selector matches `labels`, what each
+/// of those Services publishes, and the Ingresses that route to them.
+///
+/// Reachability is judged over what the Service publishes, not only over the
+/// subject's own pods — a Service takes traffic when any address behind it
+/// does, and that address need not belong to the workload being looked at.
+pub(super) fn traffic_into(
+    ns: &str,
+    target: &ObjectRef,
+    labels: &BTreeMap<String, String>,
+    own: &[&Pod],
+    snapshot: &Snapshot,
+    out: &mut Neighbourhood,
+) {
+    let mut near: Vec<(usize, NearSelector)> = Vec::new();
+    let mut selected = false;
+    for svc in snapshot.services() {
+        let selector = service_selector(svc);
+        let Some(text) = Selector::Equality(&selector).says() else {
+            continue;
+        };
+        if Selector::Equality(&selector).matches(labels) != Some(true) {
+            if let Some((carries, lacks)) = published::partly_carried(&selector, labels) {
+                let short = lacks.split(',').count();
+                near.push((
+                    short,
+                    NearSelector {
+                        service: service_ref(svc, ns),
+                        carries,
+                        lacks,
+                    },
+                ));
+            }
+            continue;
+        }
+        selected = true;
+        let svc_ref = service_ref(svc, ns);
+        out.edge(
+            svc_ref.clone(),
+            target.clone(),
+            Relation::Selects { selector: text },
+        );
+        note_reach(svc, &svc_ref, snapshot, out, Carry::Named(own));
+        routes_into(ns, &svc_ref, snapshot, out);
+        gateway_traffic_into(
+            ns,
+            &svc_ref,
+            &snapshot.gateway_routes,
+            snapshot.gateways.as_deref(),
+            out,
+        );
+    }
+    if !selected {
+        let fewest = near.iter().map(|(short, _)| *short).min();
+        let closest: Vec<NearSelector> = near
+            .into_iter()
+            .filter(|(short, _)| Some(*short) == fewest)
+            .map(|(_, near)| near)
+            .collect();
+        out.nearly_selected_by = (!closest.is_empty()).then_some(closest);
+    }
+}
+
+/// The Gateway API routes whose `backendRefs` name this Service, with the
+/// Gateway above each and every stop its status names.
+///
+/// Stops come from what the controller wrote — `Accepted: False`,
+/// `ResolvedRefs: False`, per parent — plus the one thing no condition will
+/// ever say: a parentRef naming a Gateway the API server does not have,
+/// for which no controller will ever write status at all. A parentRef of
+/// any other kind — `Service` is GAMMA/mesh — is recognized and left
+/// alone: not a Gateway, so never "a missing Gateway".
+/// The paths of a rule's matches, where a match without one is `/`.
+fn pasteable_paths(rule: &crate::resources::RouteRuleInfo) -> Vec<String> {
+    if rule.matches.is_empty() {
+        return vec!["/".into()];
+    }
+    let mut paths: Vec<String> = rule
+        .matches
+        .iter()
+        .filter(|m| m.path_type.as_deref() != Some("RegularExpression"))
+        .map(|m| m.path.clone().unwrap_or_else(|| "/".into()))
+        .collect();
+    paths.dedup();
+    paths
+}
+
+pub(super) fn gateway_traffic_into(
+    ns: &str,
+    svc_ref: &ObjectRef,
+    routes: &[crate::resources::RouteInfo],
+    gateways: Option<&[crate::resources::GatewayInfo]>,
+    out: &mut Neighbourhood,
+) {
+    use crate::resources::{programmed, verdict_of, Verdict, GATEWAY_API_GROUP};
+
+    for route in routes {
+        let backends: Vec<_> = route
+            .rules
+            .iter()
+            .flat_map(|rule| rule.backend_refs.iter().map(move |b| (rule, b)))
+            .filter(|(_, b)| {
+                b.kind == "Service"
+                    && b.group.is_empty()
+                    && b.name == svc_ref.name
+                    && b.namespace.as_deref().unwrap_or(&route.namespace) == ns
+            })
+            .collect();
+        if backends.is_empty() {
+            continue;
+        }
+
+        let route_ref = ObjectRef::new(
+            &route.kind,
+            &route.name,
+            Some(route.namespace.clone()),
+            Existence::Present,
+        );
+
+        for (rule, backend) in backends {
+            out.edge(
+                route_ref.clone(),
+                svc_ref.clone(),
+                Relation::RuleRoutes {
+                    hostnames: route.hostnames.clone(),
+                    port: backend.port.map(|p| p.to_string()),
+                    weight: backend.weight,
+                    paths: pasteable_paths(rule),
+                },
+            );
+        }
+
+        for parent in &route.parent_refs {
+            // A route may name a `ListenerSet` instead of the Gateway; the set
+            // carries its own `spec.parentRef`, and `GatewayInfo` keeps the
+            // ones that named it. Skipping those here left the chain with no
+            // `attachesTo` edge, so the peek panel called the route mesh while
+            // the routes list traced it to a Gateway — one object, two answers.
+            let via_set = parent.kind == "ListenerSet" && parent.group == GATEWAY_API_GROUP;
+            if !via_set && (parent.kind != "Gateway" || parent.group != GATEWAY_API_GROUP) {
+                continue;
+            }
+            let gw_ns = parent
+                .namespace
+                .clone()
+                .unwrap_or_else(|| route.namespace.clone());
+            // Absent list means nobody asked, which is a different answer
+            // from "asked, and it is not there" — and only the second one
+            // may be drawn as a break in the chain.
+            let found = gateways
+                .and_then(|list| {
+                    list.iter().find(|g| {
+                        if via_set {
+                            // The set's own namespace resolution, then the
+                            // Gateway it named.
+                            g.listener_sets
+                                .iter()
+                                .any(|set| set.name == parent.name && set.namespace == gw_ns)
+                        } else {
+                            g.name == parent.name && g.namespace == gw_ns
+                        }
+                    })
+                })
+                .map(Some);
+            // Only when the sets were actually read: an unlisted ListenerSet
+            // makes every set-parented route look orphaned.
+            let resolvable =
+                !via_set || gateways.is_some_and(|list| list.iter().all(|g| g.listener_sets_known));
+            let gw_ref = match found {
+                Some(Some(g)) => ObjectRef::new(
+                    "Gateway",
+                    &g.name,
+                    Some(g.namespace.clone()),
+                    Existence::Present,
+                )
+                .with_facts(ObjectFacts::Gateway {
+                    class_name: g.class_name.clone(),
+                    listeners: g.listeners.clone(),
+                }),
+                // Unresolved: point at what the route actually named. Calling
+                // a ListenerSet a Gateway would put the set's name under the
+                // wrong kind, and the reader would go looking for a Gateway
+                // that was never supposed to exist.
+                _ => ObjectRef::new(
+                    if via_set { "ListenerSet" } else { "Gateway" },
+                    &parent.name,
+                    Some(gw_ns.clone()),
+                    if gateways.is_some() && resolvable {
+                        Existence::Missing
+                    } else {
+                        Existence::NotChecked
+                    },
+                ),
+            };
+            // Only when the sets were actually read: an unlisted ListenerSet
+            // makes every set-parented route look orphaned, and a break drawn
+            // from that is this app's blind spot, not the cluster's state.
+            let resolvable =
+                !via_set || gateways.is_some_and(|list| list.iter().all(|g| g.listener_sets_known));
+            if found.is_none() && gateways.is_some() && resolvable {
+                out.stops.push(ChainStop::GatewayMissing {
+                    route: route_ref.clone(),
+                    gateway: gw_ref.clone(),
+                });
+            }
+            if let Some(said) = found
+                .flatten()
+                .and_then(|g| programmed(&g.conditions))
+                .filter(|said| said.status == "False")
+            {
+                out.stops.push(ChainStop::GatewayNotProgrammed {
+                    route: route_ref.clone(),
+                    gateway: gw_ref.clone(),
+                    condition_type: said.type_.clone(),
+                    condition_reason: said.reason.clone(),
+                    message: said.message.clone(),
+                });
+            }
+            out.edge(
+                route_ref.clone(),
+                gw_ref.clone(),
+                Relation::AttachesTo {
+                    section_name: parent.section_name.clone(),
+                    port: parent.port,
+                    listener_set: via_set.then(|| crate::resources::ObjectName {
+                        name: parent.name.clone(),
+                        namespace: gw_ns.clone(),
+                    }),
+                },
+            );
+
+            // Every entry for this attachment, read by the one rule the
+            // trace and the Gateway page read it by.
+            let entries = route.statuses_for(parent);
+            if let Verdict::False(said) = verdict_of(&entries, "Accepted") {
+                out.stops.push(ChainStop::RouteNotAccepted {
+                    route: route_ref.clone(),
+                    gateway: gw_ref.clone(),
+                    condition_reason: said.reason.clone(),
+                    message: said.message.clone(),
+                });
+            }
+            if let Verdict::False(said) = verdict_of(&entries, "ResolvedRefs") {
+                out.stops.push(ChainStop::RouteRefsUnresolved {
+                    route: route_ref.clone(),
+                    condition_reason: said.reason.clone(),
+                    message: said.message.clone(),
+                });
+            }
+        }
+    }
+}
+
+/// The Ingresses whose backend names this Service.
+pub(super) fn routes_into(
+    ns: &str,
+    svc_ref: &ObjectRef,
+    snapshot: &Snapshot,
+    out: &mut Neighbourhood,
+) {
+    for ing in snapshot.ingresses() {
+        for (backend, relation) in ingress_backends(ing) {
+            if backend != Backend::Service(svc_ref.name.clone()) {
+                continue;
+            }
+            out.edge(ingress_ref(ing, ns), svc_ref.clone(), relation);
+        }
+    }
+}
+
+/// How much of what a Service publishes an answer carries.
+#[derive(Clone, Copy)]
+pub(super) enum Carry<'a> {
+    /// Every address, and the pods it does not publish.
+    Whole,
+    /// The counts and the addresses a chain names: these pods', where it
+    /// publishes any, or else the first taking traffic.
+    Named(&'a [&'a Pod]),
+}
+
+/// What this Service publishes, and where the path stops if it does.
+///
+/// The last hop is the Service's own slices, not one `Selects` edge per
+/// selected pod: three objects rather than 300 pod refs on a 300-pod Service,
+/// and the cluster's own answer rather than a deduction — the two disagree in
+/// exactly the cases nobody can see.
+///
+/// A Service with no selector is not a stop: an `ExternalName` resolves
+/// elsewhere and a hand-managed one has endpoints this app never wrote — but
+/// what it publishes is still read and still drawn, because a slice is a
+/// slice however it got written.
+///
+/// `carry` is [`Carry::Whole`] on this Service's own page, where the
+/// endpoint rows and the pods it does not publish are the point rather than a
+/// payload every other page would carry for nothing.
+pub(super) fn note_reach(
+    svc: &Service,
+    svc_ref: &ObjectRef,
+    snapshot: &Snapshot,
+    out: &mut Neighbourhood,
+    carry: Carry<'_>,
+) {
+    if out
+        .published
+        .iter()
+        .any(|entry| entry.service.same_object(svc_ref))
+    {
+        return;
+    }
+
+    let selector = service_selector(svc);
+    let query = Selector::Equality(&selector);
+    let selected: Vec<&Pod> = snapshot
+        .pods()
+        .iter()
+        .filter(|pod| query.matches(pod.labels()) == Some(true))
+        .collect();
+
+    // Empty because nothing matched, or because nobody could read the pods?
+    // Only the first is "no pod carries this"; for the second the rule gets
+    // `None` and says what the endpoints alone can.
+    let pods = snapshot.pods.is_ok().then_some(selected.as_slice());
+    let makers = snapshot.makers();
+    let published = snapshot
+        .published_of(svc, svc_ref.clone(), &selected)
+        .with_stop(svc, pods)
+        .with_policies(svc, snapshot.policies.as_deref().map_err(String::as_str))
+        .with_makers(svc, &makers, snapshot.makers_read())
+        .with_workloads(svc, &makers, pods, chrono::Utc::now())
+        .with_near_miss(svc, snapshot.pods());
+    let stop = published.stop.clone();
+    out.published.push(match carry {
+        Carry::Whole => published,
+        Carry::Named(own) => published.summary_keeping(|target| {
+            target.kind == "Pod" && own.iter().any(|pod| pod.name_any() == target.name)
+        }),
+    });
+    if let Some(stop) = stop {
+        out.stops.push(stop);
+    }
+}
+
+pub(super) fn ingress_ref(ing: &Ingress, ns: &str) -> ObjectRef {
+    ObjectRef::new(
+        "Ingress",
+        &ing.name_any(),
+        Some(ns.to_string()),
+        Existence::Present,
+    )
+    .with_facts(ObjectFacts::Ingress {
+        class_name: ing.spec.as_ref().and_then(|s| s.ingress_class_name.clone()),
+    })
+}
+
+#[derive(PartialEq, Eq)]
+pub(super) enum Backend {
+    Service(String),
+    /// A backend that names an API object instead of a Service. The app does
+    /// not follow it, and says so rather than dropping the path.
+    Resource {
+        kind: String,
+        name: String,
+    },
+}
+
+/// Every backend an Ingress states, with the route that reaches it.
+pub(super) fn ingress_backends(ing: &Ingress) -> Vec<(Backend, Relation)> {
+    let Some(spec) = ing.spec.as_ref() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for rule in spec.rules.iter().flatten() {
+        let host = rule.host.clone();
+        let tls = tls_covers(ing, host.as_deref());
+        for path in rule.http.iter().flat_map(|http| &http.paths) {
+            if let Some((backend, port)) = path_backend(path) {
+                out.push((
+                    backend,
+                    Relation::Routes {
+                        host: host.clone(),
+                        path: path.path.clone().unwrap_or_else(|| "/".to_string()),
+                        path_type: path.path_type.clone(),
+                        port,
+                        tls,
+                    },
+                ));
+            }
+        }
+    }
+
+    // `spec.defaultBackend` is a route too — for a rules-less Ingress it is
+    // the whole object, the ordinary way a cloud load balancer fronts an
+    // in-cluster proxy. Without this edge the graph drew such an Ingress as
+    // touching nothing: an empty chain and an empty Connections tab.
+    if let Some(fallback) = spec.default_backend.as_ref() {
+        if let Some((backend, port)) = backend_of(fallback) {
+            out.push((
+                backend,
+                Relation::Routes {
+                    host: None,
+                    path: "*".to_string(),
+                    path_type: "DefaultBackend".to_string(),
+                    port,
+                    tls: tls_covers(ing, None),
+                },
+            ));
+        }
+    }
+    out
+}
+
+pub(super) fn path_backend(path: &HTTPIngressPath) -> Option<(Backend, Option<String>)> {
+    backend_of(&path.backend)
+}
+
+pub(super) fn backend_of(backend: &IngressBackend) -> Option<(Backend, Option<String>)> {
+    if let Some(svc) = &backend.service {
+        let port = svc.port.as_ref().and_then(|p| {
+            p.name
+                .clone()
+                .or_else(|| p.number.map(|number| number.to_string()))
+        });
+        return Some((Backend::Service(svc.name.clone()), port));
+    }
+    let resource = backend.resource.as_ref()?;
+    Some((
+        Backend::Resource {
+            kind: resource.kind.clone(),
+            name: resource.name.clone(),
+        },
+        None,
+    ))
+}
+
+/// Whether `spec.tls` covers a host. A TLS block with no hosts is the
+/// catch-all the API defines, and a leading `*.` matches one label.
+pub(super) fn tls_covers(ing: &Ingress, host: Option<&str>) -> bool {
+    let Some(spec) = ing.spec.as_ref() else {
+        return false;
+    };
+    spec.tls.iter().flatten().any(|tls| {
+        let hosts = tls.hosts.clone().unwrap_or_default();
+        if hosts.is_empty() {
+            return true;
+        }
+        let Some(host) = host else { return false };
+        hosts.iter().any(|candidate| {
+            candidate == host
+                || candidate
+                    .strip_prefix("*.")
+                    .and_then(|suffix| host.split_once('.').map(|(_, rest)| rest == suffix))
+                    .unwrap_or(false)
+        })
+    })
+}
+
+#[cfg(test)]
+mod ingress_backend_tests {
+    use super::*;
+    use k8s_openapi::api::networking::v1::{
+        IngressBackend, IngressServiceBackend, IngressSpec, IngressTLS, ServiceBackendPort,
+    };
+
+    /// A defaultBackend-only Ingress is how a cloud load balancer fronts an
+    /// in-cluster proxy, and the connections graph used to draw it as
+    /// touching nothing — an empty chain and an empty tab on the one
+    /// Ingress the reported cluster has.
+    #[test]
+    fn default_backend_is_an_edge() {
+        let ingress = Ingress {
+            spec: Some(IngressSpec {
+                default_backend: Some(IngressBackend {
+                    service: Some(IngressServiceBackend {
+                        name: "traefik".into(),
+                        port: Some(ServiceBackendPort {
+                            number: Some(80),
+                            ..Default::default()
+                        }),
+                    }),
+                    resource: None,
+                }),
+                tls: Some(vec![IngressTLS {
+                    hosts: None,
+                    secret_name: Some("wildcard-tls".into()),
+                }]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let backends = ingress_backends(&ingress);
+        assert_eq!(backends.len(), 1);
+        let (backend, relation) = &backends[0];
+        assert!(matches!(backend, Backend::Service(name) if name == "traefik"));
+        match relation {
+            Relation::Routes {
+                host,
+                path,
+                path_type,
+                port,
+                tls,
+            } => {
+                assert_eq!(host.as_deref(), None);
+                assert_eq!(path, "*");
+                assert_eq!(path_type, "DefaultBackend");
+                assert_eq!(port.as_deref(), Some("80"));
+                assert!(*tls);
+            }
+            other => panic!("expected Routes, got {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod gateway_traffic_tests {
+    use super::*;
+    use crate::resources::{GatewayInfo, RouteInfo};
+
+    fn route(yaml: &str) -> RouteInfo {
+        RouteInfo::read(&serde_yaml::from_str(yaml).expect("route fixture parses"))
+    }
+
+    fn gateway(yaml: &str) -> GatewayInfo {
+        GatewayInfo::read(&serde_yaml::from_str(yaml).expect("gateway fixture parses"))
+    }
+
+    fn service(ns: &str, name: &str) -> ObjectRef {
+        ObjectRef::new("Service", name, Some(ns.to_string()), Existence::Present)
+    }
+
+    const EDGE_GATEWAY: &str = r"
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: edge, namespace: shop }
+spec: { gatewayClassName: envoy }
+";
+
+    const HEALTHY_ROUTE: &str = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge, sectionName: https }
+  hostnames: [promo.example.com]
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+status:
+  parents:
+  - parentRef: { name: edge, sectionName: https }
+    controllerName: example.net/gw
+    conditions:
+    - { type: Accepted, status: "True", reason: Accepted, message: ok }
+    - { type: ResolvedRefs, status: "True", reason: ResolvedRefs, message: ok }
+"#;
+
+    #[test]
+    fn backend_ref_becomes_an_edge_and_the_gateway_sits_above() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(HEALTHY_ROUTE)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+
+        assert!(out.stops.is_empty());
+
+        let to_service = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Service")
+            .expect("route -> service edge");
+        assert_eq!(to_service.from.kind, "HTTPRoute");
+        assert_eq!(to_service.from.name, "promo");
+        match &to_service.relation {
+            Relation::RuleRoutes {
+                hostnames,
+                port,
+                weight,
+                paths,
+            } => {
+                assert_eq!(paths, &["/"]);
+                assert_eq!(hostnames, &vec!["promo.example.com".to_string()]);
+                assert_eq!(port.as_deref(), Some("8080"));
+                assert_eq!(*weight, None);
+            }
+            other => panic!("expected RuleRoutes, got {other:?}"),
+        }
+
+        let to_gateway = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Gateway")
+            .expect("route -> gateway edge");
+        assert_eq!(to_gateway.to.name, "edge");
+        assert!(matches!(to_gateway.to.existence, Existence::Present));
+        assert!(matches!(
+            &to_gateway.relation,
+            Relation::AttachesTo { section_name, .. } if section_name.as_deref() == Some("https")
+        ));
+        assert!(matches!(
+            &to_gateway.to.facts,
+            Some(ObjectFacts::Gateway { class_name, .. }) if class_name == "envoy"
+        ));
+    }
+
+    /// A route's address is composed from these on the frontend; without
+    /// the rule's paths, the parentRef's port and the Gateway's listeners a
+    /// Gateway API route hands the chain no URL at all.
+    #[test]
+    fn a_route_edge_carries_its_pasteable_paths_and_the_gateway_its_listeners() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(
+                r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: api, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge, port: 8443 }
+  hostnames: [api.example.com]
+  rules:
+  - matches:
+    - path: { type: PathPrefix, value: /api }
+    - path: { type: RegularExpression, value: "/v[0-9]+" }
+    - headers: [{ name: x-beta, value: "1" }]
+    backendRefs:
+    - { name: promo, port: 8080 }
+"#,
+            )],
+            Some(&[gateway(
+                r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: { name: edge, namespace: shop }
+spec:
+  gatewayClassName: envoy
+  listeners:
+  - { name: https, protocol: HTTPS, port: 8443, hostname: "*.example.com" }
+"#,
+            )]),
+            &mut out,
+        );
+
+        let edge_to = |kind: &str| {
+            out.edges
+                .iter()
+                .find(|e| e.to.kind == kind)
+                .unwrap_or_else(|| panic!("an edge to a {kind}"))
+        };
+        match &edge_to("Service").relation {
+            Relation::RuleRoutes { paths, .. } => assert_eq!(paths, &["/api", "/"]),
+            other => panic!("expected RuleRoutes, got {other:?}"),
+        }
+        let up = edge_to("Gateway");
+        match &up.relation {
+            Relation::AttachesTo {
+                port, listener_set, ..
+            } => {
+                assert_eq!(*port, Some(8443));
+                assert!(listener_set.is_none());
+            }
+            other => panic!("expected AttachesTo, got {other:?}"),
+        }
+        match &up.to.facts {
+            Some(ObjectFacts::Gateway { listeners, .. }) => {
+                assert_eq!(listeners.len(), 1);
+                assert_eq!(listeners[0].port, 8443);
+                assert_eq!(listeners[0].hostname.as_deref(), Some("*.example.com"));
+            }
+            other => panic!("expected Gateway facts, got {other:?}"),
+        }
+    }
+
+    /// A route through a `ListenerSet` reaches only the set's listeners;
+    /// without the set on the edge its address would be composed against
+    /// every listener the Gateway carries.
+    #[test]
+    fn a_route_through_a_listener_set_names_the_set_on_its_edge() {
+        let team = crate::resources::ObjectName {
+            name: "team".into(),
+            namespace: "shop".into(),
+        };
+        let mut edge = gateway(EDGE_GATEWAY);
+        edge.listener_sets = vec![team.clone()];
+        edge.listener_sets_known = true;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(
+                r"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { group: gateway.networking.k8s.io, kind: ListenerSet, name: team }
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+",
+            )],
+            Some(&[edge]),
+            &mut out,
+        );
+
+        let up = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Gateway")
+            .expect("route -> gateway edge");
+        assert_eq!(up.to.name, "edge");
+        assert!(matches!(
+            &up.relation,
+            Relation::AttachesTo { listener_set: Some(set), .. } if *set == team
+        ));
+    }
+
+    #[test]
+    fn a_route_naming_another_service_draws_nothing() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "checkout"),
+            &[route(HEALTHY_ROUTE)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+        assert!(out.edges.is_empty());
+        assert!(out.stops.is_empty());
+    }
+
+    #[test]
+    fn cross_namespace_backend_ref_does_not_match_by_name_alone() {
+        // The route names `promo` in the `audit` namespace; the subject is
+        // `promo` in `shop`. Same name, different Service.
+        let cross = r"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  rules:
+  - backendRefs:
+    - { name: promo, namespace: audit, port: 8080 }
+";
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(cross)],
+            Some(&[]),
+            &mut out,
+        );
+        assert!(out.edges.is_empty());
+    }
+
+    #[test]
+    fn accepted_false_is_a_stop_in_the_controllers_words() {
+        let refused = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge }
+  hostnames: [promo.example.com]
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+status:
+  parents:
+  - parentRef: { name: edge }
+    controllerName: example.net/gw
+    conditions:
+    - { type: Accepted, status: "False", reason: NoMatchingListenerHostname, message: no listener matches }
+"#;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(refused)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+
+        let stop = out.stops.first().expect("a stop");
+        match stop {
+            ChainStop::RouteNotAccepted {
+                route,
+                gateway,
+                condition_reason,
+                ..
+            } => {
+                assert_eq!(route.name, "promo");
+                assert_eq!(gateway.name, "edge");
+                assert_eq!(
+                    condition_reason.as_deref(),
+                    Some("NoMatchingListenerHostname")
+                );
+            }
+            other => panic!("expected RouteNotAccepted, got {other:?}"),
+        }
+    }
+
+    /// Two controllers wrote entries for one Gateway and disagree. Reading
+    /// the first entry alone drew no stop here while the Gateway page, the
+    /// map and the trace said refused.
+    #[test]
+    fn a_refusal_in_the_second_controllers_entry_is_still_a_stop() {
+        let contested = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge }
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+status:
+  parents:
+  - parentRef: { name: edge }
+    controllerName: a.example.net/gw
+    conditions:
+    - { type: Accepted, status: "True", reason: Accepted, message: ok }
+    - { type: ResolvedRefs, status: "True", reason: ResolvedRefs, message: ok }
+  - parentRef: { name: edge }
+    controllerName: b.example.net/gw
+    conditions:
+    - { type: Accepted, status: "False", reason: NotAllowedByListeners, message: no }
+    - { type: ResolvedRefs, status: "False", reason: BackendNotFound, message: no }
+"#;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(contested)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+        assert!(out.stops.iter().any(|stop| matches!(
+            stop,
+            ChainStop::RouteNotAccepted { condition_reason, .. }
+                if condition_reason.as_deref() == Some("NotAllowedByListeners")
+        )));
+        assert!(out.stops.iter().any(|stop| matches!(
+            stop,
+            ChainStop::RouteRefsUnresolved { condition_reason, .. }
+                if condition_reason.as_deref() == Some("BackendNotFound")
+        )));
+    }
+
+    #[test]
+    fn resolved_refs_false_is_a_stop() {
+        let unresolved = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge }
+  rules:
+  - backendRefs:
+    - { name: promo, namespace: shop, port: 8080 }
+status:
+  parents:
+  - parentRef: { name: edge }
+    controllerName: example.net/gw
+    conditions:
+    - { type: Accepted, status: "True", reason: Accepted, message: ok }
+    - { type: ResolvedRefs, status: "False", reason: RefNotPermitted, message: no ReferenceGrant allows it }
+"#;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(unresolved)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+
+        assert!(out.stops.iter().any(|stop| matches!(
+            stop,
+            ChainStop::RouteRefsUnresolved { condition_reason, .. }
+                if condition_reason.as_deref() == Some("RefNotPermitted")
+        )));
+    }
+
+    #[test]
+    fn a_parent_gateway_the_server_does_not_have_is_named_missing() {
+        let orphan = r"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: ghost }
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+";
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(orphan)],
+            Some(&[]),
+            &mut out,
+        );
+
+        let stop = out.stops.first().expect("a stop");
+        match stop {
+            ChainStop::GatewayMissing { route, gateway } => {
+                assert_eq!(route.name, "promo");
+                assert_eq!(gateway.name, "ghost");
+            }
+            other => panic!("expected GatewayMissing, got {other:?}"),
+        }
+        let to_gateway = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Gateway")
+            .expect("the edge is still drawn, to a missing ref");
+        assert!(matches!(to_gateway.to.existence, Existence::Missing));
+    }
+
+    /// A Gateway its controller refused: the chain drew the route's address
+    /// on it, unbroken, while the trace stopped at "not programmed". Fails
+    /// if a refusal, written as `Programmed` or as the legacy `Ready`, does
+    /// not stop the route, or if a programmed Gateway does.
+    #[test]
+    fn a_gateway_its_controller_refused_stops_the_routes_on_it() {
+        let edge = |conditions: &str| {
+            gateway(&format!(
+                "{EDGE_GATEWAY}status:\n  conditions:\n{conditions}"
+            ))
+        };
+        let stops = |gw: GatewayInfo| {
+            let mut out = Neighbourhood::new();
+            gateway_traffic_into(
+                "shop",
+                &service("shop", "promo"),
+                &[route(HEALTHY_ROUTE)],
+                Some(&[gw]),
+                &mut out,
+            );
+            out.stops
+        };
+
+        let refused = stops(edge(
+            "  - { type: Programmed, status: \"False\", reason: AddressNotAssigned, message: no address }\n",
+        ));
+        match refused.as_slice() {
+            [ChainStop::GatewayNotProgrammed {
+                route,
+                gateway,
+                condition_type,
+                condition_reason,
+                ..
+            }] => {
+                assert_eq!(route.name, "promo");
+                assert_eq!(gateway.name, "edge");
+                assert_eq!(condition_type, "Programmed");
+                assert_eq!(condition_reason.as_deref(), Some("AddressNotAssigned"));
+            }
+            other => panic!("expected GatewayNotProgrammed, got {other:?}"),
+        }
+        assert!(matches!(
+            stops(edge(
+                "  - { type: Ready, status: \"False\", reason: Invalid }\n"
+            ))
+            .as_slice(),
+            [ChainStop::GatewayNotProgrammed { .. }]
+        ));
+        assert!(matches!(
+            stops(edge(
+                "  - { type: Accepted, status: \"False\", reason: ListenersNotValid }\n"
+            ))
+            .as_slice(),
+            [ChainStop::GatewayNotProgrammed { condition_type, .. }] if condition_type == "Accepted"
+        ));
+        assert!(stops(edge(
+            "  - { type: Programmed, status: \"True\", reason: Programmed }\n  - { type: Ready, status: \"False\" }\n"
+        ))
+        .is_empty());
+    }
+
+    /// The list that was read and did not hold it says "missing". A list
+    /// nobody read says nothing — a namespace-scoped reader is refused this
+    /// cluster-wide one, and every route they open would otherwise draw a
+    /// break in a chain that is fine.
+    #[test]
+    fn an_unread_gateway_list_is_not_a_missing_gateway() {
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(HEALTHY_ROUTE)],
+            None,
+            &mut out,
+        );
+
+        assert!(
+            out.stops.is_empty(),
+            "an unread list must not produce a GatewayMissing stop"
+        );
+        let gw = out
+            .edges
+            .iter()
+            .find(|e| e.to.kind == "Gateway")
+            .expect("the route still names its parent");
+        assert_eq!(gw.to.existence, Existence::NotChecked);
+    }
+
+    #[test]
+    fn a_mesh_parent_ref_is_not_a_missing_gateway() {
+        let mesh = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: split, namespace: shop }
+spec:
+  parentRefs:
+  - { group: "", kind: Service, name: promo }
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+"#;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(mesh)],
+            Some(&[]),
+            &mut out,
+        );
+        // The backend edge is real; the Service parentRef must produce
+        // neither a Gateway edge nor a "gateway missing" lie.
+        assert!(out.edges.iter().all(|e| e.to.kind != "Gateway"));
+        assert!(out.stops.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(services: Vec<Service>) -> Snapshot {
+        Snapshot {
+            pods: Ok(Vec::new()),
+            services: Ok(services),
+            ingresses: Ok(Vec::new()),
+            claims: Ok(Vec::new()),
+            autoscalers: Ok(Vec::new()),
+            budgets: Ok(Vec::new()),
+            deployments: Ok(Vec::new()),
+            stateful_sets: Ok(Vec::new()),
+            replica_sets: Ok(Vec::new()),
+            refusals: Ok(Vec::new()),
+            policies: Ok(Vec::new()),
+            slices: Ok(Vec::new()),
+            legacy: Err("the slices answered".to_string()),
+            taken_at: chrono::Utc::now(),
+            gateway_routes: Vec::new(),
+            gateways: None,
+            gateway_unread: Vec::new(),
+        }
+    }
+
+    fn service(name: &str, selector: &[(&str, &str)]) -> Service {
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": name, "namespace": "team-checkout" },
+            "spec": { "selector": selector.iter().copied().collect::<BTreeMap<_, _>>() }
+        }))
+        .expect("a Service")
+    }
+
+    fn near_of(services: Vec<Service>, labels: &[(&str, &str)]) -> Vec<(String, String)> {
+        let labels: BTreeMap<String, String> = labels
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        let mut out = Neighbourhood::new();
+        let pod = ObjectRef::new(
+            "Pod",
+            "checkout-api-a",
+            Some("team-checkout".into()),
+            Existence::Present,
+        );
+        traffic_into(
+            "team-checkout",
+            &pod,
+            &labels,
+            &[],
+            &snapshot(services),
+            &mut out,
+        );
+        out.nearly_selected_by
+            .into_iter()
+            .flatten()
+            .map(|near| (near.service.name, near.lacks))
+            .collect()
+    }
+
+    /// Marco's checkout-api pod page said no Service selects it while the
+    /// Service checkout-api is one label short. Fails if the near Service
+    /// goes unnamed, if a farther or unrelated one is offered beside it, or
+    /// if a pod some Service does select is told about near misses.
+    #[test]
+    fn a_pod_no_service_selects_names_the_service_one_label_short() {
+        let canary = [("app", "checkout-api"), ("track", "canary")];
+        let services = || {
+            vec![
+                service(
+                    "checkout-api",
+                    &[("app", "checkout-api"), ("track", "stable")],
+                ),
+                service(
+                    "checkout-api-eu",
+                    &[
+                        ("app", "checkout-api"),
+                        ("track", "stable"),
+                        ("region", "eu"),
+                    ],
+                ),
+                service("worker", &[("app", "checkout-worker")]),
+            ]
+        };
+        assert_eq!(
+            near_of(services(), &canary),
+            [("checkout-api".to_string(), "track=stable".to_string())]
+        );
+
+        let mut selecting = services();
+        selecting.push(service("canary", &[("track", "canary")]));
+        assert!(near_of(selecting, &canary).is_empty());
+
+        assert!(near_of(services(), &[("app", "other")]).is_empty());
+    }
+
+    /// The chain reads its stops from here, and the routing pages from the
+    /// backing lists: a policy admitting nothing has to stop both, or the
+    /// Ingress page and the Traefik page disagree about the same pods.
+    /// Fails if the neighbourhood skips the policies, or reads a refused
+    /// policy list as a shut door.
+    #[test]
+    fn a_policy_that_admits_nothing_stops_the_chain_at_the_pods() {
+        let svc = service("log-demo", &[("app", "log-demo")]);
+        let svc_ref = service_ref(&svc, "team-checkout");
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "log-demo-a", "namespace": "team-checkout", "labels": { "app": "log-demo" } },
+            "status": { "conditions": [{ "type": "Ready", "status": "True" }] }
+        }))
+        .expect("a Pod");
+        let slice: EndpointSlice = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "log-demo-x",
+                "namespace": "team-checkout",
+                "labels": { "kubernetes.io/service-name": "log-demo" }
+            },
+            "addressType": "IPv4",
+            "ports": [{ "port": 8080, "protocol": "TCP" }],
+            "endpoints": [{
+                "addresses": ["10.0.0.1"],
+                "conditions": { "ready": true },
+                "targetRef": { "kind": "Pod", "name": "log-demo-a", "namespace": "team-checkout" }
+            }]
+        }))
+        .expect("an EndpointSlice");
+        let deny: k8s_openapi::api::networking::v1::NetworkPolicy =
+            serde_json::from_value(serde_json::json!({
+                "metadata": { "name": "deny-all-ingress", "namespace": "team-checkout" },
+                "spec": { "podSelector": {}, "policyTypes": ["Ingress"] }
+            }))
+            .expect("a NetworkPolicy");
+        let stops = |policies: Read<k8s_openapi::api::networking::v1::NetworkPolicy>| {
+            let snapshot = Snapshot {
+                pods: Ok(vec![pod.clone()]),
+                slices: Ok(vec![slice.clone()]),
+                policies,
+                ..snapshot(vec![svc.clone()])
+            };
+            let mut out = Neighbourhood::new();
+            note_reach(&svc, &svc_ref, &snapshot, &mut out, Carry::Whole);
+            out.stops
+        };
+        assert!(
+            matches!(
+                stops(Ok(vec![deny])).as_slice(),
+                [ChainStop::PolicyRefuses { no_rules: true, .. }]
+            ),
+            "the pods are shut to every client"
+        );
+        assert!(stops(Err("forbidden".to_string())).is_empty());
+    }
+}

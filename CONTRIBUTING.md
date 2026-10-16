@@ -21,7 +21,7 @@ make dev
 ```
 
 The hooks (defined in `lefthook.yml`) format the staged files with rustfmt
-and prettier, stage the result, and run `eslint` on them before each commit. Skip them for a
+and `vp fmt`, stage the result, and run `vp lint` on them before each commit. Skip them for a
 single commit with `LEFTHOOK=0 git commit ...`.
 
 Nothing runs on push — `lefthook.yml` says why. Run `bun run test` yourself
@@ -31,15 +31,15 @@ before pushing something you want to land green.
 
 - **Rust:** `cargo fmt` must pass, and so must `cargo clippy` — CI runs it
   with `-D warnings`.
-- **TypeScript:** ESLint + Prettier (configs are in the repo).
+- **TypeScript:** Vite+ (`vp lint` is oxlint, `vp fmt` is oxfmt), configured in `vite.config.ts`.
 
 A block of lint rules exists to stop the codebase drifting back to habits it
 has already left. Each fails the commit, and each has a reason:
 
 - **Role tokens only.** Raw Tailwind colours, `dark:` variants and the legacy
-  shadcn tokens are banned across `src/`. The app draws in roles — `--fg-mut`,
+  shadcn tokens are banned across `src/ui/`. The app draws in roles — `--fg-mut`,
   `--warn`, `--hair` — so a theme is one file rather than a thousand decisions.
-- **No vendor imports outside `src/integrations/`.** A surface asks for a
+- **No vendor imports outside `src/ui/integrations/`.** A surface asks for a
   _capability_ (`usage.history`, `delivery.source`) and never names Traefik or
   Prometheus. This is what lets every integration be optional without a single
   `if (hasPrometheus)` anywhere in the UI.
@@ -54,9 +54,10 @@ has already left. Each fails the commit, and each has a reason:
 - **No native `<select>` outside `components/ui`.** The OS paints it, so it is
   white in a dark window whatever the app's theme says.
 
-They all live in one `no-restricted-syntax` block in `eslint.config.js`, and
-they have to: a second config object naming that rule replaces the selector
-list rather than extending it, which would switch the others off silently.
+They are the rules of the local oxlint plugin in `scripts/lint/rubick.mjs`,
+switched on in `vite.config.ts`. `src/ui/test/lint-guards.test.ts` lints one
+violation of each, so a rule the config forgets fails a test instead of
+quietly guarding nothing.
 
 Before committing:
 
@@ -68,9 +69,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 All three fail CI. Clippy became a gate in 4.4.0 — `ci.yml` runs it exactly as
 written above — and the backlog it once had is at zero, so anything it reports
-is yours. The crate turns on `clippy::pedantic` in `src-tauri/src/lib.rs`.
+is yours. The crate turns on `clippy::pedantic` in `src/tauri/src/lib.rs`.
 
-There is no pre-push hook, so run the tests yourself before pushing. Prettier
+There is no pre-push hook, so run the tests yourself before pushing. `vp fmt`
 and rustfmt run in the pre-commit hook and again in CI, so a commit that
 bypasses the hook fails there instead.
 
@@ -87,14 +88,14 @@ how v2.1.0 shipped with ninety `__cmd__X not found` errors after a green run.
 Tests here assert _behaviour_, not markup, and the house style is a doc comment
 saying what would break followed by the assertion — so a failing test explains
 itself. There are also `#[ignore]`d integration tests that run against a live
-cluster (`src-tauri/tests/live/`); `test-manifests/k8s-gui-all.yaml` creates
+cluster (`src/tauri/tests/live/`); `tests/manifests/k8s-gui-all.yaml` creates
 every fixture they need, each block carrying its own cleanup command.
 
 ## Adding an integration
 
 An integration costs **one folder and one line**. Create
-`src/integrations/<vendor>/`, export a `defineVendor({...})` from its
-`index.ts`, and add it to the list in `src/integrations/index.ts`. Nothing
+`src/ui/integrations/<vendor>/`, export a `defineVendor({...})` from its
+`index.ts`, and add it to the list in `src/ui/integrations/index.ts`. Nothing
 else in the app changes.
 
 Which tier it belongs to decides its obligations, not where its files live:
@@ -125,7 +126,7 @@ that, and a new configured vendor should use both:
   cluster_ button. The app resolves the Service to a running pod, forwards a
   local port and fills the address in. The reader is naming a server either
   way; a Service names one the app can already reach.
-- **`unreachable()` in `src/integrations/reachability.ts`** — recognises a
+- **`unreachable()` in `src/ui/integrations/reachability.ts`** — recognises a
   cluster-internal address in a failed probe and appends the sentence that
   explains it. Call it from your `probe`; keep the transport's own words in
   front of it, because somebody searching for `Name or service not known` has
@@ -156,9 +157,9 @@ does not belong behind an integration at all.
 
 ## Adding a language
 
-A language costs **one file and no code**. Copy `src/i18n/ru.ts` to
-`src/i18n/<code>.ts`, translate the values, and add it to `CATALOGUES` in
-`src/i18n/index.ts`. The picker in Settings finds it from there.
+A language costs **one file and no code**. Copy `src/ui/i18n/ru.ts` to
+`src/ui/i18n/<code>.ts`, translate the values, and add it to `CATALOGUES` in
+`src/ui/i18n/index.ts`. The picker in Settings finds it from there.
 
 The `Catalogue` type is derived from the English catalogue rather than declared
 beside it, so a key you have not translated is a **build error**, not a blank
@@ -171,21 +172,21 @@ half-translated Rubick still makes sense:
   empty states, settings.
 - **The cluster's words are not.** A Kubernetes kind is a proper noun (`Pods`,
   not `Поды`), and a status string is a lookup key: `statusRole()` in
-  `src/lib/status-role.ts` decides a badge's colour by matching the raw text,
+  `src/ui/lib/status-role.ts` decides a badge's colour by matching the raw text,
   so translating `CrashLoopBackOff` turns every badge grey. A lint rule rejects
   `<StatusBadge status={t(...)}>` for exactly this reason. Put the translation
   in the children and leave `status` as the code.
 
 A sentence that carries markup — a container name in mono, a status the reader
 has to pick out — stays **one** catalogue string with a `{placeholder}`, and the
-component substitutes the element with `parts()` from `src/i18n/parts.tsx`. Two
+component substitutes the element with `parts()` from `src/ui/i18n/parts.tsx`. Two
 half-sentences either side of a `<span>` are fixed in place by the markup
 between them, and a language that wants the fragment elsewhere has nowhere to
 put it.
 
 A helper that builds a sentence but is not a component takes the translator as a
 parameter: `function noShell(pod: PodInfo, t: T)`, with `T` from
-`src/i18n/useT.ts`. The component calls the hook once and hands it down.
+`src/ui/i18n/useT.ts`. The component calls the hook once and hands it down.
 
 Counted strings are objects, not sentences glued together:
 

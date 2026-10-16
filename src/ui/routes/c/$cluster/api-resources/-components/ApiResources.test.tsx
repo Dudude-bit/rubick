@@ -1,0 +1,270 @@
+import { fireEvent, screen, within } from "@testing-library/react";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
+
+import type { ApiCatalog } from "@/generated/types";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
+import { renderWithRouter } from "@/test/render";
+
+const catalog = vi.hoisted(() => ({
+  answer: null as unknown as () => Promise<ApiCatalog>,
+  asked: [] as string[],
+}));
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    listApiCatalog: () => {
+      catalog.asked.push("catalog");
+      return catalog.answer();
+    },
+    forgetDiscovery: () => {
+      catalog.asked.push("forget");
+      return Promise.resolve();
+    },
+  },
+}));
+
+const { ApiResources } = await import("./ApiResources");
+
+const entry = (
+  group: string,
+  kind: string,
+  plural: string,
+  namespaced = true,
+  verbs = ["get", "list", "watch"]
+) => ({
+  group,
+  version: "v1",
+  kind,
+  plural,
+  namespaced,
+  verbs,
+  shortNames: [],
+});
+
+const SERVED: ApiCatalog = {
+  entries: [
+    entry("coordination.k8s.io", "Lease", "leases"),
+    entry("", "Pod", "pods"),
+    entry("", "ServiceAccount", "serviceaccounts"),
+    entry("scheduling.k8s.io", "PriorityClass", "priorityclasses", false),
+    entry("authentication.k8s.io", "TokenReview", "tokenreviews", false, [
+      "create",
+    ]),
+    entry("events.k8s.io", "Event", "events"),
+  ],
+  unread: [
+    {
+      group: "metrics.k8s.io",
+      code: "KUBE_API",
+      message: "the server is currently unable to handle the request",
+    },
+  ],
+};
+
+const draw = () =>
+  renderWithRouter(<ApiResources />, {
+    at: "/c/prod/api-resources",
+    route: "/c/$cluster/api-resources",
+  });
+
+const link = (name: string) => screen.getByRole("link", { name });
+
+beforeEach(() => {
+  catalog.answer = () => Promise.resolve(SERVED);
+  useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+});
+afterEach(() => useLocaleStore.setState({ choice: null }));
+
+describe("the API resources page", () => {
+  /** Every served kind is a way to its list, its own page where it has one. */
+  it("links each kind to its list", async () => {
+    await draw();
+    expect(await screen.findByRole("link", { name: "Lease" })).toHaveAttribute(
+      "href",
+      "/c/prod/leases.coordination.k8s.io"
+    );
+    expect(link("Pod")).toHaveAttribute("href", "/c/prod/pods");
+    expect(link("ServiceAccount")).toHaveAttribute(
+      "href",
+      "/c/prod/serviceaccounts"
+    );
+    expect(link("Event")).toHaveAttribute(
+      "href",
+      "/c/prod/events.events.k8s.io"
+    );
+  });
+
+  it("groups kinds by API group, core first", async () => {
+    await draw();
+    const titles = (await screen.findAllByRole("region")).map((region) =>
+      region.getAttribute("aria-label")
+    );
+    expect(titles.slice(0, 2)).toEqual(["core", "authentication.k8s.io"]);
+  });
+
+  it("says a kind's scope and whether it can be listed", async () => {
+    await draw();
+    const priority = (await screen.findByText("PriorityClass")).closest("li")!;
+    expect(within(priority).getByText("cluster-wide")).toBeInTheDocument();
+    const review = screen.getByText("TokenReview").closest("li")!;
+    expect(within(review).getByText("cannot be listed")).toBeInTheDocument();
+    expect(within(review).queryByRole("link")).toBeNull();
+  });
+
+  /** A group discovery did not answer is named with why, never left out. */
+  it("keeps an unread group on the page with its reason", async () => {
+    await draw();
+    const metrics = await screen.findByRole("region", {
+      name: "metrics.k8s.io",
+    });
+    expect(metrics).toHaveTextContent("Discovery did not answer");
+    expect(metrics).toHaveTextContent("unable to handle the request");
+  });
+
+  it("narrows to the kinds the filter names", async () => {
+    await draw();
+    fireEvent.change(await screen.findByRole("textbox"), {
+      target: { value: "lease" },
+    });
+    expect(link("Lease")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pod" })).toBeNull();
+  });
+
+  /** No match among the groups that answered is not "this cluster has none". */
+  it("does not call a miss final while a group did not answer", async () => {
+    await draw();
+    fireEvent.change(await screen.findByRole("textbox"), {
+      target: { value: "podmetrics" },
+    });
+    expect(
+      screen.getByText(/No kind in the groups that answered matches podmetrics/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "metrics.k8s.io" })
+    ).toBeInTheDocument();
+  });
+
+  it("says what failed when the catalogue could not be read", async () => {
+    catalog.answer = () =>
+      Promise.reject({ code: "PERMISSION_DENIED", message: "forbidden" });
+    await draw();
+    expect(
+      await screen.findByText("Could not read what this cluster serves")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A CRD applied a moment ago was "No served kind matches" with nothing to
+   * press, and the backend kept that answer two minutes. Fails if the retry
+   * goes, or asks the catalogue without dropping what discovery said first.
+   */
+  it("lists a kind installed since, once the read is asked again", async () => {
+    catalog.asked = [];
+    catalog.answer = () => Promise.resolve(SERVED);
+    await draw();
+    await screen.findByText("PriorityClass");
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter kinds" }), {
+      target: { value: "gizmo" },
+    });
+    expect(
+      screen.getByText(/No kind in the groups that answered matches gizmo/)
+    ).toBeInTheDocument();
+
+    catalog.answer = () =>
+      Promise.resolve({
+        ...SERVED,
+        entries: [...SERVED.entries, entry("traefik.io", "Gizmo", "gizmos")],
+      });
+    fireEvent.click(screen.getByRole("button", { name: "Try the read again" }));
+
+    expect(await screen.findByText("Gizmo")).toBeInTheDocument();
+    expect(catalog.asked).toEqual(["catalog", "forget", "catalog"]);
+  });
+});
+
+describe("a kind name longer than its row", () => {
+  /** Fails if a cut kind name can no longer be read whole on hover. */
+  it("keeps the whole name on hover", async () => {
+    catalog.answer = () => Promise.resolve(SERVED);
+    await draw();
+    expect(await screen.findByText("PriorityClass")).toHaveAttribute(
+      "title",
+      "PriorityClass"
+    );
+  });
+
+  /**
+   * ValidatingAdmissionPolicyBinding's row ended in
+   * "admissionregistration.k8s.io/…", the version cut and the group said
+   * again under its own heading. Fails if the row repeats the group.
+   */
+  it("says the version beside the kind, with the whole apiVersion on hover", async () => {
+    catalog.answer = () => Promise.resolve(SERVED);
+    await draw();
+    const row = (await screen.findByText("Lease")).closest("li")!;
+    const version = within(row).getByTitle("coordination.k8s.io/v1");
+    expect(version).toHaveTextContent(/^v1$/);
+  });
+
+  /**
+   * Lena read "ValidatingAdmissionPolicyBinding v." in Russian at 1024: the
+   * version gave way while the scope kept its words. Fails if the version
+   * can be cut, or the scope's words stop giving way first, whole on hover.
+   */
+  it("keeps the version whole and lets the scope's words give way", async () => {
+    catalog.answer = () => Promise.resolve(SERVED);
+    await draw();
+    const row = (await screen.findByText("TokenReview")).closest("li")!;
+    const version = within(row).getByTitle("authentication.k8s.io/v1");
+    expect(version).toHaveClass("flex-none");
+    expect(version).not.toHaveClass("truncate");
+    const scope = within(row).getByText("cluster-wide");
+    expect(scope).toHaveClass("truncate");
+    expect(scope.parentElement).toHaveAttribute("title", "cluster-wide");
+    expect(scope.parentElement?.parentElement).toHaveClass("shrink-[100]");
+  });
+
+  /**
+   * In Russian at 1024 two columns of 380 px cut "Binding" to "Bindi…" and
+   * its scope words to "нельзя получить спис…". Fails if a column may be
+   * narrower than the longest row's words in the reader's language, or if
+   * typing a filter moves the columns.
+   */
+  it("keeps two columns only where each holds the longest row whole", async () => {
+    catalog.answer = () =>
+      Promise.resolve({
+        ...SERVED,
+        entries: [
+          ...SERVED.entries,
+          entry("", "Binding", "bindings", true, ["create"]),
+        ],
+      });
+    useLocaleStore.setState({ choice: "ru" });
+    await draw();
+    await screen.findByText("Binding");
+    const columnFloor = () =>
+      Number(
+        /max\((\d+)px/.exec(
+          screen.getAllByRole("list")[0].style.gridTemplateColumns
+        )?.[1]
+      );
+    const floor = columnFloor();
+    expect(floor).toBeGreaterThan(380);
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Pod" },
+    });
+    expect(columnFloor()).toBe(floor);
+  });
+});

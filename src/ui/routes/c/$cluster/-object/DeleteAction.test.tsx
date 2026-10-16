@@ -1,0 +1,403 @@
+import type { UseMutationResult } from "@tanstack/react-query";
+import { fireEvent, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+import type {
+  Cascade,
+  KindReading,
+  ObjectRef,
+  ResourceConnections,
+} from "@/generated/types";
+import { useClusterStore } from "@/stores/clusterStore";
+import { renderWithRouter } from "@/test/render";
+
+const getResourceConnections = vi.hoisted(() => vi.fn());
+const THREE_PODS: Cascade = {
+  takes: [{ kind: "Pod", group: "", plural: "pods", count: 3 }],
+  notRead: { kinds: [], groups: [], watched: 40 },
+  holds: null,
+};
+const cascade = vi.hoisted(() => ({ now: null as unknown as Cascade }));
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    getResourceConnections,
+    objectLineage: () =>
+      Promise.resolve({ uid: "d", ancestors: [], others: [], stop: null }),
+    previewCascade: () => Promise.resolve(cascade.now),
+  },
+}));
+
+const { DeleteAction } = await import("./DeleteAction");
+
+const mutate = vi.fn();
+const mutation = {
+  mutate,
+  isPending: false,
+} as unknown as UseMutationResult<void, Error, void>;
+
+beforeEach(() => {
+  mutate.mockReset();
+  getResourceConnections.mockReset();
+  cascade.now = THREE_PODS;
+  useClusterStore.setState({ currentContext: "test", isConnected: true });
+});
+
+const renderDelete = () =>
+  renderWithRouter(
+    <DeleteAction
+      kind="Deployment"
+      name="api"
+      namespace="shop"
+      intercept={null}
+      mutation={mutation}
+    />
+  );
+
+describe("Delete on a detail page", () => {
+  /** Every detail page deleted on the click itself until this asked first. */
+  it("asks first and deletes nothing on the click", async () => {
+    await renderDelete();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    expect(await screen.findByText("Also deletes:")).toBeInTheDocument();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  /** However long the preview grows, the field to type the name stays on screen. */
+  it("keeps the confirmation field outside the preview's own scroller", async () => {
+    await renderDelete();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await screen.findByText("Also deletes:");
+    const scroller = screen.getByTestId("confirm-details");
+    expect(scroller).toHaveClass("overflow-y-auto");
+    expect(scroller).toContainElement(screen.getByText("Also deletes:"));
+    expect(scroller).not.toContainElement(screen.getByRole("textbox"));
+  });
+
+  /** The confirmation is the name typed, not a second click in the same place. */
+  it("deletes once the name is typed and confirmed", async () => {
+    await renderDelete();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    const confirm = Array.from(dialog.querySelectorAll("button")).find(
+      (button) => button.textContent === "Delete"
+    )!;
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "api" } });
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Restart on a pod's page", () => {
+  const owned = {
+    name: "cart-1",
+    namespace: "shop",
+    status: { phase: "Running" },
+    ownerReferences: [
+      {
+        api_version: "apps/v1",
+        kind: "ReplicaSet",
+        name: "cart-75",
+        uid: "rs",
+        controller: true,
+      },
+    ],
+  };
+
+  /** The page's Restart deleted the pod on the click, like the peek's did. */
+  it("asks with the delete's facts and restarts nothing on the click", async () => {
+    await renderWithRouter(
+      <DeleteAction
+        restart
+        kind="Pod"
+        name="cart-1"
+        namespace="shop"
+        detail={owned}
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Restart Pod shop/cart-1?");
+    expect(dialog).toHaveTextContent(
+      "Its ReplicaSet cart-75 will start a replacement."
+    );
+    expect(await screen.findByText("Also deletes:")).toBeInTheDocument();
+    expect(mutate).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "cart-1" },
+    });
+    fireEvent.click(
+      Array.from(dialog.querySelectorAll("button")).find(
+        (button) => button.textContent === "Restart"
+      )!
+    );
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Delete on a Service that Ingresses route to", () => {
+  const ref = (kind: string, name: string): ObjectRef => ({
+    kind,
+    name,
+    namespace: "k8s-gui-test",
+    existence: "present",
+    facts: null,
+  });
+  const service = ref("Service", "topology-demo");
+  const routes = (
+    ingress: string,
+    host: string
+  ): ResourceConnections["edges"][number] => ({
+    from: ref("Ingress", ingress),
+    to: service,
+    relation: {
+      verb: "routes",
+      host,
+      path: "/",
+      pathType: "Prefix",
+      port: "80",
+      tls: false,
+    },
+  });
+  const neighbourhood = (
+    over: Partial<ResourceConnections> = {}
+  ): ResourceConnections => ({
+    subject: service,
+    edges: [
+      routes("dupe-nginx-new", "legacy.nginx.k8s-gui.test"),
+      routes("promo-nginx-canary", "promo.nginx.k8s-gui.test"),
+      {
+        from: service,
+        to: ref("Pod", "topology-demo-1"),
+        relation: { verb: "selects", selector: "app=topology-demo" },
+      },
+    ],
+    stops: [],
+    published: [],
+    notLookedAt: [],
+    ...over,
+  });
+
+  const openDelete = async () => {
+    await renderWithRouter(
+      <DeleteAction
+        kind="Service"
+        name="topology-demo"
+        namespace="k8s-gui-test"
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    return screen.findByRole("alertdialog");
+  };
+
+  /**
+   * Sam's Delete on topology-demo said only "Also deletes: EndpointSlice 1"
+   * while two Ingresses route to it and stay, pointing at nothing. Fails
+   * unless the dialog names both, with the route each sends.
+   */
+  it("names the Ingresses left routing to it", async () => {
+    getResourceConnections.mockResolvedValue(neighbourhood());
+    const dialog = await openDelete();
+    const left = await within(dialog).findByTestId("dependents");
+    expect(left).toHaveTextContent("Left behind, still pointing at it:");
+    expect(left).toHaveTextContent(
+      "Ingressdupe-nginx-newlegacy.nginx.k8s-gui.test/"
+    );
+    expect(left).toHaveTextContent(
+      "promo-nginx-canarypromo.nginx.k8s-gui.test/"
+    );
+    expect(left).not.toHaveTextContent("topology-demo-1");
+  });
+
+  /**
+   * A refused or failed read is not "nothing points at it". Fails if the
+   * dialog falls silent when the neighbourhood could not be read.
+   */
+  it("says it could not check when the neighbourhood read fails", async () => {
+    getResourceConnections.mockRejectedValue(new Error("connection reset"));
+    const dialog = await openDelete();
+    expect(
+      await within(dialog).findByText(/Could not check what points at it/)
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByTestId("dependents")).toBeNull();
+  });
+
+  /**
+   * Marco may not list Ingresses, so an Ingress routing here would be
+   * invisible. Fails unless the kinds the read skipped are named.
+   */
+  it("names the kinds it could not check for references", async () => {
+    getResourceConnections.mockResolvedValue(
+      neighbourhood({
+        edges: [],
+        notLookedAt: [
+          {
+            kind: "Ingress",
+            why: { says: "unanswered", version: "v1", said: "forbidden" },
+          },
+        ],
+      })
+    );
+    const dialog = await openDelete();
+    expect(
+      await within(dialog).findByText(
+        "Not checked for references to it: Ingress."
+      )
+    ).toBeInTheDocument();
+  });
+});
+
+describe("a Delete whose ownership read covered only some namespaces", () => {
+  const partial = (kind: string, plural: string): KindReading => ({
+    kind,
+    group: "",
+    plural,
+    reading: { says: "partial", namespaces: ["team-checkout"] },
+  });
+
+  /**
+   * Marco's pod Delete listed ConfigMap, Pod and Secret "read only in
+   * team-checkout" under "the kinds it could not read", and once that was
+   * fixed the settled dialog named neither them nor any total. Fails if any
+   * of them is listed as unread, leaves its own heading, if DaemonSet,
+   * refused outright, is not unread, or if the total is dropped.
+   */
+  it("files kinds read in the object's own namespace under their own heading, with the total read", async () => {
+    cascade.now = {
+      takes: [],
+      notRead: {
+        kinds: [
+          partial("ConfigMap", "configmaps"),
+          partial("Pod", "pods"),
+          partial("Secret", "secrets"),
+          {
+            kind: "DaemonSet",
+            group: "apps",
+            plural: "daemonsets",
+            reading: { says: "refused", message: "forbidden" },
+          },
+        ],
+        groups: [],
+        watched: 72,
+      },
+      holds: null,
+    };
+    await renderWithRouter(
+      <DeleteAction
+        kind="Pod"
+        name="checkout-api-xwg4j"
+        namespace="team-checkout"
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    const unread = (
+      await within(dialog).findByText(
+        "And possibly objects of the kinds it could not read:"
+      )
+    ).parentElement!;
+    expect(unread).toHaveTextContent("DaemonSet");
+    expect(unread).not.toHaveTextContent("ConfigMap");
+    expect(dialog).not.toHaveTextContent("read only in team-checkout");
+    const here = within(dialog).getByTestId("read-here");
+    expect(here).toHaveTextContent(
+      "Read only in team-checkout, where anything it owns lives:"
+    );
+    expect(here).toHaveTextContent("ConfigMap");
+    expect(here).toHaveTextContent("Secret");
+    expect(here).not.toHaveTextContent("DaemonSet");
+    expect(within(dialog).getByTestId("read-totals")).toHaveTextContent(
+      "Read 71 of 72 kinds that can be watched"
+    );
+  });
+
+  /**
+   * Dana typed the name and confirmed while the box still read "0 of 72".
+   * Fails if a dialog still reading says anything but that the impact is not
+   * known yet.
+   */
+  it("says the impact is not known yet while kinds are still being read", async () => {
+    cascade.now = {
+      takes: [],
+      notRead: {
+        kinds: [
+          {
+            kind: "Pod",
+            group: "",
+            plural: "pods",
+            reading: { says: "syncing" },
+          },
+        ],
+        groups: [],
+        watched: 72,
+      },
+      holds: null,
+    };
+    await renderWithRouter(
+      <DeleteAction
+        kind="Pod"
+        name="cart-9df89489c-f76qh"
+        namespace="shop"
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      await within(dialog).findByText(
+        "What goes with it is not known yet: the app is still reading the cluster."
+      )
+    ).toBeVisible();
+    expect(within(dialog).queryByTestId("read-totals")).toBeNull();
+    expect(dialog).not.toHaveTextContent("Nothing else goes with it");
+  });
+
+  /**
+   * A cluster-scoped object's dependents may live in any namespace, so a
+   * kind read in one is read in part. Fails if it is filed under the kinds
+   * that could not be read.
+   */
+  it("files a kind read in part under its own heading", async () => {
+    cascade.now = {
+      takes: [],
+      notRead: {
+        kinds: [partial("ConfigMap", "configmaps")],
+        groups: [],
+        watched: 72,
+      },
+      holds: null,
+    };
+    await renderWithRouter(
+      <DeleteAction
+        kind="PersistentVolume"
+        name="pv-1"
+        namespace={null}
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    const inPart = await within(dialog).findByTestId("read-in-part");
+    expect(inPart).toHaveTextContent(
+      "And possibly objects of the kinds it could read only in part:"
+    );
+    expect(inPart).toHaveTextContent("ConfigMapread only in team-checkout");
+    expect(
+      within(dialog).queryByText(
+        "And possibly objects of the kinds it could not read:"
+      )
+    ).toBeNull();
+  });
+});

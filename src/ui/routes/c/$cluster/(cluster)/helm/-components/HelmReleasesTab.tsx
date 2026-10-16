@@ -1,0 +1,351 @@
+import { useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import type { ColumnDef } from "@/components/ui/table-features";
+import {
+  RefreshCw,
+  Trash2,
+  History,
+  FileCode,
+  RotateCcw,
+  PauseCircle,
+  PlayCircle,
+  ExternalLink,
+  ArrowUpCircle,
+} from "lucide-react";
+
+import { fluxHelmReleaseLink } from "@/integrations";
+import { ActionMenu } from "@/components/ui/action-menu";
+import { DataTable } from "@/components/ui/data-table";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { RouteLink } from "@/components/ui/route-link";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { DetailAction } from "@/components/object/detail-blocks";
+import type { HelmRelease, UnreadNamespace } from "@/generated/types";
+import { StaleRows } from "../../../-list/StaleRows";
+import { UnreadNamespaces } from "../../../-list/UnreadNamespaces";
+import { UnreadList } from "../../../-list/UnreadList";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { helmReleaseLink, hrefOf } from "@/lib/links";
+import { noneWhereAnswered } from "@/lib/namespace-scope";
+import { formatDate, formatWhen } from "@/lib/utils";
+
+import { SourceIcon } from "./SourceIcon";
+import { isRefusal } from "@/lib/error-utils";
+import { useT } from "@/i18n/useT";
+import { T } from "@/i18n/T";
+import { None } from "@/components/ui/none";
+
+const getHelmReleaseRowId = (row: HelmRelease) =>
+  `${row.source}-${row.namespace}-${row.name}`;
+
+const helmReleaseHref = (row: HelmRelease) => hrefOf(helmReleaseLink(row));
+
+export interface HelmReleasesTabProps {
+  releases: HelmRelease[];
+  /** The namespaces of the scope whose releases could not be read. */
+  unread?: UnreadNamespace[];
+  isLoading: boolean;
+  /** `unknown`, not `Error`: the query's thrown value is not guaranteed to be
+   *  an Error, and `UnreadList`/`isRefusal` both take it as-is. */
+  error: unknown;
+  /** When the releases on screen were read, where a later read failed over them. */
+  readAt?: number | null;
+  helmCliAvailable: boolean;
+  onRefetch: () => void;
+  onShowHistory: (release: HelmRelease) => void;
+  onUpgrade: (release: HelmRelease) => void;
+  onRollback: (release: HelmRelease) => void;
+  onUninstall: (release: HelmRelease) => void;
+}
+
+export function HelmReleasesTab({
+  releases,
+  unread = [],
+  isLoading,
+  error,
+  readAt = null,
+  helmCliAvailable,
+  onRefetch,
+  onShowHistory,
+  onUpgrade,
+  onRollback,
+  onUninstall,
+}: HelmReleasesTabProps) {
+  const t = useT();
+  const navigate = useNavigate();
+  const { scope } = useNamespaceScope();
+
+  const columns: ColumnDef<HelmRelease>[] = useMemo(
+    () => [
+      {
+        accessorKey: "source",
+        header: t("columns", "source"),
+        cell: ({ row }) => <SourceIcon source={row.original.source} />,
+        size: 90,
+      },
+      {
+        accessorKey: "name",
+        header: t("columns", "name"),
+        size: 260,
+        cell: ({ row }) => (
+          <RouteLink
+            {...helmReleaseLink(row.original)}
+            className="font-mono text-info hover:underline"
+          >
+            {row.original.name}
+          </RouteLink>
+        ),
+      },
+      {
+        accessorKey: "namespace",
+        header: t("columns", "namespace"),
+        size: 150,
+      },
+      { accessorKey: "revision", header: t("columns", "rev"), size: 60 },
+      {
+        accessorKey: "status",
+        header: t("columns", "status"),
+        size: 120,
+        cell: ({ row }) => {
+          const status = row.original.status;
+          const suspended = row.original.suspended;
+          // A release whose secret would not decode is here by name and
+          // nothing else. Painting it with an empty status would be the
+          // silence this row exists to break.
+          const unreadable = row.original.unreadable;
+          if (unreadable) {
+            return (
+              <span className="text-[11px] text-warn" title={unreadable}>
+                {t("empty", "releaseNotRead")}
+              </span>
+            );
+          }
+          return (
+            <div className="flex items-center gap-1.5">
+              <StatusBadge status={suspended ? "suspended" : status} showDot />
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "chart",
+        header: t("columns", "chart"),
+        size: 200,
+        cell: ({ row }) => (
+          <span className="font-mono text-fg-mut">{row.original.chart}</span>
+        ),
+      },
+      {
+        accessorKey: "appVersion",
+        header: t("columns", "appVersion"),
+        size: 150,
+        cell: ({ row }) => row.original.appVersion || <None />,
+      },
+      {
+        accessorKey: "updated",
+        header: t("columns", "updated"),
+        size: 150,
+        cell: ({ row }) => {
+          const { updated } = row.original;
+          const full = formatDate(updated);
+          if (!updated || !full) return updated || <None />;
+          return <span title={full}>{formatWhen(updated, "moment")}</span>;
+        },
+      },
+      {
+        id: "actions",
+        size: 50,
+        cell: ({ row }) => {
+          const release = row.original;
+          const isNative = release.source === "native";
+          const isFlux = release.source === "flux";
+
+          return (
+            <ActionMenu>
+              <DropdownMenuItem
+                onClick={() => navigate(helmReleaseLink(release))}
+              >
+                <FileCode className="mr-2 h-4 w-4" />
+                <T section="action" k="viewDetails" />
+              </DropdownMenuItem>
+
+              <DropdownMenuItem onClick={() => onShowHistory(release)}>
+                <History className="mr-2 h-4 w-4" />
+                <T section="action" k="viewHistory" />
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              {isNative && (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuItem
+                        disabled={!helmCliAvailable}
+                        onClick={() => onUpgrade(release)}
+                      >
+                        <ArrowUpCircle className="mr-2 h-4 w-4" />
+                        <T section="action" k="upgrade" />
+                      </DropdownMenuItem>
+                    </TooltipTrigger>
+                    {!helmCliAvailable && (
+                      <TooltipContent>
+                        <T section="action" k="helmCliRequired" />
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuItem
+                        disabled={!helmCliAvailable}
+                        onClick={() => onRollback(release)}
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        <T section="action" k="rollBack" />
+                      </DropdownMenuItem>
+                    </TooltipTrigger>
+                    {!helmCliAvailable && (
+                      <TooltipContent>
+                        <T section="action" k="helmCliRequired" />
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+
+                  <DropdownMenuSeparator />
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuItem
+                        disabled={!helmCliAvailable}
+                        className="text-err"
+                        onClick={() => onUninstall(release)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        <T section="action" k="uninstall" />
+                      </DropdownMenuItem>
+                    </TooltipTrigger>
+                    {!helmCliAvailable && (
+                      <TooltipContent>
+                        <T section="action" k="helmCliRequired" />
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </>
+              )}
+
+              {isFlux && (
+                <>
+                  <DropdownMenuItem disabled>
+                    {release.suspended ? (
+                      <>
+                        <PlayCircle className="mr-2 h-4 w-4" />
+                        <T section="action" k="resume" />
+                      </>
+                    ) : (
+                      <>
+                        <PauseCircle className="mr-2 h-4 w-4" />
+                        <T section="action" k="suspend" />
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    <T section="action" k="reconcile" />
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() =>
+                      navigate(
+                        fluxHelmReleaseLink(release.namespace, release.name)
+                      )
+                    }
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    <T section="action" k="viewCrd" />
+                  </DropdownMenuItem>
+                </>
+              )}
+            </ActionMenu>
+          );
+        },
+      },
+    ],
+    [
+      t,
+      navigate,
+      helmCliAvailable,
+      onShowHistory,
+      onUpgrade,
+      onRollback,
+      onUninstall,
+    ]
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center">
+        <div className="ml-auto">
+          <DetailAction
+            label={t("action", "refresh")}
+            icon={RefreshCw}
+            onClick={onRefetch}
+            busy={isLoading}
+          />
+        </div>
+      </div>
+
+      {readAt !== null && releases.length > 0 && (
+        <StaleRows
+          label={t("empty", "helmReleases")}
+          since={readAt}
+          error={error}
+          onRetry={onRefetch}
+        />
+      )}
+      <UnreadNamespaces
+        unread={unread}
+        label={t("empty", "helmReleases")}
+        onRetry={onRefetch}
+      />
+      {error && releases.length === 0 ? (
+        <UnreadList
+          error={error}
+          words={
+            isRefusal(error)
+              ? t("nav", "noListAccess")
+              : t("empty", "couldNotReadInScope", {
+                  label: t("empty", "helmReleases"),
+                })
+          }
+          onRetry={onRefetch}
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={releases}
+          isLoading={isLoading}
+          searchPlaceholder={t("action", "searchReleases")}
+          getRowId={getHelmReleaseRowId}
+          getRowHref={helmReleaseHref}
+          pageKeys
+          share={{ title: t("nav", "releases") }}
+          partial={unread.length > 0}
+          emptyMessage={
+            unread.length > 0
+              ? noneWhereAnswered(t, t("empty", "helmReleases"), scope, unread)
+              : undefined
+          }
+        />
+      )}
+    </div>
+  );
+}

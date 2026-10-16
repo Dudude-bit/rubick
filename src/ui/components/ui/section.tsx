@@ -1,0 +1,236 @@
+import * as React from "react";
+import { cn } from "@/lib/utils";
+import { formatCount } from "@/lib/count";
+import { HeaderFolded } from "./header-folded";
+
+/**
+ * A region on the flat canvas — the replacement for `Card`.
+ *
+ * Deliberately brings no background, border or shadow: the window is one
+ * surface, and stacking tinted boxes on it reads as a grid of containers.
+ * Grouping is carried by the heading above and the space around it.
+ */
+export function Section({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLElement>) {
+  return (
+    <section className={cn("flex flex-col gap-2", className)} {...props} />
+  );
+}
+
+/**
+ * What the frame around a section has already told the reader.
+ *
+ * A tab strip is a heading: clicking "Conditions" is being told what the pane
+ * below holds, so a block captioned "Conditions" under it says the word
+ * twice, and the breadcrumb and page title say the kind the same way. The
+ * rule — *a caption names what the frame has not already named* — is enforced
+ * here rather than remembered by thirty-odd tabs one at a time.
+ *
+ * So the frame states what it says, and `SectionHeader` drops a title that
+ * only repeats it. What the frame does not carry — a count, a description,
+ * the section's own controls — survives as the 11px caption line.
+ */
+export interface CaptionFrame {
+  /** The kind in the breadcrumb and the header row. */
+  kind?: string;
+  /** The label of the tab this subtree is inside. */
+  tab?: string;
+}
+
+const CaptionFrameContext = React.createContext<CaptionFrame>({});
+
+/** Extends the frame rather than replacing it: the tab sits inside a page
+ *  that has already named the kind. */
+export function CaptionScope({
+  kind,
+  tab,
+  children,
+}: CaptionFrame & { children: React.ReactNode }) {
+  const outer = React.useContext(CaptionFrameContext);
+  const value = React.useMemo(
+    () => ({ kind: kind ?? outer.kind, tab: tab ?? outer.tab }),
+    [kind, tab, outer.kind, outer.tab]
+  );
+  return (
+    <CaptionFrameContext.Provider value={value}>
+      {children}
+    </CaptionFrameContext.Provider>
+  );
+}
+
+const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Whether a title says only what the frame said. Deliberately exact rather
+ * than fuzzy: "Reachable at" under an "Access" tab is a second fact and
+ * has to survive, while "PersistentVolumeClaim YAML" under a "YAML" tab is
+ * the tab label with the kind bolted onto it and does not.
+ */
+function restatesFrame(title: string, frame: CaptionFrame): boolean {
+  const said = slug(title);
+  if (said === "") return false;
+  const kind = frame.kind ? slug(frame.kind) : "";
+  const tab = frame.tab ? slug(frame.tab) : "";
+  if (kind !== "" && said === kind) return true;
+  if (tab !== "" && said === tab) return true;
+  return (
+    kind !== "" && tab !== "" && (said === kind + tab || said === tab + kind)
+  );
+}
+
+/**
+ * A bare number left alone under a dropped title is a digit floating on
+ * the canvas, so it borrows the noun the title was carrying. Zero says
+ * nothing the empty message below does not say better.
+ */
+function tally(count: React.ReactNode, title: string): React.ReactNode {
+  if (typeof count !== "number") return count;
+  if (count === 0) return null;
+  const caps = title === title.toUpperCase();
+  const word = caps ? title : title.toLowerCase();
+  const noun =
+    !caps && count === 1 && word.endsWith("s") ? word.slice(0, -1) : word;
+  return `${formatCount(count)} ${noun}`;
+}
+
+export interface SectionHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  title: string;
+  /** Shown muted beside the title — a row count, a total. */
+  count?: React.ReactNode;
+  /** One line under the title for a qualifier the title cannot carry. */
+  description?: React.ReactNode;
+  /** Right-aligned controls belonging to this section. */
+  actions?: React.ReactNode;
+  /** The count truncates rather than pushing the actions onto a row of their own. */
+  countYields?: boolean;
+  /**
+   * The row never wraps: where its actions' words do not fit, they draw as
+   * icons. Above a list, a row that wrapped beside a peek moved every row
+   * of the list under the pointer.
+   */
+  foldActions?: boolean;
+}
+
+/** What the row's items take side by side, each at its own width. */
+function itemsWidth(row: HTMLElement): number {
+  const items = Array.from(row.children) as HTMLElement[];
+  const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+  return (
+    items.reduce((sum, item) => sum + item.offsetWidth, 0) +
+    gap * Math.max(items.length - 1, 0)
+  );
+}
+
+function useFoldedRow(enabled: boolean) {
+  const row = React.useRef<HTMLDivElement>(null);
+  const actions = React.useRef<HTMLDivElement>(null);
+  const unfolded = React.useRef(0);
+  const [folded, setFolded] = React.useState(false);
+  React.useLayoutEffect(() => {
+    const node = row.current;
+    if (!enabled || !node) return;
+    const measure = () => {
+      if (node.dataset.folded === undefined)
+        unfolded.current = itemsWidth(node);
+      setFolded(node.clientWidth > 0 && node.clientWidth < unfolded.current);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    if (actions.current) observer.observe(actions.current);
+    return () => observer.disconnect();
+  }, [enabled]);
+  return [row, actions, enabled && folded] as const;
+}
+
+export function SectionHeader({
+  title,
+  count,
+  description,
+  actions,
+  countYields = false,
+  foldActions = false,
+  className,
+  ...props
+}: SectionHeaderProps) {
+  const frame = React.useContext(CaptionFrameContext);
+  const [rowRef, actionsRef, folded] = useFoldedRow(foldActions);
+
+  if (restatesFrame(title, frame)) {
+    const caption = tally(count, title);
+    if (caption == null && !description && !actions) return null;
+    return (
+      <div className={cn("flex flex-col gap-0.5", className)} {...props}>
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11px] text-fg-fnt">
+          {caption}
+          {actions && (
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
+              {actions}
+            </div>
+          )}
+        </div>
+        {description && <p className="text-xs text-fg-mut">{description}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("flex flex-col gap-0.5", className)} {...props}>
+      <div
+        ref={rowRef}
+        data-folded={folded || undefined}
+        className={cn(
+          "flex items-baseline gap-x-2 gap-y-1",
+          foldActions ? "flex-nowrap" : "flex-wrap"
+        )}
+      >
+        <h2
+          className={cn(
+            "text-[13px] font-semibold tracking-tight text-fg",
+            foldActions && "shrink-0 whitespace-nowrap"
+          )}
+        >
+          {title}
+        </h2>
+        {count != null && (
+          <span
+            data-testid="section-count"
+            className={cn(
+              "min-w-0 text-xs text-fg-fnt",
+              countYields && "flex-[1_1_0]",
+              foldActions && !countYields && "shrink-0 whitespace-nowrap"
+            )}
+          >
+            {typeof count === "number" ? formatCount(count) : count}
+          </span>
+        )}
+        {actions && (
+          <div
+            ref={actionsRef}
+            className={cn(
+              "ml-auto flex items-center justify-end gap-1",
+              foldActions ? "shrink-0 flex-nowrap" : "flex-wrap"
+            )}
+          >
+            <HeaderFolded.Provider value={folded}>
+              {actions}
+            </HeaderFolded.Provider>
+          </div>
+        )}
+      </div>
+      {description && <p className="text-xs text-fg-mut">{description}</p>}
+    </div>
+  );
+}
+
+/** Wrapper for a list or table body: one hairline separates it from the
+ *  heading, in place of the card's top border. */
+export function SectionBody({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("border-t border-hair", className)} {...props} />;
+}

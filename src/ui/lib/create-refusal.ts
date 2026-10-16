@@ -1,0 +1,149 @@
+import type { EventInfo } from "@/generated/types";
+import type { T } from "@/i18n/useT";
+import { refusalReason, securityLevel } from "@/lib/refusal-reason";
+
+const FAILED_CREATE = "FailedCreate";
+
+/** What client-go's event correlator writes before a message it folded several similar events into. */
+const COMBINED = "(combined from similar events): ";
+
+const refusedCreate = (event: EventInfo) =>
+  event.type === "Warning" && event.reason === FAILED_CREATE;
+
+const at = (time: string | null) => (time ? Date.parse(time) : Number.NaN);
+
+/** When an event was last seen, an undated one before every dated one. */
+const seen = (event: EventInfo) => {
+  const when = at(event.lastTimestamp);
+  return Number.isNaN(when) ? Number.NEGATIVE_INFINITY : when;
+};
+
+/** The newest of `events` that `holds`, the later of two seen at once. */
+function newestWhere(
+  events: readonly EventInfo[],
+  holds: (event: EventInfo) => boolean
+): EventInfo | null {
+  let newest: EventInfo | null = null;
+  for (const event of events)
+    if (
+      refusedCreate(event) &&
+      holds(event) &&
+      (!newest || seen(event) >= seen(newest))
+    )
+      newest = event;
+  return newest;
+}
+
+/**
+ * The newest refusal the controller `uid` was given, unless a pod of its was
+ * created after it: a refusal a later create got past is history.
+ * `create_refusal` answers the Overview in Rust, and
+ * `src/contracts/create-refusal-conformance.json` holds the two to one answer.
+ */
+export function createRefusal(
+  uid: string,
+  events: readonly EventInfo[],
+  created: readonly (string | null)[]
+): string | null {
+  const newest = newestWhere(
+    events,
+    (event) => event.involvedObject.uid === uid
+  );
+  if (!newest) return null;
+  const since = at(newest.lastTimestamp);
+  if (created.some((pod) => at(pod) > since)) return null;
+  const said = newest.message ?? "";
+  return said.startsWith(COMBINED) ? said.slice(COMBINED.length) : said;
+}
+
+/** The uid of the newest controller of this kind and name a refusal names, for a row that does not carry its own. */
+export function refusedUid(
+  events: readonly EventInfo[],
+  kind: string,
+  namespace: string,
+  name: string
+): string | null {
+  const newest = newestWhere(
+    events,
+    ({ involvedObject: object }) =>
+      object.kind === kind &&
+      object.name === name &&
+      object.namespace === namespace
+  );
+  return newest?.involvedObject.uid ?? null;
+}
+
+const FORBIDDEN = / is forbidden: ([\s\S]+)$/;
+
+/** The part of a refusal that says why, without the name of a pod that never existed; the whole of it where it has no such part. */
+export const refusalGist = (said: string): string =>
+  FORBIDDEN.exec(said)?.[1] ?? said;
+
+const named = (names: readonly string[]) => [...new Set(names)].join(", ");
+
+/** A refusal as a row, the Overview and a shared report say it: who refused, and the gist of why. */
+export function refusalText(said: string, t: T): string {
+  const reason = refusalReason(said);
+  switch (reason.by) {
+    case "podSecurity":
+      return t("cause", "refusedShortSecurity", {
+        level: securityLevel(reason),
+        n: reason.checks.length,
+      });
+    case "quotaExceeded":
+      return t("cause", "refusedShortQuota", {
+        quota: reason.quota,
+        resources: named(reason.over.map((over) => over.resource)),
+      });
+    case "quotaUnset":
+      return t("cause", "refusedShortQuotaUnset", {
+        quota: reason.quota,
+        resources: named(reason.unset.map((unset) => unset.resource)),
+      });
+    case "limitRange":
+      return t("cause", "refusedShortRange", {
+        resources: named(reason.bounds.map((bound) => bound.resource)),
+      });
+    case "serviceAccount":
+      return t("cause", "refusedShortServiceAccount", { name: reason.name });
+    case "policy":
+      return t("cause", "refusedShortPolicy", {
+        policy: reason.policy,
+        said: reason.said,
+      });
+    case "webhookDenied":
+      return reason.said
+        ? t("cause", "refusedShortWebhook", {
+            webhook: reason.webhook,
+            said: reason.said,
+          })
+        : t("cause", "refusedShortWebhookSilent", { webhook: reason.webhook });
+    case "webhookFailed":
+      return t("cause", "refusedShortWebhookDown", { webhook: reason.webhook });
+    case "terminating":
+      return t("cause", "refusedShortTerminating", {
+        namespace: reason.namespace,
+      });
+    case "unknown":
+      return said
+        ? t("cause", "podsRefusedSaid", { said: refusalGist(said) })
+        : t("cause", "podsRefused");
+  }
+}
+
+/** A Job's word with its pods' refusal read beside it; `JobState::refused` answers the same in Rust. */
+export const jobWord = (status: string, refused: string | null) =>
+  refused !== null && status === "Pending" ? "FailedCreate" : status;
+
+/** Runs as their rows and bars draw them: a Pending run whose pods the API server refuses is FailedCreate. A Pending run has no pod running, so none can postdate the refusal. */
+export function toldRuns<J extends { uid: string; status: string }>(
+  jobs: readonly J[],
+  refusals: readonly EventInfo[] | null
+): readonly J[] {
+  if (!refusals) return jobs;
+  return jobs.map((job) => {
+    if (job.status !== "Pending") return job;
+    const status = jobWord(job.status, createRefusal(job.uid, refusals, []));
+    return status === job.status ? job : { ...job, status };
+  });
+}
