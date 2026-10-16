@@ -12,8 +12,10 @@ import {
   answeredByItsController,
   selfAnswered,
   gatewayProgrammed,
+  gatewayRefusalWords,
 } from "@/lib/route-trace";
 import type { KeyValue } from "@/components/object/key-values";
+import { ProblemSummary } from "@/components/object/detail-blocks";
 import type { RouteInfo } from "@/generated/types";
 import {
   conditionItem,
@@ -174,6 +176,13 @@ export const GATEWAY_SOURCES: PeekSources = {
           ? "Programmed"
           : (programmed.reason ?? programmed.status),
       createdAt: gateway.createdAt,
+      lead: programmed?.status === "False" && (
+        <ProblemSummary
+          headline={t("empty", "gwNotProgrammedTitle")}
+          detail={gatewayRefusalWords(gateway, programmed, t)}
+          className="mt-3"
+        />
+      ),
       groups: [
         {
           title: "Gateway",

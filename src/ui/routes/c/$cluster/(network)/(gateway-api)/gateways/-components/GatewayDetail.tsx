@@ -33,6 +33,7 @@ import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../../../../-object/ResourceDetailLayout";
 import { readCountMark, viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { ProblemSummary } from "@/components/object/detail-blocks";
 import { KeyValueSection, type KeyValue } from "../../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { CertificateLine } from "../../../../-object/CertificateFacts";
@@ -49,7 +50,11 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "../../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import { cautioningCondition, failingCondition } from "@/lib/condition-health";
-import { gatewayProgrammed, parentIsGateway } from "@/lib/route-trace";
+import {
+  gatewayProgrammed,
+  gatewayRefusalWords,
+  parentIsGateway,
+} from "@/lib/route-trace";
 import { ROUTING_STALE } from "@/integrations";
 import type { GatewayInfo, ListenerInfo, RouteInfo } from "@/generated/types";
 import { None } from "@/components/ui/none";
@@ -591,6 +596,15 @@ export function GatewayDetail() {
       badges={
         gateway && (
           <span className="text-[11px] text-fg-mut">{gateway.className}</span>
+        )
+      }
+      summary={
+        gateway &&
+        programmed?.status === "False" && (
+          <ProblemSummary
+            headline={t("empty", "gwNotProgrammedTitle")}
+            detail={gatewayRefusalWords(gateway, programmed, t)}
+          />
         )
       }
       onBack={goBack}

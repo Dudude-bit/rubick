@@ -220,6 +220,19 @@ export function gatewayProgrammed(
   );
 }
 
+/** Why a Gateway its controller refused serves nothing: the trace step and the Gateway's own page say it alike. */
+export function gatewayRefusalWords(
+  gateway: GatewayInfo,
+  said: ConditionInfo,
+  t: T
+): string {
+  return [
+    t("empty", "gwNotProgrammedBody", { said: conditionSaid(said) }),
+    ...listenerRefusals(gateway.listeners, t),
+    t("empty", "gwNotProgrammedUpstream"),
+  ].join(" ");
+}
+
 /**
  * Whether this parentRef points at that Gateway, directly or through one of
  * its `ListenerSet`s.
@@ -567,13 +580,7 @@ function gatewayStep(
       subject,
       detail: {
         title: t("empty", "gwNotProgrammedTitle"),
-        body: [
-          t("empty", "gwNotProgrammedBody", {
-            said: conditionSaid(programmed),
-          }),
-          ...listenerRefusals(gateway.listeners, t),
-          t("empty", "gwNotProgrammedUpstream"),
-        ].join(" "),
+        body: gatewayRefusalWords(gateway, programmed, t),
       },
     };
   }

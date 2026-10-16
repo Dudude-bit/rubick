@@ -124,6 +124,47 @@ describe("a Gateway's listener rows", () => {
   });
 });
 
+describe("a Gateway its controller refused", () => {
+  /**
+   * bad-gw's own page said "Programmed: ListenersNotValid" and
+   * "odd · PortUnavailable", while the route chain through it said which
+   * port had no entry point and what that meant. Fails if the page stops
+   * leading with the controller's answer and the listener it refused, or
+   * says so about a Gateway that is programmed.
+   */
+  it("leads with the controller's answer and the listener under it", async () => {
+    await open({
+      ...edge([
+        {
+          ...said("Accepted", "False", "PortUnavailable"),
+          message: "no matching entryPoint for port 9999",
+        },
+      ]),
+      conditions: [
+        {
+          ...said("Accepted", "False", "ListenersNotValid"),
+          message: "All Listeners must be valid",
+        },
+      ],
+    });
+    expect(
+      screen.getByText("The controller refuses this Gateway")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /^ListenersNotValid: All Listeners must be valid\. Listener https: PortUnavailable: no matching entryPoint for port 9999\. Nothing behind it serves/
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing of a refusal over a programmed Gateway", async () => {
+    await open(edge([said("Accepted", "True", "Accepted")]));
+    expect(
+      screen.queryByText("The controller refuses this Gateway")
+    ).toBeNull();
+  });
+});
+
 describe("a Gateway's Routes tab", () => {
   afterEach(() => {
     for (const name of Object.keys(answers)) delete answers[name];
