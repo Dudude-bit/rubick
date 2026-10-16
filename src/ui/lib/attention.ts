@@ -228,6 +228,12 @@ export function reasonWord(
 const keyOf = (item: Omit<AttentionItem, "key">) =>
   `${item.kind}/${item.namespace ?? "-"}/${item.name}/${item.reason}`;
 
+// Our words in a row are a sentence beside the cluster's, wherever they were composed.
+const ours = (text: string): AttentionDetail => ({
+  says: "ours",
+  text: /[.!?]$/.test(text) ? text : `${text}.`,
+});
+
 const withKey = (item: Omit<AttentionItem, "key">): AttentionItem => ({
   ...item,
   key: keyOf(item),
@@ -285,7 +291,7 @@ const serviceItems = remember(
         const detail: AttentionDetail | null = words.cause
           ? { says: "stopCause", ...words.cause }
           : words.reason
-            ? { says: "ours", text: words.reason }
+            ? ours(words.reason)
             : null;
         return group.names.map((name) => {
           const subject = { kind: "Service", name, namespace };
@@ -364,7 +370,7 @@ const ingressItems = remember(
           ...subject,
           tone,
           reason: words.label,
-          detail: words.reason ? { says: "ours", text: words.reason } : null,
+          detail: words.reason ? ours(words.reason) : null,
           since: null,
           restarts: null,
           foldedPods: null,
@@ -434,7 +440,7 @@ const claimItems = remember(
           ...subject,
           tone: role,
           reason: "Pending",
-          detail: { says: "ours", text: claimCauseText(cause, t) },
+          detail: ours(claimCauseText(cause, t)),
           since: claim.createdAt,
           restarts: null,
           foldedPods: null,
@@ -456,7 +462,7 @@ const gatewayItems = remember((pulse: readonly GatewayPulse[]) =>
       ...subject,
       tone: "err",
       reason: at.reason,
-      detail: at.why ? { says: "ours", text: at.why } : null,
+      detail: at.why ? ours(at.why) : null,
       since: null,
       restarts: null,
       foldedPods: null,
@@ -465,9 +471,6 @@ const gatewayItems = remember((pulse: readonly GatewayPulse[]) =>
     });
   })
 );
-
-// The trace says this as a headline; beside the Ingress rows it is a sentence.
-const endSentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
 
 const routeItems = remember(
   (rows: readonly RouteRow[], t: T): AttentionItem[] =>
@@ -485,7 +488,7 @@ const routeItems = remember(
           reason: t("cluster", "attentionStopsAt", {
             at: t("columns", STEP_WORD[row.stop.at]),
           }),
-          detail: { says: "ours", text: endSentence(row.stop.say) },
+          detail: ours(row.stop.say),
           since: null,
           restarts: null,
           foldedPods: null,

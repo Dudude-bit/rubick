@@ -293,7 +293,7 @@ describe("what Needs attention lists beyond pods", () => {
 
     const said = serviceHealthWords(serviceHealthOf(web, web, null), t).reason;
     expect(said).toBeTruthy();
-    expect(listed.items[0].detail).toEqual({ says: "ours", text: said });
+    expect(listed.items[0].detail).toEqual({ says: "ours", text: `${said}.` });
   });
 
   /**
@@ -339,7 +339,7 @@ describe("what Needs attention lists beyond pods", () => {
     expect(listed.items[0].reason).toBe("shut by NetworkPolicy");
     expect(listed.items[0].detail).toEqual({
       says: "ours",
-      text: "NetworkPolicy deny-all-ingress admits no connection to these pods",
+      text: "NetworkPolicy deny-all-ingress admits no connection to these pods.",
     });
   });
 
@@ -690,7 +690,7 @@ describe("what Needs attention lists beyond pods", () => {
       tone: "err",
       detail: {
         says: "ours",
-        text: "StorageClass fast-ssd does not exist, so nothing will provision a volume for it",
+        text: "StorageClass fast-ssd does not exist, so nothing will provision a volume for it.",
       },
     });
     const unread = attention({ claims });
