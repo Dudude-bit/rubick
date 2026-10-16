@@ -16,6 +16,8 @@ import {
 } from "./ingress";
 import type { StopMood } from "@/lib/connections";
 import { translate } from "@/i18n";
+import { en } from "@/i18n/catalogue";
+import { ru } from "@/i18n/ru";
 import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
@@ -474,5 +476,25 @@ describe("how much a stopped backend weighs", () => {
     );
     expect(stopsRowState([stops.idle], t)?.text).toBe("nothing behind it");
     expect(stopsRowState([], t)).toBeNull();
+  });
+});
+
+describe("what a routing finding leads with", () => {
+  /**
+   * The nginx, Traefik and Istio rows opened on what the proxy answers and
+   * named the cause last, so a page of stopped routes read thirty identical
+   * words before the one that differed. Fails if any answer, in either
+   * language, stops leading with the cause it is handed.
+   */
+  it.each([
+    ["everyRequest503", "reason"],
+    ["nginxUpstreamRefused", "reason"],
+    ["traefikRouteDropped", "reason"],
+    ["traefikRouteRefused", "reason"],
+    ["traefikRouteDroppedOr503", "reason"],
+    ["istioRouteResolves503", "detail"],
+  ] as const)("says the cause before what %s answers", (key, slot) => {
+    for (const catalogue of [en, ru])
+      expect(catalogue.empty[key]).toMatch(new RegExp(`^\\{${slot}\\}\\. \\S`));
   });
 });

@@ -5725,7 +5725,7 @@ export const en = {
     istioWeightsOver:
       "the shares written here are not the shares that will be served",
     istioRouteResolves503:
-      "This route resolves and every request gets a 503: {detail}",
+      "{detail}. This route resolves, and every request gets a 503.",
     istioNoGatewayObjects:
       "This cluster has no Gateway objects, so nothing in the mesh is exposed at the edge. Traffic between workloads that have a sidecar still flows, which needs no Gateway.",
     istioGatewaysDescription:
@@ -5816,9 +5816,9 @@ export const en = {
     stopNoPortToSendTo: "no port to send to",
     stopPolicyShutUnder: "shut by NetworkPolicy",
     everyRequest503:
-      "This host answers, and every request gets a 503: {reason}",
+      "{reason}. This host answers, and every request gets a 503.",
     nginxUpstreamRefused:
-      "This host answers, and nginx's connection to the pods is refused, so a request gets a 502, or a 504 after proxy-connect-timeout where the network drops the connection rather than refusing it: {reason}",
+      "{reason}. This host answers, and nginx's connection to the pods is refused, so a request gets a 502, or a 504 after proxy-connect-timeout where the network drops the connection rather than refusing it.",
     servedInClearTitle:
       "Served in the clear: nothing offers this host over TLS",
     nginxClearRedirectAnyway:
@@ -5871,11 +5871,11 @@ export const en = {
     },
     notFoundInThisCluster: "not found in this cluster",
     traefikRouteDropped:
-      "Traefik drops this route, so a request gets a 404, or goes to whichever other route matches it: {reason}",
+      "{reason}. Traefik drops this route, so a request gets a 404, or goes to whichever other route matches it.",
     traefikRouteRefused:
-      "Traefik keeps this route and its connection to the pods is refused, so a request gets a 502, or a 504 once the dial times out where the network drops the connection rather than refusing it: {reason}",
+      "{reason}. Traefik keeps this route and its connection to the pods is refused, so a request gets a 502, or a 504 once the dial times out where the network drops the connection rather than refusing it.",
     traefikRouteDroppedOr503:
-      "Traefik drops this route or answers it with a 503, depending on allowEmptyServices, which could not be read: {reason}",
+      "{reason}. Traefik drops this route or answers it with a 503, depending on allowEmptyServices, which could not be read.",
     traefikClearLoadedNote: {
       one: "{secret} is named in spec.tls, but Traefik only loads a certificate from that field. A router is served over TLS with the router.tls annotation or on a TLS entry point, and this host is bound to {list}, which terminates no TLS and carries no redirection.",
       other:

@@ -89,11 +89,12 @@ describe("a Traefik finding in a shared file", () => {
 
 describe("a Traefik finding on the page", () => {
   /**
-   * The stop's words were lowercased after the colon, which turned "Pod
-   * Security" into "pod Security" and would turn ResourceQuota into
-   * resourceQuota, a kind the reader then cannot find in their terminal.
+   * Every row on the page opened with the same thirty words of what Traefik
+   * answers, and the cause that differs row to row came last, after a colon
+   * that left "ResourceQuota" capitalised mid-sentence. Fails if the cause
+   * stops leading, or loses the case a reader greps their terminal for.
    */
-  it("keeps the case of a refusal's first word after the colon", () => {
+  it("leads with the cause in its own case, then says what Traefik answers", () => {
     const said = describeFinding(
       {
         kind: "stop",
@@ -116,8 +117,8 @@ describe("a Traefik finding on the page", () => {
       } as unknown as Finding,
       t
     );
-    expect(said.title).toContain(
-      "matches it: ResourceQuota two-pods refuses its pods"
+    expect(said.title).toMatch(
+      /^ResourceQuota two-pods refuses its pods: no room for pods\. Traefik drops/
     );
   });
 
@@ -146,10 +147,10 @@ describe("a Traefik finding on the page", () => {
         t
       ).title;
     expect(title("dropped")).toBe(
-      "Traefik drops this route, so a request gets a 404, or goes to whichever other route matches it: No pod carries app=web"
+      "No pod carries app=web. Traefik drops this route, so a request gets a 404, or goes to whichever other route matches it."
     );
     expect(title("unavailable")).toBe(
-      "This host answers, and every request gets a 503: No pod carries app=web"
+      "No pod carries app=web. This host answers, and every request gets a 503."
     );
     expect(title("unknown")).toContain(
       "depending on allowEmptyServices, which could not be read"
