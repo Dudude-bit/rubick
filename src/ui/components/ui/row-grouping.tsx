@@ -29,9 +29,11 @@ export interface RowGrouping<TData> {
    */
   minGroups?: number;
   /**
-   * Below this many rows per group, on average, a caption costs about a line
-   * for every row it heads: thirty namespaces holding one ConfigMap each drew
+   * Unless most groups hold this many rows, a caption costs about a line for
+   * every row it heads: thirty namespaces holding one ConfigMap each drew
    * sixty lines for thirty objects, while a column says the same in place.
+   * Most, not on average: kube-system's thirty ServiceAccounts did not make
+   * twenty-nine captions over one `default` each worth reading.
    */
   minRowsPerGroup?: number;
 }

@@ -1251,7 +1251,7 @@ describe("row grouping", () => {
     expect(screen.getByText("one · 2")).toBeInTheDocument();
   });
 
-  it("captions namespaces only where each holds two rows on average", async () => {
+  it("captions namespaces only where most hold two rows or more", async () => {
     const namespaces = byNamespace<Item>(kindNoun("ConfigMaps"));
     const spread = [
       { name: "kube-root-ca.crt", namespace: "shop" },
@@ -1261,6 +1261,17 @@ describe("row grouping", () => {
     const flat = await grouped(spread, namespaces);
     expect(screen.getAllByRole("row")).toHaveLength(1 + spread.length);
     flat.unmount();
+    const lone = ["argo", "cert-manager", "flux", "shop"].map((namespace) => ({
+      name: "default",
+      namespace,
+    }));
+    const system = Array.from({ length: 30 }, (_, at) => ({
+      name: `controller-${at}`,
+      namespace: "kube-system",
+    }));
+    const crowded = await grouped([...lone, ...system], namespaces);
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 34);
+    crowded.unmount();
     await grouped(
       [...spread, { name: "checkout-env", namespace: "shop" }],
       namespaces

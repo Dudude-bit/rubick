@@ -739,18 +739,15 @@ function DataTableInner<TData extends RowData>({
   // page exactly the flat list it was.
   const groupingActive = React.useMemo(() => {
     if (!grouping) return false;
-    const seen = new Set<string>();
-    let keyed = 0;
+    const sizes = new Map<string, number>();
     for (const item of data) {
       const key = grouping.keyOf(item);
-      if (!key) continue;
-      seen.add(key);
-      keyed += 1;
+      if (key) sizes.set(key, (sizes.get(key) ?? 0) + 1);
     }
-    return (
-      seen.size >= (grouping.minGroups ?? 1) &&
-      keyed >= seen.size * (grouping.minRowsPerGroup ?? 1)
-    );
+    const full = [...sizes.values()].filter(
+      (size) => size >= (grouping.minRowsPerGroup ?? 1)
+    ).length;
+    return sizes.size >= (grouping.minGroups ?? 1) && full * 2 > sizes.size;
   }, [data, grouping]);
 
   // One namespace chosen is the same word on every row, and the scope bar
