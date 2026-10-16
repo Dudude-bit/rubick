@@ -16,19 +16,19 @@ export function JobStatusCell({
   const t = useT();
   return (
     <span className="inline-flex min-w-0 items-baseline gap-1.5">
-      {/* The badge stays whole; what follows it gives way. */}
+      {/* The badge and the controller's word stay whole, as the floor sizes them; the pods' cause gives way. */}
       <span className="flex-none">
         <StatusBadge status={job.status}>
           {ownStatusWord(job.status, t)}
         </StatusBadge>
       </span>
       {job.status === "Retrying" && (
-        <span className="truncate text-[11px] tabular-nums text-warn">
+        <span className="flex-none text-[11px] tabular-nums text-warn">
           {t("count", "failedPods", { n: job.failed })}
         </span>
       )}
       {job.failure?.reason && (
-        <span className="truncate font-mono text-[11px] text-fg-mut">
+        <span className="max-w-[24ch] flex-none truncate font-mono text-[11px] text-fg-mut">
           {job.failure.reason}
         </span>
       )}

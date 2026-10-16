@@ -40,8 +40,13 @@ describe("a Job's status in the list", () => {
     expect(screen.getByText("DeadlineExceeded")).toBeInTheDocument();
   });
 
-  /** Lena read "Fai… BackoffLimitEx…": fails if the badge can shrink beside its reason or the failed pods, which give way instead. */
-  it("keeps the badge whole and lets what follows it give way", () => {
+  /**
+   * Lena read "Fai… BackoffLimitEx…", and later "Failed BackoffLimitEx… 2 of
+   * 2 pods: report exited": the reason a reader matches against kubectl gave
+   * way to the cause after it. Fails if the badge or the reason can shrink,
+   * or a reason past the floor's 24 glyphs stops ending in an ellipsis.
+   */
+  it("keeps the badge and the controller's reason whole and lets the pods' cause give way", () => {
     render(
       <JobStatusCell
         job={{
@@ -53,7 +58,11 @@ describe("a Job's status in the list", () => {
       />
     );
     expect(screen.getByText("Failed").closest(".flex-none")).not.toBeNull();
-    expect(screen.getByText("BackoffLimitExceeded")).toHaveClass("truncate");
+    expect(screen.getByText("BackoffLimitExceeded")).toHaveClass(
+      "flex-none",
+      "max-w-[24ch]",
+      "truncate"
+    );
   });
 });
 
@@ -87,6 +96,7 @@ describe("the cause a Job's pods share, in its row", () => {
     );
     const cause = screen.getByTestId("row-cause");
     expect(cause).toHaveTextContent(/^2 of 2 pods: report/);
+    expect(cause).toHaveClass("min-w-0", "truncate");
     expect(
       screen.getByText("BackoffLimitExceeded").compareDocumentPosition(cause) &
         Node.DOCUMENT_POSITION_FOLLOWING
