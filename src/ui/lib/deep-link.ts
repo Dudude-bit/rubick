@@ -38,6 +38,13 @@ const SAFE_PARAMS = new Set([
   "namespace",
 ]);
 
+const LEGACY_SECTIONS = new Set([
+  "workloads",
+  "network",
+  "storage",
+  "configuration",
+]);
+
 export interface DeepLink {
   /** The cluster the address names. */
   context: string;
@@ -77,10 +84,15 @@ export function parseDeepLink(raw: string): DeepLink | null {
     return null;
   }
   if (url.protocol !== `${DEEP_LINK_SCHEME}:` || url.host !== HOST) return null;
-  const [root, clusterSegment, ...rest] = url.pathname
-    .split("/")
-    .filter(Boolean);
-  if (root !== "c" || !clusterSegment) return null;
+  const [root, ...after] = url.pathname.split("/").filter(Boolean);
+  if (!root) return null;
+  // 4.11 to 4.21 wrote `open/<cluster>/<section>/<plural>/...`; the
+  // sections are now pathless route groups.
+  const [clusterSegment, ...rest] =
+    root === "c"
+      ? after
+      : [root, ...(LEGACY_SECTIONS.has(after[0]) ? after.slice(1) : after)];
+  if (!clusterSegment) return null;
   let context: string;
   let segments: string[];
   try {

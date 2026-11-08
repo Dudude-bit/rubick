@@ -47,10 +47,28 @@ describe("parseDeepLink", () => {
   });
 
   /** Only an address inside a cluster is a place a link can open. */
-  it("refuses a path that does not name a cluster first", () => {
-    expect(parseDeepLink("rubick://open/ctx/pods/a/b")).toBeNull();
+  it("refuses a link that names no cluster", () => {
     expect(parseDeepLink("rubick://open/c/")).toBeNull();
-    expect(parseDeepLink("rubick://open/settings/clusters")).toBeNull();
+  });
+
+  /**
+   * Would break if links copied or shared by 4.11 to 4.21, which put the
+   * cluster first and a section before the plural, were dropped: they sit
+   * in chats, tickets and saved reports, and nothing said why they stopped
+   * opening.
+   */
+  it("opens a link from 4.21 at the same place in its cluster", () => {
+    expect(
+      parseDeepLink(
+        "rubick://open/arn%3Aaws%3Aeks%3Aeu%3A1%3Acluster%2Fprod/workloads/pods/shop/api?tab=logs&t=2026-09-01T10:00:00Z"
+      )
+    ).toMatchObject({
+      context: "arn:aws:eks:eu:1:cluster/prod",
+      path: "/c/arn%3Aaws%3Aeks%3Aeu%3A1%3Acluster%2Fprod/pods/shop/api?tab=logs",
+    });
+    expect(parseDeepLink("rubick://open/kind/events")?.path).toBe(
+      "/c/kind/events"
+    );
   });
 
   /** A path that climbs out of the app's routes is not a place in the app. */
