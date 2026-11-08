@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { QueryClient } from "@tanstack/react-query";
 
@@ -441,6 +448,79 @@ describe("tabs on two clusters the backend holds", () => {
     expect(commands.connectCluster).not.toHaveBeenCalled();
     expect(useClusterStore.getState().currentContext).toBe("acme-staging");
     expect(said).not.toContain(false);
+  });
+});
+
+describe("an activation the reader moved on from", () => {
+  let answer = () => {};
+
+  beforeEach(() => {
+    vi.mocked(commands.connectCluster).mockImplementationOnce(
+      (context) =>
+        new Promise((resolve) => {
+          answer = () => resolve({ context } as ClusterInfo);
+        })
+    );
+    vi.mocked(commands.focusCluster).mockImplementation(
+      async (context) => ({ context }) as unknown as ClusterInfo
+    );
+    useClusterStore.setState({
+      currentContext: "staging",
+      isConnected: true,
+      pendingContext: null,
+      isAuthenticating: false,
+      namespaceScope: [],
+      savedScopes: {},
+      live: ["prod", "staging"],
+    });
+    seed([
+      tab({ id: "a", context: "staging", href: "/c/staging" }),
+      tab({ id: "b", context: "qa", namespace: "qa-ns", href: "/c/qa" }),
+      tab({ id: "c", context: "prod", namespace: "prod-ns", href: "/c/prod" }),
+      tab({ id: "d", context: "qa", namespace: "qa-two", href: "/c/qa" }),
+    ]);
+  });
+
+  afterEach(() => {
+    vi.mocked(commands.focusCluster).mockImplementation(async () => null);
+  });
+
+  /**
+   * Activating qa (a slow sign-in) and then prod (held) left qa's connect to
+   * return late, and qa's namespaces were applied to prod and saved as
+   * prod's. Fails if a superseded activation touches the scope on screen.
+   */
+  it("leaves the scope of the tab that replaced it alone", async () => {
+    const slow = state().activateTab("b");
+    await state().activateTab("c");
+    answer();
+    await slow;
+
+    const cluster = useClusterStore.getState();
+    expect(cluster.currentContext).toBe("prod");
+    expect(cluster.namespaceScope).toEqual(["prod-ns"]);
+    expect(cluster.savedScopes.prod).toEqual(["prod-ns"]);
+  });
+
+  /** Fails if a later tab on the same cluster loses its scope to the earlier one's connect. */
+  it("leaves alone a tab on the same cluster that replaced it", async () => {
+    const slow = state().activateTab("b");
+    await state().activateTab("d");
+    answer();
+    await slow;
+
+    expect(useClusterStore.getState().namespaceScope).toEqual(["qa-two"]);
+  });
+
+  /** Fails if a cluster reached outside the strip, with the tab still active, takes the tab's scope. */
+  it("leaves alone a cluster the window moved to by other means", async () => {
+    const slow = state().activateTab("b");
+    await useClusterStore.getState().connect("prod");
+    answer();
+    await slow;
+
+    expect(useClusterStore.getState().currentContext).toBe("prod");
+    expect(useClusterStore.getState().namespaceScope).toEqual([]);
   });
 });
 

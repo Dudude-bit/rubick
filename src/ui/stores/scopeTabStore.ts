@@ -192,6 +192,13 @@ async function applyScope(tab: ScopeTab) {
     await cluster.connect(tab.context, { keepRoute: true });
   }
   const live = useClusterStore.getState();
+  // A connect the reader moved on from returns quietly, and this tab's scope
+  // would land on whichever tab and cluster are on screen by then.
+  if (
+    useScopeTabStore.getState().activeId !== tab.id ||
+    live.currentContext !== tab.context
+  )
+    return;
   const scope = tabScope(tab);
   if (!sameScope(live.namespaceScope, scope)) {
     await live.setNamespaceScope(scope);
