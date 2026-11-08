@@ -239,6 +239,25 @@ describe("opening", () => {
     }
   );
 
+  /**
+   * A staging recent opened behind a prod page was drawn as prod, kept prod
+   * held, and narrowed prod's remembered scope on its first activation.
+   * Fails if a tab whose address names another cluster takes the cluster or
+   * the scope of the one on screen.
+   */
+  it("takes its cluster, and that cluster's scope, from its address", async () => {
+    liveScope("prod", ["shop"]);
+    useClusterStore.setState({ savedScopes: { staging: ["web", "shop"] } });
+    await state().openTab({
+      href: "/c/staging/pods/web/api-1",
+      background: true,
+    });
+    expect(state().tabs[1]).toMatchObject({
+      context: "staging",
+      scope: ["web", "shop"],
+    });
+  });
+
   /** Fails if a tab opened at an object the inherited scope holds is narrowed. */
   it("keeps the inherited scope where it holds the object", async () => {
     liveScope("prod", ["shop", "web"]);
