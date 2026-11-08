@@ -58,6 +58,8 @@ fn main() {
     // stderr reaches nobody, and every question about what the app did has
     // had to be answered by guessing.
     init_tracing(log_dir(BUNDLE).as_deref());
+    #[cfg(unix)]
+    k8s_gui_lib::client::open_files::raise();
 
     tracing::info!("Starting Rubick application");
     match k8s_gui_lib::app_log::log_path() {

@@ -18,6 +18,8 @@ pub mod clock;
 mod context;
 mod floors;
 mod hedge;
+#[cfg(unix)]
+pub mod open_files;
 pub mod proxy;
 mod send_again;
 pub mod served;
