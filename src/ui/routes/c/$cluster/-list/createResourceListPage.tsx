@@ -170,6 +170,7 @@ export function createResourceListPage<
       <Around>
         <ResourceList<T>
           title={config.title}
+          kind={config.resourceType}
           queryKey={queryKey}
           getRowId={getResourceRowId}
           queryFn={queryFn}

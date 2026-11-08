@@ -153,6 +153,7 @@ export function NamespaceList() {
     <NamespaceCells.Provider value={cellContext}>
       <ResourceList<NamespaceInfo>
         title="Namespaces"
+        kind={ResourceType.Namespace}
         queryKey={queryKey}
         queryFn={() => commands.listNamespaces().then(whole)}
         staleTime={STALE_TIMES.slow}

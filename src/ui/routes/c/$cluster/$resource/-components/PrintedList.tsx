@@ -33,7 +33,7 @@ import { KindAbout } from "@/components/object/KindAbout";
 import { accessKind, listTitleOf, segmentOf } from "@/lib/access-kinds";
 import { isExplained } from "@/lib/docs";
 import { commands } from "@/lib/commands";
-import { hrefOf, objectLink } from "@/lib/links";
+import { hrefOf, objectLink, registryKindOf } from "@/lib/links";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -213,6 +213,7 @@ function PrintedTable({
   return (
     <ResourceList<PrintedRow>
       title={plural}
+      kind={registryKindOf(entry)}
       description={
         isExplained(entry.kind) && access?.group === entry.group ? (
           <KindAbout kind={entry.kind} />

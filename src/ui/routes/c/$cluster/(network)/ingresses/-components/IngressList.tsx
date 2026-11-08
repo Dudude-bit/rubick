@@ -431,6 +431,7 @@ export function IngressList() {
       <VendorTls.Provider value={vendorFor}>
         <ResourceList<IngressInfo>
           title="Ingresses"
+          kind={ResourceType.Ingress}
           queryKey={queryKey}
           getRowId={getResourceRowId}
           queryFn={listIngresses}

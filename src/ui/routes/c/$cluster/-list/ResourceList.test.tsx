@@ -70,6 +70,7 @@ const list = (props: {
   draw(
     <ResourceList<Item>
       title="Pods"
+      kind="Pod"
       columns={columns}
       emptyStateLabel="Pods"
       {...props}
@@ -225,6 +226,7 @@ describe("a list whose rows come from outside", () => {
     await draw(
       <ResourceList<Item>
         title="Nodes"
+        kind="Node"
         columns={columns}
         emptyStateLabel="nodes"
         data={[]}
@@ -528,6 +530,7 @@ describe("a scope some of whose namespaces did not answer", () => {
     const page = (queryKey: string[], answer: () => Promise<Scoped<Item>>) => (
       <ResourceList<Item>
         title="Pods"
+        kind="Pod"
         columns={columns}
         emptyStateLabel="Pods"
         queryKey={queryKey}
@@ -564,6 +567,7 @@ describe("a scope some of whose namespaces did not answer", () => {
     const page = (queryKey: string[], answer: () => Promise<Scoped<Item>>) => (
       <ResourceList<Item>
         title="Services"
+        kind="Service"
         columns={columns}
         emptyStateLabel="Services"
         queryKey={queryKey}
@@ -615,6 +619,7 @@ describe("a scope some of whose namespaces did not answer", () => {
     await draw(
       <ResourceList<Item>
         title="Pods"
+        kind="Pod"
         columns={columns}
         emptyStateLabel="Pods"
         queryKey={key}
@@ -679,6 +684,7 @@ describe("a read on a large cluster", () => {
     await draw(
       <ResourceList<Item>
         title="Pods"
+        kind="Pod"
         columns={columns}
         emptyStateLabel="Pods"
         queryKey={["pods", "slow"]}
@@ -718,6 +724,7 @@ describe("a read on a large cluster", () => {
     await draw(
       <ResourceList<Item>
         title="Pods"
+        kind="Pod"
         columns={columns}
         emptyStateLabel="Pods"
         data={[]}
@@ -750,6 +757,7 @@ describe("a read on a large cluster", () => {
     await draw(
       <ResourceList<Item>
         title="Pods"
+        kind="Pod"
         columns={columns}
         emptyStateLabel="Pods"
         data={undefined}
@@ -788,6 +796,7 @@ describe("what a list hands to Share", () => {
       <ScreenShareProvider>
         <ResourceList<Item>
           title="Pods"
+          kind="Pod"
           columns={columns}
           emptyStateLabel="Pods"
           {...props}
@@ -862,6 +871,7 @@ describe("what a list is of", () => {
     await draw(
       <ResourceList<Item>
         title="Applications"
+        kind={null}
         description="applications.argoproj.io"
         columns={columns}
         emptyStateLabel="Applications"
@@ -883,6 +893,7 @@ describe("a list a link to another kind's list landed on", () => {
     const deployments = (
       <ResourceList<Item>
         title="Deployments"
+        kind="Deployment"
         columns={columns}
         emptyStateLabel="Deployments"
         data={[]}
@@ -905,6 +916,7 @@ describe("a list a link to another kind's list landed on", () => {
     await renderWithRouter(
       <ResourceList<Item>
         title="Pods"
+        kind="Pod"
         columns={columns}
         emptyStateLabel="Pods"
         data={[]}
@@ -927,6 +939,7 @@ describe("a list a link narrowed to the rows it named", () => {
     await renderWithRouter(
       <ResourceList<Item>
         title="Pods"
+        kind="Pod"
         columns={columns}
         emptyStateLabel="Pods"
         data={[

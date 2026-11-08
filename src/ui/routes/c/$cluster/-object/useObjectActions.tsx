@@ -41,7 +41,7 @@ import { scaleWarnings } from "@/lib/governance";
 import { readinessOf } from "@/lib/restart-plan";
 import { objectLink } from "@/lib/links";
 import { useShellAskStore } from "@/stores/shellAskStore";
-import { toKind } from "@/lib/resource-registry";
+import type { ResourceKind } from "@/lib/resource-registry";
 import type {
   DebugResult,
   DeploymentInfo,
@@ -96,7 +96,12 @@ export interface ObjectActions {
 }
 
 export interface ObjectActionsOptions {
-  kind: string;
+  /**
+   * The registry's kind, resolved with its group; `null` for anything else,
+   * which is offered nothing. A bare name would take Knative's `Service` for
+   * a core one and run that kind's delete on it.
+   */
+  kind: ResourceKind | null;
   name: string;
   namespace: string | null;
   /** The object itself, where the surface has it. Undefined narrows nothing. */
@@ -106,7 +111,7 @@ export interface ObjectActionsOptions {
 }
 
 export function useObjectActions({
-  kind: rawKind,
+  kind: registryKind,
   name,
   namespace,
   detail,
@@ -119,7 +124,8 @@ export function useObjectActions({
   const critical = useCritical();
   const criticalActive = critical.critical && !!critical.context;
 
-  const kind = toKind(rawKind) ?? rawKind;
+  // Every table below misses on "", so an unknown kind plans and runs nothing.
+  const kind: string = registryKind ?? "";
   const pod = kind === "Pod" ? (detail as PodInfo | undefined) : undefined;
   const service =
     kind === "Service" ? (detail as ServiceInfo | undefined) : undefined;

@@ -34,12 +34,11 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { NO_TABLE, tableSection } from "@/components/share/table-share";
 import {
-  isResourceType,
   kindNoun,
   listQueryFor,
   narrowingHelps as narrowsByKind,
-  toKind,
   type KindNoun,
+  type ResourceKind,
 } from "@/lib/resource-registry";
 import {
   DeliveryColumnCell,
@@ -104,6 +103,12 @@ export interface ResourceListProps<
 > {
   /** Display title for the resource list */
   title: string;
+  /**
+   * The registry's kind these rows are, or `null` for any other. Said, not
+   * guessed from a label: Knative's `services` share the plural, and a list
+   * that read the label as `Service` deleted core Services from its rows.
+   */
+  kind: ResourceKind | null;
   /** Below the title; a typed kind says what it is without being asked. */
   description?: ReactNode;
   /** Query key for React Query */
@@ -236,6 +241,7 @@ export function ResourceList<
   Row extends { name: string; namespace?: string | null },
 >({
   title,
+  kind: listKind,
   description,
   queryKey,
   queryFn,
@@ -274,13 +280,6 @@ export function ResourceList<
   const t = useT();
   const { isConnected } = useClusterStore();
   const namespaceScope = useClusterStore((state) => state.namespaceScope);
-  const listKind = useMemo(() => {
-    const said = [queryKey?.[0], emptyStateLabel, title].find(
-      (candidate): candidate is string =>
-        typeof candidate === "string" && isResourceType(candidate)
-    );
-    return said ? toKind(said) : null;
-  }, [queryKey, emptyStateLabel, title]);
   const narrowingHelps =
     narrowingHelpsProp ?? (listKind ? narrowsByKind(listKind) : true);
   const counted = useMemo(

@@ -96,6 +96,7 @@ const draw = () =>
   renderWithRouter(
     <ResourceList<Deployment>
       title="Deployments"
+      kind="Deployment"
       emptyStateLabel="deployments"
       data={[WEB]}
       columns={columns}
@@ -259,6 +260,7 @@ describe("a list row's right-click menu", () => {
     await renderWithRouter(
       <ResourceList<Deployment>
         title="Deployments"
+        kind="Deployment"
         emptyStateLabel="deployments"
         data={[WEB, search]}
         columns={columns}
@@ -417,6 +419,7 @@ describe("a StatefulSet row's delete", () => {
     await renderWithRouter(
       <ResourceList<typeof row>
         title="StatefulSets"
+        kind="StatefulSet"
         emptyStateLabel="statefulsets"
         data={[row]}
         columns={[
@@ -462,6 +465,7 @@ describe("every list kind's row menu", () => {
       await renderWithRouter(
         <ResourceList<typeof row>
           title={entry.plural}
+          kind={entry.kind}
           emptyStateLabel={entry.plural}
           data={[row]}
           columns={[

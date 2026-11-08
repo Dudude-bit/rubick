@@ -405,6 +405,7 @@ export function NodeList() {
     <MetricsAbsenceContext.Provider value={absenceOf(nodeStatus)}>
       <ResourceList<NodeInfo>
         title={NODES_TITLE}
+        kind={ResourceType.Node}
         queryKey={queryKeys.resources(ResourceType.Node, null)}
         getRowId={getResourceRowId}
         queryFn={() => commands.listNodes(null).then(whole)}

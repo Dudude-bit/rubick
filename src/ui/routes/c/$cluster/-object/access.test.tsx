@@ -197,6 +197,7 @@ describe("Delete for a reader who may not delete", () => {
     await renderWithRouter(
       <ResourceList
         title="Deployments"
+        kind="Deployment"
         emptyStateLabel="deployments"
         data={[WORKER]}
         columns={[
@@ -351,6 +352,7 @@ describe("Debug for Marco, whose Role allows exec and port-forward and neither w
     renderWithRouter(
       <ResourceList
         title="Pods"
+        kind="Pod"
         emptyStateLabel="pods"
         data={[API_POD]}
         columns={[
@@ -459,6 +461,7 @@ describe("Debug node for Marco, who may create pods in no namespace", () => {
     await renderWithRouter(
       <ResourceList
         title="Nodes"
+        kind="Node"
         emptyStateLabel="nodes"
         data={[{ name: "node01" }]}
         columns={[

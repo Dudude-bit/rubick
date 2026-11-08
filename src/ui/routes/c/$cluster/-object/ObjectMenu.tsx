@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { peekTargetOfHref } from "@/hooks/usePeek";
+import { builtInKindOf } from "@/lib/links";
+import type { ResourceKind } from "@/lib/resource-registry";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
 import type { Listed } from "../-list/RowMenu";
 import { useRowMenu } from "../-list/useRowMenu";
@@ -15,7 +17,7 @@ const hrefOfRow = (row: Linked) => row.href;
  * the Pods list. The webview's own menu copied `http://tauri.localhost/...`.
  */
 export function ObjectMenu() {
-  const [kind, setKind] = useState<string | null>(null);
+  const [kind, setKind] = useState<ResourceKind | null>(null);
   const menu = useRowMenu<Linked>({ kind, getRowHref: hrefOfRow });
   const { open } = menu;
 
@@ -25,7 +27,7 @@ export function ObjectMenu() {
       useObjectMenuStore.subscribe(({ target, close }) => {
         if (!target) return;
         const object = peekTargetOfHref(target.to);
-        setKind(object?.crd ? null : (object?.kind ?? null));
+        setKind(object ? builtInKindOf(object) : null);
         open(
           { name: target.name, namespace: object?.namespace, href: target.to },
           { x: target.x, y: target.y }

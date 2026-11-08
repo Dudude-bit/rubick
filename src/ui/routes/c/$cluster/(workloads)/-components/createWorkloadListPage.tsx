@@ -232,6 +232,7 @@ export function createWorkloadListPage<T extends Workload>(
     const list = (
       <ResourceList<WorkloadRow<T>>
         title={config.title}
+        kind={config.resourceType}
         data={dataWithMetrics}
         unread={listQuery.data?.unread}
         placeholder={listQuery.isPlaceholderData}
