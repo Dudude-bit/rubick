@@ -590,10 +590,10 @@ function IntegrationsGroup() {
   // sidebar row that swallowed a click for two seconds would read as broken.
   const press = (id: string) => {
     const preference = context ? saved[context]?.[id] : undefined;
-    if (!preference) return;
+    if (!context || !preference) return;
     setWaking(id);
     setFailed(null);
-    void wake(id, preference)
+    void wake(id, context, preference)
       // Everything cached was read while the tunnel was down — the probe
       // that said unreachable, the page verdicts built on a dead socket,
       // the address itself if the forward moved ports. A row that stayed

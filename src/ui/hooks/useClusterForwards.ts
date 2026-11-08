@@ -28,10 +28,22 @@ import {
 } from "@/stores/clusterForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
-/** Whether this app is already forwarding that local port. */
-async function alreadyUp(localPort: number): Promise<boolean> {
+/**
+ * The cluster whose tunnel this app has listening on a local port, if any.
+ * Every cluster's tunnels are listed, and a parked tab keeps its cluster's
+ * up: one on this cluster's saved address answers this cluster's queries
+ * with another cluster's data.
+ */
+export function holderOf(
+  sessions: readonly PortForwardSessionInfo[],
+  localPort: number
+): string | null {
+  return sessions.find((s) => s.localPort === localPort)?.context ?? null;
+}
+
+async function holder(localPort: number): Promise<string | null> {
   const sessions = await commands.listPortForwards().catch(() => []);
-  return sessions.some((session) => session.localPort === localPort);
+  return holderOf(sessions, localPort);
 }
 
 /**
@@ -65,12 +77,14 @@ async function serviceOf(
  */
 export function orphansIn(
   sessions: readonly PortForwardSessionInfo[],
+  context: string,
   preference: ForwardPreference,
   keep: number | null
 ): string[] {
   return sessions
     .filter(
-      ({ via, namespace, localPort }) =>
+      ({ context: of, via, namespace, localPort }) =>
+        of === context &&
         via.kind === "service" &&
         via.name === preference.service &&
         via.port === preference.remotePort &&
@@ -81,11 +95,12 @@ export function orphansIn(
 }
 
 async function orphansOf(
+  context: string,
   preference: ForwardPreference,
   keep: number | null
 ): Promise<string[]> {
   const sessions = await commands.listPortForwards().catch(() => []);
-  return orphansIn(sessions, preference, keep);
+  return orphansIn(sessions, context, preference, keep);
 }
 
 /**
@@ -100,10 +115,15 @@ async function orphansOf(
  */
 export async function wake(
   vendorId: string,
+  context: string,
   preference: ForwardPreference
 ): Promise<Forwarded> {
-  if (await alreadyUp(preference.localPort)) {
-    for (const id of await orphansOf(preference, preference.localPort)) {
+  if ((await holder(preference.localPort)) === context) {
+    for (const id of await orphansOf(
+      context,
+      preference,
+      preference.localPort
+    )) {
       await commands.stopPortForward(id).catch(() => undefined);
     }
     const subpath = normalisedSubpath(preference.subpath);
@@ -126,7 +146,7 @@ export async function wake(
   }
 
   // Anything already tunnelling to this Service is from a previous address.
-  for (const id of await orphansOf(preference, null)) {
+  for (const id of await orphansOf(context, preference, null)) {
     await commands.stopPortForward(id).catch(() => undefined);
   }
 
@@ -137,7 +157,7 @@ export async function wake(
     preference.subpath
   );
   if (found.localPort !== preference.localPort) {
-    await moveAddress(vendorId, preference, found.localPort);
+    await moveAddress(vendorId, context, preference, found.localPort);
   }
   return found;
 }
@@ -150,10 +170,10 @@ export async function wake(
  */
 async function moveAddress(
   vendorId: string,
+  context: string,
   preference: ForwardPreference,
   localPort: number
 ): Promise<void> {
-  const context = useClusterStore.getState().currentContext ?? "";
   useClusterForwardStore.getState().remember(context, vendorId, {
     ...preference,
     localPort,
@@ -195,8 +215,8 @@ export function useWakeOnVisit(vendorId: string): void {
     if (!preference) return;
     tried.current = true;
     void (async () => {
-      if (await alreadyUp(preference.localPort)) return;
-      await wake(vendorId, preference);
+      if ((await holder(preference.localPort)) === context) return;
+      await wake(vendorId, context, preference);
       // Everything asked before the tunnel came up was answered by a dead
       // socket — including the verdict this page opened onto.
       await queryClient.invalidateQueries();
@@ -208,7 +228,9 @@ export function useWakeOnVisit(vendorId: string): void {
  * Wake every forward this cluster asked to have up.
  *
  * Mounted once, beside the other shell-level hooks. Runs per context and only
- * for the ones marked `autoStart`; everything else waits to be pressed.
+ * for the ones marked `autoStart`; everything else waits to be pressed —
+ * except a forward whose address another cluster's tunnel is answering,
+ * which would read that cluster's data until this one had its own.
  */
 export function useClusterForwards(): void {
   const context = useClusterStore((state) => state.currentContext);
@@ -222,17 +244,31 @@ export function useClusterForwards(): void {
 
   useEffect(() => {
     if (!isConnected || context === null) return;
-    for (const [vendorId, preference] of forwardsFor(forwards, context)) {
-      if (!preference.autoStart) continue;
-      const key = `${context}/${vendorId}`;
-      if (tried.current.has(key)) continue;
-      tried.current.add(key);
-      void wake(vendorId, preference)
-        // Anything asked before the tunnel came up was answered by a dead
-        // socket and cached as such; the probe and every page verdict have
-        // to be asked again now that there is somewhere to ask.
-        .then(() => queryClient.invalidateQueries())
-        .catch(() => undefined);
-    }
+    const saved = forwardsFor(forwards, context);
+    if (saved.length === 0) return;
+    let left = false;
+    void commands
+      .listPortForwards()
+      .catch(() => [])
+      .then((sessions) => {
+        if (left) return;
+        for (const [vendorId, preference] of saved) {
+          const held = holderOf(sessions, preference.localPort);
+          const borrowed = held !== null && held !== context;
+          const key = `${context}/${vendorId}`;
+          if (!borrowed && (!preference.autoStart || tried.current.has(key)))
+            continue;
+          tried.current.add(key);
+          void wake(vendorId, context, preference)
+            // Anything asked before the tunnel came up was answered by a dead
+            // socket and cached as such; the probe and every page verdict have
+            // to be asked again now that there is somewhere to ask.
+            .then(() => queryClient.invalidateQueries())
+            .catch(() => undefined);
+        }
+      });
+    return () => {
+      left = true;
+    };
   }, [context, isConnected, forwards, queryClient]);
 }
