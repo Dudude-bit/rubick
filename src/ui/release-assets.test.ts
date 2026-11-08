@@ -33,21 +33,29 @@ describe("what the AUR package downloads", () => {
   });
 
   /**
-   * Would break if an icon were renamed or moved: the package pins a
-   * commit and bumps it per release, so the failure lands on the
-   * maintainer, one release later, far from whoever tidied the folder.
+   * Would break if the copies the package fetches went missing or drifted
+   * from the icons the app ships: the PKGBUILD pins
+   * `raw/refs/tags/v<ver>/src-tauri/icons/<file>`, a path from before the
+   * relayout, and GitHub's raw URLs do not follow symlinks.
    */
-  it("still keeps the five icons it fetches by raw URL", () => {
+  it("still serves the five icons at the paths the package fetches", () => {
     for (const icon of [
-      "256x256.png",
+      "128x128@2x.png",
       "128x128.png",
       "64x64.png",
       "32x32.png",
       "icon.svg",
     ]) {
+      const fetched = resolve(root, "src-tauri/icons", icon);
       expect(
-        existsSync(resolve(root, "src/tauri/icons", icon)),
-        `src/tauri/icons/${icon} is fetched by rubick-kubernetes-bin`
+        existsSync(fetched),
+        `src-tauri/icons/${icon} is fetched by rubick-kubernetes-bin`
+      ).toBe(true);
+      expect(
+        readFileSync(fetched).equals(
+          readFileSync(resolve(root, "src/tauri/icons", icon))
+        ),
+        `src-tauri/icons/${icon} differs from the icon the app ships`
       ).toBe(true);
     }
   });
