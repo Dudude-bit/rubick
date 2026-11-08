@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-  type Ref,
-} from "react";
+import { useCallback, useRef, useState, type ReactNode, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -58,16 +51,7 @@ export function ScaleDialog({
   // Scaling a workload to zero on a cluster the person marked critical is a
   // change to that cluster, so the same typed-name gate the confirm dialogs
   // use guards the Scale button here too — notice and field cannot part ways.
-  const gate = useCriticalGate();
-
-  // The Scale button is a plain button, not a Radix close, so the success path
-  // closes this by the parent flipping `open` — which never fires
-  // onOpenChange. Reset on every close regardless of who closed it, or the
-  // typed name survives a scale and the next one fires on a stale match.
-  const gateReset = gate.reset;
-  useEffect(() => {
-    if (!open) gateReset();
-  }, [open, gateReset]);
+  const gate = useCriticalGate(open);
   const count = useRef<HTMLInputElement>(null);
   // A count read after the dialog opened remounts the field, which drops the
   // focus it held.

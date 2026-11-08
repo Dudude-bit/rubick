@@ -65,13 +65,6 @@ export function YamlEditorDialog() {
   const asking = useAsk();
   const t = useT();
   const queryClient = useQueryClient();
-  // Applying an edited manifest replaces the whole object — the most powerful
-  // write here — so on a critical cluster it takes the same typed-name gate,
-  // and the field is bound to the notice so neither can appear without the other.
-  const gate = useCriticalGate();
-  // Stable (memoised in the hook), so the apply callback can depend on it
-  // without being rebuilt every render.
-  const gateReset = gate.reset;
   const { toast } = useToast();
   const currentNamespace = useClusterStore((state) => state.currentNamespace);
 
@@ -103,6 +96,10 @@ export function YamlEditorDialog() {
   } = useYamlEditorStore();
 
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+  // Applying an edited manifest replaces the whole object — the most powerful
+  // write here — so on a critical cluster it takes the same typed-name gate,
+  // and the field is bound to the notice so neither can appear without the other.
+  const gate = useCriticalGate(showApplyConfirm);
   const applyDenied = useEditDenied(readOnly ? null : resourceKey);
 
   const history = getResourceHistory();
@@ -217,7 +214,6 @@ export function YamlEditorDialog() {
 
   const handleApply = useCallback(async () => {
     setShowApplyConfirm(false);
-    gateReset();
     setIsApplying(true);
     setApplyResult(null);
 
@@ -300,7 +296,6 @@ export function YamlEditorDialog() {
     setIsApplying,
     setApplyResult,
     addHistoryEntry,
-    gateReset,
     toast,
     t,
   ]);
@@ -453,13 +448,7 @@ export function YamlEditorDialog() {
       </Dialog>
 
       {/* Apply Confirmation Dialog */}
-      <Dialog
-        open={showApplyConfirm}
-        onOpenChange={(next) => {
-          if (!next) gate.reset();
-          setShowApplyConfirm(next);
-        }}
-      >
+      <Dialog open={showApplyConfirm} onOpenChange={setShowApplyConfirm}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -529,10 +518,7 @@ export function YamlEditorDialog() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                gate.reset();
-                setShowApplyConfirm(false);
-              }}
+              onClick={() => setShowApplyConfirm(false)}
             >
               {t("action", "cancel")}
             </Button>

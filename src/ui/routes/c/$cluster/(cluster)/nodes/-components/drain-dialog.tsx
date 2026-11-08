@@ -154,7 +154,7 @@ function DrainConfirm({
   // Draining a node on a cluster the person marked critical is a change to
   // that cluster, so the drain waits on the cluster's own name — the same gate
   // Scale, Apply and every confirmation use, notice and field inseparable.
-  const gate = useCriticalGate();
+  const gate = useCriticalGate(node !== null);
 
   // Asked for only while the dialog is open: a node's neighbourhood is every
   // pod on it in every namespace, which is not a read to make from a list row.

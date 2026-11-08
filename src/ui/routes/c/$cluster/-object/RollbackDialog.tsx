@@ -38,16 +38,11 @@ export function RollbackDialog({
   onConfirm: () => void;
 }) {
   const t = useT();
-  const gate = useCriticalGate();
+  const gate = useCriticalGate(true);
   const label = `${subject.kind} ${subject.namespace}/${subject.name}`;
 
-  const close = (next: boolean) => {
-    if (!next) gate.reset();
-    onOpenChange(next);
-  };
-
   return (
-    <Dialog open onOpenChange={close}>
+    <Dialog open onOpenChange={onOpenChange}>
       <DialogContent>
         <form
           className="contents"
@@ -87,7 +82,7 @@ export function RollbackDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={() => close(false)}
+              onClick={() => onOpenChange(false)}
               data-autofocus
             >
               {t("action", "cancel")}

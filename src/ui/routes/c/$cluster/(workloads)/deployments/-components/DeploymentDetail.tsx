@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { WorkloadPodsCause } from "../../../-object/CauseLine";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -130,11 +130,7 @@ export function DeploymentDetail() {
   const [selectedContainer, setSelectedContainer] = useState("");
   // Updating a container image rolls out new code — a change to the cluster,
   // gated on a critical one exactly like Scale, Restart and Delete beside it.
-  const imageGate = useCriticalGate();
-  const imageGateReset = imageGate.reset;
-  useEffect(() => {
-    if (!imageDialogOpen) imageGateReset();
-  }, [imageDialogOpen, imageGateReset]);
+  const imageGate = useCriticalGate(imageDialogOpen);
   const {
     name,
     namespace,

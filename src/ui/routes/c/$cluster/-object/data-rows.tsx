@@ -91,7 +91,7 @@ export function DataSection({
   // Editing a key writes live config the cluster's workloads read, so on a
   // cluster marked critical the Save waits on the cluster's own name. Cleared
   // whenever the edited key changes, so a match never carries to the next key.
-  const gate = useCriticalGate();
+  const gate = useCriticalGate(editing !== null);
   const gateReset = gate.reset;
   useEffect(() => {
     gateReset();

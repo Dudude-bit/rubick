@@ -16,12 +16,15 @@ import { useT } from "@/i18n/useT";
  * went ahead on one click. This hook is that notice AND the field it promises,
  * together, so a dialog cannot render the one without the other:
  *
- *   const gate = useCriticalGate();
+ *   const gate = useCriticalGate(open);
  *   ... {gate.notice} ... {gate.input} ...
  *   <Button disabled={busy || gate.blocked} />
- *   // and gate.reset() when the dialog closes.
+ *
+ * It forgets the typed name whenever `open` is false, whoever closed it: a
+ * success path that flips `open` fires no onOpenChange, and a reset left to
+ * each dialog's close handler let the next restart through on a stale match.
  */
-export function useCriticalGate(): {
+export function useCriticalGate(open: boolean): {
   /** The cluster is marked critical, so the gate applies at all. A caller that
    *  otherwise fires with no dialog (an InterceptedAction with no delivery to
    *  warn about) uses this to decide it must interpose one after all. */
@@ -33,12 +36,13 @@ export function useCriticalGate(): {
   notice: ReactNode;
   /** The label + typed-name field, or null when not critical. */
   input: ReactNode;
-  /** Clear the typed name — call when the dialog closes. */
+  /** Clear the typed name while the dialog stays open. */
   reset: () => void;
 } {
   const t = useT();
   const critical = useCritical();
   const [typed, setTyped] = useState("");
+  if (!open && typed !== "") setTyped("");
   const id = useId();
   const gate = critical.critical ? critical.context : null;
   const blocked = gate !== null && typed !== gate;

@@ -15,7 +15,6 @@ import { KeyValueRow } from "../../../-object/detail-kv";
 import type { HelmRelease } from "@/generated/types";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
-import { useEffect } from "react";
 
 export interface HelmUpgradeDialogProps {
   /** Release to upgrade */
@@ -52,11 +51,7 @@ export function HelmUpgradeDialog({
   const t = useT();
   // Upgrading replaces a release on the cluster, so on a critical one it takes
   // the typed-name gate — as uninstall and rollback already do.
-  const gate = useCriticalGate();
-  const gateReset = gate.reset;
-  useEffect(() => {
-    if (release === null) gateReset();
-  }, [release, gateReset]);
+  const gate = useCriticalGate(release !== null);
 
   return (
     <Dialog open={release !== null} onOpenChange={(open) => !open && onClose()}>

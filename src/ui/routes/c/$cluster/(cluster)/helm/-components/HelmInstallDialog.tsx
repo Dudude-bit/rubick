@@ -21,7 +21,6 @@ import {
 import type { HelmChartSearchResult } from "@/generated/types";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
-import { useEffect } from "react";
 
 export interface HelmInstallDialogProps {
   /** Chart to install */
@@ -76,11 +75,7 @@ export function HelmInstallDialog({
   const t = useT();
   // Installing a chart creates a whole release on the cluster, so on a critical
   // one it takes the typed-name gate — as uninstall and rollback already do.
-  const gate = useCriticalGate();
-  const gateReset = gate.reset;
-  useEffect(() => {
-    if (chart === null) gateReset();
-  }, [chart, gateReset]);
+  const gate = useCriticalGate(chart !== null);
   return (
     <Dialog open={chart !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
