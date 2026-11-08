@@ -2,6 +2,7 @@
 //! cluster refused the kind across it.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use futures::StreamExt;
 use kube::api::{Api, DynamicObject};
@@ -13,7 +14,7 @@ use tracing::Level;
 use super::graph::{Node, OwnerLink, SlotKey};
 use super::{ClusterIndex, SlotState};
 use crate::error::watch_failure;
-use crate::watch::{answered, backoff_for};
+use crate::watch::backoff_for;
 
 /// Just under the five minutes an API server allows a watch.
 const WATCH_TIMEOUT_SECS: u32 = 290;
@@ -37,41 +38,76 @@ pub(super) fn spawn(index: &Arc<ClusterIndex>, slot: SlotKey, resource: ApiResou
         let config = watcher::Config::default()
             .page_size(PAGE_SIZE)
             .timeout(WATCH_TIMEOUT_SECS);
-        let stream = watcher::watcher(api, config);
-        futures::pin_mut!(stream);
-        let mut errors = 0u32;
-        loop {
-            let next = tokio::select! {
-                biased;
-                () = index.stop.cancelled() => break,
-                next = stream.next() => next,
-            };
-            match next {
-                Some(Ok(event)) => {
-                    if answered(&event) {
-                        errors = 0;
+        let mut streak = Streak::default();
+        // After a failure the kind is listed afresh: kube's resumed watch says
+        // nothing when it succeeds, so the slot stayed stale for good.
+        'list: loop {
+            let stream = watcher::watcher(api.clone(), config.clone());
+            futures::pin_mut!(stream);
+            loop {
+                let next = tokio::select! {
+                    biased;
+                    () = index.stop.cancelled() => break 'list,
+                    next = stream.next() => next,
+                };
+                match next {
+                    Some(Ok(event)) => {
+                        if matches!(event, Event::InitDone) {
+                            streak.live(Instant::now());
+                        }
+                        index.saw(&slot, &resource, event);
                     }
-                    index.saw(&slot, &resource, event);
+                    Some(Err(error)) => {
+                        let message = watch_failure(&error);
+                        if refused(&error) {
+                            told_refused(&slot);
+                            index.refused(&slot, message);
+                            break 'list;
+                        }
+                        index.failed(&slot, message);
+                        tokio::select! {
+                            biased;
+                            () = index.stop.cancelled() => break 'list,
+                            () = tokio::time::sleep(streak.failed(Instant::now())) => {}
+                        }
+                        continue 'list;
+                    }
+                    None => break 'list,
                 }
-                Some(Err(error)) => {
-                    errors += 1;
-                    let message = watch_failure(&error);
-                    if refused(&error) {
-                        told_refused(&slot);
-                        index.refused(&slot, message);
-                        break;
-                    }
-                    index.failed(&slot, message);
-                    tokio::select! {
-                        biased;
-                        () = index.stop.cancelled() => break,
-                        () = tokio::time::sleep(backoff_for(errors)) => {}
-                    }
-                }
-                None => break,
             }
         }
     });
+}
+
+/// How long a watch stays live before its next failure waits from the
+/// first rung again; kube's own ramp tops out here too.
+const STEADY: Duration = Duration::from_secs(30);
+
+/// Failures in a row, for the wait before listing again. A list that
+/// answers is not a recovery: one whose watch then fails at once would
+/// list again every second, for ever.
+#[derive(Debug, Default)]
+struct Streak {
+    errors: u32,
+    live_since: Option<Instant>,
+}
+
+impl Streak {
+    fn live(&mut self, now: Instant) {
+        self.live_since = Some(now);
+    }
+
+    fn failed(&mut self, now: Instant) -> Duration {
+        if self
+            .live_since
+            .take()
+            .is_some_and(|since| now.duration_since(since) >= STEADY)
+        {
+            self.errors = 0;
+        }
+        self.errors += 1;
+        backoff_for(self.errors)
+    }
 }
 
 /// A kind refused across the cluster warns once per connection, since a
@@ -189,5 +225,114 @@ impl ClusterIndex {
                 self.fall_back(&slot.kind, &namespaces);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::served::test_server::{answering, failure};
+    use crate::ownership::KindKey;
+
+    /// A list that answers and a watch that fails at once is not a
+    /// recovery. Fails if a list starts the wait over, which listed every
+    /// kind again every second for as long as its watch kept failing.
+    #[test]
+    fn a_watch_that_fails_right_after_its_list_waits_longer_each_time() {
+        let start = Instant::now();
+        let mut streak = Streak::default();
+        let waits: Vec<Duration> = (0..4u64)
+            .map(|n| {
+                streak.live(start + Duration::from_secs(n * 10));
+                streak.failed(start + Duration::from_secs(n * 10 + 1))
+            })
+            .collect();
+        assert_eq!(waits, [1, 2, 4, 8].map(Duration::from_secs));
+    }
+
+    /// A watch that served for a while and broke once is one failure, not
+    /// the next of every failure since the index started.
+    #[test]
+    fn a_watch_that_stayed_live_waits_from_the_first_rung() {
+        let start = Instant::now();
+        let mut streak = Streak::default();
+        for _ in 0..5 {
+            streak.failed(start);
+        }
+        streak.live(start);
+        assert_eq!(streak.failed(start + STEADY), Duration::from_secs(1));
+    }
+
+    fn list(resource_version: &str) -> (u16, String) {
+        (
+            200,
+            serde_json::json!({
+                "apiVersion": "meta.k8s.io/v1",
+                "kind": "PartialObjectMetadataList",
+                "metadata": { "resourceVersion": resource_version },
+                "items": [{
+                    "apiVersion": "meta.k8s.io/v1",
+                    "kind": "PartialObjectMetadata",
+                    "metadata": {
+                        "name": "api", "namespace": "shop", "uid": "u1",
+                        "resourceVersion": resource_version,
+                    },
+                }],
+            })
+            .to_string(),
+        )
+    }
+
+    /// A VPN reconnect broke every watch once; kube resumed each from where
+    /// it was and said nothing, so every kind read "stale since" for as long
+    /// as the index ran and no Delete could say nothing was hidden. Fails if
+    /// a watch that broke is not read live again once the cluster answers.
+    #[tokio::test]
+    async fn a_watch_that_broke_once_is_live_again_when_the_cluster_answers() {
+        let (client, _) = answering(|path, nth| match (path, nth) {
+            ("/api/v1/pods", 1 | 3) => list("5"),
+            ("/api/v1/pods", 2) => failure(500, "InternalError"),
+            ("/api/v1/pods", _) => (200, String::new()),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let pods = KindKey {
+            group: String::new(),
+            plural: "pods".to_string(),
+        };
+        let index = ClusterIndex::holding(client, &[("Pod", pods.clone())]);
+        let slot = SlotKey {
+            kind: pods,
+            namespace: None,
+        };
+        let resource = ApiResource {
+            group: String::new(),
+            version: "v1".to_string(),
+            api_version: "v1".to_string(),
+            kind: "Pod".to_string(),
+            plural: "pods".to_string(),
+        };
+        let state = || index.slots.lock().get(&slot).cloned();
+
+        spawn(&index, slot.clone(), resource);
+        let mut seen = Vec::new();
+        for _ in 0..400 {
+            let now = state();
+            if seen.last() != Some(&now) {
+                seen.push(now.clone());
+            }
+            if matches!(now, Some(SlotState::Live)) && seen.len() > 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        index.stop.cancel();
+
+        assert!(
+            seen.iter()
+                .any(|state| matches!(state, Some(SlotState::Stale { .. }))),
+            "the watch never broke: {seen:?}"
+        );
+        assert_eq!(seen.last(), Some(&Some(SlotState::Live)), "{seen:?}");
     }
 }
