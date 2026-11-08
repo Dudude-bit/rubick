@@ -32,6 +32,7 @@ import {
   readExpiredCredentials,
 } from "@/lib/credentials";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
+import { currentConnection } from "@/lib/refusals";
 import type { ClusterInfo, ContextInfo } from "@/generated/types";
 import { hasSession, useClusterStore, wayBackTo } from "./clusterStore";
 import { holdClusters } from "./heldClusters";
@@ -238,14 +239,14 @@ describe("an expired session and the reconnect", () => {
   beforeEach(() => credentialsRestored());
 
   it("clears the refusal when the same context connects again", async () => {
-    credentialsExpired("Unauthorized");
+    credentialsExpired("Unauthorized", currentConnection());
     await state().connect("prod-eu");
     expect(readExpiredCredentials()).toBeNull();
     expect(state().isConnected).toBe(true);
   });
 
   it("keeps the refusal when the reconnect fails too", async () => {
-    credentialsExpired("Unauthorized");
+    credentialsExpired("Unauthorized", currentConnection());
     vi.mocked(commands.connectCluster).mockRejectedValueOnce(
       new Error("still refused")
     );

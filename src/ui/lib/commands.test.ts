@@ -16,9 +16,19 @@ vi.mock("@/generated/commands", () => ({
       })
   ),
   listNamespaces: vi.fn(async () => []),
+  listPods: vi.fn(
+    () =>
+      new Promise((_, reject) =>
+        backend.release.push(() =>
+          reject("CREDENTIALS_EXPIRED: the token expired at 12:00")
+        )
+      )
+  ),
 }));
 
 import { commands, CONFIG_WRITES } from "./commands";
+import { credentialsRestored, readExpiredCredentials } from "./credentials";
+import { followConnections } from "./refusals";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -77,5 +87,39 @@ describe("config writes", () => {
     );
     for (const name of CONFIG_WRITES)
       expect(typeof generated[name], name).toBe("function");
+  });
+});
+
+describe("a 401 the window is no longer owed", () => {
+  /** A read sent on connection 7 that answers 401 once the window is on `now`. */
+  async function expiresOn(now: number) {
+    let connection = 7;
+    followConnections(() => connection);
+    credentialsRestored();
+    backend.release.length = 0;
+    const asked = commands.listPods(null);
+    await settle();
+    connection = now;
+    backend.release[0]!();
+    await expect(asked).rejects.toThrow(/CREDENTIALS_EXPIRED/);
+    const said = readExpiredCredentials()?.reason ?? null;
+    credentialsRestored();
+    followConnections(() => 0);
+    return said;
+  }
+
+  /**
+   * The window left an expired cluster for one it still held, and a poll
+   * already in flight to the old one came back 401 and put the healthy
+   * cluster behind "credentials refused". Fails if a 401 counts against a
+   * connection other than the one its request was sent on.
+   */
+  it("does not count against the connection the window moved to", async () => {
+    expect(await expiresOn(8)).toBeNull();
+  });
+
+  /** Fails if the guard above stops a 401 on the window's own connection too. */
+  it("still counts on the connection it was sent on", async () => {
+    expect(await expiresOn(7)).toBe("the token expired at 12:00");
   });
 });

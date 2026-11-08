@@ -147,6 +147,31 @@ describe("listPodRows", () => {
   });
 
   /**
+   * A pod list still streaming from the cluster the window left failed with
+   * a 401 and put the cluster on screen behind "credentials refused". Fails
+   * if a stream's 401 counts against a connection it was not opened on.
+   */
+  it("leaves the session alone for a 401 from a connection the window left", async () => {
+    const { readExpiredCredentials, credentialsRestored } =
+      await import("./credentials");
+    const { followConnections } = await import("./refusals");
+    let connection = 3;
+    followConnections(() => connection);
+    credentialsRestored();
+
+    const answer = listPodRows(["shop"]);
+    await settled();
+    connection = 4;
+    emit("pod-rows-failed", {
+      stream_id: "pods-1",
+      message: "CREDENTIALS_EXPIRED: the token expired at 12:00",
+    });
+    await expect(answer).rejects.toThrow(/CREDENTIALS_EXPIRED/);
+    expect(readExpiredCredentials()).toBeNull();
+    followConnections(() => 0);
+  });
+
+  /**
    * A namespace that failed partway had already sent some pods. Keeping them
    * would draw part of a namespace as all of it beside the sentence saying it
    * could not be read; dropping the name would draw the rest as the scope.

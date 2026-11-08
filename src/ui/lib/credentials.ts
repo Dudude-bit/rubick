@@ -19,9 +19,11 @@
  * A module and not a store because it is set from `lib/commands.ts`, the one
  * choke point every Tauri call already passes through: no per-surface wiring,
  * nothing to forget on the next command added. `clusterStore` imports
- * `commands`, so `commands` cannot import `clusterStore`; this imports nothing
- * and both sides may have it.
+ * `commands`, so `commands` cannot import `clusterStore`; this imports only
+ * `refusals`, which imports neither, and both sides may have it.
  */
+
+import { currentConnection } from "@/lib/refusals";
 
 /**
  * The marker `Error::CredentialsExpired` puts at the front of its message.
@@ -64,10 +66,12 @@ function publish() {
  *
  * First one wins until it is cleared: the window makes many requests at once
  * and they all fail together, so the reader is owed the first sentence rather
- * than whichever request happened to land last.
+ * than whichever request happened to land last. Only an answer on the
+ * `connection` the window still has counts: a 401 from the cluster it left,
+ * or from the session a reconnect replaced, is not about this one.
  */
-export function credentialsExpired(reason: string): void {
-  if (expired) return;
+export function credentialsExpired(reason: string, connection: number): void {
+  if (expired || connection !== currentConnection()) return;
   expired = { reason, at: Date.now() };
   publish();
 }

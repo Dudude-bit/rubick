@@ -98,7 +98,7 @@ export async function listPodRows(
       // so a 401 mid-stream left the marker to be rendered at the reader
       // verbatim and the sign-in screen never came up. Noticed here too.
       if (isCredentialsExpired(event.payload.message)) {
-        credentialsExpired(expiryReason(event.payload.message));
+        credentialsExpired(expiryReason(event.payload.message), connection);
       }
       const failure = new Error(event.payload.message);
       const read = readOf("listPodRows", [scope]);

@@ -8,6 +8,7 @@ import {
   readExpiredCredentials,
   subscribeToCredentials,
 } from "./credentials";
+import { currentConnection } from "./refusals";
 
 beforeEach(() => credentialsRestored());
 
@@ -48,8 +49,8 @@ describe("what the window is told", () => {
    * overwritten by the twelve that follow it in the same second.
    */
   it("keeps the first refusal until it is cleared", () => {
-    credentialsExpired("the token is expired");
-    credentialsExpired("something else entirely");
+    credentialsExpired("the token is expired", currentConnection());
+    credentialsExpired("something else entirely", currentConnection());
     expect(readExpiredCredentials()?.reason).toBe("the token is expired");
 
     credentialsRestored();
@@ -62,8 +63,8 @@ describe("what the window is told", () => {
       seen.push(state?.reason ?? null)
     );
 
-    credentialsExpired("expired");
-    credentialsExpired("expired again");
+    credentialsExpired("expired", currentConnection());
+    credentialsExpired("expired again", currentConnection());
     credentialsRestored();
     credentialsRestored();
     stop();
