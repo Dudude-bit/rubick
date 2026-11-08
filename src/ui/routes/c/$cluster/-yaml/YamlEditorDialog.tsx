@@ -79,6 +79,7 @@ export function YamlEditorDialog() {
     open,
     title,
     resourceKey,
+    openedOn,
     originalContent,
     editedContent,
     isLoading,
@@ -103,7 +104,16 @@ export function YamlEditorDialog() {
   } = useYamlEditorStore();
 
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
-  const applyDenied = useEditDenied(readOnly ? null : resourceKey);
+  const editDenied = useEditDenied(readOnly ? null : resourceKey);
+  // The manifest belongs to the cluster it was read from, and every command
+  // below goes to the window's: with the window moved on, nothing is sent.
+  const cluster = useClusterStore((state) => state.currentContext);
+  const elsewhere =
+    open && openedOn !== cluster
+      ? t("action", "yamlFromAnotherCluster", { cluster: openedOn ?? "" })
+      : undefined;
+  if (elsewhere && showApplyConfirm) setShowApplyConfirm(false);
+  const applyDenied = elsewhere ?? editDenied;
 
   const history = getResourceHistory();
   const hasChanges = originalContent !== editedContent;
@@ -379,7 +389,9 @@ export function YamlEditorDialog() {
                   variant="outline"
                   size="sm"
                   onClick={handleValidate}
-                  disabled={isLoading || isValidating || isApplying}
+                  disabled={
+                    !!elsewhere || isLoading || isValidating || isApplying
+                  }
                 >
                   {isValidating ? (
                     <Spinner size="sm" className="mr-2" />

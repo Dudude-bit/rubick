@@ -852,6 +852,8 @@ export const en = {
     viewYamlManifest: "View the YAML manifest",
     editYamlManifestHint:
       "Edit the YAML manifest and apply changes to the cluster",
+    yamlFromAnotherCluster:
+      "Read from {cluster}, and the window is on another cluster now. Go back to {cluster} to apply it.",
     applyChangesQuestion: "Apply Changes?",
     applyManifestConfirm:
       "This will apply the manifest to your Kubernetes cluster. Make sure you have reviewed the changes.",

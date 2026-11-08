@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import type { ManifestResult } from "@/generated/types";
 
 export interface HistoryEntry {
@@ -19,6 +20,8 @@ interface YamlEditorState {
   open: boolean;
   title: string;
   resourceKey: ResourceKey | null;
+  /** The cluster the manifest was read from, the only one it may be applied to. */
+  openedOn: string | null;
   readOnly: boolean;
 
   // Content
@@ -70,6 +73,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   open: false,
   title: "",
   resourceKey: null,
+  openedOn: null,
   readOnly: false,
   originalContent: "",
   editedContent: "",
@@ -86,6 +90,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
       open: true,
       title,
       resourceKey,
+      openedOn: useClusterStore.getState().currentContext,
       readOnly,
       originalContent: "",
       editedContent: "",
@@ -134,6 +139,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
       open: false,
       title: "",
       resourceKey: null,
+      openedOn: null,
       readOnly: false,
       originalContent: "",
       editedContent: "",

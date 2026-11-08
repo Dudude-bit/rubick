@@ -829,6 +829,8 @@ export const ru: Catalogue = {
     viewYamlManifest: "Просмотр YAML-манифеста",
     editYamlManifestHint:
       "Отредактируйте YAML-манифест и примените изменения к кластеру",
+    yamlFromAnotherCluster:
+      "Прочитан из {cluster}, а окно теперь на другом кластере. Чтобы применить его, вернитесь в {cluster}.",
     applyChangesQuestion: "Применить изменения?",
     applyManifestConfirm:
       "Манифест будет применён к вашему кластеру Kubernetes. Убедитесь, что вы проверили изменения.",

@@ -20,7 +20,7 @@ import {
   it,
   vi,
 } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
@@ -547,6 +547,38 @@ describe("applying where the cluster says this user may not", () => {
         .length
     ).toBeGreaterThan(0);
     await user.click(apply());
+    expect(screen.queryByText("Apply Changes?")).toBeNull();
+    expect(applyManifest).not.toHaveBeenCalled();
+  });
+});
+
+describe("a manifest read from a cluster the window has left", () => {
+  /**
+   * The editor sits over the whole shell, so Ctrl+Tab moved the window to
+   * prod under a staging manifest and Apply sent it to prod. Fails if Apply
+   * or Validate stay live once the window is on another cluster.
+   */
+  it("applies nothing and says where the manifest came from", async () => {
+    checkAccess.mockReset();
+    useClusterStore.setState((s) => ({
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+    expect(await screen.findByText("Apply Changes?")).toBeInTheDocument();
+
+    act(() => useClusterStore.setState({ currentContext: "prod" }));
+
+    expect(screen.queryByText("Apply Changes?")).toBeNull();
+    const apply = screen.getByRole("button", { name: /^Apply$/ });
+    expect(apply).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: /Validate/ })).toBeDisabled();
+    await user.hover(apply);
+    expect(
+      (await screen.findAllByText(/Read from test, and the window is on/))
+        .length
+    ).toBeGreaterThan(0);
+    await user.click(apply);
     expect(screen.queryByText("Apply Changes?")).toBeNull();
     expect(applyManifest).not.toHaveBeenCalled();
   });

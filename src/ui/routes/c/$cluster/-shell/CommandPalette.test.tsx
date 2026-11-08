@@ -1,6 +1,6 @@
 import type { SearchFailureKind } from "@/generated/types";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
@@ -687,6 +687,26 @@ describe("the command palette's object actions", () => {
     expect(screen.getByTestId("object-dialogs")).toHaveTextContent(
       "burst-demo"
     );
+  });
+
+  /**
+   * The host outlives the palette, and every action it runs goes to the
+   * window's cluster: a Delete confirmed after Ctrl+Tab to prod deleted
+   * prod's namesake. Fails if the host stays mounted once the window has
+   * moved off the cluster its target lives in.
+   */
+  it("drops an action's dialog when the window moves to another cluster", async () => {
+    search.hits = [hit()];
+    await open("burst");
+    await screen.findByText("burst-demo");
+    await userEvent.keyboard("{Tab}");
+    await screen.findByText("Delete");
+    await userEvent.keyboard("del{Enter}");
+    expect(screen.getByTestId("object-dialogs")).toBeInTheDocument();
+
+    act(() => useClusterStore.setState({ currentContext: "k3d-prod" }));
+
+    expect(screen.queryByTestId("object-dialogs")).toBeNull();
   });
 
   /** On an object's page its own actions are one word away. */
