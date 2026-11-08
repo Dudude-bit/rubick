@@ -1271,6 +1271,7 @@ function EntryRow({
               kind={entry.hit.kind}
               name={entry.hit.name}
               namespace={entry.hit.namespace}
+              linkOptions={{ cluster: entry.hit.context }}
               showKind={false}
               onClick={(event) => {
                 // The row underneath picks too; without stopping here a
@@ -1342,6 +1343,7 @@ function EntryRow({
               kind={entry.resourceKind}
               name={entry.name}
               namespace={entry.namespace}
+              linkOptions={{ cluster: entry.context }}
               showKind={false}
               onClick={(event) => {
                 // The row underneath picks too; without stopping here a

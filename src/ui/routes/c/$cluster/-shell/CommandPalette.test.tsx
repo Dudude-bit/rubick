@@ -61,18 +61,18 @@ vi.mock("./useResourceSearch", async (importOriginal) => ({
     return {
       hits: search.hits,
       clusters: [
-        {
-          context: "k3d-dev",
-          status: "done",
-          reason: null,
-          message: null,
-          matched: search.hits.length,
-          truncated: false,
-          searched: search.searched,
-          unreadable: search.unreadable,
-          loading: search.loading,
-        },
-      ],
+        ...new Set(["k3d-dev", ...search.hits.map((h) => h.context)]),
+      ].map((context) => ({
+        context,
+        status: "done",
+        reason: null,
+        message: null,
+        matched: search.hits.filter((h) => h.context === context).length,
+        truncated: false,
+        searched: search.searched,
+        unreadable: search.unreadable,
+        loading: search.loading,
+      })),
       isSearching: false,
       error: null,
     };
@@ -117,6 +117,7 @@ vi.mock("../-peek/peek-sources", () => ({
 }));
 
 import { CommandPalette } from "./CommandPalette";
+import { commands } from "@/lib/commands";
 import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
@@ -707,6 +708,42 @@ describe("the command palette's object actions", () => {
     act(() => useClusterStore.setState({ currentContext: "k3d-prod" }));
 
     expect(screen.queryByTestId("object-dialogs")).toBeNull();
+  });
+
+  /**
+   * A recent from staging linked to prod's namesake, so its right-click menu,
+   * Open and Copy link all named the wrong object. Fails if a row from
+   * another cluster links anywhere but that cluster.
+   */
+  it("links a recent from another cluster to that cluster", async () => {
+    vi.mocked(commands.getRecentItems).mockResolvedValueOnce([
+      {
+        name: "api",
+        namespace: "shop",
+        kind: "Deployment",
+        context: "k3d-stage",
+        timestamp: 1,
+      },
+    ]);
+    await renderWithRouter(<CommandPalette />, {
+      at: "/c/k3d-dev",
+      route: "/c/$cluster/$",
+    });
+    window.dispatchEvent(new Event("command-palette-open"));
+
+    expect(
+      await screen.findByRole("link", { name: "Deployment api" })
+    ).toHaveAttribute("href", expect.stringMatching(/^\/c\/k3d-stage\//));
+  });
+
+  /** The same for a search hit, which carries its cluster too. */
+  it("links a hit from another cluster to that cluster", async () => {
+    search.hits = [hit({ context: "k3d-stage" })];
+    await open("burst");
+
+    expect(
+      await screen.findByRole("link", { name: "Pod burst-demo" })
+    ).toHaveAttribute("href", expect.stringMatching(/^\/c\/k3d-stage\//));
   });
 
   /** On an object's page its own actions are one word away. */
