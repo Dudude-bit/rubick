@@ -153,18 +153,17 @@ async function moveAddress(
   preference: ForwardPreference,
   localPort: number
 ): Promise<void> {
-  useClusterForwardStore
-    .getState()
-    .remember(useClusterStore.getState().currentContext ?? "", vendorId, {
-      ...preference,
-      localPort,
-    });
+  const context = useClusterStore.getState().currentContext ?? "";
+  useClusterForwardStore.getState().remember(context, vendorId, {
+    ...preference,
+    localPort,
+  });
 
   const connect = connectOf(vendorId);
   if (!connect) return;
   const saved = await connect.read().catch(() => null);
   await connect
-    .save({
+    .save(context, {
       url: `http://localhost:${localPort}${normalisedSubpath(preference.subpath)}`,
       authType: saved?.authType ?? "none",
       // Empty, never null: the backend keeps the stored one when nothing is

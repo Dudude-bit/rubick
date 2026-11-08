@@ -709,22 +709,31 @@ export function useConnectionEditor(vendorId: string): {
   // Both keys, because saving an address changes what is stored *and*
   // whether it answers, and a row still reading "not configured" after a
   // successful save would be the app disagreeing with itself.
-  const refresh = () =>
+  const refresh = (on: string) =>
     Promise.all([
       client.invalidateQueries({
-        queryKey: queryKeys.integrationConnection(vendorId, context),
+        queryKey: queryKeys.integrationConnection(vendorId, on),
       }),
       client.invalidateQueries({
-        queryKey: queryKeys.integrationProbe(vendorId, context),
+        queryKey: queryKeys.integrationProbe(vendorId, on),
       }),
     ]).then(() => undefined);
 
+  // The cluster is taken when Save is pressed: the write can wait behind
+  // another, and the window may have moved on by the time it runs.
   const saving = useMutation({
-    mutationFn: async (draft: ConnectionDraft | null) => {
+    mutationFn: async ({
+      on,
+      draft,
+    }: {
+      on: string | null;
+      draft: ConnectionDraft | null;
+    }) => {
       if (!vendor) return;
-      if (draft === null) await vendor.connect.forget();
-      else await vendor.connect.save(draft);
-      await refresh();
+      if (on === null) throw new Error(t("cluster", "noClusterSelected"));
+      if (draft === null) await vendor.connect.forget(on);
+      else await vendor.connect.save(on, draft);
+      await refresh(on);
     },
   });
 
@@ -738,8 +747,10 @@ export function useConnectionEditor(vendorId: string): {
   return {
     connect: vendor?.connect ?? null,
     saved,
-    save: (draft) => saving.mutateAsync(draft).then(() => undefined),
-    forget: () => saving.mutateAsync(null).then(() => undefined),
+    save: (draft) =>
+      saving.mutateAsync({ on: context, draft }).then(() => undefined),
+    forget: () =>
+      saving.mutateAsync({ on: context, draft: null }).then(() => undefined),
     test: async (draft) =>
       vendor
         ? vendor.connect.probe(draft).then((result) => {

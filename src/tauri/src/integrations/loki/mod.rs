@@ -173,17 +173,17 @@ pub async fn get_loki_connection(state: State<'_, AppState>) -> Result<Option<Lo
     .await
 }
 
-/// Save this cluster's Loki. An empty `token` keeps whatever is stored — the
-/// form never receives the credential, so it cannot send it back.
+/// Save `context`'s Loki, named by the caller for the reason Prometheus's
+/// save is. An empty `token` keeps whatever is stored — the form never
+/// receives the credential, so it cannot send it back.
 #[tauri::command]
 pub async fn save_loki_connection(
+    context: String,
     url: String,
     auth_type: String,
     token: Option<String>,
     insecure_tls: bool,
-    state: State<'_, AppState>,
 ) -> Result<()> {
-    let context = context_of(&state)?;
     let url = url.trim().trim_end_matches('/').to_string();
     if url.is_empty() {
         return Err(Error::InvalidInput("A Loki needs an address".into()));
@@ -211,10 +211,9 @@ pub async fn save_loki_connection(
     .await
 }
 
-/// Forget this cluster's Loki, credential included.
+/// Forget `context`'s Loki, credential included.
 #[tauri::command]
-pub async fn forget_loki_connection(state: State<'_, AppState>) -> Result<()> {
-    let context = context_of(&state)?;
+pub async fn forget_loki_connection(context: String) -> Result<()> {
     crate::commands::settings::with_config(move |config| {
         config.integrations.loki.remove(&context);
     })

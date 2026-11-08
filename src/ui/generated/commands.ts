@@ -1842,12 +1842,14 @@ export async function getPrometheusConnection(): Promise<PrometheusConnection | 
 }
 
 export async function savePrometheusConnection(
+  context: string,
   url: string,
   authType: string,
   token: string | null,
   insecureTls: boolean
 ): Promise<void> {
   return invoke<void>("save_prometheus_connection", {
+    context,
     url,
     authType,
     token,
@@ -1855,8 +1857,10 @@ export async function savePrometheusConnection(
   });
 }
 
-export async function forgetPrometheusConnection(): Promise<void> {
-  return invoke<void>("forget_prometheus_connection");
+export async function forgetPrometheusConnection(
+  context: string
+): Promise<void> {
+  return invoke<void>("forget_prometheus_connection", { context });
 }
 
 export async function probePrometheus(
@@ -1904,12 +1908,14 @@ export async function getLokiConnection(): Promise<LokiConnection | null> {
 }
 
 export async function saveLokiConnection(
+  context: string,
   url: string,
   authType: string,
   token: string | null,
   insecureTls: boolean
 ): Promise<void> {
   return invoke<void>("save_loki_connection", {
+    context,
     url,
     authType,
     token,
@@ -1917,8 +1923,8 @@ export async function saveLokiConnection(
   });
 }
 
-export async function forgetLokiConnection(): Promise<void> {
-  return invoke<void>("forget_loki_connection");
+export async function forgetLokiConnection(context: string): Promise<void> {
+  return invoke<void>("forget_loki_connection", { context });
 }
 
 export async function probeLoki(
