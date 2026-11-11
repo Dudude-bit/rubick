@@ -8,6 +8,7 @@ use crate::error::{Error, PluginError, Result};
 use crate::shell::ShellCommand;
 use crate::state::AppState;
 use serde::Deserialize;
+use std::io::Write;
 use std::time::Duration;
 use tauri::State;
 
@@ -201,34 +202,30 @@ async fn helm_install_or_upgrade(
         args.push(timeout.clone());
     }
 
-    // Handle values - write to temp file if provided
-    let temp_file = if let Some(values) = &options.values {
-        if values.trim().is_empty() {
-            None
-        } else {
-            let temp_dir = std::env::temp_dir();
-            let temp_path = temp_dir.join(format!("helm-values-{}.yaml", uuid::Uuid::new_v4()));
-            std::fs::write(&temp_path, values).map_err(|e| {
-                Error::Plugin(PluginError::ExecutionFailed(format!(
-                    "Failed to write values file: {e}"
-                )))
-            })?;
-            args.push("-f".to_string());
-            args.push(temp_path.to_string_lossy().to_string());
-            Some(temp_path)
-        }
-    } else {
-        None
-    };
-
-    let args_refs: Vec<&str> = args.iter().map(std::string::String::as_str).collect();
-    let result = exec_helm_on_cluster(state, &args_refs, 300).await;
-
-    if let Some(path) = temp_file {
-        let _ = std::fs::remove_file(path);
+    let values = options.values.as_deref().filter(|v| !v.trim().is_empty());
+    let file = values.map(values_file).transpose().map_err(|e| {
+        Error::Plugin(PluginError::ExecutionFailed(format!(
+            "Failed to write values file: {e}"
+        )))
+    })?;
+    if let Some(file) = &file {
+        args.push("-f".to_string());
+        args.push(file.to_string_lossy().to_string());
     }
 
-    result
+    let args_refs: Vec<&str> = args.iter().map(std::string::String::as_str).collect();
+    exec_helm_on_cluster(state, &args_refs, 300).await
+}
+
+/// The values as a file for `-f`: readable by this user only, since values
+/// carry passwords, and removed when dropped.
+fn values_file(values: &str) -> std::io::Result<tempfile::TempPath> {
+    let mut file = tempfile::Builder::new()
+        .prefix("helm-values-")
+        .suffix(".yaml")
+        .tempfile()?;
+    file.write_all(values.as_bytes())?;
+    Ok(file.into_temp_path())
 }
 
 /// Install a Helm chart
@@ -278,6 +275,30 @@ mod tests {
             seen,
             "/clusters/prod.yaml --kube-context kubernetes-admin@kubernetes"
         );
+    }
+
+    /// Values carry passwords. Written with the default mode they sat in a
+    /// shared temp directory, readable by every local user for the whole run.
+    #[test]
+    fn the_values_file_is_its_owners_alone_and_gone_after_the_run() {
+        let file = values_file("password: hunter2\n").expect("written");
+        let path = file.to_path_buf();
+
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("readable"),
+            "password: hunter2\n"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path)
+                .expect("there")
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        drop(file);
+        assert!(!path.exists());
     }
 
     /// Without a current context the command used to run with no
