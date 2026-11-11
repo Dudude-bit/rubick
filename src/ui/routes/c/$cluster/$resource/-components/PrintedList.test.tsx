@@ -17,6 +17,11 @@ import type {
 import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
+import type { PlacedSection } from "@/lib/report-parts";
 
 const answers = vi.hoisted(() => ({
   catalog: (): Promise<ApiCatalog> =>
@@ -160,6 +165,54 @@ describe("a kind listed as the API server prints it", () => {
     expect(await screen.findByText("holder-node-2")).toBeInTheDocument();
     expect(answers.pages).toContain("after-1");
     expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
+  });
+
+  /**
+   * 200 of 412 ServiceAccounts were read: the header said 200 beside a
+   * sidebar saying 412, the footer gave 200 as the total, a search for one
+   * in a later namespace said nothing matches, and Share wrote 200 rows as
+   * the whole list.
+   */
+  it("gives a list cut at a page no total, and a search or a report of it says so", async () => {
+    let collect: (() => PlacedSection[]) | null = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    const draw = () =>
+      renderWithRouter(
+        <ScreenShareProvider>
+          <PrintedList resource="leases.coordination.k8s.io" />
+          <Probe />
+        </ScreenShareProvider>
+      );
+
+    answers.table = () => Promise.resolve(table([lease("node-1")]));
+    const whole = await draw();
+    expect(await screen.findByText("holder-node-1")).toBeInTheDocument();
+    expect(screen.getByTestId("section-count")).toHaveTextContent("1");
+    expect(screen.getByText("1 Lease")).toBeInTheDocument();
+    expect(collect!()[0]).toMatchObject({ count: 1, partial: null });
+    whole.unmount();
+
+    answers.table = () => Promise.resolve(table([lease("node-1")], "after-1"));
+    await draw();
+    expect(await screen.findByText("holder-node-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("section-count")).toBeNull();
+    expect(
+      screen.getByText("1 Lease, from the part of the list read so far")
+    ).toBeInTheDocument();
+    expect(collect!()[0]).toMatchObject({
+      count: null,
+      partial: "Showing the first 1. The cluster has more.",
+    });
+
+    fireEvent.change(screen.getByLabelText("Search..."), {
+      target: { value: "node-2" },
+    });
+    expect(
+      await screen.findByText(/^Only part of the list has been read/)
+    ).toBeInTheDocument();
   });
 
   /**

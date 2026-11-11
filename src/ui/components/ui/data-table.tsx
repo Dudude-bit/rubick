@@ -142,6 +142,8 @@ interface DataTableProps<TData extends RowData> {
   partial?: boolean;
   /** The read stopped at this many objects, so older ones are not among the rows. */
   cutAt?: number;
+  /** The rows are the first of a longer list: no total, and a search has not seen the rest. */
+  more?: boolean;
   /** Offers the rows on screen to this screen's Share. */
   share?: TableShare;
   /** The page's own list: it answers the list keys wherever the focus is. */
@@ -689,6 +691,7 @@ function DataTableInner<TData extends RowData>({
   widthsKey,
   partial = false,
   cutAt,
+  more = false,
   share,
   pageKeys = false,
   onRowMenu,
@@ -1789,6 +1792,11 @@ function DataTableInner<TData extends RowData>({
                               {searchValue}
                             </span>
                           </p>
+                          {more && (
+                            <p className="max-w-md text-[11px] text-balance text-fg-fnt">
+                              {t("empty", "notAllSearched")}
+                            </p>
+                          )}
                           {searched && (
                             <p
                               className="max-w-md text-[11px] text-balance text-fg-fnt"
@@ -1854,17 +1862,21 @@ function DataTableInner<TData extends RowData>({
               spells it; only the frame around it is translated. Without one
               — a table of something with no kind — the frame counts rows. */}
             {rowLabel === undefined && rowNoun === undefined
-              ? partial
-                ? t("readings", "rowCountWhereAnswered", { n: filteredRows })
-                : t("readings", "rowCount", { n: filteredRows })
-              : partial
-                ? t("readings", "rowsWhereAnswered", nounsOf(filteredRows))
-                : filteredRows === totalRows
-                  ? t("readings", "objectCount", nounsOf(totalRows))
-                  : t("readings", "rowsOfTotal", {
-                      ...nounsOf(totalRows),
-                      shown: formatCount(filteredRows),
-                    })}
+              ? more
+                ? t("readings", "rowCountSoFar", { n: filteredRows })
+                : partial
+                  ? t("readings", "rowCountWhereAnswered", { n: filteredRows })
+                  : t("readings", "rowCount", { n: filteredRows })
+              : more
+                ? t("readings", "rowsSoFar", nounsOf(filteredRows))
+                : partial
+                  ? t("readings", "rowsWhereAnswered", nounsOf(filteredRows))
+                  : filteredRows === totalRows
+                    ? t("readings", "objectCount", nounsOf(totalRows))
+                    : t("readings", "rowsOfTotal", {
+                        ...nounsOf(totalRows),
+                        shown: formatCount(filteredRows),
+                      })}
           </div>
           {yieldedNames && (
             <span

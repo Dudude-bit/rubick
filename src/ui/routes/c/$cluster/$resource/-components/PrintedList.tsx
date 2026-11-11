@@ -227,6 +227,7 @@ function PrintedTable({
       slowed={printed.freshness.slowed}
       onRetry={() => void printed.refetch()}
       placeholder={printed.isPlaceholderData}
+      more={printed.data?.more}
       columns={columns}
       emptyStateLabel={plural}
       widthsKey={`printed:${resource}`}
