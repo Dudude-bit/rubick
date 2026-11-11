@@ -25,6 +25,8 @@ import {
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { ResourceListHeader } from "../../../../-list/ResourceListHeader";
 import { UnreadNamespaces } from "../../../../-list/UnreadNamespaces";
+import { NamedRowsBanner } from "../../../../-list/NamedRows";
+import { useNamedRows } from "../../../../-list/useNamedRows";
 import { Unknown } from "@/components/ui/unknown";
 import { inScope, noneWhereAnswered } from "@/lib/namespace-scope";
 import { RealtimeAge } from "@/components/ui/realtime";
@@ -52,7 +54,7 @@ import {
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { hrefOf, listLink, objectLink } from "@/lib/links";
+import { hrefOf, listLink, objectLink, rowName } from "@/lib/links";
 import { KIND_TONE } from "@/lib/route-kind-tone";
 import {
   allServing,
@@ -319,9 +321,12 @@ export function GatewayRoutesList() {
   } = useGatewayRoutes(scope.scope);
 
   const [query, setQuery] = useState("");
-  const { kind: kindParam } = useAppSearch();
+  // `listOf` is how a link to one route kind's list arrives: the same ask as `kind`.
+  const { kind: kindParam, listOf } = useAppSearch();
   const setSearch = useSetSearch();
-  const kind = ROUTE_KINDS.find((k) => toPlural(k) === kindParam) ?? "";
+  const asked = kindParam ?? listOf;
+  const kind = ROUTE_KINDS.find((k) => toPlural(k) === asked) ?? "";
+  const named = useNamedRows();
   const [brokenOnly, setBrokenOnly] = useState(false);
   const [showMap, setShowMap] = useState(false);
 
@@ -343,13 +348,18 @@ export function GatewayRoutesList() {
   const backing = useBackingLists();
   const door = useDoorAsk();
 
-  const filtered = useMemo(
+  const narrowed = useMemo(
     () =>
       routes.filter(
         (route) =>
-          (kind === "" || route.kind === kind) && matchesQuery(route, query)
+          (kind === "" || route.kind === kind) &&
+          (!named || named.has(rowName(route)))
       ),
-    [routes, kind, query]
+    [routes, kind, named]
+  );
+  const filtered = useMemo(
+    () => narrowed.filter((route) => matchesQuery(route, query)),
+    [narrowed, query]
   );
 
   const board = useMemo(
@@ -517,7 +527,10 @@ export function GatewayRoutesList() {
               value={kind === "" ? ALL_KINDS : kind}
               onValueChange={(value) => {
                 const chosen = ROUTE_KINDS.find((k) => k === value);
-                setSearch({ kind: chosen && toPlural(chosen) });
+                setSearch({
+                  kind: chosen && toPlural(chosen),
+                  listOf: undefined,
+                });
               }}
             >
               <SelectTrigger
@@ -549,6 +562,12 @@ export function GatewayRoutesList() {
           </div>
         }
       />
+
+      {named && !isLoading && (
+        <div className="mt-3">
+          <NamedRowsBanner named={named} found={narrowed.length} />
+        </div>
+      )}
 
       <div className="mt-3 empty:hidden">
         <UnreadNamespaces
