@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type {
@@ -8,9 +8,10 @@ import type {
   Lineage,
   NotRead,
 } from "@/generated/types";
+import { queryKeys } from "@/lib/query-keys";
 import { SurfaceVisibility } from "@/lib/surface-visibility";
 import { useClusterStore } from "@/stores/clusterStore";
-import { renderWithRouter } from "@/test/render";
+import { renderWithRouter, testQueryClient } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   lineage: null as unknown as () => Promise<Lineage>,
@@ -20,7 +21,7 @@ const answers = vi.hoisted(() => ({
   ) => Promise<
     Pick<Dependents, "dependents" | "notRead"> & Partial<Dependents>
   >,
-  cascade: null as unknown as () => Promise<Cascade>,
+  cascade: null as unknown as (uid: string) => Promise<Cascade>,
   asked: [] as string[],
 }));
 
@@ -37,10 +38,11 @@ vi.mock("@/lib/commands", () => ({
         ...answer,
       };
     },
-    previewCascade: () => answers.cascade(),
+    previewCascade: (uid: string) => answers.cascade(uid),
   },
 }));
 
+const { useLineage } = await import("./ownership");
 const { LineageTrail } = await import("./Lineage");
 const { OwnsPanel } = await import("./Owns");
 const { CascadePreview } = await import("./CascadePreview");
@@ -414,6 +416,78 @@ describe("what an object owns", () => {
       </SurfaceVisibility.Provider>
     );
     expect(answers.asked).toEqual([]);
+  });
+});
+
+describe("an object made again under the same name", () => {
+  const lineageOf = (uid: string): Lineage => ({
+    uid,
+    ancestors: [],
+    others: [],
+    stop: null,
+  });
+
+  /**
+   * Argo replaced Deployment `api` while its page was open: the page read the
+   * new object while Owns, Alt and the arrows and Delete went on asking about
+   * the old uid, whose ReplicaSet the garbage collector had taken, so "owns
+   * nothing" stood over an object that owns pods. Fails if the lineage is not
+   * asked again once the page holds another uid, or if the old uid is given
+   * out while it is.
+   */
+  it("is known by the uid its page now reads, never the one before", async () => {
+    function Uid() {
+      const lineage = useLineage(
+        { group: "apps", plural: "deployments" },
+        "api",
+        "shop"
+      );
+      return <output>{lineage.data?.uid ?? "not known"}</output>;
+    }
+    const client = testQueryClient();
+    const page = queryKeys.detail("Deployment", "shop", "api");
+    client.setQueryData(page, { uid: "old" });
+    answers.lineage = () => Promise.resolve(lineageOf("old"));
+    await renderWithRouter(<Uid />, { client });
+    expect(await screen.findByText("old")).toBeInTheDocument();
+
+    let answer = (_: Lineage) => {};
+    answers.lineage = () => new Promise((resolve) => (answer = resolve));
+    act(() => client.setQueryData(page, { uid: "new" }));
+    expect(await screen.findByText("not known")).toBeInTheDocument();
+
+    await act(async () => answer(lineageOf("new")));
+    expect(await screen.findByText("new")).toBeInTheDocument();
+  });
+
+  /**
+   * Delete opened from a list has no page reading the object: the lineage it
+   * found in the cache could be thirty seconds old and about the object
+   * before this one. Fails if the dialog trusts a cached lineage without
+   * asking again, or asks the index about the cached uid while it does.
+   */
+  it("has its lineage asked again each time Delete opens", async () => {
+    const client = testQueryClient();
+    client.setQueryData(
+      queryKeys.lineage("apps", "deployments", "shop", "api"),
+      lineageOf("old")
+    );
+    const asked: string[] = [];
+    answers.lineage = () => Promise.resolve(lineageOf("new"));
+    answers.cascade = (uid) => {
+      asked.push(uid);
+      return Promise.resolve({
+        takes: [],
+        notRead: NOTHING_UNREAD,
+        holds: null,
+      });
+    };
+    await renderWithRouter(
+      <CascadePreview kind="Deployment" name="api" namespace="shop" />,
+      { client }
+    );
+    await waitFor(() => expect(asked).toContain("new"));
+    expect(asked).not.toContain("old");
   });
 });
 
