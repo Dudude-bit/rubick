@@ -98,6 +98,16 @@ describe("what Traefik tells the Ingress pages about TLS", () => {
     });
   });
 
+  /**
+   * An answer that has not come cannot say it replaces spec.tls, so the
+   * supplier says it ahead of one. Fails if the declaration is dropped while
+   * the answers still carry the flag: a pending read then leaves spec.tls
+   * standing as HTTPS.
+   */
+  it("declares ahead of any answer that its word replaces spec.tls", () => {
+    expect(ingressTls.replacesSpec).toBe(true);
+  });
+
   it("says TLS from the named Secret once the router asks for it", async () => {
     vi.mocked(commands.listIngresses).mockResolvedValue([
       promo({ "traefik.ingress.kubernetes.io/router.tls": "true" }),

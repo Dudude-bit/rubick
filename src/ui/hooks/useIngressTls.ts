@@ -23,6 +23,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { useCapabilities, type IngressTls } from "@/integrations";
+import type { TlsUnread } from "@/lib/ingress-tls";
 
 export interface IngressRef {
   namespace: string;
@@ -40,6 +41,8 @@ export interface IngressTlsAnswers {
   ) => IngressTls | null;
   isPending: boolean;
   error: Error | null;
+  /** Which kind of answer is still out or failed, for {@link hostTls}. */
+  unread: TlsUnread;
 }
 
 const key = (namespace: string, name: string) => `${namespace}/${name}`;
@@ -102,6 +105,11 @@ export function useIngressTls(ingresses: IngressRef[]): IngressTlsAnswers {
     });
   }
 
+  const silent = suppliers.filter(
+    (_, index) =>
+      (enabled && results[index]?.isPending) || results[index]?.error
+  );
+
   return {
     available: suppliers.length > 0,
     of: (ingress, host) => {
@@ -119,5 +127,8 @@ export function useIngressTls(ingresses: IngressRef[]): IngressTlsAnswers {
     },
     isPending: enabled && results.some((result) => result.isPending),
     error: (results.find((result) => result.error)?.error as Error) ?? null,
+    unread: silent.some((supplier) => supplier.replacesSpec)
+      ? "replaces"
+      : silent.length > 0 && "adds",
   };
 }

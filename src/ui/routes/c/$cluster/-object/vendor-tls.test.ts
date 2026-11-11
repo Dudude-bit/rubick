@@ -4,6 +4,7 @@ import type { IngressInfo } from "@/generated/types";
 import type { IngressTls } from "@/integrations";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
+import type { TlsUnread } from "@/lib/ingress-tls";
 import { hostTlsOf, ingressOpenUrl, vendorTlsAnswer } from "./vendor-tls";
 
 const t = ((section, key, values) =>
@@ -20,7 +21,7 @@ const shop = {
 
 const answering = (
   terminated: IngressTls["terminated"] | undefined,
-  read: { isPending?: boolean; error?: Error | null } = {}
+  unread: TlsUnread = false
 ) => ({
   of: () =>
     terminated === undefined
@@ -30,8 +31,7 @@ const answering = (
           terminated,
           by: { key: "verbatimLine" as const, values: { said: "shop-cert" } },
         },
-  isPending: read.isPending ?? false,
-  error: read.error ?? null,
+  unread,
 });
 
 describe("what the Ingress list takes from a cloud controller", () => {
@@ -48,7 +48,7 @@ describe("what the Ingress list takes from a cloud controller", () => {
 
   /** A question that failed has not said no either. */
   it("keeps a host apart while the controllers could not be asked", () => {
-    const failed = answering(undefined, { error: new Error("x") });
+    const failed = answering(undefined, "adds");
     expect(vendorTlsAnswer(shop, failed, t)?.unchecked).toEqual([
       "shop.example.com",
     ]);
@@ -60,7 +60,7 @@ describe("what the Ingress list takes from a cloud controller", () => {
    * `http://` for a site that may well be HTTPS.
    */
   it("keeps a host apart while the controllers have not answered yet", () => {
-    const pending = answering(undefined, { isPending: true });
+    const pending = answering(undefined, "adds");
     expect(vendorTlsAnswer(shop, pending, t)?.unchecked).toEqual([
       "shop.example.com",
     ]);
@@ -129,8 +129,7 @@ describe("a controller whose answer replaces spec.tls", () => {
       by: { key: "traefikTlsNotServed" as const },
       replacesSpec: true,
     }),
-    isPending: false,
-    error: null,
+    unread: false as const,
   });
 
   /**
@@ -151,6 +150,26 @@ describe("a controller whose answer replaces spec.tls", () => {
     const vendor = vendorTlsAnswer(covered, traefik(null), t);
     expect(hostTlsOf(covered, "shop.example.com", vendor)).toBeNull();
     expect(ingressOpenUrl(covered, vendor)).toBeNull();
+  });
+
+  /**
+   * While Traefik's answer was out, or its read had failed, the host read as
+   * HTTPS on spec.tls alone and the row handed out https:// for a router
+   * that may answer nothing on 443. Fails if spec.tls stands in for the
+   * controller whose answer replaces it.
+   */
+  it("leaves a host spec.tls names unknown until that controller has answered", () => {
+    const silent = vendorTlsAnswer(
+      covered,
+      answering(undefined, "replaces"),
+      t
+    );
+    expect(silent?.unchecked).toEqual(["shop.example.com"]);
+    expect(hostTlsOf(covered, "shop.example.com", silent)).toBeNull();
+    expect(ingressOpenUrl(covered, silent)).toBeNull();
+
+    const adding = vendorTlsAnswer(covered, answering(undefined, "adds"), t);
+    expect(hostTlsOf(covered, "shop.example.com", adding)).toBe(true);
   });
 
   /** A controller that only adds to spec.tls never takes a host away from it. */

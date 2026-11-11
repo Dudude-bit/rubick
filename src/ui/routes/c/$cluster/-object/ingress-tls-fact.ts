@@ -48,11 +48,12 @@ export function useIngressTlsFact(ingress: IngressInfo | undefined) {
   const verdicts = (ingress?.rules ?? []).flatMap((rule) =>
     rule.host ? [tlsOf(rule.host)] : []
   );
+  const named = tlsConfigs.length > 0 && (vendor?.plain.length ?? 0) === 0;
+  // `spec.tls` cannot say yes for the controller whose answer replaces it.
   const tls: "yes" | "no" | "unknown" =
-    verdicts.includes(true) ||
-    (tlsConfigs.length > 0 && (vendor?.plain.length ?? 0) === 0)
+    verdicts.includes(true) || (named && vendorTls.unread !== "replaces")
       ? "yes"
-      : verdicts.includes(null)
+      : verdicts.includes(null) || named
         ? "unknown"
         : "no";
 

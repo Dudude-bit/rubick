@@ -38,6 +38,7 @@ vi.mock("@/hooks/useIngressTls", () => ({
     },
     isPending: false,
     error: null,
+    unread: false,
   }),
 }));
 

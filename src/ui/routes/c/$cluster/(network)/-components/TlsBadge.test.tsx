@@ -38,8 +38,7 @@ const badge = (
           : unchecked.includes(host)
             ? { host, terminated: null, by: { key: "awsHttpOnly" } }
             : null,
-      isPending: false,
-      error: null,
+      unread: false,
     },
     t
   );

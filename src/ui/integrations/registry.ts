@@ -322,6 +322,18 @@ export interface EdgeConfig {
   problem: { text: Saying; tone: "warn" | "err" } | null;
 }
 
+export interface IngressTlsSupplier {
+  (
+    ingresses: Array<{ namespace: string; name: string; hosts: string[] }>
+  ): Promise<IngressTls[][]>;
+  /**
+   * Its answers may carry {@link IngressTls.replacesSpec}. Declared on the
+   * supplier because an answer that has not come cannot say so: while this
+   * one is out or failed, `spec.tls` settles nothing.
+   */
+  replacesSpec?: true;
+}
+
 /** What terminates TLS for one host, where `spec.tls` does not. */
 export interface IngressTls {
   host: string;
@@ -646,9 +658,7 @@ export interface Capabilities {
    * the column impossible — and the list is where a wrong answer shows most,
    * because it is what hands out the `http://` link somebody clicks.
    */
-  "ingress.tls": (
-    ingresses: Array<{ namespace: string; name: string; hosts: string[] }>
-  ) => Promise<IngressTls[][]>;
+  "ingress.tls": IngressTlsSupplier;
   /**
    * The controller an IngressClass's `controller` or a GatewayClass's
    * `controllerName` names, if it is this vendor's, and how to read the pods

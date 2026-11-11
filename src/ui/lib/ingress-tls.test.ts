@@ -28,7 +28,20 @@ describe("whether an Ingress host is served over TLS", () => {
 
   /** A question still out, or one that failed, has not said no. */
   it("leaves a host spec.tls does not name unknown while nobody has answered", () => {
-    expect(hostTls(false, null, true)).toBeNull();
+    expect(hostTls(false, null, "adds")).toBeNull();
     expect(hostTls(false, null, false)).toBe(false);
+  });
+
+  /**
+   * A Traefik Ingress with spec.tls read as HTTPS while Traefik's answer was
+   * out or its read had failed, and stayed HTTPS after a failure. Fails if
+   * spec.tls decides before the controller that replaces it has spoken, or
+   * if a missing answer that could only add to it takes the field away.
+   */
+  it("lets spec.tls settle nothing while the controller that replaces it is silent", () => {
+    expect(hostTls(true, null, "replaces")).toBeNull();
+    expect(hostTls(true, said(true), "replaces")).toBeNull();
+    expect(hostTls(true, said(false, true), "replaces")).toBe(false);
+    expect(hostTls(true, null, "adds")).toBe(true);
   });
 });

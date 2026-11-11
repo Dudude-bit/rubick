@@ -57,7 +57,7 @@ export function usePlainHosts(ingresses: readonly Ingress[]) {
     [ingresses]
   );
   const answers = useIngressTls(asked);
-  const unread = answers.isPending || answers.error !== null;
+  const { unread } = answers;
   const plain = asked
     .flatMap(({ hosts, ...ingress }) =>
       hosts
