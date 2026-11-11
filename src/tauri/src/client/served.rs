@@ -49,7 +49,7 @@ type Entry = Arc<OnceCell<Answer>>;
 
 /// How long an answer that holds what was asked for is kept. A kind added to
 /// a group in use, or a version dropped from it, shows up within this.
-const FRESH_FOR: Duration = Duration::from_secs(60);
+pub(crate) const FRESH_FOR: Duration = Duration::from_secs(60);
 
 /// How long an answer that lacks what was asked for is kept. A miss is what
 /// most clusters say about most kinds, asked on every poll; a group in use

@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use futures::future::join_all;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::APIGroupList;
 use kube::api::{Api, DynamicObject};
 use kube::core::params::ListParams;
 use serde::{Deserialize, Serialize};
@@ -92,17 +93,44 @@ pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
     catalog_within(state, GROUP_DEADLINE).await
 }
 
+/// The kinds of the groups `wanted` picks and nothing else, short names
+/// left out: for a reader that holds the rest and asks about what is new.
+pub(crate) async fn catalog_of(
+    state: &AppState,
+    wanted: impl Fn(&str) -> bool,
+) -> Result<ApiCatalog> {
+    let client = ResourceContext::for_list(state, None)?.client;
+    let listed = timeout(GROUP_DEADLINE, client.list_api_groups())
+        .await
+        .map_err(|_| Error::ReadDeadline {
+            after_secs: GROUP_DEADLINE.as_secs(),
+        })??;
+    let names = group_names(listed).filter(|group| wanted(group)).collect();
+    Ok(read_groups(state, names, &HashMap::new(), GROUP_DEADLINE).await)
+}
+
 async fn catalog_within(state: &AppState, deadline: Duration) -> Result<ApiCatalog> {
     let client = ResourceContext::for_list(state, None)?.client;
     let (groups, short) = futures::join!(
         client.list_api_groups(),
         timeout(deadline, short_names(&client))
     );
-    let groups = groups?;
-    let short = short.unwrap_or_default();
-    let names: Vec<String> = std::iter::once(String::new())
-        .chain(groups.groups.into_iter().map(|group| group.name))
-        .collect();
+    let names = group_names(groups?).collect();
+    Ok(read_groups(state, names, &short.unwrap_or_default(), deadline).await)
+}
+
+/// The core group, then every group the cluster lists.
+fn group_names(listed: APIGroupList) -> impl Iterator<Item = String> {
+    std::iter::once(String::new()).chain(listed.groups.into_iter().map(|group| group.name))
+}
+
+/// Each group read on its turn; one that fails is named in `unread`.
+async fn read_groups(
+    state: &AppState,
+    names: Vec<String>,
+    short: &HashMap<(String, String), Vec<String>>,
+    deadline: Duration,
+) -> ApiCatalog {
     // A cluster of operators serves a hundred groups, each a read of its
     // own. A group's deadline starts on its turn: one that waited is not one
     // that did not answer.
@@ -154,7 +182,7 @@ async fn catalog_within(state: &AppState, deadline: Duration) -> Result<ApiCatal
             }),
         }
     }
-    Ok(catalog)
+    catalog
 }
 
 /// kubectl's short names by group and plural. Only aggregated discovery says
