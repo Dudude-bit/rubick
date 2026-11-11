@@ -49,10 +49,7 @@ pub async fn apply_manifest(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ManifestResult> {
-    let parsed_docs = match parse_all_documents(&manifest) {
-        Ok(docs) => docs,
-        Err(e) => return Ok(ManifestResult::error(e.to_string())),
-    };
+    let parsed_docs = parse_all_documents(&manifest)?;
 
     let mut results = Vec::new();
     let patch_params = PatchParams::apply("k8s-gui").force();
@@ -290,8 +287,7 @@ pub async fn dry_run_of(
     manifest: &str,
     namespace: Option<&str>,
 ) -> Result<DryRun> {
-    let parsed_docs =
-        parse_all_documents(manifest).map_err(|e| Error::InvalidInput(e.to_string()))?;
+    let parsed_docs = parse_all_documents(manifest)?;
     let patch_params = preview_params();
     let mut documents = Vec::new();
 

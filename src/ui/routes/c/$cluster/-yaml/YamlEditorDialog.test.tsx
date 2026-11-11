@@ -27,6 +27,7 @@ import { renderWithRouter } from "@/test/render";
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { marcoReview } from "@/test/marco";
+import { WITHHELD_MARKER } from "./manifest-reads";
 
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();
@@ -511,6 +512,55 @@ describe("what the dry run is asked, and what it draws", () => {
     await user.click(screen.getByRole("button", { name: /^Apply$/ }));
 
     await waitFor(() => expect(screen.getByTestId("diff")).toBeInTheDocument());
+  });
+});
+
+describe("a manifest that holds a withheld private key", () => {
+  const CONFIG = (withKey: boolean) =>
+    [
+      "apiVersion: v1",
+      "kind: ConfigMap",
+      "metadata:",
+      "  name: nginx",
+      "  namespace: shop",
+      "data:",
+      "  nginx.conf: worker_processes 2;",
+      ...(withKey ? [`  server.key: '${WITHHELD_MARKER}'`] : []),
+      "",
+    ].join("\n");
+
+  /**
+   * A ConfigMap's private key reaches the editor as a placeholder, and Apply
+   * stored that placeholder as the key: no edit needed, nothing about it in
+   * the confirmation. Fails if Apply is offered, or the cluster is asked
+   * anything, while the placeholder is still in the buffer.
+   */
+  it("names the withheld key and offers no apply until it is out of the buffer", async () => {
+    await renderWithRouter(<YamlEditorDialog />, {
+      at: "/c/test",
+      route: "/c/$cluster",
+    });
+    await useYamlEditorStore.getState().openEditor({
+      title: "Edit ConfigMap: nginx",
+      resourceKey: { kind: "ConfigMap", name: "nginx", namespace: "shop" },
+      fetchYaml: async () => CONFIG(true),
+    });
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /^Withheld: server\.key\..*would write the placeholder as the value/
+    );
+    const apply = () => screen.getByRole("button", { name: /^Apply$/ });
+    expect(apply()).toHaveAttribute("aria-disabled", "true");
+    await user.click(apply());
+    expect(screen.queryByText("Apply Changes?")).toBeNull();
+    expect(dryRunManifest).not.toHaveBeenCalled();
+    expect(applyManifest).not.toHaveBeenCalled();
+
+    act(() => useYamlEditorStore.getState().setEditedContent(CONFIG(false)));
+    expect(screen.queryByRole("status")).toBeNull();
+    await user.click(apply());
+    expect(await screen.findByText("Apply Changes?")).toBeInTheDocument();
   });
 });
 

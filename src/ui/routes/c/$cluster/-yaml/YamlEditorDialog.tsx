@@ -43,7 +43,11 @@ import { useConnections } from "@/hooks/useConnections";
 import { useDelivery } from "../-delivery/useDelivery";
 import { deliveryApplyIntercept } from "@/lib/delivery";
 import { applyWarnings } from "@/lib/governance";
-import { changesReplicaCount, deliveryOfManifest } from "./manifest-reads";
+import {
+  changesReplicaCount,
+  deliveryOfManifest,
+  withheldKeysIn,
+} from "./manifest-reads";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { useAsk } from "../-object/useAsk";
@@ -110,7 +114,17 @@ export function YamlEditorDialog() {
       ? t("action", "yamlFromAnotherCluster", { cluster: openedOn ?? "" })
       : undefined;
   if (elsewhere && showApplyConfirm) setShowApplyConfirm(false);
-  const applyDenied = elsewhere ?? editDenied;
+  // A private key reads here as a placeholder, and a ConfigMap would store
+  // the placeholder as the key: said while editing, not after confirming.
+  const withheld = useMemo(
+    () => withheldKeysIn(editedContent),
+    [editedContent]
+  );
+  const carriesWithheld =
+    !readOnly && withheld.length > 0
+      ? t("action", "yamlCarriesWithheld", { keys: withheld.join(", ") })
+      : undefined;
+  const applyDenied = elsewhere ?? carriesWithheld ?? editDenied;
 
   const history = getResourceHistory();
   const hasChanges = originalContent !== editedContent;
@@ -422,6 +436,12 @@ export function YamlEditorDialog() {
               </div>
             )}
           </div>
+
+          {carriesWithheld && (
+            <p role="status" className="py-2 text-xs text-warn">
+              {carriesWithheld}
+            </p>
+          )}
 
           {/* Main Content */}
           <div className="flex-1 min-h-0 overflow-hidden">

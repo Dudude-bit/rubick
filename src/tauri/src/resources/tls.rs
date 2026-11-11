@@ -300,11 +300,27 @@ fn decodes_as_private_key(value: &[u8]) -> bool {
 
 /// What replaces a private key in a rendered manifest.
 ///
-/// Deliberately not valid base64. A reader who copies a Secret's YAML, edits
-/// it and applies it would otherwise overwrite the real key with a
-/// placeholder and take the service down; this way the API server rejects
-/// the object and says why.
+/// Not valid base64, so the API server refuses it in a Secret's `data`. A
+/// `ConfigMap`'s `data` is plain text and takes it as the new value, which
+/// is why [`still_withheld`] is asked before a manifest is sent anywhere.
+/// `src/contracts/withheld-value.json` holds the frontend to the same text.
 pub const WITHHELD_MARKER: &str = "<withheld: the app never shows a private key>";
+
+/// The maps a private key can sit in, and whether each is base64.
+const KEY_MAPS: [(&str, bool); 3] = [("data", true), ("binaryData", true), ("stringData", false)];
+
+/// The keys of a manifest that still hold [`WITHHELD_MARKER`]: applied as it
+/// is, the placeholder would be written over each of them.
+#[must_use]
+pub fn still_withheld(object: &serde_json::Value) -> Vec<String> {
+    KEY_MAPS
+        .iter()
+        .filter_map(|(field, _)| object.get(field)?.as_object())
+        .flatten()
+        .filter(|(_, value)| value.as_str().is_some_and(|v| v.trim() == WITHHELD_MARKER))
+        .map(|(key, _)| key.clone())
+        .collect()
+}
 
 /// Blank every private key in a rendered object, in place.
 ///
@@ -328,7 +344,7 @@ pub fn redact_private_keys(object: &mut serde_json::Value) -> Vec<String> {
         .to_string();
 
     let mut blanked = Vec::new();
-    for (field, base64_encoded) in [("data", true), ("binaryData", true), ("stringData", false)] {
+    for (field, base64_encoded) in KEY_MAPS {
         let Some(map) = object
             .get_mut(field)
             .and_then(serde_json::Value::as_object_mut)

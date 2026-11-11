@@ -153,6 +153,15 @@ pub enum Error {
     #[error("No ready pod is behind Service {service}")]
     NoReadyPod { service: String },
 
+    /// A manifest that still carries the placeholder shown in place of a
+    /// private key. Raised before anything is sent: a `ConfigMap` takes the
+    /// placeholder as the key's new value.
+    #[error(
+        "Not sent: the manifest still carries the placeholder shown in place of a private key ({}), and applying it would write the placeholder as the value",
+        keys.join(", ")
+    )]
+    WithheldValue { keys: Vec<String> },
+
     /// Internal errors
     #[error("Internal error: {0}")]
     Internal(String),
@@ -248,6 +257,7 @@ impl Error {
             Error::LocalPortPrivileged { .. } => "LOCAL_PORT_PRIVILEGED",
             Error::LocalPortInUse { .. } => "LOCAL_PORT_IN_USE",
             Error::NoReadyPod { .. } => "NO_READY_POD",
+            Error::WithheldValue { .. } => "WITHHELD_VALUE",
         }
     }
 
@@ -654,6 +664,7 @@ mod tests {
                 Error::LocalPortPrivileged { .. } => 20,
                 Error::LocalPortInUse { .. } => 21,
                 Error::NoReadyPod { .. } => 22,
+                Error::WithheldValue { .. } => 23,
             }
         }
         const LIST: &str = include_str!("../../contracts/error-codes.json");
@@ -707,11 +718,12 @@ mod tests {
             Error::NoReadyPod {
                 service: String::new(),
             },
+            Error::WithheldValue { keys: Vec::new() },
         ];
         let covered: std::collections::BTreeSet<usize> = samples.iter().map(variant).collect();
         assert_eq!(
             covered,
-            (0..=22).collect(),
+            (0..=23).collect(),
             "a variant has no sample, so its code is never checked"
         );
 

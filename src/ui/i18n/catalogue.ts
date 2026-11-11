@@ -854,6 +854,8 @@ export const en = {
       "Edit the YAML manifest and apply changes to the cluster",
     yamlFromAnotherCluster:
       "Read from {cluster}, and the window is on another cluster now. Go back to {cluster} to apply it.",
+    yamlCarriesWithheld:
+      "Withheld: {keys}. The app never shows a private key, so the manifest holds a placeholder there, and applying would write the placeholder as the value. Remove what is withheld from the manifest to apply the rest: the preview shows whether the cluster keeps it.",
     applyChangesQuestion: "Apply Changes?",
     applyManifestConfirm:
       "This will apply the manifest to your Kubernetes cluster. Make sure you have reviewed the changes.",

@@ -1,6 +1,40 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
-import { changesReplicaCount, deliveryOfManifest } from "./manifest-reads";
+import {
+  changesReplicaCount,
+  deliveryOfManifest,
+  WITHHELD_MARKER,
+  withheldKeysIn,
+} from "./manifest-reads";
+
+describe("the keys a manifest still withholds", () => {
+  const corpus = JSON.parse(
+    readFileSync(
+      resolve(process.cwd(), "src/contracts/withheld-value.json"),
+      "utf8"
+    )
+  ) as {
+    marker: string;
+    cases: { name: string; manifest: string; keys: string[] }[];
+  };
+
+  /**
+   * The backend refuses a manifest holding its placeholder; the editor has to
+   * name the same keys before Apply is offered, or the reader learns of the
+   * refusal only after confirming. Fails when the two stop agreeing.
+   */
+  it("names the keys the backend would refuse the manifest for", () => {
+    expect(WITHHELD_MARKER).toBe(corpus.marker);
+    expect(corpus.cases.length).toBeGreaterThanOrEqual(6);
+    for (const { name, manifest, keys } of corpus.cases) {
+      expect([...withheldKeysIn(manifest)].sort(), name).toEqual(
+        [...keys].sort()
+      );
+    }
+  });
+});
 
 describe("the delivery question read out of the document itself", () => {
   it("takes the group from apiVersion, which no table has to know", () => {

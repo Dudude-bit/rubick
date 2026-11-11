@@ -58,14 +58,25 @@ pub(super) fn parse_all_documents(manifest: &str) -> Result<Vec<ParsedManifest>>
         ));
     }
 
-    documents
+    let parsed = documents
         .iter()
         .enumerate()
         .map(|(i, doc)| {
             parse_manifest_document(doc)
                 .map_err(|e| Error::InvalidInput(format!("Document {}: {}", i + 1, e)))
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+
+    // Every command that sends a manifest gets its documents here, so this
+    // is the one door: a `ConfigMap` would store the placeholder as the key.
+    let keys: Vec<String> = parsed
+        .iter()
+        .flat_map(|doc| crate::resources::still_withheld(&doc.object.data))
+        .collect();
+    if !keys.is_empty() {
+        return Err(Error::WithheldValue { keys });
+    }
+    Ok(parsed)
 }
 
 /// Parse a single YAML document into a `DynamicObject` with API resource info
@@ -313,6 +324,37 @@ metadata:
     fn a_trailing_separator_adds_nothing() {
         let yaml = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n---\n";
         assert_eq!(yaml_documents(yaml).expect("parses").len(), 1);
+    }
+
+    /// Would let Apply, and the dry run before it, write the placeholder
+    /// over a private key: a `ConfigMap`'s `data` is plain text, so the API
+    /// server stores the sentence. The frontend names the same keys before
+    /// Apply is offered, and the shared cases are what keep the two agreeing.
+    #[test]
+    fn a_manifest_still_holding_the_withheld_placeholder_is_never_parsed_for_sending() {
+        const CORPUS: &str = include_str!("../../../../contracts/withheld-value.json");
+        let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
+        assert_eq!(corpus["marker"], crate::resources::WITHHELD_MARKER);
+
+        let cases = corpus["cases"].as_array().unwrap();
+        assert!(cases.len() >= 6, "the corpus lost its cases");
+        for case in cases {
+            let name = case["name"].as_str().unwrap();
+            let mut expected: Vec<&str> = case["keys"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|key| key.as_str().unwrap())
+                .collect();
+            expected.sort_unstable();
+            let mut found = match parse_all_documents(case["manifest"].as_str().unwrap()) {
+                Ok(_) => Vec::new(),
+                Err(Error::WithheldValue { keys }) => keys,
+                Err(other) => panic!("{name}: {other}"),
+            };
+            found.sort_unstable();
+            assert_eq!(found, expected, "{name}");
+        }
     }
 
     #[test]
