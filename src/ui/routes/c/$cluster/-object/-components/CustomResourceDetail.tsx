@@ -495,11 +495,15 @@ export function CustomResourceDetail({
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
+        // Kind with its group and name with its namespace: "Delete Service?
+        // web" over a Knative Service reads as any core Service of that name.
         title={t("action", "deleteKindQuestion", {
-          kind: crdInfo?.kind || t("action", "resourceNoun"),
+          kind: crdInfo
+            ? `${crdInfo.kind}.${crdInfo.group}`
+            : t("action", "resourceNoun"),
         })}
         description={t("action", "willBeRemovedIrreversible", {
-          name: name ?? "",
+          name: namespace ? `${namespace}/${name}` : (name ?? ""),
         })}
         confirmLabel={t("action", "delete")}
         confirmVariant="destructive"

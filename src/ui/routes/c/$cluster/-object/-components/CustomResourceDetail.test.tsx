@@ -122,6 +122,23 @@ describe("the page of a custom resource named like a built-in", () => {
   });
 
   /**
+   * Knative makes a core Service named like its own, and another namespace
+   * may hold a third. Fails if the page asks to delete "Service" "frontend"
+   * with nothing to say which of them.
+   */
+  it("asks to delete it by its group and its namespace", async () => {
+    answers.crd = crd("serving.knative.dev", "Service", "services");
+    answers.resource = object("serving.knative.dev/v1", "Service");
+    await open("services.serving.knative.dev");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete" })
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Delete Service.serving.knative.dev?");
+    expect(dialog).toHaveTextContent("“storefront/frontend” will be removed");
+  });
+
+  /**
    * A Knative Configuration is owned by a Knative Service, and Knative makes
    * a core Service of that name. Fails if the owner opens the core one.
    */
