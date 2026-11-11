@@ -47,6 +47,31 @@ fn decode_helm_release(data: &[u8]) -> std::result::Result<HelmSecretRelease, St
     serde_json::from_slice(&json_bytes).map_err(|e| e.to_string())
 }
 
+/// The release a secret holds, or why it could not be read out of it. The one
+/// way in, so a secret that will not read is an answer and never a skip.
+fn release_in(secret: &Secret) -> std::result::Result<HelmSecretRelease, String> {
+    let data = secret.data.as_ref().and_then(|data| data.get("release"));
+    decode_helm_release(&data.ok_or("the secret has no `release` data")?.0)
+}
+
+/// The revision a release secret is labelled with, readable or not.
+fn labelled_revision(secret: &Secret) -> i32 {
+    let labels = secret.metadata.labels.as_ref();
+    labels
+        .and_then(|labels| labels.get("version"))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0)
+}
+
+/// The newest revision of a release, as the metadata list named it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Winner {
+    namespace: String,
+    secret: String,
+    release: String,
+    revision: i32,
+}
+
 /// The newest revision of each release, picked from metadata alone.
 ///
 /// Helm labels every release Secret with `name` and `version`, so the
@@ -63,28 +88,30 @@ fn latest_release_secrets<'a>(
             Option<&'a std::collections::BTreeMap<String, String>>,
         ),
     >,
-) -> Vec<(String, String)> {
-    let mut best: HashMap<(String, String), (i64, String)> = HashMap::new();
+) -> Vec<Winner> {
+    let mut best: HashMap<(String, String), Winner> = HashMap::new();
     for (namespace, secret_name, labels) in entries {
         let Some(labels) = labels else { continue };
         let Some(release) = labels.get("name") else {
             continue;
         };
-        let version = labels
+        let revision = labels
             .get("version")
-            .and_then(|v| v.parse::<i64>().ok())
+            .and_then(|v| v.parse::<i32>().ok())
             .unwrap_or(0);
         let key = (namespace.to_string(), release.clone());
-        match best.get(&key) {
-            Some((seen, _)) if *seen >= version => {}
-            _ => {
-                best.insert(key, (version, secret_name.to_string()));
-            }
+        if best.get(&key).is_some_and(|seen| seen.revision >= revision) {
+            continue;
         }
+        let winner = Winner {
+            namespace: namespace.to_string(),
+            secret: secret_name.to_string(),
+            release: release.clone(),
+            revision,
+        };
+        best.insert(key, winner);
     }
-    best.into_iter()
-        .map(|((namespace, _), (_, secret_name))| (namespace, secret_name))
-        .collect()
+    best.into_values().collect()
 }
 
 /// The Helm page's read: the latest revision of every release in the scope,
@@ -121,99 +148,77 @@ async fn releases_in(client: kube::Client, reach: Option<String>) -> Result<Vec<
     }));
 
     let fetched = futures::stream::iter(winners)
-        .map(|(namespace, name)| {
+        .map(|winner| {
             let client = client.clone();
             async move {
-                Api::<Secret>::namespaced(client, &namespace)
-                    .get(&name)
-                    .await
+                let got = Api::<Secret>::namespaced(client, &winner.namespace)
+                    .get(&winner.secret)
+                    .await;
+                (winner, got)
             }
         })
         .buffer_unordered(6)
         .collect::<Vec<_>>()
         .await;
 
-    let mut releases_map: HashMap<(String, String), HelmRelease> = HashMap::new();
-
-    for secret in fetched.into_iter().filter_map(|result| match result {
-        Ok(secret) => Some(secret),
-        Err(error) => {
-            // A revision deleted between the metadata list and the get is
-            // a release that changed under us, not a page that failed.
-            tracing::warn!("Failed to fetch Helm release secret: {}", error);
-            None
-        }
-    }) {
-        if let Some(data) = secret.data {
-            if let Some(release_data) = data.get("release") {
-                match decode_helm_release(&release_data.0) {
-                    Ok(release) => {
-                        let key = (release.namespace.clone(), release.name.clone());
-
-                        // Keep only the latest revision for each release
-                        let should_insert = releases_map
-                            .get(&key)
-                            .is_none_or(|existing| release.version > existing.revision);
-
-                        if should_insert {
-                            let helm_release = HelmRelease {
-                                name: release.name,
-                                namespace: release.namespace,
-                                revision: release.version,
-                                status: release.info.status,
-                                chart: format!(
-                                    "{}-{}",
-                                    release.chart.metadata.name, release.chart.metadata.version
-                                ),
-                                app_version: release.chart.metadata.app_version,
-                                updated: release.info.last_deployed.unwrap_or_default(),
-                                source: "native".to_string(),
-                                suspended: None,
-                                source_ref: None,
-                                unreadable: None,
-                            };
-                            releases_map.insert(key, helm_release);
-                        }
-                    }
-                    Err(e) => {
-                        // A row rather than a silence: the labels say which
-                        // release this is without decoding anything, so the
-                        // page can name what it could not read instead of
-                        // leaving the reader to believe it is not there.
-                        tracing::warn!("Failed to decode Helm release secret: {}", e);
-                        let labels = secret.metadata.labels.unwrap_or_default();
-                        let name = labels.get("name").cloned().unwrap_or_default();
-                        let namespace = secret.metadata.namespace.clone().unwrap_or_default();
-                        if !name.is_empty() {
-                            releases_map
-                                .entry((namespace.clone(), name.clone()))
-                                .or_insert_with(|| HelmRelease {
-                                    name,
-                                    namespace,
-                                    revision: labels
-                                        .get("version")
-                                        .and_then(|v| v.parse().ok())
-                                        .unwrap_or(0),
-                                    status: String::new(),
-                                    chart: String::new(),
-                                    app_version: None,
-                                    updated: String::new(),
-                                    source: "native".to_string(),
-                                    suspended: None,
-                                    source_ref: None,
-                                    unreadable: Some(e),
-                                });
-                        }
-                    }
-                }
-            }
-        }
+    let mut releases = Vec::with_capacity(fetched.len());
+    for (winner, got) in fetched {
+        let read = match got {
+            Ok(secret) => release_in(&secret),
+            // Deleted between the metadata list and the get: a release that
+            // changed under us. Any other failure is a release the list named
+            // and this read did not reach, which is a row saying so.
+            Err(kube::Error::Api(status)) if status.code == 404 => continue,
+            Err(error) => match Error::from(error) {
+                expired @ Error::CredentialsExpired(_) => return Err(expired),
+                other => Err(other.to_string()),
+            },
+        };
+        releases.push(row_of(winner, read));
     }
-
-    let mut releases: Vec<HelmRelease> = releases_map.into_values().collect();
     releases.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
 
     Ok(releases)
+}
+
+/// One row for one release the list named: what was read, or the release by
+/// its labels with why it was not.
+fn row_of(winner: Winner, read: std::result::Result<HelmSecretRelease, String>) -> HelmRelease {
+    let blank = HelmRelease {
+        name: winner.release,
+        namespace: winner.namespace,
+        revision: winner.revision,
+        status: String::new(),
+        chart: String::new(),
+        app_version: None,
+        updated: String::new(),
+        source: "native".to_string(),
+        suspended: None,
+        source_ref: None,
+        unreadable: None,
+    };
+    match read {
+        Ok(release) => HelmRelease {
+            name: release.name,
+            namespace: release.namespace,
+            revision: release.version,
+            status: release.info.status,
+            chart: format!(
+                "{}-{}",
+                release.chart.metadata.name, release.chart.metadata.version
+            ),
+            app_version: release.chart.metadata.app_version,
+            updated: release.info.last_deployed.unwrap_or_default(),
+            ..blank
+        },
+        Err(why) => {
+            tracing::warn!("Helm release {} was not read: {why}", blank.name);
+            HelmRelease {
+                unreadable: Some(why),
+                ..blank
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -230,6 +235,123 @@ mod tests {
             ("name".to_string(), name.to_string()),
             ("version".to_string(), version.to_string()),
         ])
+    }
+
+    /// A cluster answering each path with one status and body.
+    fn cluster(answers: Vec<(&'static str, u16, serde_json::Value)>) -> kube::Client {
+        let service = tower::service_fn(move |request: http::Request<kube::client::Body>| {
+            let (_, status, body) = answers
+                .iter()
+                .find(|(path, ..)| *path == request.uri().path())
+                .unwrap_or_else(|| panic!("unexpected read of {}", request.uri()))
+                .clone();
+            async move {
+                Ok::<_, std::convert::Infallible>(
+                    http::Response::builder()
+                        .status(status)
+                        .body(kube::client::Body::from(body.to_string().into_bytes()))
+                        .unwrap(),
+                )
+            }
+        });
+        kube::Client::new(service, "default")
+    }
+
+    fn says(code: u16, reason: &str) -> serde_json::Value {
+        serde_json::json!({
+            "kind": "Status", "apiVersion": "v1", "metadata": {}, "status": "Failure",
+            "message": format!("secrets is {reason}"), "reason": reason, "code": code,
+        })
+    }
+
+    fn secret_name(release: &str, revision: i32) -> String {
+        format!("sh.helm.release.v1.{release}.v{revision}")
+    }
+
+    /// The release secret Helm writes for one revision, payload and labels.
+    fn stored(release: &str, revision: i32) -> serde_json::Value {
+        let payload = serde_json::json!({
+            "name": release, "namespace": "shop", "version": revision,
+            "info": { "status": "deployed" },
+            "chart": { "metadata": { "name": release, "version": "1.0.0" } },
+        });
+        serde_json::json!({
+            "apiVersion": "v1", "kind": "Secret",
+            "metadata": {
+                "name": secret_name(release, revision), "namespace": "shop",
+                "labels": labels(release, &revision.to_string()),
+            },
+            "data": { "release": STANDARD.encode(STANDARD.encode(payload.to_string())) },
+        })
+    }
+
+    /// What the metadata list says of the same secrets.
+    fn listed(releases: &[(&str, i32)]) -> serde_json::Value {
+        let items: Vec<_> = releases
+            .iter()
+            .map(|(release, revision)| serde_json::json!({ "metadata": stored(release, *revision)["metadata"] }))
+            .collect();
+        serde_json::json!({
+            "kind": "PartialObjectMetadataList", "apiVersion": "meta.k8s.io/v1",
+            "metadata": {}, "items": items,
+        })
+    }
+
+    /// A role that may list secrets and not get them, a timeout, a reset: the
+    /// release was dropped with a log line, and with every get failing the
+    /// page said the cluster has 0 releases. Only a 404 is a release gone.
+    #[tokio::test]
+    async fn a_release_whose_secret_could_not_be_fetched_is_a_row_saying_so() {
+        let client = cluster(vec![
+            (
+                "/api/v1/secrets",
+                200,
+                listed(&[("api", 1), ("web", 3), ("gone", 2)]),
+            ),
+            (
+                "/api/v1/namespaces/shop/secrets/sh.helm.release.v1.api.v1",
+                200,
+                stored("api", 1),
+            ),
+            (
+                "/api/v1/namespaces/shop/secrets/sh.helm.release.v1.web.v3",
+                403,
+                says(403, "Forbidden"),
+            ),
+            (
+                "/api/v1/namespaces/shop/secrets/sh.helm.release.v1.gone.v2",
+                404,
+                says(404, "NotFound"),
+            ),
+        ]);
+
+        let rows = releases_in(client, None).await.expect("the list was read");
+
+        let seen: Vec<_> = rows
+            .iter()
+            .map(|row| (row.name.as_str(), row.revision, row.unreadable.is_some()))
+            .collect();
+        assert_eq!(seen, [("api", 1, false), ("web", 3, true)]);
+        let why = rows[1].unreadable.as_deref().expect("why");
+        assert!(why.contains("secrets is Forbidden"), "{why}");
+    }
+
+    /// A 401 is about the session, not one release. As a row it would sit in
+    /// a tooltip, and nothing would notice the session had expired.
+    #[tokio::test]
+    async fn an_expired_session_fails_the_read_instead_of_marking_a_row() {
+        let client = cluster(vec![
+            ("/api/v1/secrets", 200, listed(&[("web", 3)])),
+            (
+                "/api/v1/namespaces/shop/secrets/sh.helm.release.v1.web.v3",
+                401,
+                says(401, "Unauthorized"),
+            ),
+        ]);
+
+        let failed = releases_in(client, None).await.expect_err("expired");
+
+        assert!(matches!(failed, Error::CredentialsExpired(_)), "{failed}");
     }
 
     /// An older revision decoding is not an answer about a newer one that
@@ -284,7 +406,10 @@ mod tests {
             ])
             .collect();
 
-        let mut winners = latest_release_secrets(entries.into_iter());
+        let mut winners: Vec<_> = latest_release_secrets(entries.into_iter())
+            .into_iter()
+            .map(|winner| (winner.namespace, winner.secret))
+            .collect();
         winners.sort();
         assert_eq!(
             winners,
@@ -326,7 +451,10 @@ mod tests {
             ("backend", "some-other-secret", None),
         ];
 
-        let mut winners = latest_release_secrets(entries.into_iter());
+        let mut winners: Vec<_> = latest_release_secrets(entries.into_iter())
+            .into_iter()
+            .map(|winner| (winner.namespace, winner.secret))
+            .collect();
         winners.sort();
         assert_eq!(
             winners,
@@ -403,32 +531,22 @@ async fn release_detail(
     let mut unreadable: Option<(i32, String)> = None;
 
     for secret in secret_list {
-        let at = secret
-            .metadata
-            .labels
-            .as_ref()
-            .and_then(|labels| labels.get("version"))
-            .and_then(|v| v.parse::<i32>().ok())
-            .unwrap_or(0);
-        if let Some(data) = secret.data {
-            if let Some(release_data) = data.get("release") {
-                match decode_helm_release(&release_data.0) {
-                    Ok(release) => {
-                        if let Some(target_rev) = revision {
-                            if release.version == target_rev {
-                                target_release = Some(release);
-                            }
-                        } else if release.version > max_revision {
-                            max_revision = release.version;
-                            target_release = Some(release);
-                        }
+        let at = labelled_revision(&secret);
+        match release_in(&secret) {
+            Ok(release) => {
+                if let Some(target_rev) = revision {
+                    if release.version == target_rev {
+                        target_release = Some(release);
                     }
-                    Err(error) => {
-                        tracing::warn!("Failed to decode Helm release secret: {error}");
-                        if unreadable.as_ref().is_none_or(|(seen, _)| at > *seen) {
-                            unreadable = Some((at, error));
-                        }
-                    }
+                } else if release.version > max_revision {
+                    max_revision = release.version;
+                    target_release = Some(release);
+                }
+            }
+            Err(error) => {
+                tracing::warn!("Failed to decode Helm release secret: {error}");
+                if unreadable.as_ref().is_none_or(|(seen, _)| at > *seen) {
+                    unreadable = Some((at, error));
                 }
             }
         }
