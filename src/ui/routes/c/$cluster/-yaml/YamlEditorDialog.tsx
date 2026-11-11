@@ -46,6 +46,7 @@ import { applyWarnings } from "@/lib/governance";
 import {
   changesReplicaCount,
   deliveryOfManifest,
+  liveReplicaMove,
   withheldKeysIn,
 } from "./manifest-reads";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -141,37 +142,13 @@ export function YamlEditorDialog() {
   const { deliveries } = useDelivery(delivery);
   const intercept = deliveryApplyIntercept(deliveries, t);
 
-  // The autoscaler owns `spec.replicas` and nothing else, so it is asked
-  // about only when that field is what moved — see `applyWarnings`. Asked
-  // while the editor is open rather than when the confirmation appears, so
-  // the sentence is already there when the reader gets to it; the query key
-  // is the detail page's, so a page that has read its connections pays
-  // nothing.
-  // Two whole-document parses per keystroke on a long manifest, and the
-  // answer is only needed by the time the confirmation opens: deferred, so
-  // typing is never behind them, and memoised on what was actually parsed.
-  const settledContent = useDeferredValue(editedContent);
-  const replicasMoved = useMemo(
-    () =>
-      !readOnly &&
-      originalContent !== settledContent &&
-      changesReplicaCount(originalContent, settledContent),
-    [readOnly, originalContent, settledContent]
-  );
-  const governance = useConnections(
-    resourceKey?.kind ?? "",
-    resourceKey?.name,
-    resourceKey?.namespace ?? null,
-    open && replicasMoved
-  );
-
-  const warnings = applyWarnings(governance, intercept, replicasMoved, t);
-
   // What the server would store against what it holds now. Asked only once
   // the confirmation is open, of the buffer as it is at that moment; the
   // editor's own diff stands in while the answer is on its way, and says so.
   // `asked` is in the key because "now" is: an answer kept from an earlier
   // opening describes the object as it was then, under the same buffer.
+  // Asked of an untouched buffer too: it is as old as the moment it was
+  // read, and applying it undoes whatever moved on the cluster since.
   const dryRun = useQuery({
     queryKey: [
       "dry-run",
@@ -186,11 +163,50 @@ export function YamlEditorDialog() {
         editedContent,
         resourceKey?.namespace || currentNamespace || null
       ),
-    enabled: showApplyConfirm && hasChanges,
+    enabled: showApplyConfirm,
     retry: false,
     staleTime: Infinity,
     gcTime: 0,
   });
+
+  // The autoscaler owns `spec.replicas` and nothing else, so it is asked
+  // about only when that field is what moved — see `applyWarnings`. A typed
+  // count is known while the editor is open, so the sentence is already
+  // there when the reader gets to the confirmation; the query key is the
+  // detail page's, so a page that has read its connections pays nothing.
+  // Two whole-document parses per keystroke on a long manifest, and the
+  // answer is only needed by the time the confirmation opens: deferred, so
+  // typing is never behind them, and memoised on what was actually parsed.
+  const settledContent = useDeferredValue(editedContent);
+  const typedReplicas = useMemo(
+    () =>
+      !readOnly &&
+      originalContent !== settledContent &&
+      changesReplicaCount(originalContent, settledContent),
+    [readOnly, originalContent, settledContent]
+  );
+  // A count that moved on the cluster after the manifest was read is in no
+  // buffer: only the dry run's current object shows it.
+  const documents = dryRun.data?.documents;
+  const unanswered = dryRun.isError;
+  const liveMove = useMemo(
+    () =>
+      showApplyConfirm && (documents || unanswered)
+        ? liveReplicaMove(originalContent, editedContent, documents ?? null)
+        : null,
+    [showApplyConfirm, documents, unanswered, originalContent, editedContent]
+  );
+  const replicasMoved =
+    typedReplicas || (liveMove === "unknown" ? null : liveMove !== null);
+  const governance = useConnections(
+    resourceKey?.kind ?? "",
+    resourceKey?.name,
+    resourceKey?.namespace ?? null,
+    open && replicasMoved !== false
+  );
+
+  const warnings = applyWarnings(governance, intercept, replicasMoved, t);
+
   const refused =
     dryRun.data?.documents.find((doc) => doc.outcome.says === "refused") ??
     null;
@@ -503,8 +519,19 @@ export function YamlEditorDialog() {
               the only thing safe to leave out is the second naming of the
               owner, which the lead sentence carries anyway. */}
           <ActionWarnings warnings={warnings} headingFor="warnUndoApply" />
+          {liveMove !== null && liveMove !== "unknown" && liveMove.drifted && (
+            <p
+              className="min-w-0 wrap-break-word text-xs text-warn"
+              data-testid="replicas-moved"
+            >
+              {t("action", "replicasMovedUnderEditor", {
+                now: liveMove.from,
+                set: liveMove.to,
+              })}
+            </p>
+          )}
 
-          {hasChanges && dryRun.data ? (
+          {dryRun.data ? (
             <div className="min-w-0 py-4" data-testid="dry-run">
               <p className="mb-2 text-xs text-fg-mut">
                 {t("action", "dryRunFromServer")}
@@ -519,35 +546,41 @@ export function YamlEditorDialog() {
                 ))}
               </div>
             </div>
-          ) : hasChanges ? (
+          ) : (
             // The diff is arbitrarily wide and this dialog is a grid, whose
             // items default to `min-width: auto` — without this the longest
             // line of the manifest sets the column width and everything above
             // it, warning included, is dragged off the right of the screen.
             <div className="min-w-0 py-4">
-              <p className="mb-2 text-xs text-fg-mut">
-                {t("action", "changesToBeApplied")}
-              </p>
-              <ScrollArea className="h-[200px] w-full overflow-hidden rounded-md border">
-                <YamlDiffViewer
-                  original={originalContent}
-                  modified={editedContent}
-                  height="200px"
-                />
-              </ScrollArea>
+              {hasChanges && (
+                <>
+                  <p className="mb-2 text-xs text-fg-mut">
+                    {t("action", "changesToBeApplied")}
+                  </p>
+                  <ScrollArea className="mb-2 h-[200px] w-full overflow-hidden rounded-md border">
+                    <YamlDiffViewer
+                      original={originalContent}
+                      modified={editedContent}
+                      height="200px"
+                    />
+                  </ScrollArea>
+                </>
+              )}
               <p
-                className="mt-2 text-[11px] text-fg-fnt"
+                className="text-[11px] text-fg-fnt"
                 role="status"
                 data-testid="dry-run-standing"
               >
                 {dryRun.isError
-                  ? t("action", "dryRunFailed", {
-                      error: errorToShow(dryRun.error),
-                    })
+                  ? t(
+                      "action",
+                      hasChanges ? "dryRunFailed" : "dryRunFailedNoDiff",
+                      { error: errorToShow(dryRun.error) }
+                    )
                   : t("action", "dryRunAsking")}
               </p>
             </div>
-          ) : null}
+          )}
 
           {gate.input}
 

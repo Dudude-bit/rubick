@@ -841,6 +841,10 @@ export const ru: Catalogue = {
     dryRunAsking: "Спрашиваем кластер, что изменится…",
     dryRunFailed:
       "Кластер не ответил на dry run ({error}); это собственный diff редактора.",
+    dryRunFailedNoDiff:
+      "Кластер не ответил на dry run ({error}), поэтому неизвестно, что изменит применение.",
+    replicasMovedUnderEditor:
+      "Число реплик в кластере изменилось до {now} с тех пор, как манифест был прочитан. Применение установит {set}.",
     dryRunCreated: "будет создан",
     dryRunConfigured: "изменится",
     dryRunUnchanged: "не изменится",
@@ -4602,6 +4606,8 @@ export const ru: Catalogue = {
     hpaWillRevertDetail:
       "Он держит это между {min} и {max} и перечитывает метрики примерно раз в пятнадцать секунд.",
     hpaAutoscalerNamed: "Автомасштабировщик {name}",
+    replicasMoveUnchecked:
+      "Не удалось проверить, изменит ли это применение число реплик: кластер не показал, что хранит сейчас.",
     hpaUnreadHead: "Автомасштабировщик может вернуть это число обратно.",
     docNoReplicaCount: "в документе нет числа реплик",
     cannotTell: "определить нельзя",

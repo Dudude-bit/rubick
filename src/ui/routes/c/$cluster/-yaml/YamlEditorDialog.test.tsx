@@ -439,6 +439,167 @@ describe("a confirmation opened again over the same buffer", () => {
   });
 });
 
+describe("a replica count that moved on the cluster under the editor", () => {
+  const at = (replicas: number) =>
+    PLAIN.replace("replicas: 2", `replicas: ${replicas}`);
+  const LABELLED_BY_HAND = PLAIN.replace(
+    "  namespace: shop",
+    "  namespace: shop\n  labels:\n    tier: web"
+  );
+  const answered = (live: number) => ({
+    documents: [
+      {
+        id: "deployment/shop api",
+        outcome: { says: "configured" },
+        live: at(live),
+        would: at(2),
+      },
+    ],
+  });
+
+  /** Opens on the Deployment at 2 replicas; the edit, if any, leaves the count alone. */
+  async function openAt2(edited?: string) {
+    await renderWithRouter(<YamlEditorDialog />, {
+      at: "/c/test",
+      route: "/c/$cluster",
+    });
+    await useYamlEditorStore.getState().openEditor({
+      title: "Edit Deployment: api",
+      resourceKey: { kind: "Deployment", name: "api", namespace: "shop" },
+      fetchYaml: async () => PLAIN,
+    });
+    if (edited) useYamlEditorStore.getState().setEditedContent(edited);
+    return userEvent.setup();
+  }
+
+  beforeEach(() => {
+    connections = () => ({
+      object: null,
+      notLookedAt: [],
+      edges: [
+        {
+          relation: { verb: "governs" },
+          from: {
+            kind: "HorizontalPodAutoscaler",
+            name: "api",
+            namespace: "shop",
+            facts: {
+              kind: "autoscaler",
+              minReplicas: 2,
+              maxReplicas: 10,
+              conditions: [],
+            },
+          },
+          to: { kind: "Deployment", name: "api", namespace: "shop" },
+        },
+      ],
+    });
+  });
+
+  /**
+   * The editor read the Deployment at 2; the autoscaler went to 12; the
+   * reader changed a label. Both buffers say 2, so nothing named the
+   * autoscaler and the forced apply cut ten pods with a plain "Apply". Fails
+   * if the confirmation does not say the count moved and who owns it.
+   */
+  it("says the count moved and names the autoscaler that owns it", async () => {
+    dryRunManifest.mockResolvedValue(answered(12));
+    const user = await openAt2(LABELLED_BY_HAND);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByTestId("replicas-moved")).toHaveTextContent(
+      "has moved to 12 since this manifest was read. Applying sets it to 2."
+    );
+    expect(
+      await screen.findAllByText(/will put this number back/)
+    ).not.toHaveLength(0);
+    expect(
+      screen.getByRole("button", { name: /Apply anyway/ })
+    ).toBeInTheDocument();
+  });
+
+  /** The cost of the one above: a save that leaves the count where the cluster has it names no autoscaler. */
+  it("stays quiet when the cluster holds the count being applied", async () => {
+    dryRunManifest.mockResolvedValue(answered(2));
+    const user = await openAt2(LABELLED_BY_HAND);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByTestId("dry-run")).toBeInTheDocument();
+    expect(screen.queryByTestId("replicas-moved")).toBeNull();
+    expect(screen.queryByText(/will put this number back/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Apply anyway/ })).toBeNull();
+  });
+
+  /**
+   * With the current object unread, or the dry run unanswered, nobody knows
+   * whether the count moved. Fails if that is drawn as a save the autoscaler
+   * has no part in.
+   */
+  it.each([
+    [
+      "the current object could not be read",
+      () =>
+        dryRunManifest.mockResolvedValue({
+          documents: [
+            {
+              id: "deployment/shop api",
+              outcome: { says: "liveUnread", said: "deployments is forbidden" },
+              live: null,
+              would: at(2),
+            },
+          ],
+        }),
+    ],
+    [
+      "the dry run was not answered",
+      () => dryRunManifest.mockRejectedValue(new Error("connection reset")),
+    ],
+  ])(
+    "names the autoscaler and what went unchecked when %s",
+    async (_, given) => {
+      given();
+      const user = await openAt2(LABELLED_BY_HAND);
+      await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+      expect(
+        await screen.findByText(
+          /Whether this apply changes the replica count could not be checked/
+        )
+      ).toBeInTheDocument();
+      expect(screen.getAllByText(/will put this number back/)).not.toHaveLength(
+        0
+      );
+      expect(screen.queryByTestId("replicas-moved")).toBeNull();
+    }
+  );
+
+  /**
+   * Apply is offered on an untouched buffer, and that buffer is as old as
+   * the read: with no dry run the confirmation drew nothing and the apply
+   * reset the count all the same. Fails if the server is not asked.
+   */
+  it("asks the server what an untouched buffer would do", async () => {
+    dryRunManifest.mockResolvedValue(answered(12));
+    const user = await openAt2();
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByTestId("replicas-moved")).toBeInTheDocument();
+    expect(dryRunManifest).toHaveBeenCalledWith(PLAIN, "shop");
+  });
+
+  /** With nothing edited there is no editor's diff to fall back on, and the sentence must not promise one. */
+  it("does not promise the editor's diff where the buffer was not edited", async () => {
+    dryRunManifest.mockRejectedValue(new Error("connection reset"));
+    const user = await openAt2();
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByTestId("dry-run-standing")).toHaveTextContent(
+      "(connection reset), so what applying would change is unknown."
+    );
+    expect(screen.queryByTestId("diff")).toBeNull();
+  });
+});
+
 describe("a dry run nobody answered", () => {
   /** A proxy's 502 is not the server saying no; blocking on it would block an apply the server never saw. */
   it("says the question went unanswered and leaves the apply enabled", async () => {

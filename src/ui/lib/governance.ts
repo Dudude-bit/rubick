@@ -653,19 +653,26 @@ export function deliveryWarning(
  *
  * Never naming it is the other wrong answer, because a replica count typed
  * into the YAML editor is undone exactly as fast as one typed into the Scale
- * dialog, where the app already warns. So the rule is the diff:
- * `changesReplicaCount` compares what the API server had when the editor
- * opened against what is about to be sent, and the autoscaler is named when —
- * and only when — that field is what moved.
+ * dialog, where the app already warns. So the rule is the diff: the
+ * autoscaler is named when — and only when — applying leaves a count other
+ * than the one the cluster holds. `null` is that question unanswered: the
+ * autoscaler is still named, and the warning says what could not be checked.
  */
 export function applyWarnings(
   read: GovernanceRead,
   intercept: DeliveryIntercept | null,
-  replicasMoved: boolean,
+  replicasMoved: boolean | null,
   t: T
 ): ActionWarning[] {
+  const autoscaler =
+    replicasMoved === false ? [] : autoscalerScaleWarnings(read, t);
   return [
-    ...(replicasMoved ? autoscalerScaleWarnings(read, t) : []),
+    ...(replicasMoved === null
+      ? autoscaler.map((warning) => ({
+          ...warning,
+          description: `${t("readings", "replicasMoveUnchecked")} ${warning.description}`,
+        }))
+      : autoscaler),
     ...deliveryWarning(intercept),
   ];
 }

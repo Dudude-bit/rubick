@@ -864,6 +864,10 @@ export const en = {
     dryRunAsking: "Asking the cluster what would change…",
     dryRunFailed:
       "The cluster did not answer the dry run ({error}); this is the editor's own diff.",
+    dryRunFailedNoDiff:
+      "The cluster did not answer the dry run ({error}), so what applying would change is unknown.",
+    replicasMovedUnderEditor:
+      "The replica count on the cluster has moved to {now} since this manifest was read. Applying sets it to {set}.",
     dryRunCreated: "would be created",
     dryRunConfigured: "would change",
     dryRunUnchanged: "would not change",
@@ -4096,6 +4100,8 @@ export const en = {
     hpaWillRevertDetail:
       "It keeps this between {min} and {max} and re-reads its metrics about every fifteen seconds.",
     hpaAutoscalerNamed: "The autoscaler {name}",
+    replicasMoveUnchecked:
+      "Whether this apply changes the replica count could not be checked: the cluster did not show what it holds now.",
     hpaUnreadHead: "An autoscaler may put this number back.",
     docNoReplicaCount: "the document has no replica count",
     cannotTell: "cannot tell",

@@ -7,6 +7,7 @@
 
 import { load, loadAll } from "js-yaml";
 
+import type { DryRunDocument } from "@/generated/types";
 import type { DeliveryQuery } from "@/integrations";
 
 /**
@@ -99,9 +100,8 @@ export function withheldKeysIn(text: string): string[] {
  * `original` carried.
  *
  * `original` is what the API server had when the editor opened, so this is
- * true both when the reader typed a new number and when the buffer is stale —
- * an autoscaler moved the count under them, and applying scales the workload
- * back.
+ * the number the reader typed and nothing newer: a count an autoscaler moved
+ * since is {@link liveReplicaMove}'s to see.
  *
  * A document that will not parse is not a replica change: the apply is about
  * to fail on its own, and the API server's message beats anything guessed
@@ -119,6 +119,56 @@ export function changesReplicaCount(original: string, edited: string): boolean {
   return counterparts.some(
     (doc) => replicaCountOf(subject) !== replicaCountOf(doc)
   );
+}
+
+/** The count the cluster holds now, and the one applying would leave. */
+export interface ReplicaMove {
+  from: number;
+  to: number;
+  /** The cluster's count is no longer the one the editor read. */
+  drifted: boolean;
+}
+
+/**
+ * What applying does to the replica count the editor's object has on the
+ * cluster now, read from the dry run. The buffer is as old as the moment it
+ * was read, and an autoscaler that moved the count since is undone by it.
+ *
+ * `null` where the count stays. `"unknown"` where the buffer sets a count and
+ * the server showed no current object to hold it against (`documents` is
+ * `null` for a dry run that did not answer at all): not "it stays".
+ */
+export function liveReplicaMove(
+  original: string,
+  edited: string,
+  documents: Pick<DryRunDocument, "outcome" | "live" | "would">[] | null
+): ReplicaMove | "unknown" | null {
+  const [subject] = documentsIn(original) ?? [];
+  if (subject === undefined) return null;
+  const first = (text: string | null) =>
+    text === null ? undefined : documentsIn(text)?.[0];
+
+  let unread = documents === null;
+  for (const doc of documents ?? []) {
+    // Neither has a current count to move: there is no object, or no apply.
+    if (doc.outcome.says === "created" || doc.outcome.says === "refused")
+      continue;
+    const [now, after] = [first(doc.live), first(doc.would)];
+    if (now === undefined || after === undefined) {
+      unread = true;
+      continue;
+    }
+    if (!sameObject(now, subject)) continue;
+    const [from, to] = [replicaCountOf(now), replicaCountOf(after)];
+    return from === null || to === null || from === to
+      ? null
+      : { from, to, drifted: from !== replicaCountOf(subject) };
+  }
+  if (!unread) return null;
+  const docs = documentsIn(edited) ?? [];
+  const mine =
+    docs.length === 1 ? docs : docs.filter((doc) => sameObject(doc, subject));
+  return mine.some((doc) => replicaCountOf(doc) !== null) ? "unknown" : null;
 }
 
 /** The buffer's documents, or `null` where it will not parse. */
