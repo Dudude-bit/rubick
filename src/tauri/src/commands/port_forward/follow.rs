@@ -313,6 +313,8 @@ pub(super) async fn replacement(
 #[derive(Debug, PartialEq, Eq)]
 enum PodNow {
     Serving,
+    /// There, and nothing of its own running yet.
+    Starting,
     Leaving,
     Gone,
     /// Not asked, or the asking failed: never read as gone.
@@ -326,7 +328,8 @@ async fn pod_now(clients: &K8sClientManager, context: &str, namespace: &str, pod
     match Api::<Pod>::namespaced(client, namespace).get_opt(pod).await {
         Ok(None) => PodNow::Gone,
         Ok(Some(found)) if leaving(&found) => PodNow::Leaving,
-        Ok(Some(_)) => PodNow::Serving,
+        Ok(Some(found)) if ready(&found) || up(&found) => PodNow::Serving,
+        Ok(Some(_)) => PodNow::Starting,
         Err(_) => PodNow::Unknown,
     }
 }
@@ -365,11 +368,20 @@ pub(super) async fn follow(
         }
         let current = target.borrow().clone();
         let now = pod_now(&spec.clients, &spec.context, &spec.namespace, &current.pod).await;
-        if matches!(now, PodNow::Serving | PodNow::Unknown) {
-            gone_since = None;
-            continue;
+        match now {
+            // Back under its own name: the wait that was announced is over,
+            // and nothing else would take "reconnecting" off the row.
+            PodNow::Serving => {
+                if gone_since.take().is_some() {
+                    report.say(&current.pod, current.remote_port, "reconnected", None, None);
+                }
+                continue;
+            }
+            PodNow::Unknown => continue,
+            PodNow::Starting if gone_since.is_none() => continue,
+            PodNow::Starting | PodNow::Leaving | PodNow::Gone => {}
         }
-        let gone = now == PodNow::Gone;
+        let gone = now != PodNow::Leaving;
         let Some((kind, name)) = spec.via.names().filter(|_| spec.auto_reconnect) else {
             if gone {
                 return ForwardNote::PodGone { pod: current.pod };
@@ -973,6 +985,82 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(500)).await;
         assert_eq!(followed.target.borrow().pod, "api-0");
         followed.ended.abort();
+    }
+
+    fn stateful_via() -> ForwardVia {
+        ForwardVia::Owner {
+            owner_kind: "StatefulSet".into(),
+            name: "api".into(),
+        }
+    }
+
+    /// The first two looks find `api-0` deleted, the third is refused, and
+    /// from then on it is `back`.
+    fn restarted(back: Value) -> impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static {
+        move |path, nth| match path {
+            "/api/v1/namespaces/shop/pods/api-0" => match nth {
+                1 | 2 => failure(404, "NotFound"),
+                3 => failure(403, "Forbidden"),
+                _ => (200, back.to_string()),
+            },
+            "/apis/apps/v1/namespaces/shop/statefulsets/api" => {
+                (200, deployment().replace("Deployment", "StatefulSet"))
+            }
+            "/api/v1/namespaces/shop/pods" => (200, listing(&[])),
+            _ => failure(404, "NotFound"),
+        }
+    }
+
+    /// A restarted StatefulSet pod returns under its own name. The row said
+    /// "reconnecting" when it went and kept saying it over a working forward;
+    /// a look that could not read the pod in between must not lose that.
+    #[tokio::test]
+    async fn a_pod_back_under_its_own_name_ends_the_wait_out_loud() {
+        let back = pod("api-0", "2026-10-04T00:07:00Z", true, api());
+        let mut followed = following(stateful_via(), true, restarted(back)).await;
+        let mut said = Vec::new();
+        for _ in 0..2 {
+            let AppEvent::PortForwardStatus { status, pod, .. } =
+                tokio::time::timeout(Duration::from_secs(5), followed.events.recv())
+                    .await
+                    .expect("a status within five seconds")
+                    .unwrap()
+            else {
+                panic!("a port-forward status");
+            };
+            said.push((status, pod));
+        }
+        assert_eq!(
+            said,
+            [
+                ("reconnecting".to_string(), "api-0".to_string()),
+                ("reconnected".to_string(), "api-0".to_string())
+            ]
+        );
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        assert!(!followed.ended.is_finished(), "the forward goes on");
+        followed.ended.abort();
+    }
+
+    /// A pod object that is back with nothing running answers no connection:
+    /// it is still waited for, not announced as reconnected.
+    #[tokio::test]
+    async fn a_pod_back_with_nothing_running_is_still_waited_for() {
+        let back = pod("api-0", "2026-10-04T00:07:00Z", false, api());
+        let mut followed = following(stateful_via(), true, restarted(back)).await;
+        let note = tokio::time::timeout(Duration::from_secs(5), &mut followed.ended)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(note, ForwardNote::NoReplacement { .. }),
+            "{note:?}"
+        );
+        let mut statuses = Vec::new();
+        while let Ok(AppEvent::PortForwardStatus { status, .. }) = followed.events.try_recv() {
+            statuses.push(status);
+        }
+        assert_eq!(statuses, ["reconnecting"]);
     }
 
     /// A pod on its way out keeps serving until a ready one is there; it is

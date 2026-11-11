@@ -109,6 +109,7 @@ async fn forward_connection(shared: Shared, mut local_stream: tokio::net::TcpStr
         cancel,
     } = shared;
     let mut attempt: u32 = 0;
+    let mut said = false;
 
     loop {
         // Checked at the top as well as inside the waits: a connection
@@ -134,7 +135,7 @@ async fn forward_connection(shared: Shared, mut local_stream: tokio::net::TcpStr
 
         match attempt_result {
             Ok(mut portforwarder) => {
-                if attempt > 0 {
+                if said {
                     report.say(&pod, remote_port, "reconnected", None, Some(attempt));
                 }
                 if let Some(mut remote_stream) = portforwarder.take_stream(remote_port) {
@@ -155,17 +156,14 @@ async fn forward_connection(shared: Shared, mut local_stream: tokio::net::TcpStr
                 }
                 break;
             }
-            // The pod is gone: the follower moves the forward or ends it, and
-            // this connection goes wherever that lands instead of retrying a
-            // name that will not come back.
-            Err((true, _)) => {
-                suspect.notify_one();
-                tokio::select! {
-                    changed = target.changed() => if changed.is_err() { return },
-                    () = cancel.cancelled() => return,
+            Err((gone, err)) => {
+                // The follower moves the forward, ends it, or says what it is
+                // waiting for, so a gone pod is not narrated from here. It is
+                // still tried again: a 404 is also a kubelet that has not
+                // admitted the pod yet, and the same name coming back.
+                if gone {
+                    suspect.notify_one();
                 }
-            }
-            Err((false, err)) => {
                 attempt += 1;
                 match after_failure(&err, attempt, auto_reconnect) {
                     AfterFailure::GiveUp { note } => {
@@ -173,9 +171,19 @@ async fn forward_connection(shared: Shared, mut local_stream: tokio::net::TcpStr
                         break;
                     }
                     AfterFailure::Retry { after, note } => {
-                        report.say(&pod, remote_port, "reconnecting", Some(note), Some(attempt));
+                        if !gone {
+                            said = true;
+                            report.say(
+                                &pod,
+                                remote_port,
+                                "reconnecting",
+                                Some(note),
+                                Some(attempt),
+                            );
+                        }
                         tokio::select! {
                             () = sleep(after) => {}
+                            changed = target.changed() => if changed.is_err() { return },
                             () = cancel.cancelled() => return,
                         }
                     }
@@ -621,6 +629,7 @@ mod tests {
 
     struct Running {
         state: AppState,
+        hits: crate::client::served::test_server::Hits,
         events: tokio::sync::broadcast::Receiver<AppEvent>,
         port: u16,
     }
@@ -632,7 +641,7 @@ mod tests {
         auto_reconnect: bool,
         answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
     ) -> Running {
-        let (state, _) = connected(ServedIndex::default(), answer).await;
+        let (state, hits) = connected(ServedIndex::default(), answer).await;
         let events = state.event_tx.subscribe();
         let listener = bind(0).await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -668,6 +677,7 @@ mod tests {
         ));
         Running {
             state,
+            hits,
             events,
             port,
         }
@@ -710,6 +720,41 @@ mod tests {
             "the local port must close with the forward, not hang"
         );
         assert!(forward.state.port_forward_sessions.is_empty());
+    }
+
+    const FORWARD: &str = "/api/v1/namespaces/shop/pods/api-0/portforward";
+
+    fn there() -> String {
+        serde_json::json!({
+            "metadata": { "name": "api-0", "namespace": "shop" },
+            "status": { "conditions": [{ "type": "Ready", "status": "True" }] },
+        })
+        .to_string()
+    }
+
+    /// A recreated pod's kubelet answers 404 until it has admitted the pod.
+    /// The pod is there, so the follower has nothing to move, and a
+    /// connection that waited for a move held its socket open for good.
+    #[tokio::test]
+    async fn a_connection_refused_while_its_pod_is_there_tries_again() {
+        let mut forward = running(ForwardVia::Pod, true, |path, _| match path {
+            "/api/v1/namespaces/shop/pods/api-0" => (200, there()),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        assert!(forward.state.port_forwards.subscribed("pf-1"));
+        assert_eq!(next_status(&mut forward.events).await.0, "listening");
+        let _client = tokio::net::TcpStream::connect(("127.0.0.1", forward.port))
+            .await
+            .unwrap();
+        let tried = || forward.hits.lock().unwrap().get(FORWARD).copied();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while tried() < Some(2) {
+                sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("a second attempt within five seconds");
     }
 
     /// Tauri events have no replay, so nothing is said before the frontend
