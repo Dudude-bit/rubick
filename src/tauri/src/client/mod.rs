@@ -796,6 +796,8 @@ impl K8sClientManager {
         self.paths.clear();
         self.served.clear();
         self.proxies.clear();
+        self.credential_deadlines.clear();
+        self.attempts.clear();
         tracing::info!("Disconnected from all clusters");
     }
 

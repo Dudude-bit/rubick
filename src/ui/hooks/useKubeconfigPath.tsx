@@ -58,6 +58,16 @@ export function useKubeconfigPath() {
     return useClusterStore.getState().loadContexts();
   };
 
+  /**
+   * The files the app reads were changed, and the backend let go of every
+   * session made from the old ones: the window follows, or it goes on
+   * saying connected over reads that all answer "no cluster connected".
+   */
+  const changed = async () => {
+    await reload();
+    await useClusterStore.getState().sessionsDropped();
+  };
+
   const failed = (title: string) => (error: unknown) =>
     toastError(title, error);
 
@@ -72,7 +82,7 @@ export function useKubeconfigPath() {
     try {
       if (list.length > 0) await commands.setKubeconfigPaths(list);
       else await commands.clearKubeconfigPath();
-      await reload();
+      await changed();
       toast({
         title: t("settings", "kubeconfigRestored"),
         description:
@@ -100,7 +110,7 @@ export function useKubeconfigPath() {
     // invalidated by `reload` before the toast is built.
     onMutate: () => ({ previous: override.data ?? null }),
     onSuccess: async (_result, _path, context) => {
-      await reload();
+      await changed();
       toast({
         title: t("settings", "kubeconfigUpdated"),
         description: context.previous
@@ -120,7 +130,7 @@ export function useKubeconfigPath() {
     mutationFn: (paths: string[]) => commands.setKubeconfigPaths(paths),
     onMutate: () => ({ previous: pinned.data ?? [] }),
     onSuccess: async (_result, paths, context) => {
-      await reload();
+      await changed();
       toast({
         title: t("settings", "kubeconfigUpdated"),
         description:
@@ -139,7 +149,7 @@ export function useKubeconfigPath() {
     mutationFn: () => commands.clearKubeconfigPath(),
     onMutate: () => ({ previous: override.data ?? null }),
     onSuccess: async (_result, _vars, context) => {
-      await reload();
+      await changed();
       toast({
         title: t("settings", "kubeconfigUpdated"),
         description: t("settings", "revertedToDefault"),

@@ -160,6 +160,12 @@ impl Unserved {
             .retain(|(of, read), _| of != context || read == WHOLE_API);
     }
 
+    /// Every context's answers: under other kubeconfig files a name can be
+    /// another cluster.
+    pub fn forget_all(&self) {
+        self.0.lock().clear();
+    }
+
     /// Only an admin changes these two answers; anything else is asked again.
     pub fn record(&self, context: &str, read: &str, status: &MetricsStatus, now: Instant) {
         let mut remembered = self.0.lock();

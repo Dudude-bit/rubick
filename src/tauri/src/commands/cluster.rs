@@ -272,6 +272,34 @@ fn teardown(state: &AppState, context: &str) {
     tracing::info!("Disconnected from cluster: {}", context);
 }
 
+/// Every session let go at once: the kubeconfig files they were made from
+/// are no longer the ones in force, and a name in them can now be another
+/// cluster. A connect still in flight was made from the old files too, and
+/// can no longer land. The window is told by whoever changed the files.
+pub(crate) fn teardown_all(state: &AppState) {
+    let _lifecycle = state.cluster_lifecycle.lock();
+    state.next_connect_generation();
+    let mut held = state.client_manager.connected_contexts();
+    held.extend(state.sessions.iter().map(|session| session.key().clone()));
+    held.extend(
+        state
+            .auth_sessions
+            .iter()
+            .map(|session| session.value().context.clone()),
+    );
+    held.sort();
+    held.dedup();
+    for context in &held {
+        teardown(state, context);
+    }
+    // What is kept by name for contexts not connected right now.
+    state.client_manager.disconnect_all();
+    state.overview_cache.forget_all();
+    state.ownership.forget_all();
+    state.metrics_unserved.forget_all();
+    state.set_current_context(None);
+}
+
 /// Make `context` the window's cluster again without connecting, where its
 /// session is still held. `None` makes no cluster current. Either way a
 /// connect still in flight can no longer land.
@@ -1006,6 +1034,41 @@ mod lifecycle_tests {
 
         begin(&state, "staging");
 
+        assert!(state
+            .metrics_unserved
+            .standing("staging", "nodes", at)
+            .is_none());
+    }
+
+    /// Pinning another kubeconfig file while connected. Fails if anything
+    /// made from the old files outlives them: a session whose client is
+    /// gone, a renewal still scheduled, a connect that lands afterwards, or
+    /// a metrics answer filed under a name that is now another cluster.
+    #[tokio::test]
+    async fn changing_the_kubeconfig_files_lets_go_of_every_session_whole() {
+        use crate::metrics::{MetricsStatus, MetricsStatusKind};
+        let state = AppState::new().expect("state");
+        hold(&state, "staging").await;
+        hold(&state, "prod-eu").await;
+        let in_flight = begin(&state, "tab-two");
+        let at = std::time::Instant::now();
+        let absent = MetricsStatus {
+            status: MetricsStatusKind::NotInstalled,
+            message: None,
+        };
+        state
+            .metrics_unserved
+            .record("staging", "nodes", &absent, at);
+        let (_session, mut cancelled) = state.create_auth_session("tab-two", "oidc", true);
+
+        super::teardown_all(&state);
+
+        assert!(live(&state).is_empty());
+        assert!(state.sessions.is_empty(), "no session without a client");
+        assert!(state.client_manager.connected_contexts().is_empty());
+        assert_eq!(current(&state), None);
+        assert!(cancelled.try_recv().is_ok(), "its sign-in is cancelled");
+        assert!(land(&state, in_flight, reached("tab-two").await).is_none());
         assert!(state
             .metrics_unserved
             .standing("staging", "nodes", at)
