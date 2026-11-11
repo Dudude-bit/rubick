@@ -249,7 +249,7 @@ pub async fn publish_report(
             MAX_HTML_BYTES / 1024
         )));
     }
-    let mut sharing = read_sharing()?;
+    let sharing = read_sharing()?;
     let target = sharing
         .find(&target_id)
         .ok_or_else(|| Error::InvalidInput(format!("no target {target_id}")))?
@@ -291,8 +291,7 @@ pub async fn publish_report(
         // on its own: the reader's next share should open a new link rather
         // than fail forever against a draft that was deleted over there.
         if status == reqwest::StatusCode::NOT_FOUND {
-            forget_draft(&mut sharing, &target_id, &object);
-            write_sharing(sharing).await?;
+            record_draft(target_id, object, None).await?;
         }
         return Err(Error::InvalidInput(format!(
             "{} answered {}{}",
@@ -334,17 +333,26 @@ pub async fn publish_report(
             .and_then(serde_json::Value::as_i64),
     };
     if let Some(draft) = &published.draft_id {
-        if let Some(entry) = sharing.targets.iter_mut().find(|t| t.id == target_id) {
-            entry.drafts.insert(object, draft.clone());
-        }
-        write_sharing(sharing).await?;
+        record_draft(target_id, object, Some(draft.clone())).await?;
     }
     Ok(published)
 }
 
-fn forget_draft(sharing: &mut SharingConfig, target_id: &str, object: &str) {
+/// Records the draft on the config as it is now, not as it was before the
+/// upload: a target removed or re-keyed meanwhile must stay that way.
+async fn record_draft(target_id: String, object: String, draft: Option<String>) -> Result<()> {
+    crate::commands::settings::with_config(move |config| {
+        set_draft(&mut config.sharing, &target_id, &object, draft)
+    })
+    .await
+}
+
+fn set_draft(sharing: &mut SharingConfig, target_id: &str, object: &str, draft: Option<String>) {
     if let Some(entry) = sharing.targets.iter_mut().find(|t| t.id == target_id) {
-        entry.drafts.remove(object);
+        match draft {
+            Some(draft) => entry.drafts.insert(object.to_string(), draft),
+            None => entry.drafts.remove(object),
+        };
     }
 }
 
@@ -491,13 +499,13 @@ mod tests {
         sharing.targets[0]
             .drafts
             .insert("Pod/shop/payments".into(), "abc123".into());
-        forget_draft(&mut sharing, "t1", "Pod/shop/payments");
+        set_draft(&mut sharing, "t1", "Pod/shop/payments", None);
         assert!(sharing.targets[0].drafts.is_empty());
         // Another object's draft is not touched by one target's 404.
         sharing.targets[0]
             .drafts
             .insert("Pod/shop/other".into(), "def456".into());
-        forget_draft(&mut sharing, "t1", "Pod/shop/payments");
+        set_draft(&mut sharing, "t1", "Pod/shop/payments", None);
         assert_eq!(sharing.targets[0].drafts.len(), 1);
     }
 }
