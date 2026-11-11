@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { APP_SEARCH_KEYS } from "./app-search";
 import { buildDeepLink, parseDeepLink } from "./deep-link";
 
 const ARN = "arn:aws:eks:eu-central-1:123:cluster/prod";
@@ -102,6 +103,39 @@ describe("parseDeepLink", () => {
       parseDeepLink("rubick://open/c/ctx/pods/ns/api?exec=1&shell=app&tab=logs")
         ?.path
     ).toBe("/c/ctx/pods/ns/api?tab=logs");
+  });
+
+  /**
+   * A policy's "selected pods" copied as a link reopened as every pod, with
+   * no banner: the sender's link held the filter and the receiver dropped
+   * it. Fails if a param that only narrows what is shown is stripped.
+   */
+  it("keeps the filters a link names, so a narrowed list reopens narrowed", () => {
+    for (const query of [
+      "selector=app%3Dweb&in=shop",
+      "listOf=httproutes&names=shop%2Fa%2Cshop%2Fb",
+      "kind=httproutes",
+      "tab=changes&since=2026-10-12T11%3A44%3A56Z",
+      "view=stories&range=6h&q=backoff",
+    ]) {
+      expect(parseDeepLink(`rubick://open/c/ctx/pods?${query}`)?.path).toBe(
+        `/c/ctx/pods?${query}`
+      );
+    }
+  });
+
+  /**
+   * The allowlist and the params the app reads are two lists. Fails when a
+   * param is added to the app and nobody decided whether a link may carry
+   * it: allow it, or name it here beside `shell` with the reason.
+   */
+  it("carries every param the app reads except the one that starts a shell", () => {
+    const dropped = APP_SEARCH_KEYS.filter(
+      (key) =>
+        parseDeepLink(`rubick://open/c/ctx/pods?${key}=x`)?.path !==
+        `/c/ctx/pods?${key}=x`
+    );
+    expect(dropped).toEqual(["shell"]);
   });
 
   /** An attached object's link opened its parent: fails if `view` is dropped on the way in. */

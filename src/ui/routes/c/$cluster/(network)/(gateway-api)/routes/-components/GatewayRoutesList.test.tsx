@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 const store = vi.hoisted(() => ({
   state: { isConnected: true, namespaceScope: [] as string[] },
@@ -153,6 +154,76 @@ describe("the routes page opened on one route kind", () => {
 
     expect(await screen.findAllByText("web")).not.toHaveLength(0);
     expect(screen.queryByText("Nothing matches the filter.")).toBeNull();
+  });
+});
+
+describe("the routes page opened from a link to one kind's rows", () => {
+  const api = { ...web, name: "api" };
+  const stream = { ...web, kind: "TCPRoute", name: "stream" };
+
+  /**
+   * The breadcrumb of an HTTPRoute and the Overview's "N HTTPRoutes" arrive
+   * as `?listOf=httproutes`, which the page ignored: the link named one kind
+   * and the page listed every kind.
+   */
+  it("lists only the kind the link was for", async () => {
+    page.refused = false;
+    page.backingError = null;
+    page.routes = [web, stream];
+    await renderRoutes("?listOf=httproutes");
+
+    expect(await screen.findAllByText("web")).not.toHaveLength(0);
+    expect(screen.queryByText("stream")).toBeNull();
+  });
+
+  /**
+   * The Overview's link carries `?names=` for the routes it counted. Fails
+   * if the page lists the others too, or narrows without saying so, or
+   * leaves a named route that is gone unmentioned.
+   */
+  it("lists only the named routes and says that it does", async () => {
+    page.refused = false;
+    page.backingError = null;
+    page.routes = [web, api];
+    await renderRoutes("?listOf=httproutes&names=shop/web,shop/gone");
+
+    expect(await screen.findAllByText("web")).not.toHaveLength(0);
+    expect(screen.queryByText("api")).toBeNull();
+    expect(
+      screen.getByText(
+        "Showing only the 2 rows the Overview listed as needing attention."
+      )
+    ).toBeVisible();
+    expect(
+      screen.getByText("1 of them is not in this list now.")
+    ).toBeVisible();
+  });
+});
+
+describe("the kind filter on a page a link narrowed to one kind", () => {
+  /**
+   * `listOf` stands in for `kind` until the reader picks one. Fails if
+   * "All kinds" leaves it in the address, where it would put the filter
+   * straight back.
+   */
+  it("shows every kind once the reader asks for all of them", async () => {
+    page.refused = false;
+    page.backingError = null;
+    page.routes = [web, { ...web, kind: "TCPRoute", name: "stream" }];
+    // Radix's Select asks jsdom for three things it does not have.
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    Element.prototype.scrollIntoView ??= () => {};
+    const { router } = await renderRoutes("?listOf=httproutes");
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole("combobox", { name: "Filter by kind" })
+    );
+    await user.click(await screen.findByRole("option", { name: "All kinds" }));
+
+    expect(await screen.findAllByText("stream")).not.toHaveLength(0);
+    expect(router.state.location.searchStr).toBe("");
   });
 });
 

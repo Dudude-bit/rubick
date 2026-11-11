@@ -95,6 +95,21 @@ describe("an object's address", () => {
     expect(hrefOf(link!)).toBe("/c/prod/nodes/n1");
   });
 
+  /**
+   * The backend writes a missing namespace as `""` on some rows. Fails if
+   * that reads as a namespace: a Node would open at `/nodes//n1`, and a Pod
+   * with none would get an address that leads nowhere.
+   */
+  it("reads an empty namespace as none", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const node = objectLink({ kind: "Node", name: "n1", namespace: "" });
+    expect(hrefOf(node!)).toBe("/c/prod/nodes/n1");
+    expect(
+      objectLink({ kind: "Pod", name: "api-0", namespace: "" })
+    ).toBeNull();
+  });
+
   /** A custom resource is named by its CRD, the way kubectl names it. */
   it("names a custom resource by its CRD", async () => {
     const router = at("/c/prod");

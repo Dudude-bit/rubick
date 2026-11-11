@@ -1,6 +1,16 @@
 import { readFileSync } from "node:fs";
-import { render, screen } from "@testing-library/react";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from "@tanstack/react-router";
+import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
+
+import { pageScroll } from "@/lib/page-scroll";
 
 import { CODE_FILES } from "@/test/source-files";
 import { Table, TableActionCell, TableBody, TableRow } from "./table";
@@ -44,5 +54,69 @@ describe("the cell that holds a row's last button", () => {
     );
     expect(CODE_FILES.length).toBeGreaterThan(500);
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("a table's scroll port across pages", () => {
+  const port = (name: string) =>
+    screen.getByRole("table", { name }).parentElement as HTMLElement;
+
+  async function twoLists() {
+    const root = createRootRoute({ component: Outlet });
+    const list = (path: string) =>
+      createRoute({
+        getParentRoute: () => root,
+        path,
+        component: () => <Table aria-label={path} />,
+      });
+    const router = createRouter({
+      routeTree: root.addChildren([list("/configmaps"), list("/secrets")]),
+      history: createMemoryHistory({ initialEntries: ["/configmaps"] }),
+      ...pageScroll,
+    });
+    await act(() => router.load());
+    render(<RouterProvider router={router} />);
+    await screen.findByRole("table", { name: "/configmaps" });
+    return router;
+  }
+
+  /**
+   * The router copies a scroll box's offset to whatever sits at the same
+   * DOM path on the next page, and every list's port sits at the same path:
+   * Secrets opened at the row ConfigMaps had been scrolled to. Fails if the
+   * port stops being named as the page's own.
+   */
+  it("opens at the top on a list reached from a scrolled one", async () => {
+    const router = await twoLists();
+    port("/configmaps").scrollTop = 400;
+    port("/configmaps").dispatchEvent(new Event("scroll"));
+
+    await act(async () => {
+      router.history.push("/secrets");
+      await router.load();
+    });
+    await screen.findByRole("table", { name: "/secrets" });
+
+    expect(port("/secrets").scrollTop).toBe(0);
+  });
+
+  /** Fails if naming the port costs the list its place on the way back. */
+  it("is put back where it was on the way back", async () => {
+    const router = await twoLists();
+    port("/configmaps").scrollTop = 400;
+    port("/configmaps").dispatchEvent(new Event("scroll"));
+    await act(async () => {
+      router.history.push("/secrets");
+      await router.load();
+    });
+    await screen.findByRole("table", { name: "/secrets" });
+
+    await act(async () => {
+      router.history.back();
+      await router.load();
+    });
+    await screen.findByRole("table", { name: "/configmaps" });
+
+    expect(port("/configmaps").scrollTop).toBe(400);
   });
 });

@@ -103,6 +103,27 @@ describe("listPodRows", () => {
   });
 
   /**
+   * Every reload of the Pods list adds three listeners, and the rows handed
+   * back are the array the batch listener fills. Fails if the listeners
+   * stay on after the answer: a later batch would grow a list already drawn.
+   */
+  it("stops listening once the list has arrived", async () => {
+    const answer = listPodRows(["shop"]);
+    await settled();
+    emit("pod-rows-batch", { stream_id: "pods-1", rows: [row("a")] });
+    emit("pod-rows-done", {
+      stream_id: "pods-1",
+      rows: 1,
+      complete: true,
+      unread: [],
+    });
+    const { rows } = await answer;
+
+    emit("pod-rows-batch", { stream_id: "pods-1", rows: [row("late")] });
+    expect(rows.map((r) => r.name)).toEqual(["a"]);
+  });
+
+  /**
    * The backend says how many rows it emitted, and the batches travel a
    * broadcast bus. A chunk lost on the way arrived here as a shorter list
    * with nothing to say it was short: five hundred pods missing from a pod

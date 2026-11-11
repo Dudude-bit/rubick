@@ -26,16 +26,34 @@ const HOST = "open";
  * picks a layout, or an attached object's own page over its parent's, and a
  * peek always opens on its Overview. So this is an allowlist, not a
  * blocklist, and a param the app grows later stays out until it is proven
- * safe to open unattended.
+ * safe to open unattended. `shell` is the one that is not: it names a
+ * container and the pod page opens a terminal in it on arrival.
  */
 const SAFE_PARAMS = new Set([
+  // Which tab, layout, panel, vendor or selected row is drawn.
   "tab",
   "view",
   "peek",
   "peekVia",
+  "via",
   "vendor",
   "type",
+  "rule",
+  "monitor",
+  // Which namespace the window looks at: a read the reader could ask for.
   "namespace",
+  // Narrow rows the page has already read, by text, kind, time or name.
+  // Each is matched in the page against a fixed set or as plain text.
+  "q",
+  "kind",
+  "range",
+  "since",
+  "names",
+  "listOf",
+  // Narrow the Pods list by label, matched in the page; a selector the app
+  // cannot read shows no pod and says so.
+  "selector",
+  "in",
 ]);
 
 const LEGACY_SECTIONS = new Set([
