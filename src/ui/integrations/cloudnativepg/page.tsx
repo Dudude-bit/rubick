@@ -22,7 +22,7 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf } from "@/lib/report-parts";
-import { getValueByPath, troubleMark, allowedWord } from "../kit";
+import { getValueByPath, troubleMark, reachWord } from "../kit";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { BACKUP_REFUSED, actionsFor, perform, type PgAction } from "./actions";
 import { backupsSection } from "./share";
@@ -240,12 +240,20 @@ export function OperatorStrip({
           <>
             <span>
               {t("operators", "canPatchClusters")}:{" "}
-              {allowedWord(operator.canPatchClusters, t)}
+              {reachWord(
+                operator.canPatchClusters,
+                operator.patchOn.values(),
+                t
+              )}
             </span>
             <span className="mx-2 text-fg-fnt">·</span>
             <span>
               {t("operators", "canCreateBackups")}:{" "}
-              {allowedWord(operator.canCreateBackups, t)}
+              {reachWord(
+                operator.canCreateBackups,
+                operator.createIn.values(),
+                t
+              )}
             </span>
             <span className="ml-2 text-fg-fnt">
               {t("operators", "checkedAgo", {

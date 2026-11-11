@@ -2448,6 +2448,7 @@ export const en = {
     canPatchClusters: "patch clusters",
     canCreateBackups: "create backups",
     allowed: "yes",
+    allowedOnSome: "on some (the rows say which)",
     refused: "refused",
     couldNotTell: "could not tell",
     checkedAgo: "checked for you {ago} ago",

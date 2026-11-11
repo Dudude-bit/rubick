@@ -2592,6 +2592,7 @@ export const ru: Catalogue = {
     canPatchClusters: "patch clusters",
     canCreateBackups: "create backups",
     allowed: "да",
+    allowedOnSome: "для некоторых (в строках видно, для каких)",
     refused: "отказано",
     couldNotTell: "не удалось узнать",
     checkedAgo: "проверено для вас {ago} назад",

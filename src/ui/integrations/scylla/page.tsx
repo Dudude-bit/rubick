@@ -40,7 +40,7 @@ import {
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
 import { ControllerLine, Fact, OperatorActionButton } from "../operator-kit";
-import { troubleMark, allowedWord } from "../kit";
+import { troubleMark, reachWord } from "../kit";
 import { toastError } from "@/lib/toast-error";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
@@ -152,7 +152,7 @@ export default function ScyllaPage() {
   );
 }
 
-function OperatorStrip({
+export function OperatorStrip({
   operator,
   pending,
 }: {
@@ -216,7 +216,7 @@ function OperatorStrip({
       </Fact>
       <Fact label={t("operators", "canActFact")}>
         {t("operators", "canPatchScyllaClusters")}:{" "}
-        {allowedWord(operator.canPatchClusters, t)}
+        {reachWord(operator.canPatchClusters, operator.patchOn.values(), t)}
         <span className="ml-2 text-fg-fnt">
           {t("operators", "checkedAgo", {
             ago: formatSince(operator.checkedAt, now),
