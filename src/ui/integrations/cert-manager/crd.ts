@@ -8,7 +8,13 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchByGroup, orNone, orNotWritten } from "../kit";
+import {
+  getValueByPath,
+  matchByGroup,
+  orNone,
+  orNotWritten,
+  readyColumn,
+} from "../kit";
 import type { CrdView } from "../registry";
 import { daysUntil } from "@/lib/utils";
 import { acmeServerLabel } from "./model";
@@ -20,21 +26,7 @@ import { acmeServerLabel } from "./model";
  * Columns for Certificate list
  */
 const certificateColumns: CrdColumn[] = [
-  {
-    id: "ready",
-    header: "ready",
-    accessor: (resource) => {
-      const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
-
-      if (!Array.isArray(conditions)) return "Unknown";
-
-      const readyCondition = conditions.find((c) => c.type === "Ready");
-      return readyCondition?.status === "True" ? "True" : "False";
-    },
-    cell: orNone,
-  },
+  readyColumn,
   {
     id: "secret",
     header: "secret",
@@ -87,21 +79,7 @@ const certificateColumns: CrdColumn[] = [
  * Columns for Issuer/ClusterIssuer list
  */
 const issuerColumns: CrdColumn[] = [
-  {
-    id: "ready",
-    header: "ready",
-    accessor: (resource) => {
-      const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
-
-      if (!Array.isArray(conditions)) return "Unknown";
-
-      const readyCondition = conditions.find((c) => c.type === "Ready");
-      return readyCondition?.status === "True" ? "True" : "False";
-    },
-    cell: orNone,
-  },
+  readyColumn,
   {
     id: "type",
     header: "type",
