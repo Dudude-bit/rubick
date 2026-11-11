@@ -1913,7 +1913,7 @@ export function unreadWhy(why: Unread, t: T): string {
   }
 }
 
-/** Policies are read on a pod's own tab, and no reference or way in depends on them. */
+/** Policies are read on a pod's own tab, and no way in depends on them. */
 export const policiesElsewhere = (entry: UnexploredKind): boolean =>
   entry.why.says === "policiesOnTheirTab" ||
   entry.why.says === "policiesOnPodTabs";
@@ -2573,6 +2573,15 @@ export function dependentsOf(conns: ResourceConnections, t: T): Dependent[] {
   }
   return [...found.values()];
 }
+
+/** A policy and a budget match labels and name no object. */
+const NAMES_NOTHING = new Set(["NetworkPolicy", "PodDisruptionBudget"]);
+
+/** The kinds left unread that could have held a reference to the subject. */
+export const referencesUnread = (conns: ResourceConnections): string[] =>
+  conns.notLookedAt
+    .map((entry) => entry.kind)
+    .filter((kind) => !NAMES_NOTHING.has(kind));
 
 function dependentWays(edge: ConnectionEdge, t: T): string[] | null {
   const relation = edge.relation;

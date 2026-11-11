@@ -46,9 +46,16 @@ export type ServiceHealth =
       unrouted: number;
       /** Of those, how many the slices call ready; `null` where the compact answer does not carry it. */
       unroutedReady: number | null;
+      /** {@link shutUnchecked} of the ones that serve. */
+      unchecked: string | null;
     }
   /** Nothing ready: what it serves goes to addresses still finishing their connections. */
-  | { state: "draining"; draining: number; total: number }
+  | {
+      state: "draining";
+      draining: number;
+      total: number;
+      unchecked: string | null;
+    }
   | { state: "noneReady"; published: PublishedCounts }
   /** None ready or none listed, and every workload behind it is still starting its pods. */
   | { state: "comingUp"; published: PublishedCounts }
@@ -120,11 +127,11 @@ export function serviceHealthOf(
     const { ready, draining } = published;
     if (isPolicyStop(published.stop))
       return { state: "shut", ready, stop: published.stop };
-    const why = shutUnchecked(published);
+    const unchecked = shutUnchecked(published);
     if (ready === total)
-      return why === null
+      return unchecked === null
         ? { state: "ready", ready }
-        : { state: "policiesUnread", ready, why };
+        : { state: "policiesUnread", ready, why: unchecked };
     return ready > 0
       ? {
           state: "partly",
@@ -133,8 +140,9 @@ export function serviceHealthOf(
           total,
           unrouted: published.unrouted,
           unroutedReady: published.unroutedReady ?? null,
+          unchecked,
         }
-      : { state: "draining", draining, total };
+      : { state: "draining", draining, total, unchecked };
   }
   const waiting = waitingOn(published.stop);
   if (listed > 0) return { state: waiting ?? "noneReady", published };
@@ -239,6 +247,12 @@ function stopWords(
   };
 }
 
+/** A count that is short for its own reason, and then why its door went unchecked. */
+const withUnchecked = (reason: string, unchecked: string | null, t: T) =>
+  unchecked === null
+    ? reason
+    : `${reason}. ${t("readings", "healthPoliciesUnread", { why: unchecked })}`;
+
 export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
   switch (health.state) {
     case "ready":
@@ -266,21 +280,26 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
                 total: health.total,
               }),
         role: "warn",
-        reason: [
-          health.draining > 0 &&
-            t("readings", "drainingCount", { n: health.draining }),
-          notReady > 0 && t("count", "addressesTakeNoTraffic", { n: notReady }),
-          health.unrouted > 0 &&
-            t(
-              "count",
-              health.unroutedReady === health.unrouted
-                ? "addressesReadyOffPort"
-                : "addressesOffPort",
-              { n: health.unrouted }
-            ),
-        ]
-          .filter(Boolean)
-          .join(", "),
+        reason: withUnchecked(
+          [
+            health.draining > 0 &&
+              t("readings", "drainingCount", { n: health.draining }),
+            notReady > 0 &&
+              t("count", "addressesTakeNoTraffic", { n: notReady }),
+            health.unrouted > 0 &&
+              t(
+                "count",
+                health.unroutedReady === health.unrouted
+                  ? "addressesReadyOffPort"
+                  : "addressesOffPort",
+                { n: health.unrouted }
+              ),
+          ]
+            .filter(Boolean)
+            .join(", "),
+          health.unchecked,
+          t
+        ),
       };
     }
     case "draining":
@@ -288,7 +307,11 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         code: health.state,
         label: t("readings", "drainingCount", { n: health.draining }),
         role: "warn",
-        reason: t("readings", "healthDrainingWhy"),
+        reason: withUnchecked(
+          t("readings", "healthDrainingWhy"),
+          health.unchecked,
+          t
+        ),
       };
     case "noneReady":
       return {

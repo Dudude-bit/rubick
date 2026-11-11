@@ -16,7 +16,7 @@ import { KindIcon } from "@/components/object/KindIcon";
 import { RouteLink } from "@/components/ui/route-link";
 import { useT } from "@/i18n/useT";
 import { useConnections } from "@/hooks/useConnections";
-import { dependentsOf, policiesElsewhere } from "@/lib/connections";
+import { dependentsOf, referencesUnread } from "@/lib/connections";
 import { errorToShow } from "@/lib/error-utils";
 import { crdInstancesLink } from "@/lib/links";
 import { CONNECTED_KINDS } from "@/lib/report-parts";
@@ -128,9 +128,7 @@ function Dependents({
       </p>
     );
   const dependents = dependentsOf(conns.data, t);
-  const unread = conns.data.notLookedAt
-    .filter((entry) => !policiesElsewhere(entry))
-    .map((entry) => entry.kind);
+  const unread = referencesUnread(conns.data);
   return (
     <>
       {dependents.length > 0 && (

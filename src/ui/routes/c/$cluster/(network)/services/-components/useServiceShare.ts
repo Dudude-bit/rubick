@@ -18,6 +18,7 @@ import {
   podsUnreadOf,
   serviceHealthOf,
   serviceHealthWords,
+  shutUnchecked,
 } from "@/lib/service-health";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
@@ -59,6 +60,8 @@ export function serviceStats(
       health.state === "comingUp" || unread || health.state === "shut"
         ? serviceHealthWords(health, t)
         : null;
+    // A short count keeps its own colour; the door nobody checked is said beside it.
+    const unchecked = shutUnchecked(published);
     stats.push({
       label: t("nav", "published"),
       value: `${published.ready}/${total}`,
@@ -84,7 +87,13 @@ export function serviceStats(
             ? told.reason
             : total === 0
               ? t("empty", "servicePublishesNothing")
-              : sourceNote(published, t),
+              : [
+                  unchecked !== null &&
+                    t("readings", "healthPoliciesUnread", { why: unchecked }),
+                  sourceNote(published, t),
+                ]
+                  .filter(Boolean)
+                  .join(". ") || null,
     });
   }
   return stats;

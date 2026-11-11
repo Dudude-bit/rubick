@@ -64,7 +64,8 @@ pub(super) async fn pod_connections(
     governed_by(ns, &scalable, &subject, pod.labels(), &snapshot, out);
 
     out.not_looked_at.extend(unanswered(&snapshot));
-    out.not_looked_at.push(UnexploredKind::on_a_pod());
+    out.not_looked_at
+        .extend(snapshot.policies.is_ok().then(UnexploredKind::on_a_pod));
     Ok(())
 }
 
@@ -364,7 +365,8 @@ pub(super) async fn workload_connections(
 
     out.not_looked_at.extend(unanswered(&snapshot));
     out.not_looked_at.extend(revisions_unread);
-    out.not_looked_at.push(UnexploredKind::behind_pods());
+    out.not_looked_at
+        .extend(snapshot.policies.is_ok().then(UnexploredKind::behind_pods));
     Ok(())
 }
 
@@ -486,7 +488,8 @@ pub(super) async fn service_connections(
     // "every kind was read", so the "Not looked at" group never renders and
     // the frontend's own guards have nothing to fire on.
     out.not_looked_at.extend(unanswered(&snapshot));
-    out.not_looked_at.push(UnexploredKind::behind_pods());
+    out.not_looked_at
+        .extend(snapshot.policies.is_ok().then(UnexploredKind::behind_pods));
 
     Ok(())
 }
@@ -622,7 +625,8 @@ pub(super) async fn ingress_connections(
     // As on the pod and workload pages: a refusal here has to be named, or
     // it is a gap the wire contract reads as "every kind was read".
     out.not_looked_at.extend(unanswered(&snapshot));
-    out.not_looked_at.push(UnexploredKind::behind_pods());
+    out.not_looked_at
+        .extend(snapshot.policies.is_ok().then(UnexploredKind::behind_pods));
 
     Ok(())
 }
@@ -1389,12 +1393,11 @@ mod ingress_tests {
         assert!(unread.contains(&"HorizontalPodAutoscaler"), "{unread:?}");
     }
 
-    /// Dana's `Deployment`, `StatefulSet` and `Service` pages named no unread
-    /// policies while kubectl showed policies selecting their pods, and only
-    /// the pod's page said its graph does not read them. Fails if an arm with
-    /// pods behind it stops naming the policies it never reads.
-    #[tokio::test]
-    async fn every_arm_with_pods_behind_it_names_the_policies_it_does_not_read() {
+    const POLICIES: &str = "/apis/networking.k8s.io/v1/namespaces/shop/networkpolicies";
+
+    /// An Ingress, a Service, a Deployment and a pod in `shop`, with the
+    /// namespace's `NetworkPolicies` answering as given.
+    async fn arms(policies: (u16, String)) -> ResourceContext {
         let ingress = json!({
             "metadata": { "name": "front", "namespace": "shop" },
             "spec": { "rules": [] },
@@ -1410,6 +1413,7 @@ mod ingress_tests {
                 "template": { "metadata": { "labels": { "app": "web" } } },
             },
         });
+        let pod = json!({ "metadata": { "name": "web-x", "namespace": "shop" } });
         let (client, _) = server(vec![
             (
                 "/apis/networking.k8s.io/v1/namespaces/shop/ingresses",
@@ -1417,20 +1421,34 @@ mod ingress_tests {
                 listing(&[ingress]),
             ),
             ("/api/v1/namespaces/shop/services", 200, listing(&[service])),
+            ("/api/v1/namespaces/shop/pods", 200, listing(&[pod])),
             (
                 "/apis/apps/v1/namespaces/shop/deployments/web",
                 200,
                 deployment.to_string(),
             ),
+            (POLICIES, policies.0, policies.1),
         ])
         .await;
-        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        ResourceContext::from_client(client, "shop".to_string())
+    }
 
-        for (kind, name) in [
-            ("Deployment", "web"),
-            ("Service", "web"),
-            ("Ingress", "front"),
-        ] {
+    const ARMS: [(&str, &str); 4] = [
+        ("Deployment", "web"),
+        ("Service", "web"),
+        ("Ingress", "front"),
+        ("Pod", "web-x"),
+    ];
+
+    /// Dana's `Deployment`, `StatefulSet` and `Service` pages named no unread
+    /// policies while kubectl showed policies selecting their pods, and only
+    /// the pod's page said its graph does not read them. Fails if an arm with
+    /// pods behind it stops naming the policies it never reads.
+    #[tokio::test]
+    async fn every_arm_with_pods_behind_it_names_the_policies_it_does_not_read() {
+        let ctx = arms((200, listing(&[]))).await;
+
+        for (kind, name) in &ARMS[..3] {
             let page = connections_of(&ctx, kind, name, None)
                 .await
                 .expect("a page");
@@ -1443,6 +1461,35 @@ mod ingress_tests {
                 page.not_looked_at
             );
         }
+    }
+
+    /// A token refused `list networkpolicies` read "Connections does not read
+    /// the policies" on these pages, which had asked and been refused. Fails
+    /// if an arm stops naming the refusal, or names the policies twice.
+    #[tokio::test]
+    async fn every_arm_names_a_refused_policy_list_once_as_unanswered() {
+        let ctx = arms(failure(403, "Forbidden")).await;
+
+        let mut wrong = Vec::new();
+        for (kind, name) in ARMS {
+            let page = connections_of(&ctx, kind, name, None)
+                .await
+                .expect("a page");
+            let policies: Vec<_> = page
+                .not_looked_at
+                .into_iter()
+                .filter(|entry| entry.kind == "NetworkPolicy")
+                .map(|entry| entry.why)
+                .collect();
+            if !matches!(
+                policies.as_slice(),
+                [crate::resources::Unread::Unanswered { version, .. }]
+                    if version == "networking.k8s.io/v1"
+            ) {
+                wrong.push((kind, policies));
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:?}");
     }
 
     fn tls_ingress() -> String {

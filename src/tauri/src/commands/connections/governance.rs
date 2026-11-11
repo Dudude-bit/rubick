@@ -341,6 +341,11 @@ pub(super) fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
             "networking.k8s.io/v1",
             snapshot.ingresses.as_ref().err(),
         ),
+        (
+            "NetworkPolicy",
+            "networking.k8s.io/v1",
+            snapshot.policies.as_ref().err(),
+        ),
     ] {
         if let Some(why) = why {
             unread.push(UnexploredKind::unanswered(kind, version, why));
