@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
 
@@ -45,6 +46,7 @@ import { TLS_NOT_CHECKED_TONE } from "../../-components";
 import { useIngressTlsFact } from "../../../-object/ingress-tls-fact";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
+  claimedBinding,
   ingressAddressOf,
   ingressClassWords,
   INGRESS_ADDRESS_WORDS,
@@ -128,12 +130,16 @@ export function IngressDetail() {
 
   // Which controller claims this Ingress. Core: IngressClass is a built-in
   // kind, and "none does" is the failure that is silent everywhere else.
-  const { data: controller } = useQuery({
+  const { data: binding } = useQuery({
     queryKey: queryKeys.ingressClass(ingress?.className),
     queryFn: () => commands.resolveIngressClass(ingress?.className ?? null),
     enabled: !!ingress,
   });
-  const address = ingressAddressOf({ loadBalancerIps }, controller);
+  const controller = useMemo(
+    () => (ingress && binding ? claimedBinding(ingress, binding) : undefined),
+    [ingress, binding]
+  );
+  const address = ingressAddressOf({ loadBalancerIps }, controller?.claim);
   const health = useOneIngressHealth(ingress);
 
   const share = useIngressShare(ingress, controller, {

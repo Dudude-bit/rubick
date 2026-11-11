@@ -372,7 +372,9 @@ export function IngressList() {
   const vendorTls = useIngressTls(asked);
 
   const backing = useServiceHealthInputs(scope.wire);
-  const healthOfRow = useIngressHealth(listed.data?.rows, backing);
+  const healthOfRow = useIngressHealth(listed.data?.rows, backing, {
+    asksControllers: true,
+  });
   const healthOf = (ingress: IngressInfo): Verdict =>
     ingressHealthWords(healthOfRow(ingress), t);
   const columns = useMemo(

@@ -64,7 +64,11 @@ pub struct IngressInfo {
     pub name: String,
     pub namespace: String,
     pub uid: String,
+    /// The class it asks for, as [`ingress_class`] reads it.
     pub class_name: Option<String>,
+    /// Set where only the legacy annotation names the class.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class_annotated: Option<bool>,
     pub rules: Vec<IngressRule>,
     pub default_backend: Option<IngressDefaultBackend>,
     pub load_balancer_ips: Vec<String>,
@@ -74,6 +78,32 @@ pub struct IngressInfo {
     pub labels: std::collections::BTreeMap<String, String>,
     pub annotations: std::collections::BTreeMap<String, String>,
     pub created_at: Option<String>,
+}
+
+const LEGACY_CLASS_ANNOTATION: &str = "kubernetes.io/ingress.class";
+
+/// The class an Ingress asks for, and whether only the legacy annotation
+/// names it: the one reading behind every row built from an Ingress.
+///
+/// `spec.ingressClassName` first, as the API defines it. Then the annotation
+/// GKE reads alone and nginx, ALB and Traefik still honour: a controller
+/// matches that by its own setting, so no `IngressClass` need exist for it.
+#[must_use]
+pub fn ingress_class(ingress: &Ingress) -> (Option<String>, Option<bool>) {
+    let named = ingress
+        .spec
+        .as_ref()
+        .and_then(|s| s.ingress_class_name.clone());
+    if named.is_some() {
+        return (named, None);
+    }
+    let annotated = ingress
+        .annotations()
+        .get(LEGACY_CLASS_ANNOTATION)
+        .filter(|class| !class.is_empty())
+        .cloned();
+    let legacy = annotated.is_some().then_some(true);
+    (annotated, legacy)
 }
 
 /// A backend's three spellings, shared by `rules[].paths[]` and
@@ -205,12 +235,14 @@ impl From<&Ingress> for IngressInfo {
         // Extract labels and annotations
         let labels = ingress.metadata.labels.clone().unwrap_or_default();
         let annotations = ingress.metadata.annotations.clone().unwrap_or_default();
+        let (class_name, class_annotated) = ingress_class(ingress);
 
         Self {
             name: ingress.name_any(),
             namespace: ingress.namespace().unwrap_or_default(),
             uid: ingress.uid().unwrap_or_default(),
-            class_name: spec.and_then(|s| s.ingress_class_name.clone()),
+            class_name,
+            class_annotated,
             rules,
             default_backend,
             load_balancer_ips,
@@ -421,6 +453,49 @@ mod tests {
         assert_eq!(backend.backend_service, "traefik");
         assert_eq!(backend.backend_port, "80");
         assert_eq!(backend.resource_backend, None);
+    }
+
+    fn classed(spec: Option<&str>, annotation: Option<&str>) -> Ingress {
+        let mut ingress = Ingress {
+            spec: Some(IngressSpec {
+                ingress_class_name: spec.map(Into::into),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        if let Some(class) = annotation {
+            ingress
+                .annotations_mut()
+                .insert("kubernetes.io/ingress.class".into(), class.into());
+        }
+        ingress
+    }
+
+    /// GKE reads only the annotation, and annotation-only nginx, ALB and
+    /// Traefik manifests are everywhere: read from `spec` alone such an
+    /// Ingress asked for no class, and was drawn as served by nobody. Fails
+    /// if the annotation stops naming the class, or stops saying it did.
+    #[test]
+    fn an_ingress_classed_by_the_legacy_annotation_asks_for_that_class() {
+        let info = IngressInfo::from(&classed(None, Some("gce")));
+        assert_eq!(info.class_name.as_deref(), Some("gce"));
+        assert_eq!(info.class_annotated, Some(true));
+    }
+
+    /// `spec.ingressClassName` is checked against the `IngressClass` list; an
+    /// annotation is not. Fails if a class the spec names is filed as
+    /// annotated, which would excuse a class that does not exist.
+    #[test]
+    fn spec_names_the_class_over_the_annotation_and_is_not_filed_as_annotated() {
+        let both = IngressInfo::from(&classed(Some("nginx"), Some("alb")));
+        assert_eq!(both.class_name.as_deref(), Some("nginx"));
+        assert_eq!(both.class_annotated, None);
+
+        for none in [classed(None, None), classed(None, Some(""))] {
+            let info = IngressInfo::from(&none);
+            assert_eq!(info.class_name, None);
+            assert_eq!(info.class_annotated, None);
+        }
     }
 
     #[test]

@@ -42,6 +42,7 @@ export interface IngressInputs {
     | "name"
     | "namespace"
     | "className"
+    | "classAnnotated"
     | "rules"
     | "defaultBackend"
     | "tlsConfigs"
@@ -53,9 +54,10 @@ export interface IngressInputs {
   certificates: Map<string, TlsCertificate> | undefined;
   /**
    * A host its controller serves as plain HTTP whatever `spec.tls` says, as
-   * Traefik does without `router.tls`. Absent, `spec.tls` stands.
+   * Traefik does without `router.tls`; `null` where that controller was not
+   * asked or has not answered. Absent, `spec.tls` stands.
    */
-  servedPlain?: (host: string) => boolean;
+  servedPlain?: (host: string) => boolean | null;
   /** Who the class's controller connects from; absent, no backend's NetworkPolicies are asked about it. */
   door?: DoorAsk;
 }
@@ -75,10 +77,53 @@ export type IngressProblem =
   /** Its pods are up, and whether their NetworkPolicies let the controller through is not known. */
   | { kind: "backendDoorUnchecked"; service: string; doubt: DoorDoubt };
 
+/** What nobody settled, where the words are this app's and not the cluster's. */
+export type IngressDoubt =
+  /** The Secret is missing, and whether its controller presents it at all was not asked. */
+  | { kind: "tlsUnasked"; secret: string }
+  /** {@link IngressClaim}'s `unrecorded`. */
+  | { kind: "claimUnrecorded"; className: string };
+
+/**
+ * Who picks an Ingress up. An IngressClass answers for the class
+ * `spec.ingressClassName` names, and for no class where one is the default.
+ * A class only the legacy annotation names, and no class without a default,
+ * are taken by a controller's own settings, which the cluster does not
+ * record: there the address a controller published is the evidence one did.
+ */
+export type IngressClaim =
+  /** An IngressClass answers for it. */
+  | "class"
+  /** None does, and a controller published its address all the same. */
+  | "address"
+  /** Its annotation names a class no IngressClass has, and it has no address: nobody can tell. */
+  | "unrecorded"
+  | "none";
+
+type Classed = Pick<IngressInfo, "classAnnotated" | "loadBalancerIps">;
+
+export function ingressClaimOf(
+  ingress: Classed,
+  binding: Pick<IngressClassBinding, "requested" | "resolved">
+): IngressClaim {
+  if (binding.resolved) return "class";
+  if (binding.requested !== null && !ingress.classAnnotated) return "none";
+  if (ingress.loadBalancerIps.length > 0) return "address";
+  return ingress.classAnnotated ? "unrecorded" : "none";
+}
+
+/** A class binding with the claim it makes on the one Ingress it was read for. */
+export type ClaimedBinding = IngressClassBinding & { claim: IngressClaim };
+
+export const claimedBinding = (
+  ingress: Classed,
+  binding: IngressClassBinding
+): ClaimedBinding => ({ ...binding, claim: ingressClaimOf(ingress, binding) });
+
 export interface IngressHealth {
   problems: IngressProblem[];
   /** Why an input was not read; empty when every one was. */
-  unread: Array<string | null>;
+  unread: Array<string | null | IngressDoubt>;
   backends: number;
   addressed: boolean;
 }
@@ -142,11 +187,18 @@ const BACKEND_PROBLEM: Record<
 export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
   const { ingress, binding, backing, certificates } = inputs;
   const problems: IngressProblem[] = [];
-  const unread: Array<string | null> = [];
+  const unread: IngressHealth["unread"] = [];
 
   if (!binding.known) unread.push(binding.why);
-  else if (!binding.value.resolved) {
-    problems.push({ kind: "noController", className: ingress.className });
+  else {
+    const claim = ingressClaimOf(ingress, binding.value);
+    if (claim === "none")
+      problems.push({ kind: "noController", className: ingress.className });
+    if (claim === "unrecorded")
+      unread.push({
+        kind: "claimUnrecorded",
+        className: binding.value.requested ?? "",
+      });
   }
 
   const controller = binding.known ? binding.value.controller : null;
@@ -205,18 +257,19 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
     if (!config.secretName) continue;
     // Never presented, so its absence breaks nothing a client sees; the
     // controller's own page says nothing of it either.
-    if (
-      config.hosts.length > 0 &&
-      config.hosts.every((host) => inputs.servedPlain?.(host))
-    )
-      continue;
+    const plain = config.hosts.map(inputs.servedPlain ?? (() => false));
+    if (plain.length > 0 && plain.every((served) => served === true)) continue;
     if (!certificates) {
       unread.push(null);
       continue;
     }
     const problem = certificates.get(config.secretName)?.problem;
     if (problem?.says === "noSecret") {
-      problems.push({ kind: "tlsSecretMissing", secret: config.secretName });
+      // Missing is a fault only where the Secret is presented.
+      if (plain.length > 0 && plain.every((served) => served !== false))
+        unread.push({ kind: "tlsUnasked", secret: config.secretName });
+      else
+        problems.push({ kind: "tlsSecretMissing", secret: config.secretName });
     } else if (problem?.says === "secretUnreadable") {
       unread.push(problem.said);
     }
@@ -233,7 +286,8 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
 /**
  * What an Ingress's load balancer row can say: an address, one on its way
  * from a controller that serves the class, none because nothing serves it,
- * or nothing known because the class could not be read.
+ * or nothing known because who serves it could not be read or is not
+ * recorded.
  */
 export type IngressAddress =
   | "assigned"
@@ -241,22 +295,29 @@ export type IngressAddress =
   | "noController"
   | "unknown";
 
+const UNADDRESSED: Record<IngressClaim, IngressAddress> = {
+  class: "pending",
+  address: "assigned",
+  unrecorded: "unknown",
+  none: "noController",
+};
+
 export function ingressAddressOf(
   ingress: Pick<IngressInfo, "loadBalancerIps">,
-  binding: IngressClassBinding | undefined
+  claim: IngressClaim | undefined
 ): IngressAddress {
   if (ingress.loadBalancerIps.length > 0) return "assigned";
-  if (!binding) return "unknown";
-  return binding.resolved ? "pending" : "noController";
+  return claim ? UNADDRESSED[claim] : "unknown";
 }
 
 /**
  * The class row, on the page and in the shared file: the class is a request
- * and the controller is who answers it, including "nobody does".
+ * and the controller is who answers it, including "nobody does" and "the
+ * cluster does not say".
  */
 export function ingressClassWords(
   className: string | null,
-  binding: IngressClassBinding | undefined,
+  binding: ClaimedBinding | undefined,
   t: T
 ): { text: string; tone: "err" | null } {
   if (!binding) {
@@ -270,11 +331,14 @@ export function ingressClassWords(
       tone: null,
     };
   }
+  const unclaimed = binding.claim === "none";
   return {
     text: className
-      ? t("empty", "nothingServesClass", { name: className })
+      ? t("empty", unclaimed ? "nothingServesClass" : "classByAnnotation", {
+          name: className,
+        })
       : t("empty", "noClassNoDefault"),
-    tone: "err",
+    tone: unclaimed ? "err" : null,
   };
 }
 
@@ -336,6 +400,15 @@ function problemSentence(problem: IngressProblem, t: T): string {
         ? t("readings", "healthBackendPoliciesUnread", said)
         : t("count", "healthBackendDoorUnchecked", { ...said, n, names });
     }
+  }
+}
+
+function doubtWords(doubt: IngressDoubt, t: T): string {
+  switch (doubt.kind) {
+    case "tlsUnasked":
+      return t("readings", "healthTlsUnasked", { name: doubt.secret });
+    case "claimUnrecorded":
+      return t("readings", "healthClaimUnrecorded", { name: doubt.className });
   }
 }
 
@@ -418,7 +491,9 @@ export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
     };
   }
   if (health.unread.length > 0) {
-    const said = health.unread.filter((why): why is string => why !== null);
+    const said = health.unread.flatMap((why) =>
+      why === null ? [] : [typeof why === "string" ? why : doubtWords(why, t)]
+    );
     return said.length > 0
       ? {
           code: "unknown",

@@ -382,7 +382,7 @@ pub(super) fn ingress_ref(ing: &Ingress, ns: &str) -> ObjectRef {
         Existence::Present,
     )
     .with_facts(ObjectFacts::Ingress {
-        class_name: ing.spec.as_ref().and_then(|s| s.ingress_class_name.clone()),
+        class_name: crate::resources::ingress_class(ing).0,
     })
 }
 
@@ -494,6 +494,23 @@ mod ingress_backend_tests {
     use k8s_openapi::api::networking::v1::{
         IngressBackend, IngressServiceBackend, IngressSpec, IngressTLS, ServiceBackendPort,
     };
+
+    /// The graph names an Ingress's class beside it, by the reading its
+    /// page uses. Fails if the graph goes back to `spec` alone, which calls
+    /// an annotated Ingress classless on one screen and classed on the next.
+    #[test]
+    fn an_ingress_in_the_graph_carries_the_class_its_annotation_names() {
+        let mut ingress = Ingress::default();
+        ingress
+            .annotations_mut()
+            .insert("kubernetes.io/ingress.class".into(), "alb".into());
+
+        let facts = ingress_ref(&ingress, "shop").facts;
+        assert!(
+            matches!(&facts, Some(ObjectFacts::Ingress { class_name }) if class_name.as_deref() == Some("alb")),
+            "{facts:?}"
+        );
+    }
 
     /// A defaultBackend-only Ingress is how a cloud load balancer fronts an
     /// in-cluster proxy, and the connections graph used to draw it as

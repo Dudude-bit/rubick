@@ -49,4 +49,24 @@ describe("what stands behind a backendRef", () => {
       className: "text-ok",
     });
   });
+
+  /**
+   * A reader refused the Services saw the trace quote the refusal and this
+   * column say "reading…" for good. Fails if a failed read is drawn as one
+   * still coming, or a pending one as failed.
+   */
+  it("says a backing read that failed is not read, with the cluster's words", () => {
+    const refused = 'services is forbidden: User "dev" cannot list';
+    expect(
+      behindIt({ ...reached, ready: 0, known: false, error: refused }, t)
+    ).toEqual({
+      text: "endpoints not read",
+      className: "text-fg-mut",
+      title: refused,
+    });
+    expect(behindIt({ ...reached, ready: 0, known: false }, t)).toEqual({
+      text: "reading…",
+      className: "text-fg-fnt",
+    });
+  });
 });

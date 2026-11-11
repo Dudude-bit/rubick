@@ -77,13 +77,30 @@ function hopOf(hop: ChainHop, t: T): ReportHop {
             .join(" · ") || null,
         tone: hop.read === undefined ? "warn" : tone,
       };
-    case "controller":
+    case "controller": {
+      const { claim, requested, resolved, controller } = hop.binding;
+      // No IngressClass to name, and a file keeps "not known" for good.
+      if (claim === "address" || claim === "unrecorded")
+        return {
+          ...plain,
+          text: requested
+            ? t("empty", "ingressClassAnnotated", { name: requested })
+            : t("empty", "ingressNamesNoClass"),
+          detail: t(
+            "empty",
+            claim === "address"
+              ? "ingressClaimedByAddress"
+              : "ingressClaimUnrecorded"
+          ),
+          tone: claim === "unrecorded" ? "warn" : tone,
+        };
       return {
         ...plain,
-        text: `IngressClass ${hop.binding.resolved ?? hop.binding.requested ?? "?"}`,
-        detail: hop.binding.controller,
+        text: `IngressClass ${resolved ?? requested ?? "?"}`,
+        detail: controller,
         tone,
       };
+    }
   }
 }
 

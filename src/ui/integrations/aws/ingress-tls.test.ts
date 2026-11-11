@@ -97,8 +97,13 @@ describe("whether an ALB Ingress serves TLS", () => {
     await expect(ingressTls(ask())).resolves.toEqual([[]]);
   });
 
-  /** One failing read must not take the rest of a page's rows with it. */
-  it("answers the other rows when one read fails", async () => {
+  /**
+   * One failing read must not take the rest of a page's rows with it, and
+   * must not read as silence either: an empty answer is "this controller
+   * has nothing to say", which left an ALB host with an ACM certificate as
+   * plain HTTP after a GET that failed.
+   */
+  it("answers the other rows when one read fails, and leaves that one's hosts unknown", async () => {
     vi.mocked(commands.getIngress)
       .mockRejectedValueOnce(new Error("forbidden"))
       .mockResolvedValueOnce(
@@ -112,7 +117,13 @@ describe("whether an ALB Ingress serves TLS", () => {
       { namespace: "web", name: "gone", hosts: ["a.example.com"] },
       { namespace: "web", name: "shop", hosts: ["shop.example.com"] },
     ]);
-    expect(answers[0]).toEqual([]);
+    expect(answers[0]).toEqual([
+      {
+        host: "a.example.com",
+        terminated: null,
+        by: { key: "verbatimLine", values: { said: "forbidden" } },
+      },
+    ]);
     expect(answers[1][0].terminated).toBe(true);
   });
 });

@@ -31,11 +31,10 @@ const specCovers = (
 
 export function vendorTlsAnswer(
   ingress: IngressInfo,
-  vendorTls: Pick<IngressTlsAnswers, "of" | "isPending" | "error">,
+  vendorTls: Pick<IngressTlsAnswers, "of" | "unread">,
   t: T
 ): VendorTlsAnswer | null {
-  // A question still out, or one that failed, has not said no.
-  const unread = vendorTls.isPending || vendorTls.error !== null;
+  const { unread } = vendorTls;
   const hosts: string[] = [];
   const unchecked: string[] = [];
   const plain: string[] = [];

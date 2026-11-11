@@ -67,11 +67,11 @@ import {
   RESOURCE_NAME_SHELL,
 } from "@/components/object/ResourceName";
 import type {
-  IngressClassBinding,
   ObjectRef,
   ResourceConnections,
   TlsCertificate,
 } from "@/generated/types";
+import type { ClaimedBinding } from "@/lib/ingress-health";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { TONE_TEXT } from "@/lib/tone";
@@ -211,10 +211,33 @@ function Controller({
   binding,
   brief,
 }: {
-  binding: IngressClassBinding;
+  binding: ClaimedBinding;
   brief: boolean;
 }) {
   const t = useT();
+  // No IngressClass answers, and that is not "nobody does": the class is
+  // matched by a controller's own settings, which the cluster does not record.
+  if (binding.claim === "address" || binding.claim === "unrecorded") {
+    return (
+      <>
+        <p className="text-xs text-fg-mid">
+          {binding.requested
+            ? t("empty", "ingressClassAnnotated", { name: binding.requested })
+            : t("empty", "ingressNamesNoClass")}
+        </p>
+        {!brief && (
+          <p className="max-w-[92ch] text-[11px] text-fg-fnt">
+            {t(
+              "empty",
+              binding.claim === "address"
+                ? "ingressClaimedByAddress"
+                : "ingressClaimUnrecorded"
+            )}
+          </p>
+        )}
+      </>
+    );
+  }
   if (!binding.resolved && brief && binding.requested) {
     return (
       <p
@@ -599,7 +622,7 @@ export function TrafficChain({
   /** Why those certificates look the way they do, where anything can say. */
   issuance?: Issuance;
   /** Which controller claims this Ingress, where the page has resolved it. */
-  controller?: IngressClassBinding;
+  controller?: ClaimedBinding;
 }) {
   const t = useT();
   const { data, isPending, error } = query;

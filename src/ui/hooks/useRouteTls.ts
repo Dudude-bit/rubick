@@ -29,8 +29,7 @@ export function useRouteTls(conns: ResourceConnections | undefined): RouteTls {
     return [...byIngress.values()];
   }, [conns]);
   const answers = useIngressTls(asked);
-  const unread = answers.isPending || answers.error !== null;
-  const { of } = answers;
+  const { of, unread } = answers;
   return useCallback(
     (ingress, host, spec) =>
       hostTls(

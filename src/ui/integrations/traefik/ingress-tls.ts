@@ -63,3 +63,4 @@ export async function ingressTls(
     })
   );
 }
+ingressTls.replacesSpec = true as const;

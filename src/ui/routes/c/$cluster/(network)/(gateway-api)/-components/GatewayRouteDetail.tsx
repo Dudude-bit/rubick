@@ -165,7 +165,9 @@ function RuleRows({ route }: { route: RouteInfo }) {
                               : (backend.weight ?? t("action", "notSet"))}
                           </TableCell>
                           <TableCell className="text-xs">
-                            <span className={said.className}>{said.text}</span>
+                            <span className={said.className} title={said.title}>
+                              {said.text}
+                            </span>
                           </TableCell>
                         </TableRow>
                       );

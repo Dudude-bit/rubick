@@ -25,7 +25,12 @@ import {
   pickListeners,
   routeUrlsOn,
 } from "./gateway-listeners";
-import { ingressAddressOf, type IngressAddress } from "./ingress-health";
+import {
+  ingressAddressOf,
+  type ClaimedBinding,
+  type IngressAddress,
+  type IngressClaim,
+} from "./ingress-health";
 import type { RouteTls } from "./ingress-tls";
 import { clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
@@ -63,7 +68,6 @@ import type {
   ObjectFacts,
   ObjectRef,
   Relation,
-  IngressClassBinding,
   NearSelector,
   PublishedEndpoint,
   ResourceConnections,
@@ -342,6 +346,14 @@ const STOP_TONE: Record<StopMood, HopTone> = {
 
 export const stopTone = (stop: ChainStop): HopTone => STOP_TONE[stopMood(stop)];
 
+/** A claim the cluster does not record is unknown, never the red of "nobody". */
+const CLAIM_TONE: Record<IngressClaim, HopTone> = {
+  class: "on",
+  address: "on",
+  unrecorded: "unknown",
+  none: "bad",
+};
+
 /** How the chain draws a hop, on the page and in a shared file alike. */
 export function hopTone(hop: ChainHop): HopTone {
   if (hop.at === "stop") return STOP_TONE[hop.mood];
@@ -353,7 +365,7 @@ export function hopTone(hop: ChainHop): HopTone {
   if (hop.at === "object" && hop.object.existence === "notChecked")
     return "warn";
   if (hop.at === "published") return hop.tone;
-  if (hop.at === "controller") return hop.binding.resolved ? "on" : "bad";
+  if (hop.at === "controller") return CLAIM_TONE[hop.binding.claim];
   if (hop.at === "certificate") {
     // Not read back yet is not a finding; read back and unreadable is.
     if (!hop.read) return "on";
@@ -932,7 +944,7 @@ export interface ChainHopCertificate {
  */
 export interface ChainHopController {
   at: "controller";
-  binding: IngressClassBinding;
+  binding: ClaimedBinding;
 }
 
 export type ChainHop =
@@ -965,8 +977,8 @@ export function unservedIngresses(
   for (const path of paths) {
     path.hops.forEach((hop, index) => {
       if (hop.at !== "controller") return;
-      const { resolved, requested } = hop.binding;
-      if (resolved || !requested) return;
+      const { claim, requested } = hop.binding;
+      if (claim !== "none" || !requested) return;
       const next = path.hops[index + 1];
       ingresses.add(
         next?.at === "object" ? refKey(next.object) : `${path.key}#${index}`
@@ -990,7 +1002,7 @@ export function unservedIngresses(
 export interface RoutedIngress {
   tls: Array<{ secretName: string; hosts: string[] }>;
   /** Who picks it up, including t("nav", "nobodyDoes"). */
-  binding: IngressClassBinding | null;
+  binding: ClaimedBinding | null;
   /**
    * Where the controller published it: `status.loadBalancer.ingress`, as an
    * address or a hostname.
@@ -1101,7 +1113,7 @@ function routeHop(
       ? {
           state: ingressAddressOf(
             { loadBalancerIps: known.addresses },
-            known.binding ?? undefined
+            known.binding?.claim
           ),
           addresses: known.addresses,
         }
@@ -1314,7 +1326,7 @@ export function trafficChains(
   extra: {
     certificates?: Map<string, TlsCertificate>;
     /** The binding for the subject Ingress, on the Ingress's own page. */
-    controller?: IngressClassBinding;
+    controller?: ClaimedBinding;
     /**
      * What the Ingresses *in front of* the subject say about themselves, for
      * a page whose subject is not one.

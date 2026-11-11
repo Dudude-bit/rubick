@@ -15,6 +15,7 @@ const vendor = vi.hoisted(() => ({
   replaces: false,
   /** A host whose answer differs from `terminated`. */
   byHost: {} as Record<string, boolean>,
+  unread: null as "replaces" | null,
 }));
 vi.mock("@/hooks/useIngressTls", () => ({
   useIngressTls: () => ({
@@ -32,6 +33,7 @@ vi.mock("@/hooks/useIngressTls", () => ({
         : undefined,
     isPending: false,
     error: vendor.error,
+    unread: vendor.unread ?? (vendor.error ? "adds" : false),
   }),
 }));
 
@@ -105,6 +107,7 @@ beforeEach(() => {
   vendor.error = null;
   vendor.replaces = false;
   vendor.byHost = {};
+  vendor.unread = null;
 });
 
 /** The role token that paints an element's text, its own or inherited. */
@@ -245,6 +248,28 @@ describe("an Ingress whose controller serves spec.tls hosts as plain HTTP", () =
     expect(screen.getAllByText(/router\.tls/).length).toBeGreaterThan(0);
   });
 
+  /**
+   * While Traefik's answer was out or its read had failed, spec.tls alone
+   * made the page say HTTPS and count the host as served over TLS. Fails if
+   * the Access tab or the TLS fact takes the field's word for a controller
+   * that has not given its own.
+   */
+  it("says TLS is not checked until that controller has answered", async () => {
+    vendor.answered = false;
+    vendor.unread = "replaces";
+    await open("access", named);
+
+    expect(screen.queryByText("HTTPS")).toBeNull();
+    expect(screen.queryByLabelText("Open in Browser")).toBeNull();
+    cleanup();
+
+    await open("overview", named);
+    expect(screen.queryByText("1 host")).toBeNull();
+    expect(
+      screen.getByText("TLS not checked", { selector: "dd *, dd" })
+    ).toBeTruthy();
+  });
+
   it("leads the TLS fact with the reason rather than a host count", async () => {
     vendor.terminated = false;
     vendor.replaces = true;
@@ -283,6 +308,73 @@ describe("the load balancer row of an Ingress with no address", () => {
       await screen.findByText("none: nothing serves its class to assign one")
     ).toBeInTheDocument();
     expect(screen.queryByText("pending")).toBeNull();
+  });
+});
+
+describe("an Ingress classed by the legacy annotation", () => {
+  /** No IngressClass named `gce`, as on a GKE cluster, which has none at all. */
+  const noSuchClass = () => {
+    answers.listEvents = [];
+    answers.resolveIngressClass = {
+      requested: "gce",
+      resolved: null,
+      controller: null,
+      viaDefault: false,
+      available: [],
+    };
+    answers.listServiceHealthInputs = {
+      rows: [
+        {
+          namespace: "web",
+          groups: [
+            {
+              names: ["storefront"],
+              type: "ClusterIP",
+              selectorless: false,
+              ready: 2,
+              draining: 0,
+              notReady: 0,
+              unrouted: 0,
+              targets: [8080],
+            },
+          ],
+        },
+      ],
+      unread: [],
+    };
+  };
+
+  /**
+   * shop has an address and serves. The page retitled its Access tab "Would
+   * be reachable at", took Open in Browser away and drew the class in red,
+   * because no IngressClass is named gce. Fails if the page stops reading
+   * the annotation and the address before it says nobody serves it, and the
+   * same Ingress named by the spec is the control: that one stays unserved.
+   */
+  it("keeps its way in and names the annotation once a controller has addressed it", async () => {
+    noSuchClass();
+    vendor.terminated = true;
+    const gke = { ...shop, classAnnotated: true };
+
+    await open("access", gke);
+    expect(await screen.findByText("Reachable at")).toBeInTheDocument();
+    expect(screen.getByLabelText("Open in Browser")).toBeInTheDocument();
+    cleanup();
+
+    await open("overview", gke);
+    expect(
+      await screen.findByText(
+        "gce: by the kubernetes.io/ingress.class annotation, no IngressClass by that name"
+      )
+    ).toBeInTheDocument();
+    expect(await screen.findByText("served")).toBeInTheDocument();
+    cleanup();
+
+    await open("access", shop);
+    expect(
+      await screen.findByText("Would be reachable at")
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Open in Browser")).toBeNull();
   });
 });
 

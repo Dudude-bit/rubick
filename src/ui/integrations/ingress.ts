@@ -42,6 +42,7 @@ import { servingCount } from "@/lib/published";
 import { ResourceType } from "@/lib/resource-registry";
 import type { MapNode, MapTone } from "./routing-map";
 import type { RowTone } from "./page-kit";
+import type { IngressTls } from "./registry";
 import { certificatesOf } from "@/hooks/useTlsCertificates";
 import type {
   ChainStop,
@@ -173,6 +174,18 @@ export interface PageDoor {
   client: string;
   read: DoorRead | null | undefined;
 }
+
+/**
+ * The `ingress.tls` answer for an Ingress whose read failed: every host left
+ * unknown with the cluster's words, never the silence a caller reads as "no
+ * controller spoke" and so as plain HTTP.
+ */
+export const tlsUnread = (hosts: string[], error: unknown): IngressTls[] =>
+  hosts.map((host) => ({
+    host,
+    terminated: null,
+    by: { key: "verbatimLine", values: { said: errorToShow(error) } },
+  }));
 
 /** For a caller that counts routes and never reads what is behind them. */
 export const BACKING_NOT_READ: BackingSources = {

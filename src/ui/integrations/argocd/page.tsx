@@ -1047,11 +1047,7 @@ function useFrontUi(front: UiFront | null): RoutedUi | null {
   if (!front) return null;
   return uiFromFront(
     front,
-    hostTls(
-      front.spec,
-      answers.of(front.via, front.host),
-      answers.isPending || answers.error !== null
-    )
+    hostTls(front.spec, answers.of(front.via, front.host), answers.unread)
   );
 }
 

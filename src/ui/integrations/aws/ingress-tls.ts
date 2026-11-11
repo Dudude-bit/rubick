@@ -19,6 +19,7 @@
 import { commands } from "@/lib/commands";
 import type { Saying } from "@/i18n/say";
 import type { IngressTls } from "../registry";
+import { tlsUnread } from "../ingress";
 
 const PREFIX = "alb.ingress.kubernetes.io/";
 const CERTIFICATE_ARN = `${PREFIX}certificate-arn`;
@@ -76,7 +77,11 @@ export async function ingressTls(
 ): Promise<IngressTls[][]> {
   // One `get` per Ingress the caller named, and never one per host. A list
   // page asks for every row at once; a detail page asks for one.
-  return Promise.all(wanted.map((input) => answerFor(input).catch(() => [])));
+  return Promise.all(
+    wanted.map((input) =>
+      answerFor(input).catch((error) => tlsUnread(input.hosts, error))
+    )
+  );
 }
 
 async function answerFor(input: {
