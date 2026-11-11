@@ -38,6 +38,7 @@ import {
   blindDeployments,
   useClusterOverview,
   useFollowedOverview,
+  useOverviewFollowedAt,
   useScopedOverview,
   WATCHED_COUNTS,
 } from "./useClusterOverview";
@@ -248,6 +249,29 @@ describe("an overview served from the watched stores", () => {
     expect(followClusterOverview).toHaveBeenCalledTimes(2);
     expect(getClusterOverview).toHaveBeenCalledTimes(reads);
     expect(client.getQueryState(KEY)!.dataUpdatedAt).toBe(countedAt);
+  });
+
+  /**
+   * The counts a follow moved were printed under the whole read's time:
+   * "Counted at 15:03:41" beside a number from six seconds later. Fails if
+   * a follow does not say when the stores answered, or says it for a scope
+   * that was not followed.
+   */
+  it("says when its stores last answered, which the whole read's time is not", async () => {
+    await followed();
+    const { result } = renderHook(() => useOverviewFollowedAt(), { wrapper });
+    const countedAt = client.getQueryState(KEY)!.dataUpdatedAt;
+    followClusterOverview.mockResolvedValue(served(41));
+
+    await new Promise((later) => setTimeout(later, 5));
+    const before = Date.now();
+    await changed(["shop"]);
+    await waitFor(() => expect(held()?.counts.pods).toBe(41));
+
+    expect(before).toBeGreaterThan(countedAt);
+    expect(result.current).toBeGreaterThanOrEqual(before);
+    act(() => useClusterStore.setState({ namespaceScope: ["team-blind"] }));
+    expect(result.current).toBeNull();
   });
 
   /**

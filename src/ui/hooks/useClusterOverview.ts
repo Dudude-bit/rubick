@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
+import { create } from "zustand";
 
 import { commands } from "@/lib/commands";
 import { listenEvent } from "@/lib/events";
@@ -137,6 +138,21 @@ export function useOverviewFollowed(
   return useOverviewSeen() && overview?.servedFrom === "watch";
 }
 
+/**
+ * When each overview's stores last answered a follow, by query. A follow
+ * leaves the whole read's time on the query, which is the time of the
+ * counts no store holds and not of the ones a follow moved.
+ */
+const useFollows = create<Record<string, number>>(() => ({}));
+
+/** When the stores last answered a follow of the window's overview, or `null` where none has. */
+export function useOverviewFollowedAt(): number | null {
+  const context = useClusterStore((s) => s.currentContext);
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const hash = hashKey(queryKeys.clusterOverview(context, scope));
+  return useFollows((s) => s[hash] ?? null);
+}
+
 function useOverviewSeen(): boolean {
   const context = useClusterStore((s) => s.currentContext);
   const surface = useSurfaceVisible();
@@ -207,6 +223,7 @@ export function useFollowedOverview(
       // answer's counts were: it stands, and is followed in its turn.
       if (client.getQueryState(key)?.dataUpdatedAt === from) {
         client.setQueryData(key, answer, { updatedAt: from });
+        useFollows.setState({ [hash]: Date.now() });
         seen = Math.max(seen, upTo);
       }
       void follow();

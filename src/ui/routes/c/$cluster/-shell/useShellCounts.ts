@@ -5,6 +5,7 @@ import type { ClusterOverview, ResourceCounts } from "@/generated/types";
 import { useAttention } from "@/hooks/useAttention";
 import {
   useOverviewFollowed,
+  useOverviewFollowedAt,
   useScopedOverview,
   WATCHED_COUNTS,
 } from "@/hooks/useClusterOverview";
@@ -26,6 +27,8 @@ export interface ShellCounts {
   withinMs: number | false;
   /** The counts the overview's watched stores hold, read again on each change they take. */
   followed: ReadonlySet<keyof ResourceCounts>;
+  /** When those stores last answered a change, or `null` where they have not since the whole read. */
+  followedAt: number | null;
   /** A re-read of the counts on screen has waited past the slow-read grace. */
   late: boolean;
   /** The last re-read of the counts on screen failed. */
@@ -39,6 +42,20 @@ interface Held {
 }
 
 const useHeld = create<Record<string, Held>>(() => ({}));
+
+/**
+ * When the count under `key` on screen was taken: the stores' last answer
+ * where they hold it, else the whole read. `null` with nothing read.
+ */
+export function countedAt(
+  counts: ShellCounts,
+  key: keyof ResourceCounts | undefined
+): number | null {
+  if (counts.readAt === null) return null;
+  return key !== undefined && counts.followed.has(key)
+    ? Math.max(counts.readAt, counts.followedAt ?? 0)
+    : counts.readAt;
+}
 
 const NONE: ReadonlySet<keyof ResourceCounts> = new Set();
 const WATCHED: ReadonlySet<keyof ResourceCounts> = new Set(
@@ -57,6 +74,7 @@ export function useShellCounts(): ShellCounts {
   const scope = useClusterStore((s) => s.namespaceScope);
   const scoped = useScopedOverview();
   const followed = useOverviewFollowed(scoped.data) ? WATCHED : NONE;
+  const followedAt = useOverviewFollowedAt();
   const attention = useAttention();
   const key = `${context}\n${scopeCacheKey(scope) ?? EVERY_NAMESPACE}`;
   const answered =
@@ -85,6 +103,7 @@ export function useShellCounts(): ShellCounts {
       readAt: at,
       withinMs,
       followed,
+      followedAt,
       late: slowRead,
       failed: stale,
     };
@@ -101,6 +120,7 @@ export function useShellCounts(): ShellCounts {
       readAt: held.at,
       withinMs,
       followed: NONE,
+      followedAt: null,
       late: false,
       failed: false,
     };
@@ -112,6 +132,7 @@ export function useShellCounts(): ShellCounts {
     readAt: shown && at > 0 ? at : null,
     withinMs,
     followed: scoped.isPlaceholderData ? NONE : followed,
+    followedAt,
     late: shown !== undefined && slowRead,
     failed: shown !== undefined && stale,
   };
