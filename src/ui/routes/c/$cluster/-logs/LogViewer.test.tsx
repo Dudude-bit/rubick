@@ -1921,3 +1921,71 @@ describe("LogViewer on a previous run that has not been read yet", () => {
     expect(screen.queryByTestId("log-skeleton")).toBeNull();
   });
 });
+
+/**
+ * "Reconnecting resumes from now, and what the stream missed is not fetched
+ * back" is true of the session-wide retry under intake. A lane attached
+ * again reads on from its last line, so there the sentence would be false.
+ */
+describe("the notice of a stream that broke while intake is set", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => `stream-${config.podName}`
+    );
+  });
+
+  const RESUMES_FROM_NOW = /reconnecting resumes from now/;
+  const pod = (name: string) => ({
+    name,
+    namespace: "default",
+    containers: [container("app")],
+    node: "node-a",
+    run: null,
+  });
+  /** Promote a chip to intake, then break the first stream opened under it. */
+  async function brokenUnderIntake(streams: number) {
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(streams)
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Filter the log"), "boom{Enter}");
+    await user.click(
+      screen.getByRole("button", { name: /Keep only lines matching boom/ })
+    );
+    await waitFor(
+      () =>
+        expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(streams * 2),
+      { timeout: 3000 }
+    );
+    const opened = vi.mocked(commands.streamPodLogs).mock.results[streams];
+    const stream_id = (await opened.value) as string;
+    act(() =>
+      listeners["stream-failed"]!({
+        payload: { stream_id, kind: "broken", message: "connection reset" },
+      })
+    );
+    return screen.findByTestId("log-stream-failure");
+  }
+
+  it("says a single pod's reconnect resumes from now", async () => {
+    await mount(<LogViewer {...props} />);
+    const notice = await brokenUnderIntake(1);
+    expect(notice).toHaveTextContent(RESUMES_FROM_NOW);
+  });
+
+  /** Fails if a lane, which reads on from its last line, is said to skip what it missed. */
+  it("does not say so of a workload pane's lane", async () => {
+    await mount(
+      <LogViewer
+        namespace="default"
+        pods={[pod("api-a"), pod("api-b")]}
+        laneRule="pod"
+        workload={{ owner: "api", ownerKind: "Deployment" }}
+      />
+    );
+    const notice = await brokenUnderIntake(2);
+    expect(notice).not.toHaveTextContent(RESUMES_FROM_NOW);
+  });
+});

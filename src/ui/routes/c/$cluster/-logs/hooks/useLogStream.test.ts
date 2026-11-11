@@ -990,3 +990,172 @@ describe("useLogStream reading a previous run", () => {
     expect(result.current.previousRead).toBeNull();
   });
 });
+
+/**
+ * One lane of a workload pane, attached again by the reader. It reads on
+ * from the last line it said: opened like a pod that had just joined, with
+ * no tail, everything it wrote while it was down was skipped with no mark.
+ */
+describe("useLogStream attaching one lane again", () => {
+  const A = { pod: "api-a", namespace: "n", container: "app" };
+  const B = { pod: "api-b", namespace: "n", container: "app" };
+  const at = (second: number, message: string) => ({
+    message,
+    timestamp: `2026-10-07T06:52:${String(second).padStart(2, "0")}.500Z`,
+    level: null,
+    format: null,
+    fields: null,
+    raw: message,
+  });
+  const fromA = (...lines: ReturnType<typeof at>[]) =>
+    act(() =>
+      listeners["log-batch"]!({
+        payload: { stream_id: "stream-api-a-app", lines },
+      })
+    );
+  const lanes = (previous = false) =>
+    renderHook(() =>
+      useLogStream({
+        namespace: "n",
+        sources: [A, B],
+        paneKey: "Deployment:api",
+        limit: DEFAULT_LOG_LIMIT,
+        previous,
+      })
+    );
+  const broke = () =>
+    act(() =>
+      listeners["stream-failed"]!({
+        payload: {
+          stream_id: "stream-api-a-app",
+          kind: "broken",
+          message: "connection reset",
+        },
+      })
+    );
+  const again = async (result: {
+    current: ReturnType<typeof useLogStream>;
+  }) => {
+    act(() => result.current.retrySource("api-a", "app"));
+    await waitFor(() => expect(subscribedCalls).toHaveLength(3));
+    return streamConfigs[2];
+  };
+
+  beforeEach(() => {
+    reset();
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.podName}-${config.container}`;
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** Fails if the lane is opened from now, which skips what the pod wrote while its stream was down. */
+  it("reads on from the last line the lane said", async () => {
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    fromA(at(9, "before the break"));
+    broke();
+
+    const config = await again(result);
+
+    expect(config).toMatchObject({
+      podName: "api-a",
+      sinceTime: "2026-10-07T06:52:09.500Z",
+      tailLines: DEFAULT_LOG_LIMIT,
+    });
+  });
+
+  /**
+   * The node answers from the instant asked for, so the lines of that
+   * instant come again. Fails if they are drawn twice, or if a new line
+   * written in the same instant is taken for one of them and dropped.
+   */
+  it("does not repeat what it already holds of the instant it reads on from", async () => {
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    fromA(at(8, "earlier"), at(9, "before the break"));
+    await waitFor(() => expect(result.current.logs).toHaveLength(2));
+    broke();
+    await again(result);
+    holdTheClock();
+
+    fromA(
+      at(8, "earlier"),
+      at(9, "before the break"),
+      at(9, "written in the same instant"),
+      at(12, "written while it was down"),
+      at(12, "written while it was down")
+    );
+    await pastTheWindow();
+
+    expect(result.current.logs.map((line) => line.message)).toEqual([
+      "earlier",
+      "before the break",
+      "written in the same instant",
+      "written while it was down",
+      "written while it was down",
+    ]);
+  });
+
+  /** A lane that broke before its first line has no last line. Fails if it reads on from now and skips what it wrote since the pane opened. */
+  it("reads a lane that never said a line on from when the pane opened", async () => {
+    const opened = Date.now();
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    broke();
+
+    const config = await again(result);
+
+    expect(config.tailLines).toBe(DEFAULT_LOG_LIMIT);
+    expect(Date.parse(config.sinceTime!)).toBeGreaterThanOrEqual(opened);
+    expect(Date.parse(config.sinceTime!)).toBeLessThanOrEqual(Date.now());
+  });
+
+  /**
+   * A previous run is finished: asked for no lines, it answers with none and
+   * the lane read as read. Fails if it is not read again with its share, or
+   * if the pane takes the read for over before it has ended.
+   */
+  it("reads a previous run again, and has not read it until that ends", async () => {
+    const { result } = lanes(true);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    act(() =>
+      listeners["log-read"]!({
+        payload: { stream_id: "stream-api-b-app", lines: 4 },
+      })
+    );
+    broke();
+    expect(result.current.previousRead).toEqual({ sources: 1, lines: 4 });
+
+    const config = await again(result);
+
+    expect(config).toMatchObject({
+      podName: "api-a",
+      previous: true,
+      tailLines: streamConfigs[0].tailLines,
+      sinceTime: null,
+    });
+    expect(config.tailLines).toBeGreaterThan(0);
+    expect(result.current.previousRead).toBeNull();
+  });
+
+  /** The rule for a pod that joins is not this one. Fails if a lane nobody asked to attach again reads from anywhere but now. */
+  it("still opens a pod that joins from now", async () => {
+    const { rerender } = renderHook(
+      ({ sources }) =>
+        useLogStream({
+          namespace: "n",
+          sources,
+          paneKey: "Deployment:api",
+          limit: DEFAULT_LOG_LIMIT,
+        }),
+      { initialProps: { sources: [A] } }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    rerender({ sources: [A, B] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+
+    expect(streamConfigs[1]).toMatchObject({ tailLines: 0, sinceTime: null });
+  });
+});
