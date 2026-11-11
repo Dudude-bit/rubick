@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Activity, Info, Link2, ListTree, Tag, Trash2 } from "lucide-react";
@@ -39,6 +38,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { objectLink } from "@/lib/links";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useClusterStore } from "@/stores/clusterStore";
+import { backInTab } from "@/stores/scopeTabStore";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
@@ -160,7 +160,6 @@ export function CustomResourceDetail({
   name: string;
 }) {
   const t = useT();
-  const router = useRouter();
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -178,7 +177,7 @@ export function CustomResourceDetail({
   };
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const goBack = () => router.history.back();
+  const goBack = backInTab;
 
   const { data: crdInfo } = useQuery({
     queryKey: queryKeys.crd(crdName),

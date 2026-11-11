@@ -10,7 +10,7 @@
  */
 
 import { useCallback } from "react";
-import { useNavigate, useParams, useRouter } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   useMutation,
   useQueryClient,
@@ -30,6 +30,7 @@ import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { useRememberOwners } from "./useLastOwners";
 import { useObjectWatch } from "./useObjectWatch";
 import { useStaleNotFound } from "./useStaleNotFound";
+import { backInTab } from "@/stores/scopeTabStore";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -116,7 +117,6 @@ export function useResourceDetail<T>(
   const { namespace: nsParam, name } = useParams({ strict: false });
   const namespace = isClusterScoped ? undefined : nsParam;
   const navigate = useNavigate();
-  const router = useRouter();
   const { toast } = useToast();
   const copyToClipboard = useCopyToClipboard();
   const queryClient = useQueryClient();
@@ -213,9 +213,7 @@ export function useResourceDetail<T>(
     }
   }, [yaml, copyToClipboard, t]);
 
-  const goBack = useCallback(() => {
-    router.history.back();
-  }, [router]);
+  const goBack = backInTab;
 
   const deleteMutation = useMutation({
     mutationFn: async () => {

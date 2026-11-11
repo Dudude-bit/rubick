@@ -1,8 +1,10 @@
 import { act, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { ApiCatalog, CatalogEntry } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
@@ -95,6 +97,40 @@ describe("an object of a kind no screen draws", () => {
     await open();
     expect(await screen.findByText("holderIdentity")).toBeInTheDocument();
     expect(screen.queryByText("Nothing reported yet")).not.toBeInTheDocument();
+  });
+});
+
+describe("Back on the page of a kind no screen draws", () => {
+  /**
+   * The arrow went back through the window's history, which has nothing
+   * behind it in a tab restored onto the object: it did nothing. Fails if
+   * the arrow does not ask the tab itself, which leads to the kind's list.
+   */
+  it("leaves for the kind's list in a tab with nothing behind it", async () => {
+    const at = "/c/test/leases.coordination.k8s.io/kube-node-lease/x";
+    useScopeTabStore.setState({
+      tabs: [
+        { id: "a", context: "test", namespace: "", href: at, missing: false },
+      ],
+      activeId: "a",
+      pendingHref: null,
+    });
+    answers.catalog = () => Promise.resolve({ entries: [LEASES], unread: [] });
+    answers.object = () => Promise.resolve({ metadata: { name: "x" } });
+    await renderWithRouter(
+      <GenericObjectPage
+        resource="leases.coordination.k8s.io"
+        namespace="kube-node-lease"
+        name="x"
+      />,
+      { at }
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(useScopeTabStore.getState().pendingHref).toBe(
+      "/c/test/leases.coordination.k8s.io"
+    );
   });
 });
 

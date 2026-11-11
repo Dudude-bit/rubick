@@ -501,8 +501,11 @@ export const useScopeTabStore = create<ScopeTabState>()(
           const active = state.tabs.find((tab) => tab.id === state.activeId);
           if (!active) return state;
           const back = active.back ?? [];
-          // Nothing behind it: the tab stays where it is, as a browser tab does.
-          const to = back.at(-1) ?? active.href;
+          // Nothing behind it, as in a tab restored at launch or opened at
+          // an object: its page gives way to its list, which is what the
+          // page's own Back says it does. Any other page stays where it is,
+          // as a browser tab does.
+          const to = back.at(-1) ?? listBehind(active.href) ?? active.href;
           return {
             tabs: state.tabs.map((tab) =>
               tab.id === active.id
@@ -615,6 +618,13 @@ export const useScopeTabStore = create<ScopeTabState>()(
     }
   )
 );
+
+/**
+ * Back as a page's own control means it: in the tab, not in the window. The
+ * window's history is one for every tab and has nothing behind it at launch,
+ * where asking it to go back does nothing at all.
+ */
+export const backInTab = (): void => useScopeTabStore.getState().goBack();
 
 // A parked tab is a cluster on screen a click away: switching in another
 // tab must not disconnect it, and coming back to it must not reconnect.

@@ -172,6 +172,20 @@ describe("each tab's own Back", () => {
   });
 
   /**
+   * A tab restored at launch, or opened at an object, has nothing behind it.
+   * Back on the object's page, and the one a delete makes for the reader,
+   * then asked for the page already on screen: the deleted object's notice
+   * stayed, and its "Go back" did nothing. Fails if Back on an object's page
+   * with nothing behind it does not lead to its list.
+   */
+  it("leaves an object's page for its list with nothing behind it", () => {
+    seed([tab({ id: "a", href: "/c/prod/pods/shop/api-1?tab=logs" })]);
+    state().goBack();
+    expect(state().pendingHref).toBe("/c/prod/pods");
+    expect(state().tabs[0].href).toBe("/c/prod/pods");
+  });
+
+  /**
    * The window's history starts empty on launch, so a Back restored from
    * disk would walk to routes the window has no entries for.
    */
