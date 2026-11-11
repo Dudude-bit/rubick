@@ -15,9 +15,16 @@ const STOP_TEXT: Record<StopMood, string> = {
 export function behindIt(
   state: Backing | null,
   t: T
-): { text: string; className: string } {
+): { text: string; className: string; title?: string } {
   if (state === null)
     return { text: t("cluster", "markUnchecked"), className: "text-fg-fnt" };
+  // A read that failed is not one still coming: the trace above says so too.
+  if (!state.known && state.error)
+    return {
+      text: t("empty", "endpointsUnread"),
+      className: "text-fg-mut",
+      title: state.error,
+    };
   if (!state.known)
     return { text: t("action", "readingInline"), className: "text-fg-fnt" };
   if (state.stop)
