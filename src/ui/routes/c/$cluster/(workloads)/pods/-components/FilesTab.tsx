@@ -71,10 +71,19 @@ const UP_ROW_KEY = "\u0000up";
 /** One array, so an idle tab's memo is not invalidated by a fresh `[]`. */
 const NO_ENTRIES: FileEntry[] = [];
 
+/**
+ * A debug container read through, and the container whose root it shows:
+ * the one it was pointed at, whatever the tab had open when it was started.
+ */
+export interface ReadThrough {
+  via: Via;
+  of: string;
+}
+
 export interface FilesTabProps {
   pod: PodInfo;
   /** Reading through a debug container the page started for this tab. */
-  via: Via | null;
+  through: ReadThrough | null;
   onDebug: (container: string) => void;
   onStopVia: () => void;
   /** Why the cluster will not add a debug container for this user. */
@@ -90,7 +99,7 @@ export interface FilesTabProps {
  */
 export function FilesTab({
   pod,
-  via,
+  through,
   onDebug,
   onStopVia,
   debugDenied,
@@ -106,9 +115,11 @@ export function FilesTab({
   // The container being read, and the run of it the reader asked to read. A
   // restart makes the name a different container; the old rows stay, with a
   // banner, and nothing is read in the new one until asked.
+  const via = through?.via ?? null;
   const [reading, setReading] = useState(() => {
-    const first =
-      containers.find((c) => c.state.type === "running") ?? containers[0];
+    const first = through
+      ? containers.find((c) => c.name === through.of)
+      : (containers.find((c) => c.state.type === "running") ?? containers[0]);
     return {
       container: first?.name ?? "",
       restarts: first?.restartCount ?? 0,

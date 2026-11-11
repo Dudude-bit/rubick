@@ -31,10 +31,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "../../../-metrics";
 import { DebugPodDialog } from "../../../-debug";
-import { FilesTab } from "./FilesTab";
+import { FilesTab, type ReadThrough } from "./FilesTab";
 import { StartOnAsk } from "./StartOnAsk";
 import { ChecksTab } from "./ChecksTab";
-import type { Via } from "@/generated/types";
 import { LogViewer } from "../../../-logs/LogViewer";
 import { PodShell } from "./PodShell";
 import { yamlTab } from "../../../-object/yaml-tab";
@@ -415,9 +414,9 @@ function podVerdict(
 }
 
 /** Whether opening Files would run anything: a stopped pod's tab only shows its mounts. */
-function filesWouldRun(pod: PodInfo, via: Via | null): boolean {
+function filesWouldRun(pod: PodInfo, through: ReadThrough | null): boolean {
   return (
-    via !== null ||
+    through !== null ||
     offeredContainers(pod).some((c) => c.state.type === "running")
   );
 }
@@ -438,15 +437,18 @@ export function PodDetail() {
   const setSearch = useSetSearch();
 
   const [shellPane, setShellPane] = useState<ShellPane | null>(null);
-  const [debugDialogOpen, setDebugDialogOpen] = useState(false);
-  // Which tab asked for the debug container: the shell opens a terminal in
-  // it, the files tab reads through it.
-  const [debugFor, setDebugFor] = useState<"shell" | "files">("shell");
-  // Which container the Files tab wants read. The debug container's
-  // /proc/1/root is whatever it targets, so defaulting the dialog to
-  // containers[0] could read one container and label it another.
-  const [debugTarget, setDebugTarget] = useState<string | null>(null);
-  const [filesVia, setFilesVia] = useState<Via | null>(null);
+  // The Debug dialog, open for one asker: the shell opens a terminal in the
+  // debug container, the Files tab reads through it and says which container
+  // it wants read. Set whole at every opening, so no opening inherits the
+  // last one's purpose.
+  const [debug, setDebug] = useState<{
+    for: "shell" | "files";
+    target: string | null;
+  } | null>(null);
+  // The debug container the Files tab reads through, on the pod it is in.
+  const [filesVia, setFilesVia] = useState<
+    (ReadThrough & { uid: string }) | null
+  >(null);
   // Which container the Logs tab was sent to read, from a row in the
   // Containers tab. The viewer decides where to open on its own when
   // nobody has asked, so this stays null for an ordinary visit.
@@ -679,8 +681,24 @@ export function PodDetail() {
           namespace: result.namespace,
         })!
       );
-    } else if (debugFor === "files") {
-      setFilesVia({ container: result.containerName, root: "/proc/1/root" });
+    } else if (debug?.for === "files") {
+      if (!pod) return;
+      // Its process 1 is the container it was pointed at, and only then.
+      if (result.seesRootOf === null) {
+        toast({
+          title: t("files", "viaShowsNoContainer", {
+            debug: result.containerName,
+          }),
+          description: t("files", "viaShowsNoContainerWhy"),
+          variant: "destructive",
+        });
+        return;
+      }
+      setFilesVia({
+        uid: pod.uid,
+        via: { container: result.containerName, root: "/proc/1/root" },
+        of: result.seesRootOf,
+      });
       openTab("files");
     } else {
       openTerminal(result.containerName);
@@ -691,6 +709,8 @@ export function PodDetail() {
   // when the terminal closes — they keep running otherwise.
   // Both labels: the debug toolbox and the Checks tab's copy are both pods
   // this app made and both worth offering to remove when the reader is done.
+  const through = pod && filesVia?.uid === pod.uid ? filesVia : null;
+
   const isDebugPod =
     pod?.labels?.["k8s-gui/debug-pod"] === "true" ||
     pod?.labels?.["k8s-gui/check-pod"] === "true";
@@ -932,7 +952,7 @@ export function PodDetail() {
             <ReasonedAction
               label={t("action", "debug")}
               icon={Bug}
-              onClick={() => setDebugDialogOpen(true)}
+              onClick={() => setDebug({ for: "shell", target: null })}
               disabled={!currentContext || !pod}
               reason={denied.debug}
             />
@@ -1151,10 +1171,7 @@ export function PodDetail() {
                 onClaim={claimShell}
                 onChoose={openTerminal}
                 onOpenLogs={openLogs}
-                onDebug={() => {
-                  setDebugFor("shell");
-                  setDebugDialogOpen(true);
-                }}
+                onDebug={() => setDebug({ for: "shell", target: null })}
                 denied={denied}
                 onEnd={handleTerminalClose}
               />
@@ -1166,16 +1183,12 @@ export function PodDetail() {
             glyph: viewGlyph(FolderOpen),
             kind: "surface",
             content: !pod ? null : filesAsked === pod.uid ||
-              !filesWouldRun(pod, filesVia) ? (
+              !filesWouldRun(pod, through) ? (
               <FilesTab
-                key={`files:${pod.uid}`}
+                key={`files:${pod.uid}:${through?.via.container ?? ""}`}
                 pod={pod}
-                via={filesVia}
-                onDebug={(target) => {
-                  setDebugFor("files");
-                  setDebugTarget(target);
-                  setDebugDialogOpen(true);
-                }}
+                through={through}
+                onDebug={(target) => setDebug({ for: "files", target })}
                 debugDenied={denied.ephemeral}
                 onStopVia={() => setFilesVia(null)}
               />
@@ -1247,12 +1260,14 @@ export function PodDetail() {
 
       {pod && (
         <DebugPodDialog
-          open={debugDialogOpen}
-          onOpenChange={setDebugDialogOpen}
+          open={debug !== null}
+          onOpenChange={(open) => {
+            if (!open) setDebug(null);
+          }}
           podName={pod.name}
           namespace={pod.namespace}
           containers={lifetimeContainers(pod).map((c) => c.name)}
-          preferredTarget={debugTarget ?? undefined}
+          preferredTarget={debug?.target ?? undefined}
           kubernetesVersion={clusterInfo?.git_version}
           onDebugStart={handleDebugStart}
         />

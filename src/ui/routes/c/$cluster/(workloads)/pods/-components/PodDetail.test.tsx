@@ -24,6 +24,7 @@ import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { keepShells } from "@/hooks/useKeptShells";
 import type { AnyRouter } from "@tanstack/react-router";
 import { parseDeepLink } from "@/lib/deep-link";
+import { Toaster } from "@/components/ui/toaster";
 import { PodDetail } from "./PodDetail";
 
 vi.mock("@/components/terminal/Terminal", async () => {
@@ -1146,8 +1147,8 @@ const execs = () =>
         `${command} ${(args as { pod?: string; name?: string }).pod ?? (args as { name?: string }).name}`
     );
 
-async function arrive(at: string) {
-  const rendered = await renderWithRouter(<PodDetail />, {
+async function arrive(at: string, page = <PodDetail />) {
+  const rendered = await renderWithRouter(page, {
     at,
     route: POD_ROUTE,
     beside: { "/c/$cluster/events": <p>events page</p> },
@@ -1704,5 +1705,178 @@ describe("a pod page runs nothing in the container until the reader asks on it",
 
     expect(execs()).toEqual(["open_pod_shell cart-a"]);
     expect(screen.getByText("The shell was ended")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Files through a debug container reads that container's `/proc/1/root`,
+ * which is the root of whichever container it was pointed at.
+ */
+describe("a pod's files read through a debug container", () => {
+  const INIT = {
+    ...APP_CONTAINER,
+    name: "init-migrate",
+    phase: "init",
+    ready: false,
+    state: {
+      type: "terminated",
+      termination: {
+        exitCode: 0,
+        signal: null,
+        reason: "Completed",
+        message: null,
+        startedAt: "2026-10-06T00:00:00Z",
+        finishedAt: "2026-10-06T00:00:04Z",
+      },
+    },
+  };
+  const withInit = (name: string) =>
+    ({ ...running(name), initContainers: [INIT] }) as PodInfo;
+  /** What the cluster says the next debug container sees at its process 1. */
+  let seesRootOf: string | null = "app";
+  let debuggers = 0;
+
+  beforeEach(() => {
+    seesRootOf = "app";
+    debuggers = 0;
+    useShellAskStore.getState().drop();
+    vi.mocked(invoke).mockImplementation(async (command: string, args) => {
+      const { name, podName } = args as { name: string; podName: string };
+      if (command === "get_pod") return withInit(name);
+      if (command === "open_pod_shell") return "term-1";
+      if (command === "debug_pod_ephemeral")
+        return {
+          id: `op-${++debuggers}`,
+          operationType: "ephemeral",
+          podName,
+          containerName: `debugger-${debuggers}`,
+          namespace: "shop",
+          createdAt: 0,
+          timeoutSeconds: 120,
+        };
+      if (command === "get_debug_status")
+        return {
+          type: "ready",
+          result: {
+            podName: "cart-a",
+            containerName: `debugger-${debuggers}`,
+            namespace: "shop",
+            isNewPod: false,
+            seesRootOf,
+          },
+        };
+      if (command === "check_access")
+        return (args as { queries: AccessQuery[] }).queries.map((query) => ({
+          ...query,
+          allowed: true,
+        }));
+      return undefined;
+    });
+  });
+
+  const listings = () =>
+    vi
+      .mocked(invoke)
+      .mock.calls.filter(([command]) => command === "list_container_files")
+      .map(
+        ([, args]) => args as { pod: string; container: string; via: unknown }
+      );
+  const startDebug = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Start Debug" }));
+    await advance(0);
+    await advance(0);
+  };
+  /** Files, on the finished init container, then its way in through a debug container. */
+  const throughDebugFromInit = async () => {
+    const arrived = await arrive(
+      "/c/prod/pods/shop/cart-a?tab=files",
+      <>
+        <PodDetail />
+        <Toaster />
+      </>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Read the files" }));
+    await advance(0);
+    fireEvent.click(screen.getByRole("tab", { name: /^init-migrate/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open through a debug container" })
+    );
+    await startDebug();
+    return arrived;
+  };
+
+  /**
+   * Dana picked the finished init container and opened it through a debug
+   * container; the dialog has no init containers to point at, pointed at app,
+   * and the tab listed app's filesystem as init-migrate's. Fails if the tab
+   * names any container but the one the debug container was pointed at.
+   */
+  it("names the container the debug container was pointed at, not the one the tab had open", async () => {
+    await throughDebugFromInit();
+
+    expect(
+      screen.getByText(/through debug container debugger-1/)
+    ).toHaveTextContent("at /proc/1/root of container app.");
+    expect(screen.getByRole("tab", { name: /^app/ })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(listings().at(-1)).toMatchObject({
+      container: "app",
+      via: { container: "debugger-1", root: "/proc/1/root" },
+    });
+  });
+
+  /**
+   * With one process namespace for the pod, process 1 is the pause container.
+   * Fails if its root is listed as a container's, or if nothing says why not.
+   */
+  it("reads nothing through a debug container whose process 1 is no container's", async () => {
+    seesRootOf = null;
+    await throughDebugFromInit();
+
+    expect(
+      screen.getByText("No container's files to read through debugger-1")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/through debug container/)).toBeNull();
+    expect(listings().filter((listing) => listing.via !== null)).toEqual([]);
+  });
+
+  /**
+   * After Files had used a debug container, the page's own Debug button made
+   * the next one the Files tab's way in and opened no terminal. Fails if an
+   * opening of the dialog inherits what the last one was for.
+   */
+  it("opens a terminal in the debug container the page's Debug button starts", async () => {
+    await throughDebugFromInit();
+
+    fireEvent.click(screen.getByRole("button", { name: "Debug" }));
+    await startDebug();
+
+    expect(shellsIn()).toEqual(["debugger-2"]);
+    expect(
+      screen.getByText(/through debug container debugger-1/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The page stays mounted across a move to another pod. Fails if the next
+   * pod's files are read through the last pod's debug container.
+   */
+  it("does not read the next pod through the last pod's debug container", async () => {
+    const { router } = await throughDebugFromInit();
+
+    await act(() =>
+      router.navigate({ href: "/c/prod/pods/shop/cart-b?tab=files" })
+    );
+    await advance(0);
+    fireEvent.click(screen.getByRole("button", { name: "Read the files" }));
+    await advance(0);
+    await advance(0);
+
+    const next = listings().filter((listing) => listing.pod === "cart-b");
+    expect(next).not.toEqual([]);
+    expect(next.filter((listing) => listing.via !== null)).toEqual([]);
+    expect(screen.queryByText(/through debug container/)).toBeNull();
   });
 });

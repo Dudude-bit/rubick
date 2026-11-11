@@ -31,6 +31,9 @@ pub struct DebugResult {
     pub namespace: String,
     /// Whether this is a newly created pod (copy/node) or existing (ephemeral)
     pub is_new_pod: bool,
+    /// The container whose filesystem this one finds at `/proc/1/root`, or
+    /// `None` when that is no one container's.
+    pub sees_root_of: Option<String>,
 }
 
 /// Debug operation for tracking container readiness

@@ -199,7 +199,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -231,7 +231,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -286,7 +286,7 @@ describe("FilesTab", () => {
             },
           ],
         })}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -333,7 +333,7 @@ describe("FilesTab", () => {
             ...pod().volumes,
           ],
         })}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -374,7 +374,7 @@ describe("FilesTab", () => {
       <QueryClientProvider client={new QueryClient()}>
         <FilesTab
           pod={pod()}
-          via={null}
+          through={null}
           onDebug={() => {}}
           onStopVia={() => {}}
         />
@@ -400,7 +400,7 @@ describe("FilesTab", () => {
       await wrap(
         <FilesTab
           pod={pod()}
-          via={null}
+          through={null}
           onDebug={() => {}}
           onStopVia={() => {}}
         />
@@ -425,7 +425,12 @@ describe("FilesTab", () => {
       tried: ["find", "sh"],
     });
     await wrap(
-      <FilesTab pod={pod()} via={null} onDebug={onDebug} onStopVia={() => {}} />
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={onDebug}
+        onStopVia={() => {}}
+      />
     );
     expect(
       screen.getByText("The image has nothing to list files with")
@@ -467,7 +472,7 @@ describe("FilesTab", () => {
       <TooltipProvider>
         <FilesTab
           pod={pod()}
-          via={null}
+          through={null}
           onDebug={onDebug}
           onStopVia={() => {}}
           debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods --subresource=ephemeralcontainers -n shop."
@@ -494,7 +499,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -531,7 +536,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -551,7 +556,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -574,7 +579,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={stopped}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -598,7 +603,7 @@ describe("FilesTab", () => {
     const view = await wrap(
       <FilesTab
         pod={stopped}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -611,7 +616,7 @@ describe("FilesTab", () => {
     const reading = await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -624,7 +629,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -645,7 +650,7 @@ describe("FilesTab", () => {
     const tab = () => (
       <FilesTab
         pod={shown}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -679,7 +684,7 @@ describe("FilesTab", () => {
     const tab = () => (
       <FilesTab
         pod={shown}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -714,7 +719,7 @@ describe("FilesTab", () => {
     const refused = await wrap(
       <FilesTab
         pod={stopped}
-        via={null}
+        through={null}
         onDebug={onDebug}
         onStopVia={() => {}}
         debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods --subresource=ephemeralcontainers -n shop."
@@ -733,7 +738,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={stopped}
-        via={null}
+        through={null}
         onDebug={onDebug}
         onStopVia={() => {}}
       />
@@ -750,7 +755,10 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={{ container: "debugger-x7k2", root: "/proc/1/root" }}
+        through={{
+          via: { container: "debugger-x7k2", root: "/proc/1/root" },
+          of: "app",
+        }}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -761,6 +769,32 @@ describe("FilesTab", () => {
   });
 
   /** A binary file gets a sentence with the number that decided it, not a wall of glyphs. */
+  /**
+   * The rows come from the debug container's `/proc/1/root`, which is the
+   * container it was pointed at. Fails if the tab opens on whichever runs
+   * first and puts that name, and its mounts, on another container's files.
+   */
+  it("opens on the container the debug container shows, not the first running", async () => {
+    listing.mockReturnValue(done([file("envoy.yaml")]));
+    const two = pod();
+    two.containers.push({ ...two.containers[0], name: "proxy" });
+    await wrap(
+      <FilesTab
+        pod={two}
+        through={{
+          via: { container: "debugger-x7k2", root: "/proc/1/root" },
+          of: "proxy",
+        }}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(
+      screen.getByText(/through debug container debugger-x7k2/)
+    ).toHaveTextContent("of container proxy.");
+    expect(listed.mock.calls.at(-1)![0]).toMatchObject({ container: "proxy" });
+  });
+
   it("refuses to preview a binary and says why", async () => {
     listing.mockReturnValue(
       done([
@@ -790,7 +824,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -837,7 +871,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -870,7 +904,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -889,7 +923,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -906,7 +940,7 @@ describe("FilesTab", () => {
     const view = await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -919,7 +953,7 @@ describe("FilesTab", () => {
     view.rerender(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -951,7 +985,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -983,7 +1017,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -1011,7 +1045,12 @@ describe("FilesTab", () => {
       tried: [],
     });
     await wrap(
-      <FilesTab pod={pod()} via={null} onDebug={onDebug} onStopVia={() => {}} />
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={onDebug}
+        onStopVia={() => {}}
+      />
     );
     expect(
       screen.getByText(/\/etc\/app could not be opened/)
@@ -1046,7 +1085,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -1074,7 +1113,12 @@ describe("FilesTab", () => {
       restartCount: 0,
     });
     await wrap(
-      <FilesTab pod={two} via={null} onDebug={() => {}} onStopVia={() => {}} />
+      <FilesTab
+        pod={two}
+        through={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
     );
     await userEvent.click(screen.getByRole("tab", { name: "sidecar" }));
     expect(screen.queryByText(/has restarted since/)).toBeNull();
@@ -1087,7 +1131,7 @@ describe("FilesTab", () => {
   };
   const lastListed = () => listed.mock.calls.at(-1)!;
   const tab = (of: PodInfo) => (
-    <FilesTab pod={of} via={null} onDebug={() => {}} onStopVia={() => {}} />
+    <FilesTab pod={of} through={null} onDebug={() => {}} onStopVia={() => {}} />
   );
 
   /**

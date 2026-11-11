@@ -950,6 +950,7 @@ export interface DebugResult {
   containerName: string;
   namespace: string;
   isNewPod: boolean;
+  seesRootOf: string | null;
 }
 
 export interface OwnRules {

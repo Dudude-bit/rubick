@@ -2286,6 +2286,9 @@ export const en = {
     viaDebug:
       "Viewing through debug container {debug}, at {root} of container {container}. Mode and owner are as the debug container sees them; a file the app process cannot read may still show here. The debug container stays on the pod.",
     stopVia: "Read the container directly again",
+    viaShowsNoContainer: "No container's files to read through {debug}",
+    viaShowsNoContainerWhy:
+      "Its process 1 is not a container of this pod: the pod's containers share one process namespace, or the debug container was pointed at none of them. It stays on the pod.",
     restartedSince:
       "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
     readNewContainer: "Read the new container",

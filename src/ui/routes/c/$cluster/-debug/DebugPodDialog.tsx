@@ -113,6 +113,13 @@ export function DebugPodDialog({
         ? preferredTarget
         : (containers[0] ?? "");
   const [shareProcesses, setShareProcesses] = useState(true);
+  // Every way out, so a choice belongs to the opening it was made in: the
+  // next one may be for a different container.
+  const close = useCallback(() => {
+    setPicked(null);
+    setMode(null);
+    onOpenChange(false);
+  }, [onOpenChange]);
 
   const image = selectedImage === "custom" ? customImage : selectedImage;
   const isImageValid = image.trim().length > 0;
@@ -131,9 +138,9 @@ export function DebugPodDialog({
         }),
       });
       onDebugStart(result);
-      onOpenChange(false);
+      close();
     },
-    [t, toast, onDebugStart, onOpenChange]
+    [t, toast, onDebugStart, close]
   );
 
   const handleError = useCallback(
@@ -204,13 +211,8 @@ export function DebugPodDialog({
       // Don't close during polling - user must explicitly cancel
       return;
     }
-    // A choice belongs to the dialog that was open; the next one may be
-    // opened for a different container.
-    if (!newOpen) {
-      setPicked(null);
-      setMode(null);
-    }
-    onOpenChange(newOpen);
+    if (newOpen) onOpenChange(true);
+    else close();
   };
 
   // Timeout dialog handlers
@@ -239,13 +241,13 @@ export function DebugPodDialog({
     }
     setShowTimeoutDialog(false);
     setTimeoutOperation(null);
-    onOpenChange(false);
+    close();
   };
 
   const handleLeave = () => {
     setShowTimeoutDialog(false);
     setTimeoutOperation(null);
-    onOpenChange(false);
+    close();
   };
 
   if (showTimeoutDialog && timeoutOperation) {
@@ -523,7 +525,7 @@ export function DebugPodDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={close}>
             {t("action", "cancel")}
           </Button>
           <ReasonTip reason={startDenied}>
