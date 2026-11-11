@@ -988,18 +988,30 @@ fn still_starting(pod: &Pod, now: DateTime<Utc>) -> bool {
 
 /// The cause a pod counts as trouble by at `now`: none while it is Pending
 /// inside its wait, or not Ready for less than a probe's first passes, as
-/// every pod is on its way up.
+/// every pod is on its way up; none for one Ready again past its loop, whose
+/// exits are news on its own row and not why its workload is short.
+///
+/// `src/contracts/trouble-cause-conformance.json` holds the answers, and
+/// `troubleCause` in `src/ui/lib/share/pod-status.ts` owes the same ones.
 fn trouble_cause(
     pod: &Pod,
     warned: &HashSet<&str>,
     now: DateTime<Utc>,
 ) -> Option<crate::resources::PodCause> {
+    use crate::resources::PodCause;
     let pending = pod.status.as_ref().and_then(|s| s.phase.as_deref()) == Some("Pending");
     if pending && still_starting(pod, now) && !warned_about(pod, warned) {
         return None;
     }
-    cause_at(pod, now).filter(|cause| {
-        !matches!(cause, crate::resources::PodCause::NotReady { counts_from: Some(at), .. } if now < *at)
+    cause_at(pod, now).filter(|cause| match cause {
+        PodCause::NotReady {
+            counts_from: Some(at),
+            ..
+        } => now >= *at,
+        PodCause::Exits { until: Some(_), .. } => {
+            crash_looping(pod, now) || !crate::resources::counts_ready(pod)
+        }
+        _ => true,
     })
 }
 
@@ -4454,6 +4466,81 @@ mod tests {
             panic!("the workload tells its pod's cause");
         };
         assert!(matches!(cause, crate::resources::PodCause::NotReady { .. }));
+    }
+
+    /// The Overview named two Ready pods' old exits as why a Deployment was
+    /// short while its list, page and peek named the pod no node takes.
+    /// Fails if this side counts any pod of the shared corpus, or tells any
+    /// workload's cause, differently from the frontend, or if the rows the
+    /// frontend is asked about are not what this side ships.
+    #[test]
+    fn counts_every_pod_in_the_shared_corpus_as_trouble_as_the_frontend_does() {
+        #[derive(Deserialize)]
+        struct Told {
+            says: String,
+            pods: i32,
+            of: i32,
+        }
+        #[derive(Deserialize)]
+        struct Read {
+            pod: Pod,
+            row: serde_json::Value,
+            is: Option<String>,
+            #[serde(default)]
+            warned: bool,
+        }
+        #[derive(Deserialize)]
+        struct Case {
+            name: String,
+            pods: Vec<Read>,
+            is: Option<Told>,
+        }
+        #[derive(Deserialize)]
+        struct Corpus {
+            now: DateTime<Utc>,
+            cases: Vec<Case>,
+        }
+        let says = |cause: &crate::resources::PodCause| {
+            serde_json::to_value(cause).expect("a cause")["says"]
+                .as_str()
+                .map(str::to_string)
+        };
+        let corpus: Corpus = serde_json::from_str(include_str!(
+            "../../../contracts/trouble-cause-conformance.json"
+        ))
+        .expect("the corpus parses");
+        for case in &corpus.cases {
+            let warned: HashSet<&str> = case
+                .pods
+                .iter()
+                .filter(|read| read.warned)
+                .filter_map(|read| read.pod.metadata.uid.as_deref())
+                .collect();
+            for read in &case.pods {
+                let name = format!("{}: {:?}", case.name, read.pod.metadata.name);
+                let row =
+                    serde_json::to_value(crate::resources::PodRow::from(&read.pod)).expect("a row");
+                let shipped = serde_json::json!({
+                    "status": row["status"], "start": row["start"],
+                    "containers": row["containers"], "initContainers": row["initContainers"],
+                });
+                assert_eq!(shipped, read.row, "{name}");
+                let cause = trouble_cause(&read.pod, &warned, corpus.now);
+                assert_eq!(cause.as_ref().and_then(says), read.is, "{name}");
+            }
+            let pods = case.pods.iter().map(|read| &read.pod);
+            let told = match workload_detail(pods, None, &warned, corpus.now) {
+                Some(ProblemDetail::PodsCause {
+                    cause, pods, of, ..
+                }) => Some((says(&cause), pods, of)),
+                _ => None,
+            };
+            let want = case
+                .is
+                .as_ref()
+                .map(|is| (Some(is.says.clone()), is.pods, is.of));
+            assert_eq!(told, want, "{}", case.name);
+        }
     }
 
     /// A rollout's new pod fails its readiness probe for its first seconds on

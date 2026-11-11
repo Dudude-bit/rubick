@@ -1,5 +1,5 @@
 {
-  "about": "The cause most of a workload's pods share, as both halves read it: `share` in src/tauri/src/resources/types/pod_cause.rs (the Overview's rows, a Deployment's page and peek) and `sharedCause` in src/ui/lib/pod-cause.ts (the StatefulSet, DaemonSet and Job pages and peeks, which read their pods as a list). Each pod arrives as its `gone` flag (being deleted, or failed and replaced by its controller) and the cause `pod_cause` read; `is` names the pod whose cause is told (`from`), how many share it and how many the workload runs, or null where none has a cause.",
+  "about": "The cause most of a workload's pods share, as both halves read it: `share` in src/tauri/src/resources/types/pod_cause.rs (the Overview's rows and a Service's chain) and `sharedCause` in src/ui/lib/pod-cause.ts (every workload's list row, page and peek, which read their pods as a list). Each pod arrives as its `gone` flag (being deleted, or failed and replaced by its controller) and the cause `pod_cause` read; `is` names the pod whose cause is told (`from`), how many share it and how many the workload runs, or null where none has a cause.",
   "cases": [
     {
       "name": "two pods that exit the same way share it, the third has none",

@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { PodCause, PodStart } from "@/generated/types";
+import { countsAt } from "@/lib/pod-cause";
 import {
   causeDeadlines,
   troubleCause,
@@ -146,6 +149,55 @@ describe("workloadCause", () => {
     expect(
       workloadCause([notReady(300), evicted, evicted], NOW)?.shared
     ).toMatchObject({ pods: 1, of: 1 });
+  });
+});
+
+const corpus = JSON.parse(
+  readFileSync(
+    resolve(process.cwd(), "src/contracts/trouble-cause-conformance.json"),
+    "utf8"
+  )
+) as {
+  now: string;
+  cases: {
+    name: string;
+    pods: { row: PodBadgeInput; is: string | null; warned?: boolean }[];
+    is: { says: string; pods: number; of: number } | null;
+  }[];
+};
+
+describe("the pods a workload counts as trouble", () => {
+  /**
+   * The Overview's rows count them in Rust and a workload's list row, page
+   * and peek count them here. Fails if this side counts any pod of the
+   * shared corpus, or tells any workload's cause, differently, which puts
+   * two reasons on one Deployment.
+   */
+  it("counts every pod in the shared corpus as the backend does", () => {
+    const now = Date.parse(corpus.now);
+    for (const { name, pods, is } of corpus.cases) {
+      const rows = pods.map(({ row, warned }) => ({
+        ...row,
+        kubeletWarned: warned,
+      }));
+      rows.forEach((row, at) =>
+        expect(
+          countsAt(troubleCause(row, now), now)?.says ?? null,
+          `${name}: pod ${at}`
+        ).toBe(pods[at].is)
+      );
+      const told = workloadCause(rows, now);
+      expect(
+        told && !told.warnedOnly
+          ? {
+              says: told.shared.cause.says,
+              pods: told.shared.pods,
+              of: told.shared.of,
+            }
+          : null,
+        name
+      ).toEqual(is);
+    }
   });
 });
 
