@@ -842,8 +842,6 @@ export const en = {
     editYaml: "Edit YAML",
     yamlCopiedToClipboard: "YAML copied to clipboard.",
     manifestIsValid: "Manifest is valid and can be applied.",
-    manifestApplied: "Manifest applied to cluster.",
-    failedToApplyManifest: "Failed to apply manifest.",
     formatted: "Formatted",
     yamlFormatted: "YAML has been formatted.",
     restored: "Restored",
@@ -1357,8 +1355,11 @@ export const en = {
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
     applyUnanswered: "The cluster did not answer",
-    applyUnansweredHint:
-      "We stopped waiting. Admission can outlast the wait, so whether the change was applied is unknown: check the object before applying again.",
+    applyDocApplied: "{id} applied",
+    applyDocRefused: "{id} refused: {said}",
+    applyDocUnanswered:
+      "{id} got no answer ({said}). It may have been applied: check the object before applying again.",
+    applyDocNotSent: "{id} not sent",
 
     custom: "Custom",
     stripFull: "Full",

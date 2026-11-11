@@ -200,12 +200,15 @@ export async function perform(
         "  cluster:",
         `    name: ${cluster.name}`,
       ].join("\n");
-      const result = await commands.applyManifest(manifest, cluster.namespace);
-      if (!result.success) {
+      const applied = await commands.applyManifest(manifest, cluster.namespace);
+      const outcome = applied.documents[0]?.outcome;
+      if (outcome?.says !== "applied") {
         // The cluster's own words when it has any; otherwise the caller
         // says it in the reader's language — a literal here is invisible to
         // every scanner in this project.
-        throw new Error(result.stderr || BACKUP_REFUSED);
+        throw new Error(
+          (outcome && "said" in outcome && outcome.said) || BACKUP_REFUSED
+        );
       }
       return;
     }

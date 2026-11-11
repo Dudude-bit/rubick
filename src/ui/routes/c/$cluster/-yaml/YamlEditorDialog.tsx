@@ -20,9 +20,8 @@
 
 import { useCallback, useMemo, useState, useDeferredValue } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { isReadDeadline } from "@/lib/read-deadline";
 import { commands } from "@/lib/commands";
-import type { DryRunDocument } from "@/generated/types";
+import type { Applied, ApplyOutcome, DryRunDocument } from "@/generated/types";
 import {
   Dialog,
   DialogContent,
@@ -50,7 +49,7 @@ import {
   withheldKeysIn,
 } from "./manifest-reads";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useYamlEditorStore } from "@/stores/yamlEditorStore";
+import { useYamlEditorStore, type ResultShown } from "@/stores/yamlEditorStore";
 import { useAsk } from "../-object/useAsk";
 import { askableKind } from "@/lib/tell-me-when";
 import { AlertTriangle, Play, FileCheck } from "lucide-react";
@@ -64,7 +63,49 @@ import { cn } from "@/lib/utils";
 import { YamlDiffViewer } from "./YamlDiffViewer";
 import { YamlResultDisplay } from "./YamlResultDisplay";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
+
+const APPLY_LINE: Record<
+  ApplyOutcome["says"],
+  | "applyDocApplied"
+  | "applyDocRefused"
+  | "applyDocUnanswered"
+  | "applyDocNotSent"
+> = {
+  applied: "applyDocApplied",
+  refused: "applyDocRefused",
+  unanswered: "applyDocUnanswered",
+  notSent: "applyDocNotSent",
+};
+
+/**
+ * An apply's answer as the result block draws it: a line per document, the
+ * ones that went in apart from the rest. An apply stops at the first document
+ * that did not go in, so that document's answer is the verdict.
+ */
+function applyShown(applied: Applied, t: T): ResultShown {
+  const lines = (stored: boolean) =>
+    applied.documents
+      .filter((doc) => (doc.outcome.says === "applied") === stored)
+      .map((doc) =>
+        t("action", APPLY_LINE[doc.outcome.says], {
+          id: doc.id,
+          said: "said" in doc.outcome ? doc.outcome.said : "",
+        })
+      )
+      .join("\n");
+  const some = (says: ApplyOutcome["says"]) =>
+    applied.documents.some((doc) => doc.outcome.says === says);
+  return {
+    verdict: some("unanswered")
+      ? "unanswered"
+      : applied.documents.every((doc) => doc.outcome.says === "applied")
+        ? "ok"
+        : "failed",
+    stdout: lines(true),
+    stderr: lines(false),
+  };
+}
 
 export function YamlEditorDialog() {
   const asking = useAsk();
@@ -262,13 +303,15 @@ export function YamlEditorDialog() {
     setApplyResult(null);
 
     try {
-      const result = await commands.applyManifest(
+      const applied = await commands.applyManifest(
         editedContent,
         resourceKey?.namespace || currentNamespace || null
       );
-      setApplyResult(result);
+      const shown = applyShown(applied, t);
+      setApplyResult(shown);
+      const lines = [shown.stdout, shown.stderr].filter(Boolean).join("\n");
 
-      if (result.success) {
+      if (shown.verdict === "ok") {
         addHistoryEntry(editedContent, "Applied");
         const askable = resourceKey ? askableKind(resourceKey.kind) : null;
         if (askable && resourceKey && askable !== "Pod" && askable !== "Job") {
@@ -282,48 +325,41 @@ export function YamlEditorDialog() {
           );
         }
 
-        toast({
-          title: t("action", "applySucceeded"),
-          description: result.stdout || t("action", "manifestApplied"),
-        });
+        toast({ title: t("action", "applySucceeded"), description: lines });
       } else {
+        const refusal = applied.documents.find(
+          (doc) => doc.outcome.says === "refused"
+        )?.outcome;
+        if (resourceKey && refusal?.says === "refused")
+          noteDenied(
+            "patch",
+            guardedOf(
+              resourceKey.kind,
+              resourceKey.namespace ?? null,
+              resourceKey.name
+            ),
+            { code: refusal.code, message: refusal.said, said: refusal.said }
+          );
+        // Nobody answering is not a refusal: admission can outlast the wait
+        // and the server may have stored it. "Apply failed" there is a
+        // verdict on something nobody saw, and invites a second apply.
+        const unanswered = shown.verdict === "unanswered";
         toast({
-          title: t("action", "applyFailed"),
-          description: result.stderr || t("action", "failedToApplyManifest"),
-          variant: "destructive",
+          title: unanswered
+            ? t("action", "applyUnanswered")
+            : t("action", "applyFailed"),
+          description: lines,
+          variant: unanswered ? "default" : "destructive",
         });
       }
     } catch (error) {
-      if (resourceKey)
-        noteDenied(
-          "patch",
-          guardedOf(
-            resourceKey.kind,
-            resourceKey.namespace ?? null,
-            resourceKey.name
-          ),
-          error
-        );
+      // The command itself failed: nothing was sent, or the session is over.
       const errorMessage = errorToShow(error);
-      // A deadline is not a refusal. The layer that fires it drops our
-      // request; it does not undo what the apiserver may already have
-      // committed — a chain of admission webhooks can outlast the wait.
-      // "Apply failed" there is a verdict about something nobody looked at,
-      // and it invites a second apply on top of a first that may have run.
-      const ranOut = isReadDeadline(error);
-      const errorResult = {
-        success: false,
-        stdout: "",
-        stderr: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
-        exit_code: 1,
-      };
-      setApplyResult(errorResult);
+      setApplyResult({ verdict: "failed", stdout: "", stderr: errorMessage });
       toast({
-        title: ranOut
-          ? t("action", "applyUnanswered")
-          : t("action", "applyFailed"),
-        description: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
-        variant: ranOut ? "default" : "destructive",
+        title: t("action", "applyFailed"),
+        description: errorMessage,
+        variant: "destructive",
       });
     } finally {
       setIsApplying(false);
@@ -487,7 +523,15 @@ export function YamlEditorDialog() {
           {/* Results */}
           {(validationResult || applyResult) && (
             <div className="mt-2">
-              <YamlResultDisplay result={applyResult || validationResult!} />
+              <YamlResultDisplay
+                result={
+                  applyResult ?? {
+                    verdict: validationResult!.success ? "ok" : "failed",
+                    stdout: validationResult!.stdout,
+                    stderr: validationResult!.stderr,
+                  }
+                }
+              />
             </div>
           )}
 

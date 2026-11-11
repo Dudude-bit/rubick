@@ -34,6 +34,7 @@ const listCustomResources = vi.fn();
 const applyManifest = vi.fn();
 const dryRunManifest = vi.fn();
 const checkAccess = vi.fn();
+const toast = vi.fn();
 /** The neighbourhood the dialog asks about, per test. */
 let connections: () => {
   object: null;
@@ -56,6 +57,11 @@ vi.mock("@/lib/commands", () => ({
     getYamlHistory: async () => [],
     addYamlHistoryEntry: async () => {},
   },
+}));
+
+vi.mock("@/components/ui/use-toast", () => ({
+  toast: (...args: unknown[]) => toast(...args),
+  useToast: () => ({ toast }),
 }));
 
 // CodeMirror wants a layout jsdom does not have, and none of this is about
@@ -141,10 +147,7 @@ beforeEach(() => {
   connections = () => ({ object: null, edges: [], notLookedAt: [] });
   useYamlEditorStore.getState().closeEditor();
   applyManifest.mockResolvedValue({
-    success: true,
-    stdout: "deployment.apps/api configured",
-    stderr: "",
-    exit_code: 0,
+    documents: [{ id: "deployment/shop api", outcome: { says: "applied" } }],
   });
   dryRunManifest.mockResolvedValue({
     documents: [
@@ -281,34 +284,6 @@ describe("applying on critical infrastructure", () => {
     ).not.toHaveLength(0);
   });
 
-  /**
-   * The read deadline is on every request, writes included, and the layer
-   * that fires it only drops our side — it does not undo what the apiserver
-   * may already have committed, and a chain of admission webhooks can
-   * outlast the wait. Saying "Apply failed" there is a verdict about
-   * something nobody looked at, and it invites a second apply.
-   */
-  it("does not call a timed-out apply a failed one", async () => {
-    applyManifest.mockRejectedValue(
-      new Error("READ_DEADLINE: the cluster did not answer within 60 s")
-    );
-    const user = await openWith(PLAIN);
-    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
-    // The cluster is marked critical in this harness, so the gate comes first.
-    await user.type(screen.getByPlaceholderText("test"), "test");
-    const confirm = screen
-      .getAllByRole("button", { name: /^Apply$/ })
-      .at(-1) as HTMLElement;
-    await user.click(confirm);
-
-    await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
-    await waitFor(() => {
-      expect(screen.getByText(/We stopped waiting/i)).toBeInTheDocument();
-    });
-    // Not the wire marker, and not a verdict on something nobody looked at.
-    expect(document.body.textContent).not.toContain("READ_DEADLINE:");
-  });
-
   it("holds Apply until the cluster's name is typed", async () => {
     const user = await openWith(PLAIN);
 
@@ -326,6 +301,154 @@ describe("applying on critical infrastructure", () => {
 
     await user.click(confirm);
     await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("what an apply says when it ends", () => {
+  // A refusal one test teaches the app is kept for the connection: the next
+  // test gets a connection of its own.
+  afterEach(() => {
+    checkAccess.mockReset();
+    useClusterStore.setState((s) => ({
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+  });
+
+  const told = (title: string, variant: "default" | "destructive") =>
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title, variant })
+    );
+
+  async function applyAnswering(answer: () => Promise<unknown>) {
+    applyManifest.mockImplementation(answer);
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+    await user.click(
+      screen.getAllByRole("button", { name: /^Apply$/ }).at(-1) as HTMLElement
+    );
+    await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
+    return screen.findByTestId("yaml-result");
+  }
+
+  /**
+   * The read deadline is on every request, writes included, and the layer
+   * that fires it only drops our side: a chain of admission webhooks can
+   * outlast the wait and the server store it all the same. The backend
+   * answered every such patch "failed", and the result block drew it red.
+   * Fails if an apply nobody answered is called failed, or drawn as one.
+   */
+  it("does not call an apply nobody answered a failed one", async () => {
+    const result = await applyAnswering(async () => ({
+      documents: [
+        {
+          id: "deployment/shop api",
+          outcome: {
+            says: "unanswered",
+            said: "the cluster did not answer within 60 s",
+          },
+        },
+      ],
+    }));
+
+    expect(result).toHaveAttribute("data-verdict", "unanswered");
+    expect(result).toHaveTextContent("The cluster did not answer");
+    expect(result).toHaveTextContent(
+      "deployment/shop api got no answer (the cluster did not answer within 60 s). It may have been applied"
+    );
+    told("The cluster did not answer", "default");
+    expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The apply stops at the first document that does not go in, and used to
+   * answer with that one alone: nothing said the two before it were stored.
+   * Fails if a stored document is not named as stored, or an unsent one is
+   * left out.
+   */
+  it("says which documents went in before the one that was refused", async () => {
+    const result = await applyAnswering(async () => ({
+      documents: [
+        { id: "configmap/shop a", outcome: { says: "applied" } },
+        {
+          id: "configmap/shop b",
+          outcome: {
+            says: "refused",
+            code: "KUBE_API_ERROR",
+            said: "exceeded quota",
+          },
+        },
+        { id: "configmap/shop c", outcome: { says: "notSent" } },
+      ],
+    }));
+
+    expect(result).toHaveAttribute("data-verdict", "failed");
+    expect(result).toHaveTextContent("configmap/shop a applied");
+    expect(result).toHaveTextContent(
+      "configmap/shop b refused: exceeded quota"
+    );
+    expect(result).toHaveTextContent("configmap/shop c not sent");
+    told("Apply failed", "destructive");
+    expect(toast.mock.calls[0][0].description).toContain(
+      "configmap/shop a applied"
+    );
+  });
+
+  /**
+   * A 403 on the patch never reached the code that remembers refusals: the
+   * backend folded it into a "failed" result, and the refusal was only ever
+   * looked for on a rejected command. Fails if Apply stays offered once the
+   * authorizer confirms the refusal.
+   */
+  it("remembers a patch the cluster refused this user", async () => {
+    checkAccess.mockImplementation(async (questions: unknown[]) =>
+      questions.map(() => ({
+        allowed: applyManifest.mock.calls.length === 0,
+        reason: null,
+      }))
+    );
+    await applyAnswering(async () => ({
+      documents: [
+        {
+          id: "deployment/shop api",
+          outcome: {
+            says: "refused",
+            code: "PERMISSION_DENIED",
+            said: "deployments.apps is forbidden",
+          },
+        },
+      ],
+    }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Apply$/ })).toHaveAttribute(
+        "aria-disabled",
+        "true"
+      )
+    );
+  });
+
+  /** A command that fails whole sent nothing, or lost its session: that one is a failure. */
+  it("calls a command that failed whole a failed apply", async () => {
+    const result = await applyAnswering(async () => {
+      throw new Error("Not connected to test");
+    });
+
+    expect(result).toHaveAttribute("data-verdict", "failed");
+    expect(result).toHaveTextContent("Not connected to test");
+    told("Apply failed", "destructive");
+  });
+
+  /** And the ordinary case keeps its word: every document in, said as a success. */
+  it("calls an apply every document went into a success", async () => {
+    const result = await applyAnswering(async () => ({
+      documents: [{ id: "deployment/shop api", outcome: { says: "applied" } }],
+    }));
+
+    expect(result).toHaveAttribute("data-verdict", "ok");
+    expect(result).toHaveTextContent("deployment/shop api applied");
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Apply succeeded" })
+    );
   });
 });
 

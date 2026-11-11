@@ -819,8 +819,6 @@ export const ru: Catalogue = {
     editYaml: "Изменить YAML",
     yamlCopiedToClipboard: "YAML скопирован в буфер обмена.",
     manifestIsValid: "Манифест корректен, его можно применить.",
-    manifestApplied: "Манифест применён к кластеру.",
-    failedToApplyManifest: "Не удалось применить манифест.",
     formatted: "Отформатировано",
     yamlFormatted: "YAML отформатирован.",
     restored: "Восстановлено",
@@ -1365,8 +1363,11 @@ export const ru: Catalogue = {
     applySucceeded: "Применение выполнено",
     applyFailed: "Не удалось применить",
     applyUnanswered: "Кластер не ответил",
-    applyUnansweredHint:
-      "Мы перестали ждать. Неизвестно, применилось ли изменение: допуск может длиться дольше ожидания. Посмотрите объект, прежде чем применять снова.",
+    applyDocApplied: "{id} применён",
+    applyDocRefused: "{id} отклонён: {said}",
+    applyDocUnanswered:
+      "{id} остался без ответа ({said}). Возможно, он применён: посмотрите объект, прежде чем применять снова.",
+    applyDocNotSent: "{id} не отправлен",
     custom: "Указать вручную",
     stripFull: "Полная",
     stripFullHint: "Объём во времени, с часами и счётчиками ошибок",

@@ -7,7 +7,9 @@ use kube::api::{Patch, PatchParams};
 use tauri::State;
 
 use super::parse::{api_resource_for, is_cluster_scoped, parse_all_documents};
-use super::{DryRun, DryRunDocument, DryRunOutcome, ManifestResult};
+use super::{
+    Applied, AppliedDocument, ApplyOutcome, DryRun, DryRunDocument, DryRunOutcome, ManifestResult,
+};
 
 /// Validate a Kubernetes manifest (parse and check structure).
 ///
@@ -48,37 +50,65 @@ pub async fn apply_manifest(
     manifest: String,
     namespace: Option<String>,
     state: State<'_, AppState>,
-) -> Result<ManifestResult> {
-    let parsed_docs = parse_all_documents(&manifest)?;
+) -> Result<Applied> {
+    apply_of(&state, &manifest, namespace.as_deref()).await
+}
 
-    let mut results = Vec::new();
+/// Every document in turn, stopping at the first that did not go in: the
+/// ones before it are stored, and the answer has to say so.
+async fn apply_of(state: &AppState, manifest: &str, namespace: Option<&str>) -> Result<Applied> {
+    let parsed_docs = parse_all_documents(manifest)?;
     let patch_params = PatchParams::apply("k8s-gui").force();
+    let mut documents = Vec::new();
+    let mut stopped = false;
 
     for parsed in parsed_docs {
-        let ns = parsed.effective_namespace(namespace.as_deref());
-        let name = parsed.name();
-        let ctx = ResourceContext::for_command(&state, Some(ns.clone()))?;
-        let api = ctx.dynamic_api_for_resource(
-            &parsed.api_resource,
-            is_cluster_scoped(&parsed.api_resource.kind),
-        );
-
-        match api
-            .patch(&name, &patch_params, &Patch::Apply(&parsed.object))
-            .await
-        {
-            Ok(_) => results.push(parsed.format_id(&ns, "configured")),
-            Err(e) => {
-                return Ok(ManifestResult::error(format!(
-                    "Failed to apply {}: {}",
-                    parsed.format_id(&ns, ""),
-                    e
-                )));
-            }
-        }
+        let ns = parsed.effective_namespace(namespace);
+        let outcome = if stopped {
+            ApplyOutcome::NotSent
+        } else {
+            let ctx = ResourceContext::for_command(state, Some(ns.clone()))?;
+            let api = ctx.dynamic_api_for_resource(
+                &parsed.api_resource,
+                is_cluster_scoped(&parsed.api_resource.kind),
+            );
+            applied_of(
+                api.patch(&parsed.name(), &patch_params, &Patch::Apply(&parsed.object))
+                    .await,
+            )?
+        };
+        stopped = outcome != ApplyOutcome::Applied;
+        documents.push(AppliedDocument {
+            id: parsed.format_id(&ns, "").trim_end().to_string(),
+            outcome,
+        });
     }
 
-    Ok(ManifestResult::success(results.join("\n")))
+    Ok(Applied { documents })
+}
+
+/// How one document's apply ended.
+///
+/// The arms are the point. A 4xx is the server's own no and nothing was
+/// stored. A deadline, a 5xx or a dropped connection is nobody answering a
+/// request that left: admission can outlast the wait, and "failed" there is
+/// a verdict on something nobody saw. A 401 is the session, and leaves by
+/// the door the sign-in screen listens at.
+fn applied_of<T>(patched: std::result::Result<T, kube::Error>) -> Result<ApplyOutcome> {
+    let (refused, error) = match patched {
+        Ok(_) => return Ok(ApplyOutcome::Applied),
+        Err(e) if session_over(&e) => return Err(Error::from(e)),
+        Err(e) => answered_no(e),
+    };
+    let said = shown(&error);
+    Ok(if refused {
+        ApplyOutcome::Refused {
+            code: error.code().to_string(),
+            said,
+        }
+    } else {
+        ApplyOutcome::Unanswered { said }
+    })
 }
 
 /// What the object looks like right now, before the dry run touched it.
@@ -120,19 +150,19 @@ enum NoAnswer {
 fn live_failure(err: kube::Error) -> Live {
     match err {
         kube::Error::Api(status) if status.code == 404 => Live::Absent,
-        other => {
-            let said = Error::from(other);
-            // The marker is a wire format, not a sentence: this string is
-            // rendered as prose beside the reader's own language, and
-            // `READ_DEADLINE: …` there is the app's plumbing on screen.
-            let text = said.to_string();
-            Live::Unread(
-                text.strip_prefix("READ_DEADLINE: ")
-                    .unwrap_or(&text)
-                    .to_string(),
-            )
-        }
+        other => Live::Unread(shown(&Error::from(other))),
     }
+}
+
+/// An error as a sentence for the screen, beside the reader's own language.
+///
+/// The marker is a wire format, not prose: `READ_DEADLINE: …` there is the
+/// app's plumbing on screen, and so is the variant's own label.
+fn shown(error: &Error) -> String {
+    let said = error.said();
+    said.strip_prefix("READ_DEADLINE: ")
+        .unwrap_or(&said)
+        .to_string()
 }
 
 /// A 401 is the session being over, not the server refusing this manifest.
@@ -143,7 +173,7 @@ fn live_failure(err: kube::Error) -> Live {
 /// refusal it blocked Apply — a sign-in problem dressed as the cluster
 /// rejecting the reader's YAML — and put the wire marker on screen as prose.
 fn session_over(err: &kube::Error) -> bool {
-    matches!(err, kube::Error::Api(status) if status.code == 401)
+    crate::error::session_over(err).is_some()
 }
 
 /// What the live read means, or the one failure that is not about the
@@ -187,20 +217,21 @@ fn would_of(
 }
 
 fn no_answer(err: kube::Error) -> NoAnswer {
-    let said = Error::from(err_ref_clone(&err)).to_string();
-    match err {
-        kube::Error::Api(status) if (400..500).contains(&status.code) => NoAnswer::Refused(said),
-        _ => NoAnswer::Unanswered(said),
+    let (refused, error) = answered_no(err);
+    if refused {
+        NoAnswer::Refused(shown(&error))
+    } else {
+        NoAnswer::Unanswered(shown(&error))
     }
 }
 
-/// `kube::Error` is not `Clone`; the display is what is wanted, and the
-/// `From` impl that cleans it takes the error by value.
-fn err_ref_clone(err: &kube::Error) -> kube::Error {
-    match err {
-        kube::Error::Api(status) => kube::Error::Api(status.clone()),
-        other => kube::Error::Service(other.to_string().into()),
-    }
+/// Whether the server itself said no, and the error it said it with. Only a
+/// 4xx with a `Status` is its own answer; a deadline or a proxy's 502 is not.
+fn answered_no(err: kube::Error) -> (bool, Error) {
+    let client_error =
+        matches!(&err, kube::Error::Api(status) if (400..500).contains(&status.code));
+    let error = Error::from(err);
+    (client_error || error.is_refusal(), error)
 }
 
 /// Which of the six answers this document gets.
@@ -730,8 +761,152 @@ mod dry_run_tests {
 mod tests {
     use std::time::Duration;
 
+    use super::super::ApplyOutcome;
     use crate::client::served::test_server::{connected, failure, groups, resources};
     use crate::client::served::ServedIndex;
+    use crate::error::Error;
+
+    fn status(code: u16, reason: &str, message: &str) -> kube::Error {
+        kube::Error::Api(Box::new(kube::core::Status {
+            code,
+            message: message.to_string(),
+            reason: reason.to_string(),
+            status: None,
+            details: None,
+            metadata: Option::default(),
+        }))
+    }
+
+    /// Every failed patch used to come back as one "Failed to apply" result,
+    /// so a PATCH the admission chain held past the read deadline was drawn
+    /// as a failed apply the server may well have stored. A deadline, a 5xx
+    /// and a dropped connection are nobody answering; only a 4xx is a no.
+    #[test]
+    fn an_apply_nobody_answered_is_not_one_the_server_refused() {
+        let elapsed: tower::BoxError = Box::new(tower::timeout::error::Elapsed::new());
+        match super::applied_of::<()>(Err(kube::Error::Service(elapsed))) {
+            Ok(ApplyOutcome::Unanswered { said }) => {
+                assert!(said.contains("did not answer within"), "{said}");
+                assert!(!said.contains("READ_DEADLINE"), "a wire marker: {said}");
+            }
+            other => panic!("a deadline is nobody answering, not {other:?}"),
+        }
+        for unanswered in [
+            status(502, "BadGateway", "bad gateway"),
+            status(504, "Timeout", "request did not complete"),
+            kube::Error::Service("connection reset".into()),
+        ] {
+            assert!(matches!(
+                super::applied_of::<()>(Err(unanswered)),
+                Ok(ApplyOutcome::Unanswered { .. })
+            ));
+        }
+
+        assert_eq!(
+            super::applied_of::<()>(Err(status(422, "Invalid", "replicas: must be >= 0")))
+                .expect("answered"),
+            ApplyOutcome::Refused {
+                code: "KUBE_API_ERROR".into(),
+                said: "replicas: must be >= 0".into(),
+            }
+        );
+        assert_eq!(
+            super::applied_of(Ok(())).expect("answered"),
+            ApplyOutcome::Applied
+        );
+    }
+
+    /// The frontend learns a 403 on the patch from the code, and remembers
+    /// the refusal by it; some distributions send `Forbidden` with the code
+    /// unset, and that is still the server's no and not silence.
+    #[test]
+    fn a_forbidden_apply_is_refused_with_its_code_however_it_is_filed() {
+        for forbidden in [
+            status(403, "Forbidden", "configmaps is forbidden"),
+            status(0, "Forbidden", "configmaps is forbidden"),
+        ] {
+            assert_eq!(
+                super::applied_of::<()>(Err(forbidden)).expect("answered"),
+                ApplyOutcome::Refused {
+                    code: "PERMISSION_DENIED".into(),
+                    said: "configmaps is forbidden".into(),
+                }
+            );
+        }
+    }
+
+    /// A 401 on the patch was folded into the "failed" result, so the
+    /// command never failed, the wrapper never saw `CREDENTIALS_EXPIRED`
+    /// and no sign-in was offered for an apply the session had outlived.
+    #[test]
+    fn an_expired_session_fails_the_apply_instead_of_answering_it() {
+        for unauthorised in [
+            status(401, "Unauthorized", "Unauthorized"),
+            status(0, "Unauthorized", "Unauthorized"),
+        ] {
+            assert!(matches!(
+                super::applied_of::<()>(Err(unauthorised)),
+                Err(Error::CredentialsExpired(_))
+            ));
+        }
+    }
+
+    /// A dry run past the deadline printed the wire marker as the server's
+    /// words, and with it lost the sentence that says how long was waited.
+    #[test]
+    fn a_dry_run_past_the_deadline_says_so_in_a_sentence() {
+        let elapsed: tower::BoxError = Box::new(tower::timeout::error::Elapsed::new());
+        match super::no_answer(kube::Error::Service(elapsed)) {
+            super::NoAnswer::Unanswered(said) => {
+                assert!(
+                    said.starts_with("the cluster did not answer within"),
+                    "{said}"
+                );
+            }
+            super::NoAnswer::Refused(said) => panic!("a deadline is not a no: {said}"),
+        }
+    }
+
+    /// Three documents, the second refused: the early return dropped the
+    /// first one's result, so nothing said it was already stored, and the
+    /// third's fate went unstated. Fails if the first is not reported as
+    /// applied, or the third is sent or left out.
+    #[tokio::test]
+    async fn a_refused_document_leaves_the_ones_before_it_applied_and_the_rest_unsent() {
+        let config = |name: &str| {
+            format!("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {name}\n---\n")
+        };
+        let path = |name: &str| format!("/api/v1/namespaces/shop/configmaps/{name}");
+        let (state, hits) = connected(ServedIndex::default(), |path, _| {
+            if path.ends_with("/configmaps/b") {
+                failure(403, "Forbidden")
+            } else {
+                let stored = r#"{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"x"}}"#;
+                (200, stored.to_string())
+            }
+        })
+        .await;
+
+        let manifest = ["a", "b", "c"].map(config).concat();
+        let applied = super::apply_of(&state, &manifest, Some("shop"))
+            .await
+            .expect("the run is answered, document by document");
+
+        let ids: Vec<&str> = applied.documents.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["configmap/shop a", "configmap/shop b", "configmap/shop c"]
+        );
+        assert_eq!(applied.documents[0].outcome, ApplyOutcome::Applied);
+        assert!(matches!(
+            &applied.documents[1].outcome,
+            ApplyOutcome::Refused { code, .. } if code == "PERMISSION_DENIED"
+        ));
+        assert_eq!(applied.documents[2].outcome, ApplyOutcome::NotSent);
+        let asked = hits.lock().unwrap();
+        assert_eq!(asked.get(&path("a")), Some(&1));
+        assert_eq!(asked.get(&path("c")), None, "sent after the refusal");
+    }
 
     /// Would keep the YAML tab of a route read at a version the cluster
     /// stopped serving on "not found" until discovery aged out, while the

@@ -10,6 +10,16 @@ export interface HistoryEntry {
   label?: string;
 }
 
+/**
+ * How a validate or an apply ended, for the result block. `unanswered` is an
+ * answer of its own: the server may have stored what nobody confirmed.
+ */
+export interface ResultShown {
+  verdict: "ok" | "failed" | "unanswered";
+  stdout: string;
+  stderr: string;
+}
+
 export interface ResourceKey {
   kind: string;
   name: string;
@@ -37,7 +47,7 @@ interface YamlEditorState {
 
   // Validation/Apply results
   validationResult: ManifestResult | null;
-  applyResult: ManifestResult | null;
+  applyResult: ResultShown | null;
 
   // History (per resource, stored by key)
   history: Record<string, HistoryEntry[]>;
@@ -53,7 +63,7 @@ interface YamlEditorState {
   setEditedContent: (content: string) => void;
   setShowDiff: (show: boolean) => void;
   setValidationResult: (result: ManifestResult | null) => void;
-  setApplyResult: (result: ManifestResult | null) => void;
+  setApplyResult: (result: ResultShown | null) => void;
   setIsValidating: (validating: boolean) => void;
   setIsApplying: (applying: boolean) => void;
   addHistoryEntry: (content: string, label?: string) => void;
