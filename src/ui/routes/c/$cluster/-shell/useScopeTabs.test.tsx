@@ -27,6 +27,7 @@ vi.mock("@/lib/commands", () => ({
 import { useScopeTabs } from "./useScopeTabs";
 import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { clusterOf } from "@/lib/links";
 import { renderWithRouter, testQueryClient } from "@/test/render";
 
 const tab = (over: Partial<ScopeTab> = {}): ScopeTab => ({
@@ -220,6 +221,46 @@ describe("a tab whose cluster is gone", () => {
       await state().activateTab("b");
     });
     expect(state().tabs[1]).toMatchObject({ missing: true, context: "gone" });
+  });
+});
+
+describe("a cluster whose name the address has to spell", () => {
+  /**
+   * Closing the last tab on the overview is the one way back to the picker.
+   * The router hands a path back with spaces and letters decoded, and the
+   * overview's address was built encoded, so for `my cluster` or `прод` the
+   * tab never read as being on the overview: every close sent it "home"
+   * again and none disconnected. Fails if a name that needs spelling in the
+   * address does not come back out of it as the same place.
+   */
+  it.each([
+    "my cluster",
+    "прод",
+    "arn:aws:eks:us-east-1:1234:cluster/prod",
+    "dev@corp",
+    "100% legit",
+  ])("closes the last tab of %s to the picker", async (name) => {
+    const home = `/c/${encodeURIComponent(name)}`;
+    useClusterStore.setState({ currentContext: name, isConnected: true });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: name, href: `${home}/pods` })],
+      activeId: "a",
+    });
+    await mount(`${home}/pods`);
+    expect(clusterOf(router.state.location.pathname)).toBe(name);
+
+    await act(async () => {
+      await state().closeTab("a");
+    });
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+    expect(router.state.location.pathname).not.toMatch(/pods/);
+    expect(useClusterStore.getState().currentContext).toBe(name);
+
+    await act(async () => {
+      await state().closeTab("a");
+    });
+    expect(useClusterStore.getState().currentContext).toBeNull();
+    await vi.waitFor(() => expect(href()).toBe("/"));
   });
 });
 

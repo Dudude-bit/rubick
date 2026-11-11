@@ -34,7 +34,12 @@ import {
   wireNamespace,
 } from "@/lib/namespace-scope";
 import { ACCESS_KINDS, segmentOf } from "@/lib/access-kinds";
-import { clusterOf, namespaceShownBy, retargetHref } from "@/lib/links";
+import {
+  clusterOf,
+  namespaceShownBy,
+  retargetHref,
+  sameAddress,
+} from "@/lib/links";
 import {
   RESOURCE_REGISTRY,
   getDisplayPlural,
@@ -358,7 +363,7 @@ export const useScopeTabStore = create<ScopeTabState>()(
           // namespace via the popover since this tab went live).
           const parked = parkActive(tabs, only.id)[0];
           const home = homeOf(parked.context);
-          if (only.href !== home && !only.missing) {
+          if (!sameAddress(only.href, home) && !only.missing) {
             // Keep the scope and send the view home, with no disconnect and
             // no cleared namespace.
             set({ tabs: [{ ...parked, href: home }], pendingHref: home });
