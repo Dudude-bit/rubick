@@ -97,6 +97,7 @@ import {
   type EventsView,
 } from "@/stores/displaySettingsStore";
 import type { EventFilters, EventInfo, Scoped } from "@/generated/types";
+import { eventsUidIn } from "@/hooks/useReadUid";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { formatCount } from "@/lib/count";
@@ -476,14 +477,11 @@ export function Events() {
   // Over the whole pool, before the search narrows it: whether an object was
   // replaced is told by its other events, which a search may not match.
   const opened = useCallback<Holder>(
-    (kind, namespace, name) => {
-      const read = client.getQueryData(queryKeys.detail(kind, namespace, name));
-      const uid =
-        read && typeof read === "object" && "uid" in read
-          ? read.uid
-          : undefined;
-      return typeof uid === "string" && uid !== "" ? uid : undefined;
-    },
+    (kind, namespace, name) =>
+      eventsUidIn(
+        kind,
+        client.getQueryData(queryKeys.detail(kind, namespace, name))
+      ),
     [client]
   );
   const inferred = useMemo(() => pastObjects(pool, opened), [pool, opened]);

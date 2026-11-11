@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 
 import type { EventInfo } from "@/generated/types";
 import {
@@ -10,7 +10,8 @@ import {
   type StoryOptions,
 } from "@/lib/event-stories";
 import { useLocaleStore } from "@/stores/localeStore";
-import { renderWithRouter } from "@/test/render";
+import { queryKeys } from "@/lib/query-keys";
+import { renderWithRouter, testQueryClient } from "@/test/render";
 import { StoryCard } from "./StoryCard";
 
 const NOW = Date.parse("2026-10-08T12:00:00Z");
@@ -242,5 +243,66 @@ describe("a story about pods folded by their name", () => {
     } finally {
       useLocaleStore.setState({ choice: null });
     }
+  });
+});
+
+describe("a story's clock for a static pod", () => {
+  /**
+   * The clock places a pod's remembered exits among its events when the pod
+   * read is the one the events are about. A static pod's events carry the
+   * hash in its mirror annotation. Fails if the pod is matched by its
+   * mirror's uid and its exits are left off the clock.
+   */
+  it("places the exits of a static pod among its events", async () => {
+    const client = testQueryClient();
+    client.setQueryData(queryKeys.detail("Pod", "kube-system", "etcd-cp"), {
+      name: "etcd-cp",
+      namespace: "kube-system",
+      uid: "9f0c2a11",
+      annotations: { "kubernetes.io/config.mirror": "5f3c0d7e" },
+      containers: [
+        {
+          name: "etcd",
+          state: { type: "running" },
+          lastTerminated: {
+            exitCode: 1,
+            signal: null,
+            reason: "Error",
+            message: null,
+            startedAt: null,
+            finishedAt: new Date(NOW - 90_000).toISOString(),
+          },
+        },
+      ],
+    });
+    const options: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const [story] = storiesOf(
+      [
+        {
+          ...backOff,
+          namespace: "kube-system",
+          involvedObject: {
+            kind: "Pod",
+            name: "etcd-cp",
+            namespace: "kube-system",
+            uid: "5f3c0d7e",
+          },
+        },
+      ],
+      options
+    );
+    await renderWithRouter(
+      <StoryCard story={story} options={options} showNamespace={false} />,
+      { client }
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+    expect(
+      await screen.findByText("etcd exited with code 1")
+    ).toBeInTheDocument();
   });
 });

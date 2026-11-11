@@ -169,9 +169,9 @@ pub(crate) async fn warned_while_creating<'a>(
         .into_iter()
         .filter(|pod| creating_in_wait(pod, now))
         .filter_map(|pod| {
-            let uid = pod.metadata.uid.as_deref()?;
+            let (uid, carried) = uids_of(pod)?;
             Some(async move {
-                warnings_of(api, uid)
+                warnings_of(api, carried)
                     .await
                     .is_ok_and(|warnings| !warnings.is_empty())
                     .then_some(uid)
@@ -182,6 +182,14 @@ pub(crate) async fn warned_while_creating<'a>(
         .into_iter()
         .flatten()
         .collect()
+}
+
+/// A pod's own uid, which its callers know it by, and the one its warnings are read by.
+fn uids_of(pod: &Pod) -> Option<(&str, &str)> {
+    Some((
+        pod.metadata.uid.as_deref()?,
+        crate::resources::events_uid(pod)?,
+    ))
 }
 
 fn creating_in_wait(pod: &Pod, now: DateTime<Utc>) -> bool {
@@ -301,6 +309,19 @@ mod tests {
         assert!(creating_in_wait(&pending("True", 5), now));
         assert!(!creating_in_wait(&pending("False", 5), now));
         assert!(!creating_in_wait(&pending("True", 3600), now));
+    }
+
+    /// A static pod's warnings are read by the hash its kubelet writes them
+    /// under and answered for the pod's own uid, which is what its rows are
+    /// matched by. Fails if the read asks for the mirror's uid and finds none.
+    #[test]
+    fn a_static_pods_warnings_are_read_by_the_uid_they_carry() {
+        let mirror: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "etcd-cp", "uid": "9f0c2a11",
+                "annotations": {"kubernetes.io/config.mirror": "5f3c0d7e"}}
+        }))
+        .expect("a pod this test wrote itself");
+        assert_eq!(uids_of(&mirror), Some(("9f0c2a11", "5f3c0d7e")));
     }
 
     fn none_ready(cause: PodCause, why: NotServing) -> ChainStop {

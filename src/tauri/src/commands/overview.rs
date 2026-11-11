@@ -370,7 +370,12 @@ impl<'a> Holders<'a> {
             }
         }
         let mut uids = HashMap::new();
-        hold(&mut uids, "Pod", input.scoped_pods);
+        for pod in input.scoped_pods {
+            let meta = &pod.metadata;
+            if let (Some(name), Some(uid)) = (&meta.name, crate::resources::events_uid(pod)) {
+                uids.insert(("Pod", meta.namespace.as_deref(), name.as_str()), uid);
+            }
+        }
         hold(&mut uids, "Deployment", input.deployments);
         hold(&mut uids, "StatefulSet", input.stateful_sets);
         hold(&mut uids, "DaemonSet", input.daemon_sets);
@@ -3332,6 +3337,32 @@ mod tests {
             incarnation("d10287fd", &[], &refused),
             Incarnation::Unchecked
         );
+    }
+
+    /// etcd on a kind control plane: the kubelet records a static pod's events
+    /// under the hash in its mirror annotation. Fails if the pod is held by
+    /// its mirror's uid, which calls every warning of its own an earlier object's.
+    #[test]
+    fn a_static_pods_warning_is_about_the_pod_there_now() {
+        let mut mirror = pod("etcd-cp", PodStatus::default());
+        mirror.metadata.uid = Some("9f0c2a11".to_string());
+        mirror.metadata.annotations = Some(
+            [(
+                crate::resources::MIRROR_POD_ANNOTATION.to_string(),
+                "5f3c0d7e".to_string(),
+            )]
+            .into(),
+        );
+        let warned = |uid: &str| {
+            warnings_with(
+                std::slice::from_ref(&mirror),
+                &[],
+                failed_mount("default", "etcd-cp", uid),
+            )[0]
+            .incarnation
+        };
+        assert_eq!(warned("5f3c0d7e"), Incarnation::Current);
+        assert_eq!(warned("9f0c2a11"), Incarnation::Earlier);
     }
 
     fn metric_warning(uid: &str, count: i32, first_minutes_ago: i64) -> Event {

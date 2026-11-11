@@ -551,6 +551,35 @@ describe("a feed a watch keeps", () => {
     });
   });
 
+  /**
+   * etcd on a kind control plane, open in its own page: its events carry the
+   * hash in its mirror annotation. Fails if the pod the page read is held by
+   * its mirror's uid, which marks every row of its own an earlier object's.
+   */
+  it("reads a static pod's rows as about the pod its page holds", async () => {
+    layOutRows();
+    const { client } = await watched("list");
+    client.setQueryData(queryKeys.detail("Pod", "kube-system", "etcd-cp"), {
+      uid: "9f0c2a11",
+      annotations: { "kubernetes.io/config.mirror": "5f3c0d7e" },
+    });
+    const about = (uid: string, index: number): EventInfo => ({
+      ...event("kube-system", index),
+      involvedObject: {
+        kind: "Pod",
+        name: "etcd-cp",
+        namespace: "kube-system",
+        uid,
+      },
+    });
+    burst([about("5f3c0d7e", 0), about("0ld0ld0l", 1)]);
+    await waitFor(() =>
+      expect(document.querySelectorAll("[data-past='earlier']")).toHaveLength(1)
+    );
+    expect(rowAt(0)?.querySelector("[data-past]")).toBeNull();
+    expect(rowAt(1)?.querySelector("[data-past='earlier']")).not.toBeNull();
+  });
+
   /** Dana's story title opened a peek that knew nothing of the Event. Fails if the card's link drops it. */
   it("links a story's object to its Events tab, noting the latest Event about it", async () => {
     await watched("stories");

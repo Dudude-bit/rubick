@@ -54,6 +54,28 @@ export function uidIn(read: unknown): string | undefined {
   return typeof uid === "string" && uid !== "" ? uid : undefined;
 }
 
+const MIRROR = "kubernetes.io/config.mirror";
+
+/**
+ * The uid the events about the object in `read` carry: its own, except a
+ * static pod's, which its kubelet records under the hash in its mirror
+ * annotation. `src/contracts/events-uid-conformance.json` holds the answers.
+ */
+export function eventsUidIn(kind: string, read: unknown): string | undefined {
+  if (kind !== "Pod" || !read || typeof read !== "object") return uidIn(read);
+  const meta = "metadata" in read ? read.metadata : undefined;
+  const annotations =
+    "annotations" in read
+      ? read.annotations
+      : meta && typeof meta === "object" && "annotations" in meta
+        ? meta.annotations
+        : undefined;
+  const hash = (annotations as Record<string, unknown> | null | undefined)?.[
+    MIRROR
+  ];
+  return typeof hash === "string" && hash !== "" ? hash : uidIn(read);
+}
+
 /** The uid of the object its page or peek has read: undefined until one of them has. */
 export function useReadUid(
   kind: string,
@@ -69,6 +91,25 @@ export function useReadUid(
 /** The uid of whatever object the read under `key` holds. */
 export const useReadUidAt = (key: QueryKey): string | undefined =>
   useReadAt(key, (state) => uidIn(state?.data));
+
+/** The uid the events of the object its page or peek has read carry. */
+export function useReadEventsUid(
+  kind: string,
+  namespace: string | null | undefined,
+  name: string | null | undefined,
+  enabled = true
+): string | undefined {
+  return useReadOf(kind, namespace, name, (state) =>
+    enabled ? eventsUidIn(kind, state?.data) : undefined
+  );
+}
+
+/** The uid the events of the `kind` object read under `key` carry. */
+export const useReadEventsUidAt = (
+  kind: string,
+  key: QueryKey
+): string | undefined =>
+  useReadAt(key, (state) => eventsUidIn(kind, state?.data));
 
 /**
  * The label selector its page or peek has read, written as the API server's

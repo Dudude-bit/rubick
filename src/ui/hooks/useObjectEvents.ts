@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
-import { useReadUid } from "@/hooks/useReadUid";
+import { useReadEventsUid } from "@/hooks/useReadUid";
 import type { EventInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
@@ -101,13 +101,13 @@ export function useObjectEvents(
   }: {
     enabled?: boolean;
     refresh: RefreshRate;
-    /** The object's uid where its reader holds it outside the shared detail entry. */
+    /** The uid its events carry (`eventsUidIn`), where its reader holds the object outside the shared detail entry. */
     uid?: string | null;
   }
 ) {
   const everyObject = eventsOfEveryObject(kind);
   const scope = everyObject ? name : namespace;
-  const read = useReadUid(kind, namespace, name, !everyObject);
+  const read = useReadEventsUid(kind, namespace, name, !everyObject);
   const uid = everyObject ? undefined : (known ?? read);
   const select = useCallback(
     (events: EventInfo[]) => ofIncarnation(events, uid) ?? events,

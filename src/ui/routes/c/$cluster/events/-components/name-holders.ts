@@ -3,7 +3,7 @@ import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 
 import type { ClusterOverview, EventInfo } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { useReadAt } from "@/hooks/useReadUid";
+import { eventsUidIn, useReadAt } from "@/hooks/useReadUid";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { namesToAsk, nameKey, type Named } from "@/lib/event-incarnation";
@@ -102,7 +102,10 @@ async function holdersOf(named: readonly Asked[]): Promise<string[]> {
       commands
         .getObjectMetadata(kind, getApiVersion(kind), name, namespace)
         .then(
-          ({ uid }) => (uid ? `${key}\t${uid}` : null),
+          (meta) => {
+            const uid = eventsUidIn(kind, meta);
+            return uid ? `${key}\t${uid}` : null;
+          },
           (error: unknown) =>
             errorCode(error) === ERROR_CODES.NOT_FOUND ? `${key}\t` : null
         )
