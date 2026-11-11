@@ -20,13 +20,15 @@ fn current_context() -> Option<String> {
 #[ignore = "needs kubectl and a live cluster"]
 async fn a_client_through_kubectl_proxy_reads_and_watches() {
     let context = current_context().expect("a current context");
+    let manager = K8sClientManager::new();
+    manager.load_kubeconfig().await.expect("a kubeconfig");
+    let target = manager.cli_target(&context).await.expect("a target");
     // Resolved by the OS on PATH, the way the app resolves it on the user's.
-    let proxy = KubectlProxy::start("kubectl", &context, &[])
+    let proxy = KubectlProxy::start("kubectl", &target)
         .await
         .unwrap_or_else(|f| panic!("proxy did not start: {} / {}", f.error, f.stderr));
     let port = proxy.port;
 
-    let manager = K8sClientManager::new();
     let client = manager
         .connect_through_proxy(&context, proxy)
         .expect("client through proxy");
