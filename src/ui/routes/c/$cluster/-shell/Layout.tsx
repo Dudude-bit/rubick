@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { PageArea } from "./PageArea";
@@ -49,7 +49,16 @@ function EditorWhenOpened() {
   );
 }
 
-export function Layout() {
+export function Layout({
+  lost,
+}: {
+  /**
+   * The page of a tab whose cluster the kubeconfig no longer lists. The
+   * sidebar and the status bar are a cluster's and stand down; the strip and
+   * the palette are the window's, and the way to another tab or cluster.
+   */
+  lost?: ReactNode;
+} = {}) {
   const t = useT();
   const { context: currentContext, color } = useWindowCluster();
   const { critical } = useCritical();
@@ -103,7 +112,7 @@ export function Layout() {
         />
       )}
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar missing={missing} />
+        {!lost && <Sidebar missing={missing} />}
         <div className="flex flex-1 flex-col overflow-hidden">
           <ScopeTabs />
           <div
@@ -121,13 +130,15 @@ export function Layout() {
                 a sticky tab bar sticks below a scroller's padding, and the
                 page showed through the strip above it. */}
               <div className="h-full pt-4">
-                <Suspense fallback={<PageSkeleton className="p-0" />}>
-                  <PageArea missing={missing} />
-                </Suspense>
+                {lost ?? (
+                  <Suspense fallback={<PageSkeleton className="p-0" />}>
+                    <PageArea missing={missing} />
+                  </Suspense>
+                )}
               </div>
             </main>
           </div>
-          <StatusBar missing={missing} />
+          {!lost && <StatusBar missing={missing} />}
         </div>
       </div>
       <CommandPalette />

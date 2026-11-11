@@ -105,6 +105,13 @@ interface ScopeTabState {
    * restored session would have put back. The tabs are still restored.
    */
   linked: boolean;
+  /**
+   * The restored tab's scope was applied. Once for the window, not once for
+   * each time the shell mounts: it unmounts at the front door, and applying
+   * the record again put a scope as old as the tab's last parking back over
+   * the one on screen.
+   */
+  resumed: boolean;
 
   openTab: (options?: {
     href?: string;
@@ -120,7 +127,7 @@ interface ScopeTabState {
   activateRelative: (delta: number) => Promise<void>;
   /** Activate by position; negative counts from the end, as `Array.at` does. */
   activateIndex: (index: number) => Promise<void>;
-  /** Re-apply the active tab's scope, e.g. once the kubeconfig has loaded. */
+  /** Apply the restored tab's scope, once the kubeconfig has loaded. */
   resumeActive: () => Promise<void>;
   /** The link the window was launched with takes the active tab, not the route restored for it. */
   yieldToLink: (link: { context: string; path: string }) => void;
@@ -265,6 +272,7 @@ export const useScopeTabStore = create<ScopeTabState>()(
       pendingHref: null,
       pendingReplace: false,
       linked: false,
+      resumed: false,
 
       openTab: async ({ href, context, namespace, background } = {}) => {
         const live = useClusterStore.getState();
@@ -338,7 +346,9 @@ export const useScopeTabStore = create<ScopeTabState>()(
       },
 
       resumeActive: async () => {
-        const { tabs, activeId, linked } = get();
+        const { tabs, activeId, linked, resumed } = get();
+        if (resumed) return;
+        set({ resumed: true });
         // The link's route connects its own cluster and narrows its own scope.
         if (linked) return;
         const active = tabs.find((tab) => tab.id === activeId);

@@ -12,6 +12,7 @@ import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useLocationHref } from "@/hooks/useLocationHref";
+import { clusterOf } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 
@@ -160,19 +161,19 @@ export function useScopeTabs(): void {
   }, [activeId, queryClient]);
 
   // A tab outlives the kubeconfig that made it, so what is on disk has to
-  // be checked against what is actually there before it is trusted.
-  const resumed = useRef(false);
+  // be checked against what is actually there before it is trusted. Checked
+  // again when the address moves to another cluster: Back can lead into one
+  // the kubeconfig has lost since.
+  const cluster = clusterOf(href);
   useEffect(() => {
     if (contexts.length === 0) return;
     const store = useScopeTabStore.getState();
     store.reconcileContexts(contexts.map((ctx) => ctx.name));
-    if (resumed.current) return;
-    resumed.current = true;
     // The restored tab is the workspace: its namespace scope, which the
     // route's own connect knows nothing about, is applied once there is a
     // kubeconfig to apply it under.
     void useScopeTabStore.getState().resumeActive();
-  }, [contexts]);
+  }, [contexts, cluster]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

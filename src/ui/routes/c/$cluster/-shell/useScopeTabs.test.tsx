@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import {
   createBrowserHistory,
   createRootRoute,
@@ -73,6 +73,7 @@ beforeEach(() => {
     tabs: [tab({ id: "a", href: "/" })],
     activeId: "a",
     pendingHref: null,
+    resumed: false,
   });
 });
 
@@ -392,6 +393,74 @@ describe("the tab restored at launch", () => {
       expect(useClusterStore.getState().namespaceScope).toEqual(["web"])
     );
     expect(commands.connectCluster).toHaveBeenCalledWith("acme-prod");
+  });
+
+  /**
+   * The shell unmounts at the front door and on a link to a cluster the
+   * kubeconfig lacks, and each time it came back the tab's record was
+   * applied again: a scope as old as the tab's last parking, over the one
+   * the reader had picked since. Fails if the record is applied more than
+   * once for the window.
+   */
+  it("applies it once for the window, not each time the shell mounts", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({
+          id: "a",
+          context: "acme-prod",
+          namespace: "web",
+          scope: ["web"],
+          href: "/c/acme-prod/pods",
+        }),
+      ],
+      activeId: "a",
+    });
+    useClusterStore.setState({ contexts: listed("acme-prod") });
+    await mount("/c/acme-prod/pods");
+    await vi.waitFor(() =>
+      expect(useClusterStore.getState().namespaceScope).toEqual(["web"])
+    );
+    await act(() => useClusterStore.getState().setNamespaceScope(["db"]));
+    cleanup();
+
+    await mount("/c/acme-prod/pods");
+    await act(async () => {});
+
+    expect(useClusterStore.getState().namespaceScope).toEqual(["db"]);
+  });
+});
+
+describe("a tab whose address moves into a lost cluster", () => {
+  /**
+   * A tab's Back can hold a page of a cluster the kubeconfig has lost since.
+   * The tab was only compared with the kubeconfig when the kubeconfig
+   * changed, so it went on wearing the connected cluster's name over the
+   * lost one's notice. Fails if the tab is not marked lost as its address
+   * arrives there, or stays marked after it leaves.
+   */
+  it("marks the tab lost as it arrives there, and clears it as it leaves", async () => {
+    useClusterStore.setState({
+      contexts: [{ name: "acme-prod" } as ContextInfo],
+      currentContext: "acme-prod",
+      isConnected: true,
+    });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: "acme-prod", href: "/c/acme-prod/pods" })],
+      activeId: "a",
+      resumed: true,
+    });
+    await mount("/c/acme-prod/pods");
+
+    await act(() => router.navigate({ href: "/c/acme-old/pods" }));
+    await vi.waitFor(() =>
+      expect(state().tabs[0]).toMatchObject({
+        missing: true,
+        context: "acme-old",
+      })
+    );
+
+    await act(() => router.navigate({ href: "/c/acme-prod/pods" }));
+    await vi.waitFor(() => expect(state().tabs[0].missing).toBe(false));
   });
 });
 

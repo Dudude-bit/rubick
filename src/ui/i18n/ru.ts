@@ -5966,6 +5966,8 @@ export const ru: Catalogue = {
     clusterMissing: "Кластера {cluster} нет в kubeconfig",
     clusterMissingBody:
       "Ссылка ведёт в кластер, которого нет в этом kubeconfig. Откройте один из тех, что в нём есть.",
+    clusterMissingTabBody:
+      "Вкладка открыта в кластере, которого нет в kubeconfig. Откройте один из тех, что в нём есть, или закройте вкладку.",
     kubeconfigUnread: "Не удалось прочитать kubeconfig",
     kubeconfigUnreadBody:
       "Поэтому неизвестно, есть ли в нём {cluster}. {error}",
