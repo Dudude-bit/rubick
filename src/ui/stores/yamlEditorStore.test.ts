@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { getYamlHistory: vi.fn(async () => []) },
+  commands: {
+    getYamlHistory: vi.fn(async () => []),
+    addYamlHistoryEntry: vi.fn(async () => undefined),
+  },
 }));
 
+import { commands } from "@/lib/commands";
 import { followConnections } from "@/lib/refusals";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useYamlEditorStore } from "./yamlEditorStore";
 
 beforeEach(() => {
@@ -168,5 +173,56 @@ describe("a manifest read that answers after its editor is gone", () => {
 
     await expect(first).resolves.toBeUndefined();
     expect(useYamlEditorStore.getState().open).toBe(false);
+  });
+});
+
+describe("the history of an object's edits", () => {
+  const web = { kind: "Deployment", name: "web", namespace: "shop" };
+  const openOn = async (context: string) => {
+    useClusterStore.setState({ currentContext: context });
+    await useYamlEditorStore.getState().openEditor({
+      title: "web",
+      resourceKey: web,
+      fetchYaml: async () => "kind: Deployment\n",
+    });
+  };
+
+  /**
+   * The history was filed by kind, namespace and name alone, so the edits of
+   * `shop/web` on staging were offered, one click from Apply, on `shop/web`
+   * in prod. Fails if a cluster is shown or asked for another's history, or
+   * if an object's own history is lost between two openings on its cluster.
+   */
+  it("is its cluster's own, never offered on a namesake in another cluster", async () => {
+    // The config file's map, as the backend keeps it: one list per key.
+    const saved = new Map<string, { timestamp: number; content: string }[]>();
+    vi.mocked(commands.getYamlHistory).mockImplementation(
+      async (key) => saved.get(key) ?? []
+    );
+    vi.mocked(commands.addYamlHistoryEntry).mockImplementation(
+      async (key, entry) => {
+        saved.set(key, [entry, ...(saved.get(key) ?? [])]);
+      }
+    );
+    const shown = () =>
+      useYamlEditorStore
+        .getState()
+        .getResourceHistory()
+        .map((entry) => entry.content);
+    try {
+      await openOn("staging");
+      useYamlEditorStore.getState().addHistoryEntry("replicas: 3\n");
+      useYamlEditorStore.getState().closeEditor();
+
+      await openOn("prod");
+      expect(shown()).toEqual([]);
+      useYamlEditorStore.getState().closeEditor();
+
+      await openOn("staging");
+      expect(shown()).toEqual(["replicas: 3\n"]);
+      useYamlEditorStore.getState().closeEditor();
+    } finally {
+      vi.mocked(commands.getYamlHistory).mockImplementation(async () => []);
+    }
   });
 });
