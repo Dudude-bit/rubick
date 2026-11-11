@@ -6,7 +6,7 @@
 )]
 
 use k8s_gui_lib::app_log::{init_tracing, log_dir};
-use k8s_gui_lib::{commands, integrations, quit, shell, state::AppState, BUNDLE};
+use k8s_gui_lib::{commands, instance, integrations, quit, shell, state::AppState, BUNDLE};
 use tauri::{Emitter, Manager};
 use tokio::sync::broadcast;
 
@@ -19,6 +19,23 @@ use tokio::sync::broadcast;
 #[cfg(any(windows, target_os = "linux", test))]
 fn registers_its_own_scheme(flatpak_id: Option<&std::ffi::OsStr>) -> bool {
     flatpak_id.is_none()
+}
+
+/// Starts this launch again as one that asks the login shell, and ends this
+/// one: it skipped the profile for an instance that then took nothing, and
+/// the environment cannot be adopted once Tauri's threads read it.
+fn start_whole(app: &tauri::App) -> ! {
+    let again = tauri::process::current_binary(&app.env()).and_then(|binary| {
+        std::process::Command::new(binary)
+            .args(std::env::args_os().skip(1))
+            .env(instance::START_WHOLE, "1")
+            .spawn()
+    });
+    if let Err(error) = again {
+        tracing::error!(%error, "could not start this launch over");
+    }
+    app.handle().cleanup_before_exit();
+    std::process::exit(0)
 }
 
 fn main() {
@@ -44,20 +61,30 @@ fn main() {
     // subscriber that would carry it does not exist yet.
     // Unix only, because that is where the wait exists: on Windows a GUI
     // app already has the user's environment and the import returns at once.
-    #[cfg(unix)]
-    eprintln!(
-        "rubick: asking the login shell for its environment (up to {}s)",
-        shell::SHELL_ENV_TIMEOUT.as_secs()
+    //
+    // Not for a launch a running instance is up to take the link of: that
+    // one exits inside Tauri's setup, and the profile was its whole wait.
+    let log_dir = log_dir(BUNDLE);
+    let hands_over = instance::hands_over(
+        std::env::var_os(instance::START_WHOLE).is_some(),
+        log_dir.as_deref(),
     );
+    #[cfg(unix)]
+    if !hands_over {
+        eprintln!(
+            "rubick: asking the login shell for its environment (up to {}s)",
+            shell::SHELL_ENV_TIMEOUT.as_secs()
+        );
+    }
     let shell_started = std::time::Instant::now();
-    let shell_env = shell::import_login_shell_env();
+    let shell_env = (!hands_over).then(shell::import_login_shell_env);
     let shell_env_ms = shell_started.elapsed().as_millis();
 
     // Initialize tracing. The file is what a reader can hand over: a
     // packaged Windows build is a GUI-subsystem binary with no console, so
     // stderr reaches nobody, and every question about what the app did has
     // had to be answered by guessing.
-    init_tracing(log_dir(BUNDLE).as_deref());
+    init_tracing(log_dir.as_deref());
     #[cfg(unix)]
     k8s_gui_lib::client::open_files::raise();
 
@@ -66,7 +93,10 @@ fn main() {
         Some(file) => tracing::info!(path = %file.display(), "writing this run's log"),
         None => tracing::warn!("no log file this run; this run leaves nothing to send"),
     }
-    tracing::info!(?shell_env, shell_env_ms, "login shell environment");
+    match shell_env {
+        Some(shell_env) => tracing::info!(?shell_env, shell_env_ms, "login shell environment"),
+        None => tracing::info!("a running instance is up; handing this launch over to it"),
+    }
     tracing::info!(
         since_start_ms = started.elapsed().as_millis(),
         "building the window"
@@ -90,6 +120,13 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             tracing::info!(since_start_ms = started.elapsed().as_millis(), "setting up");
+            if hands_over {
+                tracing::warn!("no running instance took this launch; starting it over");
+                start_whole(app);
+            }
+            if let Some(dir) = &log_dir {
+                instance::hold(dir);
+            }
             // A packaged build registers `rubick://` through its installer
             // (Info.plist, the Windows registry, the .desktop file); a dev
             // build has no installer, so it registers itself on the platforms
