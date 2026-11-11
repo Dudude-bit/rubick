@@ -140,8 +140,14 @@ pub fn init_tracing(dir: Option<&Path>) {
         registry.init();
         return;
     };
-    match open_log(dir) {
-        Ok(file) => {
+    match this_runs_log(dir) {
+        Ok(None) => {
+            let _ = LOG_PATH.set(None);
+            registry.init();
+            tracing::info!("a running instance is writing the log; this launch leaves it alone");
+        }
+        Ok(Some((file, lock))) => {
+            let _ = HELD.set(lock);
             let _ = LOG_PATH.set(Some(dir.join(LOG_FILE)));
             registry
                 .with(
@@ -165,6 +171,31 @@ pub fn init_tracing(dir: Option<&Path>) {
             tracing::warn!(%error, path = %dir.display(), "no log file this run");
         }
     }
+}
+
+/// The lock beside the log, kept by the one running instance that writes it.
+const LOCK_FILE: &str = "rubick.log.lock";
+
+/// This process's hold on [`LOCK_FILE`], for as long as it runs.
+static HELD: std::sync::OnceLock<std::fs::File> = std::sync::OnceLock::new();
+
+/// The file this run writes with the lock that makes it this run's, or
+/// `None` while another running instance has it.
+///
+/// A `rubick://` link opened while the app runs starts a second process,
+/// which hands the link over and exits. It got here first, and rolled the
+/// running instance's file aside for a few startup lines of its own: four
+/// links later that file was past the last one kept, and Diagnostics still
+/// named `rubick.log` as this run's.
+fn this_runs_log(dir: &Path) -> std::io::Result<Option<(std::fs::File, std::fs::File)>> {
+    std::fs::create_dir_all(dir)?;
+    let lock = std::fs::File::create(dir.join(LOCK_FILE))?;
+    match lock.try_lock() {
+        Err(std::fs::TryLockError::WouldBlock) => return Ok(None),
+        // A filesystem that cannot lock: this run is taken for the only one.
+        Ok(()) | Err(std::fs::TryLockError::Error(_)) => {}
+    }
+    Ok(Some((open_log(dir)?, lock)))
 }
 
 /// The previous run's file rolled aside, and a fresh one opened. Rolled on
@@ -276,6 +307,42 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(rolled(&dir, 2)).unwrap().trim(),
             "run 1"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A `rubick://` link clicked while the app runs starts a second process
+    /// that exits a moment later. Fails if that process rolls the running
+    /// instance's log aside or opens one of its own: after four links the
+    /// log a reader is asked to send was renamed out of existence.
+    #[test]
+    fn a_second_launch_leaves_the_running_instances_log_alone() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("rubick-log-second-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let (mut log, lock) = this_runs_log(&dir)
+            .expect("readable")
+            .expect("the first launch writes the log");
+        writeln!(log, "the running instance").expect("written");
+
+        for _link in 0..KEPT + 1 {
+            assert!(this_runs_log(&dir).expect("readable").is_none());
+        }
+        assert_eq!(
+            std::fs::read_to_string(dir.join(LOG_FILE)).unwrap().trim(),
+            "the running instance"
+        );
+        assert!(!rolled(&dir, 1).exists(), "nothing was rolled aside");
+
+        drop(lock);
+        assert!(
+            this_runs_log(&dir).expect("readable").is_some(),
+            "the launch after it quit is a run of its own"
+        );
+        assert_eq!(
+            std::fs::read_to_string(rolled(&dir, 1)).unwrap().trim(),
+            "the running instance"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
