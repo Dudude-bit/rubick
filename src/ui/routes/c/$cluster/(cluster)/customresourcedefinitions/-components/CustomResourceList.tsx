@@ -278,7 +278,9 @@ export function CustomResourceList({
             item.namespace || null
           ),
         invalidateQueryKeys: [queryKeys.customResourceLists(crdName)],
-        resourceType: crdKind,
+        // With its group, as kubectl spells it: "Delete Service?" over a
+        // Knative Service reads as the core one of that name.
+        resourceType: `${crdKind}.${crdGroup}`,
       }}
       staleTime={STALE_TIMES.resourceList}
       refresh={refresh}

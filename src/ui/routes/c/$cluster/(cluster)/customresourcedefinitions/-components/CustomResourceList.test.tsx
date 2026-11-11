@@ -255,8 +255,8 @@ describe("deleting from a CRD that shares a built-in kind's plural", () => {
   /**
    * Knative's `services` matched the registry's plural, so the row's Delete
    * ran the core Service's command on the Knative Service's name. Fails if
-   * the list deletes anything but the custom resource, or offers the core
-   * Service's actions on its row.
+   * the list deletes anything but the custom resource, offers the core
+   * Service's actions on its row, or asks "Delete Service?" with no group.
    */
   it("deletes the custom resource, never the core Service of that name", async () => {
     vi.spyOn(commands, "listCustomResourcesIn").mockResolvedValue({
@@ -297,6 +297,9 @@ describe("deleting from a CRD that shares a built-in kind's plural", () => {
 
     fireEvent.click(within(row).getByRole("button", { name: "Delete" }));
     const dialog = await screen.findByRole("alertdialog");
+    expect(
+      within(dialog).getByText("Delete Service.serving.knative.dev?")
+    ).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     await vi.waitFor(() =>
