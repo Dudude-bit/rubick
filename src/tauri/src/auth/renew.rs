@@ -299,31 +299,28 @@ async fn run(
             Renewed::Unchanged => before,
         };
 
-        if matches!(renewed, Renewed::Unchanged) {
+        let unchanged = matches!(renewed, Renewed::Unchanged);
+        if unchanged {
             tracing::info!(
                 %context,
                 ?timing,
                 "the plugin answered with the credentials already in use"
             );
-            let Some(later) = timing.next() else {
+        }
+        let (rung, again) = match after_attempt(unchanged, timing, next, Utc::now()) {
+            Ok(rung) => rung,
+            // Nothing here will stop the `401` now. Not `NeedsYou`: no
+            // plugin asked for anybody.
+            Err(outcome) => {
                 tracing::warn!(
                     %context,
-                    "the plugin never minted new credentials; the sign-in screen is next"
+                    ?timing,
+                    ?outcome,
+                    "nothing left to renew at; the sign-in screen is next"
                 );
-                stop(&state, &context, Renewal::RanOut);
+                stop(&state, &context, outcome);
                 return;
-            };
-            timing = later;
-        } else {
-            timing = Timing::Margin;
-        }
-
-        let Some((rung, again)) = rung_with_room(next, Utc::now(), timing) else {
-            // Out of room, and nothing here will stop the `401` now. Not
-            // `NeedsYou`: no plugin asked for anybody.
-            tracing::warn!(%context, ?timing, "no room left before the deadline");
-            stop(&state, &context, Renewal::RanOut);
-            return;
+            }
         };
         timing = rung;
         tracing::info!(
@@ -403,6 +400,24 @@ fn rung_with_room(
         }
         rung = rung.next()?;
     }
+}
+
+/// Where the ladder goes after an attempt, and how long until then; or the
+/// last word, when nothing later is left to ask at. An attempt answered with
+/// the credentials in use moves to the next rung with room; new credentials
+/// start the ladder again for their own deadline.
+fn after_attempt(
+    unchanged: bool,
+    timing: Timing,
+    deadline: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> std::result::Result<(Timing, std::time::Duration), Renewal> {
+    let from = if unchanged {
+        timing.next().ok_or(Renewal::RanOut)?
+    } else {
+        Timing::Margin
+    };
+    rung_with_room(deadline, now, from).ok_or(Renewal::RanOut)
 }
 
 /// When to wake next for a given timing, or `None` when it has no moment
@@ -796,37 +811,39 @@ mod tests {
         assert!(told.try_recv().is_err());
     }
 
-    /// TEMPORARY simulation of `run`'s rung ladder for a plugin that always
-    /// answers with the token in use.
+    /// `run` walked for a plugin that never mints, by the step `run` takes.
+    /// Fails if some credential life or plugin speed ends the ladder short of
+    /// the one attempt past the deadline, asks twice on a rung, or lands an
+    /// earlier attempt after the credentials died.
     #[test]
-    fn sim_ladder_reachability() {
-        fn walk(life: i64, plugin: i64) -> Vec<Timing> {
-            let t0 = Utc::now();
-            let deadline = t0 + Duration::seconds(life);
-            let mut now = t0;
-            let mut timing = Timing::Margin;
-            let mut reached: Vec<Timing> = Vec::new();
-            let Some(mut wait) = wait_for(deadline, now) else {
-                return reached;
-            };
-            for _ in 0..10 {
-                now += Duration::from_std(wait).unwrap();
-                reached.push(timing);
-                now += Duration::seconds(plugin);
-                let Some(later) = timing.next() else { break };
-                timing = later;
-                let Some(again) = next_wait(deadline, now, timing) else {
-                    break;
-                };
-                wait = again;
-            }
-            reached
-        }
+    fn a_plugin_that_never_mints_is_asked_on_each_rung_once_and_last_past_the_deadline() {
         for life in [45i64, 60, 70, 76, 100, 105, 110, 150, 300, 3600] {
             for plugin in [0i64, 1, 5, 25] {
-                println!(
-                    "life={life:5} plugin={plugin:3} -> {:?}",
-                    walk(life, plugin)
+                let start = Utc::now();
+                let deadline = start + Duration::seconds(life);
+                let mut now = start;
+                let mut asked = Vec::new();
+                let mut next = wait_for(deadline, now).map(|wait| (Timing::Margin, wait));
+                while let Some((timing, wait)) = next {
+                    now += Duration::from_std(wait).unwrap();
+                    asked.push((timing, now));
+                    assert!(asked.len() <= 3, "life {life} plugin {plugin}: {asked:?}");
+                    now += Duration::seconds(plugin);
+                    next = after_attempt(true, timing, deadline, now).ok();
+                }
+                let case = format!("life {life} plugin {plugin}: {asked:?}");
+                let (last, early) = asked.split_last().expect(&case);
+                assert_eq!(last.0, Timing::Past, "{case}");
+                assert!(last.1 > deadline, "{case}");
+                assert_eq!(
+                    early.first().map(|(rung, _)| *rung),
+                    Some(Timing::Margin),
+                    "{case}"
+                );
+                assert!(early.iter().all(|(_, at)| *at <= deadline), "{case}");
+                assert!(
+                    asked.windows(2).all(|pair| pair[0].0 != pair[1].0),
+                    "{case}"
                 );
             }
         }
