@@ -1911,11 +1911,9 @@ describe("LogViewer on a previous run that has not been read yet", () => {
     expect(screen.getByTestId("log-skeleton")).toBeInTheDocument();
     expect(screen.queryByText("The previous run wrote nothing.")).toBeNull();
 
-    act(() =>
-      listeners["log-read"]!({
-        payload: { stream_id: "stream-id-1", lines: 0 },
-      })
-    );
+    const opened = vi.mocked(commands.streamPodLogs).mock.results.at(-1)!;
+    const stream_id = (await opened.value) as string;
+    act(() => listeners["log-read"]!({ payload: { stream_id, lines: 0 } }));
 
     expect(
       screen.getByText("The previous run wrote nothing.")
