@@ -63,6 +63,9 @@ pub struct KindCount {
     pub count: usize,
 }
 
+/// How many dependents one answer carries: a page, whatever the owner holds.
+pub const DEPENDENTS_PAGE: usize = 100;
+
 #[derive(Debug, Default)]
 pub struct Graph {
     nodes: HashMap<String, Node>,
@@ -138,36 +141,69 @@ impl Graph {
         }
     }
 
-    /// The direct dependents of `owner`, by kind and then name.
-    #[must_use]
-    pub fn dependents_of(&self, owner: &str) -> Vec<Dependent> {
-        let mut found: Vec<Dependent> = self
+    /// The dependents of `owner` with their nodes, by kind and then name.
+    fn sorted(&self, owner: &str) -> Vec<(&String, &Node)> {
+        let mut found: Vec<(&String, &Node)> = self
             .dependents
             .get(owner)
             .into_iter()
             .flatten()
-            .filter_map(|uid| {
-                let node = self.nodes.get(uid)?;
-                Some(Dependent {
-                    uid: uid.clone(),
-                    kind: node.kind.clone(),
-                    group: node.key.group.clone(),
-                    version: node.version.clone(),
-                    plural: node.key.plural.clone(),
-                    name: node.name.clone(),
-                    namespace: node.namespace.clone(),
-                    controlled: node
-                        .owners
-                        .iter()
-                        .any(|link| link.uid == owner && link.controller),
-                    dependents: self.dependents.get(uid).map_or(0, BTreeSet::len),
-                })
-            })
+            .filter_map(|uid| Some((uid, self.nodes.get(uid)?)))
             .collect();
-        found.sort_by(|a, b| {
+        found.sort_by(|(_, a), (_, b)| {
             (&a.kind, &a.namespace, &a.name).cmp(&(&b.kind, &b.namespace, &b.name))
         });
         found
+    }
+
+    fn dependent(&self, owner: &str, uid: &str, node: &Node) -> Dependent {
+        Dependent {
+            uid: uid.to_string(),
+            kind: node.kind.clone(),
+            group: node.key.group.clone(),
+            version: node.version.clone(),
+            plural: node.key.plural.clone(),
+            name: node.name.clone(),
+            namespace: node.namespace.clone(),
+            controlled: node
+                .owners
+                .iter()
+                .any(|link| link.uid == owner && link.controller),
+            dependents: self.dependents.get(uid).map_or(0, BTreeSet::len),
+        }
+    }
+
+    /// One page of the direct dependents of `owner`, by kind and then name:
+    /// the page asked for, or the last there is, and how many there are in
+    /// all.
+    #[must_use]
+    pub fn dependents_of(&self, owner: &str, page: usize) -> (Vec<Dependent>, usize, usize) {
+        let found = self.sorted(owner);
+        let total = found.len();
+        let page = page.min(total.saturating_sub(1) / DEPENDENTS_PAGE);
+        let rows = found
+            .into_iter()
+            .skip(page * DEPENDENTS_PAGE)
+            .take(DEPENDENTS_PAGE)
+            .map(|(uid, node)| self.dependent(owner, uid, node))
+            .collect();
+        (rows, page, total)
+    }
+
+    /// The dependents of `owner` on either side of `uid` among those of its
+    /// kind, in the order `dependents_of` lists them.
+    #[must_use]
+    pub fn beside(&self, owner: &str, uid: &str) -> (Option<Dependent>, Option<Dependent>) {
+        let found = self.sorted(owner);
+        let Some(at) = found.iter().position(|(held, _)| *held == uid) else {
+            return (None, None);
+        };
+        let kind = &found[at].1.kind;
+        let same = |at: Option<usize>| {
+            let (uid, node) = found.get(at?)?;
+            (node.kind == *kind).then(|| self.dependent(owner, uid, node))
+        };
+        (same(at.checked_sub(1)), same(Some(at + 1)))
     }
 
     #[must_use]
@@ -312,12 +348,12 @@ mod tests {
     #[test]
     fn dependents_are_found_by_their_owners_uid_with_their_own_counts() {
         let graph = deployment_tree();
-        let replicasets = graph.dependents_of("d");
+        let (replicasets, ..) = graph.dependents_of("d", 0);
         assert_eq!(replicasets.len(), 1);
         assert_eq!(replicasets[0].name, "api-7f9");
         assert!(replicasets[0].controlled);
         assert_eq!(replicasets[0].dependents, 2);
-        assert!(graph.dependents_of("api").is_empty());
+        assert!(graph.dependents_of("api", 0).0.is_empty());
     }
 
     /// A re-list that no longer has an object is the object's deletion, the
@@ -332,7 +368,7 @@ mod tests {
             node("pods", "Pod", "api-7f9-a", &[("r", true)]),
         );
         graph.listed(&slot("pods"));
-        assert_eq!(graph.dependents_of("r").len(), 1);
+        assert_eq!(graph.dependents_of("r", 0).0.len(), 1);
     }
 
     /// An owner moving its dependent (adopt, orphan) leaves no stale edge.
@@ -344,7 +380,7 @@ mod tests {
             "p1".into(),
             node("pods", "Pod", "api-7f9-a", &[]),
         );
-        assert_eq!(graph.dependents_of("r").len(), 1);
+        assert_eq!(graph.dependents_of("r", 0).0.len(), 1);
     }
 
     #[test]
@@ -408,6 +444,70 @@ mod tests {
                 ("ReplicaSet".to_string(), 1)
             ]
         );
+    }
+
+    fn workflow(pods: usize) -> Graph {
+        let mut graph = Graph::default();
+        graph.apply(
+            &slot("configmaps"),
+            "c".into(),
+            node("configmaps", "ConfigMap", "steps", &[("w", false)]),
+        );
+        for n in 0..pods {
+            graph.apply(
+                &slot("pods"),
+                format!("p{n:04}"),
+                node("pods", "Pod", &format!("step-{n:04}"), &[("w", true)]),
+            );
+        }
+        graph
+    }
+
+    /// An Argo Workflow's 5000 step pods went to the window in one answer
+    /// of about a megabyte, every two seconds. Fails if an answer carries
+    /// more than a page, loses count of the rest, or cannot reach them.
+    #[test]
+    fn an_owner_of_thousands_is_answered_a_page_at_a_time() {
+        let graph = workflow(250);
+        let (first, page, total) = graph.dependents_of("w", 0);
+        assert_eq!((first.len(), page, total), (DEPENDENTS_PAGE, 0, 251));
+        assert_eq!(first[0].name, "steps");
+        assert_eq!(first[1].name, "step-0000");
+
+        let (last, page, _) = graph.dependents_of("w", 2);
+        assert_eq!((last.len(), page), (51, 2));
+        assert_eq!(last[50].name, "step-0249");
+    }
+
+    /// Pods finished and went while the tab stood on its last page. Fails
+    /// if a page past the end answers nothing, which reads as "owns nothing".
+    #[test]
+    fn a_page_past_the_end_is_the_last_page_there_is() {
+        let graph = workflow(120);
+        let (rows, page, total) = graph.dependents_of("w", 7);
+        assert_eq!((rows.len(), page, total), (21, 1, 121));
+    }
+
+    /// Alt and the side arrows step through an owner's objects of one kind;
+    /// they found the neighbour in the list of all of them, which is no
+    /// longer sent. Fails if a neighbour on another page is not found, or if
+    /// one of another kind is offered.
+    #[test]
+    fn a_dependent_finds_its_neighbours_of_its_kind_wherever_they_sort() {
+        let graph = workflow(250);
+        let names = |(before, after): (Option<Dependent>, Option<Dependent>)| {
+            (before.map(|d| d.name), after.map(|d| d.name))
+        };
+        assert_eq!(
+            names(graph.beside("w", "p0099")),
+            (Some("step-0098".to_string()), Some("step-0100".to_string()))
+        );
+        assert_eq!(
+            names(graph.beside("w", "p0000")),
+            (None, Some("step-0001".to_string()))
+        );
+        assert_eq!(names(graph.beside("w", "c")), (None, None));
+        assert_eq!(names(graph.beside("w", "gone")), (None, None));
     }
 
     #[test]

@@ -1,12 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 
 import type { KindReading, NotRead, Reading } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { useReadUidAt } from "@/hooks/useReadUid";
 import { commands } from "@/lib/commands";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
-import { isResourceType, listQueryFor, toKind } from "@/lib/resource-registry";
+import {
+  isResourceType,
+  listQueryFor,
+  RESOURCE_REGISTRY,
+  toKind,
+} from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ServedResource } from "./served";
 
@@ -18,20 +25,37 @@ export function servedOfKind(kind: string): ServedResource | null {
   return { group, plural: resource };
 }
 
-/** The controllers above one object, and its uid. A rollout is what moves it. */
+/** The registry kind served at a group and plural, which its page's read is kept under. */
+const KIND_AT = new Map(
+  RESOURCE_REGISTRY.map(({ kind }) => {
+    const { group, resource } = listQueryFor(kind);
+    return [`${group}/${resource}`, kind];
+  })
+);
+
+/**
+ * The controllers above one object, and its uid. A rollout is what moves it,
+ * and so does the object being made again under its name: the answer is
+ * about the uid it was read for, so one the page's own read no longer agrees
+ * with is asked again and not given out meanwhile. `fresh` asks again on
+ * every mount, for a reader with no page behind it.
+ */
 export function useLineage(
   served: ServedResource | null,
   name: string,
-  namespace: string | null | undefined
+  namespace: string | null | undefined,
+  fresh = false
 ) {
   const isConnected = useClusterStore((state) => state.isConnected);
-  return useQuery({
-    queryKey: queryKeys.lineage(
-      served?.group ?? "",
-      served?.plural ?? "",
-      namespace,
-      name
-    ),
+  const client = useQueryClient();
+  const group = served?.group ?? "";
+  const plural = served?.plural ?? "";
+  const queryKey = useMemo(
+    () => queryKeys.lineage(group, plural, namespace, name),
+    [group, plural, namespace, name]
+  );
+  const query = useQuery({
+    queryKey,
     queryFn: () =>
       commands.objectLineage(
         served!.group,
@@ -41,19 +65,37 @@ export function useLineage(
       ),
     enabled: isConnected && !!served && !!name,
     staleTime: 30_000,
+    refetchOnMount: fresh ? "always" : true,
     retry: false,
   });
+  const typed = useReadUidAt(
+    queryKeys.detail(KIND_AT.get(`${group}/${plural}`) ?? "", namespace, name)
+  );
+  const generic = useReadUidAt(
+    queryKeys.servedObject(group, plural, namespace, name)
+  );
+  const read = typed ?? generic;
+  const uid = query.data?.uid;
+  const replaced = !!read && !!uid && read !== uid;
+  useEffect(() => {
+    if (replaced) void client.invalidateQueries({ queryKey });
+  }, [replaced, client, queryKey]);
+  const held = replaced || (fresh && query.isFetching);
+  return { data: held ? undefined : query.data, error: query.error };
 }
 
-/** What `uid` owns. Asking is what keeps the index running. */
-export function useDependents(uid: string | null, enabled: boolean) {
+/** One page of what `uid` owns. Asking is what keeps the index running. */
+export function useDependents(uid: string | null, enabled: boolean, page = 0) {
   const scope = useNamespaceScope();
   const isConnected = useClusterStore((state) => state.isConnected);
   return useLiveQuery({
-    queryKey: queryKeys.dependents(uid ?? "", scopeCacheKey(scope.scope)),
-    queryFn: () => commands.listDependents(uid!, scope.wire),
+    queryKey: queryKeys.dependents(uid ?? "", scopeCacheKey(scope.scope), page),
+    queryFn: () => commands.listDependents(uid!, scope.wire, page),
     enabled: enabled && isConnected && !!uid,
     refresh: "resourceDetail",
+    // The page before stays up while the next one is read, the same owner's only.
+    placeholderData: (previous, query) =>
+      query?.queryKey[1] === uid ? previous : undefined,
   });
 }
 
@@ -83,6 +125,7 @@ export const readWhereTheyLive = (
 /** Which readings mean the index never watches the kind. A new one fails the compiler. */
 const LEFT_OUT: Record<Reading["says"], boolean> = {
   syncing: false,
+  queued: false,
   stale: false,
   refused: false,
   partial: false,

@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type {
@@ -8,28 +8,41 @@ import type {
   Lineage,
   NotRead,
 } from "@/generated/types";
+import { queryKeys } from "@/lib/query-keys";
 import { SurfaceVisibility } from "@/lib/surface-visibility";
 import { useClusterStore } from "@/stores/clusterStore";
-import { renderWithRouter } from "@/test/render";
+import { renderWithRouter, testQueryClient } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   lineage: null as unknown as () => Promise<Lineage>,
-  dependents: null as unknown as (uid: string) => Promise<Dependents>,
-  cascade: null as unknown as () => Promise<Cascade>,
+  dependents: null as unknown as (
+    uid: string,
+    page: number
+  ) => Promise<
+    Pick<Dependents, "dependents" | "notRead"> & Partial<Dependents>
+  >,
+  cascade: null as unknown as (uid: string) => Promise<Cascade>,
   asked: [] as string[],
 }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     objectLineage: () => answers.lineage(),
-    listDependents: (uid: string) => {
+    listDependents: async (uid: string, _scope: unknown, page: number) => {
       answers.asked.push(uid);
-      return answers.dependents(uid);
+      const answer = await answers.dependents(uid, page);
+      return {
+        page: 0,
+        pageSize: 100,
+        total: answer.dependents.length,
+        ...answer,
+      };
     },
-    previewCascade: () => answers.cascade(),
+    previewCascade: (uid: string) => answers.cascade(uid),
   },
 }));
 
+const { useLineage } = await import("./ownership");
 const { LineageTrail } = await import("./Lineage");
 const { OwnsPanel } = await import("./Owns");
 const { CascadePreview } = await import("./CascadePreview");
@@ -341,6 +354,87 @@ describe("what an object owns", () => {
     expect(chipOf("ComponentStatus")).not.toHaveTextContent("cannot be listed");
   });
 
+  /**
+   * A kind past the app's ceiling on watches was never asked, which is not
+   * "read, and nothing there". Fails if it is left out of the kinds that
+   * could hide a dependent, or is not named with why.
+   */
+  it("counts a kind still waiting for a watch among those not read", async () => {
+    answers.dependents = () =>
+      Promise.resolve({
+        dependents: [],
+        notRead: {
+          kinds: [
+            {
+              kind: "Widget",
+              group: "demo.example.com",
+              plural: "widgets",
+              reading: { says: "queued" },
+            },
+          ],
+          groups: [],
+          watched: 301,
+        },
+      });
+    await renderWithRouter(<OwnsPanel uid="d" namespace="shop" />);
+    expect(
+      await screen.findByText("1 kind not read in full")
+    ).toBeInTheDocument();
+    expect(chipOf("Widget")).toHaveTextContent("waiting its turn");
+  });
+
+  /**
+   * An Argo Workflow's 5000 step pods came in one answer and were all drawn
+   * as rows. Fails if more than the page answered is drawn, if the rest are
+   * not counted, or if the next page cannot be reached.
+   */
+  it("draws an owner of thousands a page at a time and says which rows these are", async () => {
+    const pages: number[] = [];
+    answers.dependents = (_uid, page) => {
+      pages.push(page);
+      return Promise.resolve({
+        dependents: Array.from({ length: page === 2 ? 50 : 100 }, (_, n) =>
+          dependent("Pod", `step-${page * 100 + n}`)
+        ),
+        page,
+        total: 250,
+        notRead: NOTHING_UNREAD,
+      });
+    };
+    await renderWithRouter(<OwnsPanel uid="w" namespace="shop" />);
+    expect(await screen.findByText("1 to 100 of 250")).toBeInTheDocument();
+    expect(screen.getAllByRole("treeitem")).toHaveLength(100);
+    expect(
+      screen.getByRole("button", { name: "Previous page" })
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(await screen.findByText("101 to 200 of 250")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Pod step-100" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pod step-0" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(await screen.findByText("201 to 250 of 250")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    expect(pages).toContain(2);
+  });
+
+  /** One page that holds everything has nowhere else to go. */
+  it("offers no pages where one holds every dependent", async () => {
+    answers.dependents = () =>
+      Promise.resolve({
+        dependents: [dependent("Pod", "api-7f9-a")],
+        notRead: NOTHING_UNREAD,
+      });
+    await renderWithRouter(<OwnsPanel uid="d" />);
+    expect(
+      await screen.findByRole("link", { name: "Pod api-7f9-a" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Next page" })).toBeNull();
+  });
+
   /** Asking starts a cluster-wide index; a tab nobody opened must not. */
   it("asks nothing while its tab is off screen", async () => {
     answers.dependents = () =>
@@ -351,6 +445,78 @@ describe("what an object owns", () => {
       </SurfaceVisibility.Provider>
     );
     expect(answers.asked).toEqual([]);
+  });
+});
+
+describe("an object made again under the same name", () => {
+  const lineageOf = (uid: string): Lineage => ({
+    uid,
+    ancestors: [],
+    others: [],
+    stop: null,
+  });
+
+  /**
+   * Argo replaced Deployment `api` while its page was open: the page read the
+   * new object while Owns, Alt and the arrows and Delete went on asking about
+   * the old uid, whose ReplicaSet the garbage collector had taken, so "owns
+   * nothing" stood over an object that owns pods. Fails if the lineage is not
+   * asked again once the page holds another uid, or if the old uid is given
+   * out while it is.
+   */
+  it("is known by the uid its page now reads, never the one before", async () => {
+    function Uid() {
+      const lineage = useLineage(
+        { group: "apps", plural: "deployments" },
+        "api",
+        "shop"
+      );
+      return <output>{lineage.data?.uid ?? "not known"}</output>;
+    }
+    const client = testQueryClient();
+    const page = queryKeys.detail("Deployment", "shop", "api");
+    client.setQueryData(page, { uid: "old" });
+    answers.lineage = () => Promise.resolve(lineageOf("old"));
+    await renderWithRouter(<Uid />, { client });
+    expect(await screen.findByText("old")).toBeInTheDocument();
+
+    let answer = (_: Lineage) => {};
+    answers.lineage = () => new Promise((resolve) => (answer = resolve));
+    act(() => client.setQueryData(page, { uid: "new" }));
+    expect(await screen.findByText("not known")).toBeInTheDocument();
+
+    await act(async () => answer(lineageOf("new")));
+    expect(await screen.findByText("new")).toBeInTheDocument();
+  });
+
+  /**
+   * Delete opened from a list has no page reading the object: the lineage it
+   * found in the cache could be thirty seconds old and about the object
+   * before this one. Fails if the dialog trusts a cached lineage without
+   * asking again, or asks the index about the cached uid while it does.
+   */
+  it("has its lineage asked again each time Delete opens", async () => {
+    const client = testQueryClient();
+    client.setQueryData(
+      queryKeys.lineage("apps", "deployments", "shop", "api"),
+      lineageOf("old")
+    );
+    const asked: string[] = [];
+    answers.lineage = () => Promise.resolve(lineageOf("new"));
+    answers.cascade = (uid) => {
+      asked.push(uid);
+      return Promise.resolve({
+        takes: [],
+        notRead: NOTHING_UNREAD,
+        holds: null,
+      });
+    };
+    await renderWithRouter(
+      <CascadePreview kind="Deployment" name="api" namespace="shop" />,
+      { client }
+    );
+    await waitFor(() => expect(asked).toContain("new"));
+    expect(asked).not.toContain("old");
   });
 });
 

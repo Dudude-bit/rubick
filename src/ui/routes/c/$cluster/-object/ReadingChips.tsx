@@ -5,6 +5,7 @@ import {
   Clock,
   EyeOff,
   Filter,
+  Hourglass,
   ListChecks,
   Loader2,
   MinusCircle,
@@ -29,6 +30,7 @@ const LOOK: Record<
     spin?: boolean;
     key:
       | "syncing"
+      | "queued"
       | "stale"
       | "refused"
       | "partial"
@@ -39,6 +41,7 @@ const LOOK: Record<
   }
 > = {
   syncing: { icon: Loader2, tone: "text-info", spin: true, key: "syncing" },
+  queued: { icon: Hourglass, tone: "text-warn", key: "queued" },
   stale: { icon: Clock, tone: "text-warn", key: "stale" },
   refused: { icon: ShieldOff, tone: "text-err", key: "refused" },
   partial: { icon: Filter, tone: "text-warn", key: "partial" },

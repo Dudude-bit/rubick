@@ -9,7 +9,7 @@ use tauri::State;
 use crate::client::served::Served;
 use crate::commands::helpers::{scope_of, ResourceContext};
 use crate::error::{Error, Result};
-use crate::ownership::{Dependent, Holds, KindCount, NotRead, Reading};
+use crate::ownership::{Dependent, Holds, KindCount, NotRead, Reading, DEPENDENTS_PAGE};
 use crate::state::AppState;
 use crate::utils::group_of;
 
@@ -19,25 +19,63 @@ const MAX_DEPTH: usize = 8;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Dependents {
+    /// One page of them, by kind and then name.
     pub dependents: Vec<Dependent>,
+    /// Which page this is, counted from 0: the last one where the page
+    /// asked for is past the end.
+    pub page: usize,
+    pub page_size: usize,
+    /// How many there are on every page together.
+    pub total: usize,
     pub not_read: NotRead,
 }
 
-/// What `uid` owns directly. Starts the index on first use.
+/// What `uid` owns directly, a page at a time. Starts the index on first use.
 #[tauri::command]
 pub async fn list_dependents(
     uid: String,
     scope: Option<Vec<String>>,
+    page: Option<u32>,
     state: State<'_, AppState>,
 ) -> Result<Dependents> {
     validate_uid(&uid)?;
     crate::client::clock::timed(&state.perf, "listDependents", async {
         let index = state.ownership.ensure(&state, scope_of(scope)?).await?;
-        let (dependents, not_read) = index.dependents(&uid);
+        let page = usize::try_from(page.unwrap_or(0)).unwrap_or(usize::MAX);
+        let (dependents, page, total, not_read) = index.dependents(&uid, page);
         Ok(Dependents {
             dependents,
+            page,
+            page_size: DEPENDENTS_PAGE,
+            total,
             not_read,
         })
+    })
+    .await
+}
+
+/// The objects of `uid`'s kind that `owner` owns just before and after it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Beside {
+    pub previous: Option<Dependent>,
+    pub next: Option<Dependent>,
+}
+
+/// Where Alt and the side arrows go from `uid`, among what `owner` owns.
+#[tauri::command]
+pub async fn list_dependents_beside(
+    owner: String,
+    uid: String,
+    scope: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<Beside> {
+    validate_uid(&owner)?;
+    validate_uid(&uid)?;
+    crate::client::clock::timed(&state.perf, "listDependentsBeside", async {
+        let index = state.ownership.ensure(&state, scope_of(scope)?).await?;
+        let (previous, next) = index.beside(&owner, &uid);
+        Ok(Beside { previous, next })
     })
     .await
 }

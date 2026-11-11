@@ -1098,6 +1098,9 @@ export interface KindCount {
 
 export interface Dependents {
   dependents: Dependent[];
+  page: number;
+  pageSize: number;
+  total: number;
   notRead: NotRead;
 }
 
@@ -2782,6 +2785,7 @@ export type Holds =
 
 export type Reading =
   | { says: "syncing" }
+  | { says: "queued" }
   | { says: "stale"; since: string }
   | { says: "refused"; message: string }
   | { says: "partial"; namespaces: string[] }
@@ -3259,3 +3263,8 @@ export type FileRead =
   | { state: "failed"; exit_code: number | null; message: string };
 
 export type RawJson = RawValue;
+
+export interface Beside {
+  previous: Dependent | null;
+  next: Dependent | null;
+}

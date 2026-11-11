@@ -59,7 +59,7 @@ export function CascadePreview({
 }) {
   const t = useT();
   const subject = served ?? servedOfKind(kind);
-  const lineage = useLineage(subject, name, namespace);
+  const lineage = useLineage(subject, name, namespace, true);
   const uid = lineage.data?.uid ?? null;
   const cascade = useCascade(uid, true);
   const failure = lineage.error ?? (cascade.data ? null : cascade.error);

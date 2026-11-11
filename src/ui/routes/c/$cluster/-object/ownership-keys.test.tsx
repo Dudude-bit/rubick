@@ -33,19 +33,23 @@ const LINEAGE: Lineage = {
   stop: null,
 };
 
+const beside = vi.hoisted(() => ({ asked: [] as string[][] }));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     objectLineage: () => Promise.resolve(LINEAGE),
     listDependents: () =>
       Promise.resolve({
-        dependents: [
-          pod("api-a"),
-          pod("api-b"),
-          pod("api-config", "ConfigMap"),
-          pod("api-c"),
-        ],
+        dependents: [pod("api-a")],
+        page: 0,
+        pageSize: 100,
+        total: 1,
         notRead: { kinds: [], groups: [], watched: 40 },
       }),
+    listDependentsBeside: (owner: string, uid: string) => {
+      beside.asked.push([owner, uid]);
+      return Promise.resolve({ previous: pod("api-a"), next: pod("api-c") });
+    },
   },
 }));
 
@@ -73,12 +77,26 @@ describe("moving along ownership from the keyboard", () => {
     });
   });
 
-  /** Sideways stays within the kind: a pod's neighbour is never a ConfigMap. */
-  it("goes sideways to the owner's next object of the same kind", async () => {
+  /**
+   * The neighbour was looked for in the list of everything the owner owns,
+   * which now comes a page at a time: a pod on the second page had none.
+   * Fails if the index is not asked for the neighbours of this object under
+   * its owner, or the key goes anywhere but to the one it names.
+   */
+  it("goes sideways to the neighbour the index names under the owner", async () => {
     const { router } = await renderWithRouter(<Page />, { at });
     await waitFor(() => {
       fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
       expect(router.state.location.pathname).toBe("/c/test/pods/shop/api-c");
+    });
+    expect(beside.asked).toContainEqual(["r", "uid-api-b"]);
+  });
+
+  it("goes back to the neighbour before it", async () => {
+    const { router } = await renderWithRouter(<Page />, { at });
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
+      expect(router.state.location.pathname).toBe("/c/test/pods/shop/api-a");
     });
   });
 
