@@ -251,6 +251,12 @@ pub enum AppEvent {
         stream_id: String,
         lines: Vec<LogLineEvent>,
     },
+    /// A log that is read rather than followed, a previous run above all,
+    /// reached its end. `lines` is how many it held before intake chose
+    /// among them, so a pane with none can tell a run that wrote nothing
+    /// from one whose lines it did not keep. After the stream's last batch;
+    /// a read that failed says `stream-failed` instead.
+    LogRead { stream_id: String, lines: u64 },
     /// A batch of Kubernetes watch changes for one stream. Forwarded
     /// to the frontend so it can update the `TanStack` Query cache
     /// directly. Each `resource` JSON is the typed resource serialized
@@ -480,6 +486,7 @@ impl AppEvent {
     pub fn channel(&self) -> &'static str {
         match self {
             AppEvent::LogBatch { .. } => "log-batch",
+            AppEvent::LogRead { .. } => "log-read",
             AppEvent::StreamFailed { .. } => "stream-failed",
             AppEvent::ResourceWatchEvent { .. } => "resource-event",
             AppEvent::SearchHits { .. } => "search-hits",
@@ -688,6 +695,10 @@ mod tests {
                 cluster: false,
             },
             AppEvent::TerminalSessions { sessions: vec![] },
+            AppEvent::LogRead {
+                stream_id: "log-1".into(),
+                lines: 2,
+            },
         ]
     }
 
@@ -717,6 +728,7 @@ mod tests {
             AppEvent::EventBridgeLagged { .. } => 21,
             AppEvent::TerminalSessions { .. } => 22,
             AppEvent::OverviewChanged { .. } => 23,
+            AppEvent::LogRead { .. } => 24,
         }
     }
 
@@ -725,7 +737,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=23).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=24).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`

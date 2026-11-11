@@ -902,3 +902,91 @@ describe("useLogStream on a workload whose pods are replaced", () => {
     expect(result.current.isStreaming).toBe(true);
   });
 });
+
+/**
+ * A previous run is read to its end, and only the end of that read says
+ * what the run held: the open answering is not it, and neither is an empty
+ * buffer.
+ */
+describe("useLogStream reading a previous run", () => {
+  beforeEach(() => {
+    reset();
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.container}`;
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const readEvent = (container: string, lines: number) => ({
+    payload: { stream_id: `stream-${container}`, lines },
+  });
+  const previous = (containers: string[]) =>
+    renderHook(() =>
+      useLogStream({ ...baseProps, containers, previous: true })
+    );
+
+  /**
+   * The pane said "The previous run wrote nothing." from the moment the
+   * streams were subscribed until the lines landed. Fails if the read is
+   * called over before the backend has said so for every container.
+   */
+  it("has found nothing out until every read has said it ended", async () => {
+    const { result } = previous(["app", "proxy"]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    expect(result.current.isConnecting).toBe(false);
+    expect(result.current.previousRead).toBeNull();
+
+    act(() => listeners["log-read"]!(readEvent("app", 3)));
+    expect(result.current.previousRead).toBeNull();
+
+    act(() => listeners["log-read"]!(readEvent("proxy", 0)));
+    expect(result.current.previousRead).toEqual({ sources: 2, lines: 3 });
+  });
+
+  /**
+   * The last lines sit in the reorder window when the read ends. Fails if
+   * the read is over while the buffer is still empty of them: an empty,
+   * finished pane is the false verdict, for a quarter of a second.
+   */
+  it("holds the last lines before it says the read is over", async () => {
+    const { result } = previous(["app"]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    holdTheClock();
+
+    act(() => {
+      listeners["log-batch"]!(logEvent("app", "one", "two"));
+      listeners["log-read"]!(readEvent("app", 2));
+    });
+
+    expect(result.current.previousRead).toEqual({ sources: 1, lines: 2 });
+    expect(result.current.retained).toBe(2);
+  });
+
+  /** A read that failed has ended too, and counts for nothing read. Fails if it holds the pane on "reading" for ever, or is counted as a run that wrote nothing. */
+  it("counts a read that failed as over, and not as a run that was read", async () => {
+    const { result } = previous(["app", "proxy"]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+
+    act(() => {
+      listeners["log-read"]!(readEvent("app", 0));
+      listeners["stream-failed"]!({
+        payload: {
+          stream_id: "stream-proxy",
+          kind: "no-previous-run",
+          message: "no previous run",
+        },
+      });
+    });
+
+    expect(result.current.previousRead).toEqual({ sources: 1, lines: 0 });
+  });
+
+  /** Fails if a followed pane, which never ends, is ever given a read to judge. */
+  it("has no read to speak of on a followed pane", async () => {
+    const { result } = renderHook(() => useLogStream(baseProps));
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    act(() => listeners["log-read"]?.(readEvent("c", 0)));
+    expect(result.current.previousRead).toBeNull();
+  });
+});

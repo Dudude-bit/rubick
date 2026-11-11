@@ -1861,3 +1861,65 @@ describe("a workload pane", () => {
     expect(coverage).not.toMatch(/of \d+ pods? streaming/);
   });
 });
+
+/**
+ * A previous run is read to its end, and the pane has a verdict on it only
+ * once the backend has said the read is over.
+ */
+describe("LogViewer on a previous run that has not been read yet", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Toggling Previous run drew "The previous run wrote nothing." for the
+   * round trip and the reorder window, then the lines; on a hung read it
+   * stayed. Fails if the pane judges the run before `log-read`, or does not
+   * judge it after.
+   */
+  it("draws lines to come until the read ends, and only then says the run wrote nothing", async () => {
+    await mount(
+      <LogViewer
+        {...props}
+        containers={[
+          container("app", {
+            restartCount: 2,
+            lastTerminated: {
+              exitCode: 1,
+              signal: null,
+              reason: "Error",
+              message: null,
+              startedAt: null,
+              finishedAt: "2026-10-12T00:00:00Z",
+            },
+          }),
+        ]}
+      />
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Previous run/ })
+    );
+    await waitFor(() =>
+      expect(
+        vi.mocked(commands.streamPodLogs).mock.calls.at(-1)?.[0].previous
+      ).toBe(true)
+    );
+    await waitFor(() => expect(listeners["log-read"]).toBeDefined());
+    await act(async () => {});
+
+    expect(screen.getByTestId("log-skeleton")).toBeInTheDocument();
+    expect(screen.queryByText("The previous run wrote nothing.")).toBeNull();
+
+    act(() =>
+      listeners["log-read"]!({
+        payload: { stream_id: "stream-id-1", lines: 0 },
+      })
+    );
+
+    expect(
+      screen.getByText("The previous run wrote nothing.")
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("log-skeleton")).toBeNull();
+  });
+});

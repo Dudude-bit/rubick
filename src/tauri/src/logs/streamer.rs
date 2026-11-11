@@ -204,6 +204,7 @@ impl LogStreamer {
         // cancel, or EOF.
         let mut buffer = LineBatch::new(self.event_tx.clone(), stream_id.clone());
         let mut follow_ended = false;
+        let mut read_ended = false;
         let mut flush_timer = interval(FLUSH_INTERVAL);
         // First tick fires immediately; skip it so an empty buffer
         // doesn't emit an empty batch right after subscribe.
@@ -250,6 +251,7 @@ impl LogStreamer {
                             // finishing, and so is a previous run, complete
                             // before it is asked for.
                             follow_ended = following && refusal.is_none();
+                            read_ended = !following && refusal.is_none();
                             break;
                         }
                         Err(e) => {
@@ -300,6 +302,14 @@ impl LogStreamer {
                 ),
             );
             return Ok(());
+        }
+
+        // After the last batch, so whoever hears it holds every line it counts.
+        if read_ended {
+            let _ = self.event_tx.send(AppEvent::LogRead {
+                stream_id: stream_id.clone(),
+                lines: buffer.offered,
+            });
         }
 
         if follow_ended {
@@ -565,6 +575,7 @@ fn take_line(
     if let Some(ts) = log_line.timestamp {
         *epoch_ms = ts.timestamp_millis();
     }
+    buffer.offered += 1;
     if !intake.matches(&log_line, *epoch_ms) {
         return;
     }
@@ -633,6 +644,8 @@ struct LineBatch {
     stream_id: String,
     lines: Vec<LogLineEvent>,
     bytes: usize,
+    /// Every line the log held so far, whether intake kept it or not.
+    offered: u64,
 }
 
 impl LineBatch {
@@ -642,6 +655,7 @@ impl LineBatch {
             stream_id,
             lines: Vec::with_capacity(MAX_BATCH_SIZE),
             bytes: 0,
+            offered: 0,
         }
     }
 
@@ -986,6 +1000,76 @@ mod follow_end_tests {
     const REFUSED: &str = "2026-10-07T06:52:09.603166503Z logfmt log request_id=req-621 user=bob\n\
                            failed to create fsnotify watcher: too many open files\n";
     const CLOSED: &str = "2026-10-07T06:52:09.603166503Z logfmt log request_id=req-621 user=bob\n";
+
+    /// What reading a previous run told the frontend: the lines it kept,
+    /// and how many the run held once the read reached its end.
+    async fn read_previous(
+        log: &'static str,
+        intake: Vec<crate::logs::QueryTerm>,
+        previous: bool,
+    ) -> (Vec<String>, Option<u64>) {
+        let (tx, mut rx) = broadcast::channel(256);
+        let config = LogConfig::new("log-demo", "k8s-gui-test")
+            .with_container("web")
+            .with_previous(previous)
+            .with_intake(intake);
+        let mut streamer = LogStreamer::new(Arc::new(cluster(log, running_long())), tx);
+        streamer.settle = Duration::ZERO;
+        streamer
+            .stream_logs("s1".to_string(), config, CancellationToken::new())
+            .await
+            .unwrap();
+        let (mut lines, mut held) = (Vec::new(), None);
+        while let Ok(event) = rx.try_recv() {
+            match event {
+                AppEvent::LogBatch { lines: batch, .. } => {
+                    assert_eq!(held, None, "a batch after the read was said to be over");
+                    lines.extend(batch.into_iter().map(|line| line.raw));
+                }
+                AppEvent::LogRead { lines, .. } => held = Some(lines),
+                _ => {}
+            }
+        }
+        (lines, held)
+    }
+
+    const TWO_LINES: &str = "2026-10-07T06:52:09Z first\n2026-10-07T06:52:10Z second\n";
+
+    /// The pane said "The previous run wrote nothing." before the read had
+    /// come back, with nothing to tell a read still under way from one that
+    /// found no lines. Fails if the end of the read is not said, or is said
+    /// before its last line.
+    #[tokio::test]
+    async fn a_previous_run_read_to_its_end_says_so_and_how_many_lines_it_held() {
+        let (lines, held) = read_previous(TWO_LINES, Vec::new(), true).await;
+        assert_eq!(lines.len(), 2);
+        assert_eq!(held, Some(2));
+
+        let (lines, held) = read_previous("", Vec::new(), true).await;
+        assert!(lines.is_empty());
+        assert_eq!(held, Some(0));
+    }
+
+    /// Intake dropped every line of a run that wrote plenty, and the pane
+    /// called the run silent. Fails if the count is of the lines kept.
+    #[tokio::test]
+    async fn the_lines_a_previous_run_held_are_counted_before_intake_chooses() {
+        let nothing_matches = vec![crate::logs::QueryTerm::Text {
+            value: "no such words".into(),
+        }];
+        let (lines, held) = read_previous(TWO_LINES, nothing_matches, true).await;
+        assert!(lines.is_empty());
+        assert_eq!(held, Some(2));
+    }
+
+    /// A followed stream that closes has not been read to an end: what it
+    /// closed on is a failure, said as one.
+    #[tokio::test]
+    async fn a_followed_stream_never_says_its_read_is_over() {
+        let (lines, held) = read_previous(TWO_LINES, Vec::new(), false).await;
+        assert_eq!(lines.len(), 2);
+        assert_eq!(held, None);
+    }
 
     /// Sam's log-demo: the node ran out of watchers, wrote why into the
     /// stream and closed it, and the pane said the container was no longer

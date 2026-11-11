@@ -317,6 +317,7 @@ export function LogViewer({
     dropped,
     frozenLines,
     isStreaming,
+    previousRead,
     isConnecting,
     isPaused,
     failures,
@@ -1274,7 +1275,10 @@ export function LogViewer({
       >
         <EmptyState
           failed={bannered.length > 0}
-          connecting={isConnecting}
+          connecting={
+            // A previous run is still arriving until its read says it ended.
+            isConnecting || (previousRun && !isPaused && previousRead === null)
+          }
           streaming={isStreaming}
           retained={retained}
           filtered={effectiveTerms.length > 0}
@@ -1285,7 +1289,7 @@ export function LogViewer({
           idle={idle}
           podsUnread={podsError}
           lanes={lanes}
-          previous={previousRun}
+          read={previousRead}
           onClearQuery={handleClearQuery}
           onShowAll={handleShowAllContainers}
         />

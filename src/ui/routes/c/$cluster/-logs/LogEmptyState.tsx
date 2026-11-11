@@ -5,6 +5,7 @@ import { errorToShow } from "@/lib/error-utils";
 
 import { useT } from "@/i18n/useT";
 import { formatCount } from "@/lib/count";
+import type { PreviousRead } from "./hooks/useLogStream";
 
 /** Ragged bars at log-line rhythm — the shape the output will land in. */
 const SKELETON_WIDTHS = [
@@ -46,7 +47,7 @@ export function EmptyState({
   idle = null,
   podsUnread,
   lanes = false,
-  previous = false,
+  read = null,
   onClearQuery,
   onShowAll,
 }: {
@@ -68,8 +69,11 @@ export function EmptyState({
   podsUnread?: unknown;
   /** A workload pane: what is hidden is a pod, not a container. */
   lanes?: boolean;
-  /** The run before the current one is being read: a read that finished, not a stream. */
-  previous?: boolean;
+  /**
+   * What reading the run before the current one found, once that read is
+   * over: only then can an empty pane say what the run wrote.
+   */
+  read?: PreviousRead | null;
   onClearQuery: () => void;
   onShowAll: () => void;
 }) {
@@ -175,7 +179,28 @@ export function EmptyState({
     );
   }
 
-  if (previous) return <Note>{t("empty", "previousRunWroteNothing")}</Note>;
+  if (read) {
+    // No read reached an end: the notices above say why each did not.
+    if (read.sources === 0) return null;
+    if (read.lines === 0)
+      return <Note>{t("empty", "previousRunWroteNothing")}</Note>;
+    // It wrote, and the lines are not here: intake kept none, or Clear
+    // took them. Neither is the run having been silent.
+    return (
+      <Note>
+        {t("empty", "nothingLeftToShow")}
+        <span className="text-fg-fnt">
+          {" "}
+          {intake
+            ? t("count", "linesKept", { n: 0, count: formatCount(0) })
+            : t("count", "linesReceived", {
+                n: read.lines,
+                count: formatCount(read.lines),
+              })}
+        </span>
+      </Note>
+    );
+  }
 
   if (streaming) {
     return (

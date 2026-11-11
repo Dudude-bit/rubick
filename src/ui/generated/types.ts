@@ -3076,6 +3076,7 @@ export type CertificateProblem =
 
 export type AppEvent =
   | { channel: "log-batch"; stream_id: string; lines: LogLineEvent[] }
+  | { channel: "log-read"; stream_id: string; lines: number }
   | {
       channel: "resource-event";
       stream_id: string;

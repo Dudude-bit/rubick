@@ -169,6 +169,8 @@ interface UseLogStreamResult {
   unfilteredFrom: number;
   /** True while at least one container's followed stream is attached; a previous run is read, not followed. */
   isStreaming: boolean;
+  /** What reading a previous run found. See `PreviousRead`. */
+  previousRead: PreviousRead | null;
   isConnecting: boolean;
   /**
    * Why a stream is not running, per container. A sidecar exiting kills
@@ -184,6 +186,19 @@ interface UseLogStreamResult {
   retrySource: (pod: string, container: string) => void;
 }
 
+/**
+ * What reading a previous run found, once every source's read has ended or
+ * failed: how many reads reached the end, and the lines those runs held
+ * before intake chose among them. `null` on the hook until then, and for a
+ * followed pane, so an empty pane cannot say "wrote nothing" ahead of the
+ * read, or about lines that intake or Clear took away.
+ */
+export interface PreviousRead {
+  sources: number;
+  lines: number;
+}
+
+const NO_READS: ReadonlyMap<string, number> = new Map();
 const NO_INTAKE: QueryTerm[] = [];
 /** What `intakeKey` reads as when nothing is being kept at the source. */
 const NO_INTAKE_KEY = JSON.stringify(NO_INTAKE);
@@ -276,6 +291,8 @@ export function useLogStream({
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [failures, setFailures] = useState<ContainerFailure[]>([]);
+  // Source key -> the lines its read held, for each read that reached its end.
+  const [reads, setReads] = useState(NO_READS);
   const failuresRef = useRef(failures);
   // oxlint-disable-next-line react-hooks/refs
   failuresRef.current = failures;
@@ -537,6 +554,10 @@ export function useLogStream({
       setFailures((prev) =>
         prev.filter((f) => !(f.pod === pod && f.container === container))
       );
+      setReads((prev) => {
+        const next = new Map(prev);
+        return next.delete(key) ? next : prev;
+      });
       void sync(s, sourcesRef.current, false);
     },
     [namespace, sync]
@@ -627,6 +648,7 @@ export function useLogStream({
 
       setIsConnecting(true);
       setFailures([]);
+      setReads(NO_READS);
       if (!resuming) {
         setBuffer(emptyBuffer());
         wiped.current?.();
@@ -657,7 +679,18 @@ export function useLogStream({
       // every stream started later, however many there are.
       let unlistenBatch: (() => void) | null = null;
       let unlistenFailure: (() => void) | null = null;
+      let unlistenRead: (() => void) | null = null;
       try {
+        unlistenRead = await listenEvent("log-read", (event) => {
+          const source = s.sourceOf.get(event.payload.stream_id);
+          if (!s.active || source === undefined) return;
+          const key = sourceKey(source);
+          if (s.opened.get(key) !== event.payload.stream_id) return;
+          // The lines it counts go into the buffer before the count is
+          // believed, or the pane is empty and finished for a moment.
+          release();
+          setReads((prev) => new Map(prev).set(key, event.payload.lines));
+        });
         unlistenBatch = await listenEvent("log-batch", (event) => {
           const streamId = event.payload.stream_id;
           const source = s.sourceOf.get(streamId);
@@ -729,6 +762,7 @@ export function useLogStream({
       } catch (err) {
         unlistenBatch?.();
         unlistenFailure?.();
+        unlistenRead?.();
         if (!s.active) return;
         console.error("Failed to listen for log events:", err);
         setFailures(
@@ -746,9 +780,10 @@ export function useLogStream({
       if (!s.active) {
         unlistenBatch();
         unlistenFailure();
+        unlistenRead();
         return;
       }
-      s.unlistens.push(unlistenBatch, unlistenFailure);
+      s.unlistens.push(unlistenBatch, unlistenFailure, unlistenRead);
       s.listening = true;
 
       await sync(s, sourcesRef.current, true);
@@ -782,6 +817,21 @@ export function useLogStream({
     void sync(s, sources, false);
   }, [sources, sync, isPaused]);
 
+  const previousRead = useMemo<PreviousRead | null>(() => {
+    if (!previous) return null;
+    const found = { sources: 0, lines: 0 };
+    for (const source of sources) {
+      const lines = reads.get(sourceKey(source));
+      if (lines !== undefined) {
+        found.sources += 1;
+        found.lines += lines;
+      } else if (!failures.some((failure) => sameSource(failure, source))) {
+        return null;
+      }
+    }
+    return found;
+  }, [previous, sources, reads, failures]);
+
   return {
     logs: buffer.lines,
     retained: buffer.lines.length,
@@ -793,6 +843,7 @@ export function useLogStream({
     intakeFrom,
     unfilteredFrom,
     isStreaming,
+    previousRead,
     isConnecting,
     failures,
     isPaused,
