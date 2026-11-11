@@ -219,6 +219,9 @@ impl FileNames {
     }
 }
 
+/// A name a context needs, and where a file keeps names of its sort.
+type Wanted<'a> = (Option<&'a str>, fn(&FileNames) -> &[String]);
+
 /// The files a CLI needs to resolve `context`, and no other that names it.
 ///
 /// client-go has merged same-named entries first-wins in some releases and
@@ -235,12 +238,12 @@ fn files_for(context: &str, loaded: &LoadedKubeconfig) -> Result<Vec<PathBuf>> {
     let Some(entry) = entry.filter(|_| !loaded.named.is_empty()) else {
         return Ok(loaded.files.clone());
     };
-    let wanted: [(Option<&str>, fn(&FileNames) -> &[String]); 3] = [
+    let wanted: [Wanted; 3] = [
         (Some(context), |file| &file.contexts),
         (Some(entry.cluster.as_str()), |file| &file.clusters),
         (entry.user.as_deref(), |file| &file.users),
     ];
-    let names = |file: usize, (name, of): &(Option<&str>, fn(&FileNames) -> &[String])| {
+    let names = |file: usize, (name, of): &Wanted| {
         name.is_some_and(|name| of(&loaded.named[file]).iter().any(|n| n == name))
     };
     let first: Vec<Option<usize>> = wanted
@@ -1575,30 +1578,28 @@ users:
         user: &str,
     ) -> PathBuf {
         let path = dir.join(file);
-        let mut text = String::from("apiVersion: v1\nkind: Config\ncontexts:");
-        if context.is_empty() {
-            text.push_str(" []");
-        } else {
-            text.push_str(&format!(
-                "\n  - name: {context}\n    context:\n      cluster: {context}\n      user: {context}"
-            ));
-        }
-        text.push_str("\nclusters:");
-        if cluster.is_empty() {
-            text.push_str(" []");
-        } else {
-            text.push_str(&format!(
-                "\n  - name: {cluster}\n    cluster:\n      server: https://{file}.invalid"
-            ));
-        }
-        text.push_str("\nusers:");
-        if user.is_empty() {
-            text.push_str(" []");
-        } else {
-            text.push_str(&format!(
-                "\n  - name: {context}\n    user:\n      token: {user}"
-            ));
-        }
+        let entry = |name: &str, body: String| {
+            if name.is_empty() {
+                " []".to_string()
+            } else {
+                format!("\n  - name: {body}")
+            }
+        };
+        let text = [
+            "apiVersion: v1\nkind: Config\ncontexts:".to_string(),
+            entry(
+                context,
+                format!("{context}\n    context:\n      cluster: {context}\n      user: {context}"),
+            ),
+            "\nclusters:".to_string(),
+            entry(
+                cluster,
+                format!("{cluster}\n    cluster:\n      server: https://{file}.invalid"),
+            ),
+            "\nusers:".to_string(),
+            entry(user, format!("{context}\n    user:\n      token: {user}")),
+        ]
+        .concat();
         std::fs::write(&path, text + "\n").expect("fixture");
         path
     }
