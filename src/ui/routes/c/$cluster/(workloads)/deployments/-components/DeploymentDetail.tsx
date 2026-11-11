@@ -152,7 +152,7 @@ export function DeploymentDetail() {
     defaultTab: "overview",
   });
   const patchDenied = useDenied(
-    guardedOf(ResourceType.Deployment, namespace || null)
+    name ? guardedOf(ResourceType.Deployment, namespace || null, name) : null
   ).patch;
 
   const chain = useChainAnswer(ResourceType.Deployment, name, namespace);

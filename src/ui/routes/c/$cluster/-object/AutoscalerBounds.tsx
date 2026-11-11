@@ -35,7 +35,11 @@ export function AutoscalerBounds({
   const unchanged =
     bounds.min === autoscaler.minReplicas &&
     bounds.max === autoscaler.maxReplicas;
-  const guarded = guardedOf("HorizontalPodAutoscaler", autoscaler.namespace);
+  const guarded = guardedOf(
+    "HorizontalPodAutoscaler",
+    autoscaler.namespace,
+    autoscaler.name
+  );
   const denied = useDenied(guarded).patch;
 
   const save = useResourceMutation(

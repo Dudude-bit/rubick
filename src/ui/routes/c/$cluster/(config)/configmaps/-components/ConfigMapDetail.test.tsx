@@ -142,8 +142,11 @@ describe("Marco's ConfigMap, which his Role lets him read and not change", () =>
     const user = userEvent.setup();
     await user.hover(edit());
     expect(
-      (await screen.findAllByText(/can-i patch configmaps -n team-checkout/))
-        .length
+      (
+        await screen.findAllByText(
+          /can-i patch configmaps\/checkout-config -n team-checkout/
+        )
+      ).length
     ).toBeGreaterThan(0);
     await user.click(edit());
     expect(screen.queryByRole("textbox")).toBeNull();
@@ -163,7 +166,7 @@ describe("Marco's ConfigMap, which his Role lets him read and not change", () =>
 
     await userEvent.setup().hover(remove());
     const reasons = await screen.findAllByText(
-      /can-i delete configmaps -n team-checkout/
+      /can-i delete configmaps\/checkout-config -n team-checkout/
     );
     for (const reason of reasons) {
       expect(container.contains(reason)).toBe(false);

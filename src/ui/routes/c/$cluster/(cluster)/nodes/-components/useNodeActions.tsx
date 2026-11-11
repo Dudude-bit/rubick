@@ -9,10 +9,10 @@ import { useCritical } from "@/hooks/useCritical";
 import { drainingNode, useNodeDrain } from "./useNodeDrain";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { ResourceType } from "@/lib/resource-registry";
+import { listQueryFor, ResourceType } from "@/lib/resource-registry";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
-import { guardedOf, noteDenied, useDenied } from "@/lib/access";
+import { guardedOf, noteDenied, useDenied, useRowDenial } from "@/lib/access";
 
 export interface NodeActions {
   cordon: (node: string) => void;
@@ -21,8 +21,8 @@ export interface NodeActions {
   drain: (node: string) => void;
   /** The node a drain is running on, if one is. */
   draining: string | null;
-  /** Why the cluster will not let this user cordon, uncordon or drain a node. */
-  denied: string | undefined;
+  /** Why the cluster will not let this user cordon, uncordon or drain `node`. */
+  denied: (node: string) => string | undefined;
   /** Mount once beside the surface; the dialog outlives any row. */
   dialogs: ReactNode;
 }
@@ -34,13 +34,14 @@ export interface NodeActions {
  * that grew its own would be the second reader of a drain's state, with a
  * report that could disagree with the row's.
  */
-export function useNodeActions(): NodeActions {
+export function useNodeActions(asked: string | null): NodeActions {
   const t = useT();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const asking = useAsk();
-  const nodes = guardedOf(ResourceType.Node, null);
-  const denied = useDenied(nodes).patch;
+  // The page asks about its node; a list learns of a row from its menu or a try.
+  useDenied(asked ? guardedOf(ResourceType.Node, null, asked) : null);
+  const rowDenied = useRowDenial(listQueryFor(ResourceType.Node), "patch");
 
   const invalidate = () => {
     void queryClient.invalidateQueries({
@@ -60,8 +61,8 @@ export function useNodeActions(): NodeActions {
         description: t("action", "nodeCordonedDetail", { name: nodeName }),
       });
     },
-    onError: (error) => {
-      noteDenied("patch", nodes, error);
+    onError: (error, nodeName) => {
+      noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
       toast({
         title: t("action", "error"),
         description: t("action", "cordonFailed", { error: errorToShow(error) }),
@@ -79,8 +80,8 @@ export function useNodeActions(): NodeActions {
         description: t("action", "nodeUncordonedDetail", { name: nodeName }),
       });
     },
-    onError: (error) => {
-      noteDenied("patch", nodes, error);
+    onError: (error, nodeName) => {
+      noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
       toast({
         title: t("action", "error"),
         description: t("action", "uncordonFailed", {
@@ -199,7 +200,7 @@ export function useNodeActions(): NodeActions {
       setOpen(node);
     },
     draining: drainingNode(drain.state),
-    denied,
+    denied: (node) => rowDenied({ name: node }),
     dialogs,
   };
 }

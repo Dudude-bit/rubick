@@ -363,7 +363,7 @@ export function CronJobDetail() {
   // this weekly wants to find their run again in a list of forty.
   const [runOpen, setRunOpen] = useState(false);
   const [runName, setRunName] = useState("");
-  const runs = guardedOf(ResourceType.Job, namespace || null);
+  const runs = guardedOf(ResourceType.Job, namespace || null, null);
   const [runDenied] = useDeniedOf([runs && { ...runs, verb: "create" }]);
   const queryClient = useQueryClient();
   const { toast } = useToast();

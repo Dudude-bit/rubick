@@ -75,7 +75,9 @@ export function ConfigMapDetail() {
   // got in the way (#107).
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const guarded = guardedOf(ResourceType.ConfigMap, namespace || null);
+  const guarded = name
+    ? guardedOf(ResourceType.ConfigMap, namespace || null, name)
+    : null;
   const editDenied = useDenied(guarded).patch;
   const writeKey = async (key: string, value: string) => {
     try {

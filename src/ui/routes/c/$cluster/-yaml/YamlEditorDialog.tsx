@@ -260,7 +260,11 @@ export function YamlEditorDialog() {
       if (resourceKey)
         noteDenied(
           "patch",
-          guardedOf(resourceKey.kind, resourceKey.namespace ?? null),
+          guardedOf(
+            resourceKey.kind,
+            resourceKey.namespace ?? null,
+            resourceKey.name
+          ),
           error
         );
       const errorMessage = errorToShow(error);

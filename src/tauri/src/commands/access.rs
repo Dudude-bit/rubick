@@ -65,6 +65,10 @@ pub struct AccessQuery {
     /// The part of the object the verb reaches: `exec` in `pods/exec`.
     #[serde(default)]
     pub subresource: Option<String>,
+    /// The object, where the action is on one: a Role may grant a verb on
+    /// named objects alone, and a nameless question is refused for those.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,6 +119,7 @@ fn access_attributes(query: &AccessQuery) -> ResourceAttributes {
         subresource: query.subresource.clone(),
         verb: Some(query.verb.clone()),
         namespace: query.namespace.clone(),
+        name: query.name.clone(),
         ..ResourceAttributes::default()
     }
 }
@@ -522,6 +527,23 @@ mod tests {
         }))
         .expect("query");
         assert_eq!(access_attributes(&query).subresource, None);
+    }
+
+    /// A Role with `resourceNames: [api]` grants `patch deployments` on api
+    /// alone, and RBAC matches such a rule only when the question names the
+    /// object. Fails if the name is dropped, which asks a question the
+    /// cluster refuses for a right the user has.
+    #[test]
+    fn an_access_question_about_one_object_names_it() {
+        let query: AccessQuery = serde_json::from_value(serde_json::json!({
+            "group": "apps",
+            "resource": "deployments",
+            "verb": "patch",
+            "namespace": "shop",
+            "name": "api",
+        }))
+        .expect("query");
+        assert_eq!(access_attributes(&query).name.as_deref(), Some("api"));
     }
 
     #[test]

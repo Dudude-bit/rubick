@@ -151,8 +151,10 @@ describe("NodeList for a reader who may not patch nodes", () => {
       cordon,
       uncordon,
       drain,
-      denied:
-        "Your access does not allow this: the cluster answers no to kubectl auth can-i patch nodes.",
+      denied: (name: string) =>
+        name === "node01"
+          ? "Your access does not allow this: the cluster answers no to kubectl auth can-i patch nodes/node01."
+          : undefined,
     };
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },

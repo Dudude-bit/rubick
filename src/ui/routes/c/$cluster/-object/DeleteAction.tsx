@@ -108,8 +108,9 @@ export function DeleteAction({
         group: served.group,
         resource: served.plural,
         namespace: namespace ?? null,
+        name,
       }
-    : guardedOf(kind, namespace ?? null);
+    : guardedOf(kind, namespace ?? null, name);
   const denied = useDenied(guarded).delete;
   if (!mutation) return null;
   const action = restart

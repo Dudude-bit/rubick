@@ -156,7 +156,7 @@ export function RestartAction({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const guarded = guardedOf(dialog.kind, dialog.namespace);
+  const guarded = guardedOf(dialog.kind, dialog.namespace, dialog.name);
   const denied = useDenied(guarded).patch;
   return (
     <>

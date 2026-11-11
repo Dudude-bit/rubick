@@ -5,7 +5,12 @@ import type { T } from "@/i18n/useT";
 import { deniedWords } from "./access";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
-const pods = { group: "", resource: "pods", namespace: "team-checkout" };
+const pods = {
+  group: "",
+  resource: "pods",
+  namespace: "team-checkout",
+  name: null,
+};
 const command = (words: string) =>
   /kubectl auth can-i (.+)\.$/.exec(words)?.[1];
 
@@ -46,6 +51,7 @@ describe("the can-i command a refusal quotes", () => {
           group: "apps",
           resource: "deployments",
           namespace: "team-checkout",
+          name: null,
         })
       )
     ).toBe("delete deployments.apps -n team-checkout");
@@ -55,8 +61,26 @@ describe("the can-i command a refusal quotes", () => {
           group: "",
           resource: "nodes",
           namespace: null,
+          name: null,
         })
       )
     ).toBe("delete nodes");
+  });
+
+  /**
+   * The question the app asked names the object, so the command it quotes
+   * must too. Fails if the name is dropped: the reader would run a nameless
+   * question and get a "no" the cluster does not give for this object.
+   */
+  it("names the object the question was about, as resource/name", () => {
+    expect(
+      command(
+        deniedWords(t, "create", {
+          ...pods,
+          name: "web-0",
+          subresource: "portforward",
+        })
+      )
+    ).toBe("create pods/web-0 --subresource=portforward -n team-checkout");
   });
 });

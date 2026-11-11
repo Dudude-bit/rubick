@@ -168,10 +168,11 @@ export function useObjectActions({
     }
   };
 
-  const guarded = guardedOf(kind, namespace);
+  const guarded = name ? guardedOf(kind, namespace, name) : null;
   const denied = useDenied(guarded);
   const podDenied = usePodDenied(
-    kind === "Pod" || kind === "Service" ? namespace : null
+    kind === "Pod" || kind === "Service" ? namespace : null,
+    kind === "Pod" ? name : (backend.backend?.podName ?? null)
   );
   const debugNamespace = useNodeDebugNamespace();
   const nodeDebugDenied = useNodeDebugDenied(

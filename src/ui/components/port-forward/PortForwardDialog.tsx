@@ -107,7 +107,10 @@ function ForwardForm({
   const addConfig = usePortForwardStore((state) => state.addConfig);
   const stopSession = usePortForwardStore((state) => state.stopSession);
   const currentContext = useClusterStore((state) => state.currentContext);
-  const denied = usePodDenied(target.namespace).portForward;
+  const denied = usePodDenied(
+    target.namespace,
+    target.kind === "Pod" ? target.name : null
+  ).portForward;
 
   const taken = new Set(sessions.map((session) => session.localPort));
   const firstPort = initialPort ?? target.ports[0]?.port;

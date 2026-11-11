@@ -248,6 +248,7 @@ export function CustomResourceDetail({
     group: served.group,
     resource: served.plural,
     namespace: namespace || null,
+    name,
   };
   const deleteDenied = useDenied(guarded).delete;
   const deleteMutation = useMutation({

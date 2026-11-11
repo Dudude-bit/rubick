@@ -34,7 +34,7 @@ export function useRollback({
   const queryClient = useQueryClient();
   const [target, setTarget] = useState<Revision | null>(null);
   const { kind, name, namespace } = subject;
-  const guarded = guardedOf(kind, namespace);
+  const guarded = guardedOf(kind, namespace, name);
   const denied = useDenied(guarded).patch;
 
   const rollback = useResourceMutation(

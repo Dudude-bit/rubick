@@ -160,7 +160,7 @@ describe("the autoscaler's bounds for a reader who may not change it", () => {
     expect(
       (
         await screen.findAllByText(
-          /can-i patch horizontalpodautoscalers.autoscaling -n shop/
+          /can-i patch horizontalpodautoscalers.autoscaling\/cart -n shop/
         )
       ).length
     ).toBeGreaterThan(0);

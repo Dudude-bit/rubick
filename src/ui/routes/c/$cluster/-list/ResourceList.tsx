@@ -63,7 +63,7 @@ import { rowName } from "@/lib/links";
 import { StaleRows } from "./StaleRows";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
 import { useListRefusal } from "./useListRefusal";
-import { useRowDeleteDenial } from "@/lib/access";
+import { useRowDenial } from "@/lib/access";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
 import { deleteCommandFor } from "../-peek/peek-actions";
@@ -455,7 +455,7 @@ export function ResourceList<
   }, [columns, showDelivery, requestDelete]);
 
   const listed = listQuery ?? (listKind ? listQueryFor(listKind) : null);
-  const deleteDenial = useRowDeleteDenial(listed, namespaceScope);
+  const deleteDenial = useRowDenial(listed, "delete");
   const deleteLabel = t("action", "delete");
   const resolvedQuickActions = useMemo(
     () =>

@@ -116,7 +116,7 @@ describe("DebugPodDialog where the cluster refuses this user", () => {
     );
     expect(
       screen.getByText(
-        /can-i patch pods --subresource=ephemeralcontainers -n team-checkout/
+        /can-i patch pods\/checkout-api-6767fbfdb7-blpfk --subresource=ephemeralcontainers -n team-checkout/
       )
     ).toBeInTheDocument();
     expect(

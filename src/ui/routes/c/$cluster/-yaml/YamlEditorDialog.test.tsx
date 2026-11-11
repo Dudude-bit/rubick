@@ -543,8 +543,11 @@ describe("applying where the cluster says this user may not", () => {
     );
     await user.hover(apply());
     expect(
-      (await screen.findAllByText(/can-i patch configmaps -n team-checkout/))
-        .length
+      (
+        await screen.findAllByText(
+          /can-i patch configmaps\/checkout-config -n team-checkout/
+        )
+      ).length
     ).toBeGreaterThan(0);
     await user.click(apply());
     expect(screen.queryByText("Apply Changes?")).toBeNull();

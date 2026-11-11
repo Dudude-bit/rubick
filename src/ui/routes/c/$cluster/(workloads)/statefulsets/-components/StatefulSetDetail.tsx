@@ -104,7 +104,7 @@ export function StatefulSetDetail() {
     defaultTab: "overview",
   });
   const scaleDenied = useDenied(
-    guardedOf(ResourceType.StatefulSet, namespace || null)
+    name ? guardedOf(ResourceType.StatefulSet, namespace || null, name) : null
   ).patch;
 
   const chain = useChainAnswer(ResourceType.StatefulSet, name, namespace);
