@@ -89,6 +89,42 @@ describe("the sidebar's number for Cilium", () => {
   });
 
   /**
+   * A policy the agent has not answered about is not a rejected one: the
+   * endpoint it selects is left out of the count and the dot says so. It
+   * was counted as "selected only by rejected policies" on every cluster
+   * whose Cilium writes no `Valid` condition.
+   */
+  it("leaves out an endpoint whose only policy the agent has not answered about", () => {
+    const endpoint = {
+      name: "api",
+      namespace: "shop",
+      kind: "CiliumEndpoint",
+      spec: null,
+      status: { identity: { id: 1, labels: ["k8s:app=api"] } },
+    } as CustomResourceInfo;
+    const policy = (conditions: unknown[]) =>
+      ({
+        name: "p",
+        namespace: "shop",
+        kind: "CiliumNetworkPolicy",
+        spec: { endpointSelector: {}, ingress: [{}], egress: [{}] },
+        status: { conditions },
+      }) as CustomResourceInfo;
+    const picture = (conditions: unknown[]) => ({
+      endpoints: [endpoint],
+      policies: [policy(conditions)],
+      clusterwide: [],
+      kubernetes: { read: true as const, policies: [], unread: [] },
+    });
+    expect(countUnrestricted(picture([]))).toBe(0);
+    expect(coverageTone(picture([]))).toBe("unchecked");
+    // A rejection the agent did write is still counted.
+    const rejected = picture([{ type: "Valid", status: "False" }]);
+    expect(countUnrestricted(rejected)).toBe(1);
+    expect(coverageTone(rejected)).toBeNull();
+  });
+
+  /**
    * A refused NetworkPolicy read is not "no NetworkPolicies": the count must
    * not take the endpoint as unrestricted, and the dot says it left it out.
    */

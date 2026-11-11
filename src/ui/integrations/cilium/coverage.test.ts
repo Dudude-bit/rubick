@@ -20,18 +20,21 @@ function endpoint(namespace: string, labels: string[]): CustomResourceInfo {
   } as CustomResourceInfo;
 }
 
+/** `valid`: what the agent wrote in `Valid`, or `null` where it wrote nothing. */
 function policy(
   namespace: string | null,
   spec: unknown,
-  valid = true
+  valid: boolean | "Unknown" | null = true
 ): CustomResourceInfo {
+  const said =
+    valid === "Unknown" ? "Unknown" : valid === true ? "True" : "False";
   return {
     name: "p",
     namespace,
     kind: namespace ? "CiliumNetworkPolicy" : "CiliumClusterwideNetworkPolicy",
     spec,
     status: {
-      conditions: [{ type: "Valid", status: valid ? "True" : "False" }],
+      conditions: valid === null ? [] : [{ type: "Valid", status: said }],
     },
   } as CustomResourceInfo;
 }
@@ -253,6 +256,62 @@ describe("what covers an endpoint", () => {
     );
     expect(api.selecting).toHaveLength(1);
     expect(api.verdict).toBe("covered");
+  });
+
+  /**
+   * The third state. A policy with no `Valid` condition, or `Unknown`, is
+   * one the agent has not answered about: it may well be in force, and
+   * "only rejected policies" in red said it was thrown away. Fails if the
+   * unanswered branch goes and such a policy counts as rejected again.
+   */
+  it("cannot say about an endpoint whose policies the agent has not answered about", () => {
+    const spec = {
+      endpointSelector: { matchLabels: { app: "api" } },
+      ...RULES,
+    };
+    for (const valid of [null, "Unknown"] as const) {
+      const [unanswered] = coverageOf(
+        [API],
+        [policy("shop", spec, valid)],
+        [],
+        NONE
+      );
+      expect(unanswered.selecting.map((one) => one.enforcement)).toEqual([
+        "notSaid",
+      ]);
+      expect(unanswered.directions).toEqual({
+        ingress: "cannotSay",
+        egress: "cannotSay",
+      });
+      expect(unanswered.verdict).toBe("cannotSay");
+    }
+
+    // Beside a rejected one it is still not "only rejected".
+    const [mixed] = coverageOf(
+      [API],
+      [policy("shop", spec, null), policy("shop", spec, false)],
+      [],
+      NONE
+    );
+    expect(mixed.verdict).toBe("cannotSay");
+
+    // And an accepted policy settles it, as it does beside a rejected one.
+    const [settled] = coverageOf(
+      [API],
+      [policy("shop", spec, null), policy("shop", spec, true)],
+      [],
+      NONE
+    );
+    expect(settled.verdict).toBe("covered");
+
+    // Rejected alone keeps its own verdict: the two are told apart.
+    const [rejected] = coverageOf(
+      [API],
+      [policy("shop", spec, false)],
+      [],
+      NONE
+    );
+    expect(rejected.verdict).toBe("onlyRejected");
   });
 
   /** Nothing names it, and that is a fact rather than a gap. */

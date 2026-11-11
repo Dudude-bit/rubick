@@ -4792,6 +4792,7 @@ export const ru: Catalogue = {
     ciliumOnlyRejected: "только отвергнутые",
     ciliumCannotSay: "нельзя сказать",
     ciliumEnforcesNothing: "отвергнута, ничего не применяет",
+    ciliumNotAnswered: "агент про неё не ответил",
     ciliumDirectionRestricted: "ограничивают",
     ciliumDirectionOnlyRejected: "его называют только отвергнутые политики",
     ciliumDirectionOpen: "не ограничен ни одной политикой",

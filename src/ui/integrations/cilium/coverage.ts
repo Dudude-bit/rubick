@@ -27,7 +27,12 @@ import {
 } from "@/lib/label-selector";
 import { selectsPod } from "@/lib/network-policy";
 import { getValueByPath } from "../kit";
-import { directionsOf, enforcementOf, selectsNodes } from "./model";
+import {
+  directionsOf,
+  enforcementOf,
+  selectsNodes,
+  type Enforcement,
+} from "./model";
 
 /** The prefix Cilium puts on a label it took from Kubernetes. */
 const FROM_K8S = "k8s:";
@@ -103,7 +108,8 @@ export interface Selecting {
   name: string;
   namespace: string | null;
   clusterwide: boolean;
-  enforcing: boolean;
+  /** What the operator said about it. `notSaid` is not `rejected`. */
+  enforcement: Enforcement["state"];
   /** The directions this policy puts the endpoint under policy for. */
   restricts: Record<Direction, boolean>;
 }
@@ -168,10 +174,16 @@ function stateOf(
   undecided: boolean
 ): DirectionState {
   const governing = selecting.filter((one) => one.restricts[direction]);
-  if (governing.some((one) => one.enforcing)) return "restricted";
+  if (governing.some((one) => one.enforcement === "accepted")) {
+    return "restricted";
+  }
   // Only after the enforcing ones: a policy that works beside one that could
   // not be read still restricts the endpoint.
   if (undecided) return "cannotSay";
+  // A policy the operator has not answered about may be in force.
+  if (governing.some((one) => one.enforcement === "notSaid")) {
+    return "cannotSay";
+  }
   if (governing.length > 0) return "onlyRejected";
   return "unrestricted";
 }
@@ -211,7 +223,7 @@ export function coverageOf(
         name: policy.name,
         namespace: policy.namespace,
         clusterwide: isClusterwide,
-        enforcing: enforcementOf(policy).state === "accepted",
+        enforcement: enforcementOf(policy).state,
         restricts: ciliumRestricts(policy),
       });
     };
@@ -240,7 +252,7 @@ export function coverageOf(
           namespace: policy.namespace,
           clusterwide: false,
           // Nothing reports a NetworkPolicy as rejected: Cilium enforces it.
-          enforcing: true,
+          enforcement: "accepted",
           restricts: {
             ingress: policy.ingress.governed,
             egress: policy.egress.governed,

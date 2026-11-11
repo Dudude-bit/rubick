@@ -4287,6 +4287,7 @@ export const en = {
     ciliumOnlyRejected: "only rejected policies",
     ciliumCannotSay: "cannot say",
     ciliumEnforcesNothing: "rejected, enforces nothing",
+    ciliumNotAnswered: "the agent has not answered about it",
     ciliumDirectionRestricted: "restricted by",
     ciliumDirectionOnlyRejected: "only rejected policies name it",
     ciliumDirectionOpen: "no policy restricts it",
