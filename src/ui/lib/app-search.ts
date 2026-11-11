@@ -31,7 +31,7 @@ export interface AppSearch {
   names?: string;
 }
 
-const KEYS: ReadonlyArray<keyof AppSearch> = [
+export const APP_SEARCH_KEYS: ReadonlyArray<keyof AppSearch> = [
   "peek",
   "q",
   "tab",
@@ -54,7 +54,7 @@ const KEYS: ReadonlyArray<keyof AppSearch> = [
 
 export function appSearch(raw: Record<string, unknown>): AppSearch {
   const search: AppSearch = {};
-  for (const key of KEYS) {
+  for (const key of APP_SEARCH_KEYS) {
     const value = raw[key];
     if (typeof value === "string" && value !== "") search[key] = value;
     else if (typeof value === "number" || typeof value === "boolean")
