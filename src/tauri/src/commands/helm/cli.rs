@@ -3,7 +3,9 @@
 //! shells out to the helm binary instead of the API server.
 
 use crate::cli::CliAvailability;
+use crate::client::CliTarget;
 use crate::error::{Error, PluginError, Result};
+use crate::shell::ShellCommand;
 use crate::state::AppState;
 use serde::Deserialize;
 use std::time::Duration;
@@ -22,30 +24,50 @@ pub async fn check_helm_availability() -> Result<CliAvailability> {
     Ok(manager.check_availability().await)
 }
 
-/// Helper to execute helm CLI commands
+/// Run helm on its own files: repositories and the chart search.
 async fn exec_helm_cli(args: &[&str], timeout_secs: u64) -> Result<String> {
-    exec_helm_cli_with_context(args, timeout_secs, None).await
+    run(helm(args, timeout_secs).await?).await
 }
 
-/// Helper to execute helm CLI commands with optional kube context
-async fn exec_helm_cli_with_context(
+/// Run helm against the cluster the app is showing.
+async fn exec_helm_on_cluster(
+    state: &AppState,
     args: &[&str],
     timeout_secs: u64,
-    context: Option<&str>,
 ) -> Result<String> {
+    let target = current_target(state).await?;
+    run(aimed(helm(args, timeout_secs).await?, &target)).await
+}
+
+async fn helm(args: &[&str], timeout_secs: u64) -> Result<ShellCommand> {
     let manager = helm_manager().await;
-    let mut cmd = manager.command().await?;
-    cmd = cmd
-        .args(args.iter().map(std::string::ToString::to_string))
-        .timeout(Duration::from_secs(timeout_secs));
+    Ok(manager
+        .command()
+        .await?
+        .args(args)
+        .timeout(Duration::from_secs(timeout_secs)))
+}
 
-    if let Some(ctx) = context {
-        cmd = cmd.arg("--kube-context").arg(ctx);
-    }
-
+async fn run(cmd: ShellCommand) -> Result<String> {
     cmd.run_success()
         .await
         .map_err(|e| Error::Plugin(PluginError::ExecutionFailed(e.to_string())))
+}
+
+/// The cluster a mutation is for. No current context is an error, never a
+/// helm left to pick its own.
+async fn current_target(state: &AppState) -> Result<CliTarget> {
+    let context = state
+        .get_current_context()
+        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    state.client_manager.cli_target(&context).await
+}
+
+/// The context by name, in the files the app read it from.
+fn aimed(cmd: ShellCommand, target: &CliTarget) -> ShellCommand {
+    cmd.arg("--kube-context")
+        .arg(&target.context)
+        .env("KUBECONFIG", &target.kubeconfig)
 }
 
 /// Rollback Helm release to a previous revision
@@ -59,13 +81,12 @@ pub async fn helm_rollback(
     crate::validation::validate_dns_subdomain(&name)?;
     crate::validation::validate_namespace(&namespace)?;
 
-    let context = state.get_current_context();
     let revision_str = revision.to_string();
 
-    exec_helm_cli_with_context(
+    exec_helm_on_cluster(
+        &state,
         &["rollback", &name, &revision_str, "-n", &namespace],
         120,
-        context.as_deref(),
     )
     .await
 }
@@ -80,14 +101,7 @@ pub async fn helm_uninstall(
     crate::validation::validate_dns_subdomain(&name)?;
     crate::validation::validate_namespace(&namespace)?;
 
-    let context = state.get_current_context();
-
-    exec_helm_cli_with_context(
-        &["uninstall", &name, "-n", &namespace],
-        120,
-        context.as_deref(),
-    )
-    .await
+    exec_helm_on_cluster(&state, &["uninstall", &name, "-n", &namespace], 120).await
 }
 
 /// List Helm repositories
@@ -158,7 +172,7 @@ pub async fn helm_search_charts(keyword: String) -> Result<Vec<HelmChartSearchRe
 async fn helm_install_or_upgrade(
     command: &str,
     options: &HelmInstallOptions,
-    context: Option<&str>,
+    state: &AppState,
 ) -> Result<String> {
     let mut args = vec![
         command.to_string(),
@@ -208,7 +222,7 @@ async fn helm_install_or_upgrade(
     };
 
     let args_refs: Vec<&str> = args.iter().map(std::string::String::as_str).collect();
-    let result = exec_helm_cli_with_context(&args_refs, 300, context).await;
+    let result = exec_helm_on_cluster(state, &args_refs, 300).await;
 
     if let Some(path) = temp_file {
         let _ = std::fs::remove_file(path);
@@ -225,8 +239,7 @@ pub async fn helm_install(
 ) -> Result<String> {
     crate::validation::validate_dns_subdomain(&options.release_name)?;
     crate::validation::validate_namespace(&options.namespace)?;
-    let context = state.get_current_context();
-    helm_install_or_upgrade("install", &options, context.as_deref()).await
+    helm_install_or_upgrade("install", &options, &state).await
 }
 
 /// Upgrade a Helm release
@@ -237,6 +250,49 @@ pub async fn helm_upgrade(
 ) -> Result<String> {
     crate::validation::validate_dns_subdomain(&options.release_name)?;
     crate::validation::validate_namespace(&options.namespace)?;
-    let context = state.get_current_context();
-    helm_install_or_upgrade("upgrade", &options, context.as_deref()).await
+    helm_install_or_upgrade("upgrade", &options, &state).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Given the context name alone, helm resolves it in its own kubeconfig.
+    /// With a pinned file that is another file, and an uninstall lands on
+    /// whichever cluster wears the same name there.
+    #[tokio::test]
+    async fn a_cluster_command_resolves_its_context_in_the_files_the_app_read() {
+        let target = CliTarget {
+            context: "kubernetes-admin@kubernetes".to_string(),
+            kubeconfig: "/clusters/prod.yaml".into(),
+        };
+        let stand_in = ShellCommand::new("sh").args([
+            "-c",
+            r#"printf '%s %s %s' "$KUBECONFIG" "$1" "$2""#,
+            "helm",
+        ]);
+
+        let seen = run(aimed(stand_in, &target)).await.expect("runs");
+
+        assert_eq!(
+            seen,
+            "/clusters/prod.yaml --kube-context kubernetes-admin@kubernetes"
+        );
+    }
+
+    /// Without a current context the command used to run with no
+    /// `--kube-context` at all, on whatever cluster helm itself points at.
+    #[tokio::test]
+    async fn a_cluster_command_with_no_cluster_connected_is_refused() {
+        let state = AppState::new().expect("state");
+
+        let refused = current_target(&state).await.expect_err("no cluster");
+
+        assert!(
+            refused
+                .to_string()
+                .contains(crate::error::messages::NO_CLUSTER),
+            "{refused}"
+        );
+    }
 }
