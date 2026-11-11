@@ -16,6 +16,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { askedKind, queryKeys, type ListQuestion } from "@/lib/query-keys";
 import { useRightsAsked } from "@/lib/refusals";
 import { seedScope } from "@/lib/namespace-scope";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -35,20 +36,57 @@ export type ListAccessMap = Partial<Record<ResourceKind, boolean>>;
 const REVIEW_FRESH_MS = 5 * 60 * 1000;
 
 export function useListAccess(kinds: ResourceKind[]): ListAccessMap {
-  const byPlural = useResourceAccess(kinds.map(listQueryFor));
+  const allowed = useResourceAccess(kinds.map(listQueryFor));
   const marks: ListAccessMap = {};
   for (const kind of kinds) {
-    const allowed = byPlural.get(listQueryFor(kind).resource);
-    if (allowed !== undefined) marks[kind] = allowed;
+    const mark = allowed.get(listQueryFor(kind));
+    if (mark !== undefined) marks[kind] = mark;
   }
   return marks;
 }
 
 /**
- * The same question for kinds the registry does not hold, asked in the
- * terms the API server matches. Keyed by plural, as the answer comes home.
+ * Answers held per kind, and read back only with the question itself: a
+ * plural is not a kind, and looked up by it a namesake took another's answer.
  */
-export function useResourceAccess(queries: ListQuery[]): Map<string, boolean> {
+export interface PerKind<V> {
+  get(asked: ListQuestion): V | undefined;
+}
+
+function perKind<V>(entries: Iterable<readonly [ListQuestion, V]>): PerKind<V> {
+  const held = new Map<string, V>();
+  for (const [asked, value] of entries) held.set(askedKind(asked), value);
+  return { get: (asked) => held.get(askedKind(asked)) };
+}
+
+const NO_ANSWERS = perKind<never>([]);
+
+/**
+ * Asks the authorizer. An answer names only its plural, so each is matched
+ * to its question by position, and one that does not line up is no answer.
+ */
+export async function askListAccess(
+  queries: readonly ListQuery[],
+  namespaces: string[]
+): Promise<PerKind<boolean | null>> {
+  const answers = await commands.checkListAccess([...queries], namespaces);
+  return perKind(
+    queries.map((query, at) => {
+      const answer = answers[at];
+      return [
+        query,
+        answer?.resource === query.resource ? answer.allowed : null,
+      ] as const;
+    })
+  );
+}
+
+/**
+ * The same question for kinds the registry does not hold, asked in the
+ * terms the API server matches. A kind the cluster could not be asked about
+ * has no answer, which is not a refusal.
+ */
+export function useResourceAccess(queries: ListQuery[]): PerKind<boolean> {
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
   const scope = useClusterStore((s) => s.namespaceScope);
@@ -57,16 +95,20 @@ export function useResourceAccess(queries: ListQuery[]): Map<string, boolean> {
   // a different order is the same question, and keying on the order would
   // ask it again and hold two copies of one answer.
   const namespaces = [...scope].sort();
-
-  // The asked kinds are part of the question: the nav asks about its own
-  // rows, the Gateway rows ask about theirs, and one key for both would
-  // hand the second asker the first one's answers.
-  const asked = queries.map((query) => query.resource).sort();
   const rights = useRightsAsked();
 
   const { data } = useQuery({
-    queryKey: ["list-access", currentContext, namespaces, asked, rights],
-    queryFn: () => commands.checkListAccess(queries, namespaces),
+    // The asked kinds are part of the question: the nav asks about its own
+    // rows, the Gateway rows ask about theirs, and one key for both would
+    // hand the second asker the first one's answers.
+    queryKey: queryKeys.listAccess(
+      "may",
+      currentContext,
+      namespaces,
+      queries,
+      rights
+    ),
+    queryFn: () => askListAccess(queries, namespaces),
     enabled: isConnected && Boolean(currentContext),
     staleTime: REVIEW_FRESH_MS,
     // A cluster that cannot answer leaves every row unmarked, which is the
@@ -77,10 +119,11 @@ export function useResourceAccess(queries: ListQuery[]): Map<string, boolean> {
 
   // `null` is "could not ask", and has to stay out: a row drawn as refused
   // because the review failed says something untrue about the reader.
-  return new Map(
-    (data ?? []).flatMap((entry) =>
-      entry.allowed === null ? [] : [[entry.resource, entry.allowed]]
-    )
+  return perKind(
+    queries.flatMap((query) => {
+      const allowed = data?.get(query);
+      return allowed == null ? [] : [[query, allowed] as const];
+    })
   );
 }
 
@@ -121,43 +164,47 @@ function useNameableNamespaces(): string[] {
 }
 
 /**
- * What each kind's answer was in the namespaces the app can name. Keyed by
- * plural; a kind nobody could ask about has no entry, which is unasked.
+ * What each kind's answer was in the namespaces the app can name. A kind
+ * nobody could ask about has no entry, which is unasked.
  */
-function useReadableIn(queries: ListQuery[]): Map<string, Reach> {
+function useReadableIn(queries: ListQuery[]): PerKind<Reach> {
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
   const namespaces = useNameableNamespaces();
-  const asked = queries.map((query) => query.resource).sort();
   const rights = useRightsAsked();
 
   const { data } = useQuery({
-    queryKey: ["list-access-in", currentContext, namespaces, asked, rights],
+    queryKey: queryKeys.listAccess(
+      "where",
+      currentContext,
+      namespaces,
+      queries,
+      rights
+    ),
     queryFn: async () => {
       const answers = await Promise.all(
         namespaces.map((namespace) =>
-          commands
-            .checkListAccess(queries, [namespace])
+          askListAccess(queries, [namespace])
+            .catch(() => NO_ANSWERS)
             .then((each) => ({ namespace, each }))
-            .catch(() => ({ namespace, each: [] }))
         )
       );
-      return new Map(
-        queries.map(({ resource }) => {
+      return perKind(
+        queries.map((query) => {
           const said = answers.map(({ namespace, each }) => ({
             namespace,
-            allowed: each.find((a) => a.resource === resource)?.allowed ?? null,
+            allowed: each.get(query) ?? null,
           }));
           const where = (allowed: boolean) =>
             said.filter((a) => a.allowed === allowed).map((a) => a.namespace);
           return [
-            resource,
+            query,
             {
               readableIn: where(true),
               refusedIn: where(false),
               unasked: said.some((a) => a.allowed === null),
             },
-          ];
+          ] as const;
         })
       );
     },
@@ -169,32 +216,28 @@ function useReadableIn(queries: ListQuery[]): Map<string, Reach> {
     staleTime: REVIEW_FRESH_MS,
     retry: false,
   });
-  return data ?? NONE_READABLE;
+  return data ?? NO_ANSWERS;
 }
 
-const NONE_READABLE = new Map<string, Reach>();
-
-/** The lock on each refused kind, keyed by plural; an allowed or unasked kind has none. */
-export function useLocks(queries: ListQuery[]): Map<string, Lock> {
+/** The lock on each refused kind; an allowed or unasked kind has none. */
+export function useLocks(queries: ListQuery[]): PerKind<Lock> {
   const allowed = useResourceAccess(queries);
   const everywhere = useClusterStore((s) => s.namespaceScope.length === 0);
   const acrossCluster = everywhere
     ? queries.filter(
-        (query) => query.namespaced && allowed.get(query.resource) === false
+        (query) => query.namespaced && allowed.get(query) === false
       )
     : [];
   const readable = useReadableIn(acrossCluster);
-  const locks = new Map<string, Lock>();
-  for (const query of queries) {
-    if (allowed.get(query.resource) !== false) continue;
-    locks.set(
-      query.resource,
-      acrossCluster.includes(query)
-        ? { says: "clusterWide", ...(readable.get(query.resource) ?? UNASKED) }
-        : { says: "refused" }
-    );
-  }
-  return locks;
+  return perKind(
+    queries.flatMap((query) => {
+      if (allowed.get(query) !== false) return [];
+      const lock: Lock = acrossCluster.includes(query)
+        ? { says: "clusterWide", ...(readable.get(query) ?? UNASKED) }
+        : { says: "refused" };
+      return [[query, lock] as const];
+    })
+  );
 }
 
 /** {@link useLocks} for the kinds the registry holds. */
@@ -204,7 +247,7 @@ export function useListLocks(
   const locks = useLocks(kinds.map(listQueryFor));
   const byKind: Partial<Record<ResourceKind, Lock>> = {};
   for (const kind of kinds) {
-    const lock = locks.get(listQueryFor(kind).resource);
+    const lock = locks.get(listQueryFor(kind));
     if (lock) byKind[kind] = lock;
   }
   return byKind;
@@ -212,11 +255,8 @@ export function useListLocks(
 
 /** Where a kind refused across the cluster can be listed instead, and where it was refused too, for a list page. */
 export function useListableIn(query: ListQuery | null): Reach {
-  return (
-    useReadableIn(query?.namespaced ? [query] : []).get(
-      query?.resource ?? ""
-    ) ?? UNASKED
-  );
+  const readable = useReadableIn(query?.namespaced ? [query] : []);
+  return (query && readable.get(query)) ?? UNASKED;
 }
 
 /** Refused across the cluster and in every namespace asked: no namespace the app knows of may still answer. */

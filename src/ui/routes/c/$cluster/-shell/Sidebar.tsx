@@ -397,7 +397,7 @@ export function Sidebar({
                       item.kind
                         ? locks[item.kind]
                         : item.query
-                          ? servedLocks.get(item.query.resource)
+                          ? servedLocks.get(item.query)
                           : undefined
                     }
                   />

@@ -20,6 +20,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { forgetRefusals } from "@/lib/refusals";
 import { queryKeys } from "@/lib/query-keys";
 import { listSegment, ResourceType } from "@/lib/resource-registry";
+import { listAccessOf } from "@/test/list-access";
 import { renderWithRouter, testQueryClient } from "@/test/render";
 
 import type {
@@ -874,11 +875,9 @@ describe("the Access group", () => {
    * the access rows stop asking the authorizer, or ask without their group.
    */
   it("locks the access row the authorizer refuses, and only that one", async () => {
-    checkListAccess.mockResolvedValue([
-      { resource: "clusterroles", allowed: false },
-      { resource: "roles", allowed: true },
-      { resource: "rolebindings", allowed: null },
-    ]);
+    checkListAccess.mockImplementation(
+      listAccessOf({ clusterroles: false, roles: true, rolebindings: null })
+    );
     await wrap(<Sidebar />);
     const locked = await screen.findByRole("link", { name: /ClusterRoles/ });
     await waitFor(() =>
@@ -905,17 +904,13 @@ describe("the Access group", () => {
    * its five-minute review held the lock beside a list that now reads.
    */
   it("lifts a lock once the reader asks a refused read again and the authorizer now allows it", async () => {
-    checkListAccess.mockResolvedValue([
-      { resource: "clusterroles", allowed: false },
-    ]);
+    checkListAccess.mockImplementation(listAccessOf({ clusterroles: false }));
     await wrap(<Sidebar />);
     const row = await screen.findByRole("link", { name: /ClusterRoles/ });
     await waitFor(() =>
       expect(within(row).getByLabelText(/permission to list/)).toBeVisible()
     );
-    checkListAccess.mockResolvedValue([
-      { resource: "clusterroles", allowed: true },
-    ]);
+    checkListAccess.mockImplementation(listAccessOf({ clusterroles: true }));
     act(() => forgetRefusals());
     await waitFor(() =>
       expect(within(row).queryByLabelText(/permission to list/)).toBeNull()
@@ -1132,9 +1127,7 @@ describe("the Integrations category", () => {
       { id: "flux", installed: true, version: "v2.3.0" },
     ]);
     // The authorizer refuses the flux page's primary list.
-    checkListAccess.mockResolvedValue([
-      { resource: "kustomizations", allowed: false },
-    ]);
+    checkListAccess.mockImplementation(listAccessOf({ kustomizations: false }));
 
     await wrap(<Sidebar />);
 
@@ -1157,9 +1150,7 @@ describe("the Integrations category", () => {
     detectInClusterExtensions.mockResolvedValue([
       { id: "cert-manager", installed: true, version: "v1.15.0" },
     ]);
-    checkListAccess.mockResolvedValue([
-      { resource: "certificates", allowed: false },
-    ]);
+    checkListAccess.mockImplementation(listAccessOf({ certificates: false }));
 
     await wrap(<Sidebar />);
 
@@ -1177,6 +1168,50 @@ describe("the Integrations category", () => {
   });
 
   /**
+   * Traefik is served under two groups that share a plural. Both answers
+   * were filed under `ingressroutes`, so the refusal of the group this
+   * cluster does not serve locked a page whose list is allowed.
+   */
+  it("leaves a vendor open when one of its two same-plural groups may be listed", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "traefik", installed: true, version: "v3.0.0" },
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    checkListAccess.mockImplementation(
+      async (queries: { group: string; resource: string }[]) =>
+        queries.map((query) => ({
+          resource: query.resource,
+          allowed: query.group === "traefik.io",
+        }))
+    );
+
+    await wrap(<Sidebar />);
+
+    // Flux is refused in the same review, so its lock says the answers are in.
+    expect(
+      await screen.findByLabelText(/permission to list Flux/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/permission to list Traefik/i)).toBeNull();
+  });
+
+  /** A vendor row's lock is an answer about rights like any other row's. */
+  it("lifts a vendor's lock once the reader asks a refused read again and it is now allowed", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    checkListAccess.mockImplementation(listAccessOf({ kustomizations: false }));
+    await wrap(<Sidebar />);
+    expect(
+      await screen.findByLabelText(/permission to list Flux/i)
+    ).toBeInTheDocument();
+    checkListAccess.mockImplementation(listAccessOf({ kustomizations: true }));
+    act(() => forgetRefusals());
+    await waitFor(() =>
+      expect(screen.queryByLabelText(/permission to list Flux/i)).toBeNull()
+    );
+  });
+
+  /**
    * The other side of the three states: allowed, or could-not-ask, must never
    * draw the lock. Fails if `forbidden` were set from anything but a firm
    * `allowed === false`.
@@ -1185,9 +1220,7 @@ describe("the Integrations category", () => {
     detectInClusterExtensions.mockResolvedValue([
       { id: "flux", installed: true, version: "v2.3.0" },
     ]);
-    checkListAccess.mockResolvedValue([
-      { resource: "kustomizations", allowed: true },
-    ]);
+    checkListAccess.mockImplementation(listAccessOf({ kustomizations: true }));
 
     await wrap(<Sidebar />);
 
@@ -1206,9 +1239,7 @@ describe("the Integrations category", () => {
     detectInClusterExtensions.mockResolvedValue([
       { id: "flux", installed: true, version: "v2.3.0" },
     ]);
-    checkListAccess.mockResolvedValue([
-      { resource: "kustomizations", allowed: true },
-    ]);
+    checkListAccess.mockImplementation(listAccessOf({ kustomizations: true }));
 
     await wrap(<Sidebar />);
 
@@ -1523,10 +1554,9 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
     });
     listGateways.mockResolvedValue([]);
     listGatewayRoutes.mockResolvedValue([routeIn("team-a")]);
-    checkListAccess.mockResolvedValue([
-      { resource: "httproutes", allowed: true },
-      { resource: "gateways", allowed: true },
-    ]);
+    checkListAccess.mockImplementation(
+      listAccessOf({ httproutes: true, gateways: true })
+    );
 
     await wrap(<Sidebar />);
 

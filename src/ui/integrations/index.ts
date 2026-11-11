@@ -37,9 +37,12 @@ import {
 } from "react";
 import type { LucideIcon } from "lucide-react";
 
+import type { ListQuery } from "@/generated/types";
+import { askListAccess } from "@/hooks/useListAccess";
 import { commands } from "@/lib/commands";
 import { pageLink, vendorLink, type AppLink } from "@/lib/links";
 import { queryKeys } from "@/lib/query-keys";
+import { useRightsAsked } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   forwardsFor,
@@ -978,52 +981,47 @@ export function useIntegrationPages(): {
       page: VendorPage & { gate: Gate };
     } => vendor.page?.gate != null
   );
-  const gateIds = (vendor: (typeof gated)[number]): string[] => {
-    const crd = vendor.page.gate.crd;
-    return typeof crd === "string" ? [crd] : [...crd];
-  };
-  const gateQueries = gated.flatMap((vendor) =>
-    gateIds(vendor).map((id) => {
+  // One question per spelling of the gate, kept to look its answer up with.
+  const gatesOf = (vendor: (typeof gated)[number]): ListQuery[] => {
+    const { crd, namespaced } = vendor.page.gate;
+    return (typeof crd === "string" ? [crd] : crd).map((id) => {
       const dot = id.indexOf(".");
       return {
         group: id.slice(dot + 1),
         resource: id.slice(0, dot),
-        namespaced: vendor.page.gate.namespaced,
+        namespaced,
       };
-    })
-  );
+    });
+  };
+  const gates = gated.map((vendor) => ({
+    id: vendor.id,
+    asks: gatesOf(vendor),
+  }));
+  const gateQueries = gates.flatMap((gate) => gate.asks);
+  const rights = useRightsAsked();
   // Asked at the cluster scope, whatever namespaces are picked: every vendor
   // page lists its objects across the cluster, so a reader allowed only in
   // their own namespaces opens a page that is refused.
   const { data: gateAnswers } = useQuery({
-    queryKey: [
-      "integration-access",
-      context,
-      gateQueries.map((q) => q.resource).sort(),
-    ],
-    queryFn: () => commands.checkListAccess(gateQueries, []),
+    queryKey: queryKeys.listAccess("vendors", context, [], gateQueries, rights),
+    queryFn: () => askListAccess(gateQueries, []),
     enabled: isConnected && Boolean(context) && gateQueries.length > 0,
     staleTime: 5 * 60 * 1000,
     // A cluster that cannot answer leaves every row as it was — the state the
     // app has always been in — rather than spending requests to hear it again.
     retry: false,
   });
-  // Plural resource -> allowed; null/undefined both mean "could not ask".
-  const allowedByResource = new Map(
-    (gateAnswers ?? []).map((answer) => [answer.resource, answer.allowed])
-  );
   // Forbidden only when EVERY spelling of the gate was answered `false`. A
   // could-not-ask (null), or any spelling allowed, leaves the row open — so a
   // failed review never renders as a refusal.
   const forbidden = new Set(
-    gated
-      .filter((vendor) => {
-        const answers = gateIds(vendor).map((id) =>
-          allowedByResource.get(id.slice(0, id.indexOf(".")))
-        );
-        return answers.length > 0 && answers.every((a) => a === false);
-      })
-      .map((vendor) => vendor.id)
+    gates
+      .filter(
+        (gate) =>
+          gate.asks.length > 0 &&
+          gate.asks.every((ask) => gateAnswers?.get(ask) === false)
+      )
+      .map((gate) => gate.id)
   );
 
   const pages = here.map((vendor): IntegrationPageEntry => {
