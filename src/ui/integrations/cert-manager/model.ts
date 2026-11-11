@@ -173,6 +173,16 @@ export function requestStep(
   };
 }
 
+/**
+ * Whether the last attempt failed. cert-manager then leaves Issuing=False
+ * with the request's reason, through a backoff of up to 32 hours. A success
+ * removes the condition, or under server-side apply leaves it False with
+ * the reason `Issued`.
+ */
+export function attemptFailed(issuing: Said): boolean {
+  return issuing?.status === "False" && issuing.reason !== "Issued";
+}
+
 /** An ACME Order or Challenge `state` the chain calls a failure. */
 export function acmeFailed(state: string): boolean {
   return state === "invalid" || state === "errored" || state === "expired";
@@ -219,6 +229,7 @@ function walk(
 ): { steps: CertStep[]; failure: string | null } {
   const issuing = conditionOf(certificate, "Issuing");
   const ready = conditionOf(certificate, "Ready");
+  const lastFailed = attemptFailed(issuing);
 
   const steps: CertStep[] = [
     {
@@ -228,12 +239,15 @@ function walk(
       crd: CERTIFICATES_CRD,
       state: stateOf(issuing, "pending"),
       note: issuing?.message ?? null,
-      failed: false,
+      failed: lastFailed,
     },
   ];
   // Ready=True keeps "Certificate is up to date" for the whole of a renewal:
-  // not a sentence about what failed.
-  let deepest = ready?.status === "True" ? null : (ready?.message ?? null);
+  // not a sentence about what failed. A failed attempt's own is.
+  let deepest =
+    (lastFailed ? issuing?.message : null) ??
+    (ready?.status === "True" ? null : ready?.message) ??
+    null;
 
   const request = newest(
     requests.filter((item) => ownedBy(item, certificate.uid))
@@ -399,9 +413,10 @@ export function certificateRows(
       const isReady = conditionSays(ready);
       const inFlight = issuing?.status === "True" || isReady === false;
 
-      const walked = inFlight
-        ? walk(certificate, requests, orders, challenges)
-        : { steps: [], failure: null };
+      const walked =
+        inFlight || attemptFailed(issuing)
+          ? walk(certificate, requests, orders, challenges)
+          : { steps: [], failure: null };
       const steps = walked.steps;
       // A renewal under way writes sentences too, and they are progress:
       // one is a failure only where something has failed.

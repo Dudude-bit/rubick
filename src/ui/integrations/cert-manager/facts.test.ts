@@ -155,6 +155,35 @@ describe("cert-manager facts", () => {
   });
 
   /**
+   * A failed renewal leaves Ready=True and Issuing=False with the request's
+   * reason, through a backoff of hours. The line counted by Ready alone and
+   * said nothing, beside a page row in red. Fails if the failed attempt is
+   * not counted, or if a finished one (`Issued`) is.
+   */
+  it("counts a renewal cert-manager marked failed while the old certificate serves", async () => {
+    const serving = certificate({ notAfter: inDays(60) });
+    const withIssuing = (reason: string): CustomResourceInfo => ({
+      ...serving,
+      status: {
+        ...(serving.status as object),
+        conditions: [
+          { type: "Ready", status: "True" },
+          { type: "Issuing", status: "False", reason },
+        ],
+      },
+    });
+    listed([withIssuing("Failed")]);
+    expect((await facts()).map(said)).toContainEqual({
+      words: "1 renewal failing",
+      tone: "err",
+    });
+
+    listed([withIssuing("Issued")]);
+    const healthy = (await facts()).map(said);
+    expect(healthy.filter((line) => line.tone === "err")).toEqual([]);
+  });
+
+  /**
    * A certificate cert-manager never wrote a plan for still deserves the
    * plain expiry sentence — silence would need a reason nobody has given.
    */

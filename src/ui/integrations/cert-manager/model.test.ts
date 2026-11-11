@@ -52,6 +52,8 @@ function certificate(over: {
   renewalTime?: string;
   readyMessage?: string;
   attempts?: number;
+  /** Issuing=False, as the issuing controller leaves it after an attempt. */
+  attempt?: { reason: string; message: string };
 }): CustomResourceInfo {
   const conditions: Array<Record<string, string>> = [];
   if (over.ready !== undefined) {
@@ -64,6 +66,9 @@ function certificate(over: {
   }
   if (over.issuing) {
     conditions.push({ type: "Issuing", status: "True", reason: "Renewing" });
+  }
+  if (over.attempt) {
+    conditions.push({ type: "Issuing", status: "False", ...over.attempt });
   }
   return resource({
     name: over.name ?? "web-cert",
@@ -485,6 +490,191 @@ describe("a renewal under way", () => {
     );
     expect(mute.state.text).toBe("renewal failing");
     expect(mute.failure).toBeNull();
+  });
+});
+
+describe("a renewal cert-manager has marked failed", () => {
+  const RETRIED =
+    "The certificate request has failed to complete and will be retried: ";
+  const failedAttempt = () =>
+    certificate({
+      uid: "cert-f",
+      ready: true,
+      readyMessage: "Certificate is up to date and has not expired",
+      notAfter: inDays(60),
+      attempts: 2,
+      attempt: { reason: "Failed", message: `${RETRIED}order is invalid` },
+    });
+
+  /**
+   * When a request fails, cert-manager sets Issuing=False with the request's
+   * reason and backs off for up to 32 hours, Ready still True. The row
+   * walked only while Issuing was True, so for that whole wait it read as
+   * fine. Fails if the walk or the verdict stops at Issuing=True again.
+   */
+  it("is failing through the backoff, in the failed request's words", () => {
+    const request = ownedBy("cert-f", {
+      uid: "req-f",
+      kind: "CertificateRequest",
+      name: "web-cert-3",
+      status: {
+        conditions: [
+          {
+            type: "Ready",
+            status: "False",
+            reason: "Failed",
+            message: "Failed to wait for order resource to become ready",
+          },
+        ],
+      },
+    });
+    const [row] = certificateRows([failedAttempt()], [request], [], [], t);
+    expect(row.state).toEqual({ text: "renewal failing", tone: "err" });
+    expect(
+      row.steps.map((step) => [step.kind, step.state, step.failed])
+    ).toEqual([
+      ["Certificate", "Failed", true],
+      ["CertificateRequest", "Failed", true],
+    ]);
+    expect(row.failure).toBe(
+      "Failed to wait for order resource to become ready"
+    );
+    expect(worstCertificateTone([failedAttempt()])).toBe("err");
+  });
+
+  /** With the request gone or unread, the Certificate's own sentence is the failure. */
+  it("quotes Issuing's own sentence where no request is left to walk", () => {
+    const [row] = certificateRows([failedAttempt()], [], [], [], t);
+    expect(row.state).toEqual({ text: "renewal failing", tone: "err" });
+    expect(row.failure).toBe(`${RETRIED}order is invalid`);
+  });
+
+  /**
+   * A success removes Issuing; under cert-manager's server-side apply it is
+   * left False with reason `Issued`. Fails if that reads as a failed attempt
+   * and a healthy certificate turns red.
+   */
+  it("is not failing where Issuing=False says Issued", () => {
+    const [row] = certificateRows(
+      [
+        certificate({
+          ready: true,
+          notAfter: inDays(60),
+          attempt: {
+            reason: "Issued",
+            message: "The certificate has been successfully issued",
+          },
+        }),
+      ],
+      [],
+      [],
+      [],
+      t
+    );
+    expect(row.state.tone).toBe("ok");
+    expect(row.steps).toEqual([]);
+    expect(row.failure).toBeNull();
+  });
+});
+
+describe("a step that failed under a certificate still Ready", () => {
+  const renewing = () =>
+    certificate({
+      uid: "cert-s",
+      ready: true,
+      issuing: true,
+      notAfter: inDays(60),
+      readyMessage: "Certificate is up to date and has not expired",
+    });
+  const pending = ownedBy("cert-s", {
+    uid: "req-s",
+    kind: "CertificateRequest",
+    name: "web-cert-4",
+    status: {
+      conditions: [
+        {
+          type: "Ready",
+          status: "False",
+          reason: "Pending",
+          message: "Waiting on certificate issuance from order",
+        },
+      ],
+    },
+  });
+  const order = (state: string, reason?: string) =>
+    ownedBy("req-s", {
+      uid: "order-s",
+      kind: "Order",
+      name: "web-cert-4-1",
+      status: { state, ...(reason && { reason }) },
+    });
+
+  /**
+   * An approver's "no" is written as a `Denied` condition, before any Ready.
+   * Fails if a denied request under a serving certificate reads as a
+   * renewal still under way.
+   */
+  it("is failing once an approver denied the request", () => {
+    const denied = ownedBy("cert-s", {
+      uid: "req-d",
+      kind: "CertificateRequest",
+      name: "web-cert-4",
+      status: {
+        conditions: [
+          {
+            type: "Denied",
+            status: "True",
+            reason: "policy.cert-manager.io",
+            message: "No policy approved this request",
+          },
+        ],
+      },
+    });
+    const [row] = certificateRows([renewing()], [denied], [], [], t);
+    expect(row.state).toEqual({ text: "renewal failing", tone: "err" });
+    expect(row.steps[1].failed).toBe(true);
+    expect(row.failure).toBe("No policy approved this request");
+  });
+
+  /** ACME's own error states, one level down each: `invalid`, `errored`, `expired`. */
+  it("is failing once the Order or a Challenge is in an error state", () => {
+    const [byOrder] = certificateRows(
+      [renewing()],
+      [pending],
+      [order("invalid", "Failed to finalize Order: 403 urn:ietf:params:acme")],
+      [],
+      t
+    );
+    expect(byOrder.state).toEqual({ text: "renewal failing", tone: "err" });
+    expect(byOrder.failure).toContain("Failed to finalize Order");
+
+    const challenge = ownedBy("order-s", {
+      uid: "chal-s",
+      kind: "Challenge",
+      name: "web-cert-4-1-0",
+      spec: { type: "DNS-01", dnsName: "shop.example.com" },
+      status: { state: "errored", reason: "DNS record not yet propagated" },
+    });
+    const [byChallenge] = certificateRows(
+      [renewing()],
+      [pending],
+      [order("pending")],
+      [challenge],
+      t
+    );
+    expect(byChallenge.state).toEqual({ text: "renewal failing", tone: "err" });
+    expect(byChallenge.failure).toBe("DNS record not yet propagated");
+
+    // And the same walk with nothing in an error state is still a renewal.
+    const [waiting] = certificateRows(
+      [renewing()],
+      [pending],
+      [order("pending")],
+      [{ ...challenge, status: { state: "pending" } }],
+      t
+    );
+    expect(waiting.state).toEqual({ text: "renewing", tone: "warn" });
+    expect(waiting.failure).toBeNull();
   });
 });
 
