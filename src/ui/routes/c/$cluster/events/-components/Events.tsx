@@ -16,6 +16,7 @@ import {
 } from "@tanstack/react-query";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useWatchedList } from "@/hooks/useWatchedList";
+import type { Keep, Kept } from "@/hooks/useResourceWatch";
 
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
@@ -96,7 +97,7 @@ import {
   useDisplaySettingsStore,
   type EventsView,
 } from "@/stores/displaySettingsStore";
-import type { EventFilters, EventInfo, Scoped } from "@/generated/types";
+import type { EventFilters, EventInfo } from "@/generated/types";
 import { eventsUidIn } from "@/hooks/useReadUid";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -112,6 +113,17 @@ const TYPE_FILTERS: Array<{
 ];
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
+
+/**
+ * What the feed's watch keeps under a limit: the latest of each type, as
+ * many as the largest limit asks for, so any limit and either type is
+ * answered from it. A scope's events are the cluster's largest collection.
+ */
+const EVENTS_KEPT: Keep<EventInfo> = {
+  rows: Math.max(...LIMITS.flatMap((limit) => Number(limit) || [])),
+  of: (event) => event.type,
+};
+const NONE_CUT: readonly string[] = [];
 
 type EventType = "Warning" | "Normal";
 
@@ -317,14 +329,15 @@ export function Events() {
   const limit = eventLimit === "all" ? null : Number(eventLimit);
   const several = scope.several;
 
-  // Every event of the scope, kept by a watch: the first read arrives in the
-  // watch's own batches, each under the IPC target, and after that only what
-  // changed crosses. The type and the limit cut it here, so changing either
-  // asks the cluster nothing.
+  // The scope's latest events of each type, kept by a watch: the first read
+  // arrives in the watch's own batches, each under the IPC target, and after
+  // that only what changed crosses. The type and the limit cut it here, so
+  // changing either asks the cluster nothing. Only "no limit" keeps them all.
   const cacheKey = useMemo(() => scopeCacheKey(scope.scope), [scope.scope]);
+  const whole = limit === null;
   const watchKey = useMemo(
-    () => [...queryKeys.events(cacheKey), "watch"],
-    [cacheKey]
+    () => queryKeys.eventsWatch(cacheKey, whole),
+    [cacheKey, whole]
   );
   const subscribe = useCallback(
     () => commands.subscribeEventWatch(scope.wire),
@@ -337,6 +350,7 @@ export function Events() {
     detail: NO_DETAIL,
     reportFailure: toPlural(ResourceType.Event),
     order: newerEvent,
+    keep: whole ? undefined : EVENTS_KEPT,
     // The overview counts events too, and re-reading it on every one of them
     // would cost more than the feed saves.
     recount: false,
@@ -346,7 +360,7 @@ export function Events() {
   const client = useQueryClient();
   const sampled =
     view === "stories" && client.getQueryData(watchKey) !== undefined;
-  const streamed = useLiveQuery<Scoped<EventInfo>>({
+  const streamed = useLiveQuery<Kept<EventInfo>>({
     queryKey: watchKey,
     queryFn: skipToken,
     enabled: false,
@@ -415,6 +429,7 @@ export function Events() {
     [watching, several, answers, single.data]
   );
   const kept = streamed.data?.rows;
+  const cut = streamed.data?.cut ?? NONE_CUT;
   // A watch that failed leaves its rows on screen until a poll answers.
   const fromWatch = watching || (polled === undefined && kept !== undefined);
   // The read can fail, and until now nothing here asked. An empty feed then
@@ -444,11 +459,17 @@ export function Events() {
     const all = kept ?? [];
     const typed =
       eventType === "all" ? all : all.filter((e) => e.type === eventType);
-    const others = all.length - typed.length;
+    // Counted only where the watch kept every row the filter leaves out.
+    const others = cut.some((type) => type !== eventType)
+      ? null
+      : all.length - typed.length;
+    // Older rows of what is on screen were not kept: these are its latest.
+    const short =
+      eventType === "all" ? cut.length > 0 : cut.includes(eventType);
     return limit !== null && typed.length > limit
       ? { pool: typed.slice(0, limit), windowFull: true, others }
-      : { pool: typed, windowFull: false, others };
-  }, [refused, fromWatch, polled, kept, eventType, limit]);
+      : { pool: typed, windowFull: short, others };
+  }, [refused, fromWatch, polled, kept, cut, eventType, limit]);
   // No event of any type is the quiet scope, filter or not.
   const typeEmptied =
     eventType === "all" || others === 0

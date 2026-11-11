@@ -218,10 +218,10 @@ afterEach(() => {
 });
 
 describe("a feed a watch keeps", () => {
-  const WATCH_KEY = [...queryKeys.events(null), "watch"];
-  const rowsOf = (client: { getQueryData: (key: unknown[]) => unknown }) =>
-    (client.getQueryData(WATCH_KEY) as { rows: EventInfo[] } | undefined)
-      ?.rows ?? [];
+  const WATCH_KEY = queryKeys.eventsWatch(null, false);
+  type Feed = { getQueryData: (key: unknown[]) => unknown };
+  const rowsOf = (client: Feed, key: unknown[] = WATCH_KEY) =>
+    (client.getQueryData(key) as { rows: EventInfo[] } | undefined)?.rows ?? [];
 
   beforeEach(() => {
     subscribeEventWatch.mockReset();
@@ -924,6 +924,45 @@ describe("a feed a watch keeps", () => {
       vi.useRealTimers();
     }
   });
+
+  const warning = (index: number): EventInfo => ({
+    ...dated("kube-system", index),
+    type: "Warning",
+    reason: "BackOff",
+  });
+
+  /**
+   * To show its latest 500 the page kept every event of the scope: tens of
+   * thousands of rows in the window's heap on a busy cluster, each batch
+   * working through all of them. Fails if the feed holds more of a type than
+   * its largest limit, if it stops saying its rows are the latest, or if it
+   * counts what the type filter hides out of rows it did not keep.
+   */
+  it("keeps the latest 2 000 of each type of a scope that has more", async () => {
+    layOutRows();
+    const { client } = await watched();
+    burst([
+      ...Array.from({ length: 2600 }, (_, index) => dated("prod", index)),
+      ...Array.from({ length: 5 }, (_, index) => warning(index)),
+    ]);
+
+    expect(
+      await screen.findByText(
+        "5 warning events · 495 normal events · of the latest 500"
+      )
+    ).toBeInTheDocument();
+    const held = rowsOf(client);
+    expect(held.filter((row) => row.type === "Normal")).toHaveLength(2000);
+    expect(held.filter((row) => row.type === "Warning")).toHaveLength(5);
+    expect(held.at(-1)?.name).toBe("prod-1999");
+
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+    expect(
+      await screen.findByText(
+        "5 warning events · the type filter leaves the rest out"
+      )
+    ).toBeInTheDocument();
+  }, 30_000);
 
   /** Fails if choosing Warnings asks the cluster again rather than cutting what the watch holds. */
   it("narrows to warnings without asking the cluster again", async () => {
@@ -2015,6 +2054,67 @@ describe("a feed beside a peek", () => {
       screen.getByRole("button", { name: "Feed settings: Warnings" })
     ).toBeInTheDocument();
   });
+
+  /**
+   * "No limit" asks for every event of the scope, which the latest 2 000 of
+   * each type cannot answer. Fails if choosing it leaves the feed cut to
+   * what the limited watch kept, or reads it from that watch's entry.
+   */
+  it("keeps every event of the scope once no limit is chosen", async () => {
+    pageOf(300);
+    subscribeEventWatch.mockReset();
+    subscribeEventWatch.mockResolvedValue("events-1");
+    const { client } = await mount("list");
+    const held = (whole: boolean) =>
+      client.getQueryData<{ rows: EventInfo[] }>(
+        queryKeys.eventsWatch(null, whole)
+      )?.rows.length;
+    const rows = Array.from({ length: 2100 }, (_, index) =>
+      dated("prod", index)
+    );
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledTimes(1)
+    );
+    burst(rows);
+    expect(held(false)).toBe(2000);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Feed settings" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "No limit" }));
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledTimes(2)
+    );
+    burst(rows);
+    expect(held(true)).toBe(2100);
+    expect(held(false)).toBe(2000);
+  }, 30_000);
+
+  /**
+   * A feed showing exactly its limit's rows said nothing was left out, though
+   * the watch had kept that many of a scope with more. Fails if rows the
+   * watch dropped stop counting as rows the limit left unread.
+   */
+  it("says its rows are the latest where the watch kept no more than the limit shows", async () => {
+    pageOf(300);
+    subscribeEventWatch.mockReset();
+    subscribeEventWatch.mockResolvedValue("events-1");
+    await mount("stories");
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Feed settings" })
+    );
+    await user.click(
+      screen.getByRole("menuitemradio", { name: /^Latest 2\s000$/ })
+    );
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledTimes(1)
+    );
+    burst(Array.from({ length: 2600 }, (_, index) => dated("prod", index)));
+
+    expect(
+      await screen.findByTitle(/ · of the latest 2\s000$/)
+    ).toBeInTheDocument();
+  }, 30_000);
 
   /**
    * With Warnings and a limit the button's words took a row of their own and

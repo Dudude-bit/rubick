@@ -37,6 +37,7 @@ import { useShellCounts, type ShellCounts } from "./useShellCounts";
 import { useWindowCluster } from "./useWindowCluster";
 import { useAppSearchValue } from "@/hooks/useSearchParam";
 import { useListFollowed, useListLive } from "@/hooks/useWatchedList";
+import type { Kept } from "@/hooks/useResourceWatch";
 import { useReadAt } from "@/hooks/useReadUid";
 import { useRoutesBoard } from "@/hooks/useRoutesBoard";
 import { useIntegrationPages } from "@/integrations";
@@ -76,7 +77,6 @@ import type {
   ListQuery,
   PartialCount,
   ResourceCounts,
-  Scoped,
 } from "@/generated/types";
 import { errorWords } from "@/i18n/say";
 import { useT, type T as Translate } from "@/i18n/useT";
@@ -972,24 +972,29 @@ function AttentionCount({
   );
 }
 
-/** The Events row: while the Events page's watch is live, its count is what that watch holds, so the row follows as the page does. */
+/** The Events row: while the Events page's watch is live and holds every event of the scope, its count is what that watch holds, so the row follows as the page does. */
 function EventsNavCount(props: {
   item: NavItem;
   counts: ShellCounts;
   missing?: ScopeMissing;
 }) {
+  const latest = useEventsHeld(false);
+  const whole = useEventsHeld(true);
+  return <NavCount {...props} watched={whole ?? latest} />;
+}
+
+/** How many events the page's live watch holds, where it left none of the scope's out: a feed cut to its latest is not a count. */
+function useEventsHeld(whole: boolean): number | undefined {
   const scope = useClusterStore((s) => s.namespaceScope);
   const key = useMemo(
-    () => [...queryKeys.events(scopeCacheKey(scope)), "watch"],
-    [scope]
+    () => queryKeys.eventsWatch(scopeCacheKey(scope), whole),
+    [scope, whole]
   );
   const live = useListLive(key);
-  const held = useReadAt(key, (state) =>
-    live
-      ? (state?.data as Scoped<EventInfo> | undefined)?.rows.length
-      : undefined
-  );
-  return <NavCount {...props} watched={held} />;
+  return useReadAt(key, (state) => {
+    const held = state?.data as Kept<EventInfo> | undefined;
+    return live && held && !held.cut?.length ? held.rows.length : undefined;
+  });
 }
 
 /**

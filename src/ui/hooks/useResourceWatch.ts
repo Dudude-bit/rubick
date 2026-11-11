@@ -57,6 +57,12 @@ interface UseResourceWatchOptions<T> {
    * Without one, rows keep the API's order, namespace then name.
    */
   order?: (a: T, b: T) => boolean;
+  /**
+   * The most rows a list in an order of its own holds; see {@link Keep}. The
+   * rest are dropped as they arrive, and the entry's `cut` names the classes
+   * that lost any.
+   */
+  keep?: Keep<T>;
   /** Whether a list growing or shrinking re-reads the overview's counts. */
   recount?: boolean;
   /**
@@ -71,6 +77,17 @@ interface UseResourceWatchOptions<T> {
   /** How long a burst of changes settles before `detail` is read again. */
   settleMs?: number;
 }
+
+/** What a list in an order of its own holds at most. */
+export interface Keep<T> {
+  /** The most rows of one class: its first in the list's order. */
+  rows: number;
+  /** The class a row is counted in. */
+  of: (row: T) => string;
+}
+
+/** A watched list's entry; `cut` is the classes whose rows past `keep` were dropped. */
+export type Kept<T> = Scoped<T> & { cut?: readonly string[] };
 
 export interface ResourceWatchState {
   /**
@@ -101,6 +118,7 @@ export function useResourceWatch<
   onError,
   onRecovered,
   order,
+  keep,
   recount = true,
   behind = false,
   onChange,
@@ -120,6 +138,7 @@ export function useResourceWatch<
   const detailRef = useRef(detail);
   const tRef = useRef(t);
   const orderRef = useRef(order);
+  const keepRef = useRef(keep);
   const recountRef = useRef(recount);
   const behindRef = useRef(behind);
   const onChangeRef = useRef(onChange);
@@ -130,6 +149,7 @@ export function useResourceWatch<
     detailRef.current = detail;
     tRef.current = t;
     orderRef.current = order;
+    keepRef.current = keep;
     recountRef.current = recount;
     behindRef.current = behind;
     onChangeRef.current = onChange;
@@ -140,6 +160,7 @@ export function useResourceWatch<
     detail,
     t,
     order,
+    keep,
     recount,
     behind,
     onChange,
@@ -160,13 +181,14 @@ export function useResourceWatch<
       failedFor.current = queryKey;
     };
     // The rows a resync has delivered so far, held here rather than in
-    // the cache until the backend says the burst is complete.
-    let staged: Map<string, T> | null = null;
+    // the cache until the backend says the burst is complete: by key as
+    // they arrive, or in the list's own order and within what it keeps.
+    let staged: Map<string, T> | Ledger<T> | null = null;
     // When the list in flight was asked for: the gate's release for the
     // first, the marker for a resync. A read of a row's own object that
     // answered before it can miss a change the list carries.
     let listedFrom = 0;
-    const positions = new Map<string, number>();
+    const held = new Map<string, Slot<T>>();
     let indexedList: T[] | undefined;
 
     // Give up on a resync that can no longer complete. What was staged is
@@ -240,10 +262,15 @@ export function useResourceWatch<
           // Live changes accumulate and land as one cache write, so a
           // batch is one render no matter how many objects moved.
           let live: Array<ResourceChange<T>> = [];
+          let burst: Array<ResourceChange<T>> = [];
+          const stageBurst = () => {
+            if (staged) stage(staged, burst, orderRef.current, keepRef.current);
+            burst = [];
+          };
           for (const change of payload.changes) {
             if (change.op === "restarted") {
               listedFrom ||= Date.now();
-              staged = new Map();
+              staged = orderRef.current ? ledger() : new Map();
               // A watch that is failing announces every attempt; saying
               // "resyncing" each time claims progress on a stream that is
               // not making any. The failure is what the reader is shown.
@@ -251,36 +278,39 @@ export function useResourceWatch<
               // The resync's list is the whole truth; anything from
               // before it is about to be superseded.
               live = [];
+              burst = [];
               continue;
             }
             if (change.op === "synced") {
-              const rows = staged;
+              stageBurst();
+              const done = staged;
               staged = null;
               setResyncing(false);
-              if (rows) {
+              if (done) {
+                const rows =
+                  done instanceof Map ? [...done.values()] : done.rows;
                 const before =
                   queryClient.getQueryData<Scoped<T>>(queryKey)?.rows.length;
                 if (
                   recountRef.current &&
                   before !== undefined &&
-                  before !== rows.size
+                  before !== rows.length
                 )
                   readSoon(queryClient, queryKeys.everyOverview(), COUNTS_MS);
-                const ranked = orderRef.current;
                 // Synced is every namespace of the stream answering, so
                 // nothing in the scope is unread any more.
-                queryClient.setQueryData<Scoped<T>>(queryKey, {
-                  rows: ranked
-                    ? [...rows.values()].sort(compareBy(ranked))
-                    : [...rows.values()],
+                queryClient.setQueryData<Kept<T>>(queryKey, {
+                  rows,
                   unread: [],
+                  ...(keepRef.current &&
+                    !(done instanceof Map) && { cut: [...done.cut].sort() }),
                 });
-                positions.clear();
+                held.clear();
                 indexedList = undefined;
                 if (behindRef.current)
                   readBehind(
                     queryClient,
-                    rows.values(),
+                    rows,
                     detailRef.current,
                     listedFrom,
                     settleRef.current
@@ -289,34 +319,45 @@ export function useResourceWatch<
               }
               continue;
             }
-            if (staged) {
-              stage(staged, change);
-            } else {
-              live.push(change);
-            }
+            if (staged) burst.push(change);
+            else live.push(change);
           }
+          stageBurst();
 
           if (live.length > 0) {
             const changes = live;
             let recounted = false;
-            const stored = queryClient.setQueryData<Scoped<T>>(
+            const stored = queryClient.setQueryData<Kept<T>>(
               queryKey,
               (prev) => {
                 if (prev?.rows !== indexedList) {
-                  positions.clear();
-                  prev?.rows.forEach((item, index) =>
-                    positions.set(identify(item), index)
+                  held.clear();
+                  prev?.rows.forEach((row, at) =>
+                    held.set(identify(row), { row, at })
                   );
                 }
+                const keep = keepRef.current;
+                const cut = new Set(prev?.cut);
                 const rows = applyChanges(
                   prev?.rows ?? [],
                   changes,
-                  positions,
-                  orderRef.current
+                  held,
+                  orderRef.current,
+                  keep,
+                  cut
                 );
                 if (prev && rows === prev.rows) return prev;
                 recounted = rows.length !== (prev?.rows.length ?? 0);
-                return watched({ rows, unread: prev?.unread ?? [] });
+                return watched({
+                  rows,
+                  unread: prev?.unread ?? [],
+                  ...(keep && {
+                    cut:
+                      prev?.cut?.length === cut.size
+                        ? prev.cut
+                        : [...cut].sort(),
+                  }),
+                });
               }
             );
             indexedList = stored?.rows;
@@ -480,7 +521,7 @@ function readAgain<T>(
  */
 function readBehind<T>(
   client: QueryClient,
-  rows: Iterable<T>,
+  rows: readonly T[],
   detail: ((row: T) => readonly QueryKey[]) | undefined,
   listedFrom: number,
   settleMs: number
@@ -498,34 +539,62 @@ function readBehind<T>(
 }
 
 /** Name plus namespace, which is what identifies a row in a list. */
-function identify<T extends { name: string; namespace?: string | null }>(
-  item: T
-): string {
+function identify(item: Row): string {
   return `${item.namespace ?? ""}\0${item.name}`;
 }
 
-function stage<T extends { name: string; namespace?: string | null }>(
-  rows: Map<string, T>,
-  change: ResourceChange<T>
+/** A row as a list identifies it. */
+type Row = { name: string; namespace?: string | null };
+
+/** A cached row and where it was last found in its list: a hint, checked before it is used. */
+interface Slot<T> {
+  row: T;
+  at: number;
+}
+
+/** A list kept in its own order as it arrives: its rows, where each is, and the classes that lost rows to `keep`. */
+interface Ledger<T> {
+  rows: T[];
+  held: Map<string, Slot<T>>;
+  cut: Set<string>;
+}
+
+const ledger = <T>(): Ledger<T> => ({
+  rows: [],
+  held: new Map(),
+  cut: new Set(),
+});
+
+function stage<T extends Row>(
+  staged: Map<string, T> | Ledger<T>,
+  changes: Array<ResourceChange<T>>,
+  order: ((a: T, b: T) => boolean) | undefined,
+  keep: Keep<T> | undefined
 ) {
-  const incoming = change.resource;
-  if (!incoming) return;
-  if (change.op === "deleted") rows.delete(identify(incoming));
-  else rows.set(identify(incoming), incoming);
+  if (!(staged instanceof Map)) {
+    staged.rows = applyChanges(
+      staged.rows,
+      changes,
+      staged.held,
+      order,
+      keep,
+      staged.cut
+    );
+    return;
+  }
+  for (const change of changes) {
+    const incoming = change.resource;
+    if (!incoming) continue;
+    if (change.op === "deleted") staged.delete(identify(incoming));
+    else staged.set(identify(incoming), incoming);
+  }
 }
 
 /** The order a list arrives in: by namespace, then by name, as the API keys it. */
-function before<T extends { name: string; namespace?: string | null }>(
-  a: T,
-  b: T
-): boolean {
+function before<T extends Row>(a: T, b: T): boolean {
   const left = a.namespace ?? "";
   const right = b.namespace ?? "";
   return left === right ? a.name < b.name : left < right;
-}
-
-function compareBy<T>(order: (a: T, b: T) => boolean) {
-  return (a: T, b: T) => (order(a, b) ? -1 : order(b, a) ? 1 : 0);
 }
 
 /** Where a new row goes in a list kept in `order`, found in O(log N) reads. */
@@ -544,63 +613,128 @@ function sortedIndex<T>(
   return low;
 }
 
-// Lookup and replacement touch only changes; immutable publication, an
-// insert's shift and ordered deletion still copy O(N) array slots. A new row
-// goes where the list would have put it, not at the end, and a row whose
-// change moves it in a list of its own order leaves its old place for that.
-function applyChanges<T extends { name: string; namespace?: string | null }>(
+/**
+ * Where the row under `key` is in `list`: its hint, else its sorted place,
+ * else a scan. Told by its key, since a cache that shares structure hands
+ * back a copy of the row it was given.
+ */
+function locate<T extends Row>(
+  list: T[],
+  key: string,
+  slot: Slot<T>,
+  place: (a: T, b: T) => boolean
+): number {
+  const there = (at: number) =>
+    at >= 0 && at < list.length && identify(list[at]) === key;
+  if (!there(slot.at)) {
+    const at = sortedIndex(list, slot.row, place);
+    slot.at = there(at) ? at : list.findIndex((row) => identify(row) === key);
+  }
+  if (slot.at >= 0) slot.row = list[slot.at];
+  return slot.at;
+}
+
+/** `rows` without what is past `keep` in each class; what goes is forgotten and its class noted. */
+function trimmed<T extends Row>(
+  rows: T[],
+  held: Map<string, Slot<T>>,
+  keep: Keep<T>,
+  lost: Set<string> | undefined
+): T[] {
+  if (rows.length <= keep.rows) return rows;
+  const counts = new Map<string, number>();
+  let kept: T[] | undefined;
+  rows.forEach((row, at) => {
+    const of = keep.of(row);
+    const nth = (counts.get(of) ?? 0) + 1;
+    counts.set(of, nth);
+    if (nth <= keep.rows) {
+      kept?.push(row);
+      return;
+    }
+    kept ??= rows.slice(0, at);
+    held.delete(identify(row));
+    lost?.add(of);
+  });
+  return kept ?? rows;
+}
+
+/**
+ * `list` after `changes`. Each row touched is found through `held`, which is
+ * written once per row touched and never per row of the list; an insert, a
+ * delete or a move then costs one copy of the array for the whole batch. A
+ * new row goes where the list would have put it, not at the end, and a row
+ * whose change moves it in a list of its own order leaves its old place.
+ */
+export function applyChanges<T extends Row>(
   list: T[],
   changes: Array<ResourceChange<T>>,
-  positions: Map<string, number>,
-  order?: (a: T, b: T) => boolean
+  held: Map<string, Slot<T>>,
+  order?: (a: T, b: T) => boolean,
+  keep?: Keep<T>,
+  lost?: Set<string>
 ): T[] {
+  const place = order ?? before;
+  // The last change to a row is the one that stands.
+  const finals = new Map<string, T | null>();
+  for (const { op, resource } of changes)
+    if (resource)
+      finals.set(identify(resource), op === "deleted" ? null : resource);
+
   let next: T[] | undefined;
-  let deleted = false;
-  for (const change of changes) {
-    const incoming = change.resource;
-    if (!incoming) continue;
-    const key = identify(incoming);
-    let index = positions.get(key);
-    if (change.op === "deleted") {
-      if (index === undefined) continue;
-      positions.delete(key);
-      deleted = true;
+  const leaving: number[] = [];
+  const arriving: Array<Slot<T>> = [];
+  for (const [key, row] of finals) {
+    const slot = held.get(key);
+    const at = slot ? locate(list, key, slot, place) : -1;
+    if (!slot || at < 0) {
+      if (row) {
+        const fresh = { row, at: -1 };
+        held.set(key, fresh);
+        arriving.push(fresh);
+      } else held.delete(key);
+      continue;
+    }
+    if (row === slot.row) continue;
+    if (row === null) {
+      held.delete(key);
+      leaving.push(at);
+      continue;
+    }
+    const moved = order && (order(slot.row, row) || order(row, slot.row));
+    slot.row = row;
+    if (moved) {
+      leaving.push(at);
+      arriving.push(slot);
     } else {
-      const held = index === undefined ? undefined : (next ?? list)[index];
-      if (held === incoming) continue;
-      if (
-        order &&
-        held !== undefined &&
-        (order(held, incoming) || order(incoming, held))
-      ) {
-        positions.delete(key);
-        deleted = true;
-        index = undefined;
-      }
       next ??= list.slice();
-      if (index === undefined) {
-        const at = sortedIndex(next, incoming, order ?? before);
-        next.splice(at, 0, incoming);
-        for (const [other, position] of positions)
-          if (position >= at) positions.set(other, position + 1);
-        positions.set(key, at);
-      } else {
-        next[index] = incoming;
-      }
+      next[at] = row;
     }
   }
-  if (deleted) {
-    const rows = next ?? list;
-    const slots: Array<string | undefined> = new Array(rows.length);
-    for (const [key, index] of positions) slots[index] = key;
-    const kept: T[] = [];
-    for (let index = 0; index < slots.length; index++) {
-      const key = slots[index];
-      if (key === undefined) continue;
-      positions.set(key, kept.length);
-      kept.push(rows[index]);
+  if (leaving.length === 0 && arriving.length === 0) return next ?? list;
+
+  const from = next ?? list;
+  // The batch's own rows are put in order, never the list.
+  if (leaving.length > 1) leaving.sort((a, b) => a - b);
+  const coming = arriving.map((slot) => ({
+    slot,
+    before: sortedIndex(list, slot.row, place),
+  }));
+  if (coming.length > 1)
+    coming.sort(
+      (a, b) => a.before - b.before || (place(a.slot.row, b.slot.row) ? -1 : 1)
+    );
+  const rows: T[] = [];
+  let gone = 0;
+  let come = 0;
+  for (let at = 0; at <= from.length; at++) {
+    for (; come < coming.length && coming[come].before === at; come++) {
+      coming[come].slot.at = rows.length;
+      rows.push(coming[come].slot.row);
     }
-    next = kept;
+    if (at === from.length) break;
+    if (leaving[gone] === at) gone++;
+    else rows.push(from[at]);
   }
-  return next ?? list;
+  return keep && arriving.length > 0 ? trimmed(rows, held, keep, lost) : rows;
 }

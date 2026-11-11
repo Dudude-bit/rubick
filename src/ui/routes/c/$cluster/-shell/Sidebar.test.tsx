@@ -508,12 +508,13 @@ describe("how old a row's count is", () => {
     const covers =
       "Every Event object the cluster still keeps, whatever its age, as All events lists them. Stories count only their own window.";
     const client = testQueryClient();
-    const key = [...queryKeys.events(null), "watch"];
+    const key = queryKeys.eventsWatch(null, false);
     client.setQueryData(key, {
       rows: Array.from({ length: 14 }, (_, i) => ({
         name: `e${i}`,
       })) as EventInfo[],
       unread: [],
+      cut: [],
     });
     pageFeeds.add(JSON.stringify(key));
     const live = await renderWithRouter(<Sidebar />, {
@@ -537,6 +538,47 @@ describe("how old a row's count is", () => {
       "title",
       `Counted at 15:03:41, and again at least every 30 s.\n${covers}`
     );
+  });
+
+  /**
+   * The row's count is how many events the page's watch holds, and under a
+   * limit that watch keeps only the latest of a busy scope. Fails if a feed
+   * that left events out is printed as how many the scope has, or if the
+   * feed that keeps them all stops being followed.
+   */
+  it("counts Events from the overview where the page's watch left some out", async () => {
+    read.at = AT;
+    overview = {
+      ...overviewWithPods(41),
+      counts: { pods: 41, events: 13 } as ClusterOverview["counts"],
+      servedFrom: "list",
+    };
+    const rows = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ name: `e${i}` })) as EventInfo[];
+    const client = testQueryClient();
+    const latest = queryKeys.eventsWatch(null, false);
+    client.setQueryData(latest, { rows: rows(9), unread: [], cut: ["Normal"] });
+    pageFeeds.add(JSON.stringify(latest));
+    const cut = await renderWithRouter(<Sidebar />, {
+      client,
+      at: "/c/prod",
+      route: "/c/$cluster/$",
+    });
+    const polled = await counted("Events");
+    expect(polled).toHaveTextContent("13");
+    expect(polled.getAttribute("title")).toContain("Counted at 15:03:41");
+    cut.unmount();
+
+    const whole = queryKeys.eventsWatch(null, true);
+    client.setQueryData(whole, { rows: rows(14), unread: [] });
+    pageFeeds.clear();
+    pageFeeds.add(JSON.stringify(whole));
+    await renderWithRouter(<Sidebar />, {
+      client,
+      at: "/c/prod",
+      route: "/c/$cluster/$",
+    });
+    expect(await counted("Events")).toHaveTextContent("14");
   });
 
   /**

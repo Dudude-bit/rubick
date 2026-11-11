@@ -44,7 +44,12 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
-import { useResourceWatch } from "./useResourceWatch";
+import {
+  applyChanges,
+  useResourceWatch,
+  type Keep,
+  type Kept,
+} from "./useResourceWatch";
 import { testQueryClient } from "@/test/render";
 import { queryKeys } from "@/lib/query-keys";
 import { useWindowActivity } from "@/lib/window-activity";
@@ -987,6 +992,194 @@ describe("useResourceWatch", () => {
     emit("stream-cm-1", "synced", null);
     await new Promise((r) => setTimeout(r, 20));
     expect(rowsIn(client)!.map((i) => i.name)).toEqual(["a"]);
+  });
+
+  /**
+   * The API's own order is not this one where a namespace's name starts
+   * another's, so a row's sorted place is not always where it is. Fails if a
+   * row an insert moved is then looked for only where the order would put
+   * it: its update lands as a second row and its delete removes nothing.
+   */
+  it("finds a row an insert moved in a list that is not in its own order", async () => {
+    const client = new QueryClient();
+    seed(client, [
+      { name: "x", namespace: "app-staging" },
+      { name: "y", namespace: "app-staging" },
+      { name: "a", namespace: "app" },
+      { name: "b", namespace: "app" },
+    ]);
+    await start(client);
+    emit("stream-cm-1", "applied", { name: "z", namespace: "aaa" });
+    emitBatch("stream-cm-1", [
+      { op: "applied", resource: { name: "b", namespace: "app", data: 1 } },
+      { op: "deleted", resource: { name: "a", namespace: "app" } },
+    ]);
+    const rows = rowsIn(client)!;
+    expect(rows.map((row) => `${row.namespace}/${row.name}`).sort()).toEqual([
+      "aaa/z",
+      "app-staging/x",
+      "app-staging/y",
+      "app/b",
+    ]);
+    expect(rows.find((row) => row.name === "b")?.data).toBe(1);
+  });
+
+  /**
+   * Dana's Events page stalled on a busy cluster: each event that happened
+   * again rewrote the place of every row under it, so a batch cost its
+   * changes times the list. Fails if a batch writes where rows are more than
+   * once per row it touches, or touches the record of any other row.
+   */
+  it("writes where a row is once per row a batch touches, however long the list", () => {
+    class Counted<K, V> extends Map<K, V> {
+      writes = 0;
+      set(key: K, value: V) {
+        this.writes++;
+        return super.set(key, value);
+      }
+    }
+    const rows: Item[] = Array.from({ length: 10_000 }, (_, index) => ({
+      name: `e-${index}`,
+      data: 10_000 - index,
+    }));
+    const moved = Array.from({ length: 20 }, (_, index) => index * 499 + 7);
+    const held = new Counted<string, { row: Item; at: number }>(
+      rows.map((row, at) => {
+        const slot = { row, at };
+        // A write to the record of a row the batch does not touch throws.
+        return [
+          `\0${row.name}`,
+          moved.includes(at) ? slot : Object.freeze(slot),
+        ];
+      })
+    );
+    held.writes = 0;
+
+    const next = applyChanges(
+      rows,
+      moved.map((at, index) => ({
+        op: "applied" as const,
+        resource: { name: `e-${at}`, data: 20_000 + index },
+      })),
+      held,
+      newest
+    );
+
+    expect(held.writes).toBeLessThanOrEqual(moved.length);
+    expect(next).toHaveLength(10_000);
+    expect(next.slice(0, 20).map((row) => row.name)).toEqual(
+      moved.map((at) => `e-${at}`).reverse()
+    );
+    const untouched = rows.filter((_, at) => !moved.includes(at));
+    expect(next.slice(20).every((row, at) => row === untouched[at])).toBe(true);
+  });
+
+  describe("a list kept to its first rows", () => {
+    const KEEP: Keep<Item> = { rows: 50, of: (row) => row.namespace ?? "" };
+    const loud = (data: number): Item => ({
+      name: `loud-${String(data).padStart(4, "0")}`,
+      namespace: "loud",
+      data,
+    });
+    const quiet = (data: number): Item => ({
+      name: `quiet-${data}`,
+      namespace: "quiet",
+      data,
+    });
+    const entry = (client: QueryClient) =>
+      client.getQueryData<Kept<Item>>(KEY)!;
+    const dataOf = (client: QueryClient, namespace: string) =>
+      entry(client)
+        .rows.filter((row) => row.namespace === namespace)
+        .map((row) => row.data);
+
+    async function startKept(client: QueryClient) {
+      renderHook(
+        () =>
+          useResourceWatch<Item>({
+            enabled: true,
+            subscribe: subscribeMock,
+            queryKey: KEY,
+            order: newest,
+            keep: KEEP,
+          }),
+        { wrapper: makeWrapper(client) }
+      );
+      await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    }
+
+    /** A first read as the backend sends it: the API's order, two hundred to a batch. */
+    function burst(rows: Item[]) {
+      const changes: Array<{ op: Op; resource: Item | null }> = [
+        { op: "restarted", resource: null },
+        ...rows.map((resource) => ({ op: "applied" as const, resource })),
+        { op: "synced", resource: null },
+      ];
+      for (let at = 0; at < changes.length; at += 200)
+        emitBatch("stream-cm-1", changes.slice(at, at + 200));
+    }
+
+    /**
+     * The Events page held every event of its scope to show the latest 500.
+     * Fails if a first read leaves more than the kept number of a class in
+     * the cache, keeps any but the first of that class, or stops naming the
+     * class it left rows out of.
+     */
+    it("holds the first rows of each class of a first read and names the class it cut", async () => {
+      const client = new QueryClient();
+      await startKept(client);
+      burst([
+        ...Array.from({ length: 1000 }, (_, index) => loud(index + 1)),
+        ...Array.from({ length: 30 }, (_, index) => quiet(index + 1)),
+      ]);
+
+      expect(entry(client).rows).toHaveLength(80);
+      expect(dataOf(client, "loud")).toEqual(
+        Array.from({ length: 50 }, (_, index) => 1000 - index)
+      );
+      expect(dataOf(client, "quiet")).toHaveLength(30);
+      expect(entry(client).cut).toEqual(["loud"]);
+    });
+
+    /**
+     * Fails if a live change grows a kept list past its number, if a row
+     * that comes to stand first is left out, or if a class that loses a row
+     * only now is not named.
+     */
+    it("stays within its number as rows arrive, move up and go", async () => {
+      const client = new QueryClient();
+      await startKept(client);
+      burst([
+        ...Array.from({ length: 50 }, (_, index) => loud(index + 1)),
+        quiet(1),
+      ]);
+      expect(entry(client).cut).toEqual([]);
+
+      emit("stream-cm-1", "applied", loud(51));
+      expect(dataOf(client, "loud")).toHaveLength(50);
+      expect(dataOf(client, "loud")[0]).toBe(51);
+      expect(dataOf(client, "loud").at(-1)).toBe(2);
+      expect(entry(client).cut).toEqual(["loud"]);
+
+      // The row it dropped happens again: first now, and the last one goes.
+      emitBatch("stream-cm-1", [
+        { op: "applied", resource: { ...loud(1), data: 60 } },
+        { op: "applied", resource: quiet(2) },
+      ]);
+      expect(dataOf(client, "loud").slice(0, 2)).toEqual([60, 51]);
+      expect(dataOf(client, "loud")).toHaveLength(50);
+      expect(dataOf(client, "loud").at(-1)).toBe(3);
+      expect(dataOf(client, "quiet")).toEqual([2, 1]);
+
+      // A row past the number changes or goes: nothing held moves.
+      const before = entry(client).rows;
+      emit("stream-cm-1", "deleted", loud(2));
+      expect(entry(client).rows).toBe(before);
+
+      emit("stream-cm-1", "deleted", { ...loud(1), data: 60 });
+      expect(dataOf(client, "loud")).toHaveLength(49);
+      expect(entry(client).cut).toEqual(["loud"]);
+    });
   });
 
   it("calls unsubscribeResourceWatch on unmount", async () => {
