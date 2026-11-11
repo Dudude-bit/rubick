@@ -317,6 +317,7 @@ export function LogViewer({
     dropped,
     frozenLines,
     isStreaming,
+    previousRead,
     isConnecting,
     isPaused,
     failures,
@@ -1203,7 +1204,9 @@ export function LogViewer({
           reading={readingOfFailure(failure)}
           podName={lanes ? failure.pod : podName}
           container={infoOfFailure(failure)}
-          intake={intake.length > 0}
+          // A lane attached again reads on from its last line; only the
+          // session-wide retry resumes from now.
+          intake={!lanes && intake.length > 0}
           previousRun={previousRun}
           onRetry={
             // One lane at a time where there are lanes: the session-wide
@@ -1274,7 +1277,10 @@ export function LogViewer({
       >
         <EmptyState
           failed={bannered.length > 0}
-          connecting={isConnecting}
+          connecting={
+            // A previous run is still arriving until its read says it ended.
+            isConnecting || (previousRun && !isPaused && previousRead === null)
+          }
           streaming={isStreaming}
           retained={retained}
           filtered={effectiveTerms.length > 0}
@@ -1285,7 +1291,7 @@ export function LogViewer({
           idle={idle}
           podsUnread={podsError}
           lanes={lanes}
-          previous={previousRun}
+          read={previousRead}
           onClearQuery={handleClearQuery}
           onShowAll={handleShowAllContainers}
         />

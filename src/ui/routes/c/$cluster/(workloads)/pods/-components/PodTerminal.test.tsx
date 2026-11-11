@@ -79,10 +79,13 @@ const closePane = () => pane.close?.();
 
 beforeEach(() => useKeptShellStore.setState({ shells: [] }));
 
+/** The reader asked: the pane may open its one shell. */
 const props = {
   podName: "log-demo-7f9",
   namespace: "default",
+  uid: "uid-log-demo",
   containerName: "app",
+  claim: () => true,
 };
 
 function fireFailure(kind: "gone" | "broken", message: string) {
@@ -246,6 +249,7 @@ describe("a shell the reader exited", () => {
       context: "",
       namespace: "default",
       pod: "log-demo-7f9",
+      uid: "uid-log-demo",
       container: "app",
     });
     heard("term-kept", "/srv/app # ls\r\nindex.html\r\n/srv/app # ");
@@ -270,12 +274,82 @@ describe("a shell the reader exited", () => {
       context: "",
       namespace: "default",
       pod: "log-demo-7f9",
+      uid: "uid-log-demo",
       container: "sidecar",
     });
 
     await renderConnected();
 
     expect(commands.openPodShell).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A StatefulSet pod comes back under its name as another pod. Fails if the
+   * pane takes the shell kept in the pod that was deleted for its own.
+   */
+  it("does not attach to a shell kept in an earlier pod of the same name", async () => {
+    useKeptShellStore.getState().keep({
+      id: "term-before",
+      tab: useScopeTabStore.getState().activeId,
+      context: "",
+      namespace: "default",
+      pod: "log-demo-7f9",
+      uid: "uid-deleted",
+      container: "app",
+    });
+
+    await renderConnected();
+
+    expect(commands.openPodShell).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * An exec is a change to the cluster, so the pane opens one only on an ask
+ * the reader made and nobody has spent: a pane that mounts again after its
+ * shell died, or beside a kept shell that has just gone, has none.
+ */
+describe("a pane with no ask left to spend", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  /** Fails if mounting is enough to open an exec, which is how one reopened in a restarted container. */
+  it("opens nothing and says the shell ended", async () => {
+    const onClose = vi.fn();
+    render(<PodTerminal {...props} claim={() => false} onClose={onClose} />);
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(commands.openPodShell).not.toHaveBeenCalled();
+  });
+
+  /** Fails if the pane asks twice for one shell, or opens before it asked. */
+  it("spends the ask once, for the one shell it opens", async () => {
+    const claim = vi.fn(() => true);
+    render(<PodTerminal {...props} claim={claim} />);
+
+    await waitFor(() => expect(commands.openPodShell).toHaveBeenCalledOnce());
+    expect(claim).toHaveBeenCalledOnce();
+  });
+
+  /** Fails if attaching to a kept shell spends an ask the reader made for another. */
+  it("leaves the ask alone when it attaches to a kept shell", async () => {
+    useKeptShellStore.getState().keep({
+      id: "term-kept",
+      tab: useScopeTabStore.getState().activeId,
+      context: "",
+      namespace: "default",
+      pod: "log-demo-7f9",
+      uid: "uid-log-demo",
+      container: "app",
+    });
+    const claim = vi.fn(() => true);
+    render(<PodTerminal {...props} claim={claim} />);
+    await act(async () => {});
+
+    expect(claim).not.toHaveBeenCalled();
+    expect(commands.openPodShell).not.toHaveBeenCalled();
   });
 
   /** Lena met the same shell as "Терминал" and "Оболочка". Fails if its × calls it anything but a shell. */

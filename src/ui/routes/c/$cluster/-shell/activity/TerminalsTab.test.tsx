@@ -119,6 +119,7 @@ describe("Activity's shells", () => {
       context: "acme-staging",
       namespace: "shop",
       pod: "cart-4f68h",
+      uid: "uid-cart",
       container: "app",
     });
     useTerminalSessionStore.setState({ sessions: [shell("cart-4f68h")] });

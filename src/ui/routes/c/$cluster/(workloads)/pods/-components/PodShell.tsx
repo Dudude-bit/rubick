@@ -6,6 +6,7 @@ import {
   PHASE_LABEL,
   containerSucceeded,
   podContainers,
+  shellTarget,
   shellTargets,
   whyNoShell,
 } from "@/lib/container-sequence";
@@ -348,28 +349,32 @@ function NoShellState({
 
 export interface PodShellProps {
   pod: PodInfo;
-  /** The container the reader chose, `null` for "whichever can take one". */
-  container: string | null;
-  /** The reader ended the shell; re-attaching to it on its own would be a loop, so it offers again. */
-  ended: boolean;
-  /** The reader asked for a shell on this page; arriving on the tab is not asking. */
-  started: boolean;
-  onStart: () => void;
+  /**
+   * The shell the reader asked for on this pod, in the container they asked
+   * for it in; `null` until they do. Arriving on the tab is not asking, and
+   * `ended` offers again: re-attaching on its own would be a loop.
+   */
+  asked: { container: string; ended: boolean } | null;
+  /** The container the address names for the offer. */
+  named: string | null;
+  onStart: (container: string) => void;
+  /** Spends the ask: the one exec the pane may open by itself. */
+  onClaim: () => boolean;
   onChoose: (container: string) => void;
   /** Opens the Logs tab on this container, on the run that failed. */
   onOpenLogs: (container: string) => void;
   onDebug: () => void;
-  onEnd: (container: string) => void;
+  onEnd: () => void;
   /** What the cluster's access review refuses this user on this pod. */
   denied?: PodDenied;
 }
 
 export function PodShell({
   pod,
-  container,
-  ended,
-  started,
+  asked,
+  named,
   onStart,
+  onClaim,
   onChoose,
   onOpenLogs,
   onDebug,
@@ -383,18 +388,15 @@ export function PodShell({
     [containers]
   );
 
-  // Phase order, so the shell that opens by itself is the reader's own
-  // container and a sidecar is only picked when nothing else can take one.
-  // The chooser above stays in run order — there, position is what explains
-  // a container that never got a turn.
+  // Phase order, so the shell on offer is the reader's own container and a
+  // sidecar is only offered when nothing else can take one. The chooser above
+  // stays in run order — there, position is what explains a container that
+  // never got a turn.
   const attachable = useMemo(() => shellTargets(pod), [pod]);
-  // A chosen container is kept even once it dies: the terminal's own banner
+  // The asked container is kept even once it dies: the terminal's own banner
   // says what happened to it, where quietly re-pointing at a sibling would
-  // hand the reader another container's prompt under the name they picked.
-  const chosen = container
-    ? (containers.find((c) => c.name === container) ?? null)
-    : null;
-  const target = chosen ?? attachable[0] ?? null;
+  // hand the reader another container's prompt under the name they asked for.
+  const target = asked?.container ?? shellTarget(pod, named);
 
   const hollow = attachable.length === 0 ? noShell(pod, t) : null;
 
@@ -409,7 +411,7 @@ export function PodShell({
         >
           {containers.map((c) => {
             const why = whyNoShell(c, t);
-            const selected = target?.name === c.name;
+            const selected = target === c.name;
             const phase = PHASE_LABEL[c.phase];
             return (
               <button
@@ -459,37 +461,32 @@ export function PodShell({
             {denied.shell}
           </p>
         </Hollow>
-      ) : target && (ended || !started) ? (
-        <StartOnAsk
-          icon={SquareTerminal}
-          headline={ended ? t("empty", "shellEnded") : t("empty", "shellWaits")}
-          body={
-            ended
-              ? t("empty", "shellEndedBody", {
-                  container: target.name,
-                  tab: t("columns", "shell"),
-                })
-              : t("empty", "shellWaitsBody", {
-                  container: target.name,
-                  tab: t("columns", "shell"),
-                })
-          }
-          action={t("action", "startShellIn", { container: target.name })}
-          onStart={onStart}
-        />
-      ) : target ? (
-        // Keyed by the container, because opening a session is the one thing
-        // `PodTerminal` does on mount: switching the chooser has to close the
-        // old shell and open a new one, not re-label the old one.
+      ) : asked && !asked.ended ? (
+        // Keyed by the pod and the container, because opening a session is
+        // the one thing `PodTerminal` does on mount: switching the chooser has
+        // to close the old shell and open a new one, not re-label the old one.
         <div className="min-h-0 flex-1">
           <PodTerminal
-            key={`${pod.namespace}/${pod.name}/${target.name}`}
+            key={`${pod.uid}/${asked.container}`}
             podName={pod.name}
             namespace={pod.namespace}
-            containerName={target.name}
-            onClose={() => onEnd(target.name)}
+            uid={pod.uid}
+            containerName={asked.container}
+            claim={onClaim}
+            onClose={onEnd}
           />
         </div>
+      ) : target ? (
+        <StartOnAsk
+          icon={SquareTerminal}
+          headline={asked ? t("empty", "shellEnded") : t("empty", "shellWaits")}
+          body={t("empty", asked ? "shellEndedBody" : "shellWaitsBody", {
+            container: target,
+            tab: t("columns", "shell"),
+          })}
+          action={t("action", "startShellIn", { container: target })}
+          onStart={() => onStart(target)}
+        />
       ) : (
         hollow && (
           <NoShellState

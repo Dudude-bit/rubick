@@ -151,6 +151,7 @@ describe("a link that arrives while the app is open", () => {
       context: "acme-staging",
       namespace: "shop",
       pod: "cart-4f68h",
+      uid: "uid-cart",
       container: "app",
     });
     const { router } = await renderWithRouter(<Window />, {

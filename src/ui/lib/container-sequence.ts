@@ -85,6 +85,9 @@ export type ReadinessContainer = Pick<
   "ready" | "started" | "phase" | "state"
 >;
 export type ReadinessLists = ContainerLists<ReadinessContainer>;
+/** What a shell is decided from; a list row's container carries all but the last exit. */
+export type ShellContainer = Pick<ContainerInfo, "name" | "phase" | "state"> &
+  Partial<Pick<ContainerInfo, "lastTerminated">>;
 /** A Deployment, StatefulSet, DaemonSet, Job or CronJob's pod template. */
 export type TemplateContainerLists = ContainerLists<DeploymentContainerInfo>;
 
@@ -180,7 +183,7 @@ const PHASE_ORDER: Record<ContainerPhase, number> = {
   init: 2,
 };
 
-function byPhase(a: ContainerInfo, b: ContainerInfo): number {
+function byPhase(a: Phased, b: Phased): number {
   return PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase];
 }
 
@@ -304,7 +307,7 @@ const NOT_STARTED = new Set([
  * answer to "why can I not shell into `prepare`" is a fact about
  * `prepare`, not an absence the reader has to interpret.
  */
-export function whyNoShell(container: ContainerInfo, t: T): string | null {
+export function whyNoShell(container: ShellContainer, t: T): string | null {
   const { state } = container;
   if (state.type === "running") return null;
   if (state.type === "terminated") {
@@ -332,11 +335,28 @@ export function whyNoShell(container: ContainerInfo, t: T): string | null {
  * the only shell in the pod worth having. The set is about what is alive
  * now, which is why it is `whyNoShell` that decides it and not `phase`.
  */
-export function shellTargets(pod: PodContainerLists): ContainerInfo[] {
+export function shellTargets<C extends ShellContainer>(
+  pod: ContainerLists<C>
+): C[] {
   // The reason is discarded — only its absence decides membership — so this
   // asks in no language rather than making every caller supply one.
   const noWords: T = () => "";
-  return offeredContainers(pod).filter((c) => whyNoShell(c, noWords) === null);
+  return declaredContainers(pod)
+    .sort(byPhase)
+    .filter((c) => whyNoShell(c, noWords) === null);
+}
+
+/**
+ * The container an ask with no container of its own means: the one the
+ * address names, else the first that can take a shell. Decided at the click,
+ * never later, so a shell does not follow the pod to whatever runs next.
+ */
+export function shellTarget(
+  pod: PodContainerLists,
+  named: string | null
+): string | null {
+  const known = named && podContainers(pod).some((c) => c.name === named);
+  return known ? named : (shellTargets(pod)[0]?.name ?? null);
 }
 
 /** "4s", from the two stamps the kubelet writes on a finished run. */

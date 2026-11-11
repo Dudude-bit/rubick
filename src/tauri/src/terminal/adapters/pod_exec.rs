@@ -21,11 +21,20 @@
 //! container runs. So the shell announces its pid first thing, and closing
 //! a session that is still running sends that pid a SIGHUP through a
 //! second exec, the signal a terminal hanging up would have sent.
+//!
+//! # Why a stream that ends is asked how
+//!
+//! A shell that exits is reported in a status frame, the last thing on the
+//! stream. A stream that closes without one was cut: a laptop that slept, a
+//! VPN that dropped, an apiserver that restarted. The shell is still in the
+//! container then, so that end is a failure the pane shows, and the shell is
+//! hung up like any other that is still running.
 
 use crate::error::{KubeErrorExt, Result};
 use crate::terminal::session::SessionTarget;
 use crate::terminal::TerminalAdapter;
 use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Status;
 use kube::{
     api::{Api, AttachParams, AttachedProcess, TerminalSize},
     Client,
@@ -44,6 +53,10 @@ const PID_MARK_WAIT: Duration = Duration::from_secs(5);
 const HANG_UP_WAIT: Duration = Duration::from_secs(5);
 /// How long the stream gets to report the shell's exit after the hang-up.
 const STREAM_END_WAIT: Duration = Duration::from_secs(3);
+/// A hang-up that did not reach the cluster is sent again after each of these.
+const HANG_UP_AGAIN: [Duration; 2] = [Duration::from_secs(5), Duration::from_secs(20)];
+/// The status frame comes before the stream closes, so this is slack.
+const STATUS_WAIT: Duration = Duration::from_millis(500);
 
 const PICK_SHELL: &str = "if command -v fish >/dev/null 2>&1; then exec fish; elif command -v zsh >/dev/null 2>&1; then exec zsh; elif command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi";
 
@@ -125,6 +138,63 @@ pub fn split_pid_mark(bytes: &[u8]) -> PidMark {
     PidMark::Found { pid, rest }
 }
 
+/// How an exec stream ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StreamEnd {
+    /// The server said the process exited.
+    Exited,
+    /// The stream closed and nothing said so: the connection was cut.
+    Dropped,
+}
+
+impl StreamEnd {
+    /// Read off the status the stream was to deliver before it closed.
+    /// `None` is a status somebody already took, which is no word of an exit.
+    async fn of(status: Option<impl std::future::Future<Output = Option<Status>>>) -> Self {
+        let Some(status) = status else {
+            return Self::Dropped;
+        };
+        match tokio::time::timeout(STATUS_WAIT, status).await {
+            Ok(Some(_)) => Self::Exited,
+            Ok(None) | Err(_) => Self::Dropped,
+        }
+    }
+
+    /// What a read at the end of the stream answers: an exit is the quiet
+    /// end of a session, a cut is a failure the reader is told about.
+    fn read(self) -> Result<Option<Vec<u8>>> {
+        match self {
+            Self::Exited => Ok(None),
+            Self::Dropped => Err(crate::error::Error::Terminal(
+                "the connection closed before the shell exited".to_string(),
+            )),
+        }
+    }
+}
+
+/// The shell to hang up on close: one that said its pid and has not exited.
+/// A stream that was cut leaves it running.
+fn to_hang_up(connected: bool, ended: Option<StreamEnd>, pid: Option<u32>) -> Option<u32> {
+    pid.filter(|_| connected && ended != Some(StreamEnd::Exited))
+}
+
+/// `attempt` now, and again after each wait, until one gets through.
+async fn until_reached<F>(waits: &[Duration], mut attempt: impl FnMut() -> F) -> bool
+where
+    F: std::future::Future<Output = bool>,
+{
+    if attempt().await {
+        return true;
+    }
+    for wait in waits {
+        tokio::time::sleep(*wait).await;
+        if attempt().await {
+            return true;
+        }
+    }
+    false
+}
+
 /// A fresh client for the hang-up, which may come an hour after the connect.
 pub type ClientSource = Box<dyn Fn() -> Option<Client> + Send + Sync>;
 
@@ -151,7 +221,7 @@ pub struct PodExecAdapter {
     pending: Vec<u8>,
     /// The shell's pid in the container, once it has said.
     pid: Option<u32>,
-    /// Whether the stream has ended.
+    /// How the stream ended, once it has.
     ///
     /// Separate from `attached`, because "a connection was made" and "it is
     /// over" are different questions and only one of them changes when the
@@ -161,7 +231,7 @@ pub struct PodExecAdapter {
     /// "still running" forever: the session task span on a 50ms tick, the
     /// entry stayed in the session map, and the pane went on drawing a
     /// terminal whose shell had exited.
-    finished: bool,
+    ended: Option<StreamEnd>,
 }
 
 impl PodExecAdapter {
@@ -187,7 +257,7 @@ impl PodExecAdapter {
             read_buf: vec![0u8; crate::terminal::session::TERMINAL_BUFFER_SIZE],
             pending: Vec::new(),
             pid: None,
-            finished: false,
+            ended: None,
         }
     }
 
@@ -198,14 +268,10 @@ impl PodExecAdapter {
         self
     }
 
-    /// The shell to hang up on close: one that is still running and said its pid.
+    /// The shell to hang up on close, if there is one.
     #[must_use]
     pub fn hang_up_pid(&self) -> Option<u32> {
-        if self.attached.is_some() && !self.finished {
-            self.pid
-        } else {
-            None
-        }
+        to_hang_up(self.attached.is_some(), self.ended, self.pid)
     }
 
     async fn read_pid_mark(&mut self) {
@@ -218,10 +284,8 @@ impl PodExecAdapter {
         loop {
             let read = tokio::time::timeout_at(deadline, stdout.read(&mut self.read_buf)).await;
             match read {
-                Ok(Ok(0)) => {
-                    self.finished = true;
-                    return;
-                }
+                // Over before it said a pid; the first read asks how.
+                Ok(Ok(0)) => return,
                 Ok(Ok(n)) => self.pending.extend_from_slice(&self.read_buf[..n]),
                 Ok(Err(_)) | Err(_) => break,
             }
@@ -242,7 +306,8 @@ impl PodExecAdapter {
         );
     }
 
-    async fn hang_up(&self, pid: u32) {
+    /// Whether the hang-up reached the cluster, whatever the cluster made of it.
+    async fn hang_up(&self, pid: u32) -> bool {
         use tokio::io::AsyncReadExt;
 
         let client = self
@@ -278,25 +343,35 @@ impl PodExecAdapter {
         })
         .await;
         match outcome {
-            Ok(Ok(Some(status))) if status.status.as_deref() == Some("Success") => {}
-            Ok(Ok(status)) => tracing::warn!(
-                "hanging up {}/{} pid {pid}: {:?}",
-                self.target.pod,
-                self.target.container,
-                status.and_then(|s| s.message)
-            ),
-            Ok(Err(error)) => tracing::warn!(
-                "could not hang up {}/{} pid {pid}: {}",
-                self.target.pod,
-                self.target.container,
-                error.display_clean()
-            ),
-            Err(_) => tracing::warn!(
-                "hanging up {}/{} pid {pid} took longer than {}s",
-                self.target.pod,
-                self.target.container,
-                HANG_UP_WAIT.as_secs()
-            ),
+            Ok(Ok(Some(status))) if status.status.as_deref() == Some("Success") => true,
+            Ok(Ok(status)) => {
+                let reached = status.is_some();
+                tracing::warn!(
+                    "hanging up {}/{} pid {pid}: {:?}",
+                    self.target.pod,
+                    self.target.container,
+                    status.and_then(|s| s.message)
+                );
+                reached
+            }
+            Ok(Err(error)) => {
+                tracing::warn!(
+                    "could not hang up {}/{} pid {pid}: {}",
+                    self.target.pod,
+                    self.target.container,
+                    error.display_clean()
+                );
+                false
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "hanging up {}/{} pid {pid} took longer than {}s",
+                    self.target.pod,
+                    self.target.container,
+                    HANG_UP_WAIT.as_secs()
+                );
+                false
+            }
         }
     }
 }
@@ -344,7 +419,7 @@ impl TerminalAdapter for PodExecAdapter {
         self.attached = Some(attached);
         // A reconnect is a new stream, and the old one having ended says
         // nothing about it.
-        self.finished = false;
+        self.ended = None;
         self.pid = None;
         self.pending.clear();
         self.read_pid_mark().await;
@@ -367,9 +442,18 @@ impl TerminalAdapter for PodExecAdapter {
             .await
             {
                 Ok(Ok(0)) => {
-                    // EOF: the shell exited or the container went away.
-                    self.finished = true;
-                    Ok(None)
+                    // EOF: the shell exited, or the connection was cut under it.
+                    let end = if let Some(end) = self.ended {
+                        end
+                    } else {
+                        let status = self
+                            .attached
+                            .as_mut()
+                            .and_then(AttachedProcess::take_status);
+                        StreamEnd::of(status).await
+                    };
+                    self.ended = Some(end);
+                    end.read()
                 }
                 Ok(Ok(n)) => {
                     // Data available (n > 0)
@@ -434,7 +518,14 @@ impl TerminalAdapter for PodExecAdapter {
     /// the shell's exit is what the stream reports last.
     async fn close(&mut self) -> Result<()> {
         if let Some(pid) = self.hang_up_pid() {
-            self.hang_up(pid).await;
+            let this = &*self;
+            if !until_reached(&HANG_UP_AGAIN, || this.hang_up(pid)).await {
+                tracing::warn!(
+                    "{}/{}: pid {pid} was not hung up and may still be running",
+                    self.target.pod,
+                    self.target.container
+                );
+            }
         }
         let ended = self
             .attached
@@ -451,7 +542,7 @@ impl TerminalAdapter for PodExecAdapter {
     }
 
     fn is_running(&self) -> bool {
-        self.attached.is_some() && !self.finished
+        self.attached.is_some() && self.ended.is_none()
     }
 
     fn target(&self) -> Option<SessionTarget> {
@@ -496,6 +587,80 @@ mod tests {
         let named = shell_command(Some("bash"), Some((80, 24)));
         assert!(named[2].ends_with("stty cols 80 rows 24 2>/dev/null; exec \"$0\""));
         assert!(!shell_command(None, None)[2].contains("stty"));
+    }
+
+    /// A laptop that slept left a pane saying "Ended" over a shell still in
+    /// the container: a stream that closed was taken for a shell that exited.
+    /// Only the server's status frame says the process is gone.
+    #[tokio::test]
+    async fn a_stream_that_closes_without_a_status_was_cut_and_is_not_an_exit() {
+        let exited = Status {
+            status: Some("Success".into()),
+            ..Status::default()
+        };
+        let said = StreamEnd::of(Some(std::future::ready(Some(exited)))).await;
+        let cut = StreamEnd::of(Some(std::future::ready(None))).await;
+        let taken = StreamEnd::of(None::<std::future::Ready<Option<Status>>>).await;
+
+        assert_eq!(said, StreamEnd::Exited);
+        assert_eq!(cut, StreamEnd::Dropped);
+        assert_eq!(taken, StreamEnd::Dropped);
+    }
+
+    /// A status that never comes is no word of an exit either, and the read
+    /// that asks must not wait on it forever.
+    #[tokio::test]
+    async fn a_status_that_never_arrives_is_not_waited_on() {
+        let never = std::future::pending::<Option<Status>>();
+        assert_eq!(StreamEnd::of(Some(never)).await, StreamEnd::Dropped);
+    }
+
+    /// The pane has to say the connection dropped, with a way to reconnect,
+    /// and say nothing but "Ended" for a shell that exited.
+    #[test]
+    fn a_cut_stream_is_a_failure_the_pane_can_retry_and_an_exit_is_not() {
+        use crate::state::StreamFailureKind;
+
+        assert!(matches!(StreamEnd::Exited.read(), Ok(None)));
+        let cut = StreamEnd::Dropped.read().expect_err("a cut is a failure");
+        assert_eq!(StreamFailureKind::classify(&cut), StreamFailureKind::Broken);
+    }
+
+    /// The shell whose stream was cut is the one left in the container, so
+    /// it is the one closing has to hang up; one that exited has no pid left.
+    #[test]
+    fn a_shell_whose_stream_was_cut_is_hung_up_and_one_that_exited_is_not() {
+        assert_eq!(
+            to_hang_up(true, Some(StreamEnd::Dropped), Some(45)),
+            Some(45)
+        );
+        assert_eq!(to_hang_up(true, None, Some(45)), Some(45));
+        assert_eq!(to_hang_up(true, Some(StreamEnd::Exited), Some(45)), None);
+        assert_eq!(to_hang_up(false, None, Some(45)), None);
+        assert_eq!(to_hang_up(true, Some(StreamEnd::Dropped), None), None);
+    }
+
+    /// A connection that dropped is usually still down when the hang-up is
+    /// first sent. Fails if one refusal is the end of it, or if a hang-up
+    /// that got through is sent again.
+    #[tokio::test]
+    async fn a_hang_up_that_did_not_get_through_is_sent_again_until_one_does() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let waits = [Duration::from_millis(1); 2];
+        let sends = |through_on: usize| async move {
+            let sent = AtomicUsize::new(0);
+            let reached = until_reached(&waits, || {
+                let nth = sent.fetch_add(1, Ordering::SeqCst) + 1;
+                async move { nth == through_on }
+            })
+            .await;
+            (reached, sent.load(Ordering::SeqCst))
+        };
+
+        assert_eq!(sends(1).await, (true, 1));
+        assert_eq!(sends(3).await, (true, 3));
+        assert_eq!(sends(usize::MAX).await, (false, 1 + waits.len()));
     }
 
     /// The hang-up is the signal a closed terminal sends, to that pid alone.

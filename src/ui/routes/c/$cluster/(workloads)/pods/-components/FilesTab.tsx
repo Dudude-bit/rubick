@@ -71,10 +71,19 @@ const UP_ROW_KEY = "\u0000up";
 /** One array, so an idle tab's memo is not invalidated by a fresh `[]`. */
 const NO_ENTRIES: FileEntry[] = [];
 
+/**
+ * A debug container read through, and the container whose root it shows:
+ * the one it was pointed at, whatever the tab had open when it was started.
+ */
+export interface ReadThrough {
+  via: Via;
+  of: string;
+}
+
 export interface FilesTabProps {
   pod: PodInfo;
   /** Reading through a debug container the page started for this tab. */
-  via: Via | null;
+  through: ReadThrough | null;
   onDebug: (container: string) => void;
   onStopVia: () => void;
   /** Why the cluster will not add a debug container for this user. */
@@ -90,7 +99,7 @@ export interface FilesTabProps {
  */
 export function FilesTab({
   pod,
-  via,
+  through,
   onDebug,
   onStopVia,
   debugDenied,
@@ -103,12 +112,20 @@ export function FilesTab({
   // the container the reader came to look at. The Shell tab asks the same
   // question and gets the same order.
   const containers = offeredContainers(pod);
-  const [containerName, setContainerName] = useState(
-    () =>
-      containers.find((c) => c.state.type === "running")?.name ??
-      containers[0]?.name ??
-      ""
-  );
+  // The container being read, and the run of it the reader asked to read. A
+  // restart makes the name a different container; the old rows stay, with a
+  // banner, and nothing is read in the new one until asked.
+  const via = through?.via ?? null;
+  const [reading, setReading] = useState(() => {
+    const first = through
+      ? containers.find((c) => c.name === through.of)
+      : (containers.find((c) => c.state.type === "running") ?? containers[0]);
+    return {
+      container: first?.name ?? "",
+      restarts: first?.restartCount ?? 0,
+    };
+  });
+  const containerName = reading.container;
   const container = containers.find((c) => c.name === containerName) ?? null;
   const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({
     key: "name",
@@ -118,23 +135,20 @@ export function FilesTab({
   const [selected, setSelected] = useState<string | null>(null);
   const [mountsOnly, setMountsOnly] = useState(false);
 
-  // The life a listing was taken from. A restart makes the current life a
-  // different container; the old rows stay, with a banner, until asked.
-  const currentLife = `${pod.uid}:${containerName}:${container?.restartCount ?? 0}`;
-  const [life, setLife] = useState(currentLife);
-  // Keying `life` by container name was half the fix. The other half is
-  // that a `life` belonging to a *different* container is not a restart of
-  // this one — it is a stale value from before the reader used the strip,
-  // and comparing it fired "app has restarted since this listing" about a
-  // container that had not restarted at all. Held rather than warned about.
-  const sameContainer = life.startsWith(`${pod.uid}:${containerName}:`);
-  const readingLife = sameContainer ? life : currentLife;
-  const restartedSinceRead = sameContainer && life !== currentLife;
+  const life = `${pod.uid}:${containerName}:${reading.restarts}`;
+  const restarts = container?.restartCount ?? 0;
+  const restartedSinceRead = reading.restarts !== restarts;
+  // Every click that reads asks of the container that is there now.
+  const readNow = useCallback(
+    () => setReading({ container: containerName, restarts }),
+    [containerName, restarts]
+  );
   const running = via !== null || container?.state.type === "running";
 
   // Where the container's own processes start is where its files make
   // sense; the first mount is usually the injected token directory.
-  const asksWorkingDir = running && via === null && container !== null;
+  const asksWorkingDir =
+    running && via === null && container !== null && !restartedSinceRead;
   const workingDir = useQuery({
     queryKey: queryKeys.containerWorkingDir(
       pod.namespace,
@@ -157,8 +171,11 @@ export function FilesTab({
   } | null>(null);
   const path = picked?.container === containerName ? picked.path : start;
   const setPath = useCallback(
-    (next: string) => setPicked({ container: containerName, path: next }),
-    [containerName]
+    (next: string) => {
+      setPicked({ container: containerName, path: next });
+      readNow();
+    },
+    [containerName, readNow]
   );
   const mounts = declaredMounts(pod.volumes, containerName);
 
@@ -171,25 +188,16 @@ export function FilesTab({
             container: container.name,
             path,
             via,
-            life: readingLife,
+            life,
           }
         : null,
-    [
-      container,
-      running,
-      mountsOnly,
-      pod.name,
-      pod.namespace,
-      path,
-      via,
-      readingLife,
-    ]
+    [container, running, mountsOnly, pod.name, pod.namespace, path, via, life]
   );
-  const { state, stop, reload } = useContainerFiles(target);
+  const { state, stop, reload } = useContainerFiles(target, restartedSinceRead);
 
   // Until this container has answered once, the tab has no path, columns or
   // names to show; a later directory keeps the bar it already earned.
-  const scope = `${readingLife}:${via?.container ?? ""}`;
+  const scope = `${life}:${via?.container ?? ""}`;
   const [answeredIn, setAnsweredIn] = useState<string | null>(null);
   const answered =
     state.phase === "done" ||
@@ -382,7 +390,7 @@ export function FilesTab({
                   : undefined
               }
               onClick={() => {
-                setContainerName(c.name);
+                setReading({ container: c.name, restarts: c.restartCount });
                 setSelected(null);
                 setMountsOnly(false);
               }}
@@ -426,7 +434,7 @@ export function FilesTab({
           </button>
         </Notice>
       )}
-      {restartedSinceRead && state.phase !== "idle" && (
+      {restartedSinceRead && target !== null && (
         <Notice tone="warn">
           {t("files", "restartedSince", {
             container: container.name,
@@ -434,7 +442,7 @@ export function FilesTab({
           })}{" "}
           <button
             type="button"
-            onClick={() => setLife(currentLife)}
+            onClick={readNow}
             className="text-info hover:underline"
           >
             {t("files", "readNewContainer")}
@@ -527,7 +535,7 @@ export function FilesTab({
             compact
           />
         </div>
-      ) : state.phase === "failed" ? (
+      ) : state.phase === "idle" ? null : state.phase === "failed" ? (
         <Failure
           state={state}
           container={container.name}
@@ -536,7 +544,10 @@ export function FilesTab({
           onDebug={onDebug}
           debugDenied={debugDenied}
           onMounts={() => setMountsOnly(true)}
-          onRetry={reload}
+          onRetry={() => {
+            readNow();
+            reload();
+          }}
         />
       ) : (
         <div className="flex min-h-0 flex-1">
@@ -622,7 +633,7 @@ export function FilesTab({
               container={container.name}
               path={joinPath(path, previewEntry.name)}
               entry={previewEntry}
-              life={readingLife}
+              life={life}
               via={via}
               onDownload={() => void download()}
             />
@@ -1041,6 +1052,16 @@ function Failure({
             {t("action", "retry")}
           </button>
         </p>
+      </div>
+    );
+  }
+  if (state.reason === "unheard") {
+    return (
+      <div className="px-3 py-6 text-xs">
+        <p className="font-medium text-warn">{t("files", "listingUnheard")}</p>
+        <button type="button" onClick={onRetry} className={cn("mt-3", link)}>
+          {t("action", "retry")}
+        </button>
       </div>
     );
   }

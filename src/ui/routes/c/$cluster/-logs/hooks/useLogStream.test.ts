@@ -902,3 +902,387 @@ describe("useLogStream on a workload whose pods are replaced", () => {
     expect(result.current.isStreaming).toBe(true);
   });
 });
+
+/**
+ * A previous run is read to its end, and only the end of that read says
+ * what the run held: the open answering is not it, and neither is an empty
+ * buffer.
+ */
+describe("useLogStream reading a previous run", () => {
+  beforeEach(() => {
+    reset();
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.container}`;
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const readEvent = (container: string, lines: number) => ({
+    payload: { stream_id: `stream-${container}`, lines },
+  });
+  const previous = (containers: string[]) =>
+    renderHook(() =>
+      useLogStream({ ...baseProps, containers, previous: true })
+    );
+
+  /**
+   * The pane said "The previous run wrote nothing." from the moment the
+   * streams were subscribed until the lines landed. Fails if the read is
+   * called over before the backend has said so for every container.
+   */
+  it("has found nothing out until every read has said it ended", async () => {
+    const { result } = previous(["app", "proxy"]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    expect(result.current.isConnecting).toBe(false);
+    expect(result.current.previousRead).toBeNull();
+
+    act(() => listeners["log-read"]!(readEvent("app", 3)));
+    expect(result.current.previousRead).toBeNull();
+
+    act(() => listeners["log-read"]!(readEvent("proxy", 0)));
+    expect(result.current.previousRead).toEqual({ sources: 2, lines: 3 });
+  });
+
+  /**
+   * The last lines sit in the reorder window when the read ends. Fails if
+   * the read is over while the buffer is still empty of them: an empty,
+   * finished pane is the false verdict, for a quarter of a second.
+   */
+  it("holds the last lines before it says the read is over", async () => {
+    const { result } = previous(["app"]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    holdTheClock();
+
+    act(() => {
+      listeners["log-batch"]!(logEvent("app", "one", "two"));
+      listeners["log-read"]!(readEvent("app", 2));
+    });
+
+    expect(result.current.previousRead).toEqual({ sources: 1, lines: 2 });
+    expect(result.current.retained).toBe(2);
+  });
+
+  /** A read that failed has ended too, and counts for nothing read. Fails if it holds the pane on "reading" for ever, or is counted as a run that wrote nothing. */
+  it("counts a read that failed as over, and not as a run that was read", async () => {
+    const { result } = previous(["app", "proxy"]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+
+    act(() => {
+      listeners["log-read"]!(readEvent("app", 0));
+      listeners["stream-failed"]!({
+        payload: {
+          stream_id: "stream-proxy",
+          kind: "no-previous-run",
+          message: "no previous run",
+        },
+      });
+    });
+
+    expect(result.current.previousRead).toEqual({ sources: 1, lines: 0 });
+  });
+
+  /** Fails if a followed pane, which never ends, is ever given a read to judge. */
+  it("has no read to speak of on a followed pane", async () => {
+    const { result } = renderHook(() => useLogStream(baseProps));
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    act(() => listeners["log-read"]?.(readEvent("c", 0)));
+    expect(result.current.previousRead).toBeNull();
+  });
+});
+
+/**
+ * One lane of a workload pane, attached again by the reader. It reads on
+ * from the last line it said: opened like a pod that had just joined, with
+ * no tail, everything it wrote while it was down was skipped with no mark.
+ */
+describe("useLogStream attaching one lane again", () => {
+  const A = { pod: "api-a", namespace: "n", container: "app" };
+  const B = { pod: "api-b", namespace: "n", container: "app" };
+  const at = (second: number, message: string) => ({
+    message,
+    timestamp: `2026-10-07T06:52:${String(second).padStart(2, "0")}.500Z`,
+    level: null,
+    format: null,
+    fields: null,
+    raw: message,
+  });
+  const fromA = (...lines: ReturnType<typeof at>[]) =>
+    act(() =>
+      listeners["log-batch"]!({
+        payload: { stream_id: "stream-api-a-app", lines },
+      })
+    );
+  const lanes = (previous = false) =>
+    renderHook(() =>
+      useLogStream({
+        namespace: "n",
+        sources: [A, B],
+        paneKey: "Deployment:api",
+        limit: DEFAULT_LOG_LIMIT,
+        previous,
+      })
+    );
+  const broke = () =>
+    act(() =>
+      listeners["stream-failed"]!({
+        payload: {
+          stream_id: "stream-api-a-app",
+          kind: "broken",
+          message: "connection reset",
+        },
+      })
+    );
+  const again = async (result: {
+    current: ReturnType<typeof useLogStream>;
+  }) => {
+    act(() => result.current.retrySource("api-a", "app"));
+    await waitFor(() => expect(subscribedCalls).toHaveLength(3));
+    return streamConfigs[2];
+  };
+
+  beforeEach(() => {
+    reset();
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.podName}-${config.container}`;
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** Fails if the lane is opened from now, which skips what the pod wrote while its stream was down. */
+  it("reads on from the last line the lane said", async () => {
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    fromA(at(9, "before the break"));
+    broke();
+
+    const config = await again(result);
+
+    expect(config).toMatchObject({
+      podName: "api-a",
+      sinceTime: "2026-10-07T06:52:09.500Z",
+      tailLines: DEFAULT_LOG_LIMIT,
+    });
+  });
+
+  /**
+   * The node answers from the instant asked for, so the lines of that
+   * instant come again. Fails if they are drawn twice, or if a new line
+   * written in the same instant is taken for one of them and dropped.
+   */
+  it("does not repeat what it already holds of the instant it reads on from", async () => {
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    fromA(at(8, "earlier"), at(9, "before the break"));
+    await waitFor(() => expect(result.current.logs).toHaveLength(2));
+    broke();
+    await again(result);
+    holdTheClock();
+
+    fromA(
+      at(8, "earlier"),
+      at(9, "before the break"),
+      at(9, "written in the same instant"),
+      at(12, "written while it was down"),
+      at(12, "written while it was down")
+    );
+    await pastTheWindow();
+
+    expect(result.current.logs.map((line) => line.message)).toEqual([
+      "earlier",
+      "before the break",
+      "written in the same instant",
+      "written while it was down",
+      "written while it was down",
+    ]);
+  });
+
+  /** A lane that broke before its first line has no last line. Fails if it reads on from now and skips what it wrote since the pane opened. */
+  it("reads a lane that never said a line on from when the pane opened", async () => {
+    const opened = Date.now();
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    broke();
+
+    const config = await again(result);
+
+    expect(config.tailLines).toBe(DEFAULT_LOG_LIMIT);
+    expect(Date.parse(config.sinceTime!)).toBeGreaterThanOrEqual(opened);
+    expect(Date.parse(config.sinceTime!)).toBeLessThanOrEqual(Date.now());
+  });
+
+  /**
+   * A previous run is finished: asked for no lines, it answers with none and
+   * the lane read as read. Fails if it is not read again with its share, or
+   * if the pane takes the read for over before it has ended.
+   */
+  it("reads a previous run again, and has not read it until that ends", async () => {
+    const { result } = lanes(true);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    act(() =>
+      listeners["log-read"]!({
+        payload: { stream_id: "stream-api-b-app", lines: 4 },
+      })
+    );
+    broke();
+    expect(result.current.previousRead).toEqual({ sources: 1, lines: 4 });
+
+    const config = await again(result);
+
+    expect(config).toMatchObject({
+      podName: "api-a",
+      previous: true,
+      tailLines: streamConfigs[0].tailLines,
+      sinceTime: null,
+    });
+    expect(config.tailLines).toBeGreaterThan(0);
+    expect(result.current.previousRead).toBeNull();
+  });
+
+  /** The rule for a pod that joins is not this one. Fails if a lane nobody asked to attach again reads from anywhere but now. */
+  it("still opens a pod that joins from now", async () => {
+    const { rerender } = renderHook(
+      ({ sources }) =>
+        useLogStream({
+          namespace: "n",
+          sources,
+          paneKey: "Deployment:api",
+          limit: DEFAULT_LOG_LIMIT,
+        }),
+      { initialProps: { sources: [A] } }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    rerender({ sources: [A, B] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+
+    expect(streamConfigs[1]).toMatchObject({ tailLines: 0, sinceTime: null });
+  });
+});
+
+/**
+ * More than a thousand events ahead of the bridge and it drops the oldest,
+ * whichever they were: a batch of lines, a lane's failure, the end of a
+ * previous run's read. The pane cannot know which, so it reads every lane on
+ * from its last line.
+ */
+describe("useLogStream when the event bridge drops events", () => {
+  const A = { pod: "api-a", namespace: "n", container: "app" };
+  const B = { pod: "api-b", namespace: "n", container: "app" };
+  const lanes = (previous = false) =>
+    renderHook(() =>
+      useLogStream({
+        namespace: "n",
+        sources: [A, B],
+        paneKey: "Deployment:api",
+        limit: DEFAULT_LOG_LIMIT,
+        previous,
+      })
+    );
+  const lagged = () =>
+    act(() => listeners["event-bridge-lagged"]!({ payload: { missed: 1200 } }));
+
+  beforeEach(() => {
+    reset();
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.podName}-${config.container}`;
+    });
+  });
+
+  /**
+   * Lines were missing with no mark, and a lane whose failure was dropped
+   * read "streaming" for good. Fails if a lane is not stopped and read on
+   * from its last line, which is what finds both.
+   */
+  it("attaches every lane again, each from the last line it said", async () => {
+    lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    act(() =>
+      listeners["log-batch"]!({
+        payload: {
+          stream_id: "stream-api-a-app",
+          lines: [
+            {
+              message: "last heard",
+              timestamp: "2026-10-07T06:52:09.500Z",
+              level: null,
+              format: null,
+              fields: null,
+              raw: "last heard",
+            },
+          ],
+        },
+      })
+    );
+
+    lagged();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(4));
+
+    expect(commands.stopLogStream).toHaveBeenCalledWith("stream-api-a-app");
+    expect(commands.stopLogStream).toHaveBeenCalledWith("stream-api-b-app");
+    const again = streamConfigs.slice(2);
+    expect(again.find((c) => c.podName === "api-a")).toMatchObject({
+      sinceTime: "2026-10-07T06:52:09.500Z",
+      tailLines: DEFAULT_LOG_LIMIT,
+    });
+    expect(again.find((c) => c.podName === "api-b")?.sinceTime).not.toBeNull();
+  });
+
+  /** A lane the pane already says stopped is not followed again behind the reader's back. Fails if a lag reopens it. */
+  it("leaves a lane that had already stopped as it was", async () => {
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    act(() =>
+      listeners["stream-failed"]!({
+        payload: {
+          stream_id: "stream-api-a-app",
+          kind: "gone",
+          message: "pod deleted",
+        },
+      })
+    );
+
+    lagged();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(3));
+
+    expect(streamConfigs[2].podName).toBe("api-b");
+    expect(result.current.failures).toMatchObject([{ pod: "api-a" }]);
+  });
+
+  /**
+   * The end of a previous run's read may be among what was dropped, and so
+   * may its lines. Fails if a read counted as over stays over while it is
+   * being read again.
+   */
+  it("takes a previous run's read as not over until it ends again", async () => {
+    const { result } = lanes(true);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    act(() => {
+      for (const pod of ["api-a", "api-b"])
+        listeners["log-read"]!({
+          payload: { stream_id: `stream-${pod}-app`, lines: 2 },
+        });
+    });
+    expect(result.current.previousRead).toEqual({ sources: 2, lines: 4 });
+
+    lagged();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(4));
+
+    expect(result.current.previousRead).toBeNull();
+  });
+
+  /** A burst lags the bridge again and again. Fails if each lag stacks another round of streams on the one being opened. */
+  it("opens one round of streams for a run of lags", async () => {
+    lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+
+    lagged();
+    lagged();
+    lagged();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(4));
+    await act(async () => {});
+
+    expect(streamConfigs).toHaveLength(4);
+  });
+});

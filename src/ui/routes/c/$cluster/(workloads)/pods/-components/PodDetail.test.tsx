@@ -24,6 +24,7 @@ import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { keepShells } from "@/hooks/useKeptShells";
 import type { AnyRouter } from "@tanstack/react-router";
 import { parseDeepLink } from "@/lib/deep-link";
+import { Toaster } from "@/components/ui/toaster";
 import { PodDetail } from "./PodDetail";
 
 vi.mock("@/components/terminal/Terminal", async () => {
@@ -142,6 +143,7 @@ const aboutThePod = () =>
 
 beforeEach(() => {
   gone = false;
+  useKeptShellStore.setState({ shells: [] });
   vi.useFakeTimers();
   useWindowActivity.setState({
     visible: true,
@@ -208,6 +210,12 @@ describe("a pod page whose pod is deleted while it is open", () => {
    * Fails if the gone page does not say the session ended with the pod.
    */
   it("says the open shell ended because the pod is gone", async () => {
+    const answer = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) =>
+      command === "get_pod" && !gone
+        ? { ...POD, containers: [RUNNING] }
+        : answer(command, args)
+    );
     await renderWithRouter(<PodDetail />, {
       at: `/c/prod/pods/shop/${NAME}`,
       route: "/c/$cluster/pods/$namespace/$name",
@@ -1139,8 +1147,8 @@ const execs = () =>
         `${command} ${(args as { pod?: string; name?: string }).pod ?? (args as { name?: string }).name}`
     );
 
-async function arrive(at: string) {
-  const rendered = await renderWithRouter(<PodDetail />, {
+async function arrive(at: string, page = <PodDetail />) {
+  const rendered = await renderWithRouter(page, {
     at,
     route: POD_ROUTE,
     beside: { "/c/$cluster/events": <p>events page</p> },
@@ -1154,10 +1162,47 @@ async function arrive(at: string) {
 let stopKeeping: (() => void) | null = null;
 const leftPage: KeptShell[] = [];
 function keepingShells(router: AnyRouter) {
-  stopKeeping = keepShells(router, (shell) => leftPage.push(shell));
+  stopKeeping = keepShells(
+    router,
+    (shell) => leftPage.push(shell),
+    () => {}
+  );
 }
 
 const terminal = () => screen.queryByTestId("terminal-stub");
+
+/** Shell in the peek, or a row's menu, on the pod as it was read there. */
+const peekAsk = (pod: string, uid = `uid-${pod}`) => ({
+  namespace: "shop",
+  pod,
+  uid,
+  container: "app",
+});
+
+/** The containers shells were opened in, in order. */
+const shellsIn = () =>
+  vi
+    .mocked(invoke)
+    .mock.calls.filter(([command]) => command === "open_pod_shell")
+    .map(([, args]) => (args as { container: string }).container);
+
+const CRASHED = {
+  ...APP_CONTAINER,
+  ready: false,
+  state: { type: "waiting", reason: "CrashLoopBackOff", message: null },
+};
+
+/** The pod the page reads, as the test last set it, and the backend's events. */
+let served: PodInfo | null = null;
+const heardBy = new Map<string, Set<(event: { payload: unknown }) => void>>();
+const emit = (event: string, payload: unknown) =>
+  act(() => heardBy.get(event)?.forEach((handler) => handler({ payload })));
+/** Long enough for a page that has backed off to read the pod again. */
+const nextRead = async () => {
+  for (let poll = 0; poll < 30; poll++)
+    await advance(REFRESH_INTERVALS.resourceDetail);
+  await advance(0);
+};
 
 const clickTab = async (name: RegExp) => {
   fireEvent.mouseDown(screen.getByRole("tab", { name }));
@@ -1170,6 +1215,7 @@ describe("a pod page runs nothing in the container until the reader asks on it",
     stopKeeping?.();
     stopKeeping = null;
     leftPage.length = 0;
+    vi.mocked(listen).mockImplementation(async () => () => {});
   });
 
   beforeEach(() => {
@@ -1189,10 +1235,18 @@ describe("a pod page runs nothing in the container until the reader asks on it",
       activeId: "tab-1",
       pendingHref: null,
     });
+    served = null;
+    heardBy.clear();
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      const handlers = heardBy.get(event) ?? new Set();
+      heardBy.set(event, handlers.add(handler as never));
+      return () => handlers.delete(handler as never);
+    });
+    let opened = 0;
     vi.mocked(invoke).mockImplementation(async (command: string, args) => {
       if (command === "get_pod")
-        return running((args as { name: string }).name);
-      if (command === "open_pod_shell") return "term-1";
+        return served ?? running((args as { name: string }).name);
+      if (command === "open_pod_shell") return `term-${++opened}`;
       if (command === "check_access")
         return (args as { queries: AccessQuery[] }).queries.map((query) => ({
           ...query,
@@ -1394,7 +1448,7 @@ describe("a pod page runs nothing in the container until the reader asks on it",
    * the ask is spent, so Back to the same address does not open another.
    */
   it("opens the shell the peek asked for, once", async () => {
-    useShellAskStore.getState().askFor("shop", "cart-a");
+    useShellAskStore.getState().askFor(peekAsk("cart-a"));
     const { unmount } = await arrive("/c/prod/pods/shop/cart-a?shell=app");
     expect(execs()).toEqual(["open_pod_shell cart-a"]);
     unmount();
@@ -1537,5 +1591,296 @@ describe("a pod page runs nothing in the container until the reader asks on it",
     });
     expect(useKeptShellStore.getState().shells).toEqual([]);
     expect(leftPage).toEqual([]);
+  });
+
+  /**
+   * Dana clicked Shell on a crash-looping pod and got a new exec on every
+   * cycle, also from the Logs tab: the shell was asked for once and reopened
+   * each time the container came back. Fails if a restart opens a shell.
+   */
+  it("opens no second shell when the container it was asked for comes back", async () => {
+    const { router } = await arrive("/c/prod/pods/shop/cart-a");
+    keepingShells(router);
+    await clickTab(/^Shell/);
+    expect(shellsIn()).toEqual(["app"]);
+
+    served = { ...running("cart-a"), containers: [CRASHED] } as PodInfo;
+    await nextRead();
+    await emit("terminal-closed", { session_id: "term-1" });
+    expect(useKeptShellStore.getState().shells).toEqual([]);
+    served = {
+      ...running("cart-a"),
+      containers: [{ ...APP_CONTAINER, restartCount: 1 }],
+    } as PodInfo;
+    await nextRead();
+
+    expect(shellsIn()).toEqual(["app"]);
+    expect(terminal()).toHaveAttribute("data-session-id", "term-1");
+  });
+
+  /**
+   * The same crash with a sidecar still up: the pane re-keyed to it and
+   * opened a prompt in a container nobody chose. Fails if the shell moves.
+   */
+  it("opens no shell in a sibling when the container it was asked for stops", async () => {
+    const worker = { ...APP_CONTAINER, name: "worker", phase: "sidecar" };
+    served = {
+      ...running("cart-a"),
+      containers: [APP_CONTAINER, worker],
+    } as PodInfo;
+    const { router } = await arrive("/c/prod/pods/shop/cart-a");
+    keepingShells(router);
+    await clickTab(/^Shell/);
+    expect(shellsIn()).toEqual(["app"]);
+
+    served = { ...served, containers: [CRASHED, worker] } as PodInfo;
+    await nextRead();
+    await emit("terminal-closed", { session_id: "term-1" });
+    await nextRead();
+
+    expect(shellsIn()).toEqual(["app"]);
+    expect(terminal()).toHaveAttribute("data-session-id", "term-1");
+  });
+
+  /**
+   * A StatefulSet pod comes back under its name as another pod. The ask was
+   * for the one that was deleted. Fails if the new pod gets a shell, or its
+   * files read, because the old one was asked on this page.
+   */
+  it.each([
+    ["Shell", "open_pod_shell cart-a", "No shell is running here yet"],
+    [
+      "Files",
+      "container_working_dir cart-a",
+      "The files have not been read yet",
+    ],
+  ])(
+    "offers %s as never asked, and runs nothing, in a pod re-created under the same name",
+    async (tab, exec, offer) => {
+      const { router } = await arrive("/c/prod/pods/shop/cart-a");
+      keepingShells(router);
+      await clickTab(new RegExp(`^${tab}`));
+      expect(execs()).toContain(exec);
+      const before = execs().length;
+
+      await emit("terminal-closed", { session_id: "term-1" });
+      served = { ...running("cart-a"), uid: "uid-recreated" } as PodInfo;
+      await nextRead();
+      await advance(10_000);
+
+      expect(execs()).toHaveLength(before);
+      expect(screen.getByText(offer)).toBeInTheDocument();
+    }
+  );
+
+  /**
+   * Shell in a peek is an ask about the pod the peek showed. Fails if it
+   * opens a shell in a pod re-created under the name before the page read it.
+   */
+  it("offers a shell, and opens none, when the peek asked about an earlier pod of the name", async () => {
+    useShellAskStore.getState().askFor(peekAsk("cart-a", "uid-deleted"));
+    await arrive("/c/prod/pods/shop/cart-a?shell=app");
+    await advance(10_000);
+
+    expect(execs()).toEqual([]);
+    expect(
+      screen.getByRole("button", { name: "Start a shell in app" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * Dana went from a pod with a shell to the next one and came Back: the
+   * shell had ended with the page, and the page opened another on arrival.
+   * Fails if one ask opens two shells.
+   */
+  it("offers a shell, and opens none, on coming back to the pod whose shell ended with the page", async () => {
+    const { router } = await arrive("/c/prod/pods/shop/cart-a");
+    keepingShells(router);
+    await clickTab(/^Shell/);
+
+    await act(() => router.navigate({ href: "/c/prod/pods/shop/cart-b" }));
+    await advance(0);
+    expect(useKeptShellStore.getState().shells).toEqual([]);
+    await act(() =>
+      router.navigate({ href: "/c/prod/pods/shop/cart-a?tab=shell" })
+    );
+    await advance(0);
+    await advance(0);
+
+    expect(execs()).toEqual(["open_pod_shell cart-a"]);
+    expect(screen.getByText("The shell was ended")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Files through a debug container reads that container's `/proc/1/root`,
+ * which is the root of whichever container it was pointed at.
+ */
+describe("a pod's files read through a debug container", () => {
+  const INIT = {
+    ...APP_CONTAINER,
+    name: "init-migrate",
+    phase: "init",
+    ready: false,
+    state: {
+      type: "terminated",
+      termination: {
+        exitCode: 0,
+        signal: null,
+        reason: "Completed",
+        message: null,
+        startedAt: "2026-10-06T00:00:00Z",
+        finishedAt: "2026-10-06T00:00:04Z",
+      },
+    },
+  };
+  const withInit = (name: string) =>
+    ({ ...running(name), initContainers: [INIT] }) as PodInfo;
+  /** What the cluster says the next debug container sees at its process 1. */
+  let seesRootOf: string | null = "app";
+  let debuggers = 0;
+
+  beforeEach(() => {
+    seesRootOf = "app";
+    debuggers = 0;
+    useShellAskStore.getState().drop();
+    vi.mocked(invoke).mockImplementation(async (command: string, args) => {
+      const { name, podName } = args as { name: string; podName: string };
+      if (command === "get_pod") return withInit(name);
+      if (command === "open_pod_shell") return "term-1";
+      if (command === "debug_pod_ephemeral")
+        return {
+          id: `op-${++debuggers}`,
+          operationType: "ephemeral",
+          podName,
+          containerName: `debugger-${debuggers}`,
+          namespace: "shop",
+          createdAt: 0,
+          timeoutSeconds: 120,
+        };
+      if (command === "get_debug_status")
+        return {
+          type: "ready",
+          result: {
+            podName: "cart-a",
+            containerName: `debugger-${debuggers}`,
+            namespace: "shop",
+            isNewPod: false,
+            seesRootOf,
+          },
+        };
+      if (command === "check_access")
+        return (args as { queries: AccessQuery[] }).queries.map((query) => ({
+          ...query,
+          allowed: true,
+        }));
+      return undefined;
+    });
+  });
+
+  const listings = () =>
+    vi
+      .mocked(invoke)
+      .mock.calls.filter(([command]) => command === "list_container_files")
+      .map(
+        ([, args]) => args as { pod: string; container: string; via: unknown }
+      );
+  const startDebug = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Start Debug" }));
+    await advance(0);
+    await advance(0);
+  };
+  /** Files, on the finished init container, then its way in through a debug container. */
+  const throughDebugFromInit = async () => {
+    const arrived = await arrive(
+      "/c/prod/pods/shop/cart-a?tab=files",
+      <>
+        <PodDetail />
+        <Toaster />
+      </>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Read the files" }));
+    await advance(0);
+    fireEvent.click(screen.getByRole("tab", { name: /^init-migrate/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open through a debug container" })
+    );
+    await startDebug();
+    return arrived;
+  };
+
+  /**
+   * Dana picked the finished init container and opened it through a debug
+   * container; the dialog has no init containers to point at, pointed at app,
+   * and the tab listed app's filesystem as init-migrate's. Fails if the tab
+   * names any container but the one the debug container was pointed at.
+   */
+  it("names the container the debug container was pointed at, not the one the tab had open", async () => {
+    await throughDebugFromInit();
+
+    expect(
+      screen.getByText(/through debug container debugger-1/)
+    ).toHaveTextContent("at /proc/1/root of container app.");
+    expect(screen.getByRole("tab", { name: /^app/ })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(listings().at(-1)).toMatchObject({
+      container: "app",
+      via: { container: "debugger-1", root: "/proc/1/root" },
+    });
+  });
+
+  /**
+   * With one process namespace for the pod, process 1 is the pause container.
+   * Fails if its root is listed as a container's, or if nothing says why not.
+   */
+  it("reads nothing through a debug container whose process 1 is no container's", async () => {
+    seesRootOf = null;
+    await throughDebugFromInit();
+
+    expect(
+      screen.getByText("No container's files to read through debugger-1")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/through debug container/)).toBeNull();
+    expect(listings().filter((listing) => listing.via !== null)).toEqual([]);
+  });
+
+  /**
+   * After Files had used a debug container, the page's own Debug button made
+   * the next one the Files tab's way in and opened no terminal. Fails if an
+   * opening of the dialog inherits what the last one was for.
+   */
+  it("opens a terminal in the debug container the page's Debug button starts", async () => {
+    await throughDebugFromInit();
+
+    fireEvent.click(screen.getByRole("button", { name: "Debug" }));
+    await startDebug();
+
+    expect(shellsIn()).toEqual(["debugger-2"]);
+    expect(
+      screen.getByText(/through debug container debugger-1/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The page stays mounted across a move to another pod. Fails if the next
+   * pod's files are read through the last pod's debug container.
+   */
+  it("does not read the next pod through the last pod's debug container", async () => {
+    const { router } = await throughDebugFromInit();
+
+    await act(() =>
+      router.navigate({ href: "/c/prod/pods/shop/cart-b?tab=files" })
+    );
+    await advance(0);
+    fireEvent.click(screen.getByRole("button", { name: "Read the files" }));
+    await advance(0);
+    await advance(0);
+
+    const next = listings().filter((listing) => listing.pod === "cart-b");
+    expect(next).not.toEqual([]);
+    expect(next.filter((listing) => listing.via !== null)).toEqual([]);
+    expect(screen.queryByText(/through debug container/)).toBeNull();
   });
 });

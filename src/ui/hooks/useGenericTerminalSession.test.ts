@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { renderHook, waitFor } from "@testing-library/react";
 
 // ----- Mocks -----
@@ -27,6 +34,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/lib/commands";
 import { useGenericTerminalSession } from "./useGenericTerminalSession";
 
@@ -263,4 +271,68 @@ describe("useGenericTerminalSession deferred-start handshake", () => {
       ).toEqual(closed);
     }
   );
+});
+
+/**
+ * `terminal-closed` travels a bridge that drops events when it falls behind,
+ * and nothing else tells a pane its session is over.
+ */
+describe("a terminal pane when the event bridge drops events", () => {
+  const handlers: Record<string, (event: { payload: unknown }) => void> = {};
+  const counting = vi.mocked(listen).getMockImplementation()!;
+  const lagged = () =>
+    handlers["event-bridge-lagged"]({ payload: { missed: 9 } });
+
+  beforeEach(() => {
+    subscribedCalls.length = 0;
+    vi.clearAllMocks();
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      handlers[event] = handler as (event: { payload: unknown }) => void;
+      return () => {};
+    });
+  });
+  afterEach(() => {
+    vi.mocked(listen).mockImplementation(counting);
+    vi.mocked(commands.terminalSubscribed).mockImplementation(
+      async (sessionId: string) => {
+        subscribedCalls.push({ sessionId, index: callCounter++ });
+      }
+    );
+  });
+
+  const pane = async (onClose = vi.fn()) => {
+    const rendered = renderHook(() =>
+      useGenericTerminalSession({ sessionId: "term-1", onClose })
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    await waitFor(() => expect(handlers["event-bridge-lagged"]).toBeDefined());
+    return { ...rendered, onClose };
+  };
+
+  /** The pane read "Connected" over a session that had ended. Fails if a session the backend no longer has stays connected. */
+  it("closes over a session the backend no longer has", async () => {
+    const { result, onClose } = await pane();
+    vi.mocked(commands.terminalSubscribed).mockRejectedValue({
+      code: "TERMINAL",
+      message: "Session term-1 not found",
+    });
+
+    lagged();
+
+    await waitFor(() => expect(result.current.status).toBe("closed"));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  /** Fails if dropped events alone end a session that is still there. */
+  it("stays connected to a session that is still there", async () => {
+    const { result, onClose } = await pane();
+
+    lagged();
+    await waitFor(() =>
+      expect(commands.terminalSubscribed).toHaveBeenCalledTimes(2)
+    );
+
+    expect(result.current.status).toBe("connected");
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

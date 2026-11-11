@@ -17,6 +17,8 @@ export interface KeptShell {
   context: string;
   namespace: string;
   pod: string;
+  /** The pod it runs in: one re-created under the name has no shell of this tab's. */
+  uid: string;
   container: string;
 }
 

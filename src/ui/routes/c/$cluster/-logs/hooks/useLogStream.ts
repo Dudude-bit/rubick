@@ -169,6 +169,8 @@ interface UseLogStreamResult {
   unfilteredFrom: number;
   /** True while at least one container's followed stream is attached; a previous run is read, not followed. */
   isStreaming: boolean;
+  /** What reading a previous run found. See `PreviousRead`. */
+  previousRead: PreviousRead | null;
   isConnecting: boolean;
   /**
    * Why a stream is not running, per container. A sidecar exiting kills
@@ -184,6 +186,19 @@ interface UseLogStreamResult {
   retrySource: (pod: string, container: string) => void;
 }
 
+/**
+ * What reading a previous run found, once every source's read has ended or
+ * failed: how many reads reached the end, and the lines those runs held
+ * before intake chose among them. `null` on the hook until then, and for a
+ * followed pane, so an empty pane cannot say "wrote nothing" ahead of the
+ * read, or about lines that intake or Clear took away.
+ */
+export interface PreviousRead {
+  sources: number;
+  lines: number;
+}
+
+const NO_READS: ReadonlyMap<string, number> = new Map();
 const NO_INTAKE: QueryTerm[] = [];
 /** What `intakeKey` reads as when nothing is being kept at the source. */
 const NO_INTAKE_KEY = JSON.stringify(NO_INTAKE);
@@ -224,6 +239,19 @@ export function toStreamedLine(
   return streamed;
 }
 
+/**
+ * The newest stamped lines heard from a source: where a stream of it opened
+ * again reads on from, and what that stream must not repeat. The node
+ * answers from the whole second, so the lines of that instant come twice.
+ */
+interface Heard {
+  epoch: number;
+  lines: Set<string>;
+}
+
+const heardKey = (line: LogBatchLine) =>
+  `${line.timestamp}\n${line.raw || line.message}`;
+
 /** Everything one session of streams shares, from the listeners to the last epoch per stream. */
 interface Session {
   active: boolean;
@@ -240,6 +268,14 @@ interface Session {
   live: Set<string>;
   /** Last timestamp seen per stream, so an untimestamped line sorts where it arrived. */
   lastEpoch: Map<string, number>;
+  /** When the session's streams were first asked for: where a lane that never said a line reads on from. */
+  since: number;
+  /** source key -> the last lines it said. */
+  heard: Map<string, Heard>;
+  /** stream id -> what it was opened after, until it has read past it. */
+  after: Map<string, Heard>;
+  /** Sources to attach again: they read on from where they stopped. */
+  again: Set<string>;
   /**
    * Sources whose open was rejected. Kept out of `opened` so nothing thinks
    * they are attached, and out of `added` so an unrelated pod joining the
@@ -276,6 +312,8 @@ export function useLogStream({
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [failures, setFailures] = useState<ContainerFailure[]>([]);
+  // Source key -> the lines its read held, for each read that reached its end.
+  const [reads, setReads] = useState(NO_READS);
   const failuresRef = useRef(failures);
   // oxlint-disable-next-line react-hooks/refs
   failuresRef.current = failures;
@@ -387,6 +425,7 @@ export function useLogStream({
         s.sourceOf.delete(id);
         s.live.delete(id);
         s.lastEpoch.delete(id);
+        s.after.delete(id);
         void commands
           .stopLogStream(id)
           .catch((err) => console.error("Failed to stop log streaming:", err));
@@ -441,23 +480,39 @@ export function useLogStream({
       // buffer is append-only: a backfill committed now would put minutes of
       // old lines after the live tail and drag a following reader down into
       // them. It streams from here, like the pod it replaced did.
+      //
+      // A lane the reader attaches again is neither: it reads on from the
+      // last line it said, so what it wrote while it was down is read rather
+      // than skipped, and a previous run, which is read whole or not at all,
+      // is read again with its share.
       const first = !s.seeded;
       s.seeded = true;
-      const tail = first ? backfillPerContainer(limit, wanted.length) : 0;
+      const share = backfillPerContainer(limit, wanted.length);
+      const tail = first ? share : 0;
       await Promise.all(
         added.map(async (source) => {
           const key = sourceKey(source);
           s.opened.set(key, "");
+          const again = s.again.delete(key);
+          const heard = again ? s.heard.get(key) : undefined;
+          const since = heard?.epoch ?? (previous ? null : s.since);
           const config: StreamLogConfig = {
             podName: source.pod,
             namespace: source.namespace,
             container: source.container,
-            tailLines: first && s.resuming ? 0 : tail,
+            tailLines: again
+              ? previous
+                ? share
+                : limit
+              : first && s.resuming
+                ? 0
+                : tail,
             follow: true,
             timestamps: true,
             previous,
             sinceSeconds: null,
-            sinceTime: null,
+            sinceTime:
+              again && since !== null ? new Date(since).toISOString() : null,
             intake: intakeTerms,
           };
           try {
@@ -468,6 +523,7 @@ export function useLogStream({
             }
             s.opened.set(key, streamId);
             s.sourceOf.set(streamId, source);
+            if (heard) s.after.set(streamId, heard);
             if (!previous) s.live.add(streamId);
             // It answered: whatever it said last time is no longer true.
             setFailures((prev) =>
@@ -534,6 +590,7 @@ export function useLogStream({
       const key = sourceKey({ pod, namespace, container });
       s.refused.delete(key);
       s.opened.delete(key);
+      s.again.add(key);
       setFailures((prev) =>
         prev.filter((f) => !(f.pod === pod && f.container === container))
       );
@@ -552,6 +609,10 @@ export function useLogStream({
       opened: new Map(),
       live: new Set(),
       lastEpoch: new Map(),
+      since: Date.now(),
+      heard: new Map(),
+      after: new Map(),
+      again: new Set(),
       refused: new Set(),
       unlistens: [],
     };
@@ -627,6 +688,7 @@ export function useLogStream({
 
       setIsConnecting(true);
       setFailures([]);
+      setReads(NO_READS);
       if (!resuming) {
         setBuffer(emptyBuffer());
         wiped.current?.();
@@ -657,7 +719,51 @@ export function useLogStream({
       // every stream started later, however many there are.
       let unlistenBatch: (() => void) | null = null;
       let unlistenFailure: (() => void) | null = null;
+      let unlistenRead: (() => void) | null = null;
+      let unlistenLagged: (() => void) | null = null;
       try {
+        // The bridge dropped events and cannot say whose: lines, a failure,
+        // the end of a read. Every lane not already known to have stopped is
+        // attached again and reads on from its last line, which brings back
+        // the lines and finds the lane that died unheard.
+        unlistenLagged = await listenEvent("event-bridge-lagged", () => {
+          if (!s.active) return;
+          const stopped = new Set(
+            failuresRef.current.map((f) =>
+              sourceKey({ pod: f.pod, namespace, container: f.container })
+            )
+          );
+          // A lane still being opened is on its way to this already.
+          const lanes = [...s.opened].filter(
+            ([key, id]) => id !== "" && !stopped.has(key)
+          );
+          if (lanes.length === 0) return;
+          for (const [key, id] of lanes) {
+            s.opened.delete(key);
+            s.again.add(key);
+            s.sourceOf.delete(id);
+            s.live.delete(id);
+            s.lastEpoch.delete(id);
+            s.after.delete(id);
+            void commands.stopLogStream(id).catch(() => {});
+          }
+          setReads((prev) => {
+            const next = new Map(prev);
+            for (const [key] of lanes) next.delete(key);
+            return next;
+          });
+          void sync(s, sourcesRef.current, false);
+        });
+        unlistenRead = await listenEvent("log-read", (event) => {
+          const source = s.sourceOf.get(event.payload.stream_id);
+          if (!s.active || source === undefined) return;
+          const key = sourceKey(source);
+          if (s.opened.get(key) !== event.payload.stream_id) return;
+          // The lines it counts go into the buffer before the count is
+          // believed, or the pane is empty and finished for a moment.
+          release();
+          setReads((prev) => new Map(prev).set(key, event.payload.lines));
+        });
         unlistenBatch = await listenEvent("log-batch", (event) => {
           const streamId = event.payload.stream_id;
           const source = s.sourceOf.get(streamId);
@@ -677,10 +783,23 @@ export function useLogStream({
           }
 
           let epoch = s.lastEpoch.get(event.payload.stream_id) ?? Date.now();
+          const from = sourceKey(source);
           for (const line of event.payload.lines) {
-            if (line.timestamp) {
-              const parsed = Date.parse(line.timestamp);
-              if (!Number.isNaN(parsed)) epoch = parsed;
+            const stamp = line.timestamp ? Date.parse(line.timestamp) : NaN;
+            if (!Number.isNaN(stamp)) {
+              const said = heardKey(line);
+              const after = s.after.get(streamId);
+              if (after) {
+                // What the buffer already holds of this lane, sent again.
+                const held = stamp === after.epoch && after.lines.has(said);
+                if (stamp < after.epoch || held) continue;
+                if (stamp > after.epoch) s.after.delete(streamId);
+              }
+              const heard = s.heard.get(from);
+              if (!heard || stamp > heard.epoch)
+                s.heard.set(from, { epoch: stamp, lines: new Set([said]) });
+              else if (stamp === heard.epoch) heard.lines.add(said);
+              epoch = stamp;
             }
             pending.push(
               toStreamedLine(line, {
@@ -729,6 +848,8 @@ export function useLogStream({
       } catch (err) {
         unlistenBatch?.();
         unlistenFailure?.();
+        unlistenRead?.();
+        unlistenLagged?.();
         if (!s.active) return;
         console.error("Failed to listen for log events:", err);
         setFailures(
@@ -746,9 +867,16 @@ export function useLogStream({
       if (!s.active) {
         unlistenBatch();
         unlistenFailure();
+        unlistenRead();
+        unlistenLagged();
         return;
       }
-      s.unlistens.push(unlistenBatch, unlistenFailure);
+      s.unlistens.push(
+        unlistenBatch,
+        unlistenFailure,
+        unlistenRead,
+        unlistenLagged
+      );
       s.listening = true;
 
       await sync(s, sourcesRef.current, true);
@@ -767,6 +895,7 @@ export function useLogStream({
     intakeTerms,
     previous,
     target,
+    namespace,
     // Deliberately not `renewals`: `stream_logs` opens one body and reads it
     // to the end, so the client it was built from is never used again. A
     // watch is restarted because `watcher` re-lists with the old token.
@@ -782,6 +911,21 @@ export function useLogStream({
     void sync(s, sources, false);
   }, [sources, sync, isPaused]);
 
+  const previousRead = useMemo<PreviousRead | null>(() => {
+    if (!previous) return null;
+    const found = { sources: 0, lines: 0 };
+    for (const source of sources) {
+      const lines = reads.get(sourceKey(source));
+      if (lines !== undefined) {
+        found.sources += 1;
+        found.lines += lines;
+      } else if (!failures.some((failure) => sameSource(failure, source))) {
+        return null;
+      }
+    }
+    return found;
+  }, [previous, sources, reads, failures]);
+
   return {
     logs: buffer.lines,
     retained: buffer.lines.length,
@@ -793,6 +937,7 @@ export function useLogStream({
     intakeFrom,
     unfilteredFrom,
     isStreaming,
+    previousRead,
     isConnecting,
     failures,
     isPaused,

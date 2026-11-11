@@ -16,8 +16,8 @@ const reload = vi.fn();
 const listed = vi.fn();
 
 vi.mock("./useContainerFiles", () => ({
-  useContainerFiles: (target: unknown) => {
-    listed(target);
+  useContainerFiles: (target: unknown, held: boolean) => {
+    listed(target, held);
     return { state: listing(), stop, reload };
   },
 }));
@@ -199,7 +199,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -231,7 +231,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -286,7 +286,7 @@ describe("FilesTab", () => {
             },
           ],
         })}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -333,7 +333,7 @@ describe("FilesTab", () => {
             ...pod().volumes,
           ],
         })}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -347,7 +347,8 @@ describe("FilesTab", () => {
       screen.getByRole("grid", { name: "Files in /srv/app" })
     ).toBeInTheDocument();
     expect(listed).toHaveBeenLastCalledWith(
-      expect.objectContaining({ path: "/srv/app" })
+      expect.objectContaining({ path: "/srv/app" }),
+      false
     );
     expect(
       screen.queryByRole("button", {
@@ -373,7 +374,7 @@ describe("FilesTab", () => {
       <QueryClientProvider client={new QueryClient()}>
         <FilesTab
           pod={pod()}
-          via={null}
+          through={null}
           onDebug={() => {}}
           onStopVia={() => {}}
         />
@@ -399,7 +400,7 @@ describe("FilesTab", () => {
       await wrap(
         <FilesTab
           pod={pod()}
-          via={null}
+          through={null}
           onDebug={() => {}}
           onStopVia={() => {}}
         />
@@ -424,7 +425,12 @@ describe("FilesTab", () => {
       tried: ["find", "sh"],
     });
     await wrap(
-      <FilesTab pod={pod()} via={null} onDebug={onDebug} onStopVia={() => {}} />
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={onDebug}
+        onStopVia={() => {}}
+      />
     );
     expect(
       screen.getByText("The image has nothing to list files with")
@@ -466,7 +472,7 @@ describe("FilesTab", () => {
       <TooltipProvider>
         <FilesTab
           pod={pod()}
-          via={null}
+          through={null}
           onDebug={onDebug}
           onStopVia={() => {}}
           debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods --subresource=ephemeralcontainers -n shop."
@@ -493,7 +499,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -530,7 +536,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -550,7 +556,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -573,7 +579,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={stopped}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -597,7 +603,7 @@ describe("FilesTab", () => {
     const view = await wrap(
       <FilesTab
         pod={stopped}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -610,7 +616,7 @@ describe("FilesTab", () => {
     const reading = await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -623,7 +629,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -644,7 +650,7 @@ describe("FilesTab", () => {
     const tab = () => (
       <FilesTab
         pod={shown}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -678,7 +684,7 @@ describe("FilesTab", () => {
     const tab = () => (
       <FilesTab
         pod={shown}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -713,7 +719,7 @@ describe("FilesTab", () => {
     const refused = await wrap(
       <FilesTab
         pod={stopped}
-        via={null}
+        through={null}
         onDebug={onDebug}
         onStopVia={() => {}}
         debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods --subresource=ephemeralcontainers -n shop."
@@ -732,7 +738,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={stopped}
-        via={null}
+        through={null}
         onDebug={onDebug}
         onStopVia={() => {}}
       />
@@ -749,7 +755,10 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={{ container: "debugger-x7k2", root: "/proc/1/root" }}
+        through={{
+          via: { container: "debugger-x7k2", root: "/proc/1/root" },
+          of: "app",
+        }}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -760,6 +769,63 @@ describe("FilesTab", () => {
   });
 
   /** A binary file gets a sentence with the number that decided it, not a wall of glyphs. */
+  /**
+   * The rows come from the debug container's `/proc/1/root`, which is the
+   * container it was pointed at. Fails if the tab opens on whichever runs
+   * first and puts that name, and its mounts, on another container's files.
+   */
+  it("opens on the container the debug container shows, not the first running", async () => {
+    listing.mockReturnValue(done([file("envoy.yaml")]));
+    const two = pod();
+    two.containers.push({ ...two.containers[0], name: "proxy" });
+    await wrap(
+      <FilesTab
+        pod={two}
+        through={{
+          via: { container: "debugger-x7k2", root: "/proc/1/root" },
+          of: "proxy",
+        }}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(
+      screen.getByText(/through debug container debugger-x7k2/)
+    ).toHaveTextContent("of container proxy.");
+    expect(listed.mock.calls.at(-1)![0]).toMatchObject({ container: "proxy" });
+  });
+
+  /**
+   * A listing whose end the window may not have heard is not a directory and
+   * not a tool that failed. Fails if it is drawn as either, or has no way on.
+   */
+  it("says a listing's end may have been missed, and reads again when asked", async () => {
+    listing.mockReturnValue({
+      phase: "failed",
+      entries: [file("app.conf")],
+      reason: "unheard",
+      message: "",
+      exitCode: null,
+      stderr: "",
+      tried: [],
+    });
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(
+      screen.getByText(/may have missed how it ended, so it was stopped/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/did not finish/)).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
   it("refuses to preview a binary and says why", async () => {
     listing.mockReturnValue(
       done([
@@ -789,7 +855,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -836,7 +902,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -869,7 +935,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -888,7 +954,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -905,7 +971,7 @@ describe("FilesTab", () => {
     const view = await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -918,7 +984,7 @@ describe("FilesTab", () => {
     view.rerender(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -950,7 +1016,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -982,7 +1048,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -1010,7 +1076,12 @@ describe("FilesTab", () => {
       tried: [],
     });
     await wrap(
-      <FilesTab pod={pod()} via={null} onDebug={onDebug} onStopVia={() => {}} />
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={onDebug}
+        onStopVia={() => {}}
+      />
     );
     expect(
       screen.getByText(/\/etc\/app could not be opened/)
@@ -1045,7 +1116,7 @@ describe("FilesTab", () => {
     await wrap(
       <FilesTab
         pod={pod()}
-        via={null}
+        through={null}
         onDebug={() => {}}
         onStopVia={() => {}}
       />
@@ -1073,9 +1144,130 @@ describe("FilesTab", () => {
       restartCount: 0,
     });
     await wrap(
-      <FilesTab pod={two} via={null} onDebug={() => {}} onStopVia={() => {}} />
+      <FilesTab
+        pod={two}
+        through={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
     );
     await userEvent.click(screen.getByRole("tab", { name: "sidecar" }));
     expect(screen.queryByText(/has restarted since/)).toBeNull();
+  });
+
+  const restarted = (restartCount: number) => {
+    const next = pod();
+    next.containers[0].restartCount = restartCount;
+    return next;
+  };
+  const lastListed = () => listed.mock.calls.at(-1)!;
+  const tab = (of: PodInfo) => (
+    <FilesTab pod={of} through={null} onDebug={() => {}} onStopVia={() => {}} />
+  );
+
+  /**
+   * Dana's Files tab on a crash-looping pod ran its listing again each time
+   * the container came back, under a banner saying the rows were the old
+   * container's. Fails if a restart is not handed to the listing as held, or
+   * if the working directory is asked of the new container.
+   */
+  it("holds the listing, and asks the new container nothing, once the container restarts", async () => {
+    listing.mockReturnValue(done([file("app.conf")]));
+    const view = await wrap(tab(pod()));
+    expect(lastListed()[1]).toBe(false);
+    expect(containerWorkingDir).toHaveBeenCalledOnce();
+
+    view.rerender(tab(restarted(4)));
+
+    expect(lastListed()).toMatchObject([{ life: "uid-1:app:3" }, true]);
+    expect(screen.getByText(/has restarted since/)).toBeInTheDocument();
+    expect(containerWorkingDir).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * The tab was opened on a container between runs, and the run that started
+   * next is not the one the reader was looking at. Fails if it is listed, or
+   * asked where it works, before the reader says so.
+   */
+  it("asks a container that started after the tab was opened nothing until the reader does", async () => {
+    listing.mockReturnValue({ phase: "idle" });
+    const waiting = pod();
+    waiting.containers[0].state = {
+      type: "waiting",
+      reason: "CrashLoopBackOff",
+      message: null,
+    };
+    const view = await wrap(tab(waiting));
+    view.rerender(tab(restarted(4)));
+    await waitFor(() => expect(lastListed()[1]).toBe(true));
+    expect(containerWorkingDir).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Read the new container" })
+    );
+
+    await waitFor(() => expect(containerWorkingDir).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(lastListed()).toMatchObject([{ life: "uid-1:app:4" }, false])
+    );
+  });
+
+  /** Fails if the offer to read the new container is hidden when no rows of the old one are left. */
+  it("offers the new container when nothing of the old one is left to show", async () => {
+    listing.mockReturnValue(done([file("app.conf")]));
+    const view = await wrap(tab(pod()));
+    listing.mockReturnValue({ phase: "idle" });
+    view.rerender(tab(restarted(4)));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Read the new container" })
+    );
+
+    expect(lastListed()).toMatchObject([{ life: "uid-1:app:4" }, false]);
+    expect(screen.queryByText(/has restarted since/)).toBeNull();
+  });
+
+  /**
+   * A click into a folder is the reader asking, and what answers is the
+   * container that is there now. Fails if it reads the new container while
+   * the banner still calls the rows the old one's.
+   */
+  it("reads the container that is there now when the reader opens a folder", async () => {
+    listing.mockReturnValue(done([file("conf.d", { kind: "dir" })]));
+    const view = await wrap(tab(pod()));
+    view.rerender(tab(restarted(4)));
+
+    await userEvent.dblClick(screen.getByText("conf.d"));
+
+    expect(lastListed()).toMatchObject([
+      { life: "uid-1:app:4", path: "/etc/app/conf.d" },
+      false,
+    ]);
+    expect(screen.queryByText(/has restarted since/)).toBeNull();
+  });
+
+  /**
+   * The strip's other container restarted and was listed again with no word:
+   * the life on record was still the first container's. Fails if a container
+   * picked on the strip is not held to the life it was picked in.
+   */
+  it("holds a container picked on the strip to the life it was picked in", async () => {
+    listing.mockReturnValue(done([file("app.conf")]));
+    const two = pod();
+    two.containers.push({
+      ...two.containers[0],
+      name: "sidecar",
+      phase: "sidecar",
+      restartCount: 0,
+    });
+    const view = await wrap(tab(two));
+    await userEvent.click(screen.getByRole("tab", { name: "sidecar" }));
+    expect(lastListed()).toMatchObject([{ life: "uid-1:sidecar:0" }, false]);
+
+    const again = structuredClone(two);
+    again.containers[1].restartCount = 1;
+    view.rerender(tab(again));
+
+    expect(lastListed()).toMatchObject([{ life: "uid-1:sidecar:0" }, true]);
   });
 });

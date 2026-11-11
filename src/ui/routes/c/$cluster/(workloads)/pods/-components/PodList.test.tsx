@@ -101,11 +101,41 @@ describe("the row's shell button", () => {
         "/c/prod/pods/prod/api-0?tab=shell"
       )
     );
-    // The address alone is what a restored tab carries; the click is the ask.
+    // The address alone is what a restored tab carries; the click is the ask,
+    // for the pod on this row and the container that could take a shell then.
     expect(useShellAskStore.getState().ask).toMatchObject({
       namespace: "prod",
       pod: "api-0",
+      uid: "u-1",
+      container: "app",
     });
+  });
+
+  /**
+   * A row with nothing running has no container to ask about. Fails if the
+   * click leaves an ask behind for whatever starts in the pod next.
+   */
+  it("asks for no shell on a pod with nothing running, and still opens the tab", async () => {
+    useShellAskStore.getState().drop();
+    const running = api.containers[0].state;
+    api.containers[0].state = {
+      type: "waiting",
+      reason: "CrashLoopBackOff",
+      message: null,
+    };
+    const { router } = await renderWithRouter(<PodList />, {
+      at: "/c/prod/pods",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Shell" }));
+    api.containers[0].state = running;
+
+    await vi.waitFor(() =>
+      expect(router.state.location.href).toBe(
+        "/c/prod/pods/prod/api-0?tab=shell"
+      )
+    );
+    expect(useShellAskStore.getState().ask).toBeNull();
   });
 });
 

@@ -1,7 +1,9 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import type { AccessQuery } from "@/generated/types";
+import type { AccessQuery, DebugResult } from "@/generated/types";
 
 const checkAccess = vi.hoisted(() => vi.fn());
 const startEphemeral = vi.hoisted(() => vi.fn());
@@ -10,8 +12,12 @@ vi.mock("@/lib/commands", () => ({ commands: { checkAccess } }));
 vi.mock("@/components/ui/use-toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
+const operation = vi.hoisted(() => ({
+  onReady: (_: DebugResult) => {},
+}));
 vi.mock("@/hooks", () => ({
-  useDebugOperation: () => ({
+  useDebugOperation: (options: { onReady: (result: DebugResult) => void }) => ({
+    ...((operation.onReady = options.onReady), {}),
     state: "idle",
     operation: null,
     startEphemeral,
@@ -93,6 +99,66 @@ describe("DebugPodDialog", () => {
     expect(
       screen.getByRole("combobox", { name: /target container/i })
     ).toHaveTextContent("app");
+  });
+});
+
+/**
+ * A target picked in one opening is not a choice made in the next, which may
+ * be for another container: the Files tab reads whichever the dialog starts.
+ */
+describe("a target picked in an earlier opening of the dialog", () => {
+  function Reopened() {
+    const [open, setOpen] = useState(true);
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)}>
+          open again
+        </button>
+        <DebugPodDialog
+          open={open}
+          onOpenChange={setOpen}
+          podName="left-behind"
+          namespace="k8s-gui-test"
+          containers={["app", "sidecar"]}
+          kubernetesVersion="v1.31.0"
+          onDebugStart={() => {}}
+        />
+      </>
+    );
+  }
+  const target = () => screen.getByRole("combobox", { name: /target/i });
+  const leave: Record<string, () => Promise<void>> = {
+    Cancel: () =>
+      userEvent.click(screen.getByRole("button", { name: "Cancel" })),
+    "a debug container it started": async () =>
+      act(() =>
+        operation.onReady({
+          podName: "left-behind",
+          containerName: "debugger-1",
+          namespace: "k8s-gui-test",
+          isNewPod: false,
+          seesRootOf: "sidecar",
+        })
+      ),
+  };
+
+  /** Only Esc and a click outside forgot it; these two ways out kept it for the next opening. */
+  it.each(Object.keys(leave))("is forgotten after %s", async (way) => {
+    // Radix's Select asks jsdom for three things it does not have.
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    Element.prototype.scrollIntoView ??= () => {};
+    renderWithProviders(<Reopened />);
+    await userEvent.click(target());
+    await userEvent.click(
+      await screen.findByRole("option", { name: "sidecar" })
+    );
+    expect(target()).toHaveTextContent("sidecar");
+
+    await leave[way]();
+    await userEvent.click(screen.getByRole("button", { name: "open again" }));
+
+    expect(target()).toHaveTextContent("app");
   });
 });
 

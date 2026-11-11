@@ -1724,6 +1724,12 @@ export const en = {
     shellClosing: "ending",
     shellDisconnected: "ended",
     shellError: "error",
+    shellOutputMissed: "Shell output may be missing",
+    shellOutputMissedBody: {
+      one: "The window fell behind and dropped {count} event. What a shell printed meanwhile may not be in its pane.",
+      other:
+        "The window fell behind and dropped {count} events. What a shell printed meanwhile may not be in its pane.",
+    },
     shellEndedOnLeave: "Shell ended",
     shellEndedOnLeaveBody:
       "The shell in {target} was ended because its tab moved to another page.",
@@ -2286,6 +2292,9 @@ export const en = {
     viaDebug:
       "Viewing through debug container {debug}, at {root} of container {container}. Mode and owner are as the debug container sees them; a file the app process cannot read may still show here. The debug container stays on the pod.",
     stopVia: "Read the container directly again",
+    viaShowsNoContainer: "No container's files to read through {debug}",
+    viaShowsNoContainerWhy:
+      "Its process 1 is not a container of this pod: the pod's containers share one process namespace, or the debug container was pointed at none of them. It stays on the pod.",
     restartedSince:
       "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
     readNewContainer: "Read the new container",
@@ -2370,6 +2379,8 @@ export const en = {
     notRunningNow:
       "Container {container} is not running, so there is nothing to exec into",
     listFailed: "The listing did not finish: {code}",
+    listingUnheard:
+      "The window fell behind while this was being read and may have missed how it ended, so it was stopped.",
     unopenable:
       "{path} could not be opened: it is not a directory, or this container may not list it. A debug container often runs as a user that can.",
 

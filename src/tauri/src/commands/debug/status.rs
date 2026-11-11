@@ -28,6 +28,7 @@ pub(super) fn check_ephemeral_container_status(pod: &Pod, container_name: &str) 
                             container_name: container_name.to_string(),
                             namespace: ns,
                             is_new_pod: false,
+                            sees_root_of: pointed_at(pod, container_name),
                         },
                     };
                 }
@@ -63,6 +64,24 @@ pub(super) fn check_ephemeral_container_status(pod: &Pod, container_name: &str) 
             }
         }
     }
+}
+
+/// The container an ephemeral one was pointed at, whose process namespace it
+/// joined: that container's process is its process 1. `None` where it was
+/// pointed at none, and where the pod shares one process namespace, in which
+/// process 1 is the pause container whatever it was pointed at.
+fn pointed_at(pod: &Pod, container_name: &str) -> Option<String> {
+    let spec = pod.spec.as_ref()?;
+    if spec.share_process_namespace == Some(true) {
+        return None;
+    }
+    spec.ephemeral_containers
+        .as_ref()?
+        .iter()
+        .find(|c| c.name == container_name)?
+        .target_container_name
+        .clone()
+        .filter(|target| !target.is_empty())
 }
 
 /// Check regular container status
@@ -117,6 +136,7 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
                             container_name: container_name.to_string(),
                             namespace: ns,
                             is_new_pod: true,
+                            sees_root_of: None,
                         },
                     };
                 }
@@ -180,4 +200,58 @@ fn get_pending_reason(pod: &Pod) -> String {
         }
     }
     "Scheduling".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn debugged(target: Option<&str>, shared: bool) -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "cart", "namespace": "shop" },
+            "spec": {
+                "shareProcessNamespace": shared,
+                "containers": [{ "name": "app" }, { "name": "proxy" }],
+                "ephemeralContainers": [{
+                    "name": "debugger-1",
+                    "targetContainerName": target,
+                }],
+            },
+            "status": {
+                "ephemeralContainerStatuses": [{
+                    "name": "debugger-1",
+                    "state": { "running": {} },
+                    "ready": false, "restartCount": 0, "image": "", "imageID": "",
+                }],
+            },
+        }))
+        .expect("a pod")
+    }
+
+    fn sees(pod: &Pod) -> Option<String> {
+        match check_ephemeral_container_status(pod, "debugger-1") {
+            DebugStatus::Ready { result } => result.sees_root_of,
+            other => panic!("not ready: {other:?}"),
+        }
+    }
+
+    /// The Files tab labels what it reads through a debug container with this
+    /// name; without it the label was whichever container the tab had open.
+    #[test]
+    fn a_debug_container_reports_the_container_it_was_pointed_at() {
+        assert_eq!(sees(&debugged(Some("proxy"), false)), Some("proxy".into()));
+    }
+
+    /// With one process namespace for the pod, process 1 is the pause
+    /// container: its root listed under an app container's name is a lie.
+    #[test]
+    fn a_debug_container_in_a_shared_process_namespace_sees_no_one_containers_root() {
+        assert_eq!(sees(&debugged(Some("proxy"), true)), None);
+    }
+
+    /// Pointed at nothing, its process 1 is its own.
+    #[test]
+    fn a_debug_container_pointed_at_nothing_sees_no_other_containers_root() {
+        assert_eq!(sees(&debugged(None, false)), None);
+    }
 }
