@@ -402,21 +402,21 @@ describe("what an object owns", () => {
       });
     };
     await renderWithRouter(<OwnsPanel uid="w" namespace="shop" />);
-    expect(await screen.findByText("1–100 of 250")).toBeInTheDocument();
+    expect(await screen.findByText("1 to 100 of 250")).toBeInTheDocument();
     expect(screen.getAllByRole("treeitem")).toHaveLength(100);
     expect(
       screen.getByRole("button", { name: "Previous page" })
     ).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
-    expect(await screen.findByText("101–200 of 250")).toBeInTheDocument();
+    expect(await screen.findByText("101 to 200 of 250")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Pod step-100" })
     ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Pod step-0" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
-    expect(await screen.findByText("201–250 of 250")).toBeInTheDocument();
+    expect(await screen.findByText("201 to 250 of 250")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
     expect(pages).toContain(2);
   });

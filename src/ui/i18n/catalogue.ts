@@ -5160,7 +5160,7 @@ export const en = {
     groupUnread: "discovery did not answer",
     syncing: "still listing",
     queued: "waiting its turn: too many kinds to watch at once",
-    range: "{from}–{to} of {total}",
+    range: "{from} to {to} of {total}",
     previousPage: "Previous page",
     nextPage: "Next page",
     stale: "stale since {since}",
