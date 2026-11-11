@@ -155,7 +155,7 @@ export function useObjectReport(
   const tlsOf = useRouteTls(capturing ? connections.data : undefined);
   const door = useDoorAsk(capturing);
   const events = useObjectEvents(
-    subject ? eventsKindOf(subject) : { custom: "" },
+    subject ? eventsKindOf(subject) : { custom: "", group: null },
     subject?.name,
     subject?.namespace,
     {

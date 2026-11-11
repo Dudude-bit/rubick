@@ -316,10 +316,15 @@ it("carries the warnings of a CronJob's own runs", async () => {
   expect(result.current.data?.[0].involvedObject.name).toBe("nightly-29000000");
 });
 
-function mountCustom(kind: string, name: string, client = testQueryClient()) {
+function mountCustom(
+  kind: string,
+  name: string,
+  client = testQueryClient(),
+  group: string | null = null
+) {
   const { result } = renderHook(
     () =>
-      useObjectEvents({ custom: kind }, name, "lena-sandbox", {
+      useObjectEvents({ custom: kind, group }, name, "lena-sandbox", {
         refresh: "slow",
       }),
     {
@@ -377,12 +382,115 @@ it("takes a reference for the registry's kind only where it is that very kind", 
       name: "frontend",
       crd: "services.serving.knative.dev",
     })
-  ).toEqual({ custom: "Service" });
+  ).toEqual({ custom: "Service", group: "serving.knative.dev" });
   expect(
     eventsKindOf({
       kind: "Application",
       name: "shop",
       crd: "applications.argoproj.io",
     })
-  ).toEqual({ custom: "Application" });
+  ).toEqual({ custom: "Application", group: "argoproj.io" });
+});
+
+/**
+ * The group is what tells a namesake's events from the object's own. Fails
+ * if a reference whose CRD nobody resolved is given a group it did not
+ * name, or a core kind outside the registry is left without its own.
+ */
+it("names the group a custom reference's events are read by, and none where its CRD is unknown", () => {
+  expect(
+    eventsKindOf({ kind: "Service", name: "frontend", crd: null })
+  ).toEqual({ custom: "Service", group: null });
+  expect(eventsKindOf({ kind: "Application", name: "shop" })).toEqual({
+    custom: "Application",
+    group: null,
+  });
+  expect(eventsKindOf({ kind: "ServiceAccount", name: "builder" })).toEqual({
+    custom: "ServiceAccount",
+    group: "",
+  });
+});
+
+const inGroup = (event: EventInfo, apiVersion: string): EventInfo => ({
+  ...event,
+  involvedObject: { ...event.involvedObject, apiVersion },
+});
+
+/**
+ * The list is asked by the kind's name, which a custom kind may share: a
+ * Deployment and a custom Deployment of one name each showed the other's
+ * events that carry no uid. Fails if an event naming another group is kept,
+ * or one that names no group, which could be either's, is dropped.
+ */
+it("leaves out the events a namesake kind in another group has under the same name", async () => {
+  const own = inGroup(
+    onObject("Deployment", "web", "deploy", "ScalingReplicaSet", 3),
+    "apps/v1"
+  );
+  const theirs = {
+    ...inGroup(
+      onObject("Deployment", "web", "", "Reconciled", 2),
+      "apps.example.io/v1"
+    ),
+    involvedObject: {
+      apiVersion: "apps.example.io/v1",
+      kind: "Deployment",
+      name: "web",
+      namespace: "lena-sandbox",
+      uid: null,
+    },
+  };
+  const unsaid = {
+    ...onObject("Deployment", "web", "", "Noted", 1),
+    involvedObject: {
+      kind: "Deployment",
+      name: "web",
+      namespace: "lena-sandbox",
+      uid: null,
+    },
+  };
+  answer.events = [own, theirs, unsaid];
+  answer.sets = [];
+  answer.setEvents = [];
+
+  const builtIn = mountDeployment();
+  await waitFor(() => expect(builtIn.current.data).toBeDefined());
+  expect(builtIn.current.data?.map((e) => e.reason)).toEqual([
+    "ScalingReplicaSet",
+    "Noted",
+  ]);
+
+  const custom = mountCustom("Deployment", "web", undefined, "apps.example.io");
+  await waitFor(() => expect(custom.current.data).toBeDefined());
+  expect(custom.current.data?.map((e) => e.reason)).toEqual([
+    "Reconciled",
+    "Noted",
+  ]);
+});
+
+/**
+ * A Volcano Job named like a CronJob's run brought its warning to the
+ * CronJob's Events. Fails if the warnings of owned objects are matched by
+ * name against a kind in another group.
+ */
+it("leaves a namesake kind's warning out of the warnings of the objects a CronJob owns", async () => {
+  const run = (apiVersion: string, reason: string): EventInfo => ({
+    ...onObject("Job", "nightly-29000000", "", reason, 4),
+    involvedObject: {
+      apiVersion,
+      kind: "Job",
+      name: "nightly-29000000",
+      namespace: "lena-sandbox",
+      uid: null,
+    },
+  });
+  answer.events = [];
+  answer.jobs = [{ uid: "run", name: "nightly-29000000" }];
+  answer.jobEvents = [
+    run("batch/v1", "FailedCreate"),
+    run("batch.volcano.sh/v1alpha1", "PodGroupPending"),
+  ];
+  const result = mountDeployment("CronJob", "nightly");
+  await waitFor(() => expect(result.current.data).toHaveLength(1));
+  expect(result.current.data?.[0].reason).toBe("FailedCreate");
 });
