@@ -10,6 +10,7 @@ import {
 
 const bus = vi.hoisted(() => ({
   handlers: [] as Array<(event: { payload: unknown }) => void>,
+  lagged: [] as Array<(dropped: number, waitMs: number) => void>,
 }));
 
 /** One stream per kind in team-checkout, as the tests below name them, and one per namespace elsewhere. */
@@ -20,6 +21,12 @@ const streamOf = vi.hoisted(
 
 vi.mock("@/lib/events", () => ({
   listenEvent: vi.fn(async () => () => {}),
+  listenBridgeLag: vi.fn(async (handler: (typeof bus.lagged)[number]) => {
+    bus.lagged.push(handler);
+    return () => {
+      bus.lagged = bus.lagged.filter((each) => each !== handler);
+    };
+  }),
   listenResourceEvents: vi.fn(
     async (handler: (typeof bus.handlers)[number]) => {
       bus.handlers.push(handler);
@@ -75,6 +82,7 @@ const span = () => useChangeJournalStore.getState().spans.dev?.at(-1);
 
 beforeEach(() => {
   bus.handlers = [];
+  bus.lagged = [];
   useChangeJournalStore.setState({ entries: [], spans: {}, identities: {} });
   // Each test is a connection of its own: a refused watch is remembered per one.
   useClusterStore.setState((s) => ({
@@ -91,6 +99,40 @@ async function journal() {
   await emit("deploy", "synced");
   await emit("sts", "synced");
 }
+
+describe("the change journal when the bridge drops events", () => {
+  afterEach(() => vi.useRealTimers());
+
+  /**
+   * Every notice had every kind listed again across the scope at once, and
+   * through a lagging bridge those lists are the next notice. Fails if the
+   * span stays open over changes nobody saw, if the blinded streams are
+   * left sending, or if the kinds are listed again before the wait is up or
+   * once more for a notice heard during it.
+   */
+  it("goes blind and stops its streams at once, and lists again only after the wait", async () => {
+    await journal();
+    await emit("ds", "synced");
+    expect(span()).toMatchObject({ to: null });
+    const listed = () =>
+      vi.mocked(commands.subscribeDeploymentWatch).mock.calls.length;
+    const before = listed();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    act(() => bus.lagged.forEach((heard) => heard(1200, 1000)));
+    act(() => bus.lagged.forEach((heard) => heard(40, 2000)));
+
+    expect(span()?.to).not.toBeNull();
+    for (const stream of ["deploy", "sts", "ds"])
+      expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith(stream);
+    await act(() => vi.advanceTimersByTimeAsync(999));
+    expect(listed()).toBe(before);
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(listed()).toBe(before + 1);
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(listed()).toBe(before + 1);
+  });
+});
 
 describe("the change journal under a refused kind", () => {
   /**

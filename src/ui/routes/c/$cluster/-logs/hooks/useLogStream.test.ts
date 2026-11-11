@@ -62,6 +62,7 @@ vi.mock("@/lib/error-utils", async (importOriginal) => ({
   errorToShow: (err: unknown) => String(err),
 }));
 
+import { LAG_WAIT_MS } from "@/lib/events";
 import { useLogStream, DEFAULT_LOG_LIMIT } from "./useLogStream";
 import { REORDER_WINDOW_MS } from "./log-buffer";
 
@@ -1270,6 +1271,34 @@ describe("useLogStream when the event bridge drops events", () => {
     await waitFor(() => expect(subscribedCalls).toHaveLength(4));
 
     expect(result.current.previousRead).toBeNull();
+  });
+
+  /**
+   * Every notice attached every lane again at once, each reading back what
+   * it missed through the bridge that had just dropped it. Fails if lanes
+   * hit by a notice that follows another are attached before the wait is
+   * up, are not stopped meanwhile, or leave the pane saying it is streaming.
+   */
+  it("waits before attaching again when one notice follows another", async () => {
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    lagged();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(4));
+    vi.mocked(commands.stopLogStream).mockClear();
+    holdTheClock();
+
+    lagged();
+
+    expect(commands.stopLogStream).toHaveBeenCalledTimes(2);
+    expect(result.current).toMatchObject({
+      isStreaming: false,
+      isConnecting: true,
+    });
+    await advance(LAG_WAIT_MS - 1);
+    expect(streamConfigs).toHaveLength(4);
+    await advance(1);
+    expect(streamConfigs).toHaveLength(6);
+    expect(result.current.isStreaming).toBe(true);
   });
 
   /** A burst lags the bridge again and again. Fails if each lag stacks another round of streams on the one being opened. */

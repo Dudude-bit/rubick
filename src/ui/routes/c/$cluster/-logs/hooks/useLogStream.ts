@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { commands } from "@/lib/commands";
-import { listenEvent } from "@/lib/events";
+import { listenBridgeLag, listenEvent } from "@/lib/events";
 import type { LogLineEvent, StreamLogConfig } from "@/generated/types";
 import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import {
@@ -725,8 +725,10 @@ export function useLogStream({
         // The bridge dropped events and cannot say whose: lines, a failure,
         // the end of a read. Every lane not already known to have stopped is
         // attached again and reads on from its last line, which brings back
-        // the lines and finds the lane that died unheard.
-        unlistenLagged = await listenEvent("event-bridge-lagged", () => {
+        // the lines and finds the lane that died unheard. It stops at once
+        // and attaches after the wait: what it reads back crosses the bridge
+        // that has just dropped it.
+        unlistenLagged = await listenBridgeLag((_dropped, waitMs) => {
           if (!s.active) return;
           const stopped = new Set(
             failuresRef.current.map((f) =>
@@ -752,7 +754,13 @@ export function useLogStream({
             for (const [key] of lanes) next.delete(key);
             return next;
           });
-          void sync(s, sourcesRef.current, false);
+          const attach = () => {
+            if (s.active) void sync(s, sourcesRef.current, false);
+          };
+          if (waitMs === 0) return attach();
+          setIsStreaming(s.live.size > 0);
+          setIsConnecting(true);
+          setTimeout(attach, waitMs);
         });
         unlistenRead = await listenEvent("log-read", (event) => {
           const source = s.sourceOf.get(event.payload.stream_id);

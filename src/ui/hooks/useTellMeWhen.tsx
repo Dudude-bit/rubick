@@ -5,6 +5,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import {
+  listenBridgeLag,
   listenEvent,
   listenResourceEvents,
   type ResourceEvent,
@@ -214,7 +215,7 @@ export function useTellMeWhen() {
   const aside = useRef(new Map<string, Sight>());
   const coalescer = useRef<Coalescer<Answer> | null>(null);
   const deliver = useRef<(answers: Answer[]) => void>(() => {});
-  const reopenAll = useRef<() => void>(() => {});
+  const reopenAll = useRef<(waitMs: number) => void>(() => {});
   const renewals = useRenewals();
   // The renewal the open streams were last moved after.
   const movedAfter = useRef(renewals);
@@ -279,8 +280,9 @@ export function useTellMeWhen() {
     // can name, so the watch is lost until that list answers. A renewal
     // dropped nothing: the stream holds a client whose token is about to
     // die, and moves to the new one without a word. The lost timer carries
-    // over, or a watch already lost would never be reported.
-    const reopen = (lost: boolean) => {
+    // over, or a watch already lost would never be reported. A lag names
+    // the wait before the list: `listenBridgeLag` says why.
+    const reopen = (lost: boolean, waitMs = 0) => {
       for (const watchId of [...live.keys()]) {
         const old = live.get(watchId);
         if (!old) continue;
@@ -295,10 +297,14 @@ export function useTellMeWhen() {
         close(watchId);
         live.set(watchId, stream);
         if (lost) loseSight(watchId, stream, coalescer);
-        void open(watchId, stream);
+        if (waitMs === 0) void open(watchId, stream);
+        else
+          setTimeout(() => {
+            if (!stream.closed) void open(watchId, stream);
+          }, waitMs);
       }
     };
-    reopenAll.current = () => reopen(true);
+    reopenAll.current = (waitMs) => reopen(true, waitMs);
 
     for (const id of [...live.keys()]) {
       if (!wanted.has(id) || !connected) close(id);
@@ -439,8 +445,8 @@ export function useTellMeWhen() {
     // The drain's ending and the forward's death travel the same bridge, so
     // a lag can drop them too. A forward can be asked again; a drain cannot,
     // and is lost until its next progress report says it is still going.
-    const off = listenEvent("event-bridge-lagged", () => {
-      reopenAll.current();
+    const off = listenBridgeLag((_dropped, waitMs) => {
+      reopenAll.current(waitMs);
       const open = useTellMeWhenStore.getState().watches.filter(isOpen);
       for (const watch of open) {
         if (watch.kind === "Node")

@@ -27,9 +27,19 @@ type Channels = WeakMap<
 >;
 let channels: Channels = new WeakMap();
 
+/** The wait after a notice that follows another, and what it doubles up to. */
+export const LAG_WAIT_MS = 1_000;
+export const LAG_WAIT_MAX_MS = 30_000;
+/** Notices further apart are separate troubles. Past the cap, or a storm paced to it would start over every round. */
+export const LAG_QUIET_MS = 2 * LAG_WAIT_MAX_MS;
+
+const NO_LAG = { notice: null as unknown, at: -Infinity, streak: -1 };
+let lag = NO_LAG;
+
 /** For tests, whose mocked `listen` starts each test with nobody registered. */
 export function forgetChannels(): void {
   channels = new WeakMap();
+  lag = NO_LAG;
 }
 
 /**
@@ -81,6 +91,34 @@ export function listenEvent<C extends EventChannel>(
       throw error;
     }
   );
+}
+
+/**
+ * The bridge dropping events, for a holder of streams it subscribes again:
+ * `handler` is told how many were dropped and how long to wait first. A
+ * stream subscribed again lists its collection through the same bridge, so
+ * answering every notice at once turns a burst of them into a burst of
+ * lists from every watch on screen. A lone notice waits nothing; each one
+ * within `LAG_QUIET_MS` of the last doubles the wait, up to the cap.
+ */
+export function listenBridgeLag(
+  handler: (missed: number, waitMs: number) => void
+): Promise<Unlisten> {
+  return listenEvent("event-bridge-lagged", ({ payload }) =>
+    handler(payload.missed, lagWait(payload))
+  );
+}
+
+/** Every hearer of one notice is handed the same payload, and the same wait. */
+function lagWait(notice: object): number {
+  if (notice !== lag.notice) {
+    const at = Date.now();
+    const streak = at - lag.at > LAG_QUIET_MS ? 0 : lag.streak + 1;
+    lag = { notice, at, streak };
+  }
+  return lag.streak === 0
+    ? 0
+    : Math.min(LAG_WAIT_MS * 2 ** (lag.streak - 1), LAG_WAIT_MAX_MS);
 }
 
 /**

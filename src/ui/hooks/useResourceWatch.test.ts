@@ -7,7 +7,7 @@ import {
   vi,
   beforeEach,
 } from "vite-plus/test";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -58,6 +58,8 @@ import {
   type Kept,
 } from "./useResourceWatch";
 import { testQueryClient } from "@/test/render";
+import { credentialsRenewed } from "@/lib/credentials";
+import { LAG_WAIT_MS } from "@/lib/events";
 import { queryKeys } from "@/lib/query-keys";
 import { useWindowActivity } from "@/lib/window-activity";
 import type { Scoped } from "@/generated/types";
@@ -739,8 +741,15 @@ describe("useResourceWatch", () => {
 
   describe("a stream the bridge dropped events of", () => {
     afterEach(() => {
+      vi.useRealTimers();
       subscribeMock.mockImplementation(async () => "stream-cm-1");
     });
+
+    const notice = () =>
+      listeners["event-bridge-lagged"]?.({
+        payload: { channel: "event-bridge-lagged", missed: 1200 },
+      });
+    const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 
     async function lagged(client: QueryClient) {
       const onError = vi.fn();
@@ -765,6 +774,54 @@ describe("useResourceWatch", () => {
       expect(onError).toHaveBeenCalledTimes(1);
       return { onRecovered };
     }
+
+    /** The first notice is answered at once; this is the watch after it, listening on its second stream. */
+    async function laggedAgain(client: QueryClient) {
+      const first = await lagged(client);
+      await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      notice();
+      return first;
+    }
+
+    /**
+     * Every notice had every mounted watch list its collection again at
+     * once, and through a lagging bridge those lists are the next notice.
+     * Fails if a notice that follows another is answered before its wait,
+     * if notices during the wait each add a list, or if the stream that
+     * lost events is left sending through the bridge meanwhile.
+     */
+    it("waits before listing again when one notice follows another", async () => {
+      const client = new QueryClient();
+      seed(client, [{ name: "a" }]);
+      await laggedAgain(client);
+      notice();
+      notice();
+
+      expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith(
+        "stream-cm-2"
+      );
+      await advance(LAG_WAIT_MS - 1);
+      expect(subscribeMock).toHaveBeenCalledTimes(2);
+
+      await advance(1);
+      expect(subscribeMock).toHaveBeenCalledTimes(3);
+      expect(subscribedCalls.at(-1)?.streamId).toBe("stream-cm-3");
+    });
+
+    /**
+     * A renewal during the wait subscribes the watch again on its own.
+     * Fails if the wait then ends in one more list of the same collection.
+     */
+    it("does not list twice when something else subscribed the watch again during the wait", async () => {
+      const client = new QueryClient();
+      seed(client, [{ name: "a" }]);
+      await laggedAgain(client);
+
+      act(() => credentialsRenewed());
+      await advance(LAG_WAIT_MS);
+      expect(subscribeMock).toHaveBeenCalledTimes(3);
+    });
 
     /**
      * The stream's remaining events arrived milliseconds after the lag and

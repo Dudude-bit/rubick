@@ -18,6 +18,7 @@ import { testQueryClient } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { credentialsRenewed } from "@/lib/credentials";
+import { LAG_WAIT_MS } from "@/lib/events";
 
 const listeners: Record<
   string,
@@ -511,6 +512,32 @@ describe("the event bridge falling behind", () => {
       title: "payments rolled out",
       body: "",
     });
+    hook.unmount();
+  });
+
+  /**
+   * Each notice opened every ask's stream again at once. Fails if an ask
+   * whose notice follows another is not lost at once, or is listed again
+   * before the wait is up.
+   */
+  it("waits before listing again when one notice follows another", async () => {
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed();
+    const listed = vi.mocked(commands.subscribeObjectWatch);
+    listed.mockResolvedValueOnce("stream-3").mockResolvedValueOnce("stream-4");
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("stream-3")
+    );
+    const before = listed.mock.calls.length;
+
+    act(() => emit("event-bridge-lagged", { missed: 40 }));
+    expect(useTellMeWhenStore.getState().watches[0].status.state).toBe("lost");
+    expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith("stream-3");
+    await act(() => vi.advanceTimersByTimeAsync(LAG_WAIT_MS - 1));
+    expect(listed).toHaveBeenCalledTimes(before);
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(listed).toHaveBeenCalledTimes(before + 1);
     hook.unmount();
   });
 
