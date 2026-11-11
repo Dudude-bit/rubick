@@ -5,6 +5,7 @@ import {
   coverageOf,
   labelsOf,
   selects,
+  sourcedLabelsOf,
   type KubernetesPolicies,
 } from "./coverage";
 
@@ -19,18 +20,21 @@ function endpoint(namespace: string, labels: string[]): CustomResourceInfo {
   } as CustomResourceInfo;
 }
 
+/** `valid`: what the agent wrote in `Valid`, or `null` where it wrote nothing. */
 function policy(
   namespace: string | null,
   spec: unknown,
-  valid = true
+  valid: boolean | "Unknown" | null = true
 ): CustomResourceInfo {
+  const said =
+    valid === "Unknown" ? "Unknown" : valid === true ? "True" : "False";
   return {
     name: "p",
     namespace,
     kind: namespace ? "CiliumNetworkPolicy" : "CiliumClusterwideNetworkPolicy",
     spec,
     status: {
-      conditions: [{ type: "Valid", status: valid ? "True" : "False" }],
+      conditions: valid === null ? [] : [{ type: "Valid", status: said }],
     },
   } as CustomResourceInfo;
 }
@@ -75,9 +79,9 @@ const API = endpoint("shop", [
 describe("the labels a policy is matched against", () => {
   /**
    * Cilium prefixes what it took from Kubernetes with `k8s:` and mixes in
-   * its own (`reserved:`, `container:`). A selector names a Kubernetes
-   * label, so only that half may be matched — taking `reserved:init` for a
-   * pod label would let a selector match on something no manifest wrote.
+   * its own (`reserved:`, `container:`). A NetworkPolicy names a Kubernetes
+   * label, so only that half may be matched: taking `reserved:init` for a
+   * pod label would let one match on something no manifest wrote.
    */
   it("keeps the pod's own labels and drops Cilium's", () => {
     expect([...labelsOf(API)]).toEqual([
@@ -89,7 +93,7 @@ describe("the labels a policy is matched against", () => {
 });
 
 describe("whether a selector picks an endpoint", () => {
-  const labels = labelsOf(API);
+  const labels = sourcedLabelsOf(API);
 
   it("reads matchLabels and every expression operator", () => {
     expect(selects({}, labels)).toBe(true);
@@ -127,6 +131,31 @@ describe("whether a selector picks an endpoint", () => {
         labels
       )
     ).toBe(false);
+  });
+
+  /**
+   * Cilium's docs write `k8s:io.kubernetes.pod.namespace`, and a key with no
+   * source means one from any. Looked up verbatim, `k8s:app` matched no
+   * label, and every endpoint such a policy covers was "unrestricted".
+   */
+  it("reads the source a selector key names the way Cilium does", () => {
+    expect(selects({ matchLabels: { "k8s:app": "api" } }, labels)).toBe(true);
+    expect(selects({ matchLabels: { "any:app": "api" } }, labels)).toBe(true);
+    expect(selects({ matchLabels: { "k8s:app": "db" } }, labels)).toBe(false);
+    expect(
+      selects(
+        { matchLabels: { "k8s:io.kubernetes.pod.namespace": "shop" } },
+        labels
+      )
+    ).toBe(true);
+    const exists = (key: string) =>
+      selects({ matchExpressions: [{ key, operator: "Exists" }] }, labels);
+    expect(exists("k8s:app")).toBe(true);
+    // A named source has to be the label's own.
+    expect(exists("reserved:app")).toBe(false);
+    expect(exists("k8s:init")).toBe(false);
+    expect(exists("reserved:init")).toBe(true);
+    expect(exists("init")).toBe(true);
   });
 
   /**
@@ -205,6 +234,84 @@ describe("what covers an endpoint", () => {
       NONE
     );
     expect(both.verdict).toBe("covered");
+  });
+
+  /**
+   * The page's whole answer for a policy written as the docs write one.
+   * Fails if the join goes back to looking a prefixed key up verbatim.
+   */
+  it("covers an endpoint a policy selects by a key written with its source", () => {
+    const [api] = coverageOf(
+      [API],
+      [],
+      [
+        policy(null, {
+          endpointSelector: {
+            matchLabels: { "k8s:io.kubernetes.pod.namespace": "shop" },
+          },
+          ...RULES,
+        }),
+      ],
+      NONE
+    );
+    expect(api.selecting).toHaveLength(1);
+    expect(api.verdict).toBe("covered");
+  });
+
+  /**
+   * The third state. A policy with no `Valid` condition, or `Unknown`, is
+   * one the agent has not answered about: it may well be in force, and
+   * "only rejected policies" in red said it was thrown away. Fails if the
+   * unanswered branch goes and such a policy counts as rejected again.
+   */
+  it("cannot say about an endpoint whose policies the agent has not answered about", () => {
+    const spec = {
+      endpointSelector: { matchLabels: { app: "api" } },
+      ...RULES,
+    };
+    for (const valid of [null, "Unknown"] as const) {
+      const [unanswered] = coverageOf(
+        [API],
+        [policy("shop", spec, valid)],
+        [],
+        NONE
+      );
+      expect(unanswered.selecting.map((one) => one.enforcement)).toEqual([
+        "notSaid",
+      ]);
+      expect(unanswered.directions).toEqual({
+        ingress: "cannotSay",
+        egress: "cannotSay",
+      });
+      expect(unanswered.verdict).toBe("cannotSay");
+    }
+
+    // Beside a rejected one it is still not "only rejected".
+    const [mixed] = coverageOf(
+      [API],
+      [policy("shop", spec, null), policy("shop", spec, false)],
+      [],
+      NONE
+    );
+    expect(mixed.verdict).toBe("cannotSay");
+
+    // And an accepted policy settles it, as it does beside a rejected one.
+    const [settled] = coverageOf(
+      [API],
+      [policy("shop", spec, null), policy("shop", spec, true)],
+      [],
+      NONE
+    );
+    expect(settled.verdict).toBe("covered");
+
+    // Rejected alone keeps its own verdict: the two are told apart.
+    const [rejected] = coverageOf(
+      [API],
+      [policy("shop", spec, false)],
+      [],
+      NONE
+    );
+    expect(rejected.verdict).toBe("onlyRejected");
   });
 
   /** Nothing names it, and that is a fact rather than a gap. */
@@ -287,6 +394,38 @@ describe("what covers an endpoint", () => {
       ingress: "unrestricted",
       egress: "restricted",
     });
+  });
+});
+
+describe("what the join costs", () => {
+  /**
+   * Every policy was parsed again for every endpoint, so the join grew as
+   * endpoints × policies. Fails if a policy's spec is read once more for
+   * each endpoint it is asked about.
+   */
+  it("reads a policy once, however many endpoints it is asked about", () => {
+    const readsFor = (endpoints: number) => {
+      let reads = 0;
+      const counted = {
+        ...policy("shop", null),
+        get spec() {
+          reads += 1;
+          return {
+            endpointSelector: { matchLabels: { app: "api" } },
+            ...RULES,
+          };
+        },
+      } as CustomResourceInfo;
+      const rows = coverageOf(
+        Array.from({ length: endpoints }, () => API),
+        [counted],
+        [counted],
+        NONE
+      );
+      expect(rows.every((row) => row.verdict === "covered")).toBe(true);
+      return reads;
+    };
+    expect(readsFor(40)).toBe(readsFor(1));
   });
 });
 

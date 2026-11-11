@@ -364,8 +364,19 @@ function DirectionLine({
 const refKey = (selecting: Selecting) =>
   `${selecting.kind}/${selecting.namespace ?? "*"}/${selecting.name}`;
 
+/** What is said beside a policy that is not known to be in force. */
+const ENFORCEMENT_NOTE: Record<
+  Selecting["enforcement"],
+  { word: "ciliumEnforcesNothing" | "ciliumNotAnswered"; tone: RowTone } | null
+> = {
+  accepted: null,
+  rejected: { word: "ciliumEnforcesNothing", tone: "err" },
+  notSaid: { word: "ciliumNotAnswered", tone: "unknown" },
+};
+
 function PolicyRef({ selecting }: { selecting: Selecting }) {
   const t = useT();
+  const note = ENFORCEMENT_NOTE[selecting.enforcement];
   return (
     <span className="inline-flex items-baseline gap-1">
       <ResourceRef
@@ -380,9 +391,9 @@ function PolicyRef({ selecting }: { selecting: Selecting }) {
               : KINDS.policies
         }
       />
-      {!selecting.enforcing && (
-        <span className="text-[10.5px] text-err">
-          {t("readings", "ciliumEnforcesNothing")}
+      {note && (
+        <span className={cn("text-[10.5px]", TONE_TEXT[note.tone])}>
+          {t("readings", note.word)}
         </span>
       )}
     </span>

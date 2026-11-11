@@ -96,6 +96,7 @@ import type {
   NodeBasis,
   NodeUsageSeries,
   NodeUsageWindow,
+  PageCount,
   Vendor,
   VendorFact,
   VendorPage,
@@ -871,6 +872,31 @@ export interface IntegrationPageEntry {
   forbidden: boolean;
 }
 
+interface Measured {
+  count: number | null;
+  tone: "warn" | "err" | "unchecked" | null;
+}
+
+const MEASURES = new WeakMap<PageCount, (data: unknown) => Measured>();
+
+/**
+ * A vendor's count and dot as one `select`, the same function every render.
+ * React Query keeps a selected answer only while the function is the one it
+ * last ran, so an arrow made per render re-read every vendor's whole
+ * payload each time the sidebar drew.
+ */
+function measureOf(declared: PageCount): (data: unknown) => Measured {
+  let measure = MEASURES.get(declared);
+  if (!measure) {
+    measure = (data) => ({
+      count: declared.select(data as never),
+      tone: declared.tone?.(data as never) ?? null,
+    });
+    MEASURES.set(declared, measure);
+  }
+  return measure;
+}
+
 /**
  * The Integrations category: one row per extension this cluster actually
  * has, or an empty list.
@@ -954,15 +980,8 @@ export function useIntegrationPages(): {
         queryKey: [context, ...declared.queryKey],
         queryFn: declared.queryFn,
         staleTime: declared.staleTime,
-        select: (data: unknown) => ({
-          count: declared.select(data as never),
-          tone: declared.tone?.(data as never) ?? null,
-        }),
-      } as UseQueryOptions<
-        unknown,
-        Error,
-        { count: number | null; tone: "warn" | "err" | "unchecked" | null }
-      >;
+        select: measureOf(declared),
+      } as UseQueryOptions<unknown, Error, Measured>;
     }),
   });
 

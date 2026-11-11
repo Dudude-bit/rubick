@@ -20,26 +20,61 @@ import type {
   NetworkPolicyInfo,
   UnreadNamespace,
 } from "@/generated/types";
-import { labelSelectorMatches, type LabelSelector } from "@/lib/label-selector";
+import {
+  holds,
+  requirementsOf,
+  type LabelSelector,
+} from "@/lib/label-selector";
 import { selectsPod } from "@/lib/network-policy";
 import { getValueByPath } from "../kit";
-import { directionsOf, enforcementOf, selectsNodes } from "./model";
+import {
+  directionsOf,
+  enforcementOf,
+  selectsNodes,
+  type Enforcement,
+} from "./model";
 
 /** The prefix Cilium puts on a label it took from Kubernetes. */
 const FROM_K8S = "k8s:";
 
-/** A pod's labels as Cilium resolved them, without its own prefixes. */
-export function labelsOf(endpoint: CustomResourceInfo): Map<string, string> {
+/** The source a selector key has when it names none: a label from anywhere. */
+const FROM_ANY = "any:";
+
+function identityLabels(endpoint: CustomResourceInfo): string[] {
   const raw = getValueByPath(endpoint, "status.identity.labels");
+  return Array.isArray(raw)
+    ? raw.filter((entry) => typeof entry === "string")
+    : [];
+}
+
+/** The pod's own labels, which a NetworkPolicy selects on: the `k8s:` half. */
+export function labelsOf(endpoint: CustomResourceInfo): Map<string, string> {
   const labels = new Map<string, string>();
-  if (!Array.isArray(raw)) return labels;
-  for (const entry of raw) {
-    if (typeof entry !== "string" || !entry.startsWith(FROM_K8S)) continue;
+  for (const entry of identityLabels(endpoint)) {
+    if (!entry.startsWith(FROM_K8S)) continue;
     const [key, ...rest] = entry.slice(FROM_K8S.length).split("=");
     labels.set(key, rest.join("="));
   }
   return labels;
 }
+
+/** Every label, keyed both ways a Cilium selector names one: `k8s:app`, `any:app`. */
+export function sourcedLabelsOf(
+  endpoint: CustomResourceInfo
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const entry of identityLabels(endpoint)) {
+    const [sourced, ...rest] = entry.split("=");
+    const value = rest.join("=");
+    labels.set(sourced, value);
+    const any = FROM_ANY + sourced.slice(sourced.indexOf(":") + 1);
+    if (!labels.has(any)) labels.set(any, value);
+  }
+  return labels;
+}
+
+/** A key that names no source is one from any; verbatim, `k8s:app` matched nothing. */
+const sourcedKey = (key: string) => (key.includes(":") ? key : FROM_ANY + key);
 
 /**
  * Whether a selector picks these labels, or `null` where that cannot be
@@ -49,10 +84,22 @@ export function labelsOf(endpoint: CustomResourceInfo): Map<string, string> {
  */
 export function selects(
   selector: unknown,
-  labels: Map<string, string>
+  sourced: Map<string, string>
 ): boolean | null {
+  return matcherOf(selector)?.(sourced) ?? null;
+}
+
+type Matcher = (sourced: Map<string, string>) => boolean;
+
+/** A selector read once, to be asked of every endpoint; `null` as above. */
+function matcherOf(selector: unknown): Matcher | null {
   if (selector === undefined || selector === null) return null;
-  return labelSelectorMatches(selector as LabelSelector, labels);
+  const requirements = requirementsOf(selector as LabelSelector)?.map(
+    (requirement) => ({ ...requirement, key: sourcedKey(requirement.key) })
+  );
+  if (!requirements) return null;
+  return (sourced) =>
+    requirements.every((requirement) => holds(requirement, sourced));
 }
 
 export type Direction = "ingress" | "egress";
@@ -69,7 +116,8 @@ export interface Selecting {
   name: string;
   namespace: string | null;
   clusterwide: boolean;
-  enforcing: boolean;
+  /** What the operator said about it. `notSaid` is not `rejected`. */
+  enforcement: Enforcement["state"];
   /** The directions this policy puts the endpoint under policy for. */
   restricts: Record<Direction, boolean>;
 }
@@ -134,12 +182,64 @@ function stateOf(
   undecided: boolean
 ): DirectionState {
   const governing = selecting.filter((one) => one.restricts[direction]);
-  if (governing.some((one) => one.enforcing)) return "restricted";
+  if (governing.some((one) => one.enforcement === "accepted")) {
+    return "restricted";
+  }
   // Only after the enforcing ones: a policy that works beside one that could
   // not be read still restricts the endpoint.
   if (undecided) return "cannotSay";
+  // A policy the operator has not answered about may be in force.
+  if (governing.some((one) => one.enforcement === "notSaid")) {
+    return "cannotSay";
+  }
   if (governing.length > 0) return "onlyRejected";
   return "unrestricted";
+}
+
+/** A Cilium policy read once; `picks` is `null` where its rules are unread. */
+interface Prepared {
+  picks: Matcher | null;
+  selecting: Selecting;
+}
+
+/** `null` for a host policy: nodes, never an endpoint, a known "no". */
+function prepare(
+  policy: CustomResourceInfo,
+  isClusterwide: boolean
+): Prepared | null {
+  if (selectsNodes(policy)) return null;
+  const spec = policy.spec;
+  return {
+    picks:
+      typeof spec === "object" && spec !== null
+        ? matcherOf((spec as Record<string, unknown>).endpointSelector)
+        : null,
+    selecting: {
+      kind: policy.kind,
+      name: policy.name,
+      namespace: policy.namespace,
+      clusterwide: isClusterwide,
+      enforcement: enforcementOf(policy).state,
+      restricts: ciliumRestricts(policy),
+    },
+  };
+}
+
+function byNamespace<T, V>(
+  items: T[],
+  namespaceOf: (item: T) => string | null,
+  read: (item: T) => V | null
+): Map<string | null, V[]> {
+  const groups = new Map<string | null, V[]>();
+  for (const item of items) {
+    const value = read(item);
+    if (value === null) continue;
+    const namespace = namespaceOf(item);
+    const group = groups.get(namespace);
+    if (group) group.push(value);
+    else groups.set(namespace, [value]);
+  }
+  return groups;
 }
 
 export function coverageOf(
@@ -148,70 +248,63 @@ export function coverageOf(
   clusterwide: CustomResourceInfo[],
   kubernetes: KubernetesPolicies
 ): Coverage[] {
+  // Each policy is read once and asked only of its own namespace. Read per
+  // endpoint, this was endpoints × every policy in the cluster.
+  // ponytail: still one synchronous pass, ~70 ms at 5000 endpoints; a worker
+  // if the rig says the picture's arrival stalls.
+  const namespaced = byNamespace(
+    policies,
+    (policy) => policy.namespace,
+    (policy) => prepare(policy, false)
+  );
+  const everywhere = clusterwide.flatMap(
+    (policy) => prepare(policy, true) ?? []
+  );
+  const kubernetesIn = byNamespace(
+    kubernetes.read ? kubernetes.policies : [],
+    (policy) => policy.namespace,
+    (policy) => policy
+  );
+
   return endpoints.map((endpoint) => {
     const labels = labelsOf(endpoint);
+    const sourced = sourcedLabelsOf(endpoint);
     const selecting: Selecting[] = [];
     let unreadable = 0;
 
-    const consider = (policy: CustomResourceInfo, isClusterwide: boolean) => {
-      if (!isClusterwide && policy.namespace !== endpoint.namespace) return;
-      // Nodes, never an endpoint: a known "no", not an unread rule.
-      if (selectsNodes(policy)) return;
-      const spec = policy.spec;
-      if (typeof spec !== "object" || spec === null) {
-        unreadable += 1;
-        return;
-      }
-      const answer = selects(
-        (spec as Record<string, unknown>).endpointSelector,
-        labels
-      );
-      if (answer === null) {
-        unreadable += 1;
-        return;
-      }
-      if (!answer) return;
-      selecting.push({
-        kind: policy.kind,
-        name: policy.name,
-        namespace: policy.namespace,
-        clusterwide: isClusterwide,
-        enforcing: enforcementOf(policy).state === "accepted",
-        restricts: ciliumRestricts(policy),
-      });
+    const consider = (one: Prepared) => {
+      if (one.picks === null) unreadable += 1;
+      else if (one.picks(sourced)) selecting.push(one.selecting);
     };
-
-    for (const policy of policies) consider(policy, false);
-    for (const policy of clusterwide) consider(policy, true);
+    namespaced.get(endpoint.namespace)?.forEach(consider);
+    everywhere.forEach(consider);
 
     const kubernetesUnread = kubernetesUnreadFor(
       kubernetes,
       endpoint.namespace
     );
-    if (kubernetes.read) {
-      for (const policy of kubernetes.policies) {
-        const answer = selectsPod(policy, {
-          namespace: endpoint.namespace,
-          labels,
-        });
-        if (answer === null) {
-          unreadable += 1;
-          continue;
-        }
-        if (!answer) continue;
-        selecting.push({
-          kind: "NetworkPolicy",
-          name: policy.name,
-          namespace: policy.namespace,
-          clusterwide: false,
-          // Nothing reports a NetworkPolicy as rejected: Cilium enforces it.
-          enforcing: true,
-          restricts: {
-            ingress: policy.ingress.governed,
-            egress: policy.egress.governed,
-          },
-        });
+    for (const policy of kubernetesIn.get(endpoint.namespace) ?? []) {
+      const answer = selectsPod(policy, {
+        namespace: endpoint.namespace,
+        labels,
+      });
+      if (answer === null) {
+        unreadable += 1;
+        continue;
       }
+      if (!answer) continue;
+      selecting.push({
+        kind: "NetworkPolicy",
+        name: policy.name,
+        namespace: policy.namespace,
+        clusterwide: false,
+        // Nothing reports a NetworkPolicy as rejected: Cilium enforces it.
+        enforcement: "accepted",
+        restricts: {
+          ingress: policy.ingress.governed,
+          egress: policy.egress.governed,
+        },
+      });
     }
 
     const undecided = unreadable > 0 || kubernetesUnread !== null;

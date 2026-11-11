@@ -6,7 +6,14 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchMultiple, orNone, orNotWritten } from "../kit";
+import {
+  conditionOf,
+  getValueByPath,
+  matchMultiple,
+  orNone,
+  orNotWritten,
+  readyColumn,
+} from "../kit";
 import type { CrdView } from "../registry";
 import { formatDate } from "@/lib/utils";
 
@@ -21,20 +28,14 @@ const helmReleaseColumns: CrdColumn[] = [
     id: "ready",
     header: "ready",
     accessor: (resource) => {
-      const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string; reason?: string }>
-        | undefined;
-
-      if (!Array.isArray(conditions)) return "Unknown";
-
-      const readyCondition = conditions.find((c) => c.type === "Ready");
-      if (!readyCondition) return "Unknown";
-
-      if (readyCondition.status === "True") return "True";
-      if (readyCondition.reason === "Progressing") return "Progressing";
-      return "False";
+      const ready = conditionOf(resource, "Ready");
+      if (!ready) return null;
+      if (ready.status === "True") return "True";
+      // Flux's reason for a reconcile under way; otherwise its own status,
+      // so `Unknown` is not printed as the `False` nobody wrote.
+      return ready.reason === "Progressing" ? "Progressing" : ready.status;
     },
-    cell: orNone,
+    cell: orNotWritten,
   },
   {
     id: "chart",
@@ -107,21 +108,7 @@ const helmReleaseColumns: CrdColumn[] = [
  * Columns for HelmRepository list
  */
 const helmRepositoryColumns: CrdColumn[] = [
-  {
-    id: "ready",
-    header: "ready",
-    accessor: (resource) => {
-      const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
-
-      if (!Array.isArray(conditions)) return "Unknown";
-
-      const readyCondition = conditions.find((c) => c.type === "Ready");
-      return readyCondition?.status === "True" ? "True" : "False";
-    },
-    cell: orNone,
-  },
+  readyColumn,
   {
     id: "url",
     header: "url",
@@ -166,21 +153,7 @@ const helmRepositoryColumns: CrdColumn[] = [
  * Columns for HelmChart list
  */
 const helmChartColumns: CrdColumn[] = [
-  {
-    id: "ready",
-    header: "ready",
-    accessor: (resource) => {
-      const conditions = getValueByPath(resource, "status.conditions") as
-        | Array<{ type: string; status: string }>
-        | undefined;
-
-      if (!Array.isArray(conditions)) return "Unknown";
-
-      const readyCondition = conditions.find((c) => c.type === "Ready");
-      return readyCondition?.status === "True" ? "True" : "False";
-    },
-    cell: orNone,
-  },
+  readyColumn,
   {
     id: "chart",
     header: "chart",

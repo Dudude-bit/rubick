@@ -2,6 +2,7 @@ import { createElement, Fragment, type ReactNode } from "react";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 
+import type { CustomResourceInfo } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { crd } from "./crd";
@@ -43,4 +44,34 @@ describe("what a vendor's list cells say in Russian", () => {
     const past = new Date(Date.now() - 86400_000 * 2).toISOString();
     expect(cell(crd, "Certificate", "expiry", past)).toBe("Истёк");
   });
+});
+
+describe("the Ready column of cert-manager's lists", () => {
+  const en: T = (section, key, values) => translate("en", section, key, values);
+
+  function ready(kind: string, conditions: unknown) {
+    const column = crd.columnsFor(kind).find((one) => one.id === "ready")!;
+    const resource = { status: { conditions } } as CustomResourceInfo;
+    return drawn(column.cell!(column.accessor(resource, en), en));
+  }
+
+  /**
+   * `status === "True" ? "True" : "False"` printed "False" for a Ready that
+   * is `Unknown` and for one cert-manager had not written yet, so an object
+   * it had not answered about read as failed.
+   */
+  it.each(["Certificate", "Issuer", "ClusterIssuer"])(
+    "says a %s's Ready as cert-manager wrote it, and never False for one it did not",
+    (kind) => {
+      expect(ready(kind, [{ type: "Ready", status: "True" }])).toBe("True");
+      expect(ready(kind, [{ type: "Ready", status: "False" }])).toBe("False");
+      expect(ready(kind, [{ type: "Ready", status: "Unknown" }])).toBe(
+        "Unknown"
+      );
+      expect(ready(kind, [{ type: "Issuing", status: "True" }])).toBe(
+        "not written yet"
+      );
+      expect(ready(kind, undefined)).toBe("not written yet");
+    }
+  );
 });

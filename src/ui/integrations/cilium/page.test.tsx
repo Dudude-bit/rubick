@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import { renderWithRouter } from "@/test/render";
 
@@ -123,6 +123,42 @@ describe("the Cilium page", () => {
     const state = await screen.findByText(en.readings.ciliumCannotSay);
     expect(state).toHaveClass(TONE_TEXT.unknown);
     expect(state).not.toHaveClass(TONE_TEXT.warn);
+  });
+
+  /**
+   * A policy with no `Valid` condition was captioned "rejected, enforces
+   * nothing" in red, and its endpoint headed the page as selected only by
+   * rejected policies. Fails if "not answered" is drawn as "rejected".
+   */
+  it("says a policy the agent has not answered about is that, not rejected", async () => {
+    answers.set(KINDS.endpoints, () => Promise.resolve([API_ENDPOINT]));
+    answers.set(KINDS.policies, () =>
+      Promise.resolve([
+        {
+          name: "allow-api",
+          namespace: "net",
+          kind: "CiliumNetworkPolicy",
+          spec: { endpointSelector: {}, ingress: [{}], egress: [{}] },
+          status: {},
+        },
+      ])
+    );
+
+    await renderPage();
+
+    const state = await screen.findByText(en.readings.ciliumCannotSay);
+    expect(state).toHaveClass(TONE_TEXT.unknown);
+    expect(screen.queryByText(/selected only by policies/)).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(API_ENDPOINT.name) })
+    );
+    const notes = await screen.findAllByText(en.readings.ciliumNotAnswered);
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toHaveClass(TONE_TEXT.unknown);
+    expect(
+      screen.queryByText(en.readings.ciliumEnforcesNothing)
+    ).not.toBeInTheDocument();
   });
 
   /** Read and empty is its own sentence, not an empty search. */

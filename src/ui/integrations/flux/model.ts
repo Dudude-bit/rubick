@@ -28,7 +28,12 @@
 import type { VendorVerdict } from "../kit";
 import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
-import { conditionOf, conditionsOf, getValueByPath } from "../kit";
+import {
+  conditionOf,
+  conditionSays,
+  conditionsOf,
+  getValueByPath,
+} from "../kit";
 import { shortRevision } from "../gitops";
 
 /**
@@ -144,8 +149,9 @@ export interface FluxSource {
   ref: string | null;
   interval: string | null;
   suspended: boolean;
-  /** `null` where the controller has written no `Ready` condition yet. */
+  /** `null` where the controller has written no `Ready`, or `Unknown`. */
   ready: boolean | null;
+  reason: string | null;
   /** The controller's own sentence, never rewritten. */
   message: string | null;
   artifact: { revision: FluxRevision | null; at: string | null } | null;
@@ -276,7 +282,8 @@ function readSource(kind: string, object: CustomResourceInfo): FluxSource {
     ref: refOf(object),
     interval: (getValueByPath(object, "spec.interval") as string) ?? null,
     suspended: getValueByPath(object, "spec.suspend") === true,
-    ready: ready ? ready.status === "True" : null,
+    ready: conditionSays(ready),
+    reason: ready?.reason ?? null,
     // FetchFailed is the specific sentence where there is one; Ready's copy of
     // it is the same string, and where they differ the specific one is why.
     message: fetchFailed?.message ?? ready?.message ?? null,
@@ -376,7 +383,7 @@ function base(
     key: `${namespace}/${object.name}`,
     interval: (getValueByPath(object, "spec.interval") as string) ?? null,
     suspended: getValueByPath(object, "spec.suspend") === true,
-    ready: ready ? ready.status === "True" : null,
+    ready: conditionSays(ready),
     reason: ready?.reason ?? null,
     message: ready?.message ?? null,
     stalled: stalled?.message ?? null,
@@ -613,7 +620,12 @@ export function reconcilerState(
     };
   }
   if (reconciler.ready === null) {
-    return { text: t("empty", "fluxNotReconciledYet"), tone: "warn" };
+    // Flux's own reason where it gave one: `Progressing` is a reconcile
+    // under way, on an object that may have reconciled a hundred times.
+    return {
+      text: reconciler.reason ?? t("empty", "fluxNotReconciledYet"),
+      tone: "warn",
+    };
   }
   if (reconciler.findings.some((finding) => finding.kind === "frozen")) {
     return { text: t("empty", "fluxFrozenSource"), tone: "err" };
@@ -632,8 +644,12 @@ export function sourceState(source: FluxSource, t: T): VendorVerdict {
       tone: "err",
     };
   }
-  if (source.ready === null)
-    return { text: t("empty", "fluxNotFetchedYet"), tone: "warn" };
+  if (source.ready === null) {
+    return {
+      text: source.reason ?? t("empty", "fluxNotFetchedYet"),
+      tone: "warn",
+    };
+  }
   if (source.usedBy.length === 0 && source.usersKnown)
     return { text: t("empty", "fluxFetchedUnused"), tone: "warn" };
   return { text: t("empty", "fluxFetched"), tone: "ok" };

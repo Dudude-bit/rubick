@@ -1,4 +1,6 @@
 import type { CustomResourceInfo } from "@/generated/types";
+import type { T } from "@/i18n/useT";
+import { declaredQuantity } from "@/lib/metric-format";
 import { conditionOf, getValueByPath } from "../kit";
 
 /**
@@ -20,6 +22,31 @@ export interface Rack {
   /** `status.racks[].stale`: the operator has not looked at this rack since the spec changed. */
   stale: boolean;
   capacity: string | null;
+}
+
+/**
+ * The storage the racks declare, members per capacity in rack order:
+ * `6 × 900Gi`, or `3 × 100Gi + 3 × 500Gi`. Every member times the
+ * first rack's size was wrong for any cluster whose racks differ.
+ */
+export function storageWords(racks: Rack[], t: T): string {
+  const members = new Map<string | null, number>();
+  for (const rack of racks) {
+    members.set(
+      rack.capacity,
+      (members.get(rack.capacity) ?? 0) + rack.members
+    );
+  }
+  const notDeclared = t("operators", "notDeclared");
+  if (![...members.keys()].some((capacity) => capacity !== null)) {
+    return notDeclared;
+  }
+  return [...members]
+    .map(
+      ([capacity, count]) =>
+        `${count} × ${capacity === null ? notDeclared : declaredQuantity("storage", capacity)}`
+    )
+    .join(" + ");
 }
 
 export interface Upgrade {

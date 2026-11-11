@@ -439,6 +439,24 @@ describe("issuers", () => {
     expect(row.serves).toBe(1);
   });
 
+  /**
+   * `Unknown` is cert-manager not having answered, which the tab counted as
+   * an issuer that is not ready and the row drew in red. Fails if a Ready
+   * that is not `False` reads as a refusal again.
+   */
+  it("does not call an issuer whose Ready is Unknown not ready", () => {
+    const unknown = resource({
+      name: "le",
+      kind: "Issuer",
+      spec: { selfSigned: {} },
+      status: { conditions: [{ type: "Ready", status: "Unknown" }] },
+    });
+    expect(issuerRows([unknown], [], [])[0].ready).toBeNull();
+    expect(issuerRows([issuer("bad", { ready: false })], [], [])[0].ready).toBe(
+      false
+    );
+  });
+
   it("puts a refusing issuer first and keeps its message", () => {
     const rows = issuerRows(
       [issuer("good"), issuer("bad", { ready: false })],

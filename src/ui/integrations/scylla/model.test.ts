@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { CustomResourceInfo } from "@/generated/types";
-import { byTrouble, readNodeConfig, readScyllaCluster } from "./model";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import {
+  byTrouble,
+  readNodeConfig,
+  readScyllaCluster,
+  storageWords,
+} from "./model";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 function cluster(
   name: string,
@@ -61,6 +70,44 @@ const ROLLED_OUT = {
     { type: "Degraded", status: "False" },
   ],
 };
+
+describe("the storage a ScyllaCluster declares", () => {
+  const racks = (...declared: Array<[members: number, capacity?: string]>) =>
+    readScyllaCluster(
+      cluster("sessions", null, {
+        datacenter: {
+          racks: declared.map(([members, capacity], at) => ({
+            name: `rack-${at}`,
+            members,
+            storage: capacity ? { capacity } : {},
+          })),
+        },
+      })
+    ).racks;
+
+  /**
+   * Every member was multiplied by the first rack's capacity: a 100Gi rack
+   * beside a 500Gi one read "6 × 100Gi", and a first rack with no capacity
+   * made the whole cluster "not declared" over racks that declare one.
+   */
+  it("counts members under the capacity their own rack declares", () => {
+    expect(storageWords(racks([3, "900Gi"], [3, "900Gi"]), t)).toBe(
+      "6 × 900Gi"
+    );
+    expect(storageWords(racks([3, "100Gi"], [2, "500Gi"]), t)).toBe(
+      "3 × 100Gi + 2 × 500Gi"
+    );
+    expect(storageWords(racks([3], [2, "500Gi"]), t)).toBe(
+      "3 × not declared + 2 × 500Gi"
+    );
+  });
+
+  /** Nothing declared anywhere is one answer, not a sum of blanks. */
+  it("says not declared when no rack declares a capacity", () => {
+    expect(storageWords(racks([3], [3]), t)).toBe("not declared");
+    expect(storageWords([], t)).toBe("not declared");
+  });
+});
 
 describe("readScyllaCluster", () => {
   it("draws a rolled-out cluster as racks and members with nothing to say", () => {

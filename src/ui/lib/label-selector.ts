@@ -94,7 +94,8 @@ function valueOf(labels: Labels, key: string): string | undefined {
   return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
-function holds(requirement: Requirement, labels: Labels): boolean {
+/** Whether `labels` satisfy one requirement. */
+export function holds(requirement: Requirement, labels: Labels): boolean {
   const value = valueOf(labels, requirement.key);
   switch (requirement.operator) {
     case "In":
