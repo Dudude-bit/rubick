@@ -281,10 +281,8 @@ impl Error {
 /// as `Unauthorized` with the code unset on some distributions.
 impl From<kube::Error> for Error {
     fn from(err: kube::Error) -> Self {
-        if let kube::Error::Api(response) = &err {
-            if response.code == 401 || response.reason == "Unauthorized" {
-                return Error::CredentialsExpired(server_words(response));
-            }
+        if let Some(response) = session_over(&err) {
+            return Error::CredentialsExpired(server_words(response));
         }
         if let kube::Error::Service(inner) = &err {
             if ran_out_of_time(inner.as_ref()) {
@@ -294,6 +292,18 @@ impl From<kube::Error> for Error {
             }
         }
         Error::KubeApi(err)
+    }
+}
+
+/// The API server's words where its answer is about the session, not the
+/// request. Asked by a read that keeps a refusal as an answer of its own: a
+/// 401 kept that way outlives the renewal that ends it.
+pub(crate) fn session_over(err: &kube::Error) -> Option<&kube::core::Status> {
+    match err {
+        kube::Error::Api(response) if response.code == 401 || response.reason == "Unauthorized" => {
+            Some(response)
+        }
+        _ => None,
     }
 }
 

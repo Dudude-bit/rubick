@@ -180,8 +180,7 @@ fn begin(state: &AppState, context: &str) -> u64 {
     let generation = state.next_connect_generation();
     state.renew_manager.forget(context);
     state.client_manager.disconnect(context);
-    state.overview_cache.forget(context);
-    state.ownership.forget(context);
+    state.client_replaced(context);
     state.remove_session(context);
     state.set_current_context(Some(context.to_string()));
     generation
@@ -235,8 +234,7 @@ fn teardown(state: &AppState, context: &str) {
     state.renew_manager.forget(context);
     state.client_manager.disconnect(context);
     state.remove_session(context);
-    state.overview_cache.forget(context);
-    state.ownership.forget(context);
+    state.client_replaced(context);
     if state.get_current_context().as_deref() == Some(context) {
         state.set_current_context(None);
     }
@@ -886,6 +884,31 @@ mod lifecycle_tests {
             state.current_client(),
             Err(Error::NotConnected(context)) if context == "never"
         ));
+    }
+
+    /// "Sign in again" can come back as somebody the metrics API answers.
+    /// Fails if a connect leaves the refusal the last credentials got
+    /// answering for the new ones.
+    #[tokio::test]
+    async fn a_connect_forgets_what_the_last_credentials_were_refused() {
+        use crate::metrics::{MetricsStatus, MetricsStatusKind};
+        let state = AppState::new().expect("state");
+        hold(&state, "staging").await;
+        let at = std::time::Instant::now();
+        let refused = MetricsStatus {
+            status: MetricsStatusKind::Forbidden,
+            message: None,
+        };
+        state
+            .metrics_unserved
+            .record("staging", "nodes", &refused, at);
+
+        begin(&state, "staging");
+
+        assert!(state
+            .metrics_unserved
+            .standing("staging", "nodes", at)
+            .is_none());
     }
 
     /// The disconnect that follows a switch. Fails if a cluster another tab

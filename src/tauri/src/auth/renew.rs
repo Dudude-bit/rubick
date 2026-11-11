@@ -509,8 +509,7 @@ async fn renew_once(
     // when they started. Dropped here so the next request starts them on the
     // client that now exists — otherwise they run to their first failure on
     // an expired token and the overview quietly falls back to listing.
-    state.overview_cache.forget(context);
-    state.ownership.forget(context);
+    state.client_replaced(context);
     // Only now: telling the holders of the old client any earlier would have
     // them rebuild onto it.
     state.emit(crate::state::AppEvent::CredentialsRenewed {

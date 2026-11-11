@@ -130,8 +130,9 @@ pub const UNSERVED_RETRY: Duration = Duration::from_secs(300);
 const WHOLE_API: &str = "";
 
 /// Each context's last unserved metrics answers and when they came: "not
-/// installed" for the whole API, "refused" for the one read refused.
-/// Kept across a reconnect, which changes neither.
+/// installed" for the whole API, "refused" for the one read refused. "Not
+/// installed" is kept across a reconnect; a refusal answered the credentials
+/// that asked, and goes with them.
 #[derive(Default)]
 pub struct Unserved(Mutex<HashMap<(String, String), (Instant, MetricsStatus)>>);
 
@@ -149,6 +150,14 @@ impl Unserved {
     /// Check again: the next read of this context asks the API.
     pub fn forget(&self, context: &str) {
         self.0.lock().retain(|(of, _), _| of != context);
+    }
+
+    /// The context's client was replaced: what its credentials were refused
+    /// is asked again with the new ones.
+    pub fn forget_refusals(&self, context: &str) {
+        self.0
+            .lock()
+            .retain(|(of, read), _| of != context || read == WHOLE_API);
     }
 
     /// Only an admin changes these two answers; anything else is asked again.
@@ -321,6 +330,87 @@ mod tests {
         state.metrics_unserved.forget("fake");
         get_node_metrics(&state).await.expect("checked again");
         assert_eq!(asked(), 2, "Check again asks the API");
+    }
+
+    /// A token that lapsed under an open list: the metrics poll gets a 401
+    /// in the moment before the renewal lands. Filed as "refused" it stood
+    /// for five minutes over a session that was good again, with no request
+    /// going out. Fails if a 401 is answered as a metrics status at all, or
+    /// if the read after it is answered from memory.
+    #[tokio::test]
+    async fn a_401_is_the_session_ending_and_is_not_remembered_as_a_refusal() {
+        use crate::client::served::{test_server::connected, test_server::failure, ServedIndex};
+        crate::tls::provider();
+        let (state, hits) = connected(ServedIndex::default(), |path, nth| {
+            if !path.starts_with("/apis/metrics.k8s.io/") {
+                return (404, "{}".to_string());
+            }
+            if nth == 1 {
+                return failure(401, "Unauthorized");
+            }
+            let kind = if path.ends_with("/nodes") {
+                "NodeMetricsList"
+            } else {
+                "PodMetricsList"
+            };
+            (
+                200,
+                format!(
+                    r#"{{"kind":"{kind}","apiVersion":"metrics.k8s.io/v1beta1","metadata":{{}},"items":[]}}"#
+                ),
+            )
+        })
+        .await;
+        let asked = |path: &str| hits.lock().unwrap().get(path).copied().unwrap_or(0);
+        let scope = ["shop".to_string()];
+
+        assert!(matches!(
+            get_node_metrics(&state).await,
+            Err(Error::CredentialsExpired(_))
+        ));
+        assert!(matches!(
+            get_pod_metrics_in(Some(&scope), &state).await,
+            Err(Error::CredentialsExpired(_))
+        ));
+
+        let nodes = get_node_metrics(&state).await.expect("the session is back");
+        assert!(matches!(nodes.status.status, MetricsStatusKind::Available));
+        let pods = get_pod_metrics_in(Some(&scope), &state)
+            .await
+            .expect("the session is back");
+        assert!(matches!(pods.status.status, MetricsStatusKind::Available));
+        assert_eq!(asked("/apis/metrics.k8s.io/v1beta1/nodes"), 2);
+        assert_eq!(
+            asked("/apis/metrics.k8s.io/v1beta1/namespaces/shop/pods"),
+            2
+        );
+    }
+
+    /// A sign-in or a renewal can come back with rights the last credentials
+    /// lacked, so a refusal goes with the client it answered. "Not installed"
+    /// is the cluster's own fact and stays: asking it again on every
+    /// reconnect was Dana's four 404s. Fails if either is treated as the
+    /// other, or if another context's refusal is dropped.
+    #[test]
+    fn a_replaced_client_forgets_what_the_last_one_was_refused_and_nothing_else() {
+        let unserved = Unserved::default();
+        let at = Instant::now();
+        unserved.record("lab", "nodes", &status(MetricsStatusKind::Forbidden), at);
+        unserved.record("prod", "nodes", &status(MetricsStatusKind::Forbidden), at);
+        unserved.record("old", "nodes", &status(MetricsStatusKind::NotInstalled), at);
+
+        unserved.forget_refusals("lab");
+        unserved.forget_refusals("old");
+
+        assert!(unserved.standing("lab", "nodes", at).is_none());
+        assert!(matches!(
+            unserved.standing("prod", "nodes", at).map(|s| s.status),
+            Some(MetricsStatusKind::Forbidden)
+        ));
+        assert!(matches!(
+            unserved.standing("old", "pods/shop", at).map(|s| s.status),
+            Some(MetricsStatusKind::NotInstalled)
+        ));
     }
 
     fn sample(name: &str) -> PodMetrics {
