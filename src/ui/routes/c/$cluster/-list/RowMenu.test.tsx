@@ -200,6 +200,10 @@ describe("a list row's right-click menu", () => {
    */
   it("starts the scale field empty, and holds Scale, while the count is unread", async () => {
     getDeployment.mockReturnValue(new Promise(() => {}));
+    getResourceConnections.mockResolvedValue({
+      ...governedByAutoscaler,
+      edges: [],
+    });
     const user = userEvent.setup();
     await draw();
     openMenu();

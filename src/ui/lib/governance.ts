@@ -27,6 +27,8 @@ import type {
   ResourceConnections,
 } from "@/generated/types";
 import type { DeliveryIntercept } from "./delivery";
+import { unreadWhy } from "./connections";
+import { errorToShow } from "./error-utils";
 import { objectLink, type AppLink } from "./links";
 import { formatAge } from "./utils";
 
@@ -412,6 +414,33 @@ export interface DrainBlocker {
   pods: number;
 }
 
+/** A neighbourhood as a dialog holds it: the answer, or the error in its place. */
+export interface GovernanceRead {
+  data: ResourceConnections | undefined;
+  error: unknown;
+}
+
+/**
+ * Why `kind` is not known to be absent from a neighbourhood: the whole read
+ * failed, or that kind went unread inside it. `null` once it was read, and
+ * while the read is still on its way.
+ */
+function governingUnread(
+  read: GovernanceRead,
+  kind: "HorizontalPodAutoscaler" | "PodDisruptionBudget",
+  t: T
+): string | null {
+  if (read.error) return errorToShow(read.error);
+  const entry = read.data?.notLookedAt.find((entry) => entry.kind === kind);
+  return entry ? unreadWhy(entry.why, t) : null;
+}
+
+export interface DrainRefusals {
+  blockers: DrainBlocker[];
+  /** Why the budgets are not known; with it, no blockers is not "none". */
+  unread: string | null;
+}
+
 /**
  * The budgets on this node that will refuse the first eviction.
  *
@@ -422,19 +451,17 @@ export interface DrainBlocker {
  * Deduplicated by budget rather than listed per pod: one budget covering four
  * pods on this node is one reason, not four identical lines.
  */
-export function drainBlockers(
-  conns: ResourceConnections | undefined
-): DrainBlocker[] {
-  if (!conns) return [];
+export function drainBlockers(read: GovernanceRead, t: T): DrainRefusals {
+  const unread = governingUnread(read, "PodDisruptionBudget", t);
   const byBudget = new Map<string, DrainBlocker>();
-  for (const budget of budgets(conns)) {
+  for (const budget of read.data ? budgets(read.data) : []) {
     if (budget.facts.disruptionsAllowed > 0) continue;
     const key = `${budget.object.namespace}/${budget.object.name}`;
     const seen = byBudget.get(key);
     if (seen) seen.pods += 1;
     else byBudget.set(key, { budget, pods: 1 });
   }
-  return [...byBudget.values()];
+  return { blockers: [...byBudget.values()], unread };
 }
 
 // --- at the point of action ---------------------------------------------
@@ -482,12 +509,26 @@ export interface ActionWarning {
  *   the range.
  */
 export function autoscalerScaleWarnings(
-  conns: ResourceConnections | undefined,
+  read: GovernanceRead,
   t: T
 ): ActionWarning[] {
-  if (!conns) return [];
-  const found = autoscalers(conns);
-  if (found.length === 0) return [];
+  const found = read.data ? autoscalers(read.data) : [];
+  if (found.length === 0) {
+    // Unread autoscalers are not "no autoscaler": one may still own the count.
+    const unread = governingUnread(read, "HorizontalPodAutoscaler", t);
+    if (unread === null) return [];
+    return [
+      {
+        key: "hpa:unread",
+        subject: t("readings", "govNotRead", {
+          kind: "HorizontalPodAutoscaler",
+        }),
+        lead: t("readings", "hpaUnreadHead"),
+        description: unread,
+        to: null,
+      },
+    ];
+  }
 
   if (found.length > 1) {
     const names = found.map((auto) => auto.object.name).join(", ");
@@ -577,11 +618,11 @@ export function boundsProblem(
  * *object*, taking the number with it.
  */
 export function scaleWarnings(
-  conns: ResourceConnections | undefined,
+  read: GovernanceRead,
   intercept: DeliveryIntercept | null,
   t: T
 ): ActionWarning[] {
-  return [...autoscalerScaleWarnings(conns, t), ...deliveryWarning(intercept)];
+  return [...autoscalerScaleWarnings(read, t), ...deliveryWarning(intercept)];
 }
 
 /** A delivery intercept as one of the stacked warnings, or none. */
@@ -618,13 +659,13 @@ export function deliveryWarning(
  * and only when — that field is what moved.
  */
 export function applyWarnings(
-  conns: ResourceConnections | undefined,
+  read: GovernanceRead,
   intercept: DeliveryIntercept | null,
   replicasMoved: boolean,
   t: T
 ): ActionWarning[] {
   return [
-    ...(replicasMoved ? autoscalerScaleWarnings(conns, t) : []),
+    ...(replicasMoved ? autoscalerScaleWarnings(read, t) : []),
     ...deliveryWarning(intercept),
   ];
 }

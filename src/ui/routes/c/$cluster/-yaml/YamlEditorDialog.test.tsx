@@ -34,9 +34,14 @@ const applyManifest = vi.fn();
 const dryRunManifest = vi.fn();
 const checkAccess = vi.fn();
 /** The neighbourhood the dialog asks about, per test. */
-let connections: () => { object: null; edges: unknown[] } = () => ({
+let connections: () => {
+  object: null;
+  edges: unknown[];
+  notLookedAt: unknown[];
+} = () => ({
   object: null,
   edges: [],
+  notLookedAt: [],
 });
 
 vi.mock("@/lib/commands", () => ({
@@ -132,7 +137,7 @@ async function openWith(yamlText: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  connections = () => ({ object: null, edges: [] });
+  connections = () => ({ object: null, edges: [], notLookedAt: [] });
   useYamlEditorStore.getState().closeEditor();
   applyManifest.mockResolvedValue({
     success: true,
@@ -249,6 +254,7 @@ describe("applying on critical infrastructure", () => {
   it("warns that an autoscaler will put the replica count back", async () => {
     connections = () => ({
       object: null,
+      notLookedAt: [],
       edges: [
         {
           relation: { verb: "governs" },

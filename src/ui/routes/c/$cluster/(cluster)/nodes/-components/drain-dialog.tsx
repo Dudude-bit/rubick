@@ -164,7 +164,7 @@ function DrainConfirm({
     null,
     !!node
   );
-  const blockers = drainBlockers(query.data);
+  const { blockers, unread } = drainBlockers(query, t);
 
   return (
     <>
@@ -174,6 +174,11 @@ function DrainConfirm({
         {query.isPending && node && (
           <p className="text-[11px] text-fg-fnt">
             {t("empty", "readingWhatRefusesToMove")}
+          </p>
+        )}
+        {unread !== null && (
+          <p className="pt-1 text-xs text-warn">
+            {t("empty", "budgetsUnread", { why: unread })}
           </p>
         )}
         {blockers.length > 0 && (
@@ -254,7 +259,7 @@ function DrainConfirm({
           disabled={gate.blocked}
           onClick={() => node && onConfirm(node, choices)}
         >
-          {blockers.length > 0
+          {blockers.length > 0 || unread !== null
             ? t("action", "drainAnyway")
             : t("action", "drain")}
         </Button>

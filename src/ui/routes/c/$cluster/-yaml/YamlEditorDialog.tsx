@@ -140,7 +140,7 @@ export function YamlEditorDialog() {
     open && replicasMoved
   );
 
-  const warnings = applyWarnings(governance.data, intercept, replicasMoved, t);
+  const warnings = applyWarnings(governance, intercept, replicasMoved, t);
 
   // What the server would store against what it holds now. Asked only once
   // the confirmation is open, of the buffer as it is at that moment; the

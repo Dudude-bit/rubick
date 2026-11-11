@@ -38,9 +38,10 @@ export function governanceFindings(
   }
   const scaling = autoscalers(conns);
   if (scaling.length > 1) {
-    const several = autoscalerScaleWarnings(conns, t).find(
-      (warning) => warning.key === "hpa:several"
-    );
+    const several = autoscalerScaleWarnings(
+      { data: conns, error: null },
+      t
+    ).find((warning) => warning.key === "hpa:several");
     if (several) {
       findings.push({
         tone: "warn",

@@ -19,9 +19,14 @@ import { useClusterStore } from "@/stores/clusterStore";
 
 const neighbourhood = vi.hoisted(() => ({
   answer: undefined as ResourceConnections | undefined,
+  error: null as Error | null,
 }));
 vi.mock("@/hooks/useConnections", () => ({
-  useConnections: () => ({ data: neighbourhood.answer, isPending: false }),
+  useConnections: () => ({
+    data: neighbourhood.answer,
+    error: neighbourhood.error,
+    isPending: false,
+  }),
 }));
 
 const onNode = (
@@ -187,6 +192,60 @@ describe("confirming a drain", () => {
     expect(screen.getByText(/prod\/pdb-stateful/)).toBeInTheDocument();
     expect(
       screen.getByText(/requires as many healthy pods as it covers/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A refused PodDisruptionBudget list came back as a node no budget covers:
+   * no line, and a plain Drain. Fails if budgets that went unread are drawn
+   * as budgets that were read and block nothing.
+   */
+  it("says the budgets were not read when their list was refused", async () => {
+    neighbourhood.answer = {
+      ...onNode({
+        disruptionsAllowed: 1,
+        currentHealthy: 2,
+        desiredHealthy: 1,
+        expectedPods: 2,
+      }),
+      edges: [],
+      notLookedAt: [
+        {
+          kind: "PodDisruptionBudget",
+          why: {
+            says: "unanswered",
+            version: "policy/v1",
+            said: "poddisruptionbudgets.policy is forbidden",
+          },
+        },
+      ],
+    };
+    await wrap(dialog({ phase: "idle" }));
+    neighbourhood.answer = undefined;
+
+    expect(
+      screen.getByText(
+        /budgets on this node could not be read.*poddisruptionbudgets\.policy is forbidden/
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Drain anyway" })
+    ).toBeInTheDocument();
+  });
+
+  /** The same, when the node's whole neighbourhood read failed. Fails if a failed read is drawn as nothing in the way. */
+  it("says the budgets were not read when the read failed", async () => {
+    neighbourhood.error = new Error("connection reset by peer");
+    await wrap(dialog({ phase: "idle" }));
+    neighbourhood.error = null;
+
+    expect(
+      screen.getByText(
+        /budgets on this node could not be read.*connection reset by peer/
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Drain anyway" })
     ).toBeInTheDocument();
   });
 
