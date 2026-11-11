@@ -27,7 +27,7 @@ const t = ((section: string, key: string, values?: Record<string, unknown>) =>
     : `${section}.${key}`) as unknown as T;
 
 const subject = {
-  kind: "Pod",
+  kind: "Pod" as const,
   name: "payments-7b6d9c5f4-x8k2p",
   namespace: "shop",
 };

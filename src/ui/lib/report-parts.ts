@@ -41,6 +41,7 @@ import {
   getResourceDefinition,
   isResourceType,
   toKind,
+  type ResourceKind,
 } from "./resource-registry";
 import { identHue, kindHue, splitName } from "./resource-identity";
 import { ROLE_ICON, statusRole } from "./status-role";
@@ -303,10 +304,10 @@ const TEMPLATE_HASH = /^(.+)-[bcdfghjklmnpqrstvwxz2456789]{5,10}$/;
  * `null` when there is none, and then nothing about changes can be said.
  */
 function watchedAs(
-  subject: { kind: string; name: string },
+  subject: { kind: ResourceKind | null; name: string },
   owners: readonly { kind: string; name: string }[]
 ): { kind: string; name: string }[] | null {
-  if (hasChangesTab(subject.kind))
+  if (subject.kind && hasChangesTab(subject.kind))
     return [{ kind: subject.kind, name: subject.name }];
   const out = owners.flatMap((owner) => {
     if (hasChangesTab(owner.kind)) return [owner];
@@ -330,9 +331,11 @@ export function changesSection(
   },
   context: string,
   subject: {
-    kind: string;
+    /** The registry's kind, `null` for a custom one: a namesake is not the workload the journal watched. */
+    kind: ResourceKind | null;
     name: string;
     namespace: string | null;
+    /** The built-in kinds that own it. */
     owners: readonly { kind: string; name: string }[];
   },
   capturedAt: string,
