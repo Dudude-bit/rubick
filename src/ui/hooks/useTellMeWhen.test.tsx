@@ -17,6 +17,7 @@ import { LOST_SIGHT_MS, type Watch } from "@/lib/tell-me-when";
 import { testQueryClient } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
+import { credentialsRenewed } from "@/lib/credentials";
 
 const listeners: Record<
   string,
@@ -383,6 +384,87 @@ describe("a watch whose list keeps failing", () => {
     });
     const status = useTellMeWhenStore.getState().watches[0].status;
     expect(status.state === "done" && status.verdict.says).toBe("lostSight");
+    hook.unmount();
+  });
+});
+
+describe("a credential renewal under an open watch", () => {
+  const firstLook = () =>
+    act(() =>
+      emit("resource-event", {
+        stream_id: "stream-1",
+        changes: [{ op: "applied", resource: deployment(1) }],
+        error: null,
+      })
+    );
+
+  /**
+   * The stream was opened on the client of that moment, and a renewal swaps
+   * the context's client: the old token dies, the stream's next re-watch is
+   * refused, and a day-long ask ends as "lost sight". Fails if the renewal
+   * does not move the stream to the new client, or reports the move as lost.
+   */
+  it("moves the stream to the renewed client and answers from it", async () => {
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed();
+    firstLook();
+    vi.mocked(commands.subscribeObjectWatch).mockResolvedValueOnce("stream-3");
+
+    act(() => credentialsRenewed());
+
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("stream-3")
+    );
+    expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith("stream-1");
+    expect(useTellMeWhenStore.getState().watches[0].status.state).toBe(
+      "watching"
+    );
+
+    act(() =>
+      emit("resource-event", {
+        stream_id: "stream-3",
+        changes: [
+          { op: "restarted", resource: null },
+          { op: "applied", resource: deployment(3, "NewReplicaSetAvailable") },
+          { op: "synced", resource: null },
+        ],
+        error: null,
+      })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: "payments rolled out",
+      body: "",
+    });
+    hook.unmount();
+  });
+
+  /** Fails if a list change after a renewal reopens every stream again. */
+  it("moves each stream once per renewal", async () => {
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed();
+    firstLook();
+    vi.mocked(commands.subscribeObjectWatch).mockResolvedValueOnce("stream-3");
+    act(() => credentialsRenewed());
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("stream-3")
+    );
+
+    act(() =>
+      useTellMeWhenStore.setState((s) => ({
+        watches: [...s.watches, { ...rollout(), id: "w-other", name: "cart" }],
+      }))
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(commands.unsubscribeResourceWatch).not.toHaveBeenCalledWith(
+      "stream-3"
+    );
+    expect(commands.subscribeObjectWatch).toHaveBeenCalledTimes(3);
     hook.unmount();
   });
 });
