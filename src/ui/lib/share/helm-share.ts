@@ -77,7 +77,9 @@ export function helmHistorySection(
       rows: kept.map((rev) => ({
         cells: [
           { text: String(rev.revision), mono: true },
-          { text: rev.status, role: statusRole(rev.status) },
+          rev.unreadable
+            ? { text: t("empty", "releaseNotRead"), role: "warn" as const }
+            : { text: rev.status, role: statusRole(rev.status) },
           { text: rev.chart, mono: true },
           { text: rev.appVersion || t("empty", "noneLower") },
           Number.isNaN(Date.parse(rev.updated))

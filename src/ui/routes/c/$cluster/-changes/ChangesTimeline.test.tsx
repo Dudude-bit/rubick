@@ -22,6 +22,31 @@ function mount(items: ChangeItem[], since?: number) {
 }
 
 describe("ChangesTimeline", () => {
+  /**
+   * A Helm revision whose secret would not decode has a number and nothing
+   * else. Fails if the timeline prints it as a revision of no chart.
+   */
+  it("says of a Helm revision that could not be read that it was not", async () => {
+    await mount([
+      {
+        kind: "helm",
+        at: null,
+        revision: {
+          revision: 5,
+          updated: "",
+          status: "",
+          chart: "",
+          appVersion: null,
+          description: null,
+          unreadable: "gzip: unexpected end of file",
+        },
+      },
+    ]);
+    expect(
+      screen.getByText("Helm revision 5: could not be read")
+    ).toHaveAttribute("title", "gzip: unexpected end of file");
+  });
+
   /** A gap is drawn as its own row, in words, not as an empty stretch a reader would read as calm. */
   it("draws a gap as a gap", async () => {
     await mount([

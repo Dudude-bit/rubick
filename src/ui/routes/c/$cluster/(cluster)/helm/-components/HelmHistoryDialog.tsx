@@ -21,11 +21,16 @@ import { statusRole } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
+import { Unknown } from "@/components/ui/unknown";
+import { NotRead } from "./NotRead";
 
 interface HelmHistoryDialogProps {
   release: HelmRelease;
   history: HelmRevision[];
   isLoading: boolean;
+  /** The history read's failure. An empty history beside it is not an answer. */
+  error: unknown;
+  onRetry: () => void;
   helmCliAvailable: boolean;
   onClose: () => void;
   onRollback: (revision: number) => void;
@@ -35,6 +40,8 @@ export function HelmHistoryDialog({
   release,
   history,
   isLoading,
+  error,
+  onRetry,
   helmCliAvailable,
   onClose,
   onRollback,
@@ -52,7 +59,13 @@ export function HelmHistoryDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto">
-          {isLoading ? (
+          {error ? (
+            <Unknown
+              question={t("empty", "helmHistoryUnread")}
+              error={error}
+              onRetry={onRetry}
+            />
+          ) : isLoading ? (
             <p className="py-6 text-center text-xs text-fg-fnt">
               {t("empty", "readingHistory")}
             </p>
@@ -97,7 +110,11 @@ export function HelmHistoryDialog({
                             : "text-fg-mut"
                         )}
                       >
-                        {rev.status}
+                        {rev.unreadable ? (
+                          <NotRead why={rev.unreadable} />
+                        ) : (
+                          rev.status
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-fg-mut">
                         {rev.chart}

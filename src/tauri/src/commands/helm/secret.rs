@@ -354,6 +354,29 @@ mod tests {
         assert!(matches!(failed, Error::CredentialsExpired(_)), "{failed}");
     }
 
+    /// A revision that would not read was left out of the history: with a
+    /// hole in it the history read as whole, and with nothing readable the
+    /// page said Helm keeps none for the release.
+    #[test]
+    fn a_revision_that_will_not_read_stays_in_the_history_saying_so() {
+        let secret = |revision| -> Secret {
+            serde_json::from_value(stored("web", revision)).expect("a secret")
+        };
+        let mut garbled = secret(2);
+        let payload = k8s_openapi::ByteString(b"not a release".to_vec());
+        garbled.data = Some(BTreeMap::from([("release".to_string(), payload)]));
+        let mut hollow = secret(3);
+        hollow.data = None;
+
+        let history = revisions_of([secret(1), garbled, hollow]);
+
+        let seen: Vec<_> = history
+            .iter()
+            .map(|entry| (entry.revision, entry.unreadable.is_some()))
+            .collect();
+        assert_eq!(seen, [(3, true), (2, true), (1, false)]);
+    }
+
     /// An older revision decoding is not an answer about a newer one that
     /// does not. The list row says revision 5 could not be read; opening it
     /// used to render revision 4's values and manifest as the release.
@@ -618,32 +641,39 @@ async fn release_history(
     let secrets: Api<Secret> = ctx.namespaced_api();
 
     let lp = ListParams::default().labels(&format!("owner=helm,name={name}"));
-    let secret_list = secrets.list(&lp).await?;
+    Ok(revisions_of(secrets.list(&lp).await?))
+}
 
-    let mut history: Vec<HelmRevision> = Vec::new();
-
-    for secret in secret_list {
-        if let Some(data) = secret.data {
-            if let Some(release_data) = data.get("release") {
-                if let Ok(release) = decode_helm_release(&release_data.0) {
-                    history.push(HelmRevision {
-                        revision: release.version,
-                        updated: release.info.last_deployed.unwrap_or_default(),
-                        status: release.info.status,
-                        chart: format!(
-                            "{}-{}",
-                            release.chart.metadata.name, release.chart.metadata.version
-                        ),
-                        app_version: release.chart.metadata.app_version,
-                        description: release.info.description,
-                    });
-                }
-            }
-        }
-    }
-
-    // Sort by revision descending (newest first)
+/// Every revision the cluster holds, newest first. One that will not decode
+/// is a row by its label: left out, a history with a hole in it reads as
+/// whole, and one with nothing readable as a release Helm keeps none for.
+fn revisions_of(secrets: impl IntoIterator<Item = Secret>) -> Vec<HelmRevision> {
+    let mut history: Vec<HelmRevision> = secrets
+        .into_iter()
+        .map(|secret| match release_in(&secret) {
+            Ok(release) => HelmRevision {
+                revision: release.version,
+                updated: release.info.last_deployed.unwrap_or_default(),
+                status: release.info.status,
+                chart: format!(
+                    "{}-{}",
+                    release.chart.metadata.name, release.chart.metadata.version
+                ),
+                app_version: release.chart.metadata.app_version,
+                description: release.info.description,
+                unreadable: None,
+            },
+            Err(why) => HelmRevision {
+                revision: labelled_revision(&secret),
+                updated: String::new(),
+                status: String::new(),
+                chart: String::new(),
+                app_version: None,
+                description: None,
+                unreadable: Some(why),
+            },
+        })
+        .collect();
     history.sort_by_key(|entry| std::cmp::Reverse(entry.revision));
-
-    Ok(history)
+    history
 }

@@ -65,6 +65,7 @@ import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
+import { NotRead } from "./NotRead";
 
 const INSTALLED_ROW =
   "grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,150px)] items-baseline gap-2.5 border-b border-hair py-1 last:border-b-0 text-xs";
@@ -368,7 +369,11 @@ export function HelmDetail() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={rev.status} />
+                        {rev.unreadable ? (
+                          <NotRead why={rev.unreadable} />
+                        ) : (
+                          <StatusBadge status={rev.status} />
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-fg-mut">
                         {rev.chart}

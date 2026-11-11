@@ -193,13 +193,19 @@ function Row({
           ) : null}
         </div>
       );
-    case "helm":
+    case "helm": {
+      const unread = item.revision.unreadable;
       return (
         <div className="min-w-0">
-          <span className="text-fg">
+          <span
+            className={unread ? "text-warn" : "text-fg"}
+            title={unread ?? undefined}
+          >
             {t("changes", "helmRevision", {
               n: item.revision.revision,
-              chart: item.revision.chart,
+              chart: unread
+                ? t("empty", "releaseNotRead")
+                : item.revision.chart,
             })}
           </span>
           <span className="ml-1 font-mono text-[11px] text-fg-mut">
@@ -212,6 +218,7 @@ function Row({
           ) : null}
         </div>
       );
+    }
     case "journal": {
       const { entry } = item;
       return (

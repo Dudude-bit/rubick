@@ -1962,6 +1962,7 @@ export interface HelmRevision {
   chart: string;
   appVersion: string | null;
   description: string | null;
+  unreadable: string | null;
 }
 
 export interface HelmReleaseDetail {

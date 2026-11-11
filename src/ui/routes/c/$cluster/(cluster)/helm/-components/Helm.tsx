@@ -27,6 +27,7 @@ import type {
   HelmRelease,
   HelmChartSearchResult,
   HelmInstallOptions,
+  HelmRevision,
   NamespaceInfo,
   UnreadNamespace,
 } from "@/generated/types";
@@ -40,6 +41,7 @@ import { toastError } from "@/lib/toast-error";
 const namesOf = (namespaces: NamespaceInfo[]) =>
   namespaces.map((ns) => ns.name);
 const NO_RELEASES: HelmRelease[] = [];
+const NO_HISTORY: HelmRevision[] = [];
 const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 export function Helm() {
@@ -125,7 +127,12 @@ export function Helm() {
   const releases = answer?.rows ?? NO_RELEASES;
   const unread = answer?.unread ?? NOTHING_UNREAD;
 
-  const { data: historyData = [], isLoading: historyLoading } = useQuery({
+  const {
+    data: historyData = NO_HISTORY,
+    isLoading: historyLoading,
+    error: historyError,
+    refetch: refetchHistory,
+  } = useQuery({
     queryKey: queryKeys.helm.history(
       historyDialog?.namespace,
       historyDialog?.name
@@ -515,6 +522,8 @@ export function Helm() {
           release={historyDialog}
           history={historyData}
           isLoading={historyLoading}
+          error={historyError}
+          onRetry={() => void refetchHistory()}
           helmCliAvailable={helmCliAvailable}
           onClose={() => setHistoryDialog(null)}
           onRollback={(revision) => {

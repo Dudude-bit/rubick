@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { act, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -38,6 +39,7 @@ const release = (name: string): HelmRelease => ({
 });
 
 const listReleases = vi.mocked(commands.listHelmReleasesIn);
+const history = vi.mocked(commands.getHelmHistory);
 
 beforeEach(() => {
   listReleases.mockReset();
@@ -75,5 +77,34 @@ describe("Helm releases whose re-read fails", () => {
       expect(screen.getByText("read failing")).toBeInTheDocument()
     );
     expect(screen.queryByText("polling")).toBeNull();
+  });
+});
+
+describe("the history dialog opened from a release's row", () => {
+  /**
+   * The dialog took the history's rows and never its error, so a refused or
+   * timed-out read was an empty history and the dialog said Helm keeps none,
+   * while the release's own History tab said the same read had failed.
+   */
+  it("says the history could not be read when the read fails", async () => {
+    listReleases.mockResolvedValue({ rows: [release("web")], unread: [] });
+    history.mockRejectedValue(new Error("secrets is forbidden"));
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Open actions" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "View History" })
+    );
+
+    expect(
+      await screen.findByText("Could not read this release's history.")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/secrets is forbidden/)).toBeInTheDocument();
+    expect(screen.queryByText(/Helm keeps none/)).toBeNull();
   });
 });
