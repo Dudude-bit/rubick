@@ -325,6 +325,7 @@ describe("one verdict for a Service on every surface", () => {
       total: 2,
       unrouted: 1,
       unroutedReady: 1,
+      unchecked: null,
     });
     const words = serviceHealthWords(health, t);
     expect(words.role).toBe("warn");
@@ -359,7 +360,12 @@ describe("one verdict for a Service on every surface", () => {
    */
   it("counts a Service down to a draining address as draining, never ready", () => {
     const health = serviceHealthOf(SELECTING, published({ draining: 1 }), null);
-    expect(health).toEqual({ state: "draining", draining: 1, total: 1 });
+    expect(health).toEqual({
+      state: "draining",
+      draining: 1,
+      total: 1,
+      unchecked: null,
+    });
     const words = serviceHealthWords(health, t);
     expect(words.label).toBe("1 draining");
     expect(words.role).toBe("warn");
@@ -444,6 +450,51 @@ describe("one verdict for a Service on every surface", () => {
       expect(
         serviceHealthOf(SELECTING, published({ ready: 2, door }), null).state
       ).toBe("ready");
+  });
+
+  /**
+   * Refused the NetworkPolicies, "1 of 2 ready" and "1 draining" stayed
+   * amber with a reason about readiness alone, as if the door had been read.
+   * Fails if a part-ready or draining Service stops saying the policies went
+   * unread in the cluster's words, or says it where they were read.
+   */
+  it("says the NetworkPolicies went unread beside a part-ready or draining count", () => {
+    const door = {
+      state: "unread" as const,
+      reason: "networkpolicies is forbidden",
+    };
+    const partly = serviceHealthOf(
+      SELECTING,
+      published({ ready: 1, notReady: 1, door }),
+      null
+    );
+    expect(partly).toMatchObject({ state: "partly", unchecked: door.reason });
+    const words = serviceHealthWords(partly, t);
+    expect(words).toMatchObject({ label: "1 of 2 ready", role: "warn" });
+    expect(words.reason).toBe(
+      "1 of its addresses takes no traffic. The NetworkPolicies over its pods could not be read, so whether one of them shuts these pods is not checked: networkpolicies is forbidden"
+    );
+
+    const draining = serviceHealthOf(
+      SELECTING,
+      published({ draining: 1, door }),
+      null
+    );
+    expect(draining).toMatchObject({
+      state: "draining",
+      unchecked: door.reason,
+    });
+    expect(serviceHealthWords(draining, t).reason).toContain(
+      "is not checked: networkpolicies is forbidden"
+    );
+
+    for (const read of [
+      published({ ready: 1, notReady: 1, door: { state: "open" } }),
+      published({ draining: 1 }),
+    ])
+      expect(
+        serviceHealthWords(serviceHealthOf(SELECTING, read, null), t).reason
+      ).not.toContain("NetworkPolicies");
   });
 
   /** A controller's own egress policies shut the way as surely as the pods' ingress ones. */

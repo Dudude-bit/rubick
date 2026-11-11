@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { cleanup, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks")>()),
@@ -48,6 +49,7 @@ vi.mock("@/lib/commands", () => ({
 import { useResourceDetail } from "@/hooks";
 import type { IngressInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
+import { useClusterStore } from "@/stores/clusterStore";
 import { IngressDetail } from "./IngressDetail";
 
 const shop: IngressInfo = {
@@ -191,6 +193,42 @@ describe("an Ingress whose certificate the controller could not read", () => {
   });
 
   /**
+   * The TLS fact said "TLS not checked" after the cluster had refused the
+   * controller's read, as it does while the read is out. Fails if the page
+   * drops the cluster's words, or shows a reason while nothing has failed.
+   */
+  it("says why TLS was not checked once the controllers' read has failed", async () => {
+    answers.listEvents = [];
+    answers.resolveIngressClass = {
+      requested: "gce",
+      resolved: "gce",
+      controller: "example.com/gce",
+      viaDefault: false,
+      available: [],
+    };
+    vendor.answered = false;
+    vendor.error = new Error("ingresses.networking.k8s.io is forbidden");
+    await open("overview");
+    const fact = screen
+      .getAllByText("TLS not checked")
+      .find((element) => element.closest("button"))!;
+    await userEvent.hover(fact);
+    expect((await screen.findAllByRole("tooltip"))[0]).toHaveTextContent(
+      "ingresses.networking.k8s.io is forbidden"
+    );
+    cleanup();
+
+    vendor.error = null;
+    vendor.unread = "replaces";
+    await open("overview");
+    expect(
+      screen
+        .getAllByText("TLS not checked")
+        .filter((element) => element.closest("button"))
+    ).toEqual([]);
+  });
+
+  /**
    * The words differed and the colour did not: the header badge, the TLS fact
    * and the `?` on the Access tab were painted as "TLS" is, so only reading
    * the word told "not checked" from "has TLS".
@@ -308,6 +346,51 @@ describe("the load balancer row of an Ingress with no address", () => {
       await screen.findByText("none: nothing serves its class to assign one")
     ).toBeInTheDocument();
     expect(screen.queryByText("pending")).toBeNull();
+  });
+});
+
+describe("an Ingress that names no class, with no default IngressClass", () => {
+  const classless = { ...shop, className: null, loadBalancerIps: [] };
+  const scanFinds = (traefik: boolean) => {
+    answers.listEvents = [];
+    answers.resolveIngressClass = {
+      requested: null,
+      resolved: null,
+      controller: null,
+      viaDefault: false,
+      available: [],
+    };
+    answers.detectInClusterExtensions = [
+      { id: "traefik", installed: traefik, version: null },
+      { id: "gke-ingress", installed: false, version: null },
+    ];
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+  };
+
+  /**
+   * Traefik takes such an Ingress by its own settings and, without a
+   * published Service, never writes its address: the page said "no
+   * controller" and "nothing serves its class" over a site that answered.
+   * Fails if the status or the load balancer row calls it unserved where a
+   * controller that takes it was found; the cluster with none is the control.
+   */
+  it("is not called unserved where a controller found here takes it", async () => {
+    scanFinds(true);
+    await open("overview", classless);
+    expect(await screen.findByText("not checked")).toBeInTheDocument();
+    expect(screen.getByText(/Installed here: Traefik\./)).toBeInTheDocument();
+    expect(screen.queryByText("no controller")).toBeNull();
+    expect(
+      screen.queryByText("none: nothing serves its class to assign one")
+    ).toBeNull();
+    cleanup();
+
+    scanFinds(false);
+    await open("overview", classless);
+    expect(await screen.findByText("no controller")).toBeInTheDocument();
+    expect(
+      screen.getByText("none: nothing serves its class to assign one")
+    ).toBeInTheDocument();
   });
 });
 

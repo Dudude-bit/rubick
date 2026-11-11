@@ -51,6 +51,7 @@ import {
   ingressClassWords,
   INGRESS_ADDRESS_WORDS,
 } from "@/lib/ingress-health";
+import { useClasslessTakers } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -135,9 +136,13 @@ export function IngressDetail() {
     queryFn: () => commands.resolveIngressClass(ingress?.className ?? null),
     enabled: !!ingress,
   });
+  const classless = useClasslessTakers();
   const controller = useMemo(
-    () => (ingress && binding ? claimedBinding(ingress, binding) : undefined),
-    [ingress, binding]
+    () =>
+      ingress && binding
+        ? claimedBinding(ingress, binding, classless)
+        : undefined,
+    [ingress, binding, classless]
   );
   const address = ingressAddressOf({ loadBalancerIps }, controller?.claim);
   const health = useOneIngressHealth(ingress);

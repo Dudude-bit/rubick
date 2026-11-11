@@ -3384,6 +3384,7 @@ export const en = {
     forwardPodGone: "pod {pod} was deleted",
     forwardWaiting:
       "pod {pod} was deleted; waiting for a ready pod of {kind} {name}",
+    forwardStarting: "pod {pod} is back and starting; waiting for it to be up",
     forwardNoReplacement:
       "pod {pod} was deleted and {kind} {name} has no ready pod to move to",
     forwardSearchFailed:
@@ -6431,6 +6432,10 @@ export const en = {
       "A controller that takes it by its own settings has published its address; the cluster does not record which one.",
     ingressClaimUnrecorded:
       "A controller matches that annotation against its own settings, and nothing has published an address yet, so whether anything serves this Ingress is not known.",
+    ingressClasslessTaken:
+      "Installed here: {names}. By default such a controller takes an Ingress that names no class; whether this one is set to is not recorded in the cluster, and nothing has published an address yet, so whether anything serves this Ingress is not known",
+    ingressClasslessUnread:
+      "Some controllers take an Ingress that names no class by their own settings, and what is installed here could not be read, so whether anything serves this Ingress is not known",
     nothingPickedThemUp:
       "Nothing has picked them up, so they have no address and never will until a controller for that class exists.",
     noAddressYet:

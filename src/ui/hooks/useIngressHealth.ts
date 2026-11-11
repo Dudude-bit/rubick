@@ -15,7 +15,8 @@ import {
   type ServiceHealthRead,
 } from "@/hooks/useServiceHealthInputs";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
-import { useIngressTls, type IngressRef } from "@/hooks/useIngressTls";
+import { useClasslessTakers } from "@/integrations";
+import { useIngressTls } from "@/hooks/useIngressTls";
 import { certificatesOf, useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
 import {
@@ -40,8 +41,6 @@ type Ingress = Pick<IngressHealthInput, "namespace" | "name" | "rules">;
 const hostKey = (ingress: Pick<Ingress, "namespace" | "name">, host: string) =>
   `${ingress.namespace}/${ingress.name}/${host}`;
 
-const NOT_ASKED: IngressRef[] = [];
-
 /**
  * Whether its controller serves a host as plain HTTP whatever `spec.tls`
  * says, asked with the same hosts as the Ingress TLS column so the answer is
@@ -49,8 +48,9 @@ const NOT_ASKED: IngressRef[] = [];
  *
  * With `asks` off no controller is asked anything: a supplier costs a
  * request per Ingress, or the whole cluster's list, which a count kept on
- * every screen cannot pay. The answer is then `null` wherever a controller
- * here could have said plain, and `false` where none could.
+ * every screen cannot pay. What a caller that asks was already told is read
+ * from the cache; without it the answer is `null` wherever a controller here
+ * could have said plain, and `false` where none could.
  *
  * Kept as a string until it changes, so a verdict built on it does not churn
  * with every render of the answers.
@@ -58,20 +58,17 @@ const NOT_ASKED: IngressRef[] = [];
 export function usePlainHosts(ingresses: readonly Ingress[], asks = true) {
   const asked = useMemo(
     () =>
-      asks
-        ? ingresses.map((ingress) => ({
-            namespace: ingress.namespace,
-            name: ingress.name,
-            hosts: ingress.rules.flatMap((rule) =>
-              rule.host ? [rule.host] : []
-            ),
-          }))
-        : NOT_ASKED,
-    [ingresses, asks]
+      ingresses.map((ingress) => ({
+        namespace: ingress.namespace,
+        name: ingress.name,
+        hosts: ingress.rules.flatMap((rule) => (rule.host ? [rule.host] : [])),
+      })),
+    [ingresses]
   );
-  const answers = useIngressTls(asked);
+  const answers = useIngressTls(asked, asks);
   const { unread } = answers;
-  const said = asked
+  // No supplier here, nothing to say of any host: the shell renders often.
+  const said = (answers.available ? asked : [])
     .flatMap(({ hosts, ...ingress }) =>
       hosts.flatMap((host) => {
         const tls = hostTls(true, answers.of(ingress, host), unread);
@@ -83,16 +80,14 @@ export function usePlainHosts(ingresses: readonly Ingress[], asks = true) {
       })
     )
     .join("\n");
-  const unasked = !asks && answers.mayReplaceSpec;
   return useMemo(() => {
     const lines = new Set(said.split("\n"));
     return (ingress: Pick<Ingress, "namespace" | "name">, host: string) => {
-      if (unasked) return null;
       const key = hostKey(ingress, host);
       if (lines.has(`plain ${key}`)) return true;
       return lines.has(`unknown ${key}`) ? null : false;
     };
-  }, [said, unasked]);
+  }, [said]);
 }
 
 /**
@@ -150,6 +145,7 @@ export function useIngressHealth(
   });
   const plain = usePlainHosts(rows ?? NO_ROWS, asksControllers);
   const door = useDoorAsk(enabled);
+  const classless = useClasslessTakers();
 
   return useMemo(
     () => (ingress: IngressHealthInput) => {
@@ -167,9 +163,10 @@ export function useIngressHealth(
           : undefined,
         servedPlain: (host) => plain(ingress, host),
         door,
+        classless,
       });
     },
-    [bindings, classes, backing, secrets, certificates, plain, door]
+    [bindings, classes, backing, secrets, certificates, plain, door, classless]
   );
 }
 
@@ -196,6 +193,7 @@ export function useOneIngressHealth(
     useMemo(() => (ingress ? [ingress] : []), [ingress])
   );
   const door = useDoorAsk(!!ingress);
+  const classless = useClasslessTakers();
   if (!ingress) return undefined;
   return ingressHealthOf({
     ingress,
@@ -204,5 +202,6 @@ export function useOneIngressHealth(
     certificates,
     servedPlain: (host) => plain(ingress, host),
     door,
+    classless,
   });
 }

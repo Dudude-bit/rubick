@@ -191,6 +191,7 @@ mod walk_tests {
 
     const PODS: &str = "/api/v1/namespaces/shop/pods";
     const SET: &str = "/apis/apps/v1/namespaces/shop/replicasets/web-7d9";
+    const POLICIES: &str = "/apis/networking.k8s.io/v1/namespaces/shop/networkpolicies";
 
     fn pods(owner_api_version: &str) -> String {
         let pod = serde_json::json!({
@@ -213,6 +214,7 @@ mod walk_tests {
         let (client, _) = server(vec![
             (PODS, 200, pods(owner_api_version)),
             (SET, set.0, set.1),
+            (POLICIES, 200, r#"{"metadata":{},"items":[]}"#.to_string()),
         ])
         .await;
         let ctx = ResourceContext::from_client(client, "shop".to_string());

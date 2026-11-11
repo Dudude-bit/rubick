@@ -42,7 +42,7 @@ const conns: ResourceConnections = {
   notLookedAt: [],
 };
 
-const controllerHop = (claim: IngressClaim) =>
+const controllerHop = (claim: IngressClaim, classless?: string[]) =>
   trafficOf(conns, t, {
     routing: new Map([
       [
@@ -51,19 +51,20 @@ const controllerHop = (claim: IngressClaim) =>
           tls: [],
           addresses: claim === "address" ? ["34.1.2.3"] : [],
           binding: {
-            requested: "gce",
+            requested: classless ? null : "gce",
             resolved: claim === "class" ? "gce" : null,
             controller: claim === "class" ? "example.com/gce" : null,
             viaDefault: false,
             available: [],
             claim,
+            classless,
           },
         },
       ],
     ]),
   })
     .flatMap((path) => path.hops)
-    .find((hop) => hop.text?.includes("gce"));
+    .find((hop) => hop.text?.includes(classless ? "names no class" : "gce"));
 
 describe("the controller hop of a shared traffic path", () => {
   /**
@@ -90,6 +91,18 @@ describe("the controller hop of a shared traffic path", () => {
       text: "IngressClass gce",
       detail: "example.com/gce",
       tone: null,
+    });
+  });
+
+  /**
+   * An Ingress that names no class has no annotation to match. Fails if the
+   * file prints the annotation's sentence under it, or drops who was found.
+   */
+  it("says who may take an Ingress that names no class", () => {
+    expect(controllerHop("unrecorded", ["Traefik"])).toMatchObject({
+      text: "This Ingress names no class, and this cluster has no default one",
+      detail: expect.stringContaining("Installed here: Traefik."),
+      tone: "warn",
     });
   });
 });

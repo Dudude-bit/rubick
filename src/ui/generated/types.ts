@@ -3243,6 +3243,7 @@ export type ForwardNote =
   | { says: "gaveUp"; text: string; attempts: number }
   | { says: "podGone"; pod: string }
   | { says: "waiting"; pod: string; kind: string; name: string }
+  | { says: "starting"; pod: string }
   | { says: "noReplacement"; pod: string; kind: string; name: string }
   | { says: "searchFailed"; pod: string; text: string }
   | { says: "moved"; from: string }

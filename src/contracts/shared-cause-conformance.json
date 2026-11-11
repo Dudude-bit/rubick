@@ -1,5 +1,5 @@
 {
-  "about": "The cause most of a workload's pods share, as both halves read it: `share` in src/tauri/src/resources/types/pod_cause.rs (the Overview's rows and a Service's chain) and `sharedCause` in src/ui/lib/pod-cause.ts (every workload's list row, page and peek, which read their pods as a list). Every cause counts as it stands at `now`: an exit a container has been up since gives way at its `until` to its `later`, and only then is grouped. Each pod arrives as its `gone` flag (being deleted, or failed and replaced by its controller) and the cause `pod_cause` read; `is` names the pod whose cause is told (`from`), how many share it and how many the workload runs, or null where none has a cause.",
+  "about": "The cause most of a workload's pods share, as both halves read it: `share` in src/tauri/src/resources/types/pod_cause.rs (the Overview's rows and a Service's chain) and `sharedCause` in src/ui/lib/pod-cause.ts (every workload's list row, page and peek, which read their pods as a list). Every cause counts as it stands at `now`: an exit a container has been up since gives way at its `until` to its `later`, and only then is grouped. A pod running and not ready counts from its `countsFrom`, a probe's first passes after it stopped being ready, and until then is one of the whole with no cause. Each pod arrives as its `gone` flag (being deleted, or failed and replaced by its controller) and the cause `pod_cause` read; `is` names the pod whose cause is told (`from`), how many share it and how many the workload runs, or null where none has a cause.",
   "now": "2026-10-12T10:30:00Z",
   "cases": [
     {
@@ -885,6 +885,121 @@
         }
       ],
       "is": null
+    },
+    {
+      "name": "a pod not ready for less than a probe's first passes is not counted yet, and is still one of the whole",
+      "pods": [
+        {
+          "gone": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web"],
+            "since": "2026-10-12T10:00:10Z",
+            "countsFrom": "2026-10-12T10:02:10Z",
+            "probe": null
+          }
+        },
+        {
+          "gone": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web"],
+            "since": "2026-10-12T10:29:30Z",
+            "countsFrom": "2026-10-12T10:31:30Z",
+            "probe": null
+          }
+        },
+        {
+          "gone": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web"],
+            "since": "2026-10-12T10:00:10Z",
+            "countsFrom": "2026-10-12T10:02:10Z",
+            "probe": null
+          }
+        }
+      ],
+      "is": {
+        "from": 0,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "pods all inside a probe's first passes share no cause",
+      "pods": [
+        {
+          "gone": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web"],
+            "since": "2026-10-12T10:29:30Z",
+            "countsFrom": "2026-10-12T10:31:30Z",
+            "probe": null
+          }
+        },
+        {
+          "gone": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web"],
+            "since": "2026-10-12T10:29:30Z",
+            "countsFrom": "2026-10-12T10:31:30Z",
+            "probe": null
+          }
+        }
+      ],
+      "is": null
+    },
+    {
+      "name": "an exit no longer news gives way to a pod inside a probe's first passes, which is no cause yet",
+      "pods": [
+        {
+          "gone": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": "2026-10-12T10:10:00Z",
+            "later": {
+              "says": "notReady",
+              "containers": ["web"],
+              "since": "2026-10-12T10:29:30Z",
+              "countsFrom": "2026-10-12T10:31:30Z",
+              "probe": null
+            }
+          }
+        },
+        {
+          "gone": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["web"],
+            "since": "2026-10-12T10:00:10Z",
+            "countsFrom": "2026-10-12T10:02:10Z",
+            "probe": null
+          }
+        }
+      ],
+      "is": {
+        "from": 1,
+        "pods": 1,
+        "of": 2
+      }
     }
   ]
 }

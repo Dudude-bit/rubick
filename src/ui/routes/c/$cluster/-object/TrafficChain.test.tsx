@@ -508,15 +508,33 @@ describe("TrafficChain", () => {
     expect(screen.queryByText(/Nothing has picked this Ingress up/)).toBeNull();
     addressed.unmount();
 
-    await wrap(
+    const unrecorded = await wrap(
       <TrafficChain
         query={query(gke)}
         controller={{ ...binding, claim: "unrecorded" }}
       />
     );
-    expect(
-      screen.getByText(/whether anything serves this Ingress is not known/)
-    ).toBeInTheDocument();
+    const annotated = screen.getByText(
+      /whether anything serves this Ingress is not known/
+    );
+    expect(annotated).toHaveTextContent(/matches that annotation/);
+    expect(screen.queryByText(/Nothing has picked this Ingress up/)).toBeNull();
+    unrecorded.unmount();
+
+    // No class at all: there is no annotation to match, and who may take it is named.
+    await wrap(
+      <TrafficChain
+        query={query(gke)}
+        controller={{
+          ...binding,
+          requested: null,
+          claim: "unrecorded",
+          classless: ["Traefik"],
+        }}
+      />
+    );
+    expect(screen.getByText(/Installed here: Traefik\./)).toBeInTheDocument();
+    expect(screen.queryByText(/matches that annotation/)).toBeNull();
     expect(screen.queryByText(/Nothing has picked this Ingress up/)).toBeNull();
   });
 

@@ -26,6 +26,8 @@ export function forwardNoteSaying(note: ForwardNote): string | Saying {
         key: "forwardWaiting",
         values: { pod: note.pod, kind: note.kind, name: note.name },
       };
+    case "starting":
+      return { key: "forwardStarting", values: { pod: note.pod } };
     case "noReplacement":
       return {
         key: "forwardNoReplacement",

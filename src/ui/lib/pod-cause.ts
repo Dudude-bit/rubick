@@ -525,7 +525,8 @@ export const sameCause = (a: PodCause, b: PodCause): boolean =>
 
 /**
  * The cause most of a workload's pods share, how many share it and how many
- * it runs, each cause counted as it stands at `now`. `share` in pod_cause.rs
+ * it runs, each cause counted as it stands at `now` and only once it counts
+ * ({@link countsAt}). `share` in pod_cause.rs
  * answers the Overview's rows and a Service's chain;
  * src/contracts/shared-cause-conformance.json holds both to one answer, and
  * trouble-cause-conformance.json the pods each side counts.
@@ -539,7 +540,7 @@ export function sharedCause(
   for (const pod of pods) {
     if (pod.gone) continue;
     of += 1;
-    const cause = currentCause(pod.cause, now);
+    const cause = countsAt(currentCause(pod.cause, now), now);
     if (!cause) continue;
     const key = causeKey(cause);
     const group = groups.get(key) ?? { cause, pods: 0 };

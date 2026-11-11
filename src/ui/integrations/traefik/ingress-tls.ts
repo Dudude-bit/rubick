@@ -1,8 +1,24 @@
 import { commands } from "@/lib/commands";
+import { isRefusal } from "@/lib/error-utils";
+import type { IngressInfo, Scoped } from "@/generated/types";
 import type { IngressTls } from "../registry";
 import { BACKING_NOT_READ } from "../ingress";
 import { fetchController } from "./data";
 import { allRoutes, routeIsSecure } from "./model";
+
+/**
+ * The cluster's Ingresses or, where the cluster refuses that list, the ones
+ * in the namespaces asked about: a reader bound to their namespaces may
+ * still read those.
+ */
+async function ingressesIn(namespaces: string[]): Promise<Scoped<IngressInfo>> {
+  try {
+    return { rows: await commands.listIngresses(null), unread: [] };
+  } catch (error) {
+    if (!isRefusal(error) || namespaces.length === 0) throw error;
+    return commands.listIngressesIn(namespaces);
+  }
+}
 
 /**
  * Whether Traefik serves these Ingresses' hosts over TLS, which `spec.tls`
@@ -14,8 +30,8 @@ import { allRoutes, routeIsSecure } from "./model";
 export async function ingressTls(
   wanted: Array<{ namespace: string; name: string; hosts: string[] }>
 ): Promise<IngressTls[][]> {
-  const [ingresses, binding, controller] = await Promise.all([
-    commands.listIngresses(null),
+  const [{ rows: ingresses, unread }, binding, controller] = await Promise.all([
+    ingressesIn([...new Set(wanted.map((input) => input.namespace))].sort()),
     commands.resolveIngressClass(null),
     fetchController().catch(() => null),
   ]);
@@ -33,6 +49,18 @@ export async function ingressTls(
 
   return wanted.map((input) =>
     input.hosts.flatMap((host): IngressTls[] => {
+      const refused = unread.find(
+        (entry) => entry.namespace === input.namespace
+      );
+      if (refused)
+        return [
+          {
+            host,
+            terminated: null,
+            by: { key: "verbatimLine", values: { said: refused.message } },
+            replacesSpec: true,
+          },
+        ];
       const mine = routes.filter(
         (route) =>
           route.source.namespace === input.namespace &&

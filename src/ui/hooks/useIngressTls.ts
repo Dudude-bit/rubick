@@ -43,8 +43,6 @@ export interface IngressTlsAnswers {
   error: Error | null;
   /** Which kind of answer is still out or failed, for {@link hostTls}. */
   unread: TlsUnread;
-  /** A controller here may serve a host `spec.tls` names as plain HTTP. */
-  mayReplaceSpec: boolean;
 }
 
 const key = (namespace: string, name: string) => `${namespace}/${name}`;
@@ -52,7 +50,14 @@ const key = (namespace: string, name: string) => `${namespace}/${name}`;
 const rank = (terminated: IngressTls["terminated"]) =>
   terminated === true ? 2 : terminated === null ? 1 : 0;
 
-export function useIngressTls(ingresses: IngressRef[]): IngressTlsAnswers {
+/**
+ * With `asks` off no supplier is asked: an answer another caller already
+ * put in the cache is read, and one that is not there is still out.
+ */
+export function useIngressTls(
+  ingresses: IngressRef[],
+  asks = true
+): IngressTlsAnswers {
   const suppliers = useCapabilities("ingress.tls");
 
   // The identity of the array churns on every render of every caller that
@@ -88,7 +93,7 @@ export function useIngressTls(ingresses: IngressRef[]): IngressTlsAnswers {
     queries: suppliers.map((ask, index) => ({
       queryKey: ["ingress-tls", index, digest],
       queryFn: () => ask(wanted),
-      enabled,
+      enabled: enabled && asks,
       // An annotation changes with a deploy, not by the second — the same
       // minute every routing read in the app uses.
       staleTime: 60_000,
@@ -132,6 +137,5 @@ export function useIngressTls(ingresses: IngressRef[]): IngressTlsAnswers {
     unread: silent.some((supplier) => supplier.replacesSpec)
       ? "replaces"
       : silent.length > 0 && "adds",
-    mayReplaceSpec: suppliers.some((supplier) => supplier.replacesSpec),
   };
 }

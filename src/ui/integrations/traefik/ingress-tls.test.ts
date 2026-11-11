@@ -5,6 +5,7 @@ import type { IngressInfo } from "@/generated/types";
 vi.mock("@/lib/commands", () => ({
   commands: {
     listIngresses: vi.fn(async () => []),
+    listIngressesIn: vi.fn(),
     resolveIngressClass: vi.fn(async () => ({
       available: [
         {
@@ -129,6 +130,56 @@ describe("what Traefik tells the Ingress pages about TLS", () => {
     const [[answer]] = await ask();
 
     expect(answer.terminated).toBeNull();
+  });
+
+  const REFUSED = {
+    code: "PERMISSION_DENIED",
+    message: "ingresses.networking.k8s.io is forbidden",
+  };
+
+  /**
+   * Bound to their namespaces, a reader was refused the cluster's Ingress
+   * list and every `spec.tls` host read "TLS not checked" for good, though
+   * the Ingress asked about was theirs to read. Fails if a refusal of the
+   * cluster's list is the end of it, or if any other failure is read around.
+   */
+  it("reads the namespaces it was asked about where the cluster's list is refused", async () => {
+    vi.mocked(commands.listIngresses).mockRejectedValue(REFUSED);
+    vi.mocked(commands.listIngressesIn).mockResolvedValue({
+      rows: [promo()],
+      unread: [],
+    });
+
+    const [[answer]] = await ask();
+
+    expect(commands.listIngressesIn).toHaveBeenCalledWith(["shop"]);
+    expect(answer).toMatchObject({ terminated: false, replacesSpec: true });
+
+    vi.mocked(commands.listIngresses).mockRejectedValue(new Error("timeout"));
+    await expect(ask()).rejects.toThrow("timeout");
+  });
+
+  /**
+   * A namespace that refuses too leaves its hosts unknown in the cluster's
+   * words. Fails if they are dropped, which hands `spec.tls` the answer.
+   */
+  it("leaves a host unknown, with the cluster's words, where its namespace is refused too", async () => {
+    vi.mocked(commands.listIngresses).mockRejectedValue(REFUSED);
+    vi.mocked(commands.listIngressesIn).mockResolvedValue({
+      rows: [],
+      unread: [{ namespace: "shop", code: "", message: REFUSED.message }],
+    });
+
+    expect(await ask()).toEqual([
+      [
+        {
+          host: "promo.example.com",
+          terminated: null,
+          by: { key: "verbatimLine", values: { said: REFUSED.message } },
+          replacesSpec: true,
+        },
+      ],
+    ]);
   });
 
   /** Another controller's Ingress is not Traefik's to speak for. */

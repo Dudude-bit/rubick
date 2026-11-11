@@ -72,7 +72,7 @@ import type {
   ResourceConnections,
   TlsCertificate,
 } from "@/generated/types";
-import type { ClaimedBinding } from "@/lib/ingress-health";
+import { claimNote, type ClaimedBinding } from "@/lib/ingress-health";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { TONE_TEXT } from "@/lib/tone";
@@ -233,12 +233,7 @@ function Controller({
         </p>
         {!brief && (
           <p className="max-w-[92ch] text-[11px] text-fg-fnt">
-            {t(
-              "empty",
-              binding.claim === "address"
-                ? "ingressClaimedByAddress"
-                : "ingressClaimUnrecorded"
-            )}
+            {claimNote(binding, t)}
           </p>
         )}
       </>

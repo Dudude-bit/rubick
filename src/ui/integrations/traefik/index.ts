@@ -44,6 +44,7 @@ export default defineVendor({
     "proxy.behind": proxyBehind,
     "ingress.tls": ingressTls,
     "ingress.clients": ingressClients,
+    "ingress.classless": true,
     "object.report": reportOf,
   },
   page: {

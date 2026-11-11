@@ -5,12 +5,7 @@ import type { ReportValue } from "@/lib/report";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { podStatusMeaning } from "@/lib/status-meaning";
 import { loopState } from "@/lib/crash-loop";
-import {
-  causeText,
-  countsAt,
-  currentCause,
-  sharedCause,
-} from "@/lib/pod-cause";
+import { causeText, currentCause, sharedCause } from "@/lib/pod-cause";
 import type {
   PodCause,
   PodGone,
@@ -174,7 +169,7 @@ export function workloadCause(
   const trouble = sharedCause(
     pods.map((pod) => ({
       gone: pod.status.gone !== undefined,
-      cause: countsAt(troubleCause(pod, now), now),
+      cause: troubleCause(pod, now),
     })),
     now
   );

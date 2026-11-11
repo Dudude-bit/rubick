@@ -33,6 +33,7 @@ const commands = vi.hoisted(() => ({
   listGatewayRoutesIn: vi.fn(),
   listGatewaysIn: vi.fn(),
   listServiceBacking: vi.fn(),
+  detectInClusterExtensions: vi.fn(),
 }));
 
 vi.mock("@/lib/commands", () => ({ commands }));
@@ -50,6 +51,7 @@ vi.mock("@/integrations", async (original) => {
 });
 
 const { useAttention } = await import("./useAttention");
+const { usePlainHosts } = await import("./useIngressHealth");
 const { useClusterStore } = await import("@/stores/clusterStore");
 const { useWindowActivity } = await import("@/lib/window-activity");
 const { REFRESH_INTERVALS, STALE_TIMES } = await import("@/lib/refresh");
@@ -286,7 +288,7 @@ describe("what the count asks about each Ingress", () => {
   };
 
   /** Addressed Ingresses of one class in one namespace, each naming a host and a Secret that is not there. */
-  const settled = async (count: number) => {
+  const settled = async (count: number, client?: QueryClient) => {
     commands.listIngressHealthInputs.mockResolvedValue({
       rows: Array.from({ length: count }, (_, at) => ({
         name: `shop-${at}`,
@@ -322,7 +324,7 @@ describe("what the count asks about each Ingress", () => {
     );
     for (const command of Object.values(commands)) command.mockClear();
     const { result, unmount } = renderHook(() => useAttention(), {
-      wrapper: wrapper(),
+      wrapper: wrapper(client),
     });
     await waitFor(() =>
       expect(
@@ -382,6 +384,51 @@ describe("what the count asks about each Ingress", () => {
   });
 
   /**
+   * With the Ingress list open, its controller had answered and the list was
+   * definite while the count beside it said "not checked". Fails if the
+   * count stops reading the answer the list put in the cache, or asks.
+   */
+  it("reads what the Ingress list was told, without asking", async () => {
+    const traefik = Object.assign(
+      vi.fn(async (wanted: Array<{ hosts: string[] }>) =>
+        wanted.map(({ hosts }) =>
+          hosts.map((host) => ({
+            host,
+            terminated: false,
+            by: { key: "traefikTlsNotServed" },
+            replacesSpec: true,
+          }))
+        )
+      ),
+      { replacesSpec: true }
+    );
+    controllers.tls = [traefik];
+    const rows = [0, 1].map((at) => ({
+      namespace: "shop",
+      name: `shop-${at}`,
+      rules: [{ host: `shop-${at}.example.com`, paths: [] }],
+    }));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const list = renderHook(() => usePlainHosts(rows as never, true), {
+      wrapper: wrapper(client),
+    });
+    await waitFor(() =>
+      expect(list.result.current(rows[0], "shop-0.example.com")).toBe(true)
+    );
+
+    const { attention } = await settled(2, client);
+
+    expect(traefik).toHaveBeenCalledTimes(1);
+    const check = attention.checks.find((entry) => entry.kind === "Ingress")!;
+    expect(check).toMatchObject({ state: "read", unread: [] });
+    expect(attention.items.filter((item) => item.kind === "Ingress")).toEqual(
+      []
+    );
+  });
+
+  /**
    * The count read the Ingress's row, which had no annotations, against an
    * IngressClass list that has no `gce`: every GKE Ingress was an error on
    * every screen. Fails if the row's annotated class and its address do not
@@ -429,6 +476,64 @@ describe("what the count asks about each Ingress", () => {
 
     expect(await counted(true)).toEqual([]);
     expect(await counted(false)).toEqual(["no controller"]);
+  });
+
+  /**
+   * An Ingress that names no class, with no default IngressClass and no
+   * address, was an error on every screen of a cluster whose Traefik serves
+   * it. Fails if the count says "no controller" where one that takes such an
+   * Ingress was found, or stops saying it where the scan found none.
+   */
+  it("does not count a classless Ingress as served by nobody where a controller here takes one", async () => {
+    const counted = async (traefik: boolean) => {
+      commands.detectInClusterExtensions.mockResolvedValue([
+        { id: "traefik", installed: traefik, version: null },
+        { id: "gke-ingress", installed: false, version: null },
+      ]);
+      commands.listIngressHealthInputs.mockResolvedValue({
+        rows: [
+          {
+            name: "shop",
+            namespace: "shop",
+            className: null,
+            rules: [],
+            defaultBackend: null,
+            loadBalancerIps: [],
+            tlsConfigs: [],
+          },
+        ],
+        unread: [],
+      });
+      commands.resolveIngressClass.mockResolvedValue({
+        requested: null,
+        resolved: null,
+        controller: null,
+        viaDefault: false,
+        available: [],
+      });
+      const { result, unmount } = renderHook(() => useAttention(), {
+        wrapper: wrapper(),
+      });
+      const check = () =>
+        result.current?.checks.find((entry) => entry.kind === "Ingress");
+      await waitFor(() =>
+        expect(check()?.state).toBe(traefik ? "unread" : "read")
+      );
+      const said = [
+        result
+          .current!.items.filter((item) => item.kind === "Ingress")
+          .map((item) => item.reason),
+        check()!.unread.map((entry) => entry.message),
+      ];
+      unmount();
+      return said;
+    };
+
+    expect(await counted(true)).toEqual([
+      [],
+      [expect.stringContaining("Installed here: Traefik.")],
+    ]);
+    expect(await counted(false)).toEqual([["no controller"], []]);
   });
 
   /** A cloud's supplier only adds to spec.tls, so its silence takes no fault away. */

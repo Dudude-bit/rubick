@@ -65,6 +65,25 @@ describe("what the Ingress report leads with", () => {
   });
 
   /**
+   * A file is read later, by someone who cannot hover: "TLS not checked"
+   * with no reason reads as a report cut short. Fails if the reason the page
+   * holds does not reach the file.
+   */
+  it("carries why TLS was not checked", () => {
+    const unchecked = {
+      text: "TLS not checked",
+      tone: null,
+      known: false,
+      why: "The cluster refused: ingresses is forbidden",
+    };
+    expect(ingressStats(ingress, served, unchecked, t)[2]).toMatchObject({
+      value: "TLS not checked",
+      role: "neutral",
+      note: "The cluster refused: ingresses is forbidden",
+    });
+  });
+
+  /**
    * Sam's Ingress shop said "Load balancer: pending" beside "nothing picks
    * this Ingress up ... never will": IngressClass traefik does not exist.
    * Fails if an address nothing can assign is called pending again.

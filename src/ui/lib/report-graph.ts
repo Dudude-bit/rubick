@@ -20,6 +20,7 @@ import {
 /** What the page read beyond the graph, handed to the chain the same way. */
 export type ChainExtra = Parameters<typeof trafficChains>[2];
 import { iconSvg } from "./icon-svg";
+import { claimNote } from "./ingress-health";
 import type { ReportHop, ReportPath } from "./report";
 import { ORDER, refOf, type PlacedSection } from "./report-parts";
 
@@ -86,12 +87,7 @@ function hopOf(hop: ChainHop, t: T): ReportHop {
           text: requested
             ? t("empty", "ingressClassAnnotated", { name: requested })
             : t("empty", "ingressNamesNoClass"),
-          detail: t(
-            "empty",
-            claim === "address"
-              ? "ingressClaimedByAddress"
-              : "ingressClaimUnrecorded"
-          ),
+          detail: claimNote(hop.binding, t),
           tone: claim === "unrecorded" ? "warn" : tone,
         };
       return {

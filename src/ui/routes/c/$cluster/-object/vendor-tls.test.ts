@@ -68,6 +68,34 @@ describe("what the Ingress list takes from a cloud controller", () => {
   });
 
   /**
+   * "TLS not checked" read the same while the controllers were being asked
+   * and after the cluster refused them for good. Fails if the answer drops
+   * what a controller said of a host it could not tell about, or why the
+   * controllers could not be asked, or invents a reason while one is out.
+   */
+  it("says why a host is unchecked, and nothing while the answer is still out", () => {
+    expect(vendorTlsAnswer(shop, answering(null), t)?.uncheckedWhy).toBe(
+      "shop-cert"
+    );
+    const refused = {
+      ...answering(undefined, "adds"),
+      error: {
+        code: "PERMISSION_DENIED",
+        message: "ingresses is forbidden",
+      } as never as Error,
+    };
+    expect(vendorTlsAnswer(shop, refused, t)?.uncheckedWhy).toBe(
+      "The cluster refused: ingresses is forbidden"
+    );
+    const failed = { ...refused, error: new Error("timed out") };
+    expect(vendorTlsAnswer(shop, failed, t)?.uncheckedWhy).toBe(
+      "The read failed: timed out"
+    );
+    const pending = answering(undefined, "adds");
+    expect(vendorTlsAnswer(shop, pending, t)?.uncheckedWhy).toBeNull();
+  });
+
+  /**
    * Two rules for one host are still one host: counted twice it read
    * "TLS 2" and keyed two tooltip rows alike.
    */

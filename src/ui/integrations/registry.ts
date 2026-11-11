@@ -667,6 +667,12 @@ export interface Capabilities {
    */
   "ingress.clients": (controller: string) => DoorClaim | null;
   /**
+   * Its controller takes an Ingress that names no class, unless it is set to
+   * a class of its own: a setting the cluster does not record. Found here, it
+   * makes "no class and no default IngressClass" no proof nobody serves.
+   */
+  "ingress.classless": true;
+  /**
    * What one custom resource is connected to, as its own controller states it.
    *
    * The gap this closes is a whole surface rather than a field.

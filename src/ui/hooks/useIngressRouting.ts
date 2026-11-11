@@ -30,6 +30,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { STALE_TIMES } from "@/lib/refresh";
 import type { RoutedIngress } from "@/lib/connections";
 import { claimedBinding } from "@/lib/ingress-health";
+import { useClasslessTakers } from "@/integrations";
 import {
   useCertificateIssuance,
   type Issuance,
@@ -128,6 +129,7 @@ export function useIngressRouting(
   conns: ResourceConnections | undefined
 ): IngressRouting {
   const ingresses = frontingIngresses(conns);
+  const classless = useClasslessTakers();
 
   const read = useQueries({
     queries: ingresses.map((ingress) => ({
@@ -219,7 +221,9 @@ export function useIngressRouting(
     }
     routing.set(refKey(ingress), {
       tls,
-      binding: binding?.data ? claimedBinding(info, binding.data) : null,
+      binding: binding?.data
+        ? claimedBinding(info, binding.data, classless)
+        : null,
       addresses: info.loadBalancerIps,
     });
   });

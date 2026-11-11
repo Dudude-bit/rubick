@@ -17,6 +17,7 @@ import {
   describeExistence,
   describeStop,
   describeUsages,
+  referencesUnread,
   hopTone,
   stopCause,
   stopUnder,
@@ -42,6 +43,7 @@ import type {
   ResourceConnections,
   Rollout,
   TlsCertificate,
+  UnexploredKind,
   Usage,
 } from "@/generated/types";
 
@@ -3579,6 +3581,29 @@ describe("what a delete leaves pointing at the object", () => {
     expect(found.map((dependent) => dependent.object.kind)).toEqual([
       "HorizontalPodAutoscaler",
     ]);
+  });
+
+  /**
+   * A policy and a budget match labels and name no object. Fails if the
+   * delete dialog warns of references unchecked in a refused list of
+   * either, or stops warning of a kind that does name its target.
+   */
+  it("warns of no unchecked reference in a kind that names no object", () => {
+    const refused = (kind: string, version: string): UnexploredKind => ({
+      kind,
+      why: { says: "unanswered", version, said: "forbidden" },
+    });
+    expect(
+      referencesUnread({
+        ...conns([]),
+        notLookedAt: [
+          refused("NetworkPolicy", "networking.k8s.io/v1"),
+          refused("PodDisruptionBudget", "policy/v1"),
+          refused("Ingress", "networking.k8s.io/v1"),
+          { kind: "NetworkPolicy", why: { says: "policiesOnPodTabs" } },
+        ],
+      })
+    ).toEqual(["Ingress"]);
   });
 });
 

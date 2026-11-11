@@ -102,6 +102,31 @@ describe("what the Service report leads with", () => {
   });
 
   /**
+   * A short count over pods nobody could check for a shut door was shared
+   * amber with no word of the refusal. Fails if the file drops why.
+   */
+  it("shares a short count with why the NetworkPolicies went unread", () => {
+    const door = { state: "unread" as const, reason: "forbidden" };
+    const short = serviceStats(
+      service,
+      published({ ready: 1, notReady: 1, door }),
+      t
+    ).at(-1);
+    expect(short).toMatchObject({ value: "1/2", role: "warn" });
+    expect(short?.note).toContain("is not checked: forbidden");
+    const legacy = serviceStats(
+      service,
+      published({ ready: 1, notReady: 1, door, source: "legacyEndpoints" }),
+      t
+    ).at(-1);
+    expect(legacy?.note).toContain("is not checked: forbidden. This cluster");
+    expect(
+      serviceStats(service, published({ ready: 1, notReady: 1 }), t).at(-1)
+        ?.note
+    ).toBeNull();
+  });
+
+  /**
    * Zero ready of zero is not "all ready": the Published tab says the
    * Service publishes nothing and the chain ends in a red stop, and the
    * file led with `0/0` and a green check above it.
