@@ -182,6 +182,26 @@ describe("what Traefik tells the Ingress pages about TLS", () => {
     ]);
   });
 
+  /**
+   * Which Ingresses are Traefik's is read off the IngressClasses and nothing
+   * else, and a reader bound to their namespaces is refused that list. Fails
+   * if the refusal is read around: with no class known Traefik claims none,
+   * says nothing, and `spec.tls` answers HTTPS for a host served in the
+   * clear. Refused whole, every host stays not checked with the cluster's
+   * words.
+   */
+  it("answers nothing, and says the refusal, where the IngressClass list is refused", async () => {
+    vi.mocked(commands.listIngresses).mockResolvedValue([promo()]);
+    vi.mocked(commands.resolveIngressClass).mockRejectedValueOnce({
+      code: "PERMISSION_DENIED",
+      message: "ingressclasses.networking.k8s.io is forbidden",
+    });
+
+    await expect(ask()).rejects.toMatchObject({
+      message: "ingressclasses.networking.k8s.io is forbidden",
+    });
+  });
+
   /** Another controller's Ingress is not Traefik's to speak for. */
   it("says nothing about an Ingress Traefik does not claim", async () => {
     vi.mocked(commands.listIngresses).mockResolvedValue([promo({}, "nginx")]);
