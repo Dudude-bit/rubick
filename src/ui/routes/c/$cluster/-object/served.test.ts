@@ -77,6 +77,22 @@ describe("whether the cluster serves a kind", () => {
     ).toEqual({ state: "absent" });
   });
 
+  /**
+   * `clusterroles` is found in whichever group lists it. With
+   * rbac.authorization.k8s.io unread, the Access page said the cluster
+   * serves no clusterroles.
+   */
+  it("cannot tell about a bare plural no group listed while any group is unread", () => {
+    const bare = { group: "", plural: "clusterroles" };
+    expect(
+      servedIn(catalog(["rbac.authorization.k8s.io"]), null, bare)
+    ).toEqual({
+      state: "unknown",
+      error: "rbac.authorization.k8s.io did not answer",
+    });
+    expect(servedIn(catalog(), null, bare)).toEqual({ state: "absent" });
+  });
+
   /** A catalogue that failed whole knows nothing about any kind. */
   it("cannot tell anything when the catalogue failed", () => {
     expect(

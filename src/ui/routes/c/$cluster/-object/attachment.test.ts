@@ -337,6 +337,45 @@ describe("the parent an attached object opens on", () => {
   });
 });
 
+describe("a parent whose kind the catalogue does not list", () => {
+  const over = (unread: ApiCatalog["unread"]) =>
+    decide(
+      "horizontalpodautoscalers.autoscaling",
+      hpa("api"),
+      readerOver({ entries: [], unread }, "horizontalpodautoscalers", "shop")
+    );
+
+  /**
+   * A discovery of `apps` that timed out told the HPA page "Deployment api
+   * does not exist", in a warning, about a Deployment nobody had looked for.
+   */
+  it("could not be read where its group did not answer discovery", async () => {
+    expect(
+      await over([
+        { group: "apps", code: "READ_DEADLINE", message: "too slow" },
+      ])
+    ).toEqual({
+      state: "stay",
+      stay: {
+        says: "targetUnread",
+        kind: "Deployment",
+        name: "api",
+        error: "too slow",
+      },
+    });
+  });
+
+  /** Another group's failure says nothing about this one: fails if any unread group blinds every parent. */
+  it("does not exist where its group answered without the kind", async () => {
+    expect(
+      await over([{ group: "batch", code: "READ_DEADLINE", message: "slow" }])
+    ).toEqual({
+      state: "stay",
+      stay: { says: "targetMissing", kind: "Deployment", name: "api" },
+    });
+  });
+});
+
 describe("where an Event about an object opens", () => {
   /** A Lease's page has no Events tab; fails if an Event about one is sent to a tab that is not there. */
   it("lands on the Events tab only where the kind's page has one", () => {

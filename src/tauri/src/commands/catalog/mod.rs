@@ -7,12 +7,14 @@
 mod table;
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use futures::future::join_all;
 use kube::api::{Api, DynamicObject};
 use kube::core::params::ListParams;
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use tokio::time::timeout;
 
 use crate::client::served::Served;
 use crate::commands::helpers::{clean_yaml_for_editor, scope_of, ResourceContext};
@@ -78,14 +80,35 @@ fn forget(state: &AppState) {
     }
 }
 
+/// How long the catalogue waits for one API group. Every list of a served
+/// kind waits for the catalogue, so a wedged aggregated API would hold all
+/// of them for the read deadline; past the hedge and its duplicate, a group
+/// is named in `unread` and the rest are shown.
+const GROUP_DEADLINE: Duration = Duration::from_secs(10);
+
 pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
+    catalog_within(state, GROUP_DEADLINE).await
+}
+
+async fn catalog_within(state: &AppState, deadline: Duration) -> Result<ApiCatalog> {
     let client = ResourceContext::for_list(state, None)?.client;
-    let (groups, short) = futures::join!(client.list_api_groups(), short_names(&client));
+    let (groups, short) = futures::join!(
+        client.list_api_groups(),
+        timeout(deadline, short_names(&client))
+    );
     let groups = groups?;
+    let short = short.unwrap_or_default();
     let names: Vec<String> = std::iter::once(String::new())
         .chain(groups.groups.into_iter().map(|group| group.name))
         .collect();
-    let answers = join_all(names.iter().map(|group| state.served_recommended(group))).await;
+    let answers = join_all(names.iter().map(|group| async move {
+        timeout(deadline, state.served_recommended(group))
+            .await
+            .unwrap_or(Err(Error::ReadDeadline {
+                after_secs: deadline.as_secs(),
+            }))
+    }))
+    .await;
 
     let mut catalog = ApiCatalog {
         entries: Vec::new(),
@@ -379,6 +402,39 @@ mod tests {
             found.entries.iter().all(|e| e.short_names.is_empty()),
             "no aggregated discovery, no short names: the frontend's table stands in"
         );
+    }
+
+    /// Every list of a served kind waits for the catalogue: one wedged
+    /// aggregated API kept Roles and `ServiceAccounts` blank for the minute
+    /// the read deadline allows it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_group_that_hangs_is_named_once_the_others_have_answered() {
+        let (state, _) = connected(ServedIndex::default(), |path, _| match path {
+            "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+            "/api/v1" => (200, resources("v1", &[("configmaps", "ConfigMap")])),
+            "/apis" => (200, json!({ "kind": "APIGroupList", "groups": [group("ok.example.com"), group("hung.example.com")] }).to_string()),
+            "/apis/ok.example.com/v1" => (200, resources("ok.example.com/v1", &[("widgets", "Widget")])),
+            "/apis/hung.example.com/v1" => {
+                std::thread::sleep(Duration::from_secs(3));
+                (200, resources("hung.example.com/v1", &[("gizmos", "Gizmo")]))
+            }
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let started = std::time::Instant::now();
+        let found = catalog_within(&state, Duration::from_secs(1))
+            .await
+            .expect("catalog");
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            started.elapsed()
+        );
+        assert!(found.entries.iter().any(|e| e.plural == "widgets"));
+        assert!(found.entries.iter().all(|e| e.plural != "gizmos"));
+        assert_eq!(found.unread.len(), 1);
+        assert_eq!(found.unread[0].group, "hung.example.com");
+        assert_eq!(found.unread[0].code, "READ_DEADLINE");
     }
 
     /// A CRD applied while its list page said "not served" stayed missing

@@ -34,7 +34,8 @@ export function servedIn(
       ? catalog.entries.find((e) => e.plural === plural)
       : undefined);
   if (entry) return { state: "served", entry };
-  const unread = catalog.unread.find((g) => g.group === group);
+  // A bare plural may be any group's, an unread one's too.
+  const unread = catalog.unread.find((g) => group === "" || g.group === group);
   return unread
     ? { state: "unknown", error: unread.message }
     : { state: "absent" };

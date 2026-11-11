@@ -55,6 +55,10 @@ pub struct ResourceTable {
 struct Cursor {
     namespace: usize,
     token: Option<String>,
+    /// Rows of this namespace already handed out by a server that pages
+    /// nothing itself.
+    #[serde(default)]
+    skip: usize,
 }
 
 pub(super) async fn page(
@@ -81,12 +85,23 @@ pub(super) async fn page(
         let reach = reaches[at.namespace].as_deref();
         let limit = PAGE - u32::try_from(table.rows.len()).unwrap_or(PAGE);
         match read(client, served, reach, limit, at.token.take()).await {
-            Ok(printed) => {
+            Ok(mut printed) => {
                 answered = true;
                 if table.columns.is_empty() {
                     table.columns = printed.columns;
                 }
-                table.rows.extend(printed.rows);
+                // metrics-server ignores `limit` and answers with every row
+                // it has: the page is cut here, and the next one reads the
+                // collection again to carry on from the cut.
+                let room = limit as usize;
+                let rest = printed.rows.split_off(at.skip.min(printed.rows.len()));
+                if rest.len() > room {
+                    table.rows.extend(rest.into_iter().take(room));
+                    at.skip += room;
+                    break;
+                }
+                at.skip = 0;
+                table.rows.extend(rest);
                 match printed.token {
                     Some(token) => at.token = Some(token),
                     None => at.namespace += 1,
@@ -106,7 +121,9 @@ pub(super) async fn page(
             Err(failed) => return Err(failed),
         }
     }
-    if !answered {
+    // Only the first page fails whole: a later one has rows before it, and
+    // its refusals are theirs to stand beside.
+    if !answered && cursor.is_none() {
         if let Some(failed) = first_failure {
             return Err(failed);
         }
@@ -330,6 +347,58 @@ mod tests {
         let scope = Some(vec!["a".to_string(), "b".to_string()]);
         let failed = page(&client, &configmaps(), scope, None).await.unwrap_err();
         assert!(failed.is_refusal());
+    }
+
+    /// "Show more" would otherwise replace the rows already read with a
+    /// whole-list refusal: a page filled exactly at a namespace's end hands
+    /// out a cursor, and every namespace after it may be refused.
+    #[tokio::test]
+    async fn a_later_page_where_nothing_answered_names_the_namespaces_and_does_not_fail() {
+        let (client, _) = answering(|path, _| match path {
+            "/api/v1/namespaces/b/configmaps" => (200, printed(&["one"], None)),
+            _ => failure(403, "Forbidden"),
+        })
+        .await;
+        let scope = Some(vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        let cursor = r#"{"namespace":2,"token":null}"#;
+        let table = page(&client, &configmaps(), scope, Some(cursor))
+            .await
+            .expect("a page, not a refusal");
+        assert!(table.rows.is_empty());
+        assert_eq!(table.unread.len(), 1);
+        assert_eq!(table.unread[0].namespace, "c");
+        assert_eq!(table.unread[0].code, "PERMISSION_DENIED");
+        assert_eq!(table.cursor, None);
+    }
+
+    /// metrics-server answers a list of 10 000 `PodMetrics` whole whatever
+    /// `limit` says: megabytes in one IPC message, re-sent on every poll.
+    #[tokio::test]
+    async fn a_server_that_ignores_the_limit_is_still_read_a_page_at_a_time() {
+        let names: Vec<String> = (0..450).map(|i| format!("r{i}")).collect();
+        let (client, _) = answering(move |_, _| {
+            let names: Vec<&str> = names.iter().map(String::as_str).collect();
+            (200, printed(&names, None))
+        })
+        .await;
+        let mut cursor = None;
+        let mut read = Vec::new();
+        let mut sizes = Vec::new();
+        loop {
+            let table = page(&client, &configmaps(), None, cursor.as_deref())
+                .await
+                .expect("page");
+            sizes.push(table.rows.len());
+            read.extend(table.rows.into_iter().map(|row| row.name));
+            cursor = table.cursor;
+            if cursor.is_none() {
+                break;
+            }
+        }
+        assert_eq!(sizes, [200, 200, 50]);
+        assert_eq!(read.len(), 450);
+        assert_eq!(read[200], "r200");
+        assert_eq!(read[449], "r449");
     }
 
     /// A page that stops mid-namespace hands back where it stopped, and the

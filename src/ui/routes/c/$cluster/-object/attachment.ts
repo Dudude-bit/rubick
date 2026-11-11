@@ -352,7 +352,13 @@ export function readerOver(
   return {
     async exists(target) {
       const read = get(target);
-      if (!read) return "missing";
+      if (!read) {
+        // No entry is "not served" only where the kind's group was read.
+        const unread = catalog.unread.find(
+          (group) => group.group === groupOf(target.apiVersion)
+        );
+        return unread ? { unread: unread.message } : "missing";
+      }
       try {
         await read;
         return "present";

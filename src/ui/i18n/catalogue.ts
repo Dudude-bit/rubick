@@ -3294,7 +3294,15 @@ export const en = {
       one: "{n} {kind}, from the namespaces that answered",
       other: "{n} {plural}, from the namespaces that answered",
     },
+    rowsSoFar: {
+      one: "{n} {kind}, from the part of the list read so far",
+      other: "{n} {plural}, from the part of the list read so far",
+    },
     rowCount: { one: "{n} row", other: "{n} rows" },
+    rowCountSoFar: {
+      one: "{n} row, from the part of the list read so far",
+      other: "{n} rows, from the part of the list read so far",
+    },
     rowCountWhereAnswered: {
       one: "{n} row, from the namespaces that answered",
       other: "{n} rows, from the namespaces that answered",
@@ -6860,6 +6868,8 @@ export const en = {
     scaledToZero: "scaled to zero",
     noResourcesInScope: "No resources of this type in the current scope.",
     nothingMatches: "Nothing matches",
+    notAllSearched:
+      "Only part of the list has been read, so it may be among the rows not read yet.",
     searchedColumns: "Searched in {columns}.",
     noDataKeys: "No data keys",
     nothingBelongsToObject: "Nothing of this kind belongs to this object.",

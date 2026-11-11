@@ -233,6 +233,8 @@ export interface ResourceListProps<
    * one is read: not this scope's total, and its unread are not this scope's.
    */
   placeholder?: boolean;
+  /** The rows are the first of a longer list the server has more of. */
+  more?: boolean;
   /** What the authorizer is asked about this list, for a kind the registry does not hold. */
   listQuery?: ListQuery;
 }
@@ -275,6 +277,7 @@ export function ResourceList<
   grouping,
   delivery,
   placeholder: externalPlaceholder = false,
+  more = false,
   listQuery,
 }: ResourceListProps<Row>) {
   const t = useT();
@@ -487,7 +490,7 @@ export function ResourceList<
   const ranOutOfTime = failed !== null && isReadDeadline(failed);
   // Rows that are not the scope's whole: a namespace unread, a read cut
   // short, or the last scope's answer still standing in.
-  const partial = ranOutOfTime || unread.length > 0 || placeholder;
+  const partial = ranOutOfTime || unread.length > 0 || placeholder || more;
   const nothingRead =
     resources.length === 0 &&
     (failed !== null ||
@@ -525,17 +528,19 @@ export function ResourceList<
         : null;
   const listPartial = !partial
     ? null
-    : unread.length > 0
-      ? unread
-          .map(
-            (missing) =>
-              `${t("empty", "couldNotReadInNamespace", {
-                label,
-                namespace: missing.namespace,
-              })} (${verbatim(missing.message)})`
-          )
-          .join(" ")
-      : (failedWords ?? t("share", "stillReading"));
+    : [
+        ...unread.map(
+          (missing) =>
+            `${t("empty", "couldNotReadInNamespace", {
+              label,
+              namespace: missing.namespace,
+            })} (${verbatim(missing.message)})`
+        ),
+        ...(more
+          ? [t("empty", "printedMore", { count: resources.length })]
+          : []),
+      ].join(" ") ||
+      (failedWords ?? t("share", "stillReading"));
   const share = useMemo(
     () => ({
       title,
@@ -738,6 +743,7 @@ export function ResourceList<
           rowLabel={emptyStateLabel.toLowerCase()}
           rowNoun={counted}
           partial={partial}
+          more={more}
           widthsKey={widthsKey}
           share={embedded ? undefined : share}
           // "None in the scope" is a claim about the namespaces that did not
