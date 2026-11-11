@@ -186,8 +186,8 @@ pub async fn uncordon_node(name: String, state: State<'_, AppState>) -> Result<(
 ///
 /// Thin on purpose. The cordon, the surveying and the waiting all belong to
 /// the drain itself — see [`crate::drain`], which owns them so that starting
-/// one cannot leave a step out. What is left here is the name check and a
-/// client.
+/// one cannot leave a step out. What is left here is the name check, a
+/// client, and where to find the one a renewal replaces it with.
 ///
 /// Everything after this arrives as `drain-progress` / `drain-finished`
 /// events, including a cordon that was refused.
@@ -199,7 +199,10 @@ pub async fn start_node_drain(
 ) -> Result<DrainHandle> {
     crate::validation::validate_dns_subdomain(&name)?;
     let client = ResourceContext::for_list(&state, None)?.client;
-    Ok(state.drain_manager.start(client, name, options))
+    let clients = state.client_manager.clone();
+    let context = state.get_current_context().unwrap_or_default();
+    let renewed = move || clients.get_client(&context).map(|held| (*held).clone());
+    Ok(state.drain_manager.start(client, renewed, name, options))
 }
 
 /// Release the first event once the frontend is listening.
