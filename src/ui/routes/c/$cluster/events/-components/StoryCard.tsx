@@ -4,7 +4,8 @@ import { useQueries } from "@tanstack/react-query";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { eventLanding } from "../../-object/attachment";
 import { PastObjectRef } from "../../-object/PastObjectRef";
-import { involvedUid } from "@/lib/event-incarnation";
+import { groupIn, involvedUid } from "@/lib/event-incarnation";
+import { crdFor } from "@/lib/links";
 import { eventsUidIn } from "@/hooks/useReadUid";
 import { commands } from "@/lib/commands";
 import {
@@ -102,6 +103,8 @@ function clockOf(ms: number, now: number): string {
 
 interface StoryCardProps {
   story: Story;
+  /** The CRD the story's object is addressed by (`subjectCrd`): `null` for a namesake of a built-in that no CRD here defines. */
+  crd: string | null | undefined;
   options: StoryOptions;
   showNamespace: boolean;
 }
@@ -134,6 +137,7 @@ export const StoryCard = memo(
   StoryCardView,
   (before, after) =>
     before.showNamespace === after.showNamespace &&
+    before.crd === after.crd &&
     before.options.windowMs === after.options.windowMs &&
     sameStory(before.story, after.story) &&
     before.story.state === after.story.state &&
@@ -141,7 +145,7 @@ export const StoryCard = memo(
     sameStrip(before, after)
 );
 
-function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
+function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const lastSeen = useRealtimeAge(
@@ -159,12 +163,14 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
   const past = subject.past ?? (story.state === "gone" ? "gone" : null);
   const landing = landingOfStory(story);
   const { open: openPeek } = usePeek();
+  // A namesake no CRD here defines opens nothing, as its title links nowhere.
   const peek =
-    subject.kind && !past
+    subject.kind && !past && crd !== null
       ? {
           kind: subject.kind,
           name: subject.name,
           namespace: subject.namespace,
+          crd: crdFor({ kind: subject.kind, name: subject.name, crd }),
           via: landing?.via,
         }
       : null;
@@ -201,6 +207,7 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
             kind={subject.kind}
             name={subject.name}
             namespace={subject.namespace ?? undefined}
+            crd={crd}
             showNamespace={showNamespace}
             linkOptions={landing}
             opens={landing ? "page" : "peek"}
@@ -497,13 +504,15 @@ function ownPod(story: Story, name: string, pod: PodInfo): boolean {
 
 /** The subject's Events tab, noting the latest Event written about the subject itself. */
 function landingOfStory(story: Story) {
-  const { kind, name } = story.subject;
+  const { kind, group, name } = story.subject;
   if (!kind) return undefined;
   const own = [...story.events]
     .reverse()
     .find(
       (event) =>
-        event.involvedObject.kind === kind && event.involvedObject.name === name
+        event.involvedObject.kind === kind &&
+        event.involvedObject.name === name &&
+        groupIn(event.involvedObject.apiVersion) === group
     );
-  return own ? eventLanding(kind, own) : undefined;
+  return own ? eventLanding({ kind, group }, own) : undefined;
 }

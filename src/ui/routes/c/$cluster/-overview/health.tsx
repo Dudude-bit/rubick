@@ -20,6 +20,8 @@ import { Composition } from "@/components/object/detail-blocks";
 import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { PastObjectRef, type Past } from "../-object/PastObjectRef";
+import { groupIn, refOfNamed } from "@/lib/event-incarnation";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { CauseLine, RefusedLine, StopCauseLine } from "../-object/CauseLine";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
@@ -1230,13 +1232,18 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
   // family mark contributes only shape.
   const { Icon } = eventReasonMark(warning.reason);
   // `showKind` stays on: nothing beside this name says the kind.
+  const { crdFor: crdOf } = useCrdIndex();
   const subject =
     warning.objectKind && warning.objectName
-      ? {
-          kind: warning.objectKind,
-          name: warning.objectName,
-          namespace: warning.namespace,
-        }
+      ? refOfNamed(
+          {
+            kind: warning.objectKind,
+            group: groupIn(warning.objectApiVersion),
+            name: warning.objectName,
+            namespace: warning.namespace,
+          },
+          crdOf
+        )
       : null;
   const past = PAST_OF[warning.incarnation];
 
@@ -1283,6 +1290,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
             kind={subject.kind}
             name={subject.name}
             namespace={subject.namespace}
+            crd={subject.crd}
             className="max-w-full"
           />
         ) : null}

@@ -14,6 +14,7 @@ import {
   involvedUid,
   nameKey,
   pastOf,
+  refOfNamed,
   type Past,
 } from "./event-incarnation";
 
@@ -921,6 +922,15 @@ const STATE_RANK: Record<StoryState, number> = {
 
 /** Where a story's object lives and what it is called, the key its existence is read by. */
 export const subjectKey = (subject: Subject): string => nameKey(subject);
+
+/** The CRD a story's object is addressed by, as {@link refOfNamed} reads an event's. */
+export const subjectCrd = (
+  subject: Subject,
+  crdOf: (group: string, kind: string) => string | null
+): string | null | undefined =>
+  subject.kind === null
+    ? undefined
+    : refOfNamed({ ...subject, kind: subject.kind }, crdOf).crd;
 
 /** Whether a story's object may have been deleted, its warnings still recent or not, which only reading it can say. */
 export const mayBeGone = (story: Story): boolean =>

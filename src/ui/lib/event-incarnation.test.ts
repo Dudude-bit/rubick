@@ -7,6 +7,7 @@ import {
   namedOf,
   namesToAsk,
   pastObjects,
+  refOfNamed,
 } from "./event-incarnation";
 import { getApiVersion } from "./resource-registry";
 
@@ -176,5 +177,31 @@ describe("a custom kind that shares a built-in's name", () => {
     expect(namedOf(unsaid).group).toBeNull();
     const keys = [unsaid, core, knative].map((e) => nameKey(namedOf(e)));
     expect(new Set(keys).size).toBe(3);
+  });
+
+  /**
+   * An Events row about a Knative Service linked to the core Service of its
+   * name. Fails if a namesake opens anywhere but its own CRD's address, if
+   * one no CRD defines opens the built-in, or if an event that names no
+   * group loses the link its kind's name gives it.
+   */
+  it("is addressed by the CRD of its group, and by its name alone where the event names no group", () => {
+    const crdOf = (group: string, kind: string) =>
+      group === "serving.knative.dev" && kind === "Service"
+        ? "services.serving.knative.dev"
+        : null;
+    expect(refOfNamed(namedOf(knative), crdOf)).toEqual({
+      kind: "Service",
+      name: "web",
+      namespace: "lena-sandbox",
+      crd: "services.serving.knative.dev",
+    });
+    expect(refOfNamed(namedOf(knative), () => null).crd).toBeNull();
+    expect(refOfNamed(namedOf(core), crdOf).crd).toBeUndefined();
+    const unsaid: EventInfo = {
+      ...knative,
+      involvedObject: { ...knative.involvedObject, apiVersion: undefined },
+    };
+    expect(refOfNamed(namedOf(unsaid), crdOf).crd).toBeUndefined();
   });
 });
