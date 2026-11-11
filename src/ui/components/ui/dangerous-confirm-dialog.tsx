@@ -48,6 +48,9 @@ export function DangerousConfirmDialog({
 }: DangerousConfirmDialogProps) {
   const t = useT();
   const [inputValue, setInputValue] = useState("");
+  // Forgotten whenever the dialog is closed, whoever closed it: a caller that
+  // flips `open` after a success fires no onOpenChange.
+  if (!open && inputValue !== "") setInputValue("");
   // On critical infrastructure the word to type is the cluster's, not the
   // object's: the mistake this guards against is the cluster, and typing a
   // pod's name proves nothing about which cluster the pod is on.
@@ -57,13 +60,6 @@ export function DangerousConfirmDialog({
 
   const isConfirmEnabled = inputValue === expected && !isLoading;
 
-  const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen) {
-      setInputValue("");
-    }
-    onOpenChange(newOpen);
-  };
-
   const handleConfirm = () => {
     if (isConfirmEnabled) {
       onConfirm();
@@ -71,7 +67,7 @@ export function DangerousConfirmDialog({
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
