@@ -21,6 +21,9 @@ export interface HelmUpgradeDialogProps {
   release: HelmRelease | null;
   /** Close the dialog */
   onClose: () => void;
+  /** Where helm gets the chart: the release itself does not say. */
+  chart: string;
+  onChartChange: (chart: string) => void;
   /** Version */
   version: string;
   onVersionChange: (version: string) => void;
@@ -39,6 +42,8 @@ export interface HelmUpgradeDialogProps {
 export function HelmUpgradeDialog({
   release,
   onClose,
+  chart,
+  onChartChange,
   version,
   onVersionChange,
   values,
@@ -75,6 +80,19 @@ export function HelmUpgradeDialog({
               {release?.revision}
             </KeyValueRow>
           </dl>
+          <div className="space-y-2">
+            <Label htmlFor="upgrade-chart">{t("action", "upgradeChart")}</Label>
+            <Input
+              id="upgrade-chart"
+              value={chart}
+              onChange={(e) => onChartChange(e.target.value)}
+              placeholder="repo/chart"
+              autoComplete="off"
+            />
+            <p className="text-[11px] text-fg-fnt">
+              {t("action", "upgradeChartHint")}
+            </p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="upgrade-version">
               {t("action", "newVersionOptional")}
@@ -114,7 +132,10 @@ export function HelmUpgradeDialog({
           <Button variant="outline" onClick={onClose}>
             {t("action", "cancel")}
           </Button>
-          <Button onClick={onUpgrade} disabled={isUpgrading || gate.blocked}>
+          <Button
+            onClick={onUpgrade}
+            disabled={isUpgrading || gate.blocked || chart.trim() === ""}
+          >
             {isUpgrading ? t("action", "upgrading") : t("action", "upgrade")}
           </Button>
         </DialogFooter>

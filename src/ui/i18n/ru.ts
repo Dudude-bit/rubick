@@ -950,6 +950,9 @@ export const ru: Catalogue = {
     upgradeRelease: "Обновить релиз",
     upgradeReleaseIn: "Обновление {name} в пространстве имён {namespace}",
     currentChart: "Текущий чарт",
+    upgradeChart: "Чарт, на который обновить",
+    upgradeChartHint:
+      "Чарт из репозитория (repo/name), путь или URL. Релиз хранит имя и версию своего чарта, но не то, откуда он взят.",
     revision: "Ревизия",
     newVersionOptional: "Новая версия (необязательно)",
     leaveEmptyForLatest: "Оставьте пустым, чтобы взять последнюю",

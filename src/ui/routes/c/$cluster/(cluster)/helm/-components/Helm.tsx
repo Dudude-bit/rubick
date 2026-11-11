@@ -88,6 +88,7 @@ export function Helm() {
   const [installWait, setInstallWait] = useState(true);
 
   const [upgradeTarget, setUpgradeTarget] = useState<HelmRelease | null>(null);
+  const [upgradeChart, setUpgradeChart] = useState("");
   const [upgradeVersion, setUpgradeVersion] = useState("");
   const [upgradeValues, setUpgradeValues] = useState("");
   const [upgradeWait, setUpgradeWait] = useState(true);
@@ -310,6 +311,7 @@ export function Helm() {
         queryKey: queryKeys.helm.everyRelease(),
       });
       setUpgradeTarget(null);
+      setUpgradeChart("");
       setUpgradeVersion("");
       setUpgradeValues("");
       setUpgradeWait(true);
@@ -384,6 +386,7 @@ export function Helm() {
             onShowHistory={setHistoryDialog}
             onUpgrade={(release) => {
               setUpgradeTarget(release);
+              setUpgradeChart("");
               setUpgradeVersion("");
               setUpgradeValues("");
             }}
@@ -494,6 +497,8 @@ export function Helm() {
       <HelmUpgradeDialog
         release={upgradeTarget}
         onClose={() => setUpgradeTarget(null)}
+        chart={upgradeChart}
+        onChartChange={setUpgradeChart}
         version={upgradeVersion}
         onVersionChange={setUpgradeVersion}
         values={upgradeValues}
@@ -504,7 +509,7 @@ export function Helm() {
           if (upgradeTarget) {
             upgradeMutation.mutate({
               releaseName: upgradeTarget.name,
-              chart: upgradeTarget.chart,
+              chart: upgradeChart.trim(),
               namespace: upgradeTarget.namespace,
               version: upgradeVersion || null,
               values: upgradeValues || null,

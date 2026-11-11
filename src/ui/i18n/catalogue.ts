@@ -954,6 +954,9 @@ export const en = {
     upgradeRelease: "Upgrade Release",
     upgradeReleaseIn: "Upgrade {name} in namespace {namespace}",
     currentChart: "Current chart",
+    upgradeChart: "Chart to upgrade to",
+    upgradeChartHint:
+      "A repository chart (repo/name), a path or a URL. The release records its chart's name and version, not where it came from.",
     revision: "Revision",
     newVersionOptional: "New Version (optional)",
     leaveEmptyForLatest: "Leave empty for latest",
