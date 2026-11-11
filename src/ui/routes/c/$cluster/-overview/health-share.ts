@@ -26,6 +26,7 @@ import {
   attentionLines,
   checkRefused,
   checkSaid,
+  eventsChecks,
   foldedWords,
   reasonWord,
   shuttingPolicy,
@@ -37,6 +38,8 @@ import {
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   ClusterOverview,
+  EventsShort,
+  JobCount,
   NodeSummary,
   Incarnation,
   OverviewUnread,
@@ -462,9 +465,30 @@ export function deploymentSegments(
   ];
 }
 
-/** Jobs by the word the Jobs list prints. */
-export function jobSegments(jobs: ReasonCount[] | null, t: T): Segment[] {
-  return wordSegments(jobs, JOB_ORDER, (code, n) => ownCountedWord(code, n, t));
+/**
+ * Jobs by the word the Jobs list prints. One waiting for pods where the
+ * Warning events were not read may be one the cluster refuses them: drawn
+ * apart, grey, with the not-read mark.
+ */
+export function jobSegments(jobs: JobCount[] | null, t: T): Segment[] {
+  const word = (code: string, n: number) => ownCountedWord(code, n, t);
+  const unread = (jobs ?? [])
+    .filter((entry) => entry.eventsUnread)
+    .map(({ reason, count }): Segment => ({
+      label: word(reason, count) ?? reason,
+      qualifier: t("readings", "jobEventsUnreadShort"),
+      count,
+      tone: "neutral",
+      unread: true,
+    }));
+  return [
+    ...wordSegments(
+      (jobs ?? []).filter((entry) => !entry.eventsUnread),
+      JOB_ORDER,
+      word
+    ),
+    ...unread,
+  ];
 }
 
 export function nodeSegments(nodes: NodeSummary[]): Segment[] {
@@ -713,10 +737,17 @@ export const olderHint = (warning: WarningGroup, t: T): string | undefined =>
       })
     : undefined;
 
+/** One sentence for each way the Warning events were read short, beside the check that says how and where. */
+export const warningsUnread = (short: readonly EventsShort[], t: T) =>
+  eventsChecks(short).map((check) => ({
+    check,
+    said: t("cluster", "warningEventsUnread", { said: checkSaid(check, t) }),
+  }));
+
 /** What the feed of warnings draws, as events with the object each is about. */
 export function warningsShare(
   warnings: WarningGroup[],
-  known: boolean,
+  short: readonly EventsShort[],
   t: T
 ): PlacedSection {
   const rows: ReportEventRow[] = warnings.map((warning) => ({
@@ -745,7 +776,10 @@ export function warningsShare(
     title: t("cluster", "warningEvents"),
     icon: iconSvg(Bell),
     count: warnings.length,
-    unread: known ? null : t("cluster", "warningEventsUnread"),
+    unread:
+      warningsUnread(short, t)
+        .map((line) => line.said)
+        .join(" ") || null,
     body: { type: "events", rows },
   };
 }

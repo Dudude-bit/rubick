@@ -4020,6 +4020,7 @@ export const en = {
     rolloutPodsUnread:
       "{word} by the controller's counts alone: its pods could not be read, so whether they are still starting is not known",
     rolloutPodsUnreadShort: "pods not read",
+    jobEventsUnreadShort: "events not read",
     upBetweenCrashes: "up between crashes",
     exitUnreported: "last exit not reported",
     hpaPinnedAt: "pinned at {n}",
@@ -4597,7 +4598,7 @@ export const en = {
         "{n} repeats of events first seen at {since}, before the last hour. The cluster counts an event's repeats over its whole life, so how many fell within the hour is not recorded.",
     },
     warningEventsUnread:
-      "Not every events list was read in full, so warnings may be missing here.",
+      "Warning events: {said}. Warnings may be missing here.",
     noCluster: "no cluster",
     missingBadge: "missing",
     missingTabHint:

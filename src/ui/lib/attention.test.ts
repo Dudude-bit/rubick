@@ -14,7 +14,10 @@ import type {
 import {
   attentionLines,
   attentionOf,
+  checkKey,
+  checkRefused,
   checkSaid,
+  eventsChecks,
   foldedWords,
   namespaceAttention,
   reasonWord,
@@ -37,7 +40,7 @@ function overview(over: Partial<ClusterOverview> = {}): ClusterOverview {
   return {
     problems: [],
     problemsTruncated: 0,
-    warningsKnown: true,
+    warningsShort: [],
     unconfirmed: [],
     unread: [],
     ...over,
@@ -1066,7 +1069,11 @@ describe("what Needs attention could not look at", () => {
    * they were read whole.
    */
   it("is not complete where the warning events were not read to their end", () => {
-    const listed = attention({ overview: overview({ warningsKnown: false }) });
+    const listed = attention({
+      overview: overview({
+        warningsShort: [{ why: "capped", namespace: null }],
+      }),
+    });
     expect(listed.complete).toBe(false);
     expect(namespaceAttention(listed, "prod").complete).toBe(false);
     const events = listed.checks.find((check) => check.kind === "Event");
@@ -1075,6 +1082,53 @@ describe("what Needs attention could not look at", () => {
     expect(attention().checks.map((check) => check.kind)).not.toContain(
       "Event"
     );
+  });
+
+  /**
+   * The wire said only that the events were not all read, so a token denied
+   * the list, a read that failed and a list cut at its cap were one sentence,
+   * and every namespace of the scope was doubted for one. Fails if a refusal
+   * is not said as one where it was, if a cut list is folded into it, or if a
+   * namespace whose events were read whole is called incomplete.
+   */
+  it("says why the warning events were not read, and only where", () => {
+    const listed = attention({
+      overview: overview({
+        warningsShort: [
+          {
+            why: "failed",
+            namespace: "staging",
+            code: "PERMISSION_DENIED",
+            message:
+              'events is forbidden: User "lena" cannot list resource "events" in API group "" in the namespace "staging"',
+          },
+          { why: "capped", namespace: "prod" },
+        ],
+      }),
+    });
+    const events = listed.checks.filter((check) => check.kind === "Event");
+    expect(events.map((check) => checkSaid(check, t))).toEqual([
+      "list is forbidden in staging",
+      "not read in full in prod",
+    ]);
+    expect(events.map(checkRefused)).toEqual([true, false]);
+    expect(new Set(events.map(checkKey)).size).toBe(2);
+    expect(listed.complete).toBe(false);
+    expect(namespaceAttention(listed, "staging").complete).toBe(false);
+    expect(namespaceAttention(listed, "prod").complete).toBe(false);
+    expect(namespaceAttention(listed, "dev").complete).toBe(true);
+
+    const failed = eventsChecks([
+      {
+        why: "failed",
+        namespace: "prod",
+        code: "KUBE_API_ERROR",
+        message: "etcdserver: request timed out",
+      },
+    ]);
+    expect(failed.map((check) => checkSaid(check, t))).toEqual([
+      "could not be read in prod",
+    ]);
   });
 
   /** Every kind read and nothing flagged is the one complete, empty answer. */

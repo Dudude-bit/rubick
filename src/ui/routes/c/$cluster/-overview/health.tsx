@@ -43,6 +43,7 @@ import {
   splitWords,
   uncheckedShare,
   warningsShare,
+  warningsUnread,
   workloadCards,
   workloadsShare,
   type Ratio,
@@ -50,6 +51,7 @@ import {
 import { eventReasonMark } from "@/lib/event-reason";
 import {
   attentionLines,
+  checkKey,
   checkRefused,
   foldedWords,
   reasonWord,
@@ -57,6 +59,7 @@ import {
   refusedVerb,
   unreadWhere,
   type Attention,
+  type Unread,
   type AttentionLine,
   type AttentionCheck,
   type AttentionItem,
@@ -76,6 +79,7 @@ import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   Census,
   ClusterOverview,
+  EventsShort,
   NodeSummary,
   OverviewUnread,
   PodComposition,
@@ -898,7 +902,7 @@ export function AttentionPanel({
                 <UnconfirmedRow key={item.key} item={item} />
               ))}
               {unchecked.map((check) => (
-                <CheckRow key={check.kind} check={check} />
+                <CheckRow key={checkKey(check)} check={check} />
               ))}
             </ul>
           </div>
@@ -930,7 +934,7 @@ function UnreadMark({
   unread,
   children,
 }: {
-  unread: readonly OverviewUnread[];
+  unread: readonly Unread[];
   children: React.ReactNode;
 }) {
   const refused = unread.every(
@@ -1184,16 +1188,17 @@ export function NodesPanel({
 
 export function WarningsPanel({
   warnings,
-  known,
+  short,
 }: {
   warnings: WarningGroup[];
-  /** False when an events list failed or was cut short: the rows are
-   *  then only part. */
-  known: boolean;
+  /** Where an events list failed or was cut short, and which: the rows
+   *  are then only part. */
+  short: readonly EventsShort[];
 }) {
   const t = useT();
-  useShareSection("overview-warnings", () => warningsShare(warnings, known, t));
-  if (known && warnings.length === 0) return null;
+  useShareSection("overview-warnings", () => warningsShare(warnings, short, t));
+  const unread = warningsUnread(short, t);
+  if (unread.length === 0 && warnings.length === 0) return null;
 
   return (
     <Section>
@@ -1201,11 +1206,11 @@ export function WarningsPanel({
         title={t("cluster", "warningEvents")}
         count={t("cluster", "warningEventsScope")}
       />
-      {!known && (
-        <p className="py-1 text-xs text-fg-mut">
-          {t("cluster", "warningEventsUnread")}
+      {unread.map(({ check, said }) => (
+        <p key={checkKey(check)} className="py-1 text-xs text-fg-mut">
+          <UnreadMark unread={check.unread}>{said}</UnreadMark>
         </p>
-      )}
+      ))}
       {warnings.length > 0 && (
         <SectionBody>
           {warnings.map((warning) => (

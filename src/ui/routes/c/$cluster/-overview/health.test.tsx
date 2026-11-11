@@ -36,6 +36,7 @@ import type {
   Census,
   ClusterOverview,
   ClusterProblem,
+  EventsShort,
   IngressHealthInput,
   NodeSummary,
   PodCause,
@@ -56,6 +57,15 @@ beforeEach(() => useAttentionExpanded.setState({ expanded: false }));
 
 /** One sentence the scheduler writes, read by both panels. */
 const MESSAGE = "Scaled up replica set meshed-demo-65d47b457f to 1";
+
+/** The API server's own refusal of the events list in one namespace. */
+const REFUSED_IN_STAGING: EventsShort = {
+  why: "failed",
+  namespace: "staging",
+  code: "PERMISSION_DENIED",
+  message:
+    'events is forbidden: User "lena" cannot list resource "events" in API group "" in the namespace "staging"',
+};
 
 const warning: WarningGroup = {
   reason: "ScalingReplicaSet",
@@ -80,7 +90,7 @@ function attentionFrom(
       overview: {
         problems,
         problemsTruncated: 0,
-        warningsKnown: true,
+        warningsShort: [],
         unconfirmed: [],
         unread: [],
       } as unknown as ClusterOverview,
@@ -162,7 +172,7 @@ describe("the overview's two event panels", () => {
           nodes={[]}
           nodesKnown={true}
         />
-        <WarningsPanel warnings={[warning]} known />
+        <WarningsPanel warnings={[warning]} short={[]} />
       </>
     );
 
@@ -174,7 +184,7 @@ describe("the overview's two event panels", () => {
   it("offers the object a warning group is about", async () => {
     /** The row already printed `Deployment/meshed-demo`; it was the one
      *  naming of an object on this screen that went nowhere. */
-    await wrap(<WarningsPanel warnings={[warning]} known />);
+    await wrap(<WarningsPanel warnings={[warning]} short={[]} />);
 
     expect(
       screen.getByRole("link", { name: "Deployment meshed-demo" })
@@ -214,7 +224,7 @@ describe("the overview's two event panels", () => {
           knative,
           { ...knative, reason: "Unhealthy", objectApiVersion: undefined },
         ]}
-        known
+        short={[]}
       />,
       { at: "/c/prod", route: "/c/$cluster", client }
     );
@@ -233,7 +243,7 @@ describe("the overview's two event panels", () => {
     const iconOf = (objectApiVersion?: string) => {
       const section = warningsShare(
         [{ ...warning, objectKind: "Service", objectApiVersion }],
-        true,
+        [],
         t
       );
       return section.body.type === "events"
@@ -273,7 +283,7 @@ describe("the overview's two event panels", () => {
             incarnation: "unchecked",
           },
         ]}
-        known
+        short={[]}
       />
     );
     expect(
@@ -309,7 +319,7 @@ describe("the overview's two event panels", () => {
           { ...hpa, count: 41, incarnation: "current" },
           { ...hpa, count: 4, incarnation: "earlier", uid: "c20ecc6d" },
         ]}
-        known
+        short={[]}
       />
     );
     expect(screen.getAllByText("FailedGetResourceMetric")).toHaveLength(2);
@@ -347,7 +357,7 @@ describe("the overview's two event panels", () => {
           { ...gone, count: 41, uid: "8b3e3d88" },
           { ...gone, count: 13, uid: "c20ecc6d" },
         ]}
-        known
+        short={[]}
       />
     );
     expect(screen.getAllByText("FailedGetResourceMetric")).toHaveLength(2);
@@ -376,7 +386,7 @@ describe("the overview's two event panels", () => {
             older: { count: 696, since: since.toISOString() },
           },
         ]}
-        known
+        short={[]}
       />
     );
     expect(screen.getByText("×71")).toBeInTheDocument();
@@ -390,17 +400,35 @@ describe("the overview's two event panels", () => {
     );
   });
 
-  it("says the warnings are unknown when an events list failed", async () => {
-    /** A refused events list drew no panel at all, and a scope where one
-     *  namespace refused showed the others' warnings as the whole. */
+  /**
+   * A refused events list drew no panel at all, and a scope where one
+   * namespace refused showed the others' warnings as the whole; then both,
+   * and a list cut at its page cap, read "not read in full". Fails if the
+   * panel is not drawn for either, if a refusal is not said as one and where,
+   * or if a cut list is worded as a read that failed.
+   */
+  it("says which events list was refused and which was cut short, beside the warnings read", async () => {
     const { container } = await wrap(
-      <WarningsPanel warnings={[]} known={false} />
+      <WarningsPanel warnings={[]} short={[REFUSED_IN_STAGING]} />
     );
     expect(container).toHaveTextContent(
-      "Not every events list was read in full, so warnings may be missing here."
+      "Warning events: list is forbidden in staging. Warnings may be missing here."
     );
-    await wrap(<WarningsPanel warnings={[warning]} known={false} />);
-    expect(screen.getAllByText(/Not every events list/)).toHaveLength(2);
+    cleanup();
+
+    await wrap(
+      <WarningsPanel
+        warnings={[warning]}
+        short={[REFUSED_IN_STAGING, { why: "capped", namespace: "prod" }]}
+      />
+    );
+    const refused = screen.getByText(/list is forbidden in staging/);
+    expect(refused.querySelector("svg")).toHaveClass("lucide-lock");
+    const cut = screen.getByText(
+      "Warning events: not read in full in prod. Warnings may be missing here."
+    );
+    expect(cut.querySelector("svg")).not.toHaveClass("lucide-lock");
+    expect(screen.queryByText(/could not be read/)).toBeNull();
     expect(screen.getByText("ScalingReplicaSet")).toBeInTheDocument();
   });
 
@@ -412,7 +440,9 @@ describe("the overview's two event panels", () => {
   it("wraps a warning's sentence rather than cutting it", async () => {
     const sample =
       "Back-off restarting failed container app in pod ledger-76bccd5b44-499fh_team-blind(9323a59c-531b-4f0d-9c3e-7f5b1c2d8e90)";
-    await wrap(<WarningsPanel warnings={[{ ...warning, sample }]} known />);
+    await wrap(
+      <WarningsPanel warnings={[{ ...warning, sample }]} short={[]} />
+    );
     const said = screen.getByTestId("warning-said");
     expect(said).not.toHaveClass("truncate");
     expect(said).toHaveClass("wrap-break-word");
@@ -421,7 +451,9 @@ describe("the overview's two event panels", () => {
   });
 
   it("draws nothing for warnings read and none found", async () => {
-    const { container } = await wrap(<WarningsPanel warnings={[]} known />);
+    const { container } = await wrap(
+      <WarningsPanel warnings={[]} short={[]} />
+    );
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -433,7 +465,7 @@ describe("the overview's two event panels", () => {
         warnings={[
           { ...warning, objectKind: null, objectName: null, namespace: null },
         ]}
-        known
+        short={[]}
       />
     );
 
@@ -961,7 +993,7 @@ describe("a scope one namespace of which refused its pods", () => {
     nodes: [],
     problems: [],
     problemsTruncated: 0,
-    warningsKnown: true,
+    warningsShort: [],
     unconfirmed: [],
     unread: [refusedPods],
   } as unknown as ClusterOverview;
@@ -996,7 +1028,7 @@ describe("a scope one namespace of which refused its pods", () => {
     nodes: [],
     problems: [],
     problemsTruncated: 0,
-    warningsKnown: true,
+    warningsShort: [],
     unconfirmed: [],
     unread: [refusedPods, refusedIn("Job", "jobs")],
   } as unknown as ClusterOverview;
@@ -1519,13 +1551,40 @@ describe("the Deployments tile", () => {
     expect(
       jobSegments(
         [
-          { reason: "Complete", count: 3 },
-          { reason: "Retrying", count: 1 },
-          { reason: "Running", count: 2 },
+          { reason: "Complete", count: 3, eventsUnread: false },
+          { reason: "Retrying", count: 1, eventsUnread: false },
+          { reason: "Running", count: 2, eventsUnread: false },
         ],
         t
       ).map(({ label, count }) => `${count} ${label}`)
     ).toEqual(["2 Running", "1 Retrying", "3 Complete"]);
+  });
+
+  /**
+   * A Job waiting for pods is told from one the cluster refuses them only by
+   * a Warning event: with those unread the tile counted it Pending like any
+   * other. Fails if such a Job is counted with the ones whose events were
+   * read, or drawn without the not-read mark.
+   */
+  it("counts a Pending Job whose events were not read apart, marked not read", () => {
+    expect(
+      jobSegments(
+        [
+          { reason: "Pending", count: 2, eventsUnread: false },
+          { reason: "Pending", count: 1, eventsUnread: true },
+        ],
+        t
+      )
+    ).toEqual([
+      { label: "Pending", count: 2, tone: "pending" },
+      {
+        label: "Pending",
+        qualifier: "events not read",
+        count: 1,
+        tone: "neutral",
+        unread: true,
+      },
+    ]);
   });
 });
 
@@ -1558,7 +1617,7 @@ describe("the census legend in Russian", () => {
       flagged("Unavailable"),
     ],
     problemsTruncated: 0,
-    warningsKnown: true,
+    warningsShort: [],
     unconfirmed: [],
     unread: [],
   } as unknown as ClusterOverview;
@@ -1725,7 +1784,7 @@ describe("what the panels offer Share", () => {
   /** The events body carries the object a warning is about; deleting the ref
    *  breaks the one link this row has back into the cluster. */
   it("carries the warned object as the event row's ref", () => {
-    const section = warningsShare([warning], true, t);
+    const section = warningsShare([warning], [], t);
     expect(section.body.type).toBe("events");
     const rows = section.body.type === "events" ? section.body.rows : [];
     expect(rows[0]).toMatchObject({
@@ -1734,10 +1793,20 @@ describe("what the panels offer Share", () => {
     });
   });
 
-  it("marks the section unread when the events list failed", () => {
-    const section = warningsShare([], false, t);
-    expect(section.unread).toBe(
-      "Not every events list was read in full, so warnings may be missing here."
+  /** Fails if the shared file says nothing of an events list not read, or says a refused one and a failed one alike. */
+  it("marks the section unread with why the events list was not read", () => {
+    expect(warningsShare([], [], t).unread).toBeNull();
+    expect(warningsShare([], [REFUSED_IN_STAGING], t).unread).toBe(
+      "Warning events: list is forbidden in staging. Warnings may be missing here."
+    );
+    const failed: EventsShort = {
+      why: "failed",
+      namespace: "prod",
+      code: "KUBE_API_ERROR",
+      message: "etcdserver: request timed out",
+    };
+    expect(warningsShare([], [failed], t).unread).toBe(
+      "Warning events: could not be read in prod. Warnings may be missing here."
     );
   });
 });
@@ -1813,7 +1882,7 @@ describe("what Needs attention says it checked", () => {
         overview: {
           problems: [],
           problemsTruncated: 0,
-          warningsKnown: true,
+          warningsShort: [],
           unconfirmed: [],
           unread: [
             {
@@ -1873,7 +1942,7 @@ describe("what Needs attention says it checked", () => {
         overview: {
           problems: [],
           problemsTruncated: 0,
-          warningsKnown: false,
+          warningsShort: [{ why: "capped", namespace: null }],
           unconfirmed: [],
           unread: [],
         } as unknown as ClusterOverview,
@@ -1888,6 +1957,39 @@ describe("what Needs attention says it checked", () => {
     expect(screen.getByTestId("attention-summary")).toHaveTextContent(
       "partly checked"
     );
+  });
+
+  /**
+   * A token denied the events list in one namespace read "not read in full"
+   * with no lock, the words of a list cut at its page cap. Fails if the
+   * refusal is not said as one with its namespace and its lock, or if a list
+   * cut short in another namespace is folded into that row.
+   */
+  it("says a refused events list as refused, apart from one cut short", async () => {
+    await panel(
+      attentionFrom([], {
+        overview: {
+          problems: [],
+          problemsTruncated: 0,
+          warningsShort: [
+            REFUSED_IN_STAGING,
+            { why: "capped", namespace: "prod" },
+          ],
+          unconfirmed: [],
+          unread: [],
+        } as unknown as ClusterOverview,
+      })
+    );
+
+    const rows = within(screen.getByTestId("attention-unchecked")).getAllByRole(
+      "listitem"
+    );
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Eventslist is forbidden in staging",
+      "Eventsnot read in full in prod",
+    ]);
+    expect(rows[0].querySelector("svg")).toHaveClass("lucide-lock");
+    expect(rows[1].querySelector("svg")).not.toHaveClass("lucide-lock");
   });
 
   /** The one state that earns the words, and the only one with a green dot. */

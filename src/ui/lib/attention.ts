@@ -13,6 +13,7 @@ import type {
   AutoscalerInfo,
   ClusterOverview,
   ClusterProblem,
+  EventsShort,
   IngressHealthInput,
   PersistentVolumeClaimInfo,
   PodWorkload,
@@ -205,13 +206,39 @@ const BACKEND_KINDS = [
   "Node",
 ] as const;
 
-/** The Warning events read short of their end: a failure, or its page cap. */
-const EVENTS_SHORT: AttentionCheck = {
-  kind: "Event",
-  state: "unread",
-  unread: [],
-  partial: true,
-};
+/**
+ * The Warning events read short of their end, a check for each way they
+ * were: refused or failed, and cut at the page cap, each with where. Only a
+ * Warning event tells a Job whose pods the cluster refuses from one still
+ * waiting for them, and a pod the kubelet cannot set up from one starting.
+ */
+export function eventsChecks(short: readonly EventsShort[]): AttentionCheck[] {
+  const failed = short.filter((entry) => entry.why === "failed");
+  const capped = short.filter((entry) => entry.why === "capped");
+  return [
+    ...(failed.length > 0
+      ? [{ kind: "Event", state: "unread" as const, unread: failed }]
+      : []),
+    ...(capped.length > 0
+      ? [
+          {
+            kind: "Event",
+            state: "unread" as const,
+            unread: capped.map(({ namespace }) => ({
+              namespace,
+              code: "",
+              message: "",
+            })),
+            partial: true,
+          },
+        ]
+      : []),
+  ];
+}
+
+/** What tells two checks of one kind apart in a list of them. */
+export const checkKey = (check: AttentionCheck): string =>
+  check.partial ? `${check.kind}/partial` : check.kind;
 
 /** One cached answer per reader: the shell and the page ask with the same inputs. */
 function remember<A extends unknown[], R>(
@@ -886,10 +913,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
       const unread = overview.unread.filter((entry) => entry.kind === kind);
       return { kind, state: unread.length > 0 ? "unread" : "read", unread };
     }),
-    // Only a Warning event tells a Job whose pods the cluster refuses from
-    // one still waiting for them, and a pod the kubelet cannot set up from
-    // one starting. Read short of their end, neither is known.
-    ...(overview.warningsKnown ? [] : [EVENTS_SHORT]),
+    ...eventsChecks(overview.warningsShort),
     services.unread === "reading"
       ? { kind: "Service", state: "reading", unread: [] }
       : {

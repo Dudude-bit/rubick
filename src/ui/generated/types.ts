@@ -2071,13 +2071,13 @@ export interface ClusterOverview {
   nodes: NodeSummary[];
   nodesKnown: boolean;
   warnings: WarningGroup[];
-  warningsKnown: boolean;
+  warningsShort: EventsShort[];
   namespaces: NamespaceLoad[];
   counts: ResourceCounts;
   podsUnlisted: ReasonCount[];
   pods: Census<PodComposition> | null;
   podsWarned: string[];
-  jobs: Census<ReasonCount[]> | null;
+  jobs: Census<JobCount[]> | null;
   deployments: Census<RolloutCount[]> | null;
   metricsAvailable: boolean;
   servedFrom: OverviewSource;
@@ -2105,6 +2105,12 @@ export interface RolloutCount {
   reason: string;
   count: number;
   podsUnread: boolean;
+}
+
+export interface JobCount {
+  reason: string;
+  count: number;
+  eventsUnread: boolean;
 }
 
 export interface PodComposition {
@@ -3073,6 +3079,10 @@ export type ProblemDetail =
   | { says: "podsRefused"; said: string };
 
 export type ProblemSeverity = "critical" | "warning";
+
+export type EventsShort =
+  | { why: "capped"; namespace: string | null }
+  | { why: "failed"; namespace: string | null; code: string; message: string };
 
 export type CertificateProblem =
   | { says: "noSecret" }

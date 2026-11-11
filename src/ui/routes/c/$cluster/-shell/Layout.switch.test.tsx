@@ -43,7 +43,7 @@ vi.mock("@/lib/commands", () => ({
                   problemsTruncated: 0,
                   unconfirmed: [],
                   warnings: [],
-                  warningsKnown: true,
+                  warningsShort: [],
                   jobs: null,
                   deployments: null,
                   namespaces: [],
