@@ -77,11 +77,9 @@ export function useAttention({
     enabled: reading,
     refresh,
   });
-  const ingressHealth = useIngressHealth(
-    ingresses.data?.rows,
-    services,
-    reading
-  );
+  const ingressHealth = useIngressHealth(ingresses.data?.rows, services, {
+    enabled: reading,
+  });
   const autoscalers = useLiveQuery({
     queryKey: queryKeys.autoscalers(cacheKey),
     queryFn: () => commands.listAutoscalersIn(wire),

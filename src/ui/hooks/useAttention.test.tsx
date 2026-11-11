@@ -35,6 +35,18 @@ const commands = vi.hoisted(() => ({
 
 vi.mock("@/lib/commands", () => ({ commands }));
 
+const controllers = vi.hoisted(() => ({ tls: [] as unknown[] }));
+vi.mock("@/integrations", async (original) => {
+  const real = await original<typeof import("@/integrations")>();
+  return {
+    ...real,
+    useCapabilities: (key: string) =>
+      key === "ingress.tls"
+        ? controllers.tls
+        : real.useCapabilities(key as never),
+  };
+});
+
 const { useAttention } = await import("./useAttention");
 const { useClusterStore } = await import("@/stores/clusterStore");
 const { useWindowActivity } = await import("@/lib/window-activity");
@@ -258,6 +270,129 @@ describe("the reads behind Needs attention", () => {
       ).toEqual([["Gateway", "bad-gw", "ListenersNotValid"]])
     );
     expect(result.current!.byNamespace.get("shop")).toBe(1);
+  });
+});
+
+describe("what the count asks about each Ingress", () => {
+  afterEach(() => {
+    controllers.tls = [];
+  });
+
+  const supplier = (replacesSpec: boolean) => {
+    const ask = vi.fn(async (wanted: unknown[]) => wanted.map(() => []));
+    return replacesSpec ? Object.assign(ask, { replacesSpec: true }) : ask;
+  };
+
+  /** Addressed Ingresses of one class in one namespace, each naming a host and a Secret that is not there. */
+  const settled = async (count: number) => {
+    commands.listIngressHealthInputs.mockResolvedValue({
+      rows: Array.from({ length: count }, (_, at) => ({
+        name: `shop-${at}`,
+        namespace: "shop",
+        className: "nginx",
+        rules: [{ host: `shop-${at}.example.com`, paths: [] }],
+        defaultBackend: null,
+        loadBalancerIps: ["34.1.2.3"],
+        tlsConfigs: [
+          {
+            hosts: [`shop-${at}.example.com`],
+            secretName: `tls-${at}`,
+            isCatchAll: false,
+          },
+        ],
+      })),
+      unread: [],
+    });
+    commands.resolveIngressClass.mockResolvedValue({
+      requested: "nginx",
+      resolved: "nginx",
+      controller: "k8s.io/ingress-nginx",
+      viaDefault: false,
+      available: [],
+    });
+    commands.getTlsCertificates.mockImplementation(
+      async (_namespace: string, names: string[]) =>
+        names.map((secretName) => ({
+          secretName,
+          certificate: null,
+          problem: { says: "noSecret" },
+        }))
+    );
+    for (const command of Object.values(commands)) command.mockClear();
+    const { result, unmount } = renderHook(() => useAttention(), {
+      wrapper: wrapper(),
+    });
+    await waitFor(() =>
+      expect(
+        result.current?.checks.find((check) => check.kind === "Ingress")?.state
+      ).toMatch(/^(read|unread)$/)
+    );
+    const attention = result.current!;
+    unmount();
+    return {
+      attention,
+      requests: Object.values(commands).reduce(
+        (sum, command) => sum + command.mock.calls.length,
+        0
+      ),
+    };
+  };
+
+  /**
+   * The count on every screen asked every `ingress.tls` supplier about every
+   * Ingress in the cluster: a GET each on AWS and Azure, the whole Ingress
+   * list on Traefik. Fails if the shell reaches a supplier at all, or if
+   * what it asks of the cluster grows with the number of Ingresses.
+   */
+  it("asks no controller, and no more of the cluster for sixty Ingresses than for three", async () => {
+    const traefik = supplier(true);
+    const cloud = supplier(false);
+    controllers.tls = [traefik, cloud];
+
+    const few = await settled(3);
+    const many = await settled(60);
+
+    expect(traefik).not.toHaveBeenCalled();
+    expect(cloud).not.toHaveBeenCalled();
+    expect(many.requests).toBe(few.requests);
+  });
+
+  /**
+   * Unasked, the shell cannot call a missing Secret a fault where a
+   * controller may never present it. Fails if it counts the Ingress as
+   * broken anyway, or drops it without saying it was not checked.
+   */
+  it("says a missing TLS Secret was not checked where a controller here could serve the host plain", async () => {
+    controllers.tls = [supplier(true)];
+
+    const { attention } = await settled(2);
+
+    expect(attention.items.filter((item) => item.kind === "Ingress")).toEqual(
+      []
+    );
+    const check = attention.checks.find((entry) => entry.kind === "Ingress")!;
+    expect(check.state).toBe("unread");
+    expect(check.unread.map((entry) => entry.message)).toEqual([
+      "No Secret named tls-0 for its TLS, and its controller was not asked whether it serves these hosts over TLS at all",
+      "No Secret named tls-1 for its TLS, and its controller was not asked whether it serves these hosts over TLS at all",
+    ]);
+    expect(attention.complete).toBe(false);
+  });
+
+  /** A cloud's supplier only adds to spec.tls, so its silence takes no fault away. */
+  it("still counts a missing TLS Secret where no controller here replaces spec.tls", async () => {
+    controllers.tls = [supplier(false)];
+
+    const { attention } = await settled(2);
+
+    expect(
+      attention.items
+        .filter((item) => item.kind === "Ingress")
+        .map((item) => [item.name, item.tone, item.reason])
+    ).toEqual([
+      ["shop-0", "err", "missing TLS Secret"],
+      ["shop-1", "err", "missing TLS Secret"],
+    ]);
   });
 });
 

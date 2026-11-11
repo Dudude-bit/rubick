@@ -43,6 +43,8 @@ export interface IngressTlsAnswers {
   error: Error | null;
   /** Which kind of answer is still out or failed, for {@link hostTls}. */
   unread: TlsUnread;
+  /** A controller here may serve a host `spec.tls` names as plain HTTP. */
+  mayReplaceSpec: boolean;
 }
 
 const key = (namespace: string, name: string) => `${namespace}/${name}`;
@@ -130,5 +132,6 @@ export function useIngressTls(ingresses: IngressRef[]): IngressTlsAnswers {
     unread: silent.some((supplier) => supplier.replacesSpec)
       ? "replaces"
       : silent.length > 0 && "adds",
+    mayReplaceSpec: suppliers.some((supplier) => supplier.replacesSpec),
   };
 }

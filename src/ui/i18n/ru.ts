@@ -4892,6 +4892,8 @@ export const ru: Catalogue = {
     healthNoClassNoDefault:
       "IngressClass не указан, а класса по умолчанию в кластере нет, и этот Ingress никто не обрабатывает",
     healthNoTlsSecret: "Нет Secret с именем {name} для его TLS",
+    healthTlsUnasked:
+      "Нет Secret с именем {name} для его TLS, а у контроллера не спрашивали, отдаёт ли он эти хосты по TLS вообще",
     healthBackendDown: "Service {name} не принимает трафик",
     healthBackendWhy: "Service {name}: {why}",
     healthNoController: "нет контроллера",

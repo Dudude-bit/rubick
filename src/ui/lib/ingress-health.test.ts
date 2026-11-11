@@ -209,6 +209,45 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
   });
 
   /**
+   * The count on every screen asks no controller, so on a cluster where one
+   * could serve the host as plain HTTP a missing Secret is not known to be
+   * a fault. Fails if the unasked answer is read as "it is presented" (a
+   * red the Ingress page then contradicts) or as "it is not" (silence).
+   */
+  it("says a missing Secret was not checked where its controller was not asked", () => {
+    const missing = new Map<string, TlsCertificate>([
+      [
+        "api-tls",
+        {
+          secretName: "api-tls",
+          certificate: null,
+          problem: { says: "noSecret" },
+        },
+      ],
+    ]);
+    const asked = (servedPlain: IngressInputs["servedPlain"]) =>
+      verdict({
+        ingress: {
+          ...ingress(["api"], "api-tls"),
+          loadBalancerIps: ["1.2.3.4"],
+        },
+        binding: { known: true, value: SERVED },
+        backing: { known: true, value: BACKING },
+        certificates: missing,
+        servedPlain,
+      });
+
+    const unasked = asked(() => null);
+    expect(unasked.code).toBe("unknown");
+    expect(unasked.role).toBe("neutral");
+    expect(unasked.reason).toBe(
+      "No Secret named api-tls for its TLS, and its controller was not asked whether it serves these hosts over TLS at all"
+    );
+    expect(asked(() => false).code).toBe("tlsSecretMissing");
+    expect(asked(() => true).code).toBe("serving");
+  });
+
+  /**
    * root-web's Ingress said "root-web takes no traffic" while the trace
    * under it said why: Pod Security refuses the pods. The badge already
    * says the backend is down, so the line leads with the Service's reason.

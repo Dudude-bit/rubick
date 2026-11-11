@@ -53,9 +53,10 @@ export interface IngressInputs {
   certificates: Map<string, TlsCertificate> | undefined;
   /**
    * A host its controller serves as plain HTTP whatever `spec.tls` says, as
-   * Traefik does without `router.tls`. Absent, `spec.tls` stands.
+   * Traefik does without `router.tls`; `null` where that controller was not
+   * asked or has not answered. Absent, `spec.tls` stands.
    */
-  servedPlain?: (host: string) => boolean;
+  servedPlain?: (host: string) => boolean | null;
   /** Who the class's controller connects from; absent, no backend's NetworkPolicies are asked about it. */
   door?: DoorAsk;
 }
@@ -75,10 +76,17 @@ export type IngressProblem =
   /** Its pods are up, and whether their NetworkPolicies let the controller through is not known. */
   | { kind: "backendDoorUnchecked"; service: string; doubt: DoorDoubt };
 
+/** What nobody settled, where the words are this app's and not the cluster's. */
+export type IngressDoubt = {
+  /** The Secret is missing, and whether its controller presents it at all was not asked. */
+  kind: "tlsUnasked";
+  secret: string;
+};
+
 export interface IngressHealth {
   problems: IngressProblem[];
   /** Why an input was not read; empty when every one was. */
-  unread: Array<string | null>;
+  unread: Array<string | null | IngressDoubt>;
   backends: number;
   addressed: boolean;
 }
@@ -142,7 +150,7 @@ const BACKEND_PROBLEM: Record<
 export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
   const { ingress, binding, backing, certificates } = inputs;
   const problems: IngressProblem[] = [];
-  const unread: Array<string | null> = [];
+  const unread: IngressHealth["unread"] = [];
 
   if (!binding.known) unread.push(binding.why);
   else if (!binding.value.resolved) {
@@ -205,18 +213,19 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
     if (!config.secretName) continue;
     // Never presented, so its absence breaks nothing a client sees; the
     // controller's own page says nothing of it either.
-    if (
-      config.hosts.length > 0 &&
-      config.hosts.every((host) => inputs.servedPlain?.(host))
-    )
-      continue;
+    const plain = config.hosts.map(inputs.servedPlain ?? (() => false));
+    if (plain.length > 0 && plain.every((served) => served === true)) continue;
     if (!certificates) {
       unread.push(null);
       continue;
     }
     const problem = certificates.get(config.secretName)?.problem;
     if (problem?.says === "noSecret") {
-      problems.push({ kind: "tlsSecretMissing", secret: config.secretName });
+      // Missing is a fault only where the Secret is presented.
+      if (plain.length > 0 && plain.every((served) => served !== false))
+        unread.push({ kind: "tlsUnasked", secret: config.secretName });
+      else
+        problems.push({ kind: "tlsSecretMissing", secret: config.secretName });
     } else if (problem?.says === "secretUnreadable") {
       unread.push(problem.said);
     }
@@ -339,6 +348,13 @@ function problemSentence(problem: IngressProblem, t: T): string {
   }
 }
 
+const DOUBT_WORDS: Record<IngressDoubt["kind"], "healthTlsUnasked"> = {
+  tlsUnasked: "healthTlsUnasked",
+};
+
+const doubtWords = (doubt: IngressDoubt, t: T) =>
+  t("readings", DOUBT_WORDS[doubt.kind], { name: doubt.secret });
+
 /** A backend's trouble in its Service's own words, where its verdict has any. */
 function backendWhy(
   problem: { service: string; health: ServiceHealth },
@@ -418,7 +434,9 @@ export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
     };
   }
   if (health.unread.length > 0) {
-    const said = health.unread.filter((why): why is string => why !== null);
+    const said = health.unread.flatMap((why) =>
+      why === null ? [] : [typeof why === "string" ? why : doubtWords(why, t)]
+    );
     return said.length > 0
       ? {
           code: "unknown",

@@ -4355,6 +4355,8 @@ export const en = {
     healthNoClassNoDefault:
       "It names no IngressClass and the cluster has no default, so nothing picks it up",
     healthNoTlsSecret: "No Secret named {name} for its TLS",
+    healthTlsUnasked:
+      "No Secret named {name} for its TLS, and its controller was not asked whether it serves these hosts over TLS at all",
     healthBackendDown: "Service {name} takes no traffic",
     healthBackendWhy: "Service {name}: {why}",
     healthNoController: "no controller",
