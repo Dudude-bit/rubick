@@ -150,6 +150,28 @@ describe("a kind listed as the API server prints it", () => {
     expect(answers.pages).toEqual([]);
   });
 
+  /**
+   * Whether a dotted address is a CRD's is read before its list is, and the
+   * pane was blank for that read too. Fails if a list still waiting for it
+   * draws nothing, or already says what discovery made of the address.
+   */
+  it("reads as a list still being read while its address may yet be a CRD's", async () => {
+    answers.catalog = () => Promise.resolve({ entries: [], unread: [] });
+    const view = await renderWithRouter(
+      <PrintedList resource="leases.coordination.k8s.io" reading />
+    );
+    // Long enough for the catalogue to have answered that it serves none.
+    await act(() => new Promise((done) => setTimeout(done, 50)));
+    expect(
+      screen.getByRole("heading", { name: "leases.coordination.k8s.io" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/serves no/)).toBeNull();
+
+    view.unmount();
+    await open();
+    expect(await screen.findByText(/serves no/)).toBeInTheDocument();
+  });
+
   /** A bare plural is another group's where the core group lacks it, as kubectl reads it. */
   it("lists a bare plural in the group discovery names", async () => {
     answers.catalog = () =>

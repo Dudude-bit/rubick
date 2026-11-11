@@ -118,10 +118,18 @@ function sizeOf(column: TableColumn): number {
  * table: a kind that is not served, a discovery nobody could read, a kind
  * that cannot be listed.
  */
-export function PrintedList({ resource }: { resource: string }) {
+export function PrintedList({
+  resource,
+  reading = false,
+}: {
+  resource: string;
+  /** Whether the address is a CRD's is still being read, so nothing is said of it yet. */
+  reading?: boolean;
+}) {
   const t = useT();
   const served = useServed(servedOf(resource));
-  if (served.state === "reading") return <ReadingKinds resource={resource} />;
+  if (reading || served.state === "reading")
+    return <ReadingKinds resource={resource} />;
   if (served.state === "absent" || served.state === "unknown")
     return <Unserved served={served} resource={resource} />;
   if (!served.entry.verbs.includes("list"))

@@ -15,10 +15,8 @@ export const Route = createFileRoute("/c/$cluster/$resource/")({
 function ResourceList() {
   const { resource } = Route.useParams();
   const crds = useCrdIndex();
-  if (resource.includes(".")) {
-    if (crds.isLoading) return null;
-    if (crds.isCrd(resource))
-      return <Navigate {...crdInstancesLink(resource)} replace />;
-  }
-  return <PrintedList resource={resource} />;
+  const reading = resource.includes(".") && crds.isLoading;
+  if (!reading && resource.includes(".") && crds.isCrd(resource))
+    return <Navigate {...crdInstancesLink(resource)} replace />;
+  return <PrintedList resource={resource} reading={reading} />;
 }
