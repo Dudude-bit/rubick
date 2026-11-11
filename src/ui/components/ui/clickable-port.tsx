@@ -48,7 +48,7 @@ export function ClickablePort({
 }: ClickablePortProps) {
   const t = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const denied = usePodDenied(podNamespace).portForward ?? reason;
+  const denied = usePodDenied(podNamespace, podName).portForward ?? reason;
 
   const label = portName
     ? `${port} (${portName})`
@@ -118,7 +118,6 @@ export function ClickableServicePort({
 }: ClickableServicePortProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const t = useT();
-  const denied = usePodDenied(namespace).portForward;
 
   return (
     <>
@@ -126,12 +125,11 @@ export function ClickableServicePort({
         <TooltipTrigger asChild>
           <button
             type="button"
-            aria-disabled={denied ? true : undefined}
-            className={cn(PORT, denied && REFUSED, className)}
+            className={cn(PORT, className)}
             onClick={(event) => {
               // The row underneath navigates; forwarding a port is not that.
               event.stopPropagation();
-              if (!denied) setDialogOpen(true);
+              setDialogOpen(true);
             }}
           >
             {prefix}
@@ -139,7 +137,7 @@ export function ClickableServicePort({
           </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-[260px] text-xs">
-          {denied ?? t("empty", "gwForwardThrough", { name: serviceName })}
+          {t("empty", "gwForwardThrough", { name: serviceName })}
         </TooltipContent>
       </Tooltip>
 

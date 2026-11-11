@@ -278,7 +278,7 @@ describe("Marco's pod page, in a namespace where he may exec and forward but not
     await advance(300);
     expect(
       screen.getAllByText(
-        /can-i patch pods --subresource=ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout/
+        /can-i patch pods\/cart-9df89489c-n6rzf --subresource=ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout/
       ).length
     ).toBeGreaterThan(0);
     act(() => debug.click());

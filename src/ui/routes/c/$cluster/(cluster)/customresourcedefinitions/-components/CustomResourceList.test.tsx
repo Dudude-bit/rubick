@@ -242,3 +242,70 @@ describe("an instance row", () => {
     );
   });
 });
+
+describe("deleting from a CRD that shares a built-in kind's plural", () => {
+  const ksvc: CustomResourceInfo = {
+    ...widget,
+    name: "hello",
+    namespace: "default",
+    apiVersion: "serving.knative.dev/v1",
+    kind: "Service",
+  };
+
+  /**
+   * Knative's `services` matched the registry's plural, so the row's Delete
+   * ran the core Service's command on the Knative Service's name. Fails if
+   * the list deletes anything but the custom resource, or offers the core
+   * Service's actions on its row.
+   */
+  it("deletes the custom resource, never the core Service of that name", async () => {
+    vi.spyOn(commands, "listCustomResourcesIn").mockResolvedValue({
+      rows: [ksvc],
+      unread: [],
+    });
+    vi.spyOn(commands, "subscribeCustomResourceWatch").mockReturnValue(
+      new Promise(() => {})
+    );
+    const deleteService = vi.spyOn(commands, "deleteService");
+    const deleteCustom = vi
+      .spyOn(commands, "deleteCustomResource")
+      .mockResolvedValue(undefined);
+    await renderWithRouter(
+      <CustomResourceList
+        crdName="services.serving.knative.dev"
+        crdKind="Service"
+        crdGroup="serving.knative.dev"
+        crdVersion="v1"
+        crdPlural="services"
+        scope="Namespaced"
+      />,
+      { at: "/c/prod/customresourcedefinitions", route: "/c/$cluster/$" }
+    );
+    const row = (
+      await screen.findByRole("link", { name: "Service hello" })
+    ).closest("tr")!;
+
+    fireEvent.contextMenu(within(row).getByText("hello"), {
+      clientX: 30,
+      clientY: 40,
+    });
+    const menu = await screen.findByRole("menu");
+    expect(
+      within(menu).queryByRole("menuitem", { name: /Port forward/ })
+    ).toBeNull();
+    fireEvent.keyDown(menu, { key: "Escape" });
+
+    fireEvent.click(within(row).getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await vi.waitFor(() =>
+      expect(deleteCustom).toHaveBeenCalledWith(
+        "services.serving.knative.dev",
+        "hello",
+        "default"
+      )
+    );
+    expect(deleteService).not.toHaveBeenCalled();
+  });
+});

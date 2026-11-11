@@ -4057,6 +4057,7 @@ export const en = {
     hpaWillRevertDetail:
       "It keeps this between {min} and {max} and re-reads its metrics about every fifteen seconds.",
     hpaAutoscalerNamed: "The autoscaler {name}",
+    hpaUnreadHead: "An autoscaler may put this number back.",
     docNoReplicaCount: "the document has no replica count",
     cannotTell: "cannot tell",
     shellFinished: "finished, nothing to attach to",
@@ -5971,6 +5972,8 @@ export const en = {
     drainExplained:
       "The node is cordoned and every pod on it that a controller can replace is evicted. DaemonSet pods stay.",
     readingWhatRefusesToMove: "Reading what would refuse to move…",
+    budgetsUnread:
+      "The disruption budgets on this node could not be read, so one that allows no eviction is not named here: {why}",
     drainKeepsAsking:
       "The drain moves what it can and keeps asking about the rest, the way kubectl does. Nothing is deleted to get past a budget, and you can stop it at any point.",
     evictUnmanagedPodsExplained:

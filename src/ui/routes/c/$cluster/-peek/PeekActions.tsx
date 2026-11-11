@@ -9,6 +9,7 @@ import {
 import { Kbd } from "@/components/ui/kbd";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { cn } from "@/lib/utils";
+import { builtInKindOf } from "@/lib/links";
 import type { PeekTarget } from "@/hooks/usePeek";
 import {
   DetailAction,
@@ -52,7 +53,7 @@ export function PeekActions({
   const t = useT();
   const copy = useCopyToClipboard();
   const { plan, busy, run, dialogs } = useObjectActions({
-    kind: target.kind,
+    kind: builtInKindOf(target),
     name: target.name,
     namespace: target.namespace ?? null,
     detail,

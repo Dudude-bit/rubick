@@ -16,6 +16,7 @@ import {
   drainBlockers,
   metricReadings,
   scaleWarnings,
+  type GovernanceRead,
 } from "./governance";
 import { connectionGroups } from "./connections";
 import { governanceRows } from "@/routes/c/$cluster/(workloads)/-components/governance";
@@ -117,6 +118,23 @@ const conns = (
   published: [],
   notLookedAt,
 });
+
+/** A neighbourhood that was read, as a dialog's query holds it. */
+const read = (...args: Parameters<typeof conns>): GovernanceRead => ({
+  data: conns(...args),
+  error: null,
+});
+
+const refused = (kind: string): ResourceConnections["notLookedAt"] => [
+  {
+    kind,
+    why: {
+      says: "unanswered",
+      version: "v1",
+      said: `${kind.toLowerCase()}s is forbidden`,
+    },
+  },
+];
 
 describe("a governing kind the app could not read", () => {
   /** The backend records the failure on purpose — its own comment says an
@@ -395,15 +413,46 @@ describe("what a drain is told", () => {
     });
     const podA = ref("Pod", "stateful-demo-0", null);
     const podB = ref("Pod", "stateful-demo-1", null);
-    const blockers = drainBlockers(
-      conns([
+    const { blockers, unread } = drainBlockers(
+      read([
         governs(spent, podA),
         governs(spent, podB),
         governs(pdb("pdb-log")),
-      ])
+      ]),
+      t
     );
     expect(blockers).toHaveLength(1);
     expect(blockers[0].pods).toBe(2);
+    expect(unread).toBeNull();
+  });
+
+  /**
+   * The budgets list was refused, or the node's whole neighbourhood read
+   * failed, and the dialog said nothing would refuse to move. Fails if either
+   * comes back as budgets read and none found.
+   */
+  it("says the budgets are unread, not that none blocks, when they could not be read", () => {
+    const node = ref("Node", "node-a", null);
+    const kept = drainBlockers(
+      read([], node, refused("PodDisruptionBudget")),
+      t
+    );
+    expect(kept.blockers).toEqual([]);
+    expect(kept.unread).toContain("poddisruptionbudgets is forbidden");
+
+    const failed = drainBlockers(
+      { data: undefined, error: new Error("connection reset") },
+      t
+    );
+    expect(failed.unread).toContain("connection reset");
+
+    expect(
+      drainBlockers(read([], node, refused("HorizontalPodAutoscaler")), t)
+        .unread
+    ).toBeNull();
+    expect(
+      drainBlockers({ data: undefined, error: null }, t).unread
+    ).toBeNull();
   });
 });
 
@@ -428,7 +477,7 @@ describe("what the Scale dialog reads", () => {
    * nothing about it is the same defect the delivery intercept was built for.
    */
   it("warns about an autoscaler", () => {
-    const warnings = scaleWarnings(conns([governs(hpa("hpa-busy"))]), null, t);
+    const warnings = scaleWarnings(read([governs(hpa("hpa-busy"))]), null, t);
     expect(warnings).toHaveLength(1);
     expect(warnings[0].lead).toContain("hpa-busy");
     expect(warnings[0].description).toContain("1 and 2");
@@ -436,7 +485,7 @@ describe("what the Scale dialog reads", () => {
 
   it("says the number stands while the autoscaler cannot act", () => {
     const warnings = scaleWarnings(
-      conns([
+      read([
         governs(
           hpa("hpa-blind", {
             conditions: [
@@ -459,7 +508,7 @@ describe("what the Scale dialog reads", () => {
 
   it("carries both reasons, soonest first, without repeating itself", () => {
     const warnings = scaleWarnings(
-      conns([governs(hpa("hpa-busy"))]),
+      read([governs(hpa("hpa-busy"))]),
       delivery,
       t
     );
@@ -472,7 +521,7 @@ describe("what the Scale dialog reads", () => {
 
   it("refuses to state a range when two autoscalers claim one workload", () => {
     const warnings = scaleWarnings(
-      conns([governs(hpa("hpa-a")), governs(hpa("hpa-b"))]),
+      read([governs(hpa("hpa-a")), governs(hpa("hpa-b"))]),
       null,
       t
     );
@@ -482,7 +531,36 @@ describe("what the Scale dialog reads", () => {
   });
 
   it("is silent on a workload nothing governs and nothing delivers", () => {
-    expect(scaleWarnings(conns([]), null, t)).toEqual([]);
+    expect(scaleWarnings(read([]), null, t)).toEqual([]);
+  });
+
+  /**
+   * The autoscaler list was refused, or the read failed, and the dialog
+   * offered a plain Scale while the ownership chain said the replica setter
+   * was unread. Fails if unread autoscalers scale as "no autoscaler".
+   */
+  it("warns that an autoscaler may exist when autoscalers could not be read", () => {
+    const [kept] = scaleWarnings(
+      read([], workload, refused("HorizontalPodAutoscaler")),
+      null,
+      t
+    );
+    expect(kept.subject).toBe("HorizontalPodAutoscaler: not read");
+    expect(kept.description).toContain("horizontalpodautoscalers is forbidden");
+
+    const [failed] = scaleWarnings(
+      { data: undefined, error: new Error("connection reset") },
+      null,
+      t
+    );
+    expect(failed.description).toContain("connection reset");
+
+    expect(
+      scaleWarnings(read([], workload, refused("PodDisruptionBudget")), null, t)
+    ).toEqual([]);
+    expect(scaleWarnings({ data: undefined, error: null }, null, t)).toEqual(
+      []
+    );
   });
 
   /**
@@ -491,7 +569,7 @@ describe("what the Scale dialog reads", () => {
    * two have no one set of bounds to offer.
    */
   it("carries the one autoscaler's bounds and a link to it", () => {
-    const [warning] = scaleWarnings(conns([governs(hpa("hpa-busy"))]), null, t);
+    const [warning] = scaleWarnings(read([governs(hpa("hpa-busy"))]), null, t);
     expect(warning.autoscaler).toEqual({
       name: "hpa-busy",
       namespace: "k8s-gui-test",
@@ -507,7 +585,7 @@ describe("what the Scale dialog reads", () => {
       namespace: "k8s-gui-test",
     });
     const [several] = scaleWarnings(
-      conns([governs(hpa("hpa-a")), governs(hpa("hpa-b"))]),
+      read([governs(hpa("hpa-a")), governs(hpa("hpa-b"))]),
       null,
       t
     );
@@ -562,7 +640,7 @@ describe("what the YAML editor's apply reads", () => {
    * dialog that is wrong on most saves is one people learn to dismiss unread.
    */
   it("stays quiet about the autoscaler when the save does not touch replicas", () => {
-    const governed = conns([governs(hpa("hpa-busy"))]);
+    const governed = read([governs(hpa("hpa-busy"))]);
     const before = doc(3);
     // A real edit somewhere else in the document. Replacing a string with
     // itself would leave `after === before`, and this test would pass even
@@ -577,7 +655,7 @@ describe("what the YAML editor's apply reads", () => {
 
   it("names the autoscaler when the replica count is what moved", () => {
     const warnings = applyWarnings(
-      conns([governs(hpa("hpa-busy"))]),
+      read([governs(hpa("hpa-busy"))]),
       null,
       changesReplicaCount(doc(3), doc(5)),
       t
@@ -591,13 +669,13 @@ describe("what the YAML editor's apply reads", () => {
    * was edited — the gate above must never be allowed to swallow it.
    */
   it("warns about delivery on any save, replicas or not", () => {
-    const warnings = applyWarnings(conns([]), delivery, false, t);
+    const warnings = applyWarnings(read([]), delivery, false, t);
     expect(warnings.map((w) => w.subject)).toEqual(["Argo CD"]);
   });
 
   it("stacks the two, soonest first, when the save moves replicas too", () => {
     const warnings = applyWarnings(
-      conns([governs(hpa("hpa-busy"))]),
+      read([governs(hpa("hpa-busy"))]),
       delivery,
       true,
       t

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
@@ -9,6 +9,7 @@ import {
   noteRefusal,
   readOf,
   useRefusedAmong,
+  useRefusedReads,
   useRightsAsked,
 } from "@/lib/refusals";
 import { seedScope } from "@/lib/namespace-scope";
@@ -33,6 +34,12 @@ export interface Guarded {
   namespace: string | null;
   /** The part of the object the verb reaches: `exec` in `pods/exec`. */
   subresource?: string;
+  /**
+   * The object the action is on, or `null` for one that does not exist yet.
+   * Required: a Role may grant a verb on named objects alone, and RBAC
+   * refuses the nameless question for those.
+   */
+  name: string | null;
 }
 
 /** One question for the authorizer: may this user `verb` this. */
@@ -42,13 +49,14 @@ export interface Asked extends Guarded {
 
 export function guardedOf(
   kind: string,
-  namespace: string | null
+  namespace: string | null,
+  name: string | null
 ): Guarded | null {
   const known = toKind(kind);
   if (!known) return null;
   const { group, resource, namespaced } = listQueryFor(known);
   if (namespaced && !namespace) return null;
-  return { group, resource, namespace: namespaced ? namespace : null };
+  return { group, resource, namespace: namespaced ? namespace : null, name };
 }
 
 /** The refusal memory's key for one verb on one resource. */
@@ -58,18 +66,48 @@ export function deniedRead(verb: GuardedVerb, on: Guarded): string {
     on.group,
     on.resource,
     on.namespace,
+    on.name,
     ...(on.subresource ? [on.subresource] : []),
   ])!;
 }
 
-/** A refusal learned by trying, kept beside the access review's own. */
+/**
+ * A refusal learned by trying, kept only once the authorizer confirms it. An
+ * admission webhook, a quota and PodSecurity answer 403 as well, and those
+ * are about this object, not about what this user may do.
+ */
 export function noteDenied(
   verb: GuardedVerb,
   on: Guarded | null,
   error: unknown
 ): void {
-  if (on && isRefusal(error))
-    noteRefusal(deniedRead(verb, on), error, currentConnection());
+  if (!on || !isRefusal(error)) return;
+  const connection = currentConnection();
+  commands.checkAccess([questionOf({ ...on, verb })]).then(
+    ([answer]) => {
+      if (answer?.allowed === false)
+        noteRefusal(deniedRead(verb, on), error, connection);
+    },
+    () => {}
+  );
+}
+
+function questionOf({
+  verb,
+  group,
+  resource,
+  namespace,
+  subresource,
+  name,
+}: Asked) {
+  return {
+    verb,
+    group,
+    resource,
+    namespace,
+    subresource,
+    name: name ?? undefined,
+  };
 }
 
 /**
@@ -91,15 +129,7 @@ export function useAccessReview(asked: readonly Asked[]): void {
     retry: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const answers = await commands.checkAccess(
-        asked.map(({ verb, group, resource, namespace, subresource }) => ({
-          verb,
-          group,
-          resource,
-          namespace,
-          subresource,
-        }))
-      );
+      const answers = await commands.checkAccess(asked.map(questionOf));
       answers.forEach((answer, at) => {
         if (answer.allowed !== false) return;
         const query = asked[at];
@@ -120,9 +150,12 @@ export function useAccessReview(asked: readonly Asked[]): void {
  * to that is no wherever only the subresource is granted.
  */
 function checkOf(asked: Asked): string {
+  const resource = asked.group
+    ? `${asked.resource}.${asked.group}`
+    : asked.resource;
   return [
     asked.verb,
-    asked.group ? `${asked.resource}.${asked.group}` : asked.resource,
+    asked.name ? `${resource}/${asked.name}` : resource,
     ...(asked.subresource ? [`--subresource=${asked.subresource}`] : []),
     ...(asked.namespace ? ["-n", asked.namespace] : []),
   ].join(" ");
@@ -170,14 +203,19 @@ export function useDenied(
  * What a pod's own actions ask, as one review every surface that draws them
  * shares: the peek, the row menu, the palette, the page and the dialogs.
  */
-function podAsks(namespace: string | null): Asked[] | null {
+function podAsks(
+  namespace: string | null,
+  pod: string | null
+): (Asked | null)[] | null {
   if (!namespace) return null;
   const pods = { group: "", resource: "pods", namespace };
+  const named = pod ? { ...pods, name: pod } : null;
   return [
-    { ...pods, verb: "patch", subresource: "ephemeralcontainers" },
-    { ...pods, verb: "create" },
-    { ...pods, verb: "create", subresource: "exec" },
-    { ...pods, verb: "create", subresource: "portforward" },
+    named && { ...named, verb: "patch", subresource: "ephemeralcontainers" },
+    // A debug copy is a new pod, and a create carries no name to match.
+    { ...pods, name: null, verb: "create" },
+    named && { ...named, verb: "create", subresource: "exec" },
+    named && { ...named, verb: "create", subresource: "portforward" },
   ];
 }
 
@@ -192,15 +230,21 @@ export interface PodDenied {
   portForward?: string;
 }
 
-/** Why each of a pod's own actions is not this user's to run in `namespace`. */
-export function usePodDenied(namespace: string | null): PodDenied {
+/**
+ * Why each of `pod`'s own actions is not this user's to run in `namespace`.
+ * With no pod named, only the copy is asked: it alone is about no pod yet.
+ */
+export function usePodDenied(
+  namespace: string | null,
+  pod: string | null
+): PodDenied {
   const t = useT();
-  const asks = podAsks(namespace);
+  const asks = podAsks(namespace, pod);
   const [ephemeral, copy, shell, portForward] = useDeniedOf(
     asks ?? [null, null, null, null]
   );
   const debug =
-    asks && ephemeral && copy
+    asks?.[0] && asks[1] && ephemeral && copy
       ? t("action", "notPermittedEither", {
           check: checkOf(asks[0]),
           other: checkOf(asks[1]),
@@ -229,7 +273,10 @@ export function useNodeDebugNamespace(): string {
 export function useNodeDebugDenied(
   namespace: string | null
 ): string | undefined {
-  const pods = namespace ? { group: "", resource: "pods", namespace } : null;
+  // The debug pod is new and named by the cluster, so neither question has a name.
+  const pods = namespace
+    ? { group: "", resource: "pods", namespace, name: null }
+    : null;
   const [create, exec] = useDeniedOf(
     pods
       ? [
@@ -243,41 +290,27 @@ export function useNodeDebugDenied(
 
 /** Why the cluster will not take an edited manifest of this object from this user. */
 export function useEditDenied(
-  key: { kind: string; namespace?: string | null } | null
+  key: { kind: string; name: string; namespace?: string | null } | null
 ): string | undefined {
-  return useDenied(key && guardedOf(key.kind, key.namespace ?? null)).patch;
+  return useDenied(key && guardedOf(key.kind, key.namespace ?? null, key.name))
+    .patch;
 }
 
 /**
- * Why a list row may not be deleted, for the namespaces the reader chose:
- * those are asked. A row elsewhere, or a review that would not answer, gets
- * no reason, and its Delete stays offered with no claim.
+ * Why `verb` is refused on a list row: the authorizer's "no" about that row,
+ * asked by its menu, its peek or its page. A nameless "no" says nothing of a
+ * row a Role grants by name, so a row nobody has asked about stays offered.
  */
-export function useRowDeleteDenial(
+export function useRowDenial(
   list: ListQuery | null,
-  namespaces: readonly string[]
-): (row: { namespace?: string | null }) => string | undefined {
+  verb: GuardedVerb
+): (row: { name: string; namespace?: string | null }) => string | undefined {
   const t = useT();
   const connection = useClusterStore((s) => s.connectionAttemptId);
+  const refused = useRefusedReads(connection);
   const group = list?.group;
   const resource = list?.resource;
   const namespaced = list?.namespaced;
-  const asked = useMemo<Guarded[]>(() => {
-    if (group === undefined || resource === undefined) return [];
-    return namespaced
-      ? namespaces.map((namespace) => ({ group, resource, namespace }))
-      : [{ group, resource, namespace: null }];
-  }, [group, resource, namespaced, namespaces]);
-  // Delete and patch, as the peek asks them, so the two share one review.
-  const review = useMemo(
-    () => asked.flatMap((on) => GUARDED.map((verb) => ({ ...on, verb }))),
-    [asked]
-  );
-  useAccessReview(review);
-  const refused = useRefusedAmong(
-    connection,
-    asked.map((on) => deniedRead("delete", on))
-  );
   return useCallback(
     (row) => {
       if (group === undefined || resource === undefined) return undefined;
@@ -285,11 +318,12 @@ export function useRowDeleteDenial(
         group,
         resource,
         namespace: namespaced ? (row.namespace ?? null) : null,
+        name: row.name,
       };
-      return refused.has(deniedRead("delete", on))
-        ? deniedWords(t, "delete", on)
+      return refused.has(deniedRead(verb, on))
+        ? deniedWords(t, verb, on)
         : undefined;
     },
-    [group, resource, namespaced, refused, t]
+    [group, resource, namespaced, verb, refused, t]
   );
 }

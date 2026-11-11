@@ -97,7 +97,7 @@ const PaletteActionsHost = lazy(() => import("./PaletteActionsHost"));
 /** Each action's English words, so they find it in every language. */
 function englishLabels(target: ActionTarget): ReadonlyMap<string, string> {
   const plan = planPeekActions(
-    registryKindOf(target) ?? target.kind,
+    registryKindOf(target) ?? "",
     undefined,
     english
   );

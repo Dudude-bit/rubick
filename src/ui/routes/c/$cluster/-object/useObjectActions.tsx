@@ -42,7 +42,7 @@ import { readinessOf } from "@/lib/restart-plan";
 import { objectLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useShellAskStore } from "@/stores/shellAskStore";
-import { toKind } from "@/lib/resource-registry";
+import type { ResourceKind } from "@/lib/resource-registry";
 import type {
   DebugResult,
   DeploymentInfo,
@@ -97,7 +97,12 @@ export interface ObjectActions {
 }
 
 export interface ObjectActionsOptions {
-  kind: string;
+  /**
+   * The registry's kind, resolved with its group; `null` for anything else,
+   * which is offered nothing. A bare name would take Knative's `Service` for
+   * a core one and run that kind's delete on it.
+   */
+  kind: ResourceKind | null;
   name: string;
   namespace: string | null;
   /** The object itself, where the surface has it. Undefined narrows nothing. */
@@ -107,7 +112,7 @@ export interface ObjectActionsOptions {
 }
 
 export function useObjectActions({
-  kind: rawKind,
+  kind: registryKind,
   name,
   namespace,
   detail,
@@ -120,7 +125,8 @@ export function useObjectActions({
   const critical = useCritical();
   const criticalActive = critical.critical && !!critical.context;
 
-  const kind = toKind(rawKind) ?? rawKind;
+  // Every table below misses on "", so an unknown kind plans and runs nothing.
+  const kind: string = registryKind ?? "";
   const pod = kind === "Pod" ? (detail as PodInfo | undefined) : undefined;
   const service =
     kind === "Service" ? (detail as ServiceInfo | undefined) : undefined;
@@ -172,10 +178,11 @@ export function useObjectActions({
     }
   };
 
-  const guarded = guardedOf(kind, namespace);
+  const guarded = name ? guardedOf(kind, namespace, name) : null;
   const denied = useDenied(guarded);
   const podDenied = usePodDenied(
-    kind === "Pod" || kind === "Service" ? namespace : null
+    kind === "Pod" || kind === "Service" ? namespace : null,
+    kind === "Pod" ? name : (backend.backend?.podName ?? null)
   );
   const debugNamespace = useNodeDebugNamespace();
   const nodeDebugDenied = useNodeDebugDenied(
@@ -439,7 +446,7 @@ export function useObjectActions({
           namespace={namespace}
           current={(detail as ScalableInfo | undefined)?.replicas.desired}
           busy={scale.isPending}
-          warnings={scaleWarnings(governance.data, intercept("Scale"), t)}
+          warnings={scaleWarnings(governance, intercept("Scale"), t)}
           onSubmit={(replicas) => scale.mutate(replicas)}
         />
       )}

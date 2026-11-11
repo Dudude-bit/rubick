@@ -104,7 +104,7 @@ export function StatefulSetDetail() {
     defaultTab: "overview",
   });
   const scaleDenied = useDenied(
-    guardedOf(ResourceType.StatefulSet, namespace || null)
+    name ? guardedOf(ResourceType.StatefulSet, namespace || null, name) : null
   ).patch;
 
   const chain = useChainAnswer(ResourceType.StatefulSet, name, namespace);
@@ -582,7 +582,7 @@ export function StatefulSetDetail() {
           moment the reader was on Logs, which is when Scale still has to
           work. It draws nothing until it is open, and portals when it is. */}
       <ScaleDialog
-        warnings={scaleWarnings(connections.data, intercept("Scale"), t)}
+        warnings={scaleWarnings(connections, intercept("Scale"), t)}
         open={scaleOpen}
         onOpenChange={setScaleOpen}
         kind={ResourceType.StatefulSet}

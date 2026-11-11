@@ -513,7 +513,10 @@ export function PodDetail() {
   } = usePodReplacementSearch(pod, name, namespace);
 
   const [portForwardOpen, setPortForwardOpen] = useState(false);
-  const denied = usePodDenied(pod?.namespace || namespace || null);
+  const denied = usePodDenied(
+    pod?.namespace || namespace || null,
+    name ?? null
+  );
 
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
     namespace: namespace || null,

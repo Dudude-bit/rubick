@@ -88,6 +88,12 @@ export function crdFor(ref: ObjectRef): string | undefined {
   return ownCrd(ref) ?? (access && segmentOf(access));
 }
 
+/** The registry's kind a reference is, or `null` for a CRD or namesake that only shares its name. */
+export function builtInKindOf(ref: ObjectRef): ResourceKind | null {
+  if (ref.crd === null || crdFor(ref)) return null;
+  return isResourceType(ref.kind) ? toKind(ref.kind) : null;
+}
+
 /**
  * The segment of a reference that knows its group but not its plural: none
  * for the built-in kind of that very group, the cluster's CRD for any other,
@@ -210,7 +216,7 @@ interface ServedKindRef {
 }
 
 /** The registry's kind only where it is that very kind, not a namesake in another group. */
-function registryKindOf(kind: ServedKindRef): ResourceKind | null {
+export function registryKindOf(kind: ServedKindRef): ResourceKind | null {
   const known = isResourceType(kind.kind) ? toKind(kind.kind) : null;
   const definition = known ? getResourceDefinition(known) : null;
   return known &&

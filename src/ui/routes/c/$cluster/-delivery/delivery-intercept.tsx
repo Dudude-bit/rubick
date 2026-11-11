@@ -92,18 +92,13 @@ export function DeliveryInterceptDialog({
   onConfirm: () => void;
 }) {
   const t = useT();
-  const gate = useCriticalGate();
+  const gate = useCriticalGate(open);
   // Nothing to ask when neither a delivery controller owns this nor the cluster
   // is critical — the caller fires straight through in that case.
   if (!intercept && !gate.active) return null;
 
-  const close = (next: boolean) => {
-    if (!next) gate.reset();
-    onOpenChange(next);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={close}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{intercept?.title ?? label}</DialogTitle>
@@ -112,14 +107,14 @@ export function DeliveryInterceptDialog({
         {intercept && <DeliveryInterceptBody intercept={intercept} />}
         {gate.input}
         <DialogFooter>
-          <Button variant="outline" onClick={() => close(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t("action", "cancel")}
           </Button>
           <Button
             variant="destructive"
             disabled={gate.blocked}
             onClick={() => {
-              close(false);
+              onOpenChange(false);
               onConfirm();
             }}
           >

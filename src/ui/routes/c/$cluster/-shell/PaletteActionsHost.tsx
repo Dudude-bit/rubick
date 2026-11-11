@@ -51,7 +51,7 @@ export default function PaletteActionsHost({
     retry: false,
   });
   const { plan, busy, run, dialogs } = useObjectActions({
-    kind: peek.kind,
+    kind,
     name: peek.name,
     namespace: peek.namespace,
     detail: detail.data,

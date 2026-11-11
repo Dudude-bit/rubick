@@ -996,6 +996,7 @@ export interface AccessQuery {
   verb: string;
   namespace: string | null;
   subresource?: string;
+  name?: string;
 }
 
 export interface SetupWarning {

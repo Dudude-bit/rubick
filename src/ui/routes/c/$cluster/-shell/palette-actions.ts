@@ -1,6 +1,12 @@
 import { AlignLeft, Copy, ExternalLink, Link2 } from "lucide-react";
 
-import { clusterOf, hrefOf, servedObjectLink, type AppLink } from "@/lib/links";
+import {
+  clusterOf,
+  hrefOf,
+  registryKindOf,
+  servedObjectLink,
+  type AppLink,
+} from "@/lib/links";
 import {
   getResourceDefinition,
   ResourceType,
@@ -95,16 +101,7 @@ export function targetKey(target: ActionTarget): string {
   ].join("/");
 }
 
-/** The registry's own kind, only where the target is that very kind. */
-export function registryKindOf(target: ActionTarget): ResourceKind | null {
-  const known = toKind(target.kind);
-  if (!known) return null;
-  const definition = getResourceDefinition(known);
-  return definition.group === target.group &&
-    definition.plural === target.plural
-    ? known
-    : null;
-}
+export { registryKindOf } from "@/lib/links";
 
 export function targetLink(
   target: ActionTarget,

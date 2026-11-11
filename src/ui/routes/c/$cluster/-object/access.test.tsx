@@ -16,6 +16,14 @@ vi.mock("@/lib/commands", async (original) => {
       getDeployment: vi.fn(async () => WORKER),
       getPod: vi.fn(async () => API_POD),
       getNode: vi.fn(async () => ({ name: "node01" })),
+      getEndpoints: vi.fn(async () => ({
+        subsets: [
+          {
+            addresses: [{ targetRef: { kind: "Pod", name: "checkout-db-0" } }],
+            ports: [{ port: 5432 }],
+          },
+        ],
+      })),
     },
   };
 });
@@ -30,6 +38,7 @@ import type { ActionsReport } from "../-shell/palette-actions";
 import { DeleteAction } from "./DeleteAction";
 import { RestartAction } from "./RestartDialog";
 import { marcoReview } from "@/test/marco";
+import { ERROR_CODES } from "@/lib/error-utils";
 
 const SECRET = { name: "checkout-db", namespace: "team-checkout" };
 const WORKER = {
@@ -121,8 +130,11 @@ describe("Delete for a reader who may not delete", () => {
     );
     fireEvent.focus(deleteButton());
     expect(
-      (await screen.findAllByText(/can-i delete secrets -n team-checkout/))
-        .length
+      (
+        await screen.findAllByText(
+          /can-i delete secrets\/checkout-db -n team-checkout/
+        )
+      ).length
     ).toBeGreaterThan(0);
     fireEvent.click(deleteButton());
     expect(screen.queryByRole("alertdialog")).toBeNull();
@@ -191,12 +203,14 @@ describe("Delete for a reader who may not delete", () => {
 
   /**
    * The right-click menu and the row's own Delete button on Marco's
-   * Deployments list. Fails if either still offers Delete as runnable.
+   * Deployments list. Fails if either still offers Delete as runnable once
+   * the row's own question is answered.
    */
   it("is greyed in the row menu and on the row", async () => {
     await renderWithRouter(
       <ResourceList
         title="Deployments"
+        kind="Deployment"
         emptyStateLabel="deployments"
         data={[WORKER]}
         columns={[
@@ -223,13 +237,6 @@ describe("Delete for a reader who may not delete", () => {
       { at: "/c/acme-staging/deployments", route: "/c/$cluster/$" }
     );
 
-    const row = screen.getByTestId("cell").closest("tr")!;
-    await waitFor(() =>
-      expect(
-        within(row).getByRole("button", { name: "Delete" })
-      ).toHaveAttribute("aria-disabled", "true")
-    );
-
     fireEvent.contextMenu(screen.getByTestId("cell"), {
       clientX: 30,
       clientY: 40,
@@ -237,7 +244,16 @@ describe("Delete for a reader who may not delete", () => {
     const item = await screen.findByRole("menuitem", { name: /^Delete/ });
     await waitFor(() => expect(item).toHaveAttribute("data-disabled"));
     expect(item.textContent).toContain(
-      "can-i delete deployments.apps -n team-checkout"
+      "can-i delete deployments.apps/checkout-worker -n team-checkout"
+    );
+    fireEvent.keyDown(item, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+
+    const row = screen.getByTestId("cell").closest("tr")!;
+    await waitFor(() =>
+      expect(
+        within(row).getByRole("button", { name: "Delete" })
+      ).toHaveAttribute("aria-disabled", "true")
     );
   });
 
@@ -266,7 +282,9 @@ describe("Delete for a reader who may not delete", () => {
         last?.reading === "ready"
           ? last.actions.find((action) => action.id === "delete")
           : undefined;
-      expect(remove?.reason).toMatch(/can-i delete secrets -n team-checkout/);
+      expect(remove?.reason).toMatch(
+        /can-i delete secrets\/checkout-db -n team-checkout/
+      );
     });
   });
 });
@@ -304,20 +322,12 @@ describe("Delete when the access review cannot answer", () => {
     }
   });
 
-  /**
-   * The review allowed it and the call was refused anyway (a webhook, a
-   * changed Role). Fails if that refusal is not remembered for the button.
-   */
-  it("is greyed once the cluster refused the delete itself", async () => {
-    checkAccess.mockImplementation(async (queries: AccessQuery[]) =>
-      queries.map((query) => ({ ...query, allowed: true }))
-    );
+  /** Deletes the Secret through its page's dialog, the cluster answering `refusal`. */
+  const deleteRefused = async (refusal: string) => {
     const mutate = vi.fn(
       (_: unknown, options: { onError: (e: Error) => void }) =>
         options.onError(
-          new Error(
-            'secrets "checkout-db" is forbidden: User "system:serviceaccount:team-checkout:marco" cannot delete resource "secrets" (code: 403)'
-          )
+          Object.assign(new Error(refusal), { code: ERROR_CODES.PERMISSION })
         )
     );
     await renderWithRouter(
@@ -336,9 +346,52 @@ describe("Delete when the access review cannot answer", () => {
       target: { value: SECRET.name },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+  };
+
+  /**
+   * The review allowed it, then the Role changed and the call was refused.
+   * Fails if the authorizer's new "no" is not remembered for the button.
+   */
+  it("is greyed once the authorizer confirms the cluster's refusal", async () => {
+    let allowed = true;
+    checkAccess.mockImplementation(async (queries: AccessQuery[]) =>
+      queries.map((query) => ({ ...query, allowed }))
+    );
+    const refused = deleteRefused(
+      'secrets "checkout-db" is forbidden: User "system:serviceaccount:team-checkout:marco" cannot delete resource "secrets"'
+    );
+    await waitFor(() => expect(checkAccess).toHaveBeenCalled());
+    allowed = false;
+    await refused;
     await waitFor(() =>
       expect(deleteButton()).toHaveAttribute("aria-disabled", "true")
     );
+  });
+
+  /**
+   * A Gatekeeper constraint refused one Secret with a 403, and Delete went
+   * grey on it as if Marco's Role had said no. Fails if a 403 the authorizer
+   * does not confirm is kept as a refusal of the user's rights.
+   */
+  it("stays offered when a webhook refused the object and the authorizer allows it", async () => {
+    checkAccess.mockImplementation(async (queries: AccessQuery[]) =>
+      queries.map((query) => ({ ...query, allowed: true }))
+    );
+    await deleteRefused(
+      'admission webhook "validation.gatekeeper.sh" denied the request: [protected] checkout-db may not be deleted'
+    );
+    await waitFor(() =>
+      expect(
+        checkAccess.mock.calls.some(([queries]) =>
+          (queries as AccessQuery[]).some(
+            (query) => query.verb === "delete" && query.name === SECRET.name
+          )
+        )
+      ).toBe(true)
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(deleteButton()).not.toHaveAttribute("aria-disabled");
   });
 });
 
@@ -351,6 +404,7 @@ describe("Debug for Marco, whose Role allows exec and port-forward and neither w
     renderWithRouter(
       <ResourceList
         title="Pods"
+        kind="Pod"
         emptyStateLabel="pods"
         data={[API_POD]}
         columns={[
@@ -382,7 +436,7 @@ describe("Debug for Marco, whose Role allows exec and port-forward and neither w
     const debug = await screen.findByRole("menuitem", { name: /^Debug/ });
     await waitFor(() => expect(debug).toHaveAttribute("data-disabled"));
     expect(debug.textContent).toContain(
-      "can-i patch pods --subresource=ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout"
+      "can-i patch pods/checkout-api-6767fbfdb7-blpfk --subresource=ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout"
     );
     for (const offered of [/^Shell/, /^Port forward/])
       expect(
@@ -413,7 +467,7 @@ describe("Debug for Marco, whose Role allows exec and port-forward and neither w
       const last = reports.at(-1);
       const actions = last?.reading === "ready" ? last.actions : [];
       expect(actions.find((action) => action.id === "debug")?.reason).toMatch(
-        /can-i patch pods --subresource=ephemeralcontainers -n team-checkout/
+        /can-i patch pods\/checkout-api-6767fbfdb7-blpfk --subresource=ephemeralcontainers -n team-checkout/
       );
       expect(
         actions.find((action) => action.id === "shell")?.reason
@@ -459,6 +513,7 @@ describe("Debug node for Marco, who may create pods in no namespace", () => {
     await renderWithRouter(
       <ResourceList
         title="Nodes"
+        kind="Node"
         emptyStateLabel="nodes"
         data={[{ name: "node01" }]}
         columns={[
@@ -527,5 +582,117 @@ describe("Debug node for Marco, who may create pods in no namespace", () => {
     );
     await waitFor(() => expect(checkAccess).toHaveBeenCalled());
     expect(debugNode()).not.toHaveAttribute("aria-disabled");
+  });
+});
+
+describe("a Role that grants a verb on named objects alone", () => {
+  /** A CI Role: patch and delete on checkout-worker by `resourceNames`, nothing else. */
+  const byName = async (queries: AccessQuery[]) =>
+    queries.map((query) => ({
+      verb: query.verb,
+      resource: query.resource,
+      allowed: query.name === WORKER.name,
+    }));
+
+  /**
+   * Restart on checkout-worker was greyed though `kubectl rollout restart`
+   * worked: the review asked about every Deployment in the namespace, which
+   * RBAC refuses for a rule that names its objects. Fails if the question
+   * leaves the object's name off.
+   */
+  it("leaves Restart offered on the object the Role names", async () => {
+    checkAccess.mockImplementation(byName);
+    await renderWithRouter(
+      <RestartAction
+        kind="Deployment"
+        name={WORKER.name}
+        namespace={WORKER.namespace}
+        plan={undefined}
+        intercept={null}
+        mutation={mutation()}
+      />
+    );
+    await waitFor(() => expect(checkAccess).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByRole("button", { name: "Restart" })).not.toHaveAttribute(
+      "aria-disabled"
+    );
+  });
+
+  /**
+   * A Service's forward lands on the pod behind it, and the question went out
+   * about every pod in the namespace, which a Role naming its pods refuses.
+   * Fails if Port forward is asked with no pod, or greyed on that answer.
+   */
+  it("asks a Service's Port forward about the pod behind it", async () => {
+    checkAccess.mockImplementation(async (queries: AccessQuery[]) =>
+      queries.map((query) => ({
+        verb: query.verb,
+        resource: query.resource,
+        allowed: query.name === "checkout-db-0",
+      }))
+    );
+    const service = {
+      name: "checkout-db",
+      namespace: "team-checkout",
+      ports: [{ port: 5432, name: null, protocol: "TCP" }],
+    };
+    await renderWithRouter(
+      <PeekActions
+        target={{ kind: "Service", ...service }}
+        detail={service}
+        onClose={vi.fn()}
+      />
+    );
+    const forwards = () =>
+      checkAccess.mock.calls
+        .flatMap(([queries]) => queries as AccessQuery[])
+        .filter((query) => query.subresource === "portforward");
+    await waitFor(() =>
+      expect(forwards().map((query) => query.name)).toEqual(["checkout-db-0"])
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      screen.getByRole("button", { name: /^Port forward/ })
+    ).not.toHaveAttribute("aria-disabled");
+  });
+
+  /**
+   * A nameless "no" says nothing about a row the Role names. Fails if the
+   * list greys a row's Delete before anything asked about that row.
+   */
+  it("leaves a row's Delete offered on a nameless refusal", async () => {
+    checkAccess.mockImplementation(byName);
+    await renderWithRouter(
+      <ResourceList
+        title="Deployments"
+        kind="Deployment"
+        emptyStateLabel="deployments"
+        data={[WORKER]}
+        columns={[
+          {
+            accessorKey: "name",
+            header: "Name",
+            cell: ({ row }) => (
+              <span data-testid="cell">{row.original.name}</span>
+            ),
+          },
+        ]}
+        quickActions={[
+          {
+            icon: Trash2,
+            label: "Delete",
+            onClick: vi.fn(),
+            variant: "destructive",
+          },
+        ]}
+      />,
+      { at: "/c/acme-staging/deployments", route: "/c/$cluster/$" }
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const row = screen.getByTestId("cell").closest("tr")!;
+    expect(
+      within(row).getByRole("button", { name: "Delete" })
+    ).not.toHaveAttribute("aria-disabled");
   });
 });

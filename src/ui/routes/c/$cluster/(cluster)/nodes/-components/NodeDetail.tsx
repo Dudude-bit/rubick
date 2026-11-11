@@ -210,7 +210,7 @@ export function NodeDetail() {
     !!node && followed.length > 0
   );
 
-  const actions = useNodeActions();
+  const actions = useNodeActions(name || null);
   const debugDenied = useNodeDebugDenied(useNodeDebugNamespace());
 
   const events = useObjectEvents(ResourceType.Node, name, null, {
@@ -537,7 +537,7 @@ export function NodeDetail() {
                 icon={Shield}
                 onClick={() => node && actions.uncordon(node.name)}
                 disabled={!node}
-                reason={actions.denied}
+                reason={actions.denied(name ?? "")}
               />
             ) : (
               <ReasonedAction
@@ -545,7 +545,7 @@ export function NodeDetail() {
                 icon={ShieldOff}
                 onClick={() => node && actions.cordon(node.name)}
                 disabled={!node}
-                reason={actions.denied}
+                reason={actions.denied(name ?? "")}
               />
             )}
             <ReasonedAction
@@ -554,7 +554,7 @@ export function NodeDetail() {
               onClick={() => node && actions.drain(node.name)}
               disabled={!node}
               danger
-              reason={actions.denied}
+              reason={actions.denied(name ?? "")}
             />
             <ReasonedAction
               label={t("action", "debugNode")}

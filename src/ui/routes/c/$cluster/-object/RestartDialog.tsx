@@ -60,17 +60,12 @@ export function RestartDialog({
   onConfirm,
 }: RestartDialogProps) {
   const t = useT();
-  const gate = useCriticalGate();
+  const gate = useCriticalGate(open);
   const words = restartWords(plan, name, t);
   const subject = `${kind} ${qualified(name, namespace)}`;
 
-  const close = (next: boolean) => {
-    if (!next) gate.reset();
-    onOpenChange(next);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={close}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <form
           className="contents"
@@ -111,7 +106,7 @@ export function RestartDialog({
                     }),
                     {
                       pods: (
-                        <span onClick={() => close(false)}>
+                        <span onClick={() => onOpenChange(false)}>
                           <RouteLink
                             {...objectLink(
                               { kind, name, namespace },
@@ -134,7 +129,7 @@ export function RestartDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={() => close(false)}
+              onClick={() => onOpenChange(false)}
               data-autofocus
             >
               {t("action", "cancel")}
@@ -161,7 +156,7 @@ export function RestartAction({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const guarded = guardedOf(dialog.kind, dialog.namespace);
+  const guarded = guardedOf(dialog.kind, dialog.namespace, dialog.name);
   const denied = useDenied(guarded).patch;
   return (
     <>

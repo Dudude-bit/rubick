@@ -86,8 +86,11 @@ export function ServiceDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
   const intercept = useDeliveryIntercept(deliveryQuery);
   const [forwardOpen, setForwardOpen] = useState(false);
-  const forwardDenied = usePodDenied(namespace || null).portForward;
   const backend = useServiceForwardBackend(service, namespace, name ?? "");
+  const forwardDenied = usePodDenied(
+    namespace || null,
+    backend.backend?.podName ?? null
+  ).portForward;
   const forwardReason =
     forwardDenied ?? serviceForwardReason(service, backend, t);
 

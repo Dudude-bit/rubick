@@ -85,7 +85,7 @@ export function DebugPodDialog({
 
   // The reader's pick stands only while the cluster allows it; otherwise the
   // first way in that it does allow, so the dialog never opens on a refusal.
-  const denied = usePodDenied(namespace);
+  const denied = usePodDenied(namespace, podName);
   const deniedOf: Record<DebugMode, string | undefined> = {
     ephemeralContainer: denied.ephemeral,
     copyPod: denied.copy,

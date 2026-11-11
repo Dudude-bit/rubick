@@ -286,7 +286,7 @@ export function NodeList() {
     return metricsMap;
   }, [nodeMetrics]);
 
-  const actions = useNodeActions();
+  const actions = useNodeActions(null);
 
   const setView = (next: "table" | "utilisation") =>
     setSearch(
@@ -344,13 +344,13 @@ export function NodeList() {
         icon: ShieldOff,
         label: t("action", "cordon"),
         onClick: (item) => actions.cordon(item.name),
-        reason: () => actions.denied,
+        reason: (item) => actions.denied(item.name),
       },
       {
         icon: Shield,
         label: t("action", "uncordon"),
         onClick: (item) => actions.uncordon(item.name),
-        reason: () => actions.denied,
+        reason: (item) => actions.denied(item.name),
       },
       {
         icon: AlertTriangle,
@@ -359,7 +359,7 @@ export function NodeList() {
         // one action here that can be refused by something the reader cannot
         // see from this row.
         onClick: (item) => actions.drain(item.name),
-        reason: () => actions.denied,
+        reason: (item) => actions.denied(item.name),
         variant: "destructive",
       },
     ],
@@ -405,6 +405,7 @@ export function NodeList() {
     <MetricsAbsenceContext.Provider value={absenceOf(nodeStatus)}>
       <ResourceList<NodeInfo>
         title={NODES_TITLE}
+        kind={ResourceType.Node}
         queryKey={queryKeys.resources(ResourceType.Node, null)}
         getRowId={getResourceRowId}
         queryFn={() => commands.listNodes(null).then(whole)}

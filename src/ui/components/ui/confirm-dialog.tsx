@@ -48,15 +48,10 @@ export function ConfirmDialog({
   const t = useT();
   // On critical infrastructure the reader also types the cluster's name:
   // what this guards against is not the object but the window it is in.
-  const gate = useCriticalGate();
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) gate.reset();
-    onOpenChange(next);
-  };
+  const gate = useCriticalGate(open);
 
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>

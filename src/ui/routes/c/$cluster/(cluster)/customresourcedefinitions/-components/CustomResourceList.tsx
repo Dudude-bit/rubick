@@ -235,6 +235,7 @@ export function CustomResourceList({
   return (
     <ResourceList<CustomResourceListItem>
       title={t("count", "kindInstances", { kind: crdKind })}
+      kind={null}
       noun={noun}
       queryKey={queryKey}
       getRowId={getResourceRowId}

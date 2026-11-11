@@ -6,6 +6,7 @@ import { peekOfRow, type PeekTarget } from "@/hooks/usePeek";
 import { useObjectActions } from "../-object/useObjectActions";
 import { peekQueryKey, resolveSource } from "../-peek/peek-sources";
 import { STALE_TIMES } from "@/lib/refresh";
+import type { ResourceKind } from "@/lib/resource-registry";
 import { RowMenu, type Listed } from "./RowMenu";
 
 /**
@@ -18,7 +19,7 @@ export function useRowMenu<Row extends Listed>({
   getRowHref,
   getRowPeek,
 }: {
-  kind: string | null;
+  kind: ResourceKind | null;
   getRowHref?: (row: Row) => string;
   getRowPeek?: (row: Row) => PeekTarget | null;
 }) {
@@ -44,7 +45,7 @@ export function useRowMenu<Row extends Listed>({
   });
   // Kept after the menu closes: the dialog an item opened still needs it.
   const actions = useObjectActions({
-    kind: kind ?? "",
+    kind,
     name: row?.name ?? "",
     namespace: row?.namespace ?? null,
     detail: detail.data,

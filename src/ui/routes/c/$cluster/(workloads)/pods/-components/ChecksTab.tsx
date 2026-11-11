@@ -59,7 +59,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
   const [address, setAddress] = useState("");
   const [image, setImage] = useState(DEFAULT_CHECK_IMAGE);
   const [runs, setRuns] = useState<Run[]>([]);
-  const denied = usePodDenied(pod.namespace);
+  const denied = usePodDenied(pod.namespace, pod.name);
   // A copy is a new pod and then an exec into it; the pod's own container is
   // only the exec.
   const copyDenied = denied.copy ?? denied.shell;
@@ -93,6 +93,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             resource: "pods",
             namespace: pod.namespace,
             subresource: "exec",
+            name: pod.name,
           },
           error
         );

@@ -324,6 +324,7 @@ export function PodList() {
   const list = (
     <ResourceList<PodWithMetrics>
       title="Pods"
+      kind={ResourceType.Pod}
       data={rows}
       unread={unread}
       placeholder={isPlaceholderData}

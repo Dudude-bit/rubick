@@ -177,6 +177,17 @@ export function useRefusedAmong(
   return useMemo(() => new Set(refused ? refused.split("\n") : []), [refused]);
 }
 
+/** Every read refused on `connection`, for rows a screen cannot name up front. */
+export function useRefusedReads(connection: number): ReadonlySet<string> {
+  const refused = useRefusals((s) =>
+    [...s.reads]
+      .filter(([, refused]) => refused.connection === connection)
+      .map(([read]) => read)
+      .join("\n")
+  );
+  return useMemo(() => new Set(refused ? refused.split("\n") : []), [refused]);
+}
+
 let told: { connection: number; reads: Set<string> } = {
   connection: -1,
   reads: new Set(),

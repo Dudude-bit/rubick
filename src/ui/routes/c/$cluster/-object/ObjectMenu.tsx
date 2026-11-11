@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { peekTargetOfHref } from "@/hooks/usePeek";
-import { clusterOf } from "@/lib/links";
+import { builtInKindOf, clusterOf } from "@/lib/links";
+import type { ResourceKind } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
 import type { Listed } from "../-list/RowMenu";
@@ -19,7 +20,7 @@ const peekOfRow = (row: Linked) =>
  * the Pods list. The webview's own menu copied `http://tauri.localhost/...`.
  */
 export function ObjectMenu() {
-  const [kind, setKind] = useState<string | null>(null);
+  const [kind, setKind] = useState<ResourceKind | null>(null);
   const menu = useRowMenu<Linked>({
     kind,
     getRowHref: hrefOfRow,
@@ -37,7 +38,7 @@ export function ObjectMenu() {
         // of another one is offered only what its own address can do.
         const here =
           clusterOf(target.to) === useClusterStore.getState().currentContext;
-        setKind(!here || object?.crd ? null : (object?.kind ?? null));
+        setKind(here && object ? builtInKindOf(object) : null);
         open(
           {
             name: target.name,

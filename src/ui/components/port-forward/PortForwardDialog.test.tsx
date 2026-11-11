@@ -181,7 +181,7 @@ describe("the port-forward dialog where the access review has answered", () => {
     expect(
       (
         await screen.findAllByText(
-          /can-i create pods --subresource=portforward -n lena-sandbox/
+          /can-i create pods\/hello-web-0 --subresource=portforward -n lena-sandbox/
         )
       ).length
     ).toBeGreaterThan(0);

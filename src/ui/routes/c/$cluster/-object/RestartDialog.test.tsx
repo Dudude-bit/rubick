@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 import { renderWithProviders } from "@/test/render";
+import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { RestartAction } from "./RestartDialog";
 
 function mutation() {
@@ -82,5 +84,56 @@ describe("a detail page's Restart", () => {
       await screen.findByRole("button", { name: "Cancel" })
     );
     expect(restart.mutate).not.toHaveBeenCalled();
+  });
+});
+
+describe("a Restart on a cluster marked critical", () => {
+  /**
+   * A restart that worked closed the dialog by flipping `open`, which fires
+   * no onOpenChange, so the typed name stayed and the next Restart on the
+   * page went through on one click. Fails if the second opening still holds
+   * the cluster's name or lets Restart run without it.
+   */
+  it("asks for the cluster's name again after a restart that worked", async () => {
+    const PROD = "prod-eu-1";
+    useClusterStore.setState({ currentContext: PROD, isConnected: true });
+    useClusterIdentityStore.getState().setCritical(PROD, true);
+    const restart = {
+      mutate: vi.fn((_: void, options?: { onSuccess?: () => void }) =>
+        options?.onSuccess?.()
+      ),
+      isPending: false,
+    } as unknown as UseMutationResult<void, Error, void>;
+    renderWithProviders(
+      <RestartAction
+        kind="Deployment"
+        name="cart"
+        namespace="shop"
+        plan={undefined}
+        intercept={null}
+        mutation={restart}
+      />
+    );
+    const open = async () => {
+      await userEvent.click(screen.getByRole("button", { name: /Restart/ }));
+      return screen.findByRole("dialog");
+    };
+
+    const first = await open();
+    await userEvent.type(within(first).getByPlaceholderText(PROD), PROD);
+    await userEvent.click(
+      within(first).getByRole("button", { name: "Restart" })
+    );
+    expect(restart.mutate).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    const second = await open();
+    expect(within(second).getByPlaceholderText(PROD)).toHaveValue("");
+    expect(
+      within(second).getByRole("button", { name: "Restart" })
+    ).toBeDisabled();
+
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterStore.setState({ currentContext: null, isConnected: false });
   });
 });

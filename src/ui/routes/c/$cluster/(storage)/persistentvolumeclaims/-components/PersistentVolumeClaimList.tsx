@@ -184,6 +184,7 @@ export function PersistentVolumeClaimList() {
   return (
     <ResourceList<PersistentVolumeClaimInfo>
       title="Persistent Volume Claims"
+      kind={ResourceType.PersistentVolumeClaim}
       queryKey={queryKey}
       getRowId={getResourceRowId}
       queryFn={queryFn}
