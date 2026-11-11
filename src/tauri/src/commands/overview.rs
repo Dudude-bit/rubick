@@ -2539,10 +2539,35 @@ pub async fn get_cluster_overview(
     .await
 }
 
+/// The overview again after a change its watched stores took: the stores as
+/// they are now, beside the counts and usage the last whole read of `scope`
+/// found. `None` where there is nothing to follow from, and the caller reads
+/// the whole overview instead.
+#[tauri::command]
+pub async fn follow_cluster_overview(
+    scope: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<Option<ClusterOverview>> {
+    crate::client::clock::timed(
+        &state.perf,
+        "followClusterOverview",
+        Box::pin(followed_overview(&state, scope)),
+    )
+    .await
+}
+
 /// The counts and the usage every overview needs beside its lists.
+#[derive(Clone)]
 struct Sides {
     counts: ResourceCounts,
     usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
+}
+
+/// What a whole read found beside the stores, the dozen requests it cost.
+/// Kept by scope, so a read the stores' own change asks for costs none.
+pub struct KeptSides {
+    sides: Sides,
+    partial: Vec<PartialCount>,
 }
 
 /// Ten bounded metadata pages, for one namespace or the whole cluster.
@@ -2739,12 +2764,58 @@ pub async fn cluster_overview(
         // Live usage is best-effort: metrics-server is not installed everywhere.
         usage_by_node: usage_index(metrics.ok()),
     };
-    let mut overview = match watched {
-        Some((snapshot, looked)) => from_snapshot(&snapshot, scope.as_deref(), sides, &looked),
-        None => by_listing(&client, scope.as_deref(), sides, Some((state, &memo))).await?,
+    let beside = state
+        .overview_cache
+        .keep_sides(&context, &scope, KeptSides { sides, partial });
+    let scope = scope.as_deref();
+    let Some((snapshot, looked)) = watched else {
+        let sides = beside.sides.clone();
+        let mut overview = by_listing(&client, scope, sides, Some((state, &memo))).await?;
+        overview
+            .counts_partial
+            .extend(beside.partial.iter().cloned());
+        return Ok(overview);
     };
-    overview.counts_partial.extend(partial);
-    Ok(overview)
+    Ok(followed(&snapshot, scope, &beside, &looked))
+}
+
+/// See [`follow_cluster_overview`]. The stores announce up to a change a
+/// second, and each was answered by reading the whole overview: ten counts,
+/// the namespaces and the node metrics, per namespace asked, for an answer
+/// only the stores had changed. The one read left is a name a new warning gives.
+pub async fn followed_overview(
+    state: &AppState,
+    scope: Option<Vec<String>>,
+) -> Result<Option<ClusterOverview>> {
+    let scope = scope_of(scope)?;
+    let context = state
+        .get_current_context()
+        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    let Some(beside) = state.overview_cache.kept_sides(&context, &scope) else {
+        return Ok(None);
+    };
+    let client = (*state.current_client()?).clone();
+    let Some(snapshot) = state.overview_cache.snapshot(&context, || client).await else {
+        return Ok(None);
+    };
+    let memo = state.overview_cache.holders(&context);
+    let scope = scope.as_deref();
+    let looked = look_up_holders(state, &memo, refs(&snapshot.events), scope).await;
+    Ok(Some(followed(&snapshot, scope, &beside, &looked)))
+}
+
+/// The stores' overview of `scope` beside what a whole read found of the rest.
+fn followed(
+    snapshot: &Snapshot,
+    scope: Option<&[String]>,
+    beside: &KeptSides,
+    looked: &Looked,
+) -> ClusterOverview {
+    let mut overview = from_snapshot(snapshot, scope, beside.sides.clone(), looked);
+    overview
+        .counts_partial
+        .extend(beside.partial.iter().cloned());
+    overview
 }
 
 /// The most names a poll reads one by one to say who holds them.
@@ -7240,6 +7311,74 @@ mod across_namespaces {
             let deployments = format!("/apis/apps/v1/namespaces/{namespace}/deployments");
             assert_eq!(asked(&hits, &deployments), 1, "{deployments}");
         }
+    }
+
+    /// The followed Overview read everything again on each change its stores
+    /// announced: ten counts, the namespaces and the node metrics, up to once
+    /// a second. Fails if a whole read does not keep what it found beside
+    /// the stores for its own scope and cluster, if the read a change asks
+    /// for is built from anything but the stores and what was kept, or if
+    /// what is kept outlives the connection it was read on.
+    #[tokio::test]
+    async fn a_read_the_stores_change_asks_for_is_the_stores_beside_the_last_whole_read() {
+        let service = |name: &str| json!({ "metadata": { "name": name } });
+        let (client, hits) = server(
+            Cluster::new()
+                .items(
+                    "/api/v1/namespaces/prod/services",
+                    vec![service("web"), service("api")],
+                )
+                .0,
+        )
+        .await;
+        let total = || hits.lock().unwrap().values().sum::<usize>();
+        let scope = scope_of(Some(vec![PROD.to_string()])).expect("a valid scope");
+        let cache = crate::overview::OverviewCache::default();
+
+        let (counts, partial) =
+            side_counts(&client, scope.as_deref(), &RefusedCounts::default()).await;
+        let whole = total();
+        assert_eq!(whole, 11, "ten counts and the namespaces");
+        let sides = Sides {
+            counts,
+            usage_by_node: None,
+        };
+        let read = cache.keep_sides("east", &scope, KeptSides { sides, partial });
+
+        let pod = |namespace: &str| Pod {
+            metadata: kube::core::ObjectMeta {
+                namespace: Some(namespace.to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let snapshot = Snapshot {
+            pods: arcs([pod(PROD), pod(PROD), pod(STAGING)]),
+            nodes: arcs([Node::default()]),
+            deployments: arcs([]),
+            jobs: arcs([]),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
+            events: arcs([]),
+        };
+        let kept = cache.kept_sides("east", &scope).expect("the whole read's");
+        assert!(Arc::ptr_eq(&read, &kept));
+        let overview = followed(&snapshot, scope.as_deref(), &kept, &Looked::new());
+        assert_eq!(overview.counts.services, Some(2), "the count the read kept");
+        assert_eq!(overview.counts.pods, Some(2), "the stores' own");
+        assert_eq!(overview.served_from, OverviewSource::Watch);
+        assert_eq!(total(), whole, "the cluster was asked nothing more");
+
+        assert!(cache.kept_sides("east", &None).is_none(), "another scope");
+        assert!(
+            cache.kept_sides("west", &scope).is_none(),
+            "another cluster"
+        );
+        cache.forget("east");
+        assert!(
+            cache.kept_sides("east", &scope).is_none(),
+            "a new connection"
+        );
     }
 
     /// Would draw the warnings of the namespaces that answered as the

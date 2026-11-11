@@ -364,6 +364,12 @@ export async function getClusterOverview(
   return invoke<ClusterOverview>("get_cluster_overview", { scope });
 }
 
+export async function followClusterOverview(
+  scope: string[] | null
+): Promise<ClusterOverview | null> {
+  return invoke<ClusterOverview | null>("follow_cluster_overview", { scope });
+}
+
 export async function getControllerRevisions(
   kind: string,
   name: string,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { listenEvent } from "@/lib/events";
@@ -145,11 +145,17 @@ function useOverviewSeen(): boolean {
 }
 
 /**
- * Whether the overview on screen is read again within a second of a change
- * the backend's watch-fed stores took in its scope, rather than on the
- * ten-second poll alone: Sam's read "41 of 62 pods ready" six seconds after
- * kubectl was back at 40. Only while it is served from those stores, the one
- * read cheap enough to repeat that often, and only while it is seen.
+ * Whether the overview on screen follows, within a second, a change the
+ * backend's watch-fed stores took in its scope, rather than the ten-second
+ * poll alone: Sam's read "41 of 62 pods ready" six seconds after kubectl was
+ * back at 40. Only while it is served from those stores, and only while it
+ * is seen.
+ *
+ * A change is answered by `followClusterOverview`: the stores as they are,
+ * beside the counts and usage the last whole read found. Read whole, each
+ * change was ten counts, the namespaces and the node metrics per namespace
+ * asked, up to once a second. So the counts no store holds keep the poll's
+ * rhythm and its time, and the whole read stays what every other asker gets.
  *
  * Called once, by the shell, so the sidebar and status bar counts follow on
  * every page and not only on the Overview: Sam's sidebar kept "Deployments 7"
@@ -169,21 +175,68 @@ export function useFollowedOverview(
   useEffect(() => {
     if (!following) return;
     const key = queryKeys.clusterOverview(context, scope);
+    const hash = hashKey(key);
     let left = false;
     let leave: (() => void) | undefined;
+    // How many changes were announced, and how many of them the answer in
+    // the cache has seen.
+    let asked = 0;
+    let seen = 0;
+    // `asked` when the whole read now out left: it saw at least those.
+    let askedAsRead = 0;
+    let busy = false;
+
+    const follow = async () => {
+      if (busy || left || seen === asked) return;
+      busy = true;
+      const upTo = asked;
+      const from = client.getQueryState(key)?.dataUpdatedAt;
+      const answer = await commands
+        .followClusterOverview(scope.length > 0 ? [...scope] : null)
+        // The whole read, on its poll, is what says a read is failing.
+        .catch(() => undefined);
+      busy = false;
+      if (left || answer === undefined) return;
+      if (answer === null) {
+        // Nothing to follow from: the backend has no whole read of this
+        // scope, or its stores stopped serving.
+        readSoon(client, key, 0);
+        return;
+      }
+      // A whole read that landed meanwhile counted everything after this
+      // answer's counts were: it stands, and is followed in its turn.
+      if (client.getQueryState(key)?.dataUpdatedAt === from) {
+        client.setQueryData(key, answer, { updatedAt: from });
+        seen = Math.max(seen, upTo);
+      }
+      void follow();
+    };
+
+    const offReads = client.getQueryCache().subscribe((event) => {
+      if (event.type !== "updated" || event.query.queryHash !== hash) return;
+      if (event.action.type === "fetch") askedAsRead = asked;
+      else if (event.action.type === "success" && !event.action.manual) {
+        // It may have left before a change announced while it was out.
+        seen = askedAsRead;
+        void follow();
+      }
+    });
     void listenEvent("overview-changed", ({ payload }) => {
       if (payload.context !== context) return;
       const inScope =
         scope.length === 0 ||
         payload.cluster ||
         payload.namespaces.some((namespace) => scope.includes(namespace));
-      if (inScope) readSoon(client, key, 0);
+      if (!inScope) return;
+      asked++;
+      void follow();
     }).then((unlisten) => {
       if (left) unlisten();
       else leave = unlisten;
     });
     return () => {
       left = true;
+      offReads();
       leave?.();
     };
   }, [following, context, scope, client]);

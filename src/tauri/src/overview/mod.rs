@@ -31,6 +31,7 @@ use serde::de::DeserializeOwned;
 use tokio::sync::{broadcast, Notify};
 use tokio_util::sync::CancellationToken;
 
+use crate::commands::overview::KeptSides;
 use crate::state::AppEvent;
 
 pub mod holders;
@@ -52,6 +53,9 @@ const READY_TIMEOUT: Duration = Duration::from_mins(1);
 /// Just under the five minutes kube used to enforce; see `watch::WATCH_TIMEOUT_SECS`.
 const WATCH_TIMEOUT_SECS: u32 = 290;
 const PAGE_SIZE: u32 = 500;
+/// The scopes whose last whole read is kept at once: the window's and the
+/// namespace picker's, with room for a switch between them.
+const KEPT_SCOPES: usize = 8;
 
 /// Watches per connected cluster, started on the first overview request.
 #[derive(Default)]
@@ -63,6 +67,8 @@ pub struct OverviewCache {
     /// Per cluster, the counts it refused: not asked again until a reconnect.
     refused_counts: DashMap<String, Arc<RefusedCounts>>,
     holders: DashMap<String, Arc<HolderMemo>>,
+    /// What each cluster's last whole read of a scope found beside the stores.
+    beside: DashMap<(String, Option<Vec<String>>), Arc<KeptSides>>,
     /// Where a change the stores took is announced, so a screen showing the
     /// overview reads it again then rather than a ten-second poll later.
     events: Option<broadcast::Sender<AppEvent>>,
@@ -349,6 +355,7 @@ impl OverviewCache {
         self.refused.remove(context);
         self.refused_counts.remove(context);
         self.holders.remove(context);
+        self.beside.retain(|(of, _), _| of != context);
     }
 
     pub fn forget_all(&self) {
@@ -360,6 +367,7 @@ impl OverviewCache {
         self.refused.clear();
         self.refused_counts.clear();
         self.holders.clear();
+        self.beside.clear();
     }
 
     /// The counts `context` refused on this connection.
@@ -375,6 +383,33 @@ impl OverviewCache {
     #[must_use]
     pub fn holders(&self, context: &str) -> Arc<HolderMemo> {
         self.holders.entry(context.to_string()).or_default().clone()
+    }
+
+    /// Keeps what a whole read of `scope` found beside the stores, and hands
+    /// it back: the read builds its own answer from what is kept here.
+    #[must_use]
+    pub fn keep_sides(
+        &self,
+        context: &str,
+        scope: &Option<Vec<String>>,
+        beside: KeptSides,
+    ) -> Arc<KeptSides> {
+        let key = (context.to_string(), scope.clone());
+        // A scope is whatever the reader picks; the ones left behind go.
+        if self.beside.len() >= KEPT_SCOPES && !self.beside.contains_key(&key) {
+            self.beside.clear();
+        }
+        let beside = Arc::new(beside);
+        self.beside.insert(key, beside.clone());
+        beside
+    }
+
+    /// What the last whole read of `scope` found beside the stores.
+    #[must_use]
+    pub fn kept_sides(&self, context: &str, scope: &Option<Vec<String>>) -> Option<Arc<KeptSides>> {
+        self.beside
+            .get(&(context.to_string(), scope.clone()))
+            .map(|kept| kept.clone())
     }
 
     /// The watches this process holds, for diagnostics.
