@@ -19,7 +19,7 @@ pub mod renew;
 
 pub use azure_aks::{is_aks_exec_command, parse_aks_exec_args, AksClusterInfo, AzureAksAuth};
 pub use gcp_gke::{is_gke_exec_command, GcpGkeAuth};
-pub use interactive::{prepare_kubeconfig_for_context, AuthMode};
+pub use interactive::{prepare_kubeconfig_for_context, AuthMode, PreparedContext};
 pub use oidc::OidcAuth;
 
 use serde::{Deserialize, Serialize};

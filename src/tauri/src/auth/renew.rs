@@ -20,6 +20,7 @@ use dashmap::DashMap;
 use tauri::{AppHandle, Manager};
 use tokio::sync::oneshot;
 
+use crate::client::{ConnectionPath, K8sClientManager};
 use crate::state::AppState;
 
 /// How early to try: long enough for a slow plugin on a slow network to
@@ -478,37 +479,50 @@ async fn renew_once(
         crate::auth::AuthMode::Silent,
     )
     .await?;
+    replace(&state, context, before, prepared, stop_rx).await
+}
+
+/// Put what the plugin minted in place of the credentials in use, once the
+/// cluster has accepted it.
+///
+/// The new client answers `/version` before it replaces anything. Swapped in
+/// first, a check that then failed left the window on credentials nobody had
+/// been told of, under the new deadline: a plugin that caches then answered
+/// the retry with that same deadline, it was filed as "the credentials in
+/// use", and no watch or log stream ever moved off the old token.
+async fn replace(
+    state: &AppState,
+    context: &str,
+    before: DateTime<Utc>,
+    prepared: crate::auth::PreparedContext,
+    stop_rx: &mut oneshot::Receiver<()>,
+) -> crate::error::Result<Renewed> {
     if prepared.expires_at == Some(before) {
         return Ok(Renewed::Unchanged);
     }
-    // Everything past here installs the result, and a renewal whose context
-    // was disconnected or signed into again while the plugin ran would lay a
-    // stale token over what the reader now has.
-    if stopped(stop_rx) || state.client_manager.credential_deadline(context) != Some(before) {
-        return Ok(Renewed::Superseded);
+    let client = K8sClientManager::prepared_client(context, prepared.kubeconfig).await?;
+    K8sClientManager::ask_version(
+        context,
+        &client,
+        prepared.expires_at,
+        ConnectionPath::Direct,
+    )
+    .await?;
+    {
+        // Under the lock a connect and a disconnect take: a context that
+        // moved while the plugin ran, or while the cluster was asked, keeps
+        // what the reader now has.
+        let _lifecycle = state.cluster_lifecycle.lock();
+        if stopped(stop_rx) || state.client_manager.credential_deadline(context) != Some(before) {
+            return Ok(Renewed::Superseded);
+        }
+        state.client_manager.install(context, client, None);
+        state
+            .client_manager
+            .set_credential_deadline(context, prepared.expires_at);
     }
-    state
-        .client_manager
-        .connect_with_kubeconfig(context, prepared.kubeconfig)
-        .await
-        .map_err(|e| crate::error::Error::Connection(e.to_string()))?;
-    // After the client: a deadline written for credentials that then failed
-    // to connect describes a token the window is not using.
-    state
-        .client_manager
-        .set_credential_deadline(context, prepared.expires_at);
-    // One request before anybody is told: building a client proves nothing,
-    // and this event is what lifts the refusal screen.
-    state
-        .client_manager
-        .test_connection(context)
-        .await
-        .map_err(|e| crate::error::Error::Connection(e.to_string()))?;
-    // The overview's watches are the one holder that cannot hear the event:
-    // they are Rust tasks that baked the old client into five `Api` handles
-    // when they started. Dropped here so the next request starts them on the
-    // client that now exists — otherwise they run to their first failure on
-    // an expired token and the overview quietly falls back to listing.
+    // The holders in this process that cannot hear the event: Rust tasks
+    // that took the old client when they started.
     state.client_replaced(context);
     // Only now: telling the holders of the old client any earlier would have
     // them rebuild onto it.
@@ -678,6 +692,108 @@ mod tests {
         assert_eq!(manager.outcome("no-plugin"), Renewal::Scheduled);
         manager.forget("no-plugin");
         assert_eq!(manager.outcome("no-plugin"), Renewal::Unknown);
+    }
+
+    /// The plugin mints a token, and the one request that confirms it fails:
+    /// a network blip, a 5xx. Thirty seconds on, a plugin that caches hands
+    /// back the same token. Fails if the unconfirmed client or its deadline
+    /// took the place of the ones in use, or if the retry, seeing a deadline
+    /// it already knows, tells nobody: every watch then stays on the old
+    /// token until it dies.
+    #[tokio::test]
+    async fn a_renewal_the_cluster_did_not_confirm_replaces_nothing_and_the_retry_announces() {
+        use crate::auth::PreparedContext;
+        use crate::client::served::{test_server::reconnectable, ServedIndex};
+        use crate::metrics::{MetricsStatus, MetricsStatusKind};
+        use crate::state::AppEvent;
+        crate::tls::provider();
+        let version = r#"{"major":"1","minor":"31","gitVersion":"v1.31.0","gitCommit":"","gitTreeState":"","buildDate":"","goVersion":"","compiler":"","platform":"linux/amd64"}"#;
+        let (state, _hits, kubeconfig) =
+            reconnectable(ServedIndex::default(), move |path, nth| match path {
+                "/version" if nth == 1 => (500, "{}".to_string()),
+                "/version" => (200, version.to_string()),
+                _ => (404, "{}".to_string()),
+            })
+            .await;
+        let before = Utc::now() + Duration::minutes(2);
+        let minted = before + Duration::minutes(15);
+        let clients = &state.client_manager;
+        clients.set_credential_deadline("fake", Some(before));
+        let held = clients.get_client("fake").expect("connected");
+        let refused = MetricsStatus {
+            status: MetricsStatusKind::Forbidden,
+            message: None,
+        };
+        let at = std::time::Instant::now();
+        state.metrics_unserved.record("fake", "nodes", &refused, at);
+        let mut told = state.subscribe();
+        let (_stop, mut stop_rx) = oneshot::channel();
+        let prepared = || PreparedContext {
+            kubeconfig: kubeconfig.clone(),
+            expires_at: Some(minted),
+        };
+
+        let unconfirmed = replace(&state, "fake", before, prepared(), &mut stop_rx).await;
+        assert!(unconfirmed.is_err());
+        let now = clients.get_client("fake").expect("still connected");
+        assert!(Arc::ptr_eq(&now, &held), "the client the cluster accepted");
+        assert_eq!(clients.credential_deadline("fake"), Some(before));
+        assert!(told.try_recv().is_err(), "nothing was renewed");
+
+        // What `run` reads on its way round again.
+        let before = clients.credential_deadline("fake").expect("a deadline");
+        let again = replace(&state, "fake", before, prepared(), &mut stop_rx).await;
+        assert!(matches!(again, Ok(Renewed::Replaced(Some(at))) if at == minted));
+        let now = clients.get_client("fake").expect("connected");
+        assert!(!Arc::ptr_eq(&now, &held), "the renewed client");
+        assert_eq!(clients.credential_deadline("fake"), Some(minted));
+        assert!(matches!(
+            told.try_recv(),
+            Ok(AppEvent::CredentialsRenewed { context }) if context == "fake"
+        ));
+        assert!(
+            state
+                .metrics_unserved
+                .standing("fake", "nodes", at)
+                .is_none(),
+            "a refusal answered the credentials that were replaced"
+        );
+    }
+
+    /// A reader signed in again while the plugin ran, or while the cluster
+    /// was asked. Fails if the renewal lays its token over the session they
+    /// now have, or announces a renewal of it.
+    #[tokio::test]
+    async fn a_renewal_overtaken_by_a_sign_in_is_dropped() {
+        use crate::auth::PreparedContext;
+        use crate::client::served::{test_server::reconnectable, ServedIndex};
+        crate::tls::provider();
+        let version = r#"{"major":"1","minor":"31","gitVersion":"v1.31.0","gitCommit":"","gitTreeState":"","buildDate":"","goVersion":"","compiler":"","platform":"linux/amd64"}"#;
+        let (state, _hits, kubeconfig) =
+            reconnectable(ServedIndex::default(), move |path, _| match path {
+                "/version" => (200, version.to_string()),
+                _ => (404, "{}".to_string()),
+            })
+            .await;
+        let before = Utc::now() + Duration::minutes(2);
+        let signed_in = before + Duration::hours(1);
+        let clients = &state.client_manager;
+        clients.set_credential_deadline("fake", Some(signed_in));
+        let held = clients.get_client("fake").expect("connected");
+        let mut told = state.subscribe();
+        let (_stop, mut stop_rx) = oneshot::channel();
+        let prepared = PreparedContext {
+            kubeconfig,
+            expires_at: Some(before + Duration::minutes(15)),
+        };
+
+        let overtaken = replace(&state, "fake", before, prepared, &mut stop_rx).await;
+
+        assert!(matches!(overtaken, Ok(Renewed::Superseded)));
+        let now = clients.get_client("fake").expect("connected");
+        assert!(Arc::ptr_eq(&now, &held));
+        assert_eq!(clients.credential_deadline("fake"), Some(signed_in));
+        assert!(told.try_recv().is_err());
     }
 
     /// TEMPORARY simulation of `run`'s rung ladder for a plugin that always
