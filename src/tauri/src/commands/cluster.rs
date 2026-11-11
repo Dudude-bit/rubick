@@ -992,12 +992,12 @@ mod lifecycle_tests {
             );
             assert!(state.sessions.contains_key("fake"), "{returns}");
             assert!(state.current_client().is_ok(), "{returns}");
+            let filed = state.client_manager.attempt_for("fake").expect("filed");
+            assert!(
+                matches!(filed.direct, crate::client::PathOutcome::Ok),
+                "{returns}: the last attempt at the context is the one that landed"
+            );
         }
-        let filed = state.client_manager.attempt_for("fake").expect("filed");
-        assert!(
-            matches!(filed.direct, crate::client::PathOutcome::Ok),
-            "the last attempt at the context is the one that landed"
-        );
     }
 
     /// A context the window holds no session for is not brought back: the
