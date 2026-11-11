@@ -446,6 +446,61 @@ mod tests {
         assert_eq!(state(), Some(SlotState::Live));
     }
 
+    /// Every kind was listed and watched whole: opening Delete pulled each
+    /// Helm release Secret and `ConfigMap` in full to keep its metadata. Fails
+    /// if a list or a watch asks for more than metadata.
+    #[tokio::test]
+    async fn a_kind_is_listed_and_watched_as_metadata_only() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let url = format!("http://{}", listener.local_addr().expect("addr"));
+        let asked: Arc<parking_lot::Mutex<Vec<String>>> = Arc::default();
+        let seen = asked.clone();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf = vec![0u8; 8192];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).to_lowercase();
+                let first = {
+                    let mut seen = seen.lock();
+                    seen.push(request);
+                    seen.len() == 1
+                };
+                let body = if first { list("5").1 } else { String::new() };
+                let reply = format!(
+                    "HTTP/1.1 200 X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            }
+        });
+        let client =
+            kube::Client::try_from(kube::Config::new(url.parse().expect("url"))).expect("client");
+        let (slot, resource) = pods();
+        let index = ClusterIndex::holding(client, &[("Pod", slot.kind.clone())]);
+
+        spawn(&index, slot, resource);
+        for _ in 0..300 {
+            if asked.lock().len() >= 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        index.stop.cancel();
+
+        let asked = asked.lock().clone();
+        assert!(asked.len() >= 2, "no list and watch: {asked:?}");
+        assert!(
+            asked[0].contains("as=partialobjectmetadatalist"),
+            "{asked:?}"
+        );
+        assert!(asked[1].contains("watch=true"), "{asked:?}");
+        assert!(asked[1].contains("as=partialobjectmetadata"), "{asked:?}");
+    }
+
     /// A watch per kind, and per namespace for each refused kind, each on a
     /// connection of its own, had no ceiling: a few hundred took every file
     /// the process may open. Fails if a watch starts with none free, or if
