@@ -16,7 +16,12 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
-import { askedKind, queryKeys, type ListQuestion } from "@/lib/query-keys";
+import {
+  askedKind,
+  heldWhileAskedAgain,
+  queryKeys,
+  type ListQuestion,
+} from "@/lib/query-keys";
 import { useRightsAsked } from "@/lib/refusals";
 import { seedScope } from "@/lib/namespace-scope";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -97,17 +102,19 @@ export function useResourceAccess(queries: ListQuery[]): PerKind<boolean> {
   const namespaces = [...scope].sort();
   const rights = useRightsAsked();
 
+  // The asked kinds are part of the question: the nav asks about its own
+  // rows, the Gateway rows ask about theirs, and one key for both would
+  // hand the second asker the first one's answers.
+  const queryKey = queryKeys.listAccess(
+    "may",
+    currentContext,
+    namespaces,
+    queries,
+    rights
+  );
   const { data } = useQuery({
-    // The asked kinds are part of the question: the nav asks about its own
-    // rows, the Gateway rows ask about theirs, and one key for both would
-    // hand the second asker the first one's answers.
-    queryKey: queryKeys.listAccess(
-      "may",
-      currentContext,
-      namespaces,
-      queries,
-      rights
-    ),
+    queryKey,
+    placeholderData: heldWhileAskedAgain(queryKey),
     queryFn: () => askListAccess(queries, namespaces),
     enabled: isConnected && Boolean(currentContext),
     staleTime: REVIEW_FRESH_MS,
@@ -173,14 +180,16 @@ function useReadableIn(queries: ListQuery[]): PerKind<Reach> {
   const namespaces = useNameableNamespaces();
   const rights = useRightsAsked();
 
+  const queryKey = queryKeys.listAccess(
+    "where",
+    currentContext,
+    namespaces,
+    queries,
+    rights
+  );
   const { data } = useQuery({
-    queryKey: queryKeys.listAccess(
-      "where",
-      currentContext,
-      namespaces,
-      queries,
-      rights
-    ),
+    queryKey,
+    placeholderData: heldWhileAskedAgain(queryKey),
     queryFn: async () => {
       const answers = await Promise.all(
         namespaces.map((namespace) =>

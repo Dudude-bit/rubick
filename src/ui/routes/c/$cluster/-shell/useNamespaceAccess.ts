@@ -38,12 +38,12 @@ export function useNamespaceAccess(names: string[]): NamespaceAccessMap {
     enabled: isConnected && Boolean(currentContext) && names.length > 0,
     staleTime: REVIEW_FRESH_MS,
     retry: false,
-    // A name added to the question keeps the answers about the others, on
-    // the same cluster and under the same rights.
+    // A name added to the question keeps the answers about the others on
+    // the same cluster, and so does asking again under rights that may have
+    // changed: a renewal asks again, and a namespace hidden as shut came
+    // back into the picker with each one until it was answered.
     placeholderData: (previous, query) =>
-      query?.queryKey[1] === currentContext && query.queryKey[3] === rights
-        ? previous
-        : undefined,
+      query?.queryKey[1] === currentContext ? previous : undefined,
   });
 
   const access: NamespaceAccessMap = { pods: new Map(), shut: new Set() };
