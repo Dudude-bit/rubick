@@ -2,6 +2,7 @@ import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import { covers } from "@/lib/certificates";
 import { hostTls } from "@/lib/ingress-tls";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
 import type { IngressInfo } from "@/generated/types";
 import type { IngressTlsAnswers } from "@/hooks/useIngressTls";
 
@@ -22,6 +23,8 @@ export interface VendorTlsAnswer {
   plain: string[];
   /** Why, in the controller's words, for the first of them. */
   plainWhy: string | null;
+  /** Why a host is unchecked: what its controller said, or how asking failed. `null` while the answer is out. */
+  uncheckedWhy: string | null;
 }
 
 const specCovers = (
@@ -31,14 +34,16 @@ const specCovers = (
 
 export function vendorTlsAnswer(
   ingress: IngressInfo,
-  vendorTls: Pick<IngressTlsAnswers, "of" | "unread">,
+  vendorTls: Pick<IngressTlsAnswers, "of" | "unread"> &
+    Partial<Pick<IngressTlsAnswers, "error">>,
   t: T
 ): VendorTlsAnswer | null {
-  const { unread } = vendorTls;
+  const { unread, error } = vendorTls;
   const hosts: string[] = [];
   const unchecked: string[] = [];
   const plain: string[] = [];
   let plainWhy: string | null = null;
+  let uncheckedWhy: string | null = null;
   // Several rules may name one host; it is still one host.
   const seen = new Set<string>();
   for (const rule of ingress.rules) {
@@ -47,8 +52,10 @@ export function vendorTlsAnswer(
     const said = vendorTls.of(ingress, rule.host);
     const spec = specCovers(ingress, rule.host);
     const verdict = hostTls(spec, said, unread);
-    if (verdict === null) unchecked.push(rule.host);
-    else if (verdict && !spec) hosts.push(rule.host);
+    if (verdict === null) {
+      unchecked.push(rule.host);
+      if (said?.terminated === null) uncheckedWhy ??= sayWords(said.by, t);
+    } else if (verdict && !spec) hosts.push(rule.host);
     else if (!verdict && spec && said) {
       plain.push(rule.host);
       plainWhy ??= sayWords(said.by, t);
@@ -60,7 +67,13 @@ export function vendorTlsAnswer(
   const by = holder
     ? sayWords(holder, t)
     : t("empty", "theLoadBalancerInFront");
-  return { hosts, by, unchecked, plain, plainWhy };
+  if (unchecked.length > 0 && error)
+    uncheckedWhy ??= t(
+      "empty",
+      isRefusal(error) ? "unknownRefused" : "unknownFault",
+      { message: errorToShow(error) }
+    );
+  return { hosts, by, unchecked, plain, plainWhy, uncheckedWhy };
 }
 
 /**

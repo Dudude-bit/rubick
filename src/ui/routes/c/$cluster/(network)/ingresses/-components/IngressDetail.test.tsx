@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { cleanup, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks")>()),
@@ -189,6 +190,42 @@ describe("an Ingress whose certificate the controller could not read", () => {
 
     expect(screen.queryByText(/no TLS/)).toBeNull();
     expect(screen.getByText(/· TLS not checked/)).toBeTruthy();
+  });
+
+  /**
+   * The TLS fact said "TLS not checked" after the cluster had refused the
+   * controller's read, as it does while the read is out. Fails if the page
+   * drops the cluster's words, or shows a reason while nothing has failed.
+   */
+  it("says why TLS was not checked once the controllers' read has failed", async () => {
+    answers.listEvents = [];
+    answers.resolveIngressClass = {
+      requested: "gce",
+      resolved: "gce",
+      controller: "example.com/gce",
+      viaDefault: false,
+      available: [],
+    };
+    vendor.answered = false;
+    vendor.error = new Error("ingresses.networking.k8s.io is forbidden");
+    await open("overview");
+    const fact = screen
+      .getAllByText("TLS not checked")
+      .find((element) => element.closest("button"))!;
+    await userEvent.hover(fact);
+    expect((await screen.findAllByRole("tooltip"))[0]).toHaveTextContent(
+      "ingresses.networking.k8s.io is forbidden"
+    );
+    cleanup();
+
+    vendor.error = null;
+    vendor.unread = "replaces";
+    await open("overview");
+    expect(
+      screen
+        .getAllByText("TLS not checked")
+        .filter((element) => element.closest("button"))
+    ).toEqual([]);
   });
 
   /**

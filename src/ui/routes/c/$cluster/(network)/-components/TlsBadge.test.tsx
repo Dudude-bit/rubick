@@ -75,6 +75,20 @@ describe("the Ingress list's TLS cell", () => {
   });
 
   /**
+   * The cell said "TLS not checked" and nothing of why, so a read the
+   * cluster refused for good looked like one still on its way.
+   */
+  it("says why TLS was not checked where the controller said why", async () => {
+    badge([], ["shop.example.com"], false, {
+      terminated: null,
+      by: { key: "verbatimLine", values: { said: "ingresses is forbidden" } },
+    });
+    expect(await tooltipOf("TLS not checked")).toContain(
+      "ingresses is forbidden"
+    );
+  });
+
+  /**
    * `spec.tls` naming the host is the end of the question. The unchecked
    * hosts only ever reach the tooltip, so a label-only assertion passed with
    * the covered host listed there as "TLS not checked".
@@ -102,6 +116,7 @@ describe("the Ingress list's TLS cell", () => {
             unchecked: [],
             plain: [],
             plainWhy: null,
+            uncheckedWhy: null,
           }}
         />
       </TooltipProvider>

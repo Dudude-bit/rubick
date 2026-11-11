@@ -16,7 +16,8 @@ import {
 import type { IngressTlsFact } from "../../../-object/ingress-tls-fact";
 import type { IngressInfo, TlsCertificate } from "@/generated/types";
 
-type TlsLine = Pick<IngressTlsFact, "text" | "tone" | "known">;
+type TlsLine = Pick<IngressTlsFact, "text" | "tone" | "known"> &
+  Partial<Pick<IngressTlsFact, "why">>;
 
 export function ingressStats(
   ingress: IngressInfo,
@@ -41,6 +42,7 @@ export function ingressStats(
       label: "TLS",
       value: tls.text,
       role: tls.known ? (tls.tone ?? undefined) : "neutral",
+      note: tls.why,
     },
     {
       label: t("columns", "loadBalancer"),

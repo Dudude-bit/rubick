@@ -54,12 +54,16 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
     const bare =
       unchecked.length > 0 ? "notChecked" : plain.length > 0 ? "plain" : "none";
     const words = t("empty", bare === "notChecked" ? "tlsNotChecked" : "noTls");
-    if (bare === "plain" && vendor?.plainWhy) {
+    const why =
+      bare === "plain"
+        ? vendor?.plainWhy
+        : bare === "notChecked" && vendor?.uncheckedWhy;
+    if (why) {
       return (
         <Tooltip>
-          <TooltipTrigger className={BARE_TONE.plain}>{words}</TooltipTrigger>
+          <TooltipTrigger className={BARE_TONE[bare]}>{words}</TooltipTrigger>
           <TooltipContent className="max-w-[42ch] text-xs">
-            {vendor.plainWhy}
+            {why}
           </TooltipContent>
         </Tooltip>
       );
@@ -89,6 +93,9 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
               {host} · {t("empty", "tlsNotChecked")}
             </div>
           ))}
+          {vendor?.uncheckedWhy && (
+            <div className="max-w-[42ch] text-xs">{vendor.uncheckedWhy}</div>
+          )}
         </TooltipContent>
       </Tooltip>
     );
@@ -117,6 +124,9 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
             {host}
           </div>
         ))}
+        {vendor?.uncheckedWhy && (
+          <div className="max-w-[42ch] text-xs">{vendor.uncheckedWhy}</div>
+        )}
       </TooltipContent>
     </Tooltip>
   );

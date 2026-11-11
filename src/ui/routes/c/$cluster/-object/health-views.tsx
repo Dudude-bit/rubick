@@ -199,18 +199,19 @@ export function ServiceNotReady({
 
 /** The fact painted as every surface paints it, "not checked" apart. */
 export function TlsFactText({ fact }: { fact: IngressTlsFact }) {
+  const tone = !fact.known
+    ? TLS_NOT_CHECKED_TONE
+    : fact.tone
+      ? TONE_CLASS[fact.tone]
+      : undefined;
+  if (!fact.why) return <span className={tone}>{fact.text}</span>;
   return (
-    <span
-      className={
-        !fact.known
-          ? TLS_NOT_CHECKED_TONE
-          : fact.tone
-            ? TONE_CLASS[fact.tone]
-            : undefined
-      }
-    >
-      {fact.text}
-    </span>
+    <Tooltip>
+      <TooltipTrigger className={tone}>{fact.text}</TooltipTrigger>
+      <TooltipContent className="max-w-[44ch] text-xs">
+        {fact.why}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

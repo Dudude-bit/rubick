@@ -14,6 +14,8 @@ export interface IngressTlsFact {
   known: boolean;
   /** The line is only a count of `hosts`, which a surface may spell out. */
   counted: boolean;
+  /** Why it could not tell, once that is known; `null` while the answer is out. */
+  why: string | null;
 }
 
 /**
@@ -88,7 +90,7 @@ export function useIngressTlsFact(ingress: IngressInfo | undefined) {
   // Once the certificate has been read, how long it has left is a more useful
   // answer than how many hosts it covers — the host count is a shape, and the
   // expiry is a date somebody has to act on.
-  const said: Omit<IngressTlsFact, "known" | "counted"> =
+  const said: Pick<IngressTlsFact, "text" | "tone"> =
     tls === "no"
       ? {
           text: vendor?.plainWhy ?? t("empty", "noneTrafficUnencrypted"),
@@ -109,6 +111,7 @@ export function useIngressTlsFact(ingress: IngressInfo | undefined) {
   const fact: IngressTlsFact = {
     ...said,
     known: tls !== "unknown",
+    why: tls === "unknown" ? (vendor?.uncheckedWhy ?? null) : null,
     counted: tls === "yes" && !missing && !soonest && !ingress?.hasCatchAllTls,
   };
 
