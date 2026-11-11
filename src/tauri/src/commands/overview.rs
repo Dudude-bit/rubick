@@ -148,18 +148,33 @@ impl ProblemDetail {
         }
     }
 
-    /// Why `pod` is in trouble, where its containers say.
-    fn cause(pod: &Pod) -> Option<Self> {
-        crate::resources::pod_cause(pod).map(|cause| Self::Cause {
+    /// Why `pod` is in trouble at `now`, where its containers say.
+    fn cause(pod: &Pod, now: DateTime<Utc>) -> Option<Self> {
+        cause_at(pod, now).map(|cause| Self::Cause {
             cause,
             by: crate::resources::restarts_by(pod),
         })
     }
 
-    /// Why `pod` restarts, where its containers say; else how often.
-    fn restarts_why(pod: &Pod, n: i32) -> Self {
-        Self::cause(pod).unwrap_or_else(|| Self::restarts(pod, n))
+    /// Why `pod` restarts, where its containers' exits say; else how often.
+    fn restarts_why(pod: &Pod, n: i32, now: DateTime<Utc>) -> Self {
+        Self::cause(pod, now)
+            .filter(|detail| {
+                matches!(
+                    detail,
+                    Self::Cause {
+                        cause: crate::resources::PodCause::Exits { .. },
+                        ..
+                    }
+                )
+            })
+            .unwrap_or_else(|| Self::restarts(pod, n))
     }
+}
+
+/// A pod's cause as it stands at `now`, an exit that is no longer news left out.
+fn cause_at(pod: &Pod, now: DateTime<Utc>) -> Option<crate::resources::PodCause> {
+    crate::resources::pod_cause(pod).and_then(|cause| cause.at(now))
 }
 
 /// The workload's detail: its pods' shared cause where they have one, else the controller's sentence.
@@ -820,7 +835,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 CRASH_LOOPING
             }
             .to_string(),
-            detail: Some(ProblemDetail::restarts_why(pod, restarts)),
+            detail: Some(ProblemDetail::restarts_why(pod, restarts, now)),
             since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
             restarts: Some(restarts),
             folded_pods: None,
@@ -840,9 +855,9 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             namespace,
             reason,
             detail: if looping {
-                Some(ProblemDetail::restarts_why(pod, restarts))
+                Some(ProblemDetail::restarts_why(pod, restarts, now))
             } else {
-                ProblemDetail::cause(pod).or_else(|| ProblemDetail::said(message))
+                ProblemDetail::cause(pod, now).or_else(|| ProblemDetail::said(message))
             },
             since: if looping {
                 last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at)
@@ -870,7 +885,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 .clone()
                 .unwrap_or_else(|| "Failed".to_string()),
             detail: ProblemDetail::said(status.message.clone())
-                .or_else(|| ProblemDetail::cause(pod)),
+                .or_else(|| ProblemDetail::cause(pod, now)),
             since: crate::resources::failed_at(pod).map(|t| t.to_rfc3339()),
             restarts: (restarts > 0).then_some(restarts),
             folded_pods: None,
@@ -896,7 +911,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             name,
             namespace,
             reason: "Pending".to_string(),
-            detail: ProblemDetail::cause(pod).or_else(|| {
+            detail: ProblemDetail::cause(pod, now).or_else(|| {
                 ProblemDetail::said(
                     scheduled
                         .and_then(|c| c.message.clone())
@@ -911,35 +926,14 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
         });
     }
 
-    // Unreported exits still report, the way an undated Pending pod does:
-    // not knowing how a run ended is not evidence that it is over.
-    let restarting = exit_unreported(pod) || restarting_until(pod).is_some_and(|until| now < until);
-
-    if restarts >= RESTART_ATTENTION_THRESHOLD && phase == "Running" && restarting {
-        return Some(ClusterProblem {
-            severity: ProblemSeverity::Warning,
-            kind: "Pod".to_string(),
-            name,
-            namespace,
-            reason: "Restarting".to_string(),
-            detail: Some(ProblemDetail::restarts_why(pod, restarts)),
-            // Dated by the restart, not by the pod. `since: created` put a
-            // twelve-day-old date on something that happened minutes ago.
-            since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
-            restarts: Some(restarts),
-            folded_pods: None,
-            replaced: false,
-            workload: None,
-        });
-    }
-
     // Past a rollout's normal settling, a pod that runs and is still left
-    // out of its Services is the reason a Deployment reads short.
+    // out of its Services is the reason a Deployment reads short. Ahead of
+    // its restarts: once those stop being news, this is what holds it.
     if let Some(
         cause @ crate::resources::PodCause::NotReady {
             since, counts_from, ..
         },
-    ) = crate::resources::pod_cause(pod)
+    ) = cause_at(pod, now)
     {
         if counts_from.is_none_or(|at| now >= at) {
             return Some(ClusterProblem {
@@ -956,6 +950,28 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 workload: None,
             });
         }
+    }
+
+    // Unreported exits still report, the way an undated Pending pod does:
+    // not knowing how a run ended is not evidence that it is over.
+    let restarting = exit_unreported(pod) || restarting_until(pod).is_some_and(|until| now < until);
+
+    if restarts >= RESTART_ATTENTION_THRESHOLD && phase == "Running" && restarting {
+        return Some(ClusterProblem {
+            severity: ProblemSeverity::Warning,
+            kind: "Pod".to_string(),
+            name,
+            namespace,
+            reason: "Restarting".to_string(),
+            detail: Some(ProblemDetail::restarts_why(pod, restarts, now)),
+            // Dated by the restart, not by the pod. `since: created` put a
+            // twelve-day-old date on something that happened minutes ago.
+            since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
+            restarts: Some(restarts),
+            folded_pods: None,
+            replaced: false,
+            workload: None,
+        });
     }
 
     None
@@ -982,7 +998,7 @@ fn trouble_cause(
     if pending && still_starting(pod, now) && !warned_about(pod, warned) {
         return None;
     }
-    crate::resources::pod_cause(pod).filter(|cause| {
+    cause_at(pod, now).filter(|cause| {
         !matches!(cause, crate::resources::PodCause::NotReady { counts_from: Some(at), .. } if now < *at)
     })
 }
@@ -4398,6 +4414,46 @@ mod tests {
             })
         ));
         assert!(pod_problem(&not_ready_for(30, now), now).is_none());
+    }
+
+    /// A pod not Ready now that crashed twice at boot long ago got no row:
+    /// its cause was the old exit, which is neither news nor the probe.
+    /// Fails if the row is missing or quotes the exit.
+    #[test]
+    fn a_pod_not_ready_long_after_its_exits_needs_attention_for_its_probe() {
+        let now = Utc::now();
+        let mut pod = not_ready_for(300, now);
+        let cs = &mut pod
+            .status
+            .as_mut()
+            .unwrap()
+            .container_statuses
+            .as_mut()
+            .unwrap()[0];
+        cs.restart_count = 5;
+        let week = now - chrono::Duration::days(7);
+        cs.last_state = serde_json::from_value(serde_json::json!({"terminated": {
+            "exitCode": 1,
+            "startedAt": (week - chrono::Duration::seconds(3)).to_rfc3339(),
+            "finishedAt": week.to_rfc3339()
+        }}))
+        .unwrap();
+        let row = pod_problem(&pod, now).expect("not Ready past the grace");
+        assert_eq!(row.reason, NOT_READY);
+        assert_eq!(row.restarts, Some(5));
+        assert!(matches!(
+            row.detail,
+            Some(ProblemDetail::Cause {
+                cause: crate::resources::PodCause::NotReady { .. },
+                ..
+            })
+        ));
+        let Some(ProblemDetail::PodsCause { cause, .. }) =
+            workload_detail([&pod], None, &HashSet::new(), now)
+        else {
+            panic!("the workload tells its pod's cause");
+        };
+        assert!(matches!(cause, crate::resources::PodCause::NotReady { .. }));
     }
 
     /// A rollout's new pod fails its readiness probe for its first seconds on

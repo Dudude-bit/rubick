@@ -127,6 +127,7 @@ describe("a workload's row that leads with its pods' cause", () => {
               limit: null,
             },
             until: null,
+            later: null,
           },
           pods: 2,
           of: 2,

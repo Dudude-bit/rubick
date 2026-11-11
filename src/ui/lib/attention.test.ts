@@ -791,6 +791,7 @@ describe("what Needs attention lists beyond pods", () => {
       restarts: 4,
       run: null,
       until: null,
+      later: null,
     };
     const row = (
       kind: string,

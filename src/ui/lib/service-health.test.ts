@@ -732,6 +732,7 @@ describe("a Service none of whose pods is ready", () => {
         limit: null,
       },
       until: null,
+      later: null,
     },
     pods: 2,
     of: 2,

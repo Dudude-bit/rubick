@@ -147,15 +147,12 @@ export function settingUp(
 /** The moments a pod's cause starts or stops counting on the clock alone. */
 export function causeDeadlines(pod: PodBadgeInput): number[] {
   const cause = pod.status.cause;
-  const turns =
-    cause?.says === "exits"
-      ? cause.until
-      : cause?.says === "notReady"
-        ? cause.countsFrom
-        : null;
-  return [...podDeadlines(pod), Date.parse(turns ?? "")].filter(
-    Number.isFinite
-  );
+  const later = cause?.says === "exits" ? cause.later : cause;
+  return [
+    ...podDeadlines(pod),
+    Date.parse((cause?.says === "exits" && cause.until) || ""),
+    Date.parse((later?.says === "notReady" && later.countsFrom) || ""),
+  ].filter(Number.isFinite);
 }
 
 /**

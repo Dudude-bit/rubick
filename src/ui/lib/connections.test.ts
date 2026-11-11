@@ -18,6 +18,7 @@ import {
   describeStop,
   describeUsages,
   hopTone,
+  stopCause,
   stopUnder,
   trafficChains,
   unreadWhy,
@@ -36,6 +37,7 @@ import type {
   ListenerInfo,
   ObjectFacts,
   ObjectRef,
+  PodCause,
   ResourceConnections,
   Rollout,
   TlsCertificate,
@@ -1653,6 +1655,41 @@ describe("the traffic chain", () => {
       expect(stops[0]).toMatchObject({ mood: "fault" });
       expect(stops[0].at === "stop" && stops[0].title).not.toContain("Traefik");
     });
+  });
+
+  /**
+   * A Service none of whose pods is ready lost its cause when their old
+   * exits expired, though each fails its probe now. Fails if the stop keeps
+   * telling the exit, or tells nothing.
+   */
+  it("tells what is wrong after an exit that has passed as a stop's cause", () => {
+    const later: PodCause = {
+      says: "notReady",
+      containers: ["web"],
+      since: null,
+      countsFrom: null,
+      probe: null,
+    };
+    const stop: ChainStop = {
+      reason: "noneReady",
+      service: service("web", "app=web"),
+      selector: "app=web",
+      pods: 2,
+      why: "failingReadiness",
+      cause: {
+        cause: {
+          says: "exits",
+          container: "web",
+          restarts: 2,
+          run: null,
+          until: new Date(Date.now() - 60_000).toISOString(),
+          later,
+        },
+        pods: 2,
+        of: 2,
+      },
+    };
+    expect(stopCause(stop)).toEqual({ cause: later, pods: 2, of: 2 });
   });
 
   it("says the three stops differently", () => {

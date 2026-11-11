@@ -41,6 +41,7 @@ const exits = (
   restarts: 7,
   run: ended,
   until,
+  later: null,
 });
 
 describe("exitMeaning", () => {
@@ -147,6 +148,27 @@ describe("currentCause", () => {
     const cause = exits(run(), "2026-10-12T11:00:00Z");
     expect(currentCause(cause, Date.parse("2026-10-12T11:00:01Z"))).toBeNull();
     expect(currentCause(cause, Date.parse("2026-10-12T10:59:59Z"))).toBe(cause);
+  });
+
+  /**
+   * A pod not Ready today that crashed at boot last week had no cause line:
+   * the old exit was dropped and nothing took its place. Fails if what is
+   * wrong after the exit is not what the pod leads with once it has passed.
+   */
+  it("gives way to what is wrong after an exit that has passed", () => {
+    const later: PodCause = {
+      says: "notReady",
+      containers: ["api"],
+      since: "2026-10-12T10:01:00Z",
+      countsFrom: "2026-10-12T10:03:00Z",
+      probe: null,
+    };
+    const cause: PodCause = {
+      ...exits(run(), "2026-10-12T10:05:00Z"),
+      later,
+    } as PodCause;
+    expect(currentCause(cause, Date.parse("2026-10-12T10:04:59Z"))).toBe(cause);
+    expect(currentCause(cause, Date.parse("2026-10-12T10:05:00Z"))).toBe(later);
   });
 });
 

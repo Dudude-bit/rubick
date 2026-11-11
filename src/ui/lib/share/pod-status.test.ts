@@ -2,6 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { PodCause, PodStart } from "@/generated/types";
 import {
+  causeDeadlines,
+  troubleCause,
   withKubeletWarned,
   workloadCause,
   type PodBadgeInput,
@@ -53,6 +55,47 @@ function creating(start: PodStart): PodBadgeInput {
     initContainers: [],
   } as PodBadgeInput;
 }
+
+/** Not Ready now, behind two short exits its container has been up since. */
+function notReadyAfterExits(until: string): PodBadgeInput {
+  const pod = notReady(300);
+  return {
+    ...pod,
+    status: {
+      ...pod.status,
+      cause: {
+        says: "exits",
+        container: "web",
+        restarts: 2,
+        run: null,
+        until,
+        later: pod.status.cause!,
+      },
+    },
+  };
+}
+
+describe("troubleCause", () => {
+  /**
+   * The pod's page, peek and hover named no failing probe once the old exit
+   * expired. Fails if the pod leads with the exit past its until, or with
+   * nothing.
+   */
+  it("leads with the probe once the exits before it have passed", () => {
+    expect(troubleCause(notReadyAfterExits(ago(-60)), NOW)?.says).toBe("exits");
+    expect(troubleCause(notReadyAfterExits(ago(60)), NOW)?.says).toBe(
+      "notReady"
+    );
+  });
+
+  /** Fails if a row is not redrawn when the cause after its exit starts to count. */
+  it("turns on the clock where the cause after an exit starts counting", () => {
+    const pod = notReadyAfterExits(ago(60));
+    expect(causeDeadlines(pod)).toEqual(
+      expect.arrayContaining([NOW - 60_000, NOW - 180_000])
+    );
+  });
+});
 
 describe("workloadCause", () => {
   /**

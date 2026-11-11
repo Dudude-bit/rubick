@@ -34,14 +34,17 @@ export interface CauseWords {
   tone: CauseTone;
 }
 
-/** A cause still true at `now`: an exit a container has been up since stops counting at its `until`. */
+/**
+ * A cause still true at `now`: an exit a container has been up since gives
+ * way at its `until` to what is wrong after it, as `PodCause::at` reads it.
+ */
 export function currentCause(
   cause: PodCause | null | undefined,
   now: number = Date.now()
 ): PodCause | null {
   if (!cause) return null;
   if (cause.says === "exits" && cause.until && Date.parse(cause.until) <= now)
-    return null;
+    return currentCause(cause.later, now);
   return cause;
 }
 
