@@ -198,6 +198,18 @@ pub struct NotRead {
     pub groups: Vec<UnreadGroup>,
     /// How many kinds the index watches, so a reader can say how far it got.
     pub watched: usize,
+    /// The kinds read by their list alone, where there are any: what the
+    /// index holds of them is as of their last turn, not live.
+    #[serde(default)]
+    pub listed: Option<ListedKinds>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListedKinds {
+    pub kinds: usize,
+    /// When the oldest of their lists answered.
+    pub since: String,
 }
 
 struct Watched {
@@ -667,6 +679,7 @@ impl ClusterIndex {
             kinds,
             groups: self.unread_groups.lock().clone(),
             watched: watched.len(),
+            listed: listed_in(&slots),
         }
     }
 
@@ -849,6 +862,23 @@ fn cascade_in(
         reading,
     };
     (graph.cascade(uid, &objects), Some(holds))
+}
+
+/// The kinds with a slot read by its list alone, and the oldest such list.
+fn listed_in(slots: &BTreeMap<SlotKey, SlotState>) -> Option<ListedKinds> {
+    let listed: Vec<(&KindKey, chrono::DateTime<chrono::Utc>)> = slots
+        .iter()
+        .filter_map(|(slot, state)| match state {
+            SlotState::Listed { at } => Some((&slot.kind, *at)),
+            _ => None,
+        })
+        .collect();
+    let since = listed.iter().map(|(_, at)| *at).min()?;
+    let kinds: BTreeSet<&KindKey> = listed.iter().map(|(kind, _)| *kind).collect();
+    Some(ListedKinds {
+        kinds: kinds.len(),
+        since: since.to_rfc3339(),
+    })
 }
 
 /// One kind's reading from its slots: `None` where it is simply live.
@@ -1049,6 +1079,56 @@ mod tests {
         assert_eq!(listed(chrono::Utc::now()), []);
     }
 
+    /// A kind past the watches is read by a list up to three turns old and
+    /// counted among the kinds read, and nothing told the reader that its
+    /// answer is not live. Fails if an answer does not say how many kinds are
+    /// read that way and since when, or says it of a kind that is watched or
+    /// already named as stale.
+    #[tokio::test]
+    async fn an_answer_says_how_many_kinds_it_read_by_their_list_and_since_when() {
+        use crate::client::served::test_server::answering;
+        let (client, _) = answering(|_, _| (404, "{}".to_string())).await;
+        let secrets = KindKey {
+            group: String::new(),
+            plural: "secrets".to_string(),
+        };
+        let index = ClusterIndex::holding(client, &[("Pod", kind()), ("Secret", secrets.clone())]);
+        let of = |kind: KindKey, namespace: Option<&str>| SlotKey {
+            kind,
+            namespace: namespace.map(str::to_string),
+        };
+        let set = |slot: SlotKey, state: SlotState| index.slots.lock().insert(slot, state);
+        let now = chrono::Utc::now();
+        let (older, newer) = (now - Duration::from_secs(20), now - Duration::from_secs(5));
+
+        index.go_live(&kind(), &[]);
+        index.go_live(&secrets, &[]);
+        assert_eq!(index.not_read().listed, None);
+
+        // Two namespaces of one refused kind are one kind.
+        set(slot(None), refused());
+        set(slot(Some("shop")), SlotState::Listed { at: newer });
+        set(slot(Some("web")), SlotState::Listed { at: now });
+        set(of(secrets.clone(), None), SlotState::Listed { at: older });
+        assert_eq!(
+            index.not_read().listed,
+            Some(ListedKinds {
+                kinds: 2,
+                since: older.to_rfc3339()
+            })
+        );
+
+        let overdue = now - LISTED_FOR - Duration::from_secs(1);
+        set(of(secrets, None), SlotState::Listed { at: overdue });
+        assert_eq!(
+            index.not_read().listed,
+            Some(ListedKinds {
+                kinds: 1,
+                since: newer.to_rfc3339()
+            })
+        );
+    }
+
     /// launchd hands a Finder-launched app 256 open files; where raising
     /// that fails, 300 watches would take every one. Fails if the watches
     /// may take more than half of what the process is allowed.
@@ -1155,6 +1235,7 @@ mod tests {
             }],
             groups: Vec::new(),
             watched: 1,
+            listed: None,
         };
         let (_, holds) = cascade_in(&widgets(), "crd", &not_read, |_| None, None);
         assert_eq!(objects(holds).2, Some(refused));

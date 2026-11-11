@@ -7848,6 +7848,11 @@ export const en = {
       one: "Read {n} of {total} kinds that can be watched",
       other: "Read {n} of {total} kinds that can be watched",
     },
+    kindsListed: {
+      one: "{n} of them is listed in turns, not watched: as of {at}",
+      other:
+        "{n} of them are listed in turns, not watched: the oldest list is as of {at}",
+    },
     kindsServedLeftOut: {
       one: "{n} kind served; Events and kinds that cannot be watched are left out",
       other:

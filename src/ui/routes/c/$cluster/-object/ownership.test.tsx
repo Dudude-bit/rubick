@@ -10,6 +10,7 @@ import type {
 } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { SurfaceVisibility } from "@/lib/surface-visibility";
+import { formatWhen } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter, testQueryClient } from "@/test/render";
 
@@ -668,6 +669,43 @@ describe("what deleting an object takes with it", () => {
     ).toBeInTheDocument();
     expect(chipOf("ComponentStatus")).toHaveTextContent("cannot be watched");
     expect(chipOf("Binding")).toHaveTextContent("cannot be listed");
+  });
+
+  /**
+   * A kind past the app's watches is read by a list up to three turns old,
+   * and the answer drew it as live. Fails if Delete and the Owns tab do not
+   * say how many kinds are read that way and as of when, or say it where
+   * every kind is watched.
+   */
+  it("says how many kinds are listed in turns and as of when, on both readers", async () => {
+    const since = "2026-11-11T14:02:10Z";
+    const at = formatWhen(since, "clock");
+    const listed: NotRead = {
+      ...NOTHING_UNREAD,
+      watched: 340,
+      listed: { kinds: 28, since },
+    };
+    const words = `28 of them are listed in turns, not watched: the oldest list is as of ${at}`;
+
+    answers.cascade = () =>
+      Promise.resolve({ takes: [], notRead: listed, holds: null });
+    const deleting = await renderWithRouter(
+      <CascadePreview kind="Deployment" name="api" namespace="shop" />
+    );
+    expect(await screen.findByTestId("listed-kinds")).toHaveTextContent(words);
+    deleting.unmount();
+
+    answers.dependents = () =>
+      Promise.resolve({ dependents: [], notRead: listed });
+    const owning = await renderWithRouter(<OwnsPanel uid="uid-1" />);
+    expect(await screen.findByTestId("listed-kinds")).toHaveTextContent(words);
+    owning.unmount();
+
+    answers.dependents = () =>
+      Promise.resolve({ dependents: [], notRead: NOTHING_UNREAD });
+    await renderWithRouter(<OwnsPanel uid="uid-2" />);
+    expect(await screen.findByTestId("read-totals")).toBeInTheDocument();
+    expect(screen.queryByTestId("listed-kinds")).toBeNull();
   });
 
   /** Once listed, what failed stays named: reading ending is not reading all. */

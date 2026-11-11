@@ -132,7 +132,8 @@ function totalsOf(notRead: NotRead) {
 
 /**
  * Once settled, how many of the watched kinds were read where they count,
- * and the served kinds left out, each named with why on opening.
+ * how many of those by a list that is as of its last turn and not live, and
+ * the served kinds left out, each named with why on opening.
  */
 export function ReadTotals({
   notRead,
@@ -154,6 +155,14 @@ export function ReadTotals({
           })}
         </span>
       </p>
+      {notRead.listed && (
+        <p className="pl-5 tabular-nums" data-testid="listed-kinds">
+          {t("count", "kindsListed", {
+            n: notRead.listed.kinds,
+            at: formatWhen(notRead.listed.since, "clock"),
+          })}
+        </p>
+      )}
       {served > total && (
         <details className="group pl-5" data-testid="left-out">
           <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-md py-0.5 tabular-nums text-fg-fnt hover:text-fg-mut">

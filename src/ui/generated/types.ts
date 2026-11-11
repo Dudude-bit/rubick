@@ -1083,6 +1083,12 @@ export interface NotRead {
   kinds: KindReading[];
   groups: UnreadGroup[];
   watched: number;
+  listed?: ListedKinds;
+}
+
+export interface ListedKinds {
+  kinds: number;
+  since: string;
 }
 
 export interface UnreadGroup {
