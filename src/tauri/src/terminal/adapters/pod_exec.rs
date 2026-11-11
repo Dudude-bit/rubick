@@ -443,15 +443,14 @@ impl TerminalAdapter for PodExecAdapter {
             {
                 Ok(Ok(0)) => {
                     // EOF: the shell exited, or the connection was cut under it.
-                    let end = match self.ended {
-                        Some(end) => end,
-                        None => {
-                            let status = self
-                                .attached
-                                .as_mut()
-                                .and_then(AttachedProcess::take_status);
-                            StreamEnd::of(status).await
-                        }
+                    let end = if let Some(end) = self.ended {
+                        end
+                    } else {
+                        let status = self
+                            .attached
+                            .as_mut()
+                            .and_then(AttachedProcess::take_status);
+                        StreamEnd::of(status).await
                     };
                     self.ended = Some(end);
                     end.read()
@@ -590,19 +589,16 @@ mod tests {
         assert!(!shell_command(None, None)[2].contains("stty"));
     }
 
-    fn exited() -> Option<Status> {
-        Some(Status {
-            status: Some("Success".into()),
-            ..Status::default()
-        })
-    }
-
     /// A laptop that slept left a pane saying "Ended" over a shell still in
     /// the container: a stream that closed was taken for a shell that exited.
     /// Only the server's status frame says the process is gone.
     #[tokio::test]
     async fn a_stream_that_closes_without_a_status_was_cut_and_is_not_an_exit() {
-        let said = StreamEnd::of(Some(std::future::ready(exited()))).await;
+        let exited = Status {
+            status: Some("Success".into()),
+            ..Status::default()
+        };
+        let said = StreamEnd::of(Some(std::future::ready(Some(exited)))).await;
         let cut = StreamEnd::of(Some(std::future::ready(None))).await;
         let taken = StreamEnd::of(None::<std::future::Ready<Option<Status>>>).await;
 
