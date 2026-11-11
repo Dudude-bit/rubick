@@ -2,11 +2,13 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   acmeServerLabel,
+  attemptFailed,
   certificateRows,
   issuerRows,
   worstCertificateTone,
 } from "./model";
 import type { CustomResourceInfo } from "@/generated/types";
+import { conditionRole } from "@/lib/condition-health";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -574,6 +576,36 @@ describe("a renewal cert-manager has marked failed", () => {
     expect(row.state.tone).toBe("ok");
     expect(row.steps).toEqual([]);
     expect(row.failure).toBeNull();
+  });
+});
+
+describe("a failed attempt, on the row and in the conditions block", () => {
+  /**
+   * The Certificates row and the generic conditions block read one Issuing
+   * condition with two rules. Fails if they part on which is a failed
+   * attempt: red in the block beside a healthy row, or the other way round.
+   */
+  it("is the same Issuing on both", () => {
+    const cases: Array<[string, string | null]> = [
+      ["True", "Renewing"],
+      ["False", "Issued"],
+      ["False", "Failed"],
+      ["False", "Denied"],
+      ["False", null],
+      ["Unknown", null],
+    ];
+    for (const [status, reason] of cases) {
+      const painted = conditionRole({
+        type: "Issuing",
+        status,
+        reason,
+        message: null,
+        lastTransitionTime: null,
+      });
+      expect(attemptFailed({ status, reason }), `${status}/${reason}`).toBe(
+        painted === "err"
+      );
+    }
   });
 });
 

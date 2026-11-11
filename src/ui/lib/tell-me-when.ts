@@ -559,7 +559,12 @@ function judgeCertificate(cert: CustomResourceInfo, was: Baseline): Judgement {
   if (moved && ready?.status === "True") {
     return { verdict: { says: "renewed", detail: notAfter }, baseline: was };
   }
-  if (issuing?.status === "False" && typeof issuing.message === "string") {
+  if (
+    issuing?.status === "False" &&
+    // Server-side apply leaves it False once issued, with these words.
+    issuing.reason !== "Issued" &&
+    typeof issuing.message === "string"
+  ) {
     return {
       verdict: { says: "issuanceFailed", detail: issuing.message },
       baseline: was,

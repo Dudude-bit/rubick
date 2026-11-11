@@ -5,6 +5,7 @@ import {
   conditionRole,
   failingCondition,
 } from "./condition-health";
+import { autoscalerVerdict, type AutoscalerFacts } from "./governance";
 import type { ConditionInfo } from "@/generated/types";
 
 function condition(
@@ -101,6 +102,110 @@ describe("a Gateway listener's overlapping TLS config", () => {
     expect(cautioningCondition(conditions)).toBe(overlap);
     expect(conditionRole(condition("OverlappingTLSConfig", "False"))).toBe(
       "ok"
+    );
+  });
+});
+
+describe("a condition its reason settles", () => {
+  const said = (type: string, status: string, reason: string | null = null) =>
+    conditionRole(condition(type, status, { reason }));
+
+  /**
+   * cert-manager writes Issuing=False with `Issued` on a healthy certificate
+   * under its ServerSideApply gate, and True for the whole of a renewal: the
+   * conditions block painted the first red and the second green. Fails if
+   * Issuing is read by its status word alone again.
+   */
+  it("reads cert-manager's Issuing as under way, issued or failed", () => {
+    expect(said("Issuing", "True", "Renewing")).toBe("pending");
+    expect(said("Issuing", "True")).toBe("pending");
+    expect(said("Issuing", "False", "Issued")).toBe("ok");
+    expect(said("Issuing", "False", "Failed")).toBe("err");
+    expect(said("Issuing", "False")).toBe("err");
+    const issued = condition("Issuing", "False", { reason: "Issued" });
+    expect(failingCondition([condition("Ready", "True"), issued])).toBeNull();
+  });
+
+  /**
+   * A Job's finished pod says Ready=False and ContainersReady=False with the
+   * reason `PodCompleted`: two red rows and a warning on the Conditions tab
+   * of a pod that did what it was for. Fails if either reads as a failure,
+   * or if a pod not ready for any other reason stops reading as one.
+   */
+  it("does not call a pod that ran to completion a failure", () => {
+    expect(said("Ready", "False", "PodCompleted")).toBe("neutral");
+    expect(said("ContainersReady", "False", "PodCompleted")).toBe("neutral");
+    expect(said("Ready", "False", "PodFailed")).toBe("err");
+    expect(said("Ready", "False", "ContainersNotReady")).toBe("err");
+    expect(
+      failingCondition([
+        condition("Initialized", "True", { reason: "PodCompleted" }),
+        condition("Ready", "False", { reason: "PodCompleted" }),
+        condition("ContainersReady", "False", { reason: "PodCompleted" }),
+        condition("PodScheduled", "True"),
+      ])
+    ).toBeNull();
+  });
+
+  /**
+   * An autoscaler inside its range says ScalingLimited=False, which read as
+   * a failure on every healthy one, and at its ceiling True, which read as
+   * satisfied. Fails if a condition's row and the workload page's finding
+   * about the same condition differ in tone.
+   */
+  it("gives an autoscaler's condition the tone its workload's page gives it", () => {
+    const cases: Array<[string, string, string]> = [
+      ["AbleToScale", "True", "ReadyForNewScale"],
+      ["AbleToScale", "False", "FailedGetScale"],
+      ["ScalingActive", "True", "ValidMetricFound"],
+      ["ScalingActive", "False", "ScalingDisabled"],
+      ["ScalingActive", "False", "FailedGetResourceMetric"],
+      ["ScalingLimited", "False", "DesiredWithinRange"],
+      ["ScalingLimited", "True", "TooFewReplicas"],
+      ["ScalingLimited", "True", "TooManyReplicas"],
+    ];
+    const tones = cases.map(([type, status, reason]) => {
+      const one = condition(type, status, { reason });
+      const facts = { conditions: [one] } as unknown as AutoscalerFacts;
+      expect(conditionRole(one), `${type}=${status}/${reason}`).toBe(
+        autoscalerVerdict(facts)?.tone ?? "ok"
+      );
+      return conditionRole(one);
+    });
+    expect(tones).toEqual([
+      "ok",
+      "err",
+      "ok",
+      "neutral",
+      "warn",
+      "ok",
+      "neutral",
+      "warn",
+    ]);
+  });
+
+  /**
+   * `SyncFailed` is the disruption controller failing to work a budget out,
+   * with no disruption allowed until it can; it read as a budget merely
+   * spent. Fails if it is not an error, or if a spent budget becomes one.
+   */
+  it("calls a budget its controller could not compute a failure", () => {
+    expect(said("DisruptionAllowed", "False", "SyncFailed")).toBe("err");
+    expect(said("DisruptionAllowed", "False", "InsufficientPods")).toBe(
+      "neutral"
+    );
+  });
+
+  /**
+   * A paused Deployment says Progressing=Unknown, which read as a controller
+   * that stopped reporting. Fails if a pause somebody asked for warns, or if
+   * any other Unknown stops warning.
+   */
+  it("does not warn about a rollout somebody paused", () => {
+    expect(said("Progressing", "Unknown", "DeploymentPaused")).toBe("neutral");
+    expect(said("Progressing", "Unknown")).toBe("warn");
+    expect(said("Progressing", "False", "ProgressDeadlineExceeded")).toBe(
+      "err"
     );
   });
 });
