@@ -106,7 +106,9 @@ pub(super) async fn page(
             Err(failed) => return Err(failed),
         }
     }
-    if !answered {
+    // Only the first page fails whole: a later one has rows before it, and
+    // its refusals are theirs to stand beside.
+    if !answered && cursor.is_none() {
         if let Some(failed) = first_failure {
             return Err(failed);
         }
@@ -330,6 +332,28 @@ mod tests {
         let scope = Some(vec!["a".to_string(), "b".to_string()]);
         let failed = page(&client, &configmaps(), scope, None).await.unwrap_err();
         assert!(failed.is_refusal());
+    }
+
+    /// "Show more" would otherwise replace the rows already read with a
+    /// whole-list refusal: a page filled exactly at a namespace's end hands
+    /// out a cursor, and every namespace after it may be refused.
+    #[tokio::test]
+    async fn a_later_page_where_nothing_answered_names_the_namespaces_and_does_not_fail() {
+        let (client, _) = answering(|path, _| match path {
+            "/api/v1/namespaces/b/configmaps" => (200, printed(&["one"], None)),
+            _ => failure(403, "Forbidden"),
+        })
+        .await;
+        let scope = Some(vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        let cursor = r#"{"namespace":2,"token":null}"#;
+        let table = page(&client, &configmaps(), scope, Some(cursor))
+            .await
+            .expect("a page, not a refusal");
+        assert!(table.rows.is_empty());
+        assert_eq!(table.unread.len(), 1);
+        assert_eq!(table.unread[0].namespace, "c");
+        assert_eq!(table.unread[0].code, "PERMISSION_DENIED");
+        assert_eq!(table.cursor, None);
     }
 
     /// A page that stops mid-namespace hands back where it stopped, and the
