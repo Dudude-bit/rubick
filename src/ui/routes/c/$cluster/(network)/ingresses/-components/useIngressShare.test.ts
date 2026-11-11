@@ -51,6 +51,7 @@ describe("what the Ingress report leads with", () => {
     controller: "k8s.io/ingress-nginx",
     viaDefault: false,
     available: [],
+    claim: "class" as const,
   };
 
   it("names the class, the host count and TLS, and warns while a served class's address is pending", () => {
@@ -77,6 +78,7 @@ describe("what the Ingress report leads with", () => {
         controller: null,
         viaDefault: false,
         available: [],
+        claim: "none",
       },
       tls,
       t
@@ -97,6 +99,7 @@ describe("what the Ingress report leads with", () => {
         controller: null,
         viaDefault: false,
         available: [],
+        claim: "none",
       },
       tls,
       t

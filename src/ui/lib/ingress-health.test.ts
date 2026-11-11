@@ -13,6 +13,10 @@ import type {
 import type { DoorRead } from "./policy-door";
 import type { ServiceHealthInput } from "./service-health";
 import {
+  claimedBinding,
+  ingressAddressOf,
+  ingressClaimOf,
+  ingressClassWords,
   ingressHealthOf,
   ingressHealthWords,
   type IngressInputs,
@@ -686,6 +690,120 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       certificates: undefined,
     });
     expect(said).toMatchObject({ code: "serving", role: "ok" });
+  });
+});
+
+describe("who picks up an Ingress no IngressClass answers for", () => {
+  const ADDRESS = ["34.1.2.3"];
+  /** No IngressClass named `gce`, as on every GKE cluster. */
+  const GCE: IngressClassBinding = { ...UNSERVED, requested: "gce" };
+  const NO_DEFAULT: IngressClassBinding = { ...UNSERVED, requested: null };
+
+  const annotated = (loadBalancerIps: string[]): IngressInputs["ingress"] => ({
+    ...ingress(["api"]),
+    className: "gce",
+    classAnnotated: true,
+    loadBalancerIps,
+  });
+
+  /**
+   * Only `spec.ingressClassName` is answered by an IngressClass. Read alone,
+   * a missing IngressClass called every GKE Ingress, and every annotation-only
+   * nginx, ALB and Traefik one, served by nobody. Fails if an annotated or
+   * classless Ingress a controller addressed is "none", if one nobody
+   * addressed is anything firmer than unrecorded, or if an address excuses a
+   * class the spec names and the cluster does not have.
+   */
+  it("takes an address as the claim only where the class is not the spec's to check", () => {
+    const of = (
+      classAnnotated: boolean | undefined,
+      loadBalancerIps: string[],
+      binding: IngressClassBinding
+    ) => ingressClaimOf({ classAnnotated, loadBalancerIps }, binding);
+
+    expect(of(true, ADDRESS, GCE)).toBe("address");
+    expect(of(true, [], GCE)).toBe("unrecorded");
+    expect(of(undefined, ADDRESS, NO_DEFAULT)).toBe("address");
+    expect(of(undefined, [], NO_DEFAULT)).toBe("none");
+    expect(of(undefined, ADDRESS, UNSERVED)).toBe("none");
+    expect(of(undefined, [], UNSERVED)).toBe("none");
+    expect(of(true, [], SERVED)).toBe("class");
+  });
+
+  /**
+   * The list drew it red "no controller", the count listed it and its
+   * Open in browser was taken away, while it had an address and served.
+   */
+  it("calls an annotated Ingress a controller has addressed served", () => {
+    const health = ingressHealthOf({
+      ingress: annotated(ADDRESS),
+      binding: { known: true, value: GCE },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(health.problems).toEqual([]);
+    expect(ingressHealthWords(health, t)).toMatchObject({
+      code: "serving",
+      role: "ok",
+    });
+  });
+
+  /**
+   * With no address there is no evidence either way: a controller matches
+   * the annotation against its own settings. Fails if that reads as "no
+   * controller" in red, or as "no address yet" from a controller nobody saw.
+   */
+  it("says an annotated Ingress with no address was not checked, and why", () => {
+    const said = verdict({
+      ingress: annotated([]),
+      binding: { known: true, value: GCE },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said).toMatchObject({ code: "unknown", role: "neutral" });
+    expect(said.reason).toBe(
+      "Its class gce is named by the kubernetes.io/ingress.class annotation and no IngressClass has that name, so the cluster does not record whether a controller picks it up, and it has no address yet"
+    );
+  });
+
+  /** The load balancer row promised "pending" or said "nothing serves its class" on the same guess. */
+  it("says the address of an unrecorded claim is unknown, never pending or refused", () => {
+    const claim = (ingress: IngressInputs["ingress"], binding = GCE) =>
+      claimedBinding(ingress, binding).claim;
+
+    expect(ingressAddressOf(annotated([]), claim(annotated([])))).toBe(
+      "unknown"
+    );
+    expect(
+      ingressAddressOf(annotated(ADDRESS), claim(annotated(ADDRESS)))
+    ).toBe("assigned");
+    expect(ingressAddressOf(ingress([]), claim(ingress([]), UNSERVED))).toBe(
+      "noController"
+    );
+    expect(ingressAddressOf(ingress([]), claim(ingress([]), SERVED))).toBe(
+      "pending"
+    );
+    expect(ingressAddressOf(ingress([]), undefined)).toBe("unknown");
+  });
+
+  /** The class row was the one place main drew this red; it names the annotation instead. */
+  it("names the annotation on the class row, in red only where nothing serves the class", () => {
+    expect(
+      ingressClassWords("gce", claimedBinding(annotated(ADDRESS), GCE), t)
+    ).toEqual({
+      text: "gce: by the kubernetes.io/ingress.class annotation, no IngressClass by that name",
+      tone: null,
+    });
+    expect(
+      ingressClassWords("nginx", claimedBinding(ingress([]), UNSERVED), t)
+    ).toEqual({ text: "nginx: no IngressClass by that name", tone: "err" });
+    expect(
+      ingressClassWords(
+        null,
+        claimedBinding({ loadBalancerIps: ADDRESS }, NO_DEFAULT),
+        t
+      )
+    ).toEqual({ text: "none named, and no cluster default", tone: null });
   });
 });
 

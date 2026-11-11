@@ -16,6 +16,7 @@ export interface IngressHealthInput {
   name: string;
   namespace: string;
   className: string | null;
+  classAnnotated?: boolean;
   rules: IngressRule[];
   defaultBackend: IngressDefaultBackend | null;
   loadBalancerIps: string[];
@@ -530,6 +531,7 @@ export interface IngressInfo {
   namespace: string;
   uid: string;
   className: string | null;
+  classAnnotated?: boolean;
   rules: IngressRule[];
   defaultBackend: IngressDefaultBackend | null;
   loadBalancerIps: string[];

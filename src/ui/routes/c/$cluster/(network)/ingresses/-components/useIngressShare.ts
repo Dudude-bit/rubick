@@ -11,24 +11,21 @@ import {
   ingressAddressOf,
   ingressClassWords,
   INGRESS_ADDRESS_WORDS,
+  type ClaimedBinding,
 } from "@/lib/ingress-health";
 import type { IngressTlsFact } from "../../../-object/ingress-tls-fact";
-import type {
-  IngressClassBinding,
-  IngressInfo,
-  TlsCertificate,
-} from "@/generated/types";
+import type { IngressInfo, TlsCertificate } from "@/generated/types";
 
 type TlsLine = Pick<IngressTlsFact, "text" | "tone" | "known">;
 
 export function ingressStats(
   ingress: IngressInfo,
-  controller: IngressClassBinding | undefined,
+  controller: ClaimedBinding | undefined,
   tls: TlsLine,
   t: T
 ): ReportStat[] {
   const loadBalancerIps = ingress.loadBalancerIps;
-  const address = ingressAddressOf(ingress, controller);
+  const address = ingressAddressOf(ingress, controller?.claim);
   const classWords = ingressClassWords(ingress.className, controller, t);
   return [
     {
@@ -144,7 +141,7 @@ export function ingressTlsSection(ingress: IngressInfo, t: T): PlacedSection {
  */
 export function useIngressShare(
   ingress: IngressInfo | undefined,
-  controller: IngressClassBinding | undefined,
+  controller: ClaimedBinding | undefined,
   page: {
     tls: TlsLine;
     certificates: Map<string, TlsCertificate> | undefined;

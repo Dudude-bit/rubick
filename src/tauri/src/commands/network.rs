@@ -49,6 +49,8 @@ pub struct IngressHealthInput {
     pub name: String,
     pub namespace: String,
     pub class_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_annotated: Option<bool>,
     pub rules: Vec<IngressRule>,
     pub default_backend: Option<IngressDefaultBackend>,
     pub load_balancer_ips: Vec<String>,
@@ -62,6 +64,7 @@ impl From<&Ingress> for IngressHealthInput {
             name: info.name,
             namespace: info.namespace,
             class_name: info.class_name,
+            class_annotated: info.class_annotated,
             rules: info.rules,
             default_backend: info.default_backend,
             load_balancer_ips: info.load_balancer_ips,
@@ -1132,6 +1135,26 @@ mod tests {
             wire_len(&whole),
             wire_len(&input)
         );
+    }
+
+    /// The count on every screen reads this row and never the annotations.
+    /// Fails if an annotated class does not reach it, which is every GKE
+    /// Ingress counted as served by nobody.
+    #[test]
+    fn an_ingress_health_input_carries_the_class_its_annotation_names() {
+        let ingress: Ingress = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "storefront",
+                "namespace": "net",
+                "annotations": { "kubernetes.io/ingress.class": "gce" }
+            },
+            "spec": { "defaultBackend": { "service": { "name": "web", "port": { "number": 80 } } } }
+        }))
+        .expect("an Ingress");
+        let input = serde_json::to_value(IngressHealthInput::from(&ingress)).expect("json");
+
+        assert_eq!(input["className"], "gce");
+        assert_eq!(input["classAnnotated"], true);
     }
 
     /// The ALB page joins a class to its `IngressClassParams` through this

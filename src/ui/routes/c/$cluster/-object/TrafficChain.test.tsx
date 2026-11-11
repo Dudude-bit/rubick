@@ -422,6 +422,7 @@ describe("TrafficChain", () => {
       <TrafficChain
         query={query(conns)}
         controller={{
+          claim: "none",
           requested: "nginx",
           resolved: null,
           controller: null,
@@ -442,6 +443,81 @@ describe("TrafficChain", () => {
       screen.getByText("No IngressClass named nginx in this cluster")
     ).toBeInTheDocument();
     expect(screen.getByText(/This cluster has traefik\./)).toBeInTheDocument();
+  });
+
+  /**
+   * A GKE Ingress has no IngressClass to resolve to, and the chain led it
+   * with a red "No IngressClass named gce" and "never will" over an address
+   * that answers. Fails if a claim the cluster does not record is drawn as
+   * nobody's, or if the two such claims say the same thing.
+   */
+  it("says who claims an annotated Ingress is not recorded, without calling it unserved", async () => {
+    const gke: ResourceConnections = {
+      subject: {
+        kind: "Ingress",
+        name: "shop",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: { kind: "ingress", className: "gce" },
+      },
+      edges: [
+        {
+          from: {
+            kind: "Ingress",
+            name: "shop",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          to: service,
+          relation: {
+            verb: "routes",
+            host: "shop.example.com",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls: false,
+          },
+        },
+      ],
+      stops: [],
+      published: [],
+      notLookedAt: [],
+    };
+    const binding = {
+      requested: "gce",
+      resolved: null,
+      controller: null,
+      viaDefault: false,
+      available: [],
+    };
+
+    const addressed = await wrap(
+      <TrafficChain
+        query={query(gke)}
+        controller={{ ...binding, claim: "address" }}
+      />
+    );
+    expect(
+      screen.getByText(
+        "Class gce, named by the kubernetes.io/ingress.class annotation: no IngressClass has that name"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/has published its address/)).toBeInTheDocument();
+    expect(screen.queryByText(/No IngressClass named gce/)).toBeNull();
+    expect(screen.queryByText(/Nothing has picked this Ingress up/)).toBeNull();
+    addressed.unmount();
+
+    await wrap(
+      <TrafficChain
+        query={query(gke)}
+        controller={{ ...binding, claim: "unrecorded" }}
+      />
+    );
+    expect(
+      screen.getByText(/whether anything serves this Ingress is not known/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing has picked this Ingress up/)).toBeNull();
   });
 
   it("marks the dot the reader is standing on, and only that one", async () => {

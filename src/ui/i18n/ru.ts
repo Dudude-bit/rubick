@@ -4892,6 +4892,8 @@ export const ru: Catalogue = {
     healthNoClassNoDefault:
       "IngressClass не указан, а класса по умолчанию в кластере нет, и этот Ingress никто не обрабатывает",
     healthNoTlsSecret: "Нет Secret с именем {name} для его TLS",
+    healthClaimUnrecorded:
+      "Его класс {name} задан аннотацией kubernetes.io/ingress.class, а IngressClass с таким именем нет, поэтому в кластере не записано, обрабатывает ли его какой-нибудь контроллер, и адреса у него пока нет",
     healthTlsUnasked:
       "Нет Secret с именем {name} для его TLS, а у контроллера не спрашивали, отдаёт ли он эти хосты по TLS вообще",
     healthBackendDown: "Service {name} не принимает трафик",
@@ -6213,6 +6215,8 @@ export const ru: Catalogue = {
     allHosts: "Все хосты",
     noClassNoDefault: "не указан, а класса по умолчанию нет",
     nothingServesClass: "{name}: IngressClass с таким именем нет",
+    classByAnnotation:
+      "{name}: по аннотации kubernetes.io/ingress.class, IngressClass с таким именем нет",
     noneTrafficUnencrypted: "нет: трафик не шифруется",
     catchAllCertificate: "универсальный сертификат",
     ingressDefaultBackendOnly:
@@ -7078,6 +7082,12 @@ export const ru: Catalogue = {
       "Этот Ingress никто не подхватил, поэтому у него нет адреса, и не будет, пока не появится контроллер этого класса.",
     clusterHasClasses: "В кластере есть {list}.",
     clusterHasNoIngressClass: "В кластере нет ни одного IngressClass.",
+    ingressClassAnnotated:
+      "Класс {name} задан аннотацией kubernetes.io/ingress.class: IngressClass с таким именем нет",
+    ingressClaimedByAddress:
+      "Контроллер, который берёт его по собственным настройкам, опубликовал его адрес; какой именно, в кластере не записано.",
+    ingressClaimUnrecorded:
+      "Контроллер сверяет эту аннотацию с собственными настройками, а адрес пока никто не опубликовал, поэтому неизвестно, обслуживает ли кто-нибудь этот Ingress.",
     nothingPickedThemUp:
       "Их никто не подхватил, поэтому адреса у них нет, и не будет, пока не появится контроллер нужного класса.",
     noAddressYet:

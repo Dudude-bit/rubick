@@ -265,6 +265,37 @@ describe("useIngressRouting", () => {
     expect(resolveIngressClass).not.toHaveBeenCalled();
   });
 
+  /**
+   * The binding is one per class; whether it claims an Ingress also takes
+   * that Ingress's annotation and address. Fails if the chain is handed the
+   * class's answer alone, which calls an annotated Ingress a controller has
+   * addressed "served by nobody" on every workload page behind it.
+   */
+  it("settles who claims each Ingress from its own annotation and address", async () => {
+    getIngress.mockResolvedValue({
+      ...info("gce"),
+      classAnnotated: true,
+      loadBalancerIps: ["34.1.2.3"],
+    });
+    resolveIngressClass.mockResolvedValue({
+      requested: "gce",
+      resolved: null,
+      controller: null,
+      viaDefault: false,
+      available: [],
+    });
+
+    const { result } = renderHook(() => useIngressRouting(conns), {
+      wrapper: wrapper(),
+    });
+
+    await waitFor(() =>
+      expect(
+        result.current.routing.get("Ingress/storefront/shop")?.binding?.claim
+      ).toBe("address")
+    );
+  });
+
   it("asks again after a failure that is not an answer", async () => {
     getIngress.mockRejectedValue(new Error("Connection error: reset by peer"));
 

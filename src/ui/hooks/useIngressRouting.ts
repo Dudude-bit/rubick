@@ -29,6 +29,7 @@ import { errorToShow } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { STALE_TIMES } from "@/lib/refresh";
 import type { RoutedIngress } from "@/lib/connections";
+import { claimedBinding } from "@/lib/ingress-health";
 import {
   useCertificateIssuance,
   type Issuance,
@@ -218,7 +219,7 @@ export function useIngressRouting(
     }
     routing.set(refKey(ingress), {
       tls,
-      binding: binding?.data ?? null,
+      binding: binding?.data ? claimedBinding(info, binding.data) : null,
       addresses: info.loadBalancerIps,
     });
   });

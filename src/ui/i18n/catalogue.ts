@@ -4355,6 +4355,8 @@ export const en = {
     healthNoClassNoDefault:
       "It names no IngressClass and the cluster has no default, so nothing picks it up",
     healthNoTlsSecret: "No Secret named {name} for its TLS",
+    healthClaimUnrecorded:
+      "Its class {name} is named by the kubernetes.io/ingress.class annotation and no IngressClass has that name, so the cluster does not record whether a controller picks it up, and it has no address yet",
     healthTlsUnasked:
       "No Secret named {name} for its TLS, and its controller was not asked whether it serves these hosts over TLS at all",
     healthBackendDown: "Service {name} takes no traffic",
@@ -5600,6 +5602,8 @@ export const en = {
     allHosts: "All hosts",
     noClassNoDefault: "none named, and no cluster default",
     nothingServesClass: "{name}: no IngressClass by that name",
+    classByAnnotation:
+      "{name}: by the kubernetes.io/ingress.class annotation, no IngressClass by that name",
     noneTrafficUnencrypted: "none: traffic is unencrypted",
     catchAllCertificate: "catch-all certificate",
     ingressDefaultBackendOnly:
@@ -6393,6 +6397,12 @@ export const en = {
       "Nothing has picked this Ingress up, so it has no address and never will until a controller for that class exists.",
     clusterHasClasses: "This cluster has {list}.",
     clusterHasNoIngressClass: "This cluster has no IngressClass at all.",
+    ingressClassAnnotated:
+      "Class {name}, named by the kubernetes.io/ingress.class annotation: no IngressClass has that name",
+    ingressClaimedByAddress:
+      "A controller that takes it by its own settings has published its address; the cluster does not record which one.",
+    ingressClaimUnrecorded:
+      "A controller matches that annotation against its own settings, and nothing has published an address yet, so whether anything serves this Ingress is not known.",
     nothingPickedThemUp:
       "Nothing has picked them up, so they have no address and never will until a controller for that class exists.",
     noAddressYet:

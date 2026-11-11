@@ -42,6 +42,7 @@ export interface IngressInputs {
     | "name"
     | "namespace"
     | "className"
+    | "classAnnotated"
     | "rules"
     | "defaultBackend"
     | "tlsConfigs"
@@ -77,11 +78,47 @@ export type IngressProblem =
   | { kind: "backendDoorUnchecked"; service: string; doubt: DoorDoubt };
 
 /** What nobody settled, where the words are this app's and not the cluster's. */
-export type IngressDoubt = {
+export type IngressDoubt =
   /** The Secret is missing, and whether its controller presents it at all was not asked. */
-  kind: "tlsUnasked";
-  secret: string;
-};
+  | { kind: "tlsUnasked"; secret: string }
+  /** {@link IngressClaim}'s `unrecorded`. */
+  | { kind: "claimUnrecorded"; className: string };
+
+/**
+ * Who picks an Ingress up. An IngressClass answers for the class
+ * `spec.ingressClassName` names, and for no class where one is the default.
+ * A class only the legacy annotation names, and no class without a default,
+ * are taken by a controller's own settings, which the cluster does not
+ * record: there the address a controller published is the evidence one did.
+ */
+export type IngressClaim =
+  /** An IngressClass answers for it. */
+  | "class"
+  /** None does, and a controller published its address all the same. */
+  | "address"
+  /** Its annotation names a class no IngressClass has, and it has no address: nobody can tell. */
+  | "unrecorded"
+  | "none";
+
+type Classed = Pick<IngressInfo, "classAnnotated" | "loadBalancerIps">;
+
+export function ingressClaimOf(
+  ingress: Classed,
+  binding: Pick<IngressClassBinding, "requested" | "resolved">
+): IngressClaim {
+  if (binding.resolved) return "class";
+  if (binding.requested !== null && !ingress.classAnnotated) return "none";
+  if (ingress.loadBalancerIps.length > 0) return "address";
+  return ingress.classAnnotated ? "unrecorded" : "none";
+}
+
+/** A class binding with the claim it makes on the one Ingress it was read for. */
+export type ClaimedBinding = IngressClassBinding & { claim: IngressClaim };
+
+export const claimedBinding = (
+  ingress: Classed,
+  binding: IngressClassBinding
+): ClaimedBinding => ({ ...binding, claim: ingressClaimOf(ingress, binding) });
 
 export interface IngressHealth {
   problems: IngressProblem[];
@@ -153,8 +190,15 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
   const unread: IngressHealth["unread"] = [];
 
   if (!binding.known) unread.push(binding.why);
-  else if (!binding.value.resolved) {
-    problems.push({ kind: "noController", className: ingress.className });
+  else {
+    const claim = ingressClaimOf(ingress, binding.value);
+    if (claim === "none")
+      problems.push({ kind: "noController", className: ingress.className });
+    if (claim === "unrecorded")
+      unread.push({
+        kind: "claimUnrecorded",
+        className: binding.value.requested ?? "",
+      });
   }
 
   const controller = binding.known ? binding.value.controller : null;
@@ -242,7 +286,8 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
 /**
  * What an Ingress's load balancer row can say: an address, one on its way
  * from a controller that serves the class, none because nothing serves it,
- * or nothing known because the class could not be read.
+ * or nothing known because who serves it could not be read or is not
+ * recorded.
  */
 export type IngressAddress =
   | "assigned"
@@ -250,22 +295,29 @@ export type IngressAddress =
   | "noController"
   | "unknown";
 
+const UNADDRESSED: Record<IngressClaim, IngressAddress> = {
+  class: "pending",
+  address: "assigned",
+  unrecorded: "unknown",
+  none: "noController",
+};
+
 export function ingressAddressOf(
   ingress: Pick<IngressInfo, "loadBalancerIps">,
-  binding: IngressClassBinding | undefined
+  claim: IngressClaim | undefined
 ): IngressAddress {
   if (ingress.loadBalancerIps.length > 0) return "assigned";
-  if (!binding) return "unknown";
-  return binding.resolved ? "pending" : "noController";
+  return claim ? UNADDRESSED[claim] : "unknown";
 }
 
 /**
  * The class row, on the page and in the shared file: the class is a request
- * and the controller is who answers it, including "nobody does".
+ * and the controller is who answers it, including "nobody does" and "the
+ * cluster does not say".
  */
 export function ingressClassWords(
   className: string | null,
-  binding: IngressClassBinding | undefined,
+  binding: ClaimedBinding | undefined,
   t: T
 ): { text: string; tone: "err" | null } {
   if (!binding) {
@@ -279,11 +331,14 @@ export function ingressClassWords(
       tone: null,
     };
   }
+  const unclaimed = binding.claim === "none";
   return {
     text: className
-      ? t("empty", "nothingServesClass", { name: className })
+      ? t("empty", unclaimed ? "nothingServesClass" : "classByAnnotation", {
+          name: className,
+        })
       : t("empty", "noClassNoDefault"),
-    tone: "err",
+    tone: unclaimed ? "err" : null,
   };
 }
 
@@ -348,12 +403,14 @@ function problemSentence(problem: IngressProblem, t: T): string {
   }
 }
 
-const DOUBT_WORDS: Record<IngressDoubt["kind"], "healthTlsUnasked"> = {
-  tlsUnasked: "healthTlsUnasked",
-};
-
-const doubtWords = (doubt: IngressDoubt, t: T) =>
-  t("readings", DOUBT_WORDS[doubt.kind], { name: doubt.secret });
+function doubtWords(doubt: IngressDoubt, t: T): string {
+  switch (doubt.kind) {
+    case "tlsUnasked":
+      return t("readings", "healthTlsUnasked", { name: doubt.secret });
+    case "claimUnrecorded":
+      return t("readings", "healthClaimUnrecorded", { name: doubt.className });
+  }
+}
 
 /** A backend's trouble in its Service's own words, where its verdict has any. */
 function backendWhy(

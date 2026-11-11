@@ -22,6 +22,7 @@ import {
   stopUnder,
   trafficChains,
   unreadWhy,
+  unservedIngresses,
   type ChainHopCertificate,
   type RoutedIngress,
 } from "./connections";
@@ -847,6 +848,7 @@ describe("the traffic chain", () => {
                 controller: "traefik.io/ingress-controller",
                 viaDefault: false,
                 available: [],
+                claim: "class",
               },
             },
           ],
@@ -921,6 +923,7 @@ describe("the traffic chain", () => {
       controller: "k8s.io/ingress-nginx",
       viaDefault: true,
       available: [],
+      claim: "class" as const,
     };
     const read = trafficChains(connections(deployment, edges), t, {
       routing: new Map([
@@ -980,6 +983,7 @@ describe("the traffic chain", () => {
       controller: null,
       viaDefault: false,
       available: [],
+      claim: "none",
     });
     if (unserved?.at !== "object") throw new Error("expected the Ingress hop");
     expect(unserved.address?.state).toBe("noController");
@@ -987,6 +991,73 @@ describe("the traffic chain", () => {
     const unread = chain(null);
     if (unread?.at !== "object") throw new Error("expected the Ingress hop");
     expect(unread.address?.state).toBe("unknown");
+  });
+
+  /**
+   * An annotated class no IngressClass has is matched by a controller's own
+   * settings. The chain read the missing IngressClass as "nobody": a red
+   * controller hop, "nothing serves its class" under the Ingress, and the
+   * banner that tells the reader to fix a class that is not broken. Fails
+   * if a claim the cluster does not record is drawn as refused or as fine.
+   */
+  it("draws a claim the cluster does not record as unknown, and one with an address as served", () => {
+    const pod = ref("Pod", "log-demo-84c4d9749c-pws9g");
+    const svc = service("log-demo", "app=log-demo");
+    const edges: ConnectionEdge[] = [
+      {
+        from: svc,
+        to: pod,
+        relation: { verb: "selects", selector: "app=log-demo" },
+      },
+      ...["shop", "admin"].map((name) => ({
+        from: ref("Ingress", name, { kind: "ingress", className: "gce" }),
+        to: svc,
+        relation: {
+          verb: "routes" as const,
+          host: `${name}.k8s-gui.test`,
+          path: "/",
+          pathType: "Prefix",
+          port: "80",
+          tls: false,
+        },
+      })),
+    ];
+    const paths = (claim: "address" | "unrecorded" | "none") =>
+      trafficChains(connections(pod, edges), t, {
+        routing: new Map(
+          ["shop", "admin"].map((name) => [
+            `Ingress/k8s-gui-test/${name}`,
+            {
+              tls: [],
+              addresses: claim === "address" ? ["34.1.2.3"] : [],
+              binding: {
+                requested: "gce",
+                resolved: null,
+                controller: null,
+                viaDefault: false,
+                available: [],
+                claim,
+              },
+            },
+          ])
+        ),
+      });
+    const drawn = (claim: "address" | "unrecorded" | "none") => {
+      const hops = paths(claim).flatMap((path) => path.hops);
+      const controller = hops.find((hop) => hop.at === "controller")!;
+      const ingress = hops.find(
+        (hop) => hop.at === "object" && hop.object.kind === "Ingress"
+      );
+      return [
+        hopTone(controller),
+        ingress?.at === "object" ? ingress.address?.state : undefined,
+        unservedIngresses(paths(claim))?.ingresses ?? 0,
+      ];
+    };
+
+    expect(drawn("unrecorded")).toEqual(["unknown", "unknown", 0]);
+    expect(drawn("address")).toEqual(["on", "assigned", 0]);
+    expect(drawn("none")).toEqual(["bad", "noController", 2]);
   });
 
   it("draws no certificate hop for a host the Secret does not cover", () => {
@@ -1330,6 +1401,7 @@ describe("the traffic chain", () => {
         controller,
         viaDefault: true,
         available: [],
+        claim: "class" as const,
       },
     });
     const chainOf = (

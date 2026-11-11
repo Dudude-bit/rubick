@@ -133,3 +133,45 @@ it("shares each row's status with the reason it draws beside it", async () => {
     });
   });
 });
+
+/**
+ * A GKE Ingress, or an annotation-only nginx or ALB one, was drawn "no
+ * controller" in red with its Open in Browser refused, while it had an
+ * address and served. Fails if the row reads a missing IngressClass as
+ * nobody serving a class only the annotation names.
+ */
+it("calls an annotated Ingress a controller has addressed served, and offers to open it", async () => {
+  const gke: IngressInfo = {
+    ...plain,
+    name: "gke-shop",
+    className: "gce",
+    classAnnotated: true,
+    loadBalancerIps: ["34.1.2.3"],
+  };
+  const before = { ...answers };
+  answers.listIngressesIn = { rows: [gke], unread: [] };
+  answers.resolveIngressClass = {
+    requested: "gce",
+    resolved: null,
+    controller: null,
+    viaDefault: false,
+    available: [],
+  };
+  useClusterStore.setState({ isConnected: true });
+  await renderWithRouter(<IngressList />, {
+    at: "/c/prod/ingresses",
+    route: "/c/$cluster/ingresses",
+  });
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  await waitFor(() => {
+    const columns = vi.mocked(ResourceList).mock.calls.at(-1)![0]
+      .columns as ColumnDef<IngressInfo>[];
+    const health = columns.find((column) => column.id === "health");
+    expect(health?.meta?.share?.(gke as never, t)).toMatchObject({
+      text: "served",
+      role: "ok",
+    });
+  });
+  expect(openAction().reason?.(gke)).toBeUndefined();
+  Object.assign(answers, before);
+});

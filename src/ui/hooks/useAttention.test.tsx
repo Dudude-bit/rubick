@@ -379,6 +379,56 @@ describe("what the count asks about each Ingress", () => {
     expect(attention.complete).toBe(false);
   });
 
+  /**
+   * The count read the Ingress's row, which had no annotations, against an
+   * IngressClass list that has no `gce`: every GKE Ingress was an error on
+   * every screen. Fails if the row's annotated class and its address do not
+   * reach the verdict; the same Ingress named by the spec is the control.
+   */
+  it("does not count an addressed Ingress classed by its annotation as served by nobody", async () => {
+    const counted = async (classAnnotated: boolean) => {
+      commands.listIngressHealthInputs.mockResolvedValue({
+        rows: [
+          {
+            name: "shop",
+            namespace: "shop",
+            className: "gce",
+            ...(classAnnotated && { classAnnotated }),
+            rules: [],
+            defaultBackend: null,
+            loadBalancerIps: ["34.1.2.3"],
+            tlsConfigs: [],
+          },
+        ],
+        unread: [],
+      });
+      commands.resolveIngressClass.mockResolvedValue({
+        requested: "gce",
+        resolved: null,
+        controller: null,
+        viaDefault: false,
+        available: [],
+      });
+      const { result, unmount } = renderHook(() => useAttention(), {
+        wrapper: wrapper(),
+      });
+      await waitFor(() =>
+        expect(
+          result.current?.checks.find((check) => check.kind === "Ingress")
+            ?.state
+        ).toBe("read")
+      );
+      const reasons = result
+        .current!.items.filter((item) => item.kind === "Ingress")
+        .map((item) => item.reason);
+      unmount();
+      return reasons;
+    };
+
+    expect(await counted(true)).toEqual([]);
+    expect(await counted(false)).toEqual(["no controller"]);
+  });
+
   /** A cloud's supplier only adds to spec.tls, so its silence takes no fault away. */
   it("still counts a missing TLS Secret where no controller here replaces spec.tls", async () => {
     controllers.tls = [supplier(false)];
