@@ -795,6 +795,37 @@ describe("FilesTab", () => {
     expect(listed.mock.calls.at(-1)![0]).toMatchObject({ container: "proxy" });
   });
 
+  /**
+   * A listing whose end the window may not have heard is not a directory and
+   * not a tool that failed. Fails if it is drawn as either, or has no way on.
+   */
+  it("says a listing's end may have been missed, and reads again when asked", async () => {
+    listing.mockReturnValue({
+      phase: "failed",
+      entries: [file("app.conf")],
+      reason: "unheard",
+      message: "",
+      exitCode: null,
+      stderr: "",
+      tried: [],
+    });
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(
+      screen.getByText(/may have missed how it ended, so it was stopped/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/did not finish/)).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
   it("refuses to preview a binary and says why", async () => {
     listing.mockReturnValue(
       done([

@@ -1159,3 +1159,130 @@ describe("useLogStream attaching one lane again", () => {
     expect(streamConfigs[1]).toMatchObject({ tailLines: 0, sinceTime: null });
   });
 });
+
+/**
+ * More than a thousand events ahead of the bridge and it drops the oldest,
+ * whichever they were: a batch of lines, a lane's failure, the end of a
+ * previous run's read. The pane cannot know which, so it reads every lane on
+ * from its last line.
+ */
+describe("useLogStream when the event bridge drops events", () => {
+  const A = { pod: "api-a", namespace: "n", container: "app" };
+  const B = { pod: "api-b", namespace: "n", container: "app" };
+  const lanes = (previous = false) =>
+    renderHook(() =>
+      useLogStream({
+        namespace: "n",
+        sources: [A, B],
+        paneKey: "Deployment:api",
+        limit: DEFAULT_LOG_LIMIT,
+        previous,
+      })
+    );
+  const lagged = () =>
+    act(() => listeners["event-bridge-lagged"]!({ payload: { missed: 1200 } }));
+
+  beforeEach(() => {
+    reset();
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.podName}-${config.container}`;
+    });
+  });
+
+  /**
+   * Lines were missing with no mark, and a lane whose failure was dropped
+   * read "streaming" for good. Fails if a lane is not stopped and read on
+   * from its last line, which is what finds both.
+   */
+  it("attaches every lane again, each from the last line it said", async () => {
+    lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    act(() =>
+      listeners["log-batch"]!({
+        payload: {
+          stream_id: "stream-api-a-app",
+          lines: [
+            {
+              message: "last heard",
+              timestamp: "2026-10-07T06:52:09.500Z",
+              level: null,
+              format: null,
+              fields: null,
+              raw: "last heard",
+            },
+          ],
+        },
+      })
+    );
+
+    lagged();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(4));
+
+    expect(commands.stopLogStream).toHaveBeenCalledWith("stream-api-a-app");
+    expect(commands.stopLogStream).toHaveBeenCalledWith("stream-api-b-app");
+    const again = streamConfigs.slice(2);
+    expect(again.find((c) => c.podName === "api-a")).toMatchObject({
+      sinceTime: "2026-10-07T06:52:09.500Z",
+      tailLines: DEFAULT_LOG_LIMIT,
+    });
+    expect(again.find((c) => c.podName === "api-b")?.sinceTime).not.toBeNull();
+  });
+
+  /** A lane the pane already says stopped is not followed again behind the reader's back. Fails if a lag reopens it. */
+  it("leaves a lane that had already stopped as it was", async () => {
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    act(() =>
+      listeners["stream-failed"]!({
+        payload: {
+          stream_id: "stream-api-a-app",
+          kind: "gone",
+          message: "pod deleted",
+        },
+      })
+    );
+
+    lagged();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(3));
+
+    expect(streamConfigs[2].podName).toBe("api-b");
+    expect(result.current.failures).toMatchObject([{ pod: "api-a" }]);
+  });
+
+  /**
+   * The end of a previous run's read may be among what was dropped, and so
+   * may its lines. Fails if a read counted as over stays over while it is
+   * being read again.
+   */
+  it("takes a previous run's read as not over until it ends again", async () => {
+    const { result } = lanes(true);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    act(() => {
+      for (const pod of ["api-a", "api-b"])
+        listeners["log-read"]!({
+          payload: { stream_id: `stream-${pod}-app`, lines: 2 },
+        });
+    });
+    expect(result.current.previousRead).toEqual({ sources: 2, lines: 4 });
+
+    lagged();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(4));
+
+    expect(result.current.previousRead).toBeNull();
+  });
+
+  /** A burst lags the bridge again and again. Fails if each lag stacks another round of streams on the one being opened. */
+  it("opens one round of streams for a run of lags", async () => {
+    lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+
+    lagged();
+    lagged();
+    lagged();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(4));
+    await act(async () => {});
+
+    expect(streamConfigs).toHaveLength(4);
+  });
+});

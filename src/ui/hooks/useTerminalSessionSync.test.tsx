@@ -25,14 +25,18 @@ const shell = (id: string, pod: string): TerminalSessionInfo => ({
 });
 
 let send: ((event: { payload: unknown }) => void) | null = null;
+let lagged: ((event: { payload: unknown }) => void) | null = null;
 let answer: () => Promise<unknown>;
 
 beforeEach(() => {
   send = null;
+  lagged = null;
   useTerminalSessionStore.setState({ sessions: null, failed: null });
   vi.mocked(listen).mockImplementation(async (channel, handler) => {
     if (channel === "terminal-sessions")
       send = handler as (event: { payload: unknown }) => void;
+    if (channel === "event-bridge-lagged")
+      lagged = handler as (event: { payload: unknown }) => void;
     return () => {};
   });
   vi.mocked(invoke).mockImplementation(async (command) =>
@@ -98,5 +102,25 @@ describe("the list of open shells", () => {
       )
     );
     expect(useTerminalSessionStore.getState().sessions).toBeNull();
+  });
+
+  /**
+   * The list arrives as events, and the one saying a shell ended can be among
+   * those a lagging bridge drops. Fails if Activity goes on listing it.
+   */
+  it("reads the backend's list again when events were dropped", async () => {
+    answer = async () => [shell("a", "cart-4f68h")];
+    renderHook(() => useTerminalSessionSync());
+    await waitFor(() =>
+      expect(useTerminalSessionStore.getState().sessions).toHaveLength(1)
+    );
+    await waitFor(() => expect(lagged).not.toBeNull());
+
+    answer = async () => [];
+    act(() => lagged!({ payload: { missed: 1200 } }));
+
+    await waitFor(() =>
+      expect(useTerminalSessionStore.getState().sessions).toEqual([])
+    );
   });
 });

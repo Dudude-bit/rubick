@@ -191,23 +191,37 @@ export function useGenericTerminalSession({
           onOutputRef.current(earlier);
         }
 
-        // Listen for close
-        const unlistenClosed = await listenEvent("terminal-closed", (event) => {
-          if (event.payload.session_id === sessionId) {
-            unlistenRef.current.forEach((u) => u());
-            unlistenRef.current = [];
-            currentSessionIdRef.current = null;
-            if (isMountedRef.current) {
-              setStatus("closed");
-            }
-            if (onCloseRef.current) onCloseRef.current(event.payload.status);
+        const closed = (status: string | null) => {
+          unlistenRef.current.forEach((u) => u());
+          unlistenRef.current = [];
+          currentSessionIdRef.current = null;
+          if (isMountedRef.current) {
+            setStatus("closed");
           }
+          if (onCloseRef.current) onCloseRef.current(status);
+        };
+        const unlistenClosed = await listenEvent("terminal-closed", (event) => {
+          if (event.payload.session_id === sessionId)
+            closed(event.payload.status);
         });
         if (cleanupCalled) {
           unlistenClosed();
           return;
         }
         unlistenRef.current.push(unlistenClosed);
+
+        // A dropped `terminal-closed` leaves this pane connected to nothing.
+        // Saying "still listening" is refused for a session that is gone.
+        const unlistenLagged = await listenEvent("event-bridge-lagged", () => {
+          commands.terminalSubscribed(sessionId).catch(() => {
+            if (currentSessionIdRef.current === sessionId) closed(null);
+          });
+        });
+        if (cleanupCalled) {
+          unlistenLagged();
+          return;
+        }
+        unlistenRef.current.push(unlistenLagged);
 
         // Both listeners are now installed. Tell the backend it's safe
         // to start reading from the adapter — without this signal the

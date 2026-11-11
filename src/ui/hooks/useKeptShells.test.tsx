@@ -90,7 +90,11 @@ it("holds what a kept shell prints while no pane shows it, and lets go when it e
   const { router } = await renderWithRouter(<p>pod page</p>, {
     at: "/c/acme-staging/pods/shop/cart-4f68h",
   });
-  stop = keepShells(router, () => {});
+  stop = keepShells(
+    router,
+    () => {},
+    () => {}
+  );
   await vi.waitFor(() => expect(handlers["terminal-closed"]).toBeDefined());
   useKeptShellStore.getState().keep(KEPT);
 
@@ -101,6 +105,61 @@ it("holds what a kept shell prints while no pane shows it, and lets go when it e
   send("terminal-closed", { session_id: "term-1", status: null });
   expect(useKeptShellStore.getState().shells).toEqual([]);
   expect(scrollbackOf("term-1")).toBe("");
+});
+
+/**
+ * A burst put more events ahead of the bridge than it holds. A dropped
+ * `terminal-closed` left a dead shell kept, to be attached to as if it ran,
+ * and dropped output is in nobody's scrollback.
+ */
+describe("kept shells when the event bridge drops events", () => {
+  const lagging = async (held: string[]) => {
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "list_terminal_sessions"
+        ? held.map((id) => ({ id }))
+        : undefined
+    );
+    const { router } = await renderWithRouter(<p>pod page</p>, {
+      at: "/c/acme-staging/pods/shop/cart-4f68h",
+    });
+    const missed: number[] = [];
+    stop = keepShells(
+      router,
+      () => {},
+      (count) => missed.push(count)
+    );
+    await vi.waitFor(() =>
+      expect(handlers["event-bridge-lagged"]).toBeDefined()
+    );
+    return missed;
+  };
+  afterEach(() => vi.mocked(invoke).mockImplementation(async () => undefined));
+
+  /** Fails if a shell the backend no longer holds stays kept, or one it does hold is let go. */
+  it("lets go of a shell the backend no longer holds, and keeps one it does", async () => {
+    await lagging(["term-2"]);
+    useKeptShellStore.getState().keep(KEPT);
+    useKeptShellStore.getState().keep({ ...KEPT, id: "term-2" });
+
+    send("event-bridge-lagged", { missed: 1200 });
+
+    await vi.waitFor(() =>
+      expect(useKeptShellStore.getState().shells).toMatchObject([
+        { id: "term-2" },
+      ])
+    );
+  });
+
+  /** Fails if output lost on the way to a kept shell's scrollback goes unsaid. */
+  it("says output may be missing while a shell is kept, and nothing when none is", async () => {
+    const missed = await lagging(["term-1"]);
+    send("event-bridge-lagged", { missed: 7 });
+    expect(missed).toEqual([]);
+
+    useKeptShellStore.getState().keep(KEPT);
+    send("event-bridge-lagged", { missed: 1200 });
+    expect(missed).toEqual([1200]);
+  });
 });
 
 const POD = "/c/acme-staging/pods/shop/cart-4f68h";
@@ -170,7 +229,7 @@ async function windowAt(
       </TooltipProvider>
     </QueryClientProvider>
   );
-  stop = keepShells(router, onLeftPage);
+  stop = keepShells(router, onLeftPage, () => {});
   return router;
 }
 

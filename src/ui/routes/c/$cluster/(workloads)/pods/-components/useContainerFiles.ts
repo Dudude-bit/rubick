@@ -6,7 +6,8 @@ import { errorToShow } from "@/lib/error-utils";
 import type { FileEntry, ListedWith } from "@/lib/container-files";
 import type { ListingFailure, Via } from "@/generated/types";
 
-export type FailureReason = ListingFailure;
+/** `unheard` is the window's own: events were dropped while this was read, its end perhaps among them. */
+export type FailureReason = ListingFailure | "unheard";
 
 /**
  * Where a listing stands. Four states, and "reading" with no rows is not
@@ -223,7 +224,27 @@ export function useContainerFiles(
             }))
           );
         });
-        off = [onBatch, onDone, onFailed];
+        // `files-done` may be one of the events the bridge dropped, and
+        // nothing else ends a read: it stops here rather than read for ever.
+        const onLagged = await listenEvent("event-bridge-lagged", () => {
+          setSnapshot(
+            only((was) =>
+              was.phase === "reading"
+                ? {
+                    phase: "failed",
+                    entries: was.entries,
+                    reason: "unheard",
+                    message: "",
+                    exitCode: null,
+                    stderr: "",
+                    tried: [],
+                  }
+                : was
+            )
+          );
+          void commands.stopFilesListing(id).catch(() => {});
+        });
+        off = [onBatch, onDone, onFailed, onLagged];
         if (!active) {
           takeDown();
           return;

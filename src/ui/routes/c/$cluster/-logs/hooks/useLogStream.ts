@@ -274,7 +274,7 @@ interface Session {
   heard: Map<string, Heard>;
   /** stream id -> what it was opened after, until it has read past it. */
   after: Map<string, Heard>;
-  /** Sources the reader asked to attach again: they read on from where they stopped. */
+  /** Sources to attach again: they read on from where they stopped. */
   again: Set<string>;
   /**
    * Sources whose open was rejected. Kept out of `opened` so nothing thinks
@@ -594,10 +594,6 @@ export function useLogStream({
       setFailures((prev) =>
         prev.filter((f) => !(f.pod === pod && f.container === container))
       );
-      setReads((prev) => {
-        const next = new Map(prev);
-        return next.delete(key) ? next : prev;
-      });
       void sync(s, sourcesRef.current, false);
     },
     [namespace, sync]
@@ -724,7 +720,40 @@ export function useLogStream({
       let unlistenBatch: (() => void) | null = null;
       let unlistenFailure: (() => void) | null = null;
       let unlistenRead: (() => void) | null = null;
+      let unlistenLagged: (() => void) | null = null;
       try {
+        // The bridge dropped events and cannot say whose: lines, a failure,
+        // the end of a read. Every lane not already known to have stopped is
+        // attached again and reads on from its last line, which brings back
+        // the lines and finds the lane that died unheard.
+        unlistenLagged = await listenEvent("event-bridge-lagged", () => {
+          if (!s.active) return;
+          const stopped = new Set(
+            failuresRef.current.map((f) =>
+              sourceKey({ pod: f.pod, namespace, container: f.container })
+            )
+          );
+          // A lane still being opened is on its way to this already.
+          const lanes = [...s.opened].filter(
+            ([key, id]) => id !== "" && !stopped.has(key)
+          );
+          if (lanes.length === 0) return;
+          for (const [key, id] of lanes) {
+            s.opened.delete(key);
+            s.again.add(key);
+            s.sourceOf.delete(id);
+            s.live.delete(id);
+            s.lastEpoch.delete(id);
+            s.after.delete(id);
+            void commands.stopLogStream(id).catch(() => {});
+          }
+          setReads((prev) => {
+            const next = new Map(prev);
+            for (const [key] of lanes) next.delete(key);
+            return next;
+          });
+          void sync(s, sourcesRef.current, false);
+        });
         unlistenRead = await listenEvent("log-read", (event) => {
           const source = s.sourceOf.get(event.payload.stream_id);
           if (!s.active || source === undefined) return;
@@ -820,6 +849,7 @@ export function useLogStream({
         unlistenBatch?.();
         unlistenFailure?.();
         unlistenRead?.();
+        unlistenLagged?.();
         if (!s.active) return;
         console.error("Failed to listen for log events:", err);
         setFailures(
@@ -838,9 +868,15 @@ export function useLogStream({
         unlistenBatch();
         unlistenFailure();
         unlistenRead();
+        unlistenLagged();
         return;
       }
-      s.unlistens.push(unlistenBatch, unlistenFailure, unlistenRead);
+      s.unlistens.push(
+        unlistenBatch,
+        unlistenFailure,
+        unlistenRead,
+        unlistenLagged
+      );
       s.listening = true;
 
       await sync(s, sourcesRef.current, true);
@@ -859,6 +895,7 @@ export function useLogStream({
     intakeTerms,
     previous,
     target,
+    namespace,
     // Deliberately not `renewals`: `stream_logs` opens one body and reads it
     // to the end, so the client it was built from is never used again. A
     // watch is restarted because `watcher` re-lists with the old token.

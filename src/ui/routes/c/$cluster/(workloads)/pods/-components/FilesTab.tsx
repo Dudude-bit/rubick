@@ -1055,6 +1055,16 @@ function Failure({
       </div>
     );
   }
+  if (state.reason === "unheard") {
+    return (
+      <div className="px-3 py-6 text-xs">
+        <p className="font-medium text-warn">{t("files", "listingUnheard")}</p>
+        <button type="button" onClick={onRetry} className={cn("mt-3", link)}>
+          {t("action", "retry")}
+        </button>
+      </div>
+    );
+  }
   const title =
     state.reason === "refused"
       ? t("files", "refused")

@@ -197,3 +197,45 @@ describe("a listing whose container has been replaced", () => {
     );
   });
 });
+
+/**
+ * `files-done` is the only thing that ends a read, and it travels a bridge
+ * that drops events when it falls behind.
+ */
+describe("a listing read while the event bridge drops events", () => {
+  /** The tab sat on "reading…" for good. Fails if the read is not stopped and said to be unheard, with the rows that did arrive kept. */
+  it("stops, and says its end may have been missed", async () => {
+    const { result } = renderHook(() => useContainerFiles(TARGET, false));
+    await waitFor(() => expect(commands.filesSubscribed).toHaveBeenCalled());
+    act(() => emit("files-batch", { entries: rows(0, 2) }));
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+
+    const state = result.current.state;
+    expect(state.phase).toBe("failed");
+    if (state.phase !== "failed") return;
+    expect(state.reason).toBe("unheard");
+    expect(state.entries).toHaveLength(2);
+    expect(commands.stopFilesListing).toHaveBeenCalledWith("files-1");
+  });
+
+  /** A read that had already ended lost nothing it was waiting for. Fails if it is thrown away. */
+  it("leaves a listing that had already ended as it was", async () => {
+    const { result } = renderHook(() => useContainerFiles(TARGET, false));
+    await waitFor(() => expect(commands.filesSubscribed).toHaveBeenCalled());
+    act(() => {
+      emit("files-batch", { entries: rows(0, 2) });
+      emit("files-done", {
+        with: "gnuFind",
+        entries: 2,
+        partial: false,
+        unreadable: 0,
+        elapsed_ms: 5,
+      });
+    });
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+
+    expect(result.current.state.phase).toBe("done");
+  });
+});

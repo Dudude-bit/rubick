@@ -1162,7 +1162,11 @@ async function arrive(at: string, page = <PodDetail />) {
 let stopKeeping: (() => void) | null = null;
 const leftPage: KeptShell[] = [];
 function keepingShells(router: AnyRouter) {
-  stopKeeping = keepShells(router, (shell) => leftPage.push(shell));
+  stopKeeping = keepShells(
+    router,
+    (shell) => leftPage.push(shell),
+    () => {}
+  );
 }
 
 const terminal = () => screen.queryByTestId("terminal-stub");
