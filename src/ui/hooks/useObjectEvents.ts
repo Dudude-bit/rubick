@@ -136,11 +136,14 @@ export function useObjectEvents(
 ) {
   const builtIn = typeof of === "string" ? of : null;
   const kind = typeof of === "string" ? of : of.custom;
-  const group =
-    typeof of === "string" ? getResourceDefinition(of).group : of.group;
-  // A Namespace's events are those of every object in it, which is what a
-  // reader opening one asks for.
+  // A Namespace's events are those of every object in it, of every group,
+  // which is what a reader opening one asks for.
   const everyObject = builtIn === ResourceType.Namespace;
+  const group = everyObject
+    ? null
+    : typeof of === "string"
+      ? getResourceDefinition(of).group
+      : of.group;
   const scope = everyObject ? name : namespace;
   const read = useReadEventsUid(
     builtIn ?? "",

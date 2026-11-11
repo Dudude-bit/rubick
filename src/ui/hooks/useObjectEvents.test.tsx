@@ -378,6 +378,44 @@ it("reads a custom kind named Namespace as one object, not as every object in a 
   ]);
 });
 
+/**
+ * A Namespace's Events are those of every object in it, of every group: read
+ * by the Namespace's own group, the core one, they lost every Deployment,
+ * Job and Ingress event and kept the pods'. Fails if an event is left out of
+ * a Namespace's Events for the group its object is served in.
+ */
+it("keeps the events of every group among those of a Namespace", async () => {
+  answer.asked = [];
+  answer.events = [
+    inGroup(
+      onObject("Deployment", "web", "deploy", "ScalingReplicaSet", 3),
+      "apps/v1"
+    ),
+    inGroup(onObject("Pod", "web-7d9f-x2x", "pod", "Started", 2), "v1"),
+    inGroup(
+      onObject("Ingress", "web", "ing", "Sync", 1),
+      "networking.k8s.io/v1"
+    ),
+  ];
+  const client = testQueryClient();
+  const { result } = renderHook(
+    () =>
+      useObjectEvents("Namespace", "lena-sandbox", null, { refresh: "slow" }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(result.current.everyObject).toBe(true);
+  expect(result.current.data?.map((e) => e.reason)).toEqual([
+    "ScalingReplicaSet",
+    "Started",
+    "Sync",
+  ]);
+});
+
 /** The CRD a reference is served by decides, never the kind's name alone. */
 it("takes a reference for the registry's kind only where it is that very kind", () => {
   expect(eventsKindOf({ kind: "Service", name: "frontend" })).toBe("Service");
