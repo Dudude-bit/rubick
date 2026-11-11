@@ -38,6 +38,7 @@ import { scopeCacheKey } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useClusterStore } from "@/stores/clusterStore";
+import { tabRouteLabel } from "@/stores/scopeTabStore";
 import { None } from "@/components/ui/none";
 
 type PrintedRow = TableRow & { namespace: string };
@@ -120,7 +121,7 @@ function sizeOf(column: TableColumn): number {
 export function PrintedList({ resource }: { resource: string }) {
   const t = useT();
   const served = useServed(servedOf(resource));
-  if (served.state === "reading") return null;
+  if (served.state === "reading") return <ReadingKinds resource={resource} />;
   if (served.state === "absent" || served.state === "unknown")
     return <Unserved served={served} resource={resource} />;
   if (!served.entry.verbs.includes("list"))
@@ -131,6 +132,31 @@ export function PrintedList({ resource }: { resource: string }) {
       />
     );
   return <PrintedTable resource={resource} entry={served.entry} />;
+}
+
+const NO_PRINTED_COLUMNS: ColumnDef<PrintedRow>[] = [];
+
+/**
+ * The list as every list waits, while discovery says what the address names:
+ * a wedged API group holds the catalogue for seconds, and the pane was blank
+ * for all of them. The picker is not offered: discovery has no namespace.
+ */
+function ReadingKinds({ resource }: { resource: string }) {
+  const t = useT();
+  const [since] = useState(() => Date.now());
+  // The tab's own name for the page, until discovery has a better one.
+  const title = tabRouteLabel(resource, t);
+  return (
+    <ResourceList<PrintedRow>
+      title={title}
+      kind={null}
+      isLoading
+      waitingSince={since}
+      narrowingHelps={false}
+      columns={NO_PRINTED_COLUMNS}
+      emptyStateLabel={title}
+    />
+  );
 }
 
 async function readPages(

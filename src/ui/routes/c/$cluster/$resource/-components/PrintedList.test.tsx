@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import {
   afterEach,
   beforeEach,
@@ -14,6 +14,7 @@ import type {
   ResourceTable,
   TableRow,
 } from "@/generated/types";
+import { SLOW_READ_MS } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
@@ -104,6 +105,10 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 const open = () =>
   renderWithRouter(<PrintedList resource="leases.coordination.k8s.io" />);
 
@@ -117,6 +122,32 @@ describe("a kind listed as the API server prints it", () => {
       "href",
       "/c/test/leases.coordination.k8s.io/kube-node-lease/node-1?view=own"
     );
+  });
+
+  /**
+   * A wedged API group holds the catalogue for ten seconds, and the pane was
+   * blank for all of them. Fails if a list whose kind discovery has not
+   * named yet draws nothing, or never says what it is waiting for.
+   */
+  it("reads as a list still being read while discovery has not named its kind", async () => {
+    vi.useFakeTimers();
+    answers.catalog = () => new Promise(() => {});
+    await open();
+    expect(
+      screen.getByRole("heading", { name: "leases.coordination.k8s.io" })
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("slow-read")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SLOW_READ_MS + 1000);
+    });
+    expect(screen.getByTestId("slow-read")).toHaveTextContent(
+      "Still reading leases.coordination.k8s.io"
+    );
+    expect(
+      screen.queryByRole("button", { name: "Pick one namespace" })
+    ).toBeNull();
+    expect(answers.pages).toEqual([]);
   });
 
   /** A bare plural is another group's where the core group lacks it, as kubectl reads it. */
