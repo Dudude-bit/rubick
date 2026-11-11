@@ -532,10 +532,11 @@ function findingsFor(
     .map((candidate) => candidate.name);
   // Only worth saying when this one is actually stuck: everything declaring a
   // healthy dependency is proceeding normally, and listing them would be
-  // inventory dressed as a problem.
+  // inventory dressed as a problem. A Ready that is Unknown is not stuck:
+  // Flux writes it at the start of every reconcile.
   if (
     blocked.length > 0 &&
-    (reconciler.ready !== true || reconciler.suspended)
+    (reconciler.ready === false || reconciler.suspended)
   ) {
     findings.push({ kind: "blocking", severity: "err", blocked });
   }

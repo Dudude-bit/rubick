@@ -193,6 +193,38 @@ describe("ordering by trouble", () => {
     expect(renewing.state).toEqual({ text: "renewal failing", tone: "err" });
   });
 
+  /**
+   * cert-manager writes a Certificate's Ready as True or False, so one it
+   * has not written is cert-manager not having looked: restored from a
+   * backup, every Certificate read "never issued" over a Secret that was
+   * serving. Fails if its silence reads as a refusal again.
+   */
+  it("does not call a Certificate cert-manager has not answered about never issued", () => {
+    const silent = certificate({ notAfter: null });
+    const [unwritten] = certificateRows([silent], [], [], [], t);
+    expect(unwritten.ready).toBeNull();
+    expect(unwritten.neverIssued).toBe(false);
+    expect(unwritten.state).toEqual({ text: "no status yet", tone: "warn" });
+    expect(unwritten.steps).toEqual([]);
+    expect(worstCertificateTone([silent])).toBe("warn");
+
+    const [unknown] = certificateRows(
+      [
+        resource({
+          status: {
+            conditions: [{ type: "Ready", status: "Unknown" }],
+            notAfter: inDays(60),
+          },
+        }),
+      ],
+      [],
+      [],
+      [],
+      t
+    );
+    expect(unknown.state).toEqual({ text: "no status yet", tone: "warn" });
+  });
+
   it("says nothing loud about a certificate that is simply serving", () => {
     const [row] = certificateRows(
       [certificate({ ready: true, notAfter: inDays(60) })],
@@ -378,6 +410,81 @@ describe("the walk", () => {
     const cert = certificate({ uid: "cert-1", ready: false, notAfter: null });
     const [row] = certificateRows([cert], [], [], [], t);
     expect(row.steps.map((step) => step.kind)).toEqual(["Certificate"]);
+  });
+});
+
+describe("a renewal under way", () => {
+  const renewing = () =>
+    certificate({
+      uid: "cert-r",
+      ready: true,
+      issuing: true,
+      notAfter: inDays(60),
+      readyMessage: "Certificate is up to date and has not expired",
+    });
+  const request = (reason: string, message?: string) =>
+    ownedBy("cert-r", {
+      uid: "req-r",
+      kind: "CertificateRequest",
+      name: "web-cert-2",
+      status: {
+        conditions: [
+          {
+            type: "Ready",
+            status: "False",
+            reason,
+            ...(message && { message }),
+          },
+        ],
+      },
+    });
+
+  /**
+   * For the whole of a renewal cert-manager keeps Ready=True with its usual
+   * message and sets Issuing=True, and the request under it says it is
+   * waiting. Either sentence made the row "renewal failing" in red, with
+   * "Certificate is up to date" quoted as the failure. Fails if progress
+   * reads as a failure again.
+   */
+  it("is renewing, not failing, while nothing on the walk has failed", () => {
+    const [alone] = certificateRows([renewing()], [], [], [], t);
+    expect(alone.state).toEqual({ text: "renewing", tone: "warn" });
+    expect(alone.failure).toBeNull();
+
+    const [waiting] = certificateRows(
+      [renewing()],
+      [request("Pending", "Waiting on certificate issuance from order")],
+      [],
+      [],
+      t
+    );
+    expect(waiting.state).toEqual({ text: "renewing", tone: "warn" });
+    expect(waiting.failure).toBeNull();
+    expect(waiting.steps[1].note).toContain("Waiting on certificate issuance");
+  });
+
+  /** The other half: once a step has failed it is failing, in that step's words. */
+  it("is failing once a step of the walk has failed", () => {
+    const [row] = certificateRows(
+      [renewing()],
+      [request("Failed", "The certificate request has failed to complete")],
+      [],
+      [],
+      t
+    );
+    expect(row.state).toEqual({ text: "renewal failing", tone: "err" });
+    expect(row.failure).toBe("The certificate request has failed to complete");
+
+    // A failed step with nothing to say does not borrow Ready=True's sentence.
+    const [mute] = certificateRows(
+      [renewing()],
+      [request("Failed")],
+      [],
+      [],
+      t
+    );
+    expect(mute.state.text).toBe("renewal failing");
+    expect(mute.failure).toBeNull();
   });
 });
 

@@ -309,6 +309,33 @@ describe("a Ready that is Unknown is a reconcile under way", () => {
     expect(reconcilers[0].findings).toEqual([]);
   });
 
+  /**
+   * Flux marks Ready=Unknown at the start of every reconcile, so a
+   * Kustomization others depend on turned red and "holding up" once an
+   * interval. Fails if a reconcile under way, or a Ready not written yet,
+   * is reported as blocking its dependants.
+   */
+  it("does not call a reconciler Flux is still reconciling blocking", () => {
+    for (const conditions of [[progressing], []]) {
+      const { reconcilers } = picture(
+        [
+          kustomization("platform", {}, conditions, REVISION),
+          kustomization(
+            "monitoring",
+            { dependsOn: [{ name: "platform" }] },
+            [ready("Applied")],
+            REVISION
+          ),
+        ],
+        [gitRepository("podinfo", [ready("stored artifact")], REVISION)]
+      );
+      const platform = reconcilers.find((entry) => entry.name === "platform")!;
+      expect(platform.ready).toBeNull();
+      expect(platform.findings).toEqual([]);
+      expect(platform.worst).toBeNull();
+    }
+  });
+
   /** With no condition at all there is no reason to quote, and the row says so. */
   it("says not reconciled yet where Flux has written no Ready at all", () => {
     const { reconcilers, sources } = picture(

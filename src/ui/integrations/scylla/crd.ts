@@ -1,5 +1,11 @@
 import type { CrdColumn } from "../kit";
-import { conditionOf, getValueByPath, matchByGroup, orNone } from "../kit";
+import {
+  conditionOf,
+  getValueByPath,
+  matchByGroup,
+  orNone,
+  orNotWritten,
+} from "../kit";
 import type { CrdView } from "../registry";
 import { GROUP } from "./data";
 
@@ -36,7 +42,7 @@ const clusterColumns: CrdColumn[] = [
       if (ready === undefined && total === undefined) return null;
       return `${ready ?? "?"}/${total ?? "?"}`;
     },
-    cell: orNone,
+    cell: orNotWritten,
   },
   {
     id: "racks",

@@ -26,10 +26,12 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 vi.mock("@/hooks/useLiveQuery", () => ({ useLiveQuery: () => ({}) }));
 
-const { useOperator } = await import("./data");
+const { patchAllowedOn, useOperator } = await import("./data");
 
-function useOperatorRead(ns: readonly string[] = []): () => Promise<unknown> {
-  useOperator(ns);
+function useOperatorRead(
+  clusters: readonly { namespace: string; name: string }[] = []
+): () => Promise<unknown> {
+  useOperator(clusters);
   const fn = lastQueryFn.current;
   if (!fn) throw new Error("useOperator registered no queryFn");
   return fn;
@@ -106,28 +108,38 @@ describe("useOperator", () => {
   });
 
   /**
-   * Asked with no namespace, the review means "in every namespace", which a
-   * namespace-scoped grant answers no to — and every knob on the reader's
-   * own cluster came up disabled saying the cluster refuses it.
+   * A Role may grant `patch` on one named ScyllaCluster, and RBAC answers no
+   * to the nameless question for it: asked per namespace, every knob on the
+   * one cluster the reader may turn came up refused. Fails if the name
+   * leaves the question, or an unasked cluster borrows the cluster-wide no.
    */
-  it("asks the patch verb in each namespace a cluster was found in", async () => {
+  it("asks the patch verb of each ScyllaCluster by name", async () => {
     listDeployments.mockResolvedValue([]);
     checkAccess.mockResolvedValue([
       { allowed: false },
-      { allowed: true },
       { allowed: false },
+      { allowed: true },
     ]);
-    const info = (await useOperatorRead(["shop", "billing"])()) as {
-      canPatchClusters: boolean | null;
-      patchIn: Map<string | null, boolean | null>;
-    };
-    const asked = checkAccess.mock.lastCall?.[0] as {
-      namespace: string | null;
-    }[];
-    expect(asked.map((q) => q.namespace)).toEqual([null, "billing", "shop"]);
-    expect(info.canPatchClusters).toBe(false);
-    expect(info.patchIn.get("billing")).toBe(true);
-    expect(info.patchIn.get("shop")).toBe(false);
+    const events = { namespace: "shop", name: "events" };
+    const ledger = { namespace: "billing", name: "ledger" };
+    const info = (await useOperatorRead([events, ledger])()) as Parameters<
+      typeof patchAllowedOn
+    >[0];
+    const asked = checkAccess.mock.lastCall?.[0] as Record<string, unknown>[];
+    expect(asked.map((q) => [q.verb, q.resource, q.namespace, q.name])).toEqual(
+      [
+        ["patch", "scyllaclusters", null, undefined],
+        ["patch", "scyllaclusters", "billing", "ledger"],
+        ["patch", "scyllaclusters", "shop", "events"],
+      ]
+    );
+    expect(info?.canPatchClusters).toBe(false);
+    expect(patchAllowedOn(info, ledger)).toBe(false);
+    expect(patchAllowedOn(info, events)).toBe(true);
+    expect(
+      patchAllowedOn(info, { namespace: "shop", name: "other" })
+    ).toBeNull();
+    expect(patchAllowedOn(undefined, events)).toBeNull();
   });
 
   /** An access review that failed is not a refusal. */

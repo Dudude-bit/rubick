@@ -1,4 +1,5 @@
 import type { CustomResourceInfo } from "@/generated/types";
+import type { T } from "@/i18n/useT";
 import { conditionOf, getValueByPath } from "../kit";
 import type { Read } from "./data";
 
@@ -46,7 +47,8 @@ export interface PgCluster {
   failingOver: boolean;
   instances: Instance[];
   declared: number;
-  ready: number;
+  /** `null` where the operator has written no status to count from. */
+  ready: number | null;
   fenced: string[];
   /**
    * Whether `fenced` is an answer. `false` says the annotation is there and
@@ -141,6 +143,27 @@ export function postgresVersionOf(image: string | null): string | null {
   const tag = colon === -1 ? "" : namePart.slice(colon + 1);
   const m = /^(\d+(?:\.\d+)?)/.exec(tag);
   return m ? m[1] : null;
+}
+
+/**
+ * `status.readyInstances`, and `null` where the operator has written no
+ * status at all. The field is `omitempty` in CNPG's API, so a status
+ * written without it says zero: every instance down, not nobody counted.
+ */
+export function readyInstancesOf(resource: CustomResourceInfo): number | null {
+  const status = (resource.status ?? {}) as Record<string, unknown>;
+  if (typeof status.readyInstances === "number") return status.readyInstances;
+  return Object.keys(status).length > 0 ? 0 : null;
+}
+
+/** "2 of 3 instances"; `n` is the declared count, which governs the noun. */
+export function readyWords(cluster: PgCluster, t: T): string {
+  return cluster.ready === null
+    ? t("operators", "membersNotWritten", { n: cluster.declared })
+    : t("operators", "readyOfDeclared", {
+        ready: cluster.ready,
+        n: cluster.declared,
+      });
 }
 
 export function readCluster(resource: CustomResourceInfo): PgCluster {
@@ -270,8 +293,7 @@ export function readCluster(resource: CustomResourceInfo): PgCluster {
     failingOver,
     instances,
     declared: typeof spec.instances === "number" ? spec.instances : 0,
-    ready:
-      typeof status.readyInstances === "number" ? status.readyInstances : 0,
+    ready: readyInstancesOf(resource),
     fenced: fencedNames,
     fencedKnown,
     fencedAll,

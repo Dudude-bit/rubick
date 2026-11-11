@@ -4120,6 +4120,12 @@ export const ru: Catalogue = {
       many: "{n} сертификатов ни разу не выпущены",
       other: "{n} сертификата ни разу не выпущены",
     },
+    factCertificatesNoStatus: {
+      one: "{n} сертификат пока без статуса",
+      few: "{n} сертификата пока без статуса",
+      many: "{n} сертификатов пока без статуса",
+      other: "{n} сертификата пока без статуса",
+    },
     certOverdueBy: "просрочено на {span}",
     certNeverIssuedShort: "ни разу не выпущен",
     certRenewalFailing: "продление не проходит",

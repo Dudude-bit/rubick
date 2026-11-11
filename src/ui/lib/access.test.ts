@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
+import { CODE_FILES } from "@/test/source-files";
 import { deniedWords } from "./access";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -82,5 +84,24 @@ describe("the can-i command a refusal quotes", () => {
         })
       )
     ).toBe("create pods/web-0 --subresource=portforward -n team-checkout");
+  });
+});
+
+describe("who asks the authorizer", () => {
+  /**
+   * The command takes the object's name as an optional field, so a caller
+   * that forgets it asks about every object, and a grant on one named
+   * object reads as a refusal: CNPG and Scylla did. `askAccess` takes an
+   * `Asked`, whose name has to be stated. Fails if a file asks on its own.
+   */
+  it("is this module alone, where a question has to state its name", () => {
+    const asking = CODE_FILES.filter(
+      (path) =>
+        path !== "src/ui/lib/access.ts" &&
+        !path.startsWith("src/ui/generated/") &&
+        /\.checkAccess\b/.test(readFileSync(path, "utf8"))
+    );
+    expect(CODE_FILES.length).toBeGreaterThan(500);
+    expect(asking).toEqual([]);
   });
 });

@@ -159,6 +159,20 @@ describe("whether a selector picks an endpoint", () => {
   });
 
   /**
+   * Cilium reads a key that starts with `$` as a reserved one: `$init` is
+   * `reserved:init`. Taken as a label named `$init` from any source it
+   * matched nothing, and the endpoint read as one no policy selects.
+   */
+  it("reads `$` as Cilium's short form of the reserved source", () => {
+    expect(selects({ matchLabels: { $init: "" } }, labels)).toBe(true);
+    const exists = (key: string) =>
+      selects({ matchExpressions: [{ key, operator: "Exists" }] }, labels);
+    expect(exists("$init")).toBe(true);
+    // Reserved, not any: the pod's own label of that name is not it.
+    expect(exists("$app")).toBe(false);
+  });
+
+  /**
    * An operator this app does not implement is not one it may answer "no"
    * to. `false` would put the endpoint in the "no policy selects it" pile,
    * which is the reading a reader acts on. `NotIn ()` was answered "yes",

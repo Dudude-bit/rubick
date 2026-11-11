@@ -60,7 +60,8 @@ export interface CertRow {
   expiry: Expiry | null;
   renewalTime: string | null;
   failedAttempts: number | null;
-  ready: boolean;
+  /** `null` where cert-manager has written no `Ready`, or `Unknown`. */
+  ready: boolean | null;
   /** cert-manager is trying to issue or renew right now. */
   inFlight: boolean;
   /** No certificate has ever been written to the Secret. */
@@ -230,7 +231,9 @@ function walk(
       failed: false,
     },
   ];
-  let deepest = ready?.message ?? null;
+  // Ready=True keeps "Certificate is up to date" for the whole of a renewal:
+  // not a sentence about what failed.
+  let deepest = ready?.status === "True" ? null : (ready?.message ?? null);
 
   const request = newest(
     requests.filter((item) => ownedBy(item, certificate.uid))
@@ -313,10 +316,11 @@ function walk(
 function stateOfCertificate(
   row: {
     neverIssued: boolean;
-    ready: boolean;
+    ready: boolean | null;
     inFlight: boolean;
     expiry: Expiry | null;
-    failure: string | null;
+    /** cert-manager says it is not ready, or a step of the walk failed. */
+    failed: boolean;
   },
   t: T
 ): { text: string; tone: Tone; rank: number } {
@@ -337,7 +341,7 @@ function stateOfCertificate(
   // Still serving, and cert-manager cannot replace it. The old certificate
   // has until `notAfter` to be fixed, which is why this is not an outage and
   // is still the loudest thing on a healthy-looking row.
-  if (!row.ready || (row.inFlight && row.failure)) {
+  if (row.failed) {
     return {
       text: t("readings", "certRenewalFailing"),
       tone: "err",
@@ -360,6 +364,9 @@ function stateOfCertificate(
   }
   if (row.inFlight)
     return { text: t("readings", "certRenewing"), tone: "warn", rank: 5 };
+  // cert-manager has said neither yes nor no, so neither does the row.
+  if (row.ready === null)
+    return { text: t("empty", "noStatusYet"), tone: "warn", rank: 5 };
   return {
     text: row.expiry ? expiryText(row.expiry, t) : t("readings", "certIssued"),
     tone: "ok",
@@ -387,15 +394,22 @@ export function certificateRows(
       const notAfter = text(certificate, "status.notAfter");
       const notBefore = text(certificate, "status.notBefore");
       const renewalTime = text(certificate, "status.renewalTime");
-      const isReady = ready?.status === "True";
-      const inFlight = issuing?.status === "True" || !isReady;
+      // cert-manager writes this Ready as True or False. Absent, it has
+      // not looked: nothing was refused and there is no walk to draw.
+      const isReady = conditionSays(ready);
+      const inFlight = issuing?.status === "True" || isReady === false;
 
-      const { steps, failure } = inFlight
+      const walked = inFlight
         ? walk(certificate, requests, orders, challenges)
         : { steps: [], failure: null };
+      const steps = walked.steps;
+      // A renewal under way writes sentences too, and they are progress:
+      // one is a failure only where something has failed.
+      const failed = isReady === false || steps.some((step) => step.failed);
+      const failure = failed ? walked.failure : null;
 
       const row = {
-        neverIssued: !isReady && notAfter === null,
+        neverIssued: isReady === false && notAfter === null,
         ready: isReady,
         inFlight,
         expiry:
@@ -407,7 +421,7 @@ export function certificateRows(
             : null,
         failure,
       };
-      const state = stateOfCertificate(row, t);
+      const state = stateOfCertificate({ ...row, failed }, t);
       const issuerName = text(certificate, "spec.issuerRef.name");
 
       const namespace = certificate.namespace ?? "";

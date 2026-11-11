@@ -7,7 +7,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchMultiple, orNone } from "../kit";
+import { getValueByPath, matchMultiple, orNone, orNotWritten } from "../kit";
 import type { CrdView } from "../registry";
 import {
   bindingIdentity,
@@ -89,7 +89,7 @@ const assignedColumns: CrdColumn[] = [
     id: "status",
     header: "status",
     accessor: (resource) => getValueByPath(resource, "status.status"),
-    cell: orNone,
+    cell: orNotWritten,
   },
 ];
 

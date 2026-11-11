@@ -2,6 +2,7 @@ import type { CrdColumn } from "../kit";
 import { getValueByPath, matchByGroup, orNone, orNotWritten } from "../kit";
 import type { CrdView } from "../registry";
 import { GROUP } from "./data";
+import { readyInstancesOf } from "./model";
 
 const clusterColumns: CrdColumn[] = [
   {
@@ -14,7 +15,7 @@ const clusterColumns: CrdColumn[] = [
     id: "instances",
     header: "instances",
     accessor: (resource) =>
-      `${getValueByPath(resource, "status.readyInstances") ?? 0}/${
+      `${readyInstancesOf(resource) ?? "?"}/${
         getValueByPath(resource, "spec.instances") ?? 0
       }`,
     cell: orNone,

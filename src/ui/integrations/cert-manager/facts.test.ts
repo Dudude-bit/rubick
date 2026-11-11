@@ -106,6 +106,55 @@ describe("cert-manager facts", () => {
   });
 
   /**
+   * The cluster line counted every Certificate whose Ready was not True as
+   * never issued or failing to renew, beside a page that says cert-manager
+   * has not answered. Fails if silence or `Unknown` is counted as either.
+   */
+  it("does not count a Certificate cert-manager has not answered about as failing", async () => {
+    const unknown = certificate({ notAfter: inDays(60) });
+    listed([
+      { ...certificate({}), status: null },
+      {
+        ...unknown,
+        status: {
+          ...(unknown.status as object),
+          conditions: [{ type: "Ready", status: "Unknown" }],
+        },
+      },
+    ]);
+    const lines = (await facts()).map(said);
+    expect(lines).toContainEqual({
+      words: "2 certificates with no status yet",
+      tone: "warn",
+    });
+    expect(lines.filter((line) => line.tone === "err")).toEqual([]);
+  });
+
+  /** The other half: a `False` cert-manager wrote is still counted. */
+  it("counts a Certificate cert-manager says is not ready", async () => {
+    const refused = certificate({ notAfter: inDays(60) });
+    listed([
+      {
+        ...refused,
+        status: {
+          ...(refused.status as object),
+          conditions: [{ type: "Ready", status: "False" }],
+        },
+      },
+      {
+        ...refused,
+        status: { conditions: [{ type: "Ready", status: "False" }] },
+      },
+    ]);
+    const lines = (await facts()).map(said);
+    expect(lines).toContainEqual({ words: "1 renewal failing", tone: "err" });
+    expect(lines).toContainEqual({
+      words: "1 certificate never issued",
+      tone: "err",
+    });
+  });
+
+  /**
    * A certificate cert-manager never wrote a plan for still deserves the
    * plain expiry sentence — silence would need a reason nobody has given.
    */

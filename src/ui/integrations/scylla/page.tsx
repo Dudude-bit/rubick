@@ -25,6 +25,7 @@ import {
   CLUSTERS_CRD,
   useClusters,
   useNodeConfigs,
+  patchAllowedOn,
   useOperator,
   type OperatorInfo,
 } from "./data";
@@ -61,14 +62,10 @@ export default function ScyllaPage() {
       ),
     [clustersQuery.data]
   );
-  // The verb is asked where the ScyllaClusters actually are; asked with no
-  // namespace it means "in every one", which a namespace-scoped grant
-  // answers no to.
-  const namespaces = useMemo(
-    () => [...new Set(clusters.map((c) => c.namespace))].sort(),
-    [clusters]
-  );
-  const operator = useOperator(namespaces);
+  // The verb is asked of the ScyllaClusters themselves; asked with no
+  // namespace or no name it means "every one", which a grant in one
+  // namespace or on one named cluster answers no to.
+  const operator = useOperator(clusters);
 
   if (clustersQuery.error) {
     return (
@@ -318,12 +315,7 @@ function ClusterRow({
   const [pending, setPending] = useState<ScyllaAction | null>(null);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
-  const actions = actionsFor(
-    cluster,
-    operator?.patchIn.get(cluster.namespace) ??
-      operator?.canPatchClusters ??
-      null
-  );
+  const actions = actionsFor(cluster, patchAllowedOn(operator, cluster));
   const stateText = cluster.silent
     ? t("operators", "noStatusYet")
     : cluster.upgrade

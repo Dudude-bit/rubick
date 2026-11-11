@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
+import { askAccess, type Asked } from "@/lib/access";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -109,13 +110,13 @@ export interface OperatorInfo {
   version: string | null;
   /**
    * Cluster-wide `patch clusters` / `create backups`; `null` = the cluster
-   * would not say. A `false` here is not "you may not act" — see `patchIn`.
+   * would not say. A `false` here is not "you may not act" — see `patchOn`.
    */
   canPatchClusters: boolean | null;
   canCreateBackups: boolean | null;
-  /** The same two verbs, per namespace a Cluster was found in. */
-  patchIn: AllowedIn;
-  createIn: AllowedIn;
+  /** `patch`, of each Cluster by name; `create backups`, per namespace. */
+  patchOn: Allowed;
+  createIn: Allowed;
   checkedAt: number;
 }
 
@@ -134,38 +135,67 @@ function versionOf(image: string | null): string | null {
 }
 
 /**
- * Whether the reader may act, asked once per namespace they have a Cluster
- * in — plus cluster-wide.
+ * Whether the reader may act, asked of each Cluster they have — plus
+ * cluster-wide.
  *
  * A `SelfSubjectAccessReview` with no namespace asks "in every namespace",
- * and an ordinary reader granted `patch clusters` in their own namespace
- * answers no to that. Asked that way, every action on every cluster came up
+ * and one with no name asks "whatever it is called": a reader granted
+ * `patch clusters` in their own namespace, or on one named Cluster, answers
+ * no to those. Asked that way, every action on every cluster came up
  * disabled with "the cluster refuses this", which is a different sentence
  * from the truth and the opposite of useful.
  */
-export type AllowedIn = Map<string | null, boolean | null>;
+type Allowed = Map<string, boolean | null>;
 
-const allowedFor = (
-  answers: { allowed: boolean | null }[] | null,
-  index: number,
-  stride: number,
-  namespaces: (string | null)[]
-): AllowedIn => {
-  const out: AllowedIn = new Map();
-  namespaces.forEach((ns, i) =>
-    out.set(ns, answers?.[i * stride + index]?.allowed ?? null)
-  );
-  return out;
-};
+interface Named {
+  namespace: string;
+  name: string;
+}
 
-export function useOperator(namespaces: readonly string[] = []) {
+const keyOf = (cluster: Named) => `${cluster.namespace}/${cluster.name}`;
+
+/**
+ * What the reader may do to one Cluster. `null` where the review would not
+ * say or was not asked about it: the cluster-wide answer is not this one's.
+ */
+export function allowedOn(operator: OperatorInfo | undefined, cluster: Named) {
+  return {
+    patchClusters: operator?.patchOn.get(keyOf(cluster)) ?? null,
+    createBackups: operator?.createIn.get(cluster.namespace) ?? null,
+  };
+}
+
+export function useOperator(clusters: readonly Named[] = []) {
   const context = useClusterStore((state) => state.currentContext);
-  // Cluster-wide first, so the Operator tab still has one answer to state,
-  // then one per namespace a Cluster was found in.
-  const scopes: (string | null)[] = [null, ...[...new Set(namespaces)].sort()];
+  const keys = [...new Set(clusters.map(keyOf))].sort();
   return useQuery({
-    queryKey: [context, "cloudnativepg", "operator", scopes.join(",")],
+    queryKey: [context, "cloudnativepg", "operator", keys.join(",")],
     queryFn: async (): Promise<OperatorInfo> => {
+      const named = keys.map((key) => {
+        const [namespace, name] = key.split("/");
+        return { namespace, name };
+      });
+      const namespaces = [...new Set(named.map((one) => one.namespace))];
+      const patch = {
+        group: GROUP,
+        resource: "clusters",
+        verb: "patch",
+      } as const;
+      // A create carries no name to match.
+      const create = {
+        group: GROUP,
+        resource: "backups",
+        verb: "create",
+        name: null,
+      } as const;
+      const asked: Asked[] = [
+        // Cluster-wide first, so the Operator tab still has one answer to
+        // state: every Cluster, and so no name.
+        { ...patch, namespace: null, name: null },
+        { ...create, namespace: null },
+        ...named.map((one) => ({ ...patch, ...one })),
+        ...namespaces.map((namespace) => ({ ...create, namespace })),
+      ];
       const [deployments, access] = await Promise.all([
         read<DeploymentInfo>(() =>
           commands.listDeployments({
@@ -175,15 +205,10 @@ export function useOperator(namespaces: readonly string[] = []) {
             limit: null,
           })
         ),
-        commands
-          .checkAccess(
-            scopes.flatMap((namespace) => [
-              { group: GROUP, resource: "clusters", verb: "patch", namespace },
-              { group: GROUP, resource: "backups", verb: "create", namespace },
-            ])
-          )
-          .catch(() => null),
+        askAccess(asked).catch(() => null),
       ]);
+      const answered = (from: number, keys: string[]): Allowed =>
+        new Map(keys.map((key, at) => [key, access?.[from + at] ?? null]));
       const deployment = deployments.ok ? (deployments.items[0] ?? null) : null;
       return {
         controller: deployment
@@ -198,10 +223,10 @@ export function useOperator(namespaces: readonly string[] = []) {
         controllerKnown: deployments.ok,
         controllerReason: deployments.ok ? null : deployments.reason,
         version: versionOf(deployment?.containers[0]?.image ?? null),
-        canPatchClusters: access?.[0]?.allowed ?? null,
-        canCreateBackups: access?.[1]?.allowed ?? null,
-        patchIn: allowedFor(access, 0, 2, scopes),
-        createIn: allowedFor(access, 1, 2, scopes),
+        canPatchClusters: access?.[0] ?? null,
+        canCreateBackups: access?.[1] ?? null,
+        patchOn: answered(2, keys),
+        createIn: answered(2 + keys.length, namespaces),
         checkedAt: Date.now(),
       };
     },

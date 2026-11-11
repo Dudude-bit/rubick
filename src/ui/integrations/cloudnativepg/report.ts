@@ -79,8 +79,13 @@ function clusterSections(
       label: t("columns", "replicas"),
       values: [
         {
-          text: `${cluster.ready}/${cluster.declared}`,
-          role: cluster.ready === cluster.declared ? "ok" : "warn",
+          text: `${cluster.ready ?? "?"}/${cluster.declared}`,
+          role:
+            cluster.ready === null
+              ? "neutral"
+              : cluster.ready === cluster.declared
+                ? "ok"
+                : "warn",
         },
       ],
     },

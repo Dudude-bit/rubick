@@ -10,8 +10,11 @@
  * and keeps its own.
  */
 
+import { createElement } from "react";
+
+import { StatusBadge } from "@/components/ui/status-badge";
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchByGroup, orNone } from "../kit";
+import { getValueByPath, matchByGroup, orNone, orNotWritten } from "../kit";
 import type { CrdView } from "../registry";
 import {
   directionsOf,
@@ -24,9 +27,9 @@ const policyColumns: CrdColumn[] = [
   {
     // First, and a column rather than the view's `status`: nothing reads
     // that on a list, and a rejected policy only visible once somebody
-    // opens it is a rejected policy nobody sees. No `cell`, so the list
-    // draws the word as a badge — `valid` and `rejected` are in
-    // `statusRole`'s table, or it would be grey.
+    // opens it is a rejected policy nobody sees. The word is a badge —
+    // `valid` and `rejected` are in `statusRole`'s table, or it would be
+    // grey — and a policy nobody has answered about is not the list's "none".
     id: "inForce",
     header: "ciliumInForce",
     accessor: (policy) => {
@@ -40,6 +43,10 @@ const policyColumns: CrdColumn[] = [
           return null;
       }
     },
+    cell: (value, t) =>
+      typeof value === "string"
+        ? createElement(StatusBadge, { status: value })
+        : orNotWritten(value, t),
   },
   {
     id: "selects",
@@ -111,13 +118,15 @@ const endpointColumns: CrdColumn[] = [
     id: "identity",
     header: "identity",
     accessor: (endpoint) => getValueByPath(endpoint, "status.identity.id"),
-    cell: (value) => orNone(typeof value === "number" ? value : null),
+    cell: (value, t) =>
+      orNotWritten(typeof value === "number" ? value : null, t),
   },
   {
     id: "state",
     header: "state",
     accessor: (endpoint) => getValueByPath(endpoint, "status.state"),
-    cell: (value) => orNone(typeof value === "string" ? value : null),
+    cell: (value, t) =>
+      orNotWritten(typeof value === "string" ? value : null, t),
   },
   {
     id: "podIp",
@@ -130,7 +139,8 @@ const endpointColumns: CrdColumn[] = [
       const first = addressing?.[0];
       return first?.ipv4 ?? first?.ipv6 ?? null;
     },
-    cell: (value) => orNone(typeof value === "string" ? value : null),
+    cell: (value, t) =>
+      orNotWritten(typeof value === "string" ? value : null, t),
   },
 ];
 

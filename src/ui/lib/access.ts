@@ -111,6 +111,18 @@ function questionOf({
 }
 
 /**
+ * The authorizer's answer to each of `asked`, in order; `null` where it
+ * would not say. The one way to ask outside this module: an `Asked` has to
+ * state the object's name, or that there is none.
+ */
+export async function askAccess(
+  asked: readonly Asked[]
+): Promise<(boolean | null)[]> {
+  const answers = await commands.checkAccess(asked.map(questionOf));
+  return asked.map((_, at) => answers[at]?.allowed ?? null);
+}
+
+/**
  * Asks the cluster's access review, once per connection, each of `asked`.
  * A "no" goes to the refusal memory; a review that would not answer, or
  * could not be asked, notes nothing, so the action stays offered with no

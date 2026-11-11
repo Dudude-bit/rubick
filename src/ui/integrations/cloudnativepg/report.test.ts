@@ -63,6 +63,32 @@ describe("what a Cluster tells a reader with no cluster access", () => {
   });
 });
 
+describe("a Cluster the operator has not written a status on", () => {
+  /**
+   * The shared report printed "0/3" in the warn tone for it: a count the
+   * operator never made, and a warning about it.
+   */
+  it("prints no ready count, and no tone for it", () => {
+    const sections = reportOf(
+      {
+        group: "postgresql.cnpg.io",
+        kind: "Cluster",
+        namespace: "shop",
+        name: "new-db",
+        spec: { instances: 3 },
+        status: null,
+      },
+      t
+    );
+    const cluster = sections?.find((section) => section.id === "cnpg-cluster");
+    if (cluster?.body.type !== "facts") throw new Error("expected facts");
+    expect(cluster.body.rows[1]).toEqual({
+      label: "Replicas",
+      values: [{ text: "?/3", role: "neutral" }],
+    });
+  });
+});
+
 describe("what an object of another vendor's kind gets", () => {
   it("declines a Certificate: that is cert-manager's kind, not CloudNativePG's", () => {
     const sections = reportOf(
