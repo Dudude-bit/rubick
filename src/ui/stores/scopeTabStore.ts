@@ -158,6 +158,14 @@ function makeTab(init: Partial<ScopeTab> = {}): ScopeTab {
   };
 }
 
+/**
+ * The cluster a tab is in: the one its address names. `context` is as old as
+ * the tab's last parking, and a cluster picked inside the tab since moved
+ * the address and not the record.
+ */
+const clusterOfTab = (tab: ScopeTab): string | null =>
+  clusterOf(tab.href) ?? tab.context;
+
 /** Park the live scope on the tab that currently owns it. */
 function parkActive(tabs: ScopeTab[], activeId: string): ScopeTab[] {
   const { currentContext, currentNamespace, namespaceScope } =
@@ -334,7 +342,10 @@ export const useScopeTabStore = create<ScopeTabState>()(
         // The link's route connects its own cluster and narrows its own scope.
         if (linked) return;
         const active = tabs.find((tab) => tab.id === activeId);
-        if (active) await applyScope(active);
+        // A record older than the address is another cluster's: the address
+        // connects, and that cluster restores its own scope.
+        if (active && clusterOfTab(active) === active.context)
+          await applyScope(active);
       },
 
       yieldToLink: ({ context, path }) =>
@@ -503,7 +514,8 @@ export const useScopeTabStore = create<ScopeTabState>()(
           const known = new Set(names);
           let goTo: string | null = null;
           const tabs = state.tabs.map((tab) => {
-            const missing = !!tab.context && !known.has(tab.context);
+            const context = clusterOfTab(tab);
+            const missing = !!context && !known.has(context);
             // An object in a cluster this kubeconfig does not have is a page
             // nothing can answer. From the state, not the change, so a tab
             // already flagged is not left holding the dead route.
@@ -514,7 +526,13 @@ export const useScopeTabStore = create<ScopeTabState>()(
             // Rewriting the record takes nobody anywhere, and `recordHref`
             // would write the dead route straight back.
             if (href !== tab.href && tab.id === state.activeId) goTo = href;
-            return { ...tab, missing, href };
+            // A lost tab is named by its record, so that names what is lost.
+            return {
+              ...tab,
+              missing,
+              href,
+              context: missing ? context : tab.context,
+            };
           });
           if (tabs.every((tab, i) => tab === state.tabs[i])) return state;
           return goTo === null ? { tabs } : { tabs, pendingHref: goTo };

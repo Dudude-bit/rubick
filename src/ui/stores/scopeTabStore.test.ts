@@ -596,6 +596,28 @@ describe("a cluster the kubeconfig has lost", () => {
     state().reconcileContexts(["gone", "prod"]);
     expect(state().tabs[0].missing).toBe(false);
   });
+
+  /**
+   * A tab's record is as old as its last parking: a cluster picked inside it
+   * since moved its address and not the record. Fails if a tab standing in a
+   * listed cluster is called lost because the cluster it was parked on once
+   * left the kubeconfig.
+   */
+  it("judges a tab by the cluster its address names, not the one it was last parked on", () => {
+    seed([tab({ id: "a", context: "gone", href: "/c/prod/pods" })]);
+    state().reconcileContexts(["prod"]);
+    expect(state().tabs[0]).toMatchObject({
+      missing: false,
+      href: "/c/prod/pods",
+    });
+  });
+
+  /** The other way round: fails if the lost tab is named after a cluster that is still there. */
+  it("names a lost tab after the cluster its address is in", () => {
+    seed([tab({ id: "a", context: "prod", href: "/c/gone/events" })]);
+    state().reconcileContexts(["prod"]);
+    expect(state().tabs[0]).toMatchObject({ missing: true, context: "gone" });
+  });
 });
 
 describe("titles", () => {

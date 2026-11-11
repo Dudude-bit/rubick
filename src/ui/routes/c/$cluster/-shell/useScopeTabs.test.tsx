@@ -24,6 +24,8 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import type { ContextInfo } from "@/generated/types";
+import { commands } from "@/lib/commands";
 import { useScopeTabs } from "./useScopeTabs";
 import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -329,6 +331,67 @@ describe("the kubeconfig", () => {
       });
     });
     expect(state().tabs[0].missing).toBe(true);
+  });
+});
+
+describe("the tab restored at launch", () => {
+  const listed = (...names: string[]) =>
+    names.map((name) => ({ name }) as ContextInfo);
+
+  beforeEach(() => vi.mocked(commands.connectCluster).mockClear());
+
+  /**
+   * A cluster picked inside a tab moves its address and not its record, and
+   * the active tab is saved as it stands. At the next launch the record's
+   * cluster was connected first and the address's a beat later: a sign-in
+   * for a cluster nobody asked for, opening over the one they did. Fails if
+   * the launch connects a cluster the tab's address does not name.
+   */
+  it("does not connect the cluster a tab was last parked on when its address names another", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({
+          id: "a",
+          context: "acme-dev",
+          namespace: "web",
+          scope: ["web"],
+          href: "/c/acme-prod/pods",
+        }),
+      ],
+      activeId: "a",
+    });
+    await mount("/c/acme-prod/pods");
+    await act(async () => {
+      useClusterStore.setState({ contexts: listed("acme-dev", "acme-prod") });
+    });
+
+    expect(commands.connectCluster).not.toHaveBeenCalled();
+    expect(useClusterStore.getState().namespaceScope).toEqual([]);
+  });
+
+  /** Fails if the rule above also drops the scope of a tab whose record is its own. */
+  it("still applies the scope of a tab standing where it was parked", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({
+          id: "a",
+          context: "acme-prod",
+          namespace: "web",
+          scope: ["web"],
+          href: "/c/acme-prod/pods",
+        }),
+      ],
+      activeId: "a",
+    });
+    await mount("/c/acme-prod/pods");
+    await act(async () => {
+      useClusterStore.setState({ contexts: listed("acme-dev", "acme-prod") });
+    });
+
+    await vi.waitFor(() =>
+      expect(useClusterStore.getState().namespaceScope).toEqual(["web"])
+    );
+    expect(commands.connectCluster).toHaveBeenCalledWith("acme-prod");
   });
 });
 
