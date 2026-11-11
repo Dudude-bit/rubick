@@ -109,8 +109,14 @@ export function GenericObjectPage({
     [verdict]
   );
   const registryKind = isResourceType(resource) ? toKind(resource) : null;
-  const kind =
-    served.state === "served" ? served.entry.kind : (registryKind ?? resource);
+  const said = (object.data as { kind?: unknown } | undefined)?.kind;
+  // Discovery's word, the registry's, or the object's own. The address's
+  // segment is only what the header shows until one of them is known.
+  const known =
+    served.state === "served"
+      ? served.entry.kind
+      : (registryKind ?? (typeof said === "string" && said ? said : null));
+  const kind = known ?? resource;
   const uid = useLineage(read, name, namespace).data?.uid ?? null;
   useOwnershipKeys(read, name, namespace);
   const crd = segmentOf(target);
@@ -119,7 +125,7 @@ export function GenericObjectPage({
     name,
     namespace,
     {
-      enabled: read !== null,
+      enabled: read !== null && known !== null,
       refresh: "slow",
       uid,
     }
