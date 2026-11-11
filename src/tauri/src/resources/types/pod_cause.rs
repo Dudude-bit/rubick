@@ -652,7 +652,9 @@ fn unfit(text: &str, nodes: i32) -> Unfit {
         .split_once("untolerated taint")
         .or_else(|| text.split_once("had taint"))
         .map(|(_, taint)| {
+            // Kubernetes 1.37 writes "untolerated taint(s)" and names none.
             taint
+                .trim_start_matches("(s)")
                 .trim()
                 .trim_end_matches(", that the pod didn't tolerate")
         })
@@ -1214,6 +1216,25 @@ mod tests {
                     "message": message, "lastTransitionTime": "2026-10-12T10:00:00Z"}]
             }
         }))
+    }
+
+    /// Kubernetes 1.37 says "had untolerated taint(s)" and names no taint.
+    /// Fails if the plural's "(s)" is shown as the taint.
+    #[test]
+    fn a_taint_the_scheduler_does_not_name_is_no_taint_named_s() {
+        let Some(PodCause::Unplaced { why, .. }) = pod_cause(&pending_with(
+            "0/2 nodes are available: 1 node(s) had untolerated taint(s), 1 Insufficient cpu. \
+             preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.",
+        )) else {
+            panic!("an unplaced pod has a cause");
+        };
+        assert_eq!(
+            why[0],
+            Unfit::Taint {
+                taint: String::new(),
+                nodes: 1
+            }
+        );
     }
 
     /// The scheduler's one line is several reasons over several nodes.

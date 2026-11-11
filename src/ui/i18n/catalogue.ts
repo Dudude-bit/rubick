@@ -7404,6 +7404,10 @@ export const en = {
       one: "{n} node has a taint it does not tolerate, {taint}",
       other: "{n} nodes have a taint it does not tolerate, {taint}",
     },
+    unfitTaintUnnamed: {
+      one: "{n} node has a taint it does not tolerate",
+      other: "{n} nodes have a taint it does not tolerate",
+    },
     unfitSelector: {
       one: "{n} node does not match its node selector or affinity",
       other: "{n} nodes do not match its node selector or affinity",

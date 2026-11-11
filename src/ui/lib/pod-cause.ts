@@ -268,7 +268,9 @@ export function unfitWords(unfit: Unfit, t: T): string {
         resource: unfit.resource,
       });
     case "taint":
-      return t("cause", "unfitTaint", { n: unfit.nodes, taint: unfit.taint });
+      return unfit.taint
+        ? t("cause", "unfitTaint", { n: unfit.nodes, taint: unfit.taint })
+        : t("cause", "unfitTaintUnnamed", { n: unfit.nodes });
     case "selector":
       return t("cause", "unfitSelector", { n: unfit.nodes });
     case "podAffinity":

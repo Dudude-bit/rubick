@@ -8174,6 +8174,12 @@ export const ru: Catalogue = {
       many: "у {n} узлов есть taint, который он не терпит: {taint}",
       other: "у {n} узлов есть taint, который он не терпит: {taint}",
     },
+    unfitTaintUnnamed: {
+      one: "у {n} узла есть taint, который он не терпит",
+      few: "у {n} узлов есть taint, который он не терпит",
+      many: "у {n} узлов есть taint, который он не терпит",
+      other: "у {n} узлов есть taint, который он не терпит",
+    },
     unfitSelector: {
       one: "{n} узел не подходит под его nodeSelector или affinity",
       few: "{n} узла не подходят под его nodeSelector или affinity",

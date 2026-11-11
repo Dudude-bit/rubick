@@ -12,6 +12,7 @@ import {
   exitMeaning,
   sharedCause,
   tellingLine,
+  unfitWords,
 } from "@/lib/pod-cause";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -451,6 +452,25 @@ describe("a pod whose topology spread is keyed by a label no node carries", () =
   it("says a label is missing where the spec names no key", () => {
     expect(causeText(unplaced([]), t)).toContain(
       "2 nodes lack a label its topology spread is keyed by."
+    );
+  });
+});
+
+describe("a taint the scheduler does not name", () => {
+  /**
+   * Kubernetes 1.37 writes "had untolerated taint(s)" with no taint after
+   * it. Fails if the clause ends on a separator with nothing behind it.
+   */
+  it("is a clause that ends where the words do, in both languages", () => {
+    const unnamed = { says: "taint", taint: "", nodes: 1 } as const;
+    expect(unfitWords(unnamed, t)).toBe(
+      "1 node has a taint it does not tolerate"
+    );
+    expect(unfitWords(unnamed, ru)).toBe(
+      "у 1 узла есть taint, который он не терпит"
+    );
+    expect(unfitWords({ ...unnamed, taint: "{gpu: }" }, t)).toBe(
+      "1 node has a taint it does not tolerate, {gpu: }"
     );
   });
 });
