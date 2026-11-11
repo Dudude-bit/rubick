@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { routeTree } from "@/generated/routeTree.gen";
 import { setRouter } from "@/lib/links";
+import { pageScroll } from "@/lib/page-scroll";
 import { navigationRendered } from "@/lib/perf-navigation";
 
 export function makeRouter(queryClient: QueryClient) {
@@ -13,7 +14,7 @@ export function makeRouter(queryClient: QueryClient) {
     // React Query owns freshness; a router cache in front of it would serve
     // a preload the watch has already replaced.
     defaultPreloadStaleTime: 0,
-    scrollRestoration: true,
+    ...pageScroll,
   });
   router.subscribe("onRendered", ({ toLocation }) => {
     const match = router.state.matches.at(-1);

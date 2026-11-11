@@ -1,4 +1,5 @@
 import * as React from "react";
+import { PAGE_SCROLLER } from "@/lib/page-scroll";
 import { cn } from "@/lib/utils";
 import { ACTIONS_CELL_GUTTER } from "./column-shares";
 
@@ -27,6 +28,7 @@ const Table = React.forwardRef<HTMLTableElement, TableProps>(
       ref={containerRef}
       className={cn("relative w-full overflow-auto", containerClassName)}
       style={containerStyle}
+      {...{ [PAGE_SCROLLER]: "" }}
     >
       <table
         ref={ref}
