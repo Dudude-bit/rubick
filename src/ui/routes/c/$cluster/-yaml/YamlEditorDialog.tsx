@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useMemo, useState, useDeferredValue } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { isReadDeadline } from "@/lib/read-deadline";
 import { commands } from "@/lib/commands";
 import type { DryRunDocument } from "@/generated/types";
@@ -68,7 +68,6 @@ import { useT } from "@/i18n/useT";
 export function YamlEditorDialog() {
   const asking = useAsk();
   const t = useT();
-  const queryClient = useQueryClient();
   const { toast } = useToast();
   const currentNamespace = useClusterStore((state) => state.currentNamespace);
 
@@ -101,6 +100,8 @@ export function YamlEditorDialog() {
   } = useYamlEditorStore();
 
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+  // Counts the openings of the confirmation: each one asks the server anew.
+  const [asked, setAsked] = useState(0);
   // Applying an edited manifest replaces the whole object — the most powerful
   // write here — so on a critical cluster it takes the same typed-name gate,
   // and the field is bound to the notice so neither can appear without the other.
@@ -169,6 +170,8 @@ export function YamlEditorDialog() {
   // What the server would store against what it holds now. Asked only once
   // the confirmation is open, of the buffer as it is at that moment; the
   // editor's own diff stands in while the answer is on its way, and says so.
+  // `asked` is in the key because "now" is: an answer kept from an earlier
+  // opening describes the object as it was then, under the same buffer.
   const dryRun = useQuery({
     queryKey: [
       "dry-run",
@@ -176,6 +179,7 @@ export function YamlEditorDialog() {
       resourceKey?.namespace ?? "",
       resourceKey?.name ?? "",
       editedContent,
+      asked,
     ],
     queryFn: () =>
       commands.dryRunManifest(
@@ -250,13 +254,6 @@ export function YamlEditorDialog() {
 
       if (result.success) {
         addHistoryEntry(editedContent, "Applied");
-        // The preview describes the cluster as it was before this apply,
-        // and its key changes only with the buffer — so opening the
-        // confirmation again for a second apply showed the first apply's
-        // answer: "would be created" about an object that now exists.
-        void queryClient.invalidateQueries({
-          queryKey: ["dry-run", resourceKey?.kind ?? ""],
-        });
         const askable = resourceKey ? askableKind(resourceKey.kind) : null;
         if (askable && resourceKey && askable !== "Pod" && askable !== "Job") {
           asking.ask(
@@ -317,7 +314,6 @@ export function YamlEditorDialog() {
     }
   }, [
     asking,
-    queryClient,
     editedContent,
     resourceKey,
     currentNamespace,
@@ -418,7 +414,11 @@ export function YamlEditorDialog() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={() => !applyDenied && setShowApplyConfirm(true)}
+                    onClick={() => {
+                      if (applyDenied) return;
+                      setAsked((n) => n + 1);
+                      setShowApplyConfirm(true);
+                    }}
                     disabled={
                       !applyDenied && (isLoading || isValidating || isApplying)
                     }

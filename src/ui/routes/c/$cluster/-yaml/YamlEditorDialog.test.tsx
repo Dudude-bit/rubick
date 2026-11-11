@@ -395,6 +395,50 @@ describe("what the cluster says it would do", () => {
   });
 });
 
+describe("a confirmation opened again over the same buffer", () => {
+  /**
+   * The answer was kept under the buffer's text for as long as the editor
+   * stayed open, so Apply, Cancel, an image rolled by CI, Apply again drew
+   * the first answer under "what it holds now" and the forced apply put the
+   * old image back unseen. Fails if the second opening does not ask again,
+   * or draws anything of the first answer.
+   */
+  it("asks the server again and shows nothing of the earlier answer", async () => {
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+    expect(await screen.findByText(/would change/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Cancel$/ }));
+    expect(dryRunManifest).toHaveBeenCalledTimes(1);
+
+    let answer: (run: unknown) => void = () => {};
+    dryRunManifest.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByText(/Asking the cluster/)).toBeInTheDocument();
+    expect(screen.queryByTestId("dry-run")).toBeNull();
+    expect(dryRunManifest).toHaveBeenCalledTimes(2);
+
+    await act(async () =>
+      answer({
+        documents: [
+          {
+            id: "deployment/shop api",
+            outcome: { says: "created" },
+            live: null,
+            would: "spec:\n  replicas: 4\n",
+          },
+        ],
+      })
+    );
+    expect(await screen.findByText(/would be created/)).toBeInTheDocument();
+    expect(screen.queryByText(/would change/)).toBeNull();
+  });
+});
+
 describe("a dry run nobody answered", () => {
   /** A proxy's 502 is not the server saying no; blocking on it would block an apply the server never saw. */
   it("says the question went unanswered and leaves the apply enabled", async () => {
