@@ -916,6 +916,42 @@ describe("the rest of the parts", () => {
     expect(slugOf("…")).toBe("section");
   });
 
+  /**
+   * A shared file drew a Knative Service, and an event about one, with the
+   * core Service's glyph and hue. Fails if the file's reference ignores
+   * where the kind is served, or the group an event names.
+   */
+  it("draws a custom kind named like a built-in as a kind of its own", () => {
+    const core = refOf({ kind: "Service", name: "web", namespace: "shop" });
+    const knative = refOf({
+      kind: "Service",
+      name: "web",
+      namespace: "shop",
+      crd: "services.serving.knative.dev",
+    });
+    expect(knative.icon).not.toBe(core.icon);
+    expect(knative.kindHue).not.toBe(core.kindHue);
+
+    const about = (apiVersion?: string) => ({
+      type: "Warning",
+      reason: "Failed",
+      message: "",
+      lastTimestamp: "2026-09-21T18:00:00Z",
+      involvedObject: { apiVersion, kind: "Service", name: "web" },
+      namespace: "shop",
+    });
+    const section = eventsSection(
+      [about("serving.knative.dev/v1"), about("v1"), about()] as never,
+      null,
+      true
+    );
+    const refs =
+      section.body.type === "events"
+        ? section.body.rows.map((row) => row.ref?.icon)
+        : [];
+    expect(refs).toEqual([knative.icon, core.icon, core.icon]);
+  });
+
   /** The tail carries identity only when it is long enough to; a node's `-0` is not. */
   it("splits a generated name the way the app does", () => {
     expect(refOf(subject)).toMatchObject({

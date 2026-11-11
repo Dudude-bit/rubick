@@ -495,7 +495,7 @@ function MoreRows({
           {...namedListLink(kind, items)}
           className="inline-flex items-center gap-1 text-fg-mut hover:text-fg"
         >
-          <KindIcon kind={kind} className="h-2.5 w-2.5" />
+          <KindIcon kind={kind} crd={undefined} className="h-2.5 w-2.5" />
           <span className="font-mono">
             {items.length} {items.length === 1 ? kind : getDisplayPlural(kind)}
           </span>
@@ -532,6 +532,7 @@ function CheckRow({ check }: { check: AttentionCheck }) {
       <span className="inline-flex items-baseline gap-1 whitespace-nowrap font-mono text-fg-mid">
         <KindIcon
           kind={check.kind}
+          crd={undefined}
           className="h-2.5 w-2.5 flex-none self-center"
         />
         {getDisplayPlural(check.kind)}
@@ -589,6 +590,7 @@ function UnconfirmedRow({ item }: { item: AttentionItem }) {
       <span className="inline-flex min-w-0 items-baseline gap-1 font-mono text-fg-mid">
         <KindIcon
           kind={item.kind}
+          crd={undefined}
           className="h-2.5 w-2.5 flex-none self-center"
         />
         <ResourceRef
@@ -1282,6 +1284,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
           <PastObjectRef
             kind={subject.kind}
             name={subject.name}
+            crd={subject.crd}
             namespace={subject.namespace}
             past={past}
           />

@@ -119,7 +119,7 @@ export function ObjectLink({
             kind,
             name,
             namespace,
-            crd: crdFor({ kind, name, crd }),
+            crd: crdFor({ kind, crd }),
             via: linkOptions?.via,
           })
     );
@@ -170,6 +170,7 @@ export function ResourceRef({
     <ResourceName
       kind={kind}
       name={name}
+      crd={crd}
       namespace={showNamespace ? namespace : undefined}
       showKind={showKind}
       size={size}

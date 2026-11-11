@@ -102,6 +102,27 @@ describe("the API resources page", () => {
     );
   });
 
+  /**
+   * Knative's Service sat in the list under the core Service's glyph. Fails
+   * if a kind is drawn by its name alone where the row knows its group.
+   */
+  it("draws a kind named like a built-in in another group with a mark of its own", async () => {
+    catalog.answer = () =>
+      Promise.resolve({
+        entries: [
+          entry("", "Service", "services"),
+          entry("serving.knative.dev", "Service", "services"),
+        ],
+        unread: [],
+      });
+    await draw();
+    const [core, knative] = (await screen.findAllByText("Service")).map(
+      (name) => name.closest("li")!.querySelector("svg")
+    );
+    expect(core).not.toHaveClass("lucide-circle-dashed");
+    expect(knative).toHaveClass("lucide-circle-dashed");
+  });
+
   it("groups kinds by API group, core first", async () => {
     await draw();
     const titles = (await screen.findAllByRole("region")).map((region) =>

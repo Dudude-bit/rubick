@@ -170,7 +170,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
           kind: subject.kind,
           name: subject.name,
           namespace: subject.namespace,
-          crd: crdFor({ kind: subject.kind, name: subject.name, crd }),
+          crd: crdFor({ kind: subject.kind, crd }),
           via: landing?.via,
         }
       : null;
@@ -198,6 +198,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
           <PastObjectRef
             kind={subject.kind}
             name={subject.name}
+            crd={crd}
             namespace={subject.namespace}
             showNamespace={showNamespace}
             past={past}

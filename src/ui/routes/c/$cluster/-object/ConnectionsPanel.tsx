@@ -46,10 +46,19 @@ const GROUP_HEADING =
 
 function Name({ object }: { object: ObjectRef }) {
   const { crdFor } = useCrdIndex();
+  const crd =
+    object.group === undefined
+      ? undefined
+      : crdInGroup({ kind: object.kind, group: object.group }, crdFor);
   if (object.existence === "missing") {
     return (
       <span className={RESOURCE_NAME_SHELL}>
-        <ResourceName kind={object.kind} name={object.name} showKind={false} />
+        <ResourceName
+          kind={object.kind}
+          name={object.name}
+          crd={crd}
+          showKind={false}
+        />
       </span>
     );
   }
@@ -59,11 +68,7 @@ function Name({ object }: { object: ObjectRef }) {
       kind={object.kind}
       name={object.name}
       namespace={object.namespace}
-      crd={
-        object.group === undefined
-          ? undefined
-          : crdInGroup({ kind: object.kind, group: object.group }, crdFor)
-      }
+      crd={crd}
       showKind={false}
     />
   );

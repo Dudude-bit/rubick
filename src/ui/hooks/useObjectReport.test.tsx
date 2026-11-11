@@ -39,6 +39,7 @@ import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { testRouter } from "@/test/render";
+import { refOf } from "@/lib/report-parts";
 import { useObjectReport } from "./useObjectReport";
 
 const router = testRouter(null, {
@@ -457,6 +458,11 @@ describe("the report of any object", () => {
         (s) => s.id === "connections" || s.id === "traffic"
       )
     ).toEqual([]);
+    // Nor is it headed with the built-in's glyph and hue.
+    const core = refOf({ kind: "Service", name: "frontend", namespace: null });
+    expect(result.current.report!.hero.icon).not.toBe(core.icon);
+    expect(result.current.report!.hero.hue).not.toBe(core.kindHue);
+    expect(result.current.report!.hero.ref?.icon).not.toBe(core.icon);
   });
 
   /**

@@ -66,16 +66,21 @@ export function resourceSegment(ref: Pick<ObjectRef, "kind" | "crd">) {
   return kind ? toPlural(kind) : null;
 }
 
+/** A kind as a reference names it: its name, and the segment it is served at where that is known. */
+export type KindRef = Pick<ObjectRef, "kind" | "crd">;
+
 /** The built-in access kind a reference names, unless its CRD says otherwise. */
-function accessOf(ref: ObjectRef): AccessKind | undefined {
+export function accessKindOf(ref: KindRef): AccessKind | undefined {
   const access = accessKind(ref.kind);
-  return access && (!ref.crd || ref.crd === segmentOf(access))
+  return ref.crd !== null &&
+    access &&
+    (!ref.crd || ref.crd === segmentOf(access))
     ? access
     : undefined;
 }
 
 /** A segment that names the registry's own kind is that kind, page and peek. */
-function ownCrd(ref: ObjectRef): string | undefined {
+function ownCrd(ref: KindRef): string | undefined {
   const known = ref.crd && isResourceType(ref.kind) ? toKind(ref.kind) : null;
   return known && segmentOf(getResourceDefinition(known)) === ref.crd
     ? undefined
@@ -83,13 +88,13 @@ function ownCrd(ref: ObjectRef): string | undefined {
 }
 
 /** The segment a reference is read through: its CRD's, or an access kind's. */
-export function crdFor(ref: ObjectRef): string | undefined {
-  const access = accessOf(ref);
+export function crdFor(ref: KindRef): string | undefined {
+  const access = accessKindOf(ref);
   return ownCrd(ref) ?? (access && segmentOf(access));
 }
 
 /** The registry's kind a reference is, or `null` for a CRD or namesake that only shares its name. */
-export function builtInKindOf(ref: ObjectRef): ResourceKind | null {
+export function builtInKindOf(ref: KindRef): ResourceKind | null {
   if (ref.crd === null || crdFor(ref)) return null;
   return isResourceType(ref.kind) ? toKind(ref.kind) : null;
 }
@@ -107,6 +112,17 @@ export function crdInGroup(
   return isBuiltInGroup(ref.kind, group) ? undefined : crdOf(group, ref.kind);
 }
 
+/**
+ * The segment a kind is drawn by where its group is known and no CRD index
+ * is at hand: none for the built-in of that group, or where no group is
+ * named; `null`, a kind of its own, for a namesake in another.
+ */
+export const drawnCrd = (ref: {
+  kind: string;
+  group?: string | null;
+}): null | undefined =>
+  ref.group == null || isBuiltInGroup(ref.kind, ref.group) ? undefined : null;
+
 /** Whether `group` is the one the built-in `kind` is served in. */
 export function isBuiltInGroup(kind: string, group: string): boolean {
   const known = isResourceType(kind) ? toKind(kind) : null;
@@ -123,7 +139,7 @@ export function objectLink(
   options: ObjectLinkOptions = {}
 ): AppLink | null {
   if (ref.crd === null) return null;
-  const access = accessOf(ref);
+  const access = accessKindOf(ref);
   const crd = crdFor(ref);
   const resource = resourceSegment({ kind: ref.kind, crd });
   if (!resource) return null;

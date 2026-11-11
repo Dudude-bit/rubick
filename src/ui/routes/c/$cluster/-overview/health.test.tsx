@@ -228,6 +228,22 @@ describe("the overview's two event panels", () => {
     ]);
   });
 
+  /** The shared file drew a warning about a Knative Service under the core Service's glyph; fails if the group the warning names is ignored. */
+  it("shares a warning about a custom kind named like a built-in with a mark of its own", () => {
+    const iconOf = (objectApiVersion?: string) => {
+      const section = warningsShare(
+        [{ ...warning, objectKind: "Service", objectApiVersion }],
+        true,
+        t
+      );
+      return section.body.type === "events"
+        ? section.body.rows[0].ref?.icon
+        : undefined;
+    };
+    expect(iconOf("v1")).toBe(iconOf());
+    expect(iconOf("serving.knative.dev/v1")).not.toBe(iconOf("v1"));
+  });
+
   /**
    * wd-demo, made again under its name, wore its predecessor's FailedMount
    * here, linked to the new pod. Fails if a warning about an object that no

@@ -1,12 +1,5 @@
-import { CircleDashed } from "lucide-react";
-
-import { accessKind } from "@/lib/access-kinds";
-import {
-  getResourceDefinition,
-  isResourceType,
-  toKind,
-} from "@/lib/resource-registry";
-import { kindHue } from "@/lib/resource-identity";
+import { kindMark } from "@/lib/resource-identity";
+import type { ResourceKind } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
@@ -17,18 +10,18 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
  */
 export function KindIcon({
   kind,
+  crd,
   className,
   ...rest
-}: {
-  kind: string;
+}: (
+  | { kind: ResourceKind; crd?: undefined }
+  | { kind: string; crd: string | null | undefined }
+) & {
   className?: string;
   "data-testid"?: string;
 }) {
   const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
-  const resolved = isResourceType(kind) ? toKind(kind) : null;
-  const Icon = resolved
-    ? getResourceDefinition(resolved).icon
-    : (accessKind(kind)?.icon ?? CircleDashed);
+  const { Icon, hue } = kindMark({ kind, crd });
   return (
     <Icon
       className={cn(
@@ -39,7 +32,7 @@ export function KindIcon({
       style={
         colouring === "off"
           ? undefined
-          : { color: `hsl(${kindHue(kind)} var(--kind-s) var(--kind-l))` }
+          : { color: `hsl(${hue} var(--kind-s) var(--kind-l))` }
       }
       aria-hidden="true"
       {...rest}

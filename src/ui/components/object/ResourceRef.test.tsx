@@ -334,6 +334,32 @@ describe("ResourceRef", () => {
       expect(screen.getByTestId("resource-ref-icon")).toBeInTheDocument();
     });
 
+    /**
+     * A Knative Service's reference, title and peek heading wore the core
+     * Service's glyph. Fails if a reference handed the CRD it is served by
+     * draws the built-in's mark, or if one without a CRD loses the built-in's.
+     */
+    it("draws a custom kind named like a built-in with a mark of its own", async () => {
+      const first = await wrap(
+        <ResourceRef
+          kind="Service"
+          name="web"
+          namespace="shop"
+          crd="services.serving.knative.dev"
+        />
+      );
+      const custom = screen.getByTestId("resource-ref-icon");
+      expect(custom).toHaveClass("lucide-circle-dashed");
+      first.unmount();
+
+      await wrap(<ResourceRef kind="Service" name="web" namespace="shop" />);
+      const builtIn = screen.getByTestId("resource-ref-icon");
+      expect(builtIn).not.toHaveClass("lucide-circle-dashed");
+      expect(builtIn.getAttribute("style")).not.toBe(
+        custom.getAttribute("style")
+      );
+    });
+
     it("still names the kind when it is not routable", async () => {
       await wrap(<ResourceRef kind="Pod" name="orphan" showKind={false} />);
       expect(screen.getByText("Pod orphan")).toBeInTheDocument();
@@ -807,6 +833,7 @@ describe("a name cut short", () => {
       <ResourceName
         kind="ServiceAccount"
         name="clusterrole-aggregation-controller"
+        crd={undefined}
         namespace="kube-system"
         showKind={false}
       />
@@ -853,7 +880,9 @@ describe("a name cut short", () => {
 
   /** A tooltip repeating a name that is already whole is noise on every row of every list. */
   it("says nothing extra over a name drawn whole", async () => {
-    await wrap(<ResourceName kind="ClusterRole" name="cluster-admin" />);
+    await wrap(
+      <ResourceName kind="ClusterRole" name="cluster-admin" crd={undefined} />
+    );
     const box = screen.getByTestId("resource-ref-name");
     measure(screen.getByTestId("resource-ref-head"), 90, 90);
     measure(screen.getByTestId("resource-ref-cut"), 7, 0);

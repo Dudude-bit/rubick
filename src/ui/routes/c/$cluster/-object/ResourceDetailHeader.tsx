@@ -7,6 +7,7 @@ import { ResourceName } from "@/components/object/ResourceName";
 import { CopyName } from "./CopyName";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { clusterLink, hrefOf, listLink, type AppLink } from "@/lib/links";
+import { segmentOf } from "@/lib/access-kinds";
 import { getDisplayPlural, type ResourceKind } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -229,6 +230,7 @@ export function ResourceDetailHeader({
       <ResourceName
         kind={kind}
         name={name}
+        crd={served ? segmentOf(served) : undefined}
         showKind={false}
         size="title"
         iconClassName="h-3 w-3"

@@ -88,6 +88,7 @@ function ObjectCell({ row }: { row: { original: EventInfo } }) {
       <PastObjectRef
         kind={subject.kind}
         name={subject.name}
+        crd={subject.crd}
         namespace={subject.namespace}
         showKind={false}
         past={past}

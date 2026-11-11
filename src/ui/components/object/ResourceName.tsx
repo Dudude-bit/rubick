@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { TITLE_SET } from "@/components/ui/title-tooltips";
 import { KindIcon } from "./KindIcon";
 import { splitName, identHue, kindHue } from "@/lib/resource-identity";
+import type { ResourceKind } from "@/lib/resource-registry";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 /**
@@ -50,8 +51,10 @@ export const RESOURCE_NAME_SIZE: Record<ResourceNameSize, string> = {
   title: "text-[13px]",
 };
 
-export interface ResourceNameProps {
-  kind: string;
+export type ResourceNameProps = (
+  | { kind: ResourceKind; crd?: undefined }
+  | { kind: string; crd: string | null | undefined }
+) & {
   name: string;
   /**
    * Drawn as a dim `namespace/` prefix inside the name's own box, never cut,
@@ -65,7 +68,7 @@ export interface ResourceNameProps {
   /** Sized up where the name is a heading rather than a row. */
   iconClassName?: string;
   size?: ResourceNameSize;
-}
+};
 
 /** The box the parts expect: baseline-aligned, shrinkable, one gap. */
 export const RESOURCE_NAME_SHELL =
@@ -168,6 +171,7 @@ export function nameCut({
 export function ResourceName({
   kind,
   name,
+  crd,
   namespace,
   showKind = true,
   iconClassName,
@@ -181,7 +185,7 @@ export function ResourceName({
   const kindStyle =
     colouring === "off"
       ? undefined
-      : { color: `hsl(${kindHue(kind)} var(--kind-s) var(--kind-l))` };
+      : { color: `hsl(${kindHue(kind, crd)} var(--kind-s) var(--kind-l))` };
   // The tint marks whichever part of the name says *which* object this is,
   // usually the generated tail. But a node is `k3d-k8s-gui-dev-agent-0`, where
   // the tail the splitter finds is the ordinal `-0` — two characters of colour
@@ -224,6 +228,7 @@ export function ResourceName({
     <>
       <KindIcon
         kind={kind}
+        crd={crd}
         className={cn("h-2.5 w-2.5 self-center", iconClassName)}
         data-testid="resource-ref-icon"
       />

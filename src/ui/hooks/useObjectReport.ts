@@ -270,8 +270,8 @@ export function useObjectReport(
       hero: {
         ref,
         title: subject.name,
-        icon: iconSvg(kindIcon(subject.kind)),
-        hue: kindHue(subject.kind),
+        icon: iconSvg(kindIcon(subject.kind, subject.crd)),
+        hue: kindHue(subject.kind, subject.crd),
       },
       kicker: t("share", "kicker"),
       capturedAt,

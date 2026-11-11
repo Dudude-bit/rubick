@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { render } from "@testing-library/react";
 
-import { TabMark } from "./tab-marks";
+import { kindGlyph } from "./detail-tab";
+import { TabGlyph, TabMark } from "./tab-marks";
 
 describe("TabMark", () => {
   /**
@@ -20,5 +21,26 @@ describe("TabMark", () => {
     const mark = container.querySelector("svg");
     expect(mark).toHaveClass("lucide-eye-off");
     expect(mark).toHaveClass("text-fg-fnt");
+  });
+});
+
+describe("TabGlyph", () => {
+  /**
+   * The Instances tab of Knative's `services` CRD wore the core Service's
+   * glyph. Fails if a tab naming a kind by the CRD that serves it draws the
+   * built-in of that name, or a registry kind's tab loses its glyph.
+   */
+  it("draws a custom kind named like a built-in with a mark of its own", () => {
+    const { container, rerender } = render(
+      <TabGlyph
+        glyph={kindGlyph("Service", "services.serving.knative.dev")}
+        isActive
+      />
+    );
+    expect(container.querySelector("svg")).toHaveClass("lucide-circle-dashed");
+    rerender(<TabGlyph glyph={kindGlyph("Service")} isActive />);
+    expect(container.querySelector("svg")).not.toHaveClass(
+      "lucide-circle-dashed"
+    );
   });
 });

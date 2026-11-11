@@ -7,14 +7,9 @@
  * a tab that opens onto Pods is the same tab in both, so it is drawn here
  * once and both ask for it.
  */
-import { CircleDashed, EyeOff } from "lucide-react";
+import { EyeOff } from "lucide-react";
 
-import { kindHue } from "@/lib/resource-identity";
-import {
-  getResourceDefinition,
-  isResourceType,
-  toKind,
-} from "@/lib/resource-registry";
+import { kindMark } from "@/lib/resource-identity";
 import { cn } from "@/lib/utils";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import type { DetailTabGlyph, DetailTabMark } from "./detail-tab";
@@ -82,19 +77,11 @@ export function TabGlyph({
   const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
   const tinted = colouring !== "off";
 
-  const resolved =
-    glyph.names === "kind" && isResourceType(glyph.kind)
-      ? toKind(glyph.kind)
-      : null;
   // A kind the registry does not carry — a CRD's own kind, on its Instances
   // tab — gets the same dashed circle it gets in every list of them.
-  const Icon =
-    glyph.names === "view"
-      ? glyph.icon
-      : resolved
-        ? getResourceDefinition(resolved).icon
-        : CircleDashed;
-  const hue = glyph.names === "view" || !tinted ? null : kindHue(glyph.kind);
+  const { Icon, hue: kindHue } =
+    glyph.names === "view" ? { Icon: glyph.icon, hue: null } : kindMark(glyph);
+  const hue = tinted ? kindHue : null;
 
   return (
     <Icon

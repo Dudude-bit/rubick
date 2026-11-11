@@ -336,7 +336,7 @@ export function CrdDetail() {
       // The CRD's own kind, so the tab carries whatever mark the list of
       // these objects carries everywhere else — a dashed circle and the
       // neutral hue for a kind the registry has never heard of.
-      glyph: kindGlyph(crd?.kind ?? ""),
+      glyph: kindGlyph(crd?.kind ?? "", crd?.name),
       content: crd && (
         <CustomResourceList
           crdName={crd.name}
@@ -430,7 +430,7 @@ export function CrdDetail() {
           crd && (
             <>
               <span className="flex min-w-0 items-center gap-1 text-[11px] text-fg-mut">
-                <KindIcon kind={crd.kind} className="h-3 w-3" />
+                <KindIcon kind={crd.kind} crd={crd.name} className="h-3 w-3" />
                 <span className="truncate">{crd.kind}</span>
               </span>
               <span className="text-[11px] text-fg-fnt">

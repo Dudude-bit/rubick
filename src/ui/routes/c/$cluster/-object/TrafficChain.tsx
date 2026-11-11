@@ -34,6 +34,7 @@ import {
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useRouteTls } from "@/hooks/useRouteTls";
 import { cn } from "@/lib/utils";
+import { drawnCrd } from "@/lib/links";
 import {
   chainBlindSpots,
   chainSilence,
@@ -86,7 +87,12 @@ function HopName({ object }: { object: ObjectRef }) {
   if (object.existence === "missing") {
     return (
       <span className={RESOURCE_NAME_SHELL}>
-        <ResourceName kind={object.kind} name={object.name} showKind={false} />
+        <ResourceName
+          kind={object.kind}
+          name={object.name}
+          crd={drawnCrd(object)}
+          showKind={false}
+        />
       </span>
     );
   }
@@ -278,6 +284,7 @@ function Controller({
           <ResourceName
             kind="IngressClass"
             name={binding.resolved}
+            crd="ingressclasses.networking.k8s.io"
             showKind={false}
           />
         </span>
@@ -497,6 +504,7 @@ function Hop({
                   <ResourceName
                     kind={hop.object.kind}
                     name={hop.object.name}
+                    crd={drawnCrd(hop.object)}
                     showKind={false}
                   />
                 </span>
