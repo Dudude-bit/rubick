@@ -78,6 +78,7 @@ function attentionFrom(
       overview: {
         problems,
         problemsTruncated: 0,
+        warningsKnown: true,
         unconfirmed: [],
         unread: [],
       } as unknown as ClusterOverview,
@@ -895,6 +896,7 @@ describe("a scope one namespace of which refused its pods", () => {
     nodes: [],
     problems: [],
     problemsTruncated: 0,
+    warningsKnown: true,
     unconfirmed: [],
     unread: [refusedPods],
   } as unknown as ClusterOverview;
@@ -929,6 +931,7 @@ describe("a scope one namespace of which refused its pods", () => {
     nodes: [],
     problems: [],
     problemsTruncated: 0,
+    warningsKnown: true,
     unconfirmed: [],
     unread: [refusedPods, refusedIn("Job", "jobs")],
   } as unknown as ClusterOverview;
@@ -1490,6 +1493,7 @@ describe("the census legend in Russian", () => {
       flagged("Unavailable"),
     ],
     problemsTruncated: 0,
+    warningsKnown: true,
     unconfirmed: [],
     unread: [],
   } as unknown as ClusterOverview;
@@ -1744,6 +1748,7 @@ describe("what Needs attention says it checked", () => {
         overview: {
           problems: [],
           problemsTruncated: 0,
+          warningsKnown: true,
           unconfirmed: [],
           unread: [
             {
@@ -1787,6 +1792,34 @@ describe("what Needs attention says it checked", () => {
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("PVCs");
     expect(unchecked).toHaveTextContent("still reading");
+    expect(screen.getByTestId("attention-summary")).toHaveTextContent(
+      "partly checked"
+    );
+  });
+
+  /**
+   * Lena's Job, its pods refused by a quota, is told from one still waiting
+   * only by a Warning event. Fails if events read short of their end leave
+   * the panel saying everything was checked, or are worded as a failed read.
+   */
+  it("names the warning events as not read in full, and is then partly checked", async () => {
+    const { container } = await panel(
+      attentionFrom([], {
+        overview: {
+          problems: [],
+          problemsTruncated: 0,
+          warningsKnown: false,
+          unconfirmed: [],
+          unread: [],
+        } as unknown as ClusterOverview,
+      })
+    );
+
+    expect(container).not.toHaveTextContent("nothing needs attention");
+    const unchecked = screen.getByTestId("attention-unchecked");
+    expect(unchecked).toHaveTextContent("Events");
+    expect(unchecked).toHaveTextContent("not read in full");
+    expect(unchecked).not.toHaveTextContent("could not be read");
     expect(screen.getByTestId("attention-summary")).toHaveTextContent(
       "partly checked"
     );

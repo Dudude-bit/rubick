@@ -504,6 +504,7 @@ fn main() {
             commands::gateway::probe_tcp_connect,
             // Stats commands
             commands::overview::get_cluster_overview,
+            commands::overview::follow_cluster_overview,
             // Metrics API
             commands::metrics::get_pods_metrics,
             commands::metrics::get_pods_metrics_in,

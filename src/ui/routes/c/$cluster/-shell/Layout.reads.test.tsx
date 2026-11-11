@@ -11,7 +11,10 @@ import {
 
 import { renderWithRouter } from "@/test/render";
 
-const reads = vi.hoisted(() => ({ overview: [] as unknown[] }));
+const reads = vi.hoisted(() => ({
+  overview: [] as unknown[],
+  followed: [] as unknown[],
+}));
 
 vi.mock("@/lib/commands", () => ({
   commands: new Proxy(
@@ -21,8 +24,14 @@ vi.mock("@/lib/commands", () => ({
         name === "then"
           ? undefined
           : async (scope: unknown) => {
-              if (name === "getClusterOverview") {
-                reads.overview.push(scope);
+              if (
+                name === "getClusterOverview" ||
+                name === "followClusterOverview"
+              ) {
+                (name === "getClusterOverview"
+                  ? reads.overview
+                  : reads.followed
+                ).push(scope);
                 return {
                   servedFrom: "watch",
                   counts: { pods: reads.overview.length },
@@ -63,6 +72,7 @@ const { useWindowActivity } = await import("@/lib/window-activity");
 
 beforeEach(() => {
   reads.overview = [];
+  reads.followed = [];
   vi.useFakeTimers({
     shouldAdvanceTime: true,
     toFake: [
@@ -145,9 +155,10 @@ describe("the shell's counts behind another page", () => {
    * Sam deleted big-pull: its page said "no longer exists" in 0.3 s while
    * the sidebar kept "Deployments 7" and "Pods 43" for 9 s, until the shell's
    * ten-second poll. Fails if a change the overview's stores announce in the
-   * window's scope is not read again within a second behind a Deployment page.
+   * window's scope is not followed within a second behind a Deployment page,
+   * or if following it reads the whole overview, a dozen requests, again.
    */
-  it("reads the counts again within a second of a change the stores announce", async () => {
+  it("follows the stores within a second of a change they announce, reading nothing whole", async () => {
     let announce: ((event: { payload: unknown }) => void) | null = null;
     vi.mocked(listen).mockImplementation(async (event, handler) => {
       if (event === "overview-changed") announce = handler as typeof announce;
@@ -172,6 +183,7 @@ describe("the shell's counts behind another page", () => {
       await vi.advanceTimersByTimeAsync(1_000);
     });
 
-    expect(reads.overview.length).toBe(before + 1);
+    expect(reads.followed).toHaveLength(1);
+    expect(reads.overview.length).toBe(before);
   });
 });

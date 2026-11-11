@@ -218,10 +218,10 @@ afterEach(() => {
 });
 
 describe("a feed a watch keeps", () => {
-  const WATCH_KEY = [...queryKeys.events(null), "watch"];
-  const rowsOf = (client: { getQueryData: (key: unknown[]) => unknown }) =>
-    (client.getQueryData(WATCH_KEY) as { rows: EventInfo[] } | undefined)
-      ?.rows ?? [];
+  const WATCH_KEY = queryKeys.eventsWatch(null, false);
+  type Feed = { getQueryData: (key: unknown[]) => unknown };
+  const rowsOf = (client: Feed, key: unknown[] = WATCH_KEY) =>
+    (client.getQueryData(key) as { rows: EventInfo[] } | undefined)?.rows ?? [];
 
   beforeEach(() => {
     subscribeEventWatch.mockReset();
@@ -238,10 +238,9 @@ describe("a feed a watch keeps", () => {
 
   /**
    * Dana's All events re-read the latest 500 every second, 350 KB each
-   * time. Fails if the feed is polled while its watch runs, if the first
-   * read is anything but the watch's batches, if the newest are not on top
-   * of a burst that arrived in the API's order, or if the cut stops saying
-   * which 500 these are.
+   * time. Fails if the feed is polled once its watch has its rows, if the
+   * newest are not on top of a burst that arrived in the API's order, or if
+   * the cut stops saying which 500 these are.
    */
   it("reads the feed from the watch's batches and asks nothing again while it runs", async () => {
     layOutRows();
@@ -256,10 +255,34 @@ describe("a feed a watch keeps", () => {
       await screen.findByText("500 normal events · of the latest 500")
     ).toBeInTheDocument();
     expect(rowAt(0)?.textContent).toContain("prod-pod-0");
+    listEvents.mockClear();
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(listEvents).not.toHaveBeenCalled();
     expect(screen.getByText("live")).toBeInTheDocument();
   }, 30_000);
+
+  /**
+   * On a scope of tens of thousands of events the page drew a skeleton until
+   * the watch had listed every one, forty requests for 20 000, where a read
+   * of four pages used to paint. Fails if nothing is drawn before the
+   * watch's list ends, if that first read is not the limited one, if it is
+   * called live, or if it goes on once the watch has its rows.
+   */
+  it("draws the latest from a limited read while its watch is still listing the scope", async () => {
+    listEvents.mockResolvedValue(feed("prod", 3));
+    await watched();
+
+    expect(await screen.findByText("3 normal events")).toBeInTheDocument();
+    expect(asked().every((filters) => filters.limit === 500)).toBe(true);
+    expect(screen.queryByText("live")).toBeNull();
+
+    burst(Array.from({ length: 5 }, (_, index) => dated("prod", index)));
+    expect(await screen.findByText("5 normal events")).toBeInTheDocument();
+    expect(screen.getByText("live")).toBeInTheDocument();
+    listEvents.mockClear();
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(listEvents).not.toHaveBeenCalled();
+  });
 
   /**
    * Dana's idle All events list stalled the window on every batch: all 500
@@ -925,6 +948,45 @@ describe("a feed a watch keeps", () => {
     }
   });
 
+  const warning = (index: number): EventInfo => ({
+    ...dated("kube-system", index),
+    type: "Warning",
+    reason: "BackOff",
+  });
+
+  /**
+   * To show its latest 500 the page kept every event of the scope: tens of
+   * thousands of rows in the window's heap on a busy cluster, each batch
+   * working through all of them. Fails if the feed holds more of a type than
+   * its largest limit, if it stops saying its rows are the latest, or if it
+   * counts what the type filter hides out of rows it did not keep.
+   */
+  it("keeps the latest 2 000 of each type of a scope that has more", async () => {
+    layOutRows();
+    const { client } = await watched();
+    burst([
+      ...Array.from({ length: 2600 }, (_, index) => dated("prod", index)),
+      ...Array.from({ length: 5 }, (_, index) => warning(index)),
+    ]);
+
+    expect(
+      await screen.findByText(
+        "5 warning events · 495 normal events · of the latest 500"
+      )
+    ).toBeInTheDocument();
+    const held = rowsOf(client);
+    expect(held.filter((row) => row.type === "Normal")).toHaveLength(2000);
+    expect(held.filter((row) => row.type === "Warning")).toHaveLength(5);
+    expect(held.at(-1)?.name).toBe("prod-1999");
+
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+    expect(
+      await screen.findByText(
+        "5 warning events · the type filter leaves the rest out"
+      )
+    ).toBeInTheDocument();
+  }, 30_000);
+
   /** Fails if choosing Warnings asks the cluster again rather than cutting what the watch holds. */
   it("narrows to warnings without asking the cluster again", async () => {
     await watched();
@@ -935,6 +997,7 @@ describe("a feed a watch keeps", () => {
     ]);
     await screen.findByText("1 warning event · 2 normal events");
 
+    listEvents.mockClear();
     await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
     expect(
       await screen.findByText(
@@ -1048,6 +1111,8 @@ describe("a feed a watch keeps", () => {
       expect(document.body.textContent).toContain("staging-pod-0")
     );
     expect(document.body.textContent).toContain("prod-pod-1");
+    listEvents.mockClear();
+    await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(listEvents).not.toHaveBeenCalled();
   });
 
@@ -1066,8 +1131,12 @@ describe("a feed a watch keeps", () => {
 
     send([{ op: "failed", resource: null }], "connection reset by peer");
 
+    // The read that drew the page ahead of the watch is still fresh, so the
+    // poll that replaces the watch comes on its own beat.
     expect(
-      await screen.findByText(/Could not read events just now/)
+      await screen.findByText(/Could not read events just now/, undefined, {
+        timeout: 3000,
+      })
     ).toBeInTheDocument();
     expect(listEvents).toHaveBeenCalled();
     expect(document.body.textContent).toContain("prod-pod-1");
@@ -1089,7 +1158,9 @@ describe("a feed a watch keeps", () => {
     );
     listEvents.mockRejectedValue(new Error("502 Bad Gateway"));
     send([{ op: "failed", resource: null }], "connection reset by peer");
-    await screen.findByText(/Could not read events just now/);
+    await screen.findByText(/Could not read events just now/, undefined, {
+      timeout: 3000,
+    });
 
     let answer: (rows: EventInfo[]) => void = () => {};
     listEvents.mockImplementation(
@@ -2015,6 +2086,75 @@ describe("a feed beside a peek", () => {
       screen.getByRole("button", { name: "Feed settings: Warnings" })
     ).toBeInTheDocument();
   });
+
+  /**
+   * "No limit" asks for every event of the scope, which the latest 2 000 of
+   * each type cannot answer. Fails if choosing it leaves the feed cut to
+   * what the limited watch kept, or reads it from that watch's entry.
+   */
+  it("keeps every event of the scope once no limit is chosen", async () => {
+    pageOf(300);
+    listEvents.mockResolvedValue(feed("prod", 3));
+    subscribeEventWatch.mockReset();
+    subscribeEventWatch.mockResolvedValue("events-1");
+    const { client } = await mount("list");
+    await screen.findByTitle("3 normal events");
+    const held = (whole: boolean) =>
+      client.getQueryData<{ rows: EventInfo[] }>(
+        queryKeys.eventsWatch(null, whole)
+      )?.rows.length;
+    const rows = Array.from({ length: 2100 }, (_, index) =>
+      dated("prod", index)
+    );
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledTimes(1)
+    );
+    burst(rows);
+    expect(held(false)).toBe(2000);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Feed settings" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "No limit" }));
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledTimes(2)
+    );
+    // Every event in one answer is what the watch is there to avoid, and
+    // until it has them the page draws neither none nor the limited read's.
+    expect(asked().some((filters) => filters.limit === null)).toBe(false);
+    expect(screen.queryByText(/^No events in /)).toBeNull();
+    expect(screen.queryByTitle(/normal events/)).toBeNull();
+    burst(rows);
+    expect(await screen.findByTitle("2 100 normal events")).toBeInTheDocument();
+    expect(held(true)).toBe(2100);
+    expect(held(false)).toBe(2000);
+  }, 30_000);
+
+  /**
+   * A feed showing exactly its limit's rows said nothing was left out, though
+   * the watch had kept that many of a scope with more. Fails if rows the
+   * watch dropped stop counting as rows the limit left unread.
+   */
+  it("says its rows are the latest where the watch kept no more than the limit shows", async () => {
+    pageOf(300);
+    subscribeEventWatch.mockReset();
+    subscribeEventWatch.mockResolvedValue("events-1");
+    await mount("stories");
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Feed settings" })
+    );
+    await user.click(
+      screen.getByRole("menuitemradio", { name: /^Latest 2\s000$/ })
+    );
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledTimes(1)
+    );
+    burst(Array.from({ length: 2600 }, (_, index) => dated("prod", index)));
+
+    expect(
+      await screen.findByTitle(/ · of the latest 2\s000$/)
+    ).toBeInTheDocument();
+  }, 30_000);
 
   /**
    * With Warnings and a limit the button's words took a row of their own and

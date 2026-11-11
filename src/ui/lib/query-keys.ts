@@ -135,6 +135,17 @@ export const queryKeys = {
 
   // Events
   events: (namespace?: string | null): string[] => ["events", scope(namespace)],
+  /**
+   * The feed the Events page's watch keeps: the latest of each type, or,
+   * `whole`, every event of the scope. Two entries, since the first cannot
+   * answer for the second.
+   */
+  eventsWatch: (namespace: string | null, whole: boolean): string[] => [
+    "events",
+    scope(namespace),
+    "watch",
+    ...(whole ? ["all"] : []),
+  ],
 
   /**
    * The pod list as the table draws it: `PodRow`s from `listPodRows`, not

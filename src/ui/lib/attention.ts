@@ -111,6 +111,8 @@ export interface AttentionCheck {
   kind: string;
   state: "read" | "reading" | "unread";
   unread: Unread[];
+  /** Read, but not to its end: what it found stands, and more may be missing. */
+  partial?: boolean;
 }
 
 /** A read of `scope` that failed whole, as each namespace it asked lost it, or as the cluster's when it asked the cluster. */
@@ -150,11 +152,13 @@ export function checkSaid(check: AttentionCheck, t: T): string {
   const word =
     check.state === "reading"
       ? t("cluster", "attentionStillReading")
-      : refused
-        ? verb
-          ? t("cluster", "attentionForbidden", { verb })
-          : t("cluster", "attentionRefused")
-        : t("cluster", "attentionFailed");
+      : check.partial
+        ? t("cluster", "attentionPartial")
+        : refused
+          ? verb
+            ? t("cluster", "attentionForbidden", { verb })
+            : t("cluster", "attentionRefused")
+          : t("cluster", "attentionFailed");
   return refused || check.unread.some((entry) => entry.namespace)
     ? `${word} ${unreadWhere(check.unread, t)}`
     : word;
@@ -200,6 +204,14 @@ const BACKEND_KINDS = [
   "Job",
   "Node",
 ] as const;
+
+/** The Warning events read short of their end: a failure, or its page cap. */
+const EVENTS_SHORT: AttentionCheck = {
+  kind: "Event",
+  state: "unread",
+  unread: [],
+  partial: true,
+};
 
 /** One cached answer per reader: the shell and the page ask with the same inputs. */
 function remember<A extends unknown[], R>(
@@ -831,6 +843,7 @@ export function namespaceAttention(
       (check) =>
         check.state === "read" ||
         (check.state === "unread" &&
+          check.unread.length > 0 &&
           check.unread.every(
             (entry) => entry.namespace !== null && entry.namespace !== namespace
           ))
@@ -873,6 +886,10 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
       const unread = overview.unread.filter((entry) => entry.kind === kind);
       return { kind, state: unread.length > 0 ? "unread" : "read", unread };
     }),
+    // Only a Warning event tells a Job whose pods the cluster refuses from
+    // one still waiting for them, and a pod the kubelet cannot set up from
+    // one starting. Read short of their end, neither is known.
+    ...(overview.warningsKnown ? [] : [EVENTS_SHORT]),
     services.unread === "reading"
       ? { kind: "Service", state: "reading", unread: [] }
       : {

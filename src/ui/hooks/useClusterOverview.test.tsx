@@ -13,12 +13,15 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const getClusterOverview = vi.fn();
+const followClusterOverview = vi.fn();
 const subscribeDeploymentWatch = vi.fn(
   async (_scope: string[] | null) => "deploy"
 );
 vi.mock("@/lib/commands", () => ({
   commands: {
     getClusterOverview: (scope: string[] | null) => getClusterOverview(scope),
+    followClusterOverview: (scope: string[] | null) =>
+      followClusterOverview(scope),
     subscribeDeploymentWatch: (scope: string[] | null) =>
       subscribeDeploymentWatch(scope),
     resourceWatchSubscribed: async () => {},
@@ -49,6 +52,7 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 
 beforeEach(() => {
   getClusterOverview.mockReset();
+  followClusterOverview.mockReset();
   client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
@@ -182,6 +186,13 @@ describe("an overview served from the watched stores", () => {
     useWindowActivity.setState({ visible: true });
   });
 
+  const served = (pods: number, services = 3) => ({
+    servedFrom: "watch",
+    counts: { pods, services },
+  });
+  const KEY = ["cluster-overview", "prod-eu", "shop"];
+  const held = () => client.getQueryData<{ counts: { pods: number } }>(KEY);
+
   function follow(servedFrom: "watch" | "list") {
     getClusterOverview.mockResolvedValue({ servedFrom, counts: { pods: 40 } });
     return renderHook(
@@ -193,61 +204,127 @@ describe("an overview served from the watched stores", () => {
     );
   }
 
-  /**
-   * Sam's Overview read "41 of 62 pods ready" for six seconds after kubectl
-   * was back at 40, on a ten-second poll over stores that knew at once.
-   * Fails if a change the stores announce in the window's scope is not read
-   * again, or one elsewhere is.
-   */
-  it("reads again when its stores announce a change in its scope, and only then", async () => {
+  /** The shop's overview, followed, and how many whole reads that took. */
+  async function followed() {
     useClusterStore.setState({ namespaceScope: ["shop"] });
     const { result } = follow("watch");
     await waitFor(() => expect(result.current).toBe(true));
     await waitFor(() => expect(announce).not.toBeNull());
-    const reads = getClusterOverview.mock.calls.length;
+    return getClusterOverview.mock.calls.length;
+  }
 
-    changed(["team-blind"]);
+  /** A read the test answers when it says. */
+  function pending<T>() {
+    let land: (value: T) => void = () => {};
+    const read = new Promise<T>((resolve) => (land = resolve));
+    return { read, land: (value: T) => act(async () => land(value)) };
+  }
+
+  /**
+   * Sam's Overview read "41 of 62 pods ready" for six seconds after kubectl
+   * was back at 40, on a ten-second poll over stores that knew at once. And
+   * each change then read the whole overview: a dozen requests to the
+   * cluster, up to once a second. Fails if a change the stores announce in
+   * the window's scope is not followed, if one elsewhere is, if following
+   * reads the whole overview, or if it moves when the counts were counted.
+   */
+  it("follows a change its stores announce in its scope, and asks the cluster's counts nothing for it", async () => {
+    const reads = await followed();
+    expect(client.getQueryData(KEY)).toBeDefined();
+    const countedAt = client.getQueryState(KEY)!.dataUpdatedAt;
+    followClusterOverview.mockResolvedValue(served(41));
+
+    await changed(["team-blind"]);
     await new Promise((settle) => setTimeout(settle, 50));
-    expect(getClusterOverview).toHaveBeenCalledTimes(reads);
+    expect(followClusterOverview).not.toHaveBeenCalled();
 
-    changed(["shop"]);
-    await waitFor(() =>
-      expect(getClusterOverview).toHaveBeenCalledTimes(reads + 1)
-    );
-    changed([], true);
-    await waitFor(() =>
-      expect(getClusterOverview).toHaveBeenCalledTimes(reads + 2)
-    );
+    await changed(["shop"]);
+    await waitFor(() => expect(held()?.counts.pods).toBe(41));
+    expect(followClusterOverview).toHaveBeenCalledWith(["shop"]);
+    followClusterOverview.mockResolvedValue(served(42));
+    await changed([], true);
+    await waitFor(() => expect(held()?.counts.pods).toBe(42));
+
+    expect(followClusterOverview).toHaveBeenCalledTimes(2);
+    expect(getClusterOverview).toHaveBeenCalledTimes(reads);
+    expect(client.getQueryState(KEY)!.dataUpdatedAt).toBe(countedAt);
+  });
+
+  /**
+   * A rollout is a change every 50 ms. Fails if each announcement is asked
+   * of the backend on its own rather than one at a time, or if the changes
+   * announced while one was out are not followed once it is back.
+   */
+  it("follows one change at a time, and the ones announced meanwhile together", async () => {
+    await followed();
+    const first = pending<unknown>();
+    followClusterOverview.mockReturnValueOnce(first.read);
+    followClusterOverview.mockResolvedValue(served(45));
+
+    for (let burst = 0; burst < 5; burst++) await changed(["shop"]);
+    expect(followClusterOverview).toHaveBeenCalledTimes(1);
+
+    await first.land(served(41));
+    await waitFor(() => expect(held()?.counts.pods).toBe(45));
+    expect(followClusterOverview).toHaveBeenCalledTimes(2);
   });
 
   /**
    * Sam's drain named the new pod at 114 ms in one run and 676 ms in the
-   * next: a change announced while a read was on its way joined that read,
-   * which could have left before it. Fails if a change announced during a
-   * read is not read again once that read lands.
+   * next: a change announced while a whole read was on its way waited for
+   * an answer that could have left before it. Fails if such a change is not
+   * followed once that read lands.
    */
-  it("reads again after a read in flight when a change is announced during it", async () => {
-    useClusterStore.setState({ namespaceScope: ["shop"] });
-    const { result } = follow("watch");
-    await waitFor(() => expect(result.current).toBe(true));
-    await waitFor(() => expect(announce).not.toBeNull());
-    const reads = getClusterOverview.mock.calls.length;
-    let land: (value: unknown) => void = () => {};
-    getClusterOverview.mockImplementationOnce(
-      () => new Promise((resolve) => (land = resolve))
-    );
+  it("follows again after a whole read that was out when a change was announced", async () => {
+    await followed();
+    const whole = pending<unknown>();
+    getClusterOverview.mockReturnValueOnce(whole.read);
+    void client.refetchQueries({ queryKey: KEY });
+    followClusterOverview.mockResolvedValue(served(41));
 
-    changed(["shop"]);
+    await changed(["shop"]);
+    await waitFor(() => expect(held()?.counts.pods).toBe(41));
+    const follows = followClusterOverview.mock.calls.length;
+
+    followClusterOverview.mockResolvedValue(served(42));
+    await whole.land({ servedFrom: "watch", counts: { pods: 40 } });
+    await waitFor(() => expect(held()?.counts.pods).toBe(42));
+    expect(followClusterOverview).toHaveBeenCalledTimes(follows + 1);
+  });
+
+  /**
+   * A follow carries the counts of the whole read before it. Fails if one
+   * that lands after a newer whole read puts those older counts back.
+   */
+  it("does not put a follow's older counts over a whole read that landed while it was out", async () => {
+    await followed();
+    const slow = pending<unknown>();
+    followClusterOverview.mockReturnValueOnce(slow.read);
+    await changed(["shop"]);
+
+    getClusterOverview.mockResolvedValue({
+      servedFrom: "watch",
+      counts: { pods: 41, services: 4 },
+    });
+    await act(() => client.refetchQueries({ queryKey: KEY }));
+    await slow.land(served(41, 3));
+
+    expect(client.getQueryData(KEY)).toMatchObject({ counts: { services: 4 } });
+    // That read left after the change was announced, so it has seen it.
+    expect(followClusterOverview).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Fails if a backend with nothing to follow from, no whole read of this
+   * scope or stores that stopped serving, leaves the change unread.
+   */
+  it("reads the whole overview where the backend has nothing to follow from", async () => {
+    const reads = await followed();
+    followClusterOverview.mockResolvedValue(null);
+
+    await changed(["shop"]);
     await waitFor(() =>
       expect(getClusterOverview).toHaveBeenCalledTimes(reads + 1)
-    );
-    changed(["shop"]);
-    await new Promise((settle) => setTimeout(settle, 50));
-    expect(getClusterOverview).toHaveBeenCalledTimes(reads + 1);
-
-    await act(async () => land({ servedFrom: "watch", counts: { pods: 41 } }));
-    await waitFor(() =>
-      expect(getClusterOverview).toHaveBeenCalledTimes(reads + 2)
     );
   });
 

@@ -3,7 +3,7 @@ import type { QueryKey } from "@tanstack/react-query";
 import { create } from "zustand";
 
 import { useToast } from "@/components/ui/use-toast";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { useResourceWatch, type Keep } from "@/hooks/useResourceWatch";
 import { useT } from "@/i18n/useT";
 import { isRefusal } from "@/lib/error-utils";
 import {
@@ -77,6 +77,7 @@ export function useWatchedList<
   detail,
   reportFailure,
   order,
+  keep,
   recount,
   onChange,
 }: {
@@ -87,6 +88,7 @@ export function useWatchedList<
   detail: (row: T) => readonly QueryKey[];
   reportFailure: string | ((message: string) => void);
   order?: (a: T, b: T) => boolean;
+  keep?: Keep<T>;
   recount?: boolean;
   onChange?: () => void;
 }): WatchedList {
@@ -142,6 +144,7 @@ export function useWatchedList<
     onError,
     onRecovered,
     order,
+    keep,
     recount,
     onChange,
   });
