@@ -5312,6 +5312,7 @@ export const ru: Catalogue = {
     attentionForbidden: "запрос {verb} запрещён",
     attentionClusterWide: "во всём кластере",
     attentionFailed: "не удалось прочитать",
+    attentionPartial: "прочитано не полностью",
     attentionStopsAt: "останавливается на {at}",
     attentionInNamespace: "в пространстве имён {namespace}",
     attentionInNamedNamespaces: "в пространствах имён {list}",

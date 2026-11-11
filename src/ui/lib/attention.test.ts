@@ -16,6 +16,7 @@ import {
   attentionOf,
   checkSaid,
   foldedWords,
+  namespaceAttention,
   reasonWord,
   type AttentionInputs,
   type GatewayApiInputs,
@@ -36,6 +37,7 @@ function overview(over: Partial<ClusterOverview> = {}): ClusterOverview {
   return {
     problems: [],
     problemsTruncated: 0,
+    warningsKnown: true,
     unconfirmed: [],
     unread: [],
     ...over,
@@ -1053,6 +1055,26 @@ describe("what Needs attention could not look at", () => {
       unread: [{ namespace: "net", code: "", message: "forbidden" }],
     });
     expect(attention({ services: read }).complete).toBe(true);
+  });
+
+  /**
+   * Lena's Job, its pods refused by a quota, is told from one still waiting
+   * only by a Warning event. With the events read short of their end the
+   * overview counted it Pending and Needs attention said all was checked.
+   * Fails if events left unread leave the answer complete, for the scope or
+   * for a namespace of it, are worded as a failed read, or are named where
+   * they were read whole.
+   */
+  it("is not complete where the warning events were not read to their end", () => {
+    const listed = attention({ overview: overview({ warningsKnown: false }) });
+    expect(listed.complete).toBe(false);
+    expect(namespaceAttention(listed, "prod").complete).toBe(false);
+    const events = listed.checks.find((check) => check.kind === "Event");
+    expect(events && checkSaid(events, t)).toBe("not read in full");
+
+    expect(attention().checks.map((check) => check.kind)).not.toContain(
+      "Event"
+    );
   });
 
   /** Every kind read and nothing flagged is the one complete, empty answer. */

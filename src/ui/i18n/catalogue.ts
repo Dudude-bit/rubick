@@ -4742,6 +4742,7 @@ export const en = {
     attentionForbidden: "{verb} is forbidden",
     attentionClusterWide: "across the cluster",
     attentionFailed: "could not be read",
+    attentionPartial: "not read in full",
     attentionStopsAt: "stops at {at}",
     attentionInNamespace: "in {namespace}",
     attentionInNamedNamespaces: "in {list}",
