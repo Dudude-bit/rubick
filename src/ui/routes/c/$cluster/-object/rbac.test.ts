@@ -132,6 +132,58 @@ describe("verbs that grant more than they name", () => {
     ).toEqual(["*"]);
   });
 
+  /**
+   * `*` is every verb, escalate, bind and impersonate among them, so the
+   * shorter spelling of the dangerous rule must not read as the safe one.
+   */
+  it("marks * wherever one of those verbs means something", () => {
+    const marked = (partial: Partial<Rule>) =>
+      escalatingVerbs(rule({ verbs: ["get", "*"], ...partial }));
+    const rbac = "rbac.authorization.k8s.io";
+    expect(
+      marked({ apiGroups: [rbac], resources: ["roles", "rolebindings"] })
+    ).toEqual(["*"]);
+    expect(marked({ apiGroups: [rbac], resources: ["clusterroles"] })).toEqual([
+      "*",
+    ]);
+    expect(marked({ apiGroups: [rbac], resources: ["*"] })).toEqual(["*"]);
+    expect(marked({ apiGroups: ["*"], resources: ["roles"] })).toEqual(["*"]);
+    for (const identity of ["users", "groups", "serviceaccounts"])
+      expect(marked({ resources: [identity] })).toEqual(["*"]);
+    expect(
+      marked({
+        apiGroups: ["authentication.k8s.io"],
+        resources: ["userextras/scopes"],
+      })
+    ).toEqual(["*"]);
+    expect(
+      marked({ apiGroups: ["authentication.k8s.io"], resources: ["uids"] })
+    ).toEqual(["*"]);
+  });
+
+  /** A group that serves a namesake, or a binding, is not where those verbs act. */
+  it("leaves * unmarked on a namesake in another group and on bindings alone", () => {
+    expect(
+      escalatingVerbs(
+        rule({ apiGroups: ["apps"], resources: ["roles"], verbs: ["*"] })
+      )
+    ).toEqual([]);
+    expect(
+      escalatingVerbs(
+        rule({
+          apiGroups: ["rbac.authorization.k8s.io"],
+          resources: ["rolebindings"],
+          verbs: ["*"],
+        })
+      )
+    ).toEqual([]);
+    expect(
+      escalatingVerbs(
+        rule({ resources: ["serviceaccounts/token"], verbs: ["*"] })
+      )
+    ).toEqual([]);
+  });
+
   /** * on pods is broad, and amber; it is not a way to more rights than it says. */
   it("leaves * over other kinds and reads of secrets unmarked", () => {
     expect(

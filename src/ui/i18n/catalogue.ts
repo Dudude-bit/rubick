@@ -5285,7 +5285,7 @@ export const en = {
     wildcard: "* matches every value",
     escalates: "grants more than it names",
     escalationNote:
-      "Marked verbs reach past the rule: bind and escalate grant roles beyond your own, impersonate acts as someone else, and * on secrets reads every token.",
+      "Marked verbs reach past the rule: bind and escalate grant roles beyond your own, impersonate acts as someone else, and * is every verb: those three where they apply, and on secrets a read of every token.",
     mayDo: "What it may do",
     boundTo: "Bound to",
     inNamespace: "in {namespace}",

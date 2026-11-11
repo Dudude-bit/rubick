@@ -141,15 +141,35 @@ export function roleTarget(
 /** Verbs that let the holder reach past what the rule names. */
 const ESCALATING_VERBS = new Set(["escalate", "bind", "impersonate"]);
 
-const coversSecrets = (rule: Rule) =>
-  rule.apiGroups.some((group) => group === "" || group === "*") &&
-  rule.resources.some((resource) => resource === "secrets" || resource === "*");
+/**
+ * Where `*` stands for a verb that reaches past the rule: every read of
+ * secrets, escalate and bind on roles, impersonate on identities.
+ */
+const WILDCARD_REACHES: ReadonlyArray<readonly [string, ReadonlySet<string>]> =
+  [
+    ["", new Set(["secrets", "users", "groups", "serviceaccounts"])],
+    [RBAC_GROUP, new Set(["roles", "clusterroles"])],
+    ["authentication.k8s.io", new Set(["uids", "userextras"])],
+  ];
+
+const wildcardReaches = (rule: Rule) =>
+  WILDCARD_REACHES.some(
+    ([group, resources]) =>
+      rule.apiGroups.some((named) => named === group || named === "*") &&
+      rule.resources.some(
+        (named) =>
+          named === "*" ||
+          resources.has(named) ||
+          // An extra is impersonated by key: `userextras/scopes`.
+          resources.has(named.replace(/^userextras\/.+/, "userextras"))
+      )
+  );
 
 /** The verbs of one rule that grant more than they say. */
 export function escalatingVerbs(rule: Rule): string[] {
+  const wildcard = wildcardReaches(rule);
   return rule.verbs.filter(
-    (verb) =>
-      ESCALATING_VERBS.has(verb) || (verb === "*" && coversSecrets(rule))
+    (verb) => ESCALATING_VERBS.has(verb) || (verb === "*" && wildcard)
   );
 }
 
