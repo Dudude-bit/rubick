@@ -78,9 +78,10 @@ export function Changes() {
       scope: scope.scope,
       window: { from, to: end },
     }).filter((item) => item.at !== null && item.at >= from);
-    return [...timeline, ...quietStretches(covering, timeline, from, end)].sort(
-      (a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity)
-    );
+    return [
+      ...timeline,
+      ...quietStretches(covering, timeline, from, end, scope.scope),
+    ].sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity));
   }, [mine, ours, covering, now, end, window, scope.scope]);
   const open = ours.find((span) => span.to === null);
   // From the start of the unbroken watch, not of the span: a scope change

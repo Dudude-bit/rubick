@@ -1154,6 +1154,88 @@ describe("a stretch watched with nothing recorded", () => {
     );
   });
 
+  /**
+   * Marco may not watch DaemonSets: the hour was history after a restart and
+   * the page said "Watched 10:00 to 11:00: nothing here changed" beside a
+   * DaemonSet page that drew the same hour as not observed. Fails if a quiet
+   * stretch stops carrying what its watch was refused, or words it as still
+   * going on.
+   */
+  it("says what a quiet stretch's watch was refused", () => {
+    const r: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const spans = [
+      {
+        from: T0,
+        seenAt: T0 + 9 * MINUTE,
+        to: T0 + 9 * MINUTE,
+        unwatched: ["DaemonSet"],
+      },
+      { from: T0 + 10 * MINUTE, seenAt: T0 + 30 * MINUTE, to: null },
+    ];
+    const [row] = quietStretches(spans, [], T0 - HOUR, T0 + 30 * MINUTE);
+    if (row.kind !== "watched" || !row.refused)
+      throw new Error("a quiet row with nothing refused");
+    expect(unwatchedWords(row.refused, t, true)).toBe(
+      "DaemonSet not watched across the cluster: the cluster refused"
+    );
+    expect(unwatchedWords(row.refused, r, true)).toBe(
+      "DaemonSet не отслеживались во всём кластере: кластер отказал"
+    );
+  });
+
+  /**
+   * A refusal in a namespace the page does not show says nothing about the
+   * rows it does. Fails if such a stretch is marked refused, or one refused
+   * inside the page's scope is not.
+   */
+  it("says a refusal only where the page's scope reaches it", () => {
+    const refusedIn = (scope: string[]) => {
+      const spans = [
+        {
+          from: T0,
+          seenAt: T0 + 9 * MINUTE,
+          to: T0 + 9 * MINUTE,
+          scope: ["shop", "ops"],
+          unwatchedIn: ["DaemonSet/ops"],
+        },
+      ];
+      const [row] = quietStretches(spans, [], T0 - HOUR, T0 + HOUR, scope);
+      return row.kind === "watched" ? (row.refused ?? null) : undefined;
+    };
+    expect(refusedIn(["shop"])).toBeNull();
+    expect(refusedIn(["shop", "ops"])).toMatchObject({
+      unwatchedIn: ["DaemonSet/ops"],
+    });
+    expect(refusedIn([])).toMatchObject({ unwatchedIn: ["DaemonSet/ops"] });
+  });
+
+  /**
+   * A scope switch retires one span and opens the next at the same moment.
+   * Fails if a stretch that was refused a kind and the one after it, which
+   * was not, are told as one, with the refusal said of both or of neither.
+   */
+  it("keeps a refused stretch apart from the one that follows it", () => {
+    const spans = [
+      {
+        from: T0,
+        seenAt: T0 + 5 * MINUTE,
+        to: T0 + 5 * MINUTE,
+        unwatched: ["DaemonSet"],
+      },
+      { from: T0 + 5 * MINUTE, seenAt: T0 + 9 * MINUTE, to: T0 + 9 * MINUTE },
+    ];
+    const rows = quietStretches(spans, [], T0 - HOUR, T0 + HOUR);
+    expect(
+      rows.map((row) =>
+        row.kind === "watched" ? [row.gap.to, Boolean(row.refused)] : null
+      )
+    ).toEqual([
+      [T0 + 5 * MINUTE, true],
+      [T0 + 9 * MINUTE, false],
+    ]);
+  });
+
   /** A stretch that recorded a change already has rows; fails if it is also called quiet. */
   it("calls no stretch quiet that recorded a change", () => {
     const spans = [{ from: T0, seenAt: T0 + 9 * MINUTE, to: T0 + 9 * MINUTE }];

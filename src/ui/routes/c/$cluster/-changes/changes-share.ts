@@ -60,16 +60,19 @@ export function changesScreenSection(
       ];
     }
     if (item.kind === "gap") return [gapChange(item.gap, t)];
-    if (item.kind === "watched")
+    if (item.kind === "watched") {
+      const refused = item.refused && unwatchedWords(item.refused, t, true);
       return [
         {
           at: new Date(item.at).toISOString(),
           ref: null,
           parts: [
             { text: gapWords(item.gap, t, utcMoment, true), quiet: true },
+            ...(refused ? [{ text: refused, quiet: false }] : []),
           ],
         },
       ];
+    }
     // The screen only ever hands this section journal entries and gaps; a
     // revision, a delivery or a Helm release row has nowhere to attach on a
     // page with no single object, so it is left for the object's own page.

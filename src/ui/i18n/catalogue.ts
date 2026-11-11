@@ -1859,6 +1859,7 @@ export const en = {
     earlierRows:
       "Rows before {since} were recorded by this app while it watched from {from} to {to}",
     unwatchedRefused: "{kinds} not watched {where}: the cluster refused",
+    unwatchedRefusedThen: "{kinds} not watched {where}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",
     claimedOwner:
       "{owner} does not list this object; it only carries the label naming it",

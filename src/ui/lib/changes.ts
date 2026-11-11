@@ -560,8 +560,22 @@ function refusedIn(
   );
 }
 
+/** What a span was refused within `scope`, `[]` for every namespace; `null` where it watched all of it. */
+function refusedWithin(
+  span: SpanCover,
+  scope: readonly string[]
+): SpanCover | null {
+  const unwatchedIn = (span.unwatchedIn ?? []).filter(
+    (entry) =>
+      scope.length === 0 || scope.includes(entry.slice(entry.indexOf("/") + 1))
+  );
+  return span.unwatched?.length || unwatchedIn.length
+    ? { unwatched: span.unwatched, unwatchedIn, scope: span.scope }
+    : null;
+}
+
 /** Each kind a span was refused, with the namespaces it was refused in; `[]` is the whole cluster. */
-export function refusedWhere(span: ObservedSpan): Map<string, string[]> {
+export function refusedWhere(span: SpanCover): Map<string, string[]> {
   const where = new Map<string, string[]>();
   for (const kind of span.unwatched ?? []) where.set(kind, span.scope ?? []);
   for (const entry of span.unwatchedIn ?? []) {
@@ -571,8 +585,12 @@ export function refusedWhere(span: ObservedSpan): Map<string, string[]> {
   return where;
 }
 
-/** The kinds a span was refused, each with where, in words, or `null` when it watched them all. */
-export function unwatchedWords(span: ObservedSpan, t: T): string | null {
+/** The kinds a span was refused, each with where, in words, or `null` when it watched them all; `ended` for a span that is over. */
+export function unwatchedWords(
+  span: SpanCover,
+  t: T,
+  ended = false
+): string | null {
   const kindsAt = new Map<string, { kinds: string[]; where: string[] }>();
   for (const [kind, where] of refusedWhere(span)) {
     const key = [...where].sort().join();
@@ -581,7 +599,7 @@ export function unwatchedWords(span: ObservedSpan, t: T): string | null {
     kindsAt.set(key, same);
   }
   const said = [...kindsAt.values()].map(({ kinds, where }) =>
-    t("changes", "unwatchedRefused", {
+    t("changes", ended ? "unwatchedRefusedThen" : "unwatchedRefused", {
       kinds: kinds.join(", "),
       where: namespacesWhere(where, t),
     })
@@ -710,24 +728,30 @@ export function earlierRowsWords(
  * The stretches `spans` watched within [from, to] and recorded no row in, as
  * rows: Lena's page said nothing about the nine quiet minutes it had watched
  * before a scope switch. The one still running has the header's own line.
+ * Each carries what its watch was refused within `scope`: a kind nobody was
+ * let watch did not have a quiet hour.
  */
 export function quietStretches(
   spans: readonly ObservedSpan[],
   items: readonly ChangeItem[],
   from: number,
-  to: number
+  to: number,
+  scope: readonly string[] = []
 ): ChangeItem[] {
-  const stretches: Gap[] = [];
+  const stretches: (Gap & { refused: SpanCover | null })[] = [];
   const clipped = spans
     .map((span) => ({
       from: Math.max(span.from, from),
       to: Math.min(span.to ?? to, to),
+      refused: refusedWithin(span, scope),
     }))
     .filter((span) => span.to > span.from)
     .sort((a, b) => a.from - b.from);
   for (const span of clipped) {
     const last = stretches.at(-1);
-    if (last && span.from <= last.to) last.to = Math.max(last.to, span.to);
+    const same = JSON.stringify(last?.refused) === JSON.stringify(span.refused);
+    if (last && same && span.from <= last.to)
+      last.to = Math.max(last.to, span.to);
     else stretches.push({ ...span });
   }
   return stretches
@@ -741,7 +765,12 @@ export function quietStretches(
             item.at <= stretch.to
         )
     )
-    .map((gap) => ({ kind: "watched", at: gap.to, gap }));
+    .map(({ refused, ...gap }) => ({
+      kind: "watched",
+      at: gap.to,
+      gap,
+      ...(refused && { refused }),
+    }));
 }
 
 /** When the running watch began, if it has recorded no row since; `null` otherwise. */
@@ -930,8 +959,8 @@ export type ChangeItem =
   | { kind: "helm"; at: number | null; revision: HelmRevision }
   | { kind: "journal"; at: number; entry: JournalEntry }
   | { kind: "gap"; at: number; gap: Gap }
-  /** A stretch watched with nothing recorded, said so it is not read as unaccounted for. */
-  | { kind: "watched"; at: number; gap: Gap }
+  /** A stretch watched with nothing recorded, said so it is not read as unaccounted for; `refused` is what its watch was not let see. */
+  | { kind: "watched"; at: number; gap: Gap; refused?: SpanCover }
   /** The object's `creationTimestamp`: nothing before it is this object's history. */
   | { kind: "created"; at: number };
 

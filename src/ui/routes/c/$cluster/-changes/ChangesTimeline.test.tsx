@@ -53,6 +53,28 @@ describe("ChangesTimeline", () => {
   });
 
   /**
+   * A past stretch whose watch was refused a kind read "Watched … nothing
+   * here changed" and nothing else. Fails if the row stops saying, beside
+   * the quiet, what nobody was let watch.
+   */
+  it("says beside a quiet stretch what its watch was refused", async () => {
+    await mount([
+      {
+        kind: "watched",
+        at: T0 + HOUR,
+        gap: { from: T0, to: T0 + HOUR },
+        refused: { unwatched: ["DaemonSet"], scope: ["shop"] },
+      },
+    ]);
+    expect(
+      screen.getByText(/^Watched .+: nothing here changed$/)
+    ).toBeVisible();
+    expect(
+      screen.getByText("DaemonSet not watched in shop: the cluster refused")
+    ).toBeVisible();
+  });
+
+  /**
    * Lena switched the scope to another namespace for 57 seconds and came
    * back to "Вне наблюдаемых пространств имён 57 секунд в 7 окт., 09:32",
    * which says where the app was not and nothing of where it was. Fails if
