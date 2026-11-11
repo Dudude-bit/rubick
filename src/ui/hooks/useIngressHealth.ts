@@ -15,6 +15,7 @@ import {
   type ServiceHealthRead,
 } from "@/hooks/useServiceHealthInputs";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
+import { useClasslessTakers } from "@/integrations";
 import { useIngressTls, type IngressRef } from "@/hooks/useIngressTls";
 import { certificatesOf, useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
@@ -150,6 +151,7 @@ export function useIngressHealth(
   });
   const plain = usePlainHosts(rows ?? NO_ROWS, asksControllers);
   const door = useDoorAsk(enabled);
+  const classless = useClasslessTakers();
 
   return useMemo(
     () => (ingress: IngressHealthInput) => {
@@ -167,9 +169,10 @@ export function useIngressHealth(
           : undefined,
         servedPlain: (host) => plain(ingress, host),
         door,
+        classless,
       });
     },
-    [bindings, classes, backing, secrets, certificates, plain, door]
+    [bindings, classes, backing, secrets, certificates, plain, door, classless]
   );
 }
 
@@ -196,6 +199,7 @@ export function useOneIngressHealth(
     useMemo(() => (ingress ? [ingress] : []), [ingress])
   );
   const door = useDoorAsk(!!ingress);
+  const classless = useClasslessTakers();
   if (!ingress) return undefined;
   return ingressHealthOf({
     ingress,
@@ -204,5 +208,6 @@ export function useOneIngressHealth(
     certificates,
     servedPlain: (host) => plain(ingress, host),
     door,
+    classless,
   });
 }

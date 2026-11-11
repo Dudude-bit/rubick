@@ -60,7 +60,16 @@ export interface IngressInputs {
   servedPlain?: (host: string) => boolean | null;
   /** Who the class's controller connects from; absent, no backend's NetworkPolicies are asked about it. */
   door?: DoorAsk;
+  /** Absent, nobody looked: `"unread"`. */
+  classless?: ClasslessTakers;
 }
+
+/**
+ * The controllers found here that take an Ingress naming no class unless set
+ * to a class of their own, by name: none where the scan found none, `unread`
+ * where the cluster would not say what is installed, `reading` until it has.
+ */
+export type ClasslessTakers = readonly string[] | "unread" | "reading";
 
 export type IngressProblem =
   | { kind: "noController"; className: string | null }
@@ -81,8 +90,10 @@ export type IngressProblem =
 export type IngressDoubt =
   /** The Secret is missing, and whether its controller presents it at all was not asked. */
   | { kind: "tlsUnasked"; secret: string }
-  /** {@link IngressClaim}'s `unrecorded`. */
-  | { kind: "claimUnrecorded"; className: string };
+  /** {@link IngressClaim}'s `unrecorded`, for a class its annotation names. */
+  | { kind: "claimUnrecorded"; className: string }
+  /** The same for an Ingress that names no class. */
+  | { kind: "classlessUnrecorded"; takers: ClasslessTakers };
 
 /**
  * Who picks an Ingress up. An IngressClass answers for the class
@@ -90,13 +101,15 @@ export type IngressDoubt =
  * A class only the legacy annotation names, and no class without a default,
  * are taken by a controller's own settings, which the cluster does not
  * record: there the address a controller published is the evidence one did.
+ * Without one, an Ingress naming no class is served by nobody only where no
+ * controller found here takes such an Ingress.
  */
 export type IngressClaim =
   /** An IngressClass answers for it. */
   | "class"
   /** None does, and a controller published its address all the same. */
   | "address"
-  /** Its annotation names a class no IngressClass has, and it has no address: nobody can tell. */
+  /** No address, and a controller's own settings may take it: nobody can tell. */
   | "unrecorded"
   | "none";
 
@@ -104,21 +117,50 @@ type Classed = Pick<IngressInfo, "classAnnotated" | "loadBalancerIps">;
 
 export function ingressClaimOf(
   ingress: Classed,
-  binding: Pick<IngressClassBinding, "requested" | "resolved">
+  binding: Pick<IngressClassBinding, "requested" | "resolved">,
+  classless: ClasslessTakers
 ): IngressClaim {
   if (binding.resolved) return "class";
   if (binding.requested !== null && !ingress.classAnnotated) return "none";
   if (ingress.loadBalancerIps.length > 0) return "address";
-  return ingress.classAnnotated ? "unrecorded" : "none";
+  if (ingress.classAnnotated) return "unrecorded";
+  return typeof classless !== "string" && classless.length === 0
+    ? "none"
+    : "unrecorded";
 }
 
 /** A class binding with the claim it makes on the one Ingress it was read for. */
-export type ClaimedBinding = IngressClassBinding & { claim: IngressClaim };
+export type ClaimedBinding = IngressClassBinding & {
+  claim: IngressClaim;
+  /** Absent, nobody looked: `"unread"`. */
+  classless?: ClasslessTakers;
+};
 
 export const claimedBinding = (
   ingress: Classed,
-  binding: IngressClassBinding
-): ClaimedBinding => ({ ...binding, claim: ingressClaimOf(ingress, binding) });
+  binding: IngressClassBinding,
+  classless: ClasslessTakers
+): ClaimedBinding => ({
+  ...binding,
+  claim: ingressClaimOf(ingress, binding, classless),
+  classless,
+});
+
+/** Why an Ingress that names no class is not known to be served by nobody. */
+function classlessWords(takers: ClasslessTakers, t: T): string {
+  if (takers === "reading") return t("readings", "healthStillReading");
+  return takers === "unread"
+    ? t("empty", "ingressClasslessUnread")
+    : t("empty", "ingressClasslessTaken", { names: takers.join(", ") });
+}
+
+/** The line under a controller hop no IngressClass answers for. */
+export function claimNote(binding: ClaimedBinding, t: T): string {
+  if (binding.claim === "address") return t("empty", "ingressClaimedByAddress");
+  return binding.requested
+    ? t("empty", "ingressClaimUnrecorded")
+    : `${classlessWords(binding.classless ?? "unread", t)}.`;
+}
 
 export interface IngressHealth {
   problems: IngressProblem[];
@@ -191,14 +233,18 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
 
   if (!binding.known) unread.push(binding.why);
   else {
-    const claim = ingressClaimOf(ingress, binding.value);
+    const takers = inputs.classless ?? "unread";
+    const claim = ingressClaimOf(ingress, binding.value, takers);
     if (claim === "none")
       problems.push({ kind: "noController", className: ingress.className });
     if (claim === "unrecorded")
-      unread.push({
-        kind: "claimUnrecorded",
-        className: binding.value.requested ?? "",
-      });
+      unread.push(
+        binding.value.requested
+          ? { kind: "claimUnrecorded", className: binding.value.requested }
+          : takers === "reading"
+            ? null
+            : { kind: "classlessUnrecorded", takers }
+      );
   }
 
   const controller = binding.known ? binding.value.controller : null;
@@ -409,6 +455,8 @@ function doubtWords(doubt: IngressDoubt, t: T): string {
       return t("readings", "healthTlsUnasked", { name: doubt.secret });
     case "claimUnrecorded":
       return t("readings", "healthClaimUnrecorded", { name: doubt.className });
+    case "classlessUnrecorded":
+      return `${t("empty", "ingressNamesNoClass")}. ${classlessWords(doubt.takers, t)}`;
   }
 }
 

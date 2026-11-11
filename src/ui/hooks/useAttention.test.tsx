@@ -31,6 +31,7 @@ const commands = vi.hoisted(() => ({
   listGatewayRoutesIn: vi.fn(),
   listGatewaysIn: vi.fn(),
   listServiceBacking: vi.fn(),
+  detectInClusterExtensions: vi.fn(),
 }));
 
 vi.mock("@/lib/commands", () => ({ commands }));
@@ -428,6 +429,64 @@ describe("what the count asks about each Ingress", () => {
 
     expect(await counted(true)).toEqual([]);
     expect(await counted(false)).toEqual(["no controller"]);
+  });
+
+  /**
+   * An Ingress that names no class, with no default IngressClass and no
+   * address, was an error on every screen of a cluster whose Traefik serves
+   * it. Fails if the count says "no controller" where one that takes such an
+   * Ingress was found, or stops saying it where the scan found none.
+   */
+  it("does not count a classless Ingress as served by nobody where a controller here takes one", async () => {
+    const counted = async (traefik: boolean) => {
+      commands.detectInClusterExtensions.mockResolvedValue([
+        { id: "traefik", installed: traefik, version: null },
+        { id: "gke-ingress", installed: false, version: null },
+      ]);
+      commands.listIngressHealthInputs.mockResolvedValue({
+        rows: [
+          {
+            name: "shop",
+            namespace: "shop",
+            className: null,
+            rules: [],
+            defaultBackend: null,
+            loadBalancerIps: [],
+            tlsConfigs: [],
+          },
+        ],
+        unread: [],
+      });
+      commands.resolveIngressClass.mockResolvedValue({
+        requested: null,
+        resolved: null,
+        controller: null,
+        viaDefault: false,
+        available: [],
+      });
+      const { result, unmount } = renderHook(() => useAttention(), {
+        wrapper: wrapper(),
+      });
+      const check = () =>
+        result.current?.checks.find((entry) => entry.kind === "Ingress");
+      await waitFor(() =>
+        expect(check()?.state).toBe(traefik ? "unread" : "read")
+      );
+      const said = [
+        result
+          .current!.items.filter((item) => item.kind === "Ingress")
+          .map((item) => item.reason),
+        check()!.unread.map((entry) => entry.message),
+      ];
+      unmount();
+      return said;
+    };
+
+    expect(await counted(true)).toEqual([
+      [],
+      [expect.stringContaining("Installed here: Traefik.")],
+    ]);
+    expect(await counted(false)).toEqual([["no controller"], []]);
   });
 
   /** A cloud's supplier only adds to spec.tls, so its silence takes no fault away. */

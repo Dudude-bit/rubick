@@ -4,6 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import type {
+  DetectedExtension,
   IngressClassBinding,
   IngressInfo,
   ObjectRef,
@@ -14,6 +15,7 @@ const getIngress =
   vi.fn<(name: string, namespace: string | null) => Promise<IngressInfo>>();
 const resolveIngressClass =
   vi.fn<(className: string | null) => Promise<IngressClassBinding>>();
+const detected = vi.hoisted(() => ({ scan: [] as DetectedExtension[] }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -21,7 +23,7 @@ vi.mock("@/lib/commands", () => ({
       getIngress(name, namespace),
     resolveIngressClass: (className: string | null) =>
       resolveIngressClass(className),
-    detectInClusterExtensions: () => Promise.resolve([]),
+    detectInClusterExtensions: () => Promise.resolve(detected.scan),
     getTlsCertificates: () => Promise.resolve([]),
     getCertificateIssuance: () => Promise.resolve(null),
   },
@@ -29,6 +31,7 @@ vi.mock("@/lib/commands", () => ({
 
 const { routedOf, useIngressRouting } = await import("./useIngressRouting");
 const { queryKeys } = await import("@/lib/query-keys");
+const { useClusterStore } = await import("@/stores/clusterStore");
 
 function wrapper() {
   const client = new QueryClient({
@@ -156,6 +159,44 @@ describe("useIngressRouting", () => {
       expect(routed?.binding?.viaDefault).toBe(true);
       expect(routed?.binding?.controller).toBe("k8s.io/ingress-nginx");
     });
+  });
+
+  /**
+   * A workload behind an Ingress that names no class, on a cluster with no
+   * default IngressClass, read "no controller" in its chain while Traefik
+   * served it. Fails if the chain stops asking what is installed before it
+   * says nobody takes the Ingress, or says so where the scan found no taker.
+   */
+  it("calls a classless Ingress unserved only where no controller found here takes one", async () => {
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    getIngress.mockResolvedValue(info(null));
+    resolveIngressClass.mockResolvedValue({
+      requested: null,
+      resolved: null,
+      controller: null,
+      viaDefault: false,
+      available: [],
+    });
+    const claimed = async (traefik: boolean) => {
+      detected.scan = [
+        { id: "traefik", installed: traefik, version: null },
+        { id: "gke-ingress", installed: false, version: null },
+      ];
+      const { result, unmount } = renderHook(() => useIngressRouting(conns), {
+        wrapper: wrapper(),
+      });
+      await waitFor(() =>
+        expect(
+          routedOf(result.current.routing, ingress)?.binding?.classless
+        ).toBeInstanceOf(Array)
+      );
+      const binding = routedOf(result.current.routing, ingress)?.binding;
+      unmount();
+      return [binding?.claim, binding?.classless];
+    };
+
+    expect(await claimed(true)).toEqual(["unrecorded", ["Traefik"]]);
+    expect(await claimed(false)).toEqual(["none", []]);
   });
 
   /**

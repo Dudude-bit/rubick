@@ -65,6 +65,8 @@ import prometheus from "./prometheus";
 import traefik from "./traefik";
 import { gatewayCrd } from "./gateway-crd";
 import { errorToShow } from "@/lib/error-utils";
+import type { ClasslessTakers } from "@/lib/ingress-health";
+import type { DetectedExtension } from "@/generated/types";
 import type {
   CapabilityKey,
   CapabilityState,
@@ -357,6 +359,38 @@ export function useCapability<K extends CapabilityKey>(
   key: K
 ): Capabilities[K] | null {
   return useCapabilities(key)[0] ?? null;
+}
+
+const NO_TAKERS: readonly string[] = [];
+
+/**
+ * {@link ClasslessTakers} out of the detection scan: the vendors found that
+ * declare `ingress.classless`, and none only once every one of them was
+ * looked for and not found.
+ */
+export function classlessTakersOf(
+  detected: readonly DetectedExtension[] | undefined,
+  failed: boolean
+): ClasslessTakers {
+  const found = VENDORS.filter(
+    (vendor) => vendor.provides?.["ingress.classless"]
+  ).map((vendor) => ({
+    name: vendor.name,
+    installed:
+      detected?.find((entry) => entry.id === vendor.id)?.installed ?? null,
+  }));
+  const here = found.filter((vendor) => vendor.installed === true);
+  if (here.length > 0) return here.map((vendor) => vendor.name);
+  if (!detected) return failed ? "unread" : "reading";
+  return found.every((vendor) => vendor.installed === false)
+    ? NO_TAKERS
+    : "unread";
+}
+
+/** Read from the scan every screen already shares: no request of its own. */
+export function useClasslessTakers(): ClasslessTakers {
+  const { data, error } = useDetected();
+  return useMemo(() => classlessTakersOf(data, error !== null), [data, error]);
 }
 
 /**

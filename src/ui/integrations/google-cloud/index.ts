@@ -56,6 +56,7 @@ export const gkeIngress = defineVendor({
     "service.edge": serviceEdge,
     "service.routes": serviceRoutes,
     "ingress.tls": ingressTls,
+    "ingress.classless": true,
     "object.report": reportOf,
   },
   page: {

@@ -14,11 +14,13 @@ import type { DoorRead } from "./policy-door";
 import type { ServiceHealthInput } from "./service-health";
 import {
   claimedBinding,
+  claimNote,
   ingressAddressOf,
   ingressClaimOf,
   ingressClassWords,
   ingressHealthOf,
   ingressHealthWords,
+  type ClasslessTakers,
   type IngressInputs,
   type NamespaceBacking,
 } from "./ingress-health";
@@ -719,7 +721,7 @@ describe("who picks up an Ingress no IngressClass answers for", () => {
       classAnnotated: boolean | undefined,
       loadBalancerIps: string[],
       binding: IngressClassBinding
-    ) => ingressClaimOf({ classAnnotated, loadBalancerIps }, binding);
+    ) => ingressClaimOf({ classAnnotated, loadBalancerIps }, binding, []);
 
     expect(of(true, ADDRESS, GCE)).toBe("address");
     expect(of(true, [], GCE)).toBe("unrecorded");
@@ -728,6 +730,95 @@ describe("who picks up an Ingress no IngressClass answers for", () => {
     expect(of(undefined, ADDRESS, UNSERVED)).toBe("none");
     expect(of(undefined, [], UNSERVED)).toBe("none");
     expect(of(true, [], SERVED)).toBe("class");
+  });
+
+  const classless = (loadBalancerIps: string[] = []) => ({
+    ...ingress(["api"]),
+    className: null,
+    loadBalancerIps,
+  });
+
+  /**
+   * Traefik and GKE take an Ingress that names no class by their own
+   * settings, and one of theirs with no address written was red "no
+   * controller" while it served. Fails if such an Ingress is "none" where a
+   * taker was found or the scan could not say, if it stops being "none"
+   * where the scan found no taker, or if a taker excuses a class the spec
+   * names and the cluster does not have.
+   */
+  it("calls a classless Ingress served by nobody only where no controller found here takes one", () => {
+    const of = (takers: ClasslessTakers, binding = NO_DEFAULT) =>
+      ingressClaimOf(classless(), binding, takers);
+
+    expect(of([])).toBe("none");
+    expect(of(["Traefik"])).toBe("unrecorded");
+    expect(of("unread")).toBe("unrecorded");
+    expect(of("reading")).toBe("unrecorded");
+    expect(of(["Traefik"], UNSERVED)).toBe("none");
+    expect(ingressClaimOf(classless(ADDRESS), NO_DEFAULT, ["Traefik"])).toBe(
+      "address"
+    );
+  });
+
+  /**
+   * The verdict every surface draws from it. Fails if a taker found leaves
+   * the Ingress red or without the taker's name, if a scan that could not
+   * look reads as "none found" or as still reading, if a scan still out
+   * reads as final, or if a caller that passed nothing gets the red verdict.
+   */
+  it("says a classless Ingress was not checked, and names who may take it", () => {
+    const said = (takers?: ClasslessTakers) =>
+      verdict({
+        ingress: classless(),
+        binding: { known: true, value: NO_DEFAULT },
+        backing: { known: true, value: BACKING },
+        certificates: undefined,
+        ...(takers && { classless: takers }),
+      });
+
+    expect(said([])).toMatchObject({ code: "noController", role: "err" });
+    expect(said(["Traefik"])).toMatchObject({
+      code: "unknown",
+      role: "neutral",
+      reason:
+        "This Ingress names no class, and this cluster has no default one. Installed here: Traefik. By default such a controller takes an Ingress that names no class; whether this one is set to is not recorded in the cluster, and nothing has published an address yet, so whether anything serves this Ingress is not known",
+    });
+    const unread = {
+      code: "unknown",
+      role: "neutral",
+      reason:
+        "This Ingress names no class, and this cluster has no default one. Some controllers take an Ingress that names no class by their own settings, and what is installed here could not be read, so whether anything serves this Ingress is not known",
+    };
+    expect(said("unread")).toMatchObject(unread);
+    expect(said()).toMatchObject(unread);
+    expect(said("reading")).toMatchObject({ code: "reading", reason: null });
+  });
+
+  /**
+   * The chain hop and the shared file print this line under "names no
+   * class". Fails if it repeats the annotation's sentence for an Ingress
+   * that has none, or drops who was found.
+   */
+  it("words the controller hop of a classless Ingress by who may take it", () => {
+    const note = (takers: ClasslessTakers | undefined, address: string[]) => {
+      const binding = claimedBinding(classless(address), NO_DEFAULT, [
+        "Traefik",
+      ]);
+      return claimNote({ ...binding, classless: takers }, t);
+    };
+
+    expect(note(["Traefik", "GKE Ingress"], [])).toContain(
+      "Installed here: Traefik, GKE Ingress. By default"
+    );
+    expect(note("unread", [])).toContain("could not be read");
+    expect(note(undefined, [])).toBe(note("unread", []));
+    expect(note("reading", [])).toBe("still reading.");
+    expect(note(["Traefik"], ADDRESS)).toBe(
+      "A controller that takes it by its own settings has published its address; the cluster does not record which one."
+    );
+    expect(claimNote(claimedBinding(annotated([]), GCE, ["Traefik"]), t)).toBe(
+      "A controller matches that annotation against its own settings, and nothing has published an address yet, so whether anything serves this Ingress is not known."
+    );
   });
 
   /**
@@ -769,7 +860,7 @@ describe("who picks up an Ingress no IngressClass answers for", () => {
   /** The load balancer row promised "pending" or said "nothing serves its class" on the same guess. */
   it("says the address of an unrecorded claim is unknown, never pending or refused", () => {
     const claim = (ingress: IngressInputs["ingress"], binding = GCE) =>
-      claimedBinding(ingress, binding).claim;
+      claimedBinding(ingress, binding, []).claim;
 
     expect(ingressAddressOf(annotated([]), claim(annotated([])))).toBe(
       "unknown"
@@ -789,18 +880,18 @@ describe("who picks up an Ingress no IngressClass answers for", () => {
   /** The class row was the one place main drew this red; it names the annotation instead. */
   it("names the annotation on the class row, in red only where nothing serves the class", () => {
     expect(
-      ingressClassWords("gce", claimedBinding(annotated(ADDRESS), GCE), t)
+      ingressClassWords("gce", claimedBinding(annotated(ADDRESS), GCE, []), t)
     ).toEqual({
       text: "gce: by the kubernetes.io/ingress.class annotation, no IngressClass by that name",
       tone: null,
     });
     expect(
-      ingressClassWords("nginx", claimedBinding(ingress([]), UNSERVED), t)
+      ingressClassWords("nginx", claimedBinding(ingress([]), UNSERVED, []), t)
     ).toEqual({ text: "nginx: no IngressClass by that name", tone: "err" });
     expect(
       ingressClassWords(
         null,
-        claimedBinding({ loadBalancerIps: ADDRESS }, NO_DEFAULT),
+        claimedBinding({ loadBalancerIps: ADDRESS }, NO_DEFAULT, []),
         t
       )
     ).toEqual({ text: "none named, and no cluster default", tone: null });

@@ -48,6 +48,7 @@ vi.mock("@/lib/commands", () => ({
 import { useResourceDetail } from "@/hooks";
 import type { IngressInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
+import { useClusterStore } from "@/stores/clusterStore";
 import { IngressDetail } from "./IngressDetail";
 
 const shop: IngressInfo = {
@@ -308,6 +309,51 @@ describe("the load balancer row of an Ingress with no address", () => {
       await screen.findByText("none: nothing serves its class to assign one")
     ).toBeInTheDocument();
     expect(screen.queryByText("pending")).toBeNull();
+  });
+});
+
+describe("an Ingress that names no class, with no default IngressClass", () => {
+  const classless = { ...shop, className: null, loadBalancerIps: [] };
+  const scanFinds = (traefik: boolean) => {
+    answers.listEvents = [];
+    answers.resolveIngressClass = {
+      requested: null,
+      resolved: null,
+      controller: null,
+      viaDefault: false,
+      available: [],
+    };
+    answers.detectInClusterExtensions = [
+      { id: "traefik", installed: traefik, version: null },
+      { id: "gke-ingress", installed: false, version: null },
+    ];
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+  };
+
+  /**
+   * Traefik takes such an Ingress by its own settings and, without a
+   * published Service, never writes its address: the page said "no
+   * controller" and "nothing serves its class" over a site that answered.
+   * Fails if the status or the load balancer row calls it unserved where a
+   * controller that takes it was found; the cluster with none is the control.
+   */
+  it("is not called unserved where a controller found here takes it", async () => {
+    scanFinds(true);
+    await open("overview", classless);
+    expect(await screen.findByText("not checked")).toBeInTheDocument();
+    expect(screen.getByText(/Installed here: Traefik\./)).toBeInTheDocument();
+    expect(screen.queryByText("no controller")).toBeNull();
+    expect(
+      screen.queryByText("none: nothing serves its class to assign one")
+    ).toBeNull();
+    cleanup();
+
+    scanFinds(false);
+    await open("overview", classless);
+    expect(await screen.findByText("no controller")).toBeInTheDocument();
+    expect(
+      screen.getByText("none: nothing serves its class to assign one")
+    ).toBeInTheDocument();
   });
 });
 
