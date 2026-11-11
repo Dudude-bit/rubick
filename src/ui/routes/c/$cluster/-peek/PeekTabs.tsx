@@ -14,7 +14,7 @@ import { errorToShow } from "@/lib/error-utils";
 import { ReadAgain } from "@/components/ui/read-again";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
-import { toKind } from "@/lib/resource-registry";
+import { builtInKindOf } from "@/lib/links";
 import type { PeekTarget } from "@/hooks/usePeek";
 import { podContainers } from "@/lib/container-sequence";
 import { ContainerRows } from "../-object/container-rows";
@@ -87,7 +87,7 @@ export function PeekTabBody({
     case "data":
       return <PeekDataTab target={target} detail={detail} />;
     case "children":
-      return toKind(target.kind) === "CronJob" ? (
+      return builtInKindOf(target) === "CronJob" ? (
         <PeekJobsTab target={target} />
       ) : (
         <PeekPodsTab target={target} detail={detail} />
@@ -303,7 +303,7 @@ function PeekDataTab({
   detail: unknown;
 }) {
   const t = useT();
-  const kind = toKind(target.kind);
+  const kind = builtInKindOf(target);
   const namespace = target.namespace ?? null;
   const isSecret = kind === "Secret";
   const keys =

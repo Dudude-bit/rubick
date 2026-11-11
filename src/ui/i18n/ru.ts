@@ -5891,7 +5891,7 @@ export const ru: Catalogue = {
     wildcard: "* подходит под любое значение",
     escalates: "даёт больше, чем названо",
     escalationNote:
-      "Отмеченные глаголы дают больше, чем написано в правиле: bind и escalate позволяют выдавать роли шире ваших, impersonate позволяет действовать от чужого имени, а * на secrets открывает все токены.",
+      "Отмеченные глаголы дают больше, чем написано в правиле: bind и escalate позволяют выдавать роли шире ваших, impersonate позволяет действовать от чужого имени, а * означает любой глагол: эти три там, где они действуют, и чтение всех токенов на secrets.",
     mayDo: "Что ему разрешено",
     boundTo: "Кому выдана",
     inNamespace: "в {namespace}",
@@ -5921,6 +5921,20 @@ export const ru: Catalogue = {
       "Ни один ClusterRoleBinding и ни один RoleBinding её не выдают.",
     notBoundClusterRoleIn:
       "Ни один ClusterRoleBinding и ни один RoleBinding в {namespaces} её не выдают.",
+    notNamed:
+      "Ни один прочитанный здесь ClusterRoleBinding или RoleBinding её не называет.",
+    aggregatedInto: {
+      one: "Её правила агрегированы в {n} ClusterRole. Они есть у каждого, кому выдана та роль.",
+      few: "Её правила агрегированы в {n} ClusterRole. Они есть у каждого, кому выдана одна из них.",
+      many: "Её правила агрегированы в {n} ClusterRole. Они есть у каждого, кому выдана одна из них.",
+      other:
+        "Её правила агрегированы в {n} ClusterRole. Они есть у каждого, кому выдана одна из них.",
+    },
+    aggregatorUnbound: "Ни одна прочитанная здесь привязка её не выдаёт.",
+    couldNotReadAggregation:
+      "Не удалось прочитать ClusterRole, поэтому неизвестно, агрегирует ли правила этой роли другая.",
+    aggregationUnevaluated:
+      "Не удалось вычислить правило агрегации у: {roles}. Каждая может включать и правила этой роли.",
     readOnlyIn:
       "RoleBinding прочитаны только в {namespaces}. Остальные пространства имён не просматривались.",
   },

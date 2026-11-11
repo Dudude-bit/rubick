@@ -6,6 +6,7 @@ import type {
   ObjectRef,
   ResourceConnections,
 } from "@/generated/types";
+import type { ResourceKind } from "@/lib/resource-registry";
 
 const answer = vi.hoisted(() => ({
   connections: (): Promise<ResourceConnections> =>
@@ -30,9 +31,12 @@ const at = (kind: string, name: string): ObjectRef => ({
   facts: null,
 });
 
-const draw = (kind: string, name: string) =>
+const draw = (kind: ResourceKind, name: string) =>
   renderWithRouter(
-    <PeekTraffic target={{ kind, name, namespace: "team-checkout" }} />,
+    <PeekTraffic
+      target={{ kind, name, namespace: "team-checkout" }}
+      kind={kind}
+    />,
     { at: "/c/prod/pods", route: "/c/$cluster/$" }
   );
 

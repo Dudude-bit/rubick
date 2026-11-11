@@ -2,7 +2,13 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { BindingInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { escalatingVerbs, grantsTo, rulesTable, type Rule } from "./rbac";
+import {
+  aggregatorsOf,
+  escalatingVerbs,
+  grantsTo,
+  rulesTable,
+  type Rule,
+} from "./rbac";
 
 const t = ((_section: string, key: string) => key) as T;
 
@@ -132,6 +138,58 @@ describe("verbs that grant more than they name", () => {
     ).toEqual(["*"]);
   });
 
+  /**
+   * `*` is every verb, escalate, bind and impersonate among them, so the
+   * shorter spelling of the dangerous rule must not read as the safe one.
+   */
+  it("marks * wherever one of those verbs means something", () => {
+    const marked = (partial: Partial<Rule>) =>
+      escalatingVerbs(rule({ verbs: ["get", "*"], ...partial }));
+    const rbac = "rbac.authorization.k8s.io";
+    expect(
+      marked({ apiGroups: [rbac], resources: ["roles", "rolebindings"] })
+    ).toEqual(["*"]);
+    expect(marked({ apiGroups: [rbac], resources: ["clusterroles"] })).toEqual([
+      "*",
+    ]);
+    expect(marked({ apiGroups: [rbac], resources: ["*"] })).toEqual(["*"]);
+    expect(marked({ apiGroups: ["*"], resources: ["roles"] })).toEqual(["*"]);
+    for (const identity of ["users", "groups", "serviceaccounts"])
+      expect(marked({ resources: [identity] })).toEqual(["*"]);
+    expect(
+      marked({
+        apiGroups: ["authentication.k8s.io"],
+        resources: ["userextras/scopes"],
+      })
+    ).toEqual(["*"]);
+    expect(
+      marked({ apiGroups: ["authentication.k8s.io"], resources: ["uids"] })
+    ).toEqual(["*"]);
+  });
+
+  /** A group that serves a namesake, or a binding, is not where those verbs act. */
+  it("leaves * unmarked on a namesake in another group and on bindings alone", () => {
+    expect(
+      escalatingVerbs(
+        rule({ apiGroups: ["apps"], resources: ["roles"], verbs: ["*"] })
+      )
+    ).toEqual([]);
+    expect(
+      escalatingVerbs(
+        rule({
+          apiGroups: ["rbac.authorization.k8s.io"],
+          resources: ["rolebindings"],
+          verbs: ["*"],
+        })
+      )
+    ).toEqual([]);
+    expect(
+      escalatingVerbs(
+        rule({ resources: ["serviceaccounts/token"], verbs: ["*"] })
+      )
+    ).toEqual([]);
+  });
+
   /** * on pods is broad, and amber; it is not a way to more rights than it says. */
   it("leaves * over other kinds and reads of secrets unmarked", () => {
     expect(
@@ -157,5 +215,51 @@ describe("verbs that grant more than they name", () => {
     );
     expect(table.rows[0][3]).toEqual({ words: ["*"], escalating: ["*"] });
     expect(table.rows[1][3]).toEqual({ words: ["get"] });
+  });
+});
+
+describe("the roles a ClusterRole's rules are aggregated into", () => {
+  /**
+   * `edit` carries the label `admin` gathers by, so what `edit` gathers
+   * `admin` holds too. Fails if only the roles that gather it directly are
+   * found, or a role that gathers another one is.
+   */
+  it("follows aggregation through every role that gathers a gatherer", () => {
+    expect(
+      aggregatorsOf(
+        [
+          { role: "admin", gathers: ["edit", "admin-only"] },
+          { role: "edit", gathers: ["widgets-editor"] },
+          { role: "view", gathers: ["widgets-viewer"] },
+        ],
+        "widgets-editor"
+      )
+    ).toEqual({ through: ["edit", "admin"], unknown: [] });
+  });
+
+  /** A rule nobody could evaluate may gather any role: it is named, not dropped. */
+  it("names the roles whose rule could not be evaluated apart from those that gather it", () => {
+    expect(
+      aggregatorsOf(
+        [
+          { role: "odd", gathers: null },
+          { role: "edit", gathers: ["widgets-editor"] },
+        ],
+        "widgets-editor"
+      )
+    ).toEqual({ through: ["edit"], unknown: ["odd"] });
+  });
+
+  /** Two roles that gather each other must end, and neither is its own gatherer. */
+  it("ends on roles that gather each other", () => {
+    expect(
+      aggregatorsOf(
+        [
+          { role: "a", gathers: ["b"] },
+          { role: "b", gathers: ["a"] },
+        ],
+        "a"
+      )
+    ).toEqual({ through: ["b"], unknown: [] });
   });
 });

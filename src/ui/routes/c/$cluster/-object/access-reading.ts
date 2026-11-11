@@ -1,10 +1,16 @@
-import type { BindingInfo, Scoped } from "@/generated/types";
+import type { AggregationInfo, BindingInfo, Scoped } from "@/generated/types";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
 import { errorCode, errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
-import { rulesOf, type RbacTarget, type Rule } from "./rbac";
+import {
+  aggregatorsOf,
+  rulesOf,
+  type Aggregators,
+  type RbacTarget,
+  type Rule,
+} from "./rbac";
 
 /** A binding list, or one namespace of it, that could not be read. */
 export interface Gap {
@@ -124,4 +130,36 @@ export function useRoleReadings(targets: RbacTarget[]): {
     refresh: "steady",
   });
   return { readings: roles.data, retry: roles.refetch };
+}
+
+/** Whether other ClusterRoles gather a role: read, still being read, or not readable. */
+export type AggregationReading = (
+  | { state: "reading" }
+  | ({ state: "read" } & Aggregators)
+  | { state: "unread"; error: unknown }
+) & { retry: () => void };
+
+const NOT_AGGREGATED: Aggregators = { through: [], unknown: [] };
+
+/**
+ * The ClusterRoles a ClusterRole's rules are aggregated into. A list of
+ * ClusterRoles that could not be read is "unread", never "none": the role
+ * would read as granted to nobody while everyone bound to `edit` holds it.
+ * `null` asks nothing: only a ClusterRole is aggregated.
+ */
+export function useAggregators(clusterRole: string | null): AggregationReading {
+  const isConnected = useClusterStore((state) => state.isConnected);
+  const { data, error, refetch } = useLiveQuery<AggregationInfo[]>({
+    queryKey: queryKeys.clusterRoleAggregation(),
+    queryFn: () => commands.listClusterRoleAggregation(),
+    enabled: isConnected && clusterRole !== null,
+    refresh: "steady",
+  });
+  const retry = () => void refetch();
+  if (clusterRole === null) return { state: "read", ...NOT_AGGREGATED, retry };
+  if (data)
+    return { state: "read", ...aggregatorsOf(data, clusterRole), retry };
+  return error
+    ? { state: "unread", error, retry }
+    : { state: "reading", retry };
 }

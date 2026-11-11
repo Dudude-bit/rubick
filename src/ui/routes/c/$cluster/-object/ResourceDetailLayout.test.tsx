@@ -854,6 +854,19 @@ Started: 2026-09-10 03:14:22 UTC`;
     await wrap(<ResourceDetailLayout {...props} resource={null} isLoading />);
     expect(screen.getByText(/KubePodCrashLooping/)).toBeVisible();
   });
+
+  /** The alert named the registry's Pod; a custom kind called Pod is another object. */
+  it("does not show it on a custom resource that only shares the kind's name", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...props}
+        served={{ group: "example.dev", plural: "pods" }}
+        resource={null}
+        isLoading
+      />
+    );
+    expect(screen.queryByText(/KubePodCrashLooping/)).toBeNull();
+  });
 });
 
 describe("a detail page whose re-read fails", () => {

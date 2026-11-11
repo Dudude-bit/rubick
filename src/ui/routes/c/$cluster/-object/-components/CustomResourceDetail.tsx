@@ -16,12 +16,13 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "../yaml-tab";
 import { eventsTab } from "../events-tab";
-import { useObjectEvents } from "@/hooks/useObjectEvents";
+import { eventsKindOf, useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../ResourceDetailLayout";
 import { servedOf } from "../served";
 import { noteDenied, useDenied } from "@/lib/access";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { OwnerRef } from "../../-peek/OwnerRef";
 import { RelatedPanel } from "../RelatedPanel";
 import { relatedMark, useRelatedObjects } from "../useRelatedObjects";
 import { KeyValueSection, type KeyValue } from "../detail-kv";
@@ -237,7 +238,12 @@ export function CustomResourceDetail({
     staleTime: STALE_TIMES.resourceDetail,
   });
 
-  const events = useObjectEvents(crdInfo?.kind ?? "", name, namespace, {
+  const eventsOf = eventsKindOf({
+    kind: crdInfo?.kind ?? "",
+    name: name ?? "",
+    crd: crdName,
+  });
+  const events = useObjectEvents(eventsOf, name, namespace, {
     enabled: !!crdInfo?.kind,
     refresh: "slow",
     uid: resource?.uid || null,
@@ -324,16 +330,9 @@ export function CustomResourceDetail({
     label: owner.controller
       ? `${owner.kind} · ${t("empty", "controllerLower")}`
       : owner.kind,
-    // An owner is often another custom resource, which has no route of its
-    // own. Linking on a guessed plural would hand the user a dead end.
-    value: (
-      <ResourceRef
-        kind={owner.kind}
-        name={owner.name}
-        namespace={resource?.namespace}
-        showKind={false}
-      />
-    ),
+    // An owner is often another custom resource, and may share a built-in
+    // kind's name: it opens by its group, or not at all.
+    value: <OwnerRef owner={owner} namespace={resource?.namespace ?? null} />,
   }));
 
   const deliveryQuery = crdInfo

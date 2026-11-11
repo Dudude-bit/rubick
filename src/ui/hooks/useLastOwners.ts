@@ -28,10 +28,17 @@ interface Named {
   kind: string;
   name: string;
   namespace?: string | null;
+  /** Where a kind outside the registry is served: a namesake of a built-in is another object. */
+  crd?: string;
 }
 
-const keyOf = (context: string | null, { kind, name, namespace }: Named) =>
-  JSON.stringify([context, toKind(kind) ?? kind, namespace ?? null, name]);
+const keyOf = (context: string | null, { kind, name, namespace, crd }: Named) =>
+  JSON.stringify([
+    context,
+    crd ?? toKind(kind) ?? kind,
+    namespace ?? null,
+    name,
+  ]);
 
 /**
  * Keeps the owners each read of this object named, past the query cache: a

@@ -9,6 +9,7 @@
  * next to.
  */
 
+import { segmentOf } from "./access-kinds";
 import { scopeCacheKey } from "./namespace-scope";
 import { ResourceKind, ResourceType, toPlural } from "./resource-registry";
 
@@ -52,6 +53,13 @@ function scope(namespace?: string | null): string {
 function home(namespace?: string | null): string | null {
   return namespace || null;
 }
+
+/** The part of a list question that says which kind it is about. */
+export type ListQuestion = { group: string; resource: string };
+
+/** One kind as the API server tells it from its namesakes, as kubectl names it. */
+export const askedKind = (asked: ListQuestion): string =>
+  segmentOf({ group: asked.group, plural: asked.resource });
 
 export const queryKeys = {
   // Resource lists
@@ -355,6 +363,25 @@ export const queryKeys = {
     home(namespace),
     name,
   ],
+  /**
+   * What the authorizer said about listing `asked`. Each kind is spelled
+   * `plural.group`: namesakes share a plural (core and Knative `services`),
+   * and keyed by it one's answer was served for the other.
+   */
+  listAccess: (
+    question: "may" | "where" | "vendors",
+    context: string | null,
+    namespaces: readonly string[],
+    asked: readonly ListQuestion[],
+    rights: number
+  ): unknown[] => [
+    "list-access",
+    question,
+    context,
+    [...namespaces],
+    asked.map(askedKind).sort(),
+    rights,
+  ],
   accessReview: (
     context: string | null,
     connection: number,
@@ -515,6 +542,8 @@ export const queryKeys = {
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
   ],
   clusterRoleBindings: (): string[] => ["cluster-role-bindings"],
+  /** Which ClusterRole gathers which, one answer for every role's page. */
+  clusterRoleAggregation: (): string[] => ["cluster-role-aggregation"],
   /** What the signed-in user may do in one namespace. */
   ownRules: (namespace: string): string[] => ["own-rules", namespace],
   /** One role's rules, or why they are not known. */

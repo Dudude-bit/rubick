@@ -1,10 +1,10 @@
 import { Replace } from "lucide-react";
 
-import { ResourceRef } from "@/components/object/ResourceRef";
 import type { PodInfo } from "@/generated/types";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
+import { OwnerRef } from "../-peek/OwnerRef";
 
 /** That a pod's controller already started another in its place, naming it, as the Overview's "already replaced" says. */
 export function ReplacedNote({
@@ -26,14 +26,7 @@ export function ReplacedNote({
       <span className="min-w-0">
         {owner
           ? parts(t("readings", "podReplaced"), {
-              owner: (
-                <ResourceRef
-                  kind={owner.kind}
-                  name={owner.name}
-                  namespace={pod.namespace}
-                  showKind={false}
-                />
-              ),
+              owner: <OwnerRef owner={owner} namespace={pod.namespace} />,
             })
           : t("statusMeaning", "replaced")}
       </span>

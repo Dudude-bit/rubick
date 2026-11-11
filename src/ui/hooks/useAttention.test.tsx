@@ -16,6 +16,8 @@ import type {
   GatewayInfo,
 } from "@/generated/types";
 
+import { listAccessOf } from "@/test/list-access";
+
 const commands = vi.hoisted(() => ({
   getClusterOverview: vi.fn(),
   listServiceHealthInputs: vi.fn(),
@@ -172,10 +174,9 @@ describe("the reads behind Needs attention", () => {
         },
       ],
     });
-    commands.checkListAccess.mockResolvedValue([
-      { resource: "gateways", allowed: false },
-      { resource: "httproutes", allowed: false },
-    ]);
+    commands.checkListAccess.mockImplementation(
+      listAccessOf({ gateways: false, httproutes: false })
+    );
 
     const { result, rerender } = renderHook(() => useAttention(), {
       wrapper: wrapper(),

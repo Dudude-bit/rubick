@@ -2,7 +2,8 @@ import type { QueryKey } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiVersion, toKind } from "@/lib/resource-registry";
+import { builtInKindOf } from "@/lib/links";
+import { getApiVersion } from "@/lib/resource-registry";
 import { vendorPeek } from "@/integrations";
 import type { PeekTarget } from "@/hooks/usePeek";
 import type { CustomResourceDetailInfo } from "@/generated/types";
@@ -48,7 +49,7 @@ export function peekQueryKey(target: PeekTarget): QueryKey {
   if (target.crd) {
     return queryKeys.customResource(target.crd, namespace, target.name);
   }
-  const resolved = toKind(target.kind);
+  const resolved = builtInKindOf(target);
   return resolved && SOURCES[resolved]
     ? queryKeys.detail(resolved, namespace, target.name)
     : ["peek", resolved ?? target.kind, namespace, target.name];
@@ -59,7 +60,7 @@ export function peekManifestKey(target: PeekTarget): QueryKey {
   return target.crd
     ? queryKeys.customResourceYaml(target.crd, namespace, target.name)
     : queryKeys.manifest(
-        toKind(target.kind) ?? target.kind,
+        builtInKindOf(target) ?? target.kind,
         namespace,
         target.name
       );
@@ -79,7 +80,7 @@ export function resolveSource(target: PeekTarget): PeekSource {
         )
       : custom;
   }
-  const resolved = toKind(target.kind);
+  const resolved = builtInKindOf(target);
   const known = resolved ? SOURCES[resolved] : undefined;
   if (!known && target.kind === "EndpointSlice") {
     return endpointSliceSource(manifestSource(target.kind));

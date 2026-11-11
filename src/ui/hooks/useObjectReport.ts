@@ -10,7 +10,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { useServiceAnswer } from "@/hooks/useServiceAnswer";
 import {
   aboutAnother,
-  eventsOfEveryObject,
+  eventsKindOf,
   useObjectEvents,
 } from "@/hooks/useObjectEvents";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
@@ -23,6 +23,7 @@ import { useCapabilities } from "@/integrations";
 import { useT } from "@/i18n/useT";
 import { buildDeepLink } from "@/lib/deep-link";
 import { errorToShow } from "@/lib/error-utils";
+import { builtInKindOf } from "@/lib/links";
 import { iconSvg } from "@/lib/icon-svg";
 import type { Report } from "@/lib/report";
 import {
@@ -54,6 +55,11 @@ export interface ObjectSubject {
   kind: string;
   name: string;
   namespace: string | null;
+  /**
+   * The segment a kind outside the registry is served at. With it a custom
+   * resource named like a built-in is not reported as that built-in.
+   */
+  crd?: string;
 }
 
 /** `conditions` wherever the object keeps them, in the shape every core kind uses. */
@@ -117,26 +123,27 @@ export function useObjectReport(
   const version = useAppInfo();
   const vendors = useCapabilities("object.report");
   const href = useLocationHref();
-  const graphed = !!subject && CONNECTED_KINDS.has(subject.kind);
+  const builtIn = subject && builtInKindOf(subject);
+  const graphed = !!builtIn && CONNECTED_KINDS.has(builtIn);
   const silent = useSilentNodes(capturing);
 
   // The chain as the page draws it: a read its watches have outrun is still
   // being read here too, not a verdict the page has already let go of.
-  const isService = subject?.kind === ResourceType.Service;
+  const isService = builtIn === ResourceType.Service;
   const serviceQuery = useConnections(
     ResourceType.Service,
-    isService ? subject.name : undefined,
+    isService ? subject?.name : undefined,
     subject?.namespace,
     capturing
   );
   const service = useServiceAnswer(
-    isService ? subject.name : undefined,
+    isService ? subject?.name : undefined,
     subject?.namespace,
     serviceQuery,
     false
   );
   const chain = useChainAnswer(
-    subject?.kind ?? "",
+    builtIn ?? "",
     isService ? undefined : subject?.name,
     subject?.namespace,
     { enabled: capturing && graphed, followed: false }
@@ -148,13 +155,13 @@ export function useObjectReport(
   const tlsOf = useRouteTls(capturing ? connections.data : undefined);
   const door = useDoorAsk(capturing);
   const events = useObjectEvents(
-    subject?.kind ?? "",
+    subject ? eventsKindOf(subject) : { custom: "" },
     subject?.name,
     subject?.namespace,
     {
       enabled: capturing && !!subject,
       refresh: "slow",
-      uid: eventsUidIn(subject?.kind ?? "", resource),
+      uid: eventsUidIn(builtIn ?? "", resource),
     }
   );
 
@@ -186,8 +193,7 @@ export function useObjectReport(
           : events.isPending && !events.data
             ? t("share", "stillReading")
             : null,
-        eventsOfEveryObject(subject.kind) ||
-          ((event) => aboutAnother(event, eventsOf)),
+        events.everyObject || ((event) => aboutAnother(event, eventsOf)),
         t("columns", "events")
       ),
       partial: events.ownedUnread
@@ -284,6 +290,7 @@ export function useObjectReport(
     events.error,
     events.isPending,
     events.ownedUnread,
+    events.everyObject,
     t,
     resource,
     journal,

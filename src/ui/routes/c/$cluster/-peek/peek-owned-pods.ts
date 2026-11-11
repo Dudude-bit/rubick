@@ -14,7 +14,7 @@ import { commands } from "@/lib/commands";
 import { controlledBy } from "@/lib/controlled-by";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
-import { toKind } from "@/lib/resource-registry";
+import { builtInKindOf } from "@/lib/links";
 
 const NO_POD_FILTERS = {
   labelSelector: null,
@@ -35,7 +35,7 @@ function fetchOwnedPods(
   namespace: string,
   detail: unknown
 ): Promise<PodInfo[] | DeploymentPods> {
-  switch (toKind(target.kind)) {
+  switch (builtInKindOf(target)) {
     case "Deployment":
       return commands.getDeploymentPods(target.name, namespace);
     case "Job":
@@ -86,7 +86,7 @@ export function usePeekOwnedPods(
   enabled = true
 ) {
   const namespace = target.namespace ?? null;
-  const kind = toKind(target.kind);
+  const kind = builtInKindOf(target);
   const selector =
     kind === "DaemonSet"
       ? (detail as DaemonSetDetailInfo | undefined)?.selector

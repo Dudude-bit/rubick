@@ -868,6 +868,11 @@ export interface GatewayClassInfo {
   createdAt: string | null;
 }
 
+export interface AggregationInfo {
+  role: string;
+  gathers: string[] | null;
+}
+
 export interface BindingInfo {
   kind: string;
   name: string;

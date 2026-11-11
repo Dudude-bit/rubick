@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 const answer = vi.hoisted(() => ({
+  asked: [] as unknown[],
   events: [] as unknown[],
   setEvents: [] as unknown[],
   sets: [] as unknown[] | Error,
@@ -12,14 +13,16 @@ const answer = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listEvents: (filters: { involved_object_kind: string | null }) =>
-      Promise.resolve(
+    listEvents: (filters: { involved_object_kind: string | null }) => {
+      answer.asked.push(filters);
+      return Promise.resolve(
         filters.involved_object_kind === "ReplicaSet"
           ? answer.setEvents
           : filters.involved_object_kind === "Job"
             ? answer.jobEvents
             : answer.events
-      ),
+      );
+    },
     listJobs: () => Promise.resolve(answer.jobs),
     getDeploymentReplicasets: () =>
       answer.sets instanceof Error
@@ -32,7 +35,12 @@ import type { EventInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { useWindowActivity } from "@/lib/window-activity";
 import { testQueryClient } from "@/test/render";
-import { ofIncarnation, useObjectEvents } from "./useObjectEvents";
+import {
+  eventsKindOf,
+  ofIncarnation,
+  useObjectEvents,
+  type EventsKind,
+} from "./useObjectEvents";
 import { useReadEventsUidAt, useReadUidAt } from "./useReadUid";
 
 const event = (reason: string, uid: string | null): EventInfo => ({
@@ -239,7 +247,7 @@ const onObject = (
   lastTimestamp: at(second),
 });
 
-function mountDeployment(kind = "Deployment", name = "web") {
+function mountDeployment(kind: EventsKind = "Deployment", name = "web") {
   const client = testQueryClient();
   const { result } = renderHook(
     () =>
@@ -306,4 +314,75 @@ it("carries the warnings of a CronJob's own runs", async () => {
   const result = mountDeployment("CronJob", "nightly");
   await waitFor(() => expect(result.current.data).toHaveLength(1));
   expect(result.current.data?.[0].involvedObject.name).toBe("nightly-29000000");
+});
+
+function mountCustom(kind: string, name: string, client = testQueryClient()) {
+  const { result } = renderHook(
+    () =>
+      useObjectEvents({ custom: kind }, name, "lena-sandbox", {
+        refresh: "slow",
+      }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  return result;
+}
+
+/**
+ * A CRD may name its kind Deployment. Fails if such an object's events are
+ * narrowed to the uid of the built-in Deployment the cache holds under its
+ * name, or carry the warnings of that Deployment's ReplicaSets.
+ */
+it("reads a custom kind named like a built-in as itself, not as the built-in", async () => {
+  const client = testQueryClient();
+  client.setQueryData(queryKeys.detail("Deployment", "lena-sandbox", "web"), {
+    uid: "deploy",
+  });
+  answer.events = [onObject("Deployment", "web", "custom", "Reconciled", 2)];
+  answer.sets = [{ uid: "rs-web", name: "web-7d9f" }];
+  answer.setEvents = [
+    onObject("ReplicaSet", "web-7d9f", "rs-web", "FailedCreate", 5),
+  ];
+  const result = mountCustom("Deployment", "web", client);
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(result.current.data?.map((e) => e.reason)).toEqual(["Reconciled"]);
+  expect(result.current.subject.kind).toBe("Deployment");
+});
+
+/** Only the registry's Namespace stands for everything inside it. */
+it("reads a custom kind named Namespace as one object, not as every object in a namespace", async () => {
+  answer.asked = [];
+  answer.events = [];
+  const result = mountCustom("Namespace", "team");
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(result.current.everyObject).toBe(false);
+  expect(answer.asked).toEqual([
+    expect.objectContaining({
+      namespace: "lena-sandbox",
+      involved_object_name: "team",
+      involved_object_kind: "Namespace",
+    }),
+  ]);
+});
+
+/** The CRD a reference is served by decides, never the kind's name alone. */
+it("takes a reference for the registry's kind only where it is that very kind", () => {
+  expect(eventsKindOf({ kind: "Service", name: "frontend" })).toBe("Service");
+  expect(
+    eventsKindOf({
+      kind: "Service",
+      name: "frontend",
+      crd: "services.serving.knative.dev",
+    })
+  ).toEqual({ custom: "Service" });
+  expect(
+    eventsKindOf({
+      kind: "Application",
+      name: "shop",
+      crd: "applications.argoproj.io",
+    })
+  ).toEqual({ custom: "Application" });
 });

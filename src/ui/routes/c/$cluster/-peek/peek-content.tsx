@@ -14,7 +14,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useReadEventsUidAt } from "@/hooks/useReadUid";
 import {
-  eventsOfEveryObject,
+  eventsKindOf,
   latestOf,
   useObjectEvents,
 } from "@/hooks/useObjectEvents";
@@ -35,7 +35,12 @@ import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
-import { listLink, objectLink, resourceSegment } from "@/lib/links";
+import {
+  builtInKindOf,
+  listLink,
+  objectLink,
+  resourceSegment,
+} from "@/lib/links";
 import { servedOf, useServed } from "../-object/served";
 import { STALE_TIMES } from "@/lib/refresh";
 import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
@@ -57,7 +62,6 @@ import { deliveryOfKind } from "@/lib/delivery";
 import {
   getResourceDefinition,
   ResourceType,
-  toKind,
   type ResourceKind,
 } from "@/lib/resource-registry";
 import { kindHue } from "@/lib/resource-identity";
@@ -112,6 +116,10 @@ export function PeekContent({
   const host = usePeekHost();
 
   const source = useMemo(() => resolveSource(target), [target]);
+  // The registry's kind only where the target is that very kind: Knative's
+  // Service is read as a custom resource, and nothing of the core Service
+  // of its name is this panel's to draw.
+  const builtIn = builtInKindOf(target);
 
   const read = useLiveQuery({
     queryKey: peekQueryKey(target),
@@ -124,7 +132,7 @@ export function PeekContent({
 
   const { dataUpdatedAt } = read;
   const reappearing = useStaleNotFound(
-    toKind(target.kind) ?? target.kind,
+    builtIn ?? target.crd ?? target.kind,
     namespace,
     target.name,
     read
@@ -137,7 +145,7 @@ export function PeekContent({
   usePodWatch(
     namespace,
     target.name,
-    !gone && visible && toKind(target.kind) === ResourceType.Pod
+    !gone && visible && builtIn === ResourceType.Pod
   );
   // The Overview fetch is also what a tab is marked from, so the strip is
   // built after it rather than beside it. A gone object has nothing left to
@@ -157,7 +165,7 @@ export function PeekContent({
     kubeletWarned(
       useCauseWarnings(
         namespace ?? "",
-        data !== undefined && toKind(target.kind) === ResourceType.Pod
+        data !== undefined && builtIn === ResourceType.Pod
           ? settingUp(data as PodInfo)
           : null
       )
@@ -187,7 +195,7 @@ export function PeekContent({
   // and the answer is the same size — one small element beside the status.
   const { deliveries } = useDelivery(
     deliveryOfKind(
-      toKind(target.kind) ?? target.kind,
+      builtIn ?? "",
       data as
         | {
             name: string;
@@ -318,7 +326,7 @@ export function PeekContent({
                 silence
                   ? silenceNote(silence, t)
                   : (summary.statusTitle ??
-                    statusMeaning(target.kind, summary.status, t))
+                    statusMeaning(builtIn ?? "", summary.status, t))
               }
             >
               {summary.statusLabel}
@@ -503,6 +511,7 @@ function PeekOverview({
   readAt: number;
 }) {
   const t = useT();
+  const builtIn = builtInKindOf(target);
   return (
     <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] pb-5 pl-3.5 pr-1.5">
       {error && gone !== false ? (
@@ -558,12 +567,14 @@ function PeekOverview({
        * same workload showed nothing. The block draws itself only where an
        * evaluator can name the kind.
        */}
-      <AlertsAbout
-        className="mt-3"
-        kind={target.kind}
-        name={target.name}
-        namespace={target.namespace ?? null}
-      />
+      {builtIn && (
+        <AlertsAbout
+          className="mt-3"
+          kind={builtIn}
+          name={target.name}
+          namespace={target.namespace ?? null}
+        />
+      )}
       {gone === false && <LiveReads target={target} />}
       <PeekEvents target={target} />
     </div>
@@ -572,17 +583,18 @@ function PeekOverview({
 
 /** What is read about the object as it is now, which a gone one has no answer to. */
 function LiveReads({ target }: { target: PeekTarget }) {
+  const kind = builtInKindOf(target);
   return (
     <>
-      {TRAFFIC_KINDS.has(target.kind) && <PeekTraffic target={target} />}
-      {target.kind === "Service" && target.namespace && (
+      {kind && TRAFFIC_KINDS.has(kind) && (
+        <PeekTraffic target={target} kind={kind} />
+      )}
+      {kind === "Service" && target.namespace && (
         <BackendPolicies
           service={{ name: target.name, namespace: target.namespace }}
         />
       )}
-      {target.kind === "Namespace" && (
-        <NamespaceContents namespace={target.name} />
-      )}
+      {kind === "Namespace" && <NamespaceContents namespace={target.name} />}
       {target.crd !== undefined &&
         target.crd === accessSegment(target.kind) && (
           <AccessPanel
@@ -848,7 +860,7 @@ function NamespaceContents({ namespace }: { namespace: string }) {
 }
 
 /** The kinds a request travels through, each owed its up and its down. */
-const TRAFFIC_KINDS = new Set([
+const TRAFFIC_KINDS = new Set<string>([
   "Service",
   "Endpoints",
   "Pod",
@@ -866,13 +878,17 @@ function PeekEvents({ target }: { target: PeekTarget }) {
   const t = useT();
   // The peek's own read, which for a kind read from its manifest is not the
   // detail entry `useObjectEvents` would otherwise look in.
-  const uid = useReadEventsUidAt(target.kind, peekQueryKey(target));
-  const query = useObjectEvents(target.kind, target.name, target.namespace, {
+  const of = eventsKindOf(target);
+  const uid = useReadEventsUidAt(
+    typeof of === "string" ? of : "",
+    peekQueryKey(target)
+  );
+  const query = useObjectEvents(of, target.name, target.namespace, {
     refresh: "overview",
     uid,
   });
   const latest = query.data ? latestOf(query.data, PEEK_EVENTS) : null;
-  const everyObject = eventsOfEveryObject(target.kind);
+  const { everyObject } = query;
 
   return (
     <>

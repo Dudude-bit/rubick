@@ -430,6 +430,35 @@ describe("the report of any object", () => {
   });
 
   /**
+   * Knative makes a core Service named like its own. Fails if the report of
+   * the Knative one reads the graph of the core Service of its name.
+   */
+  it("reads no graph of the built-in a custom resource shares its kind name with", async () => {
+    const { result } = renderHook(
+      () =>
+        useObjectReport(
+          {
+            kind: "Service",
+            name: "frontend",
+            namespace: "storefront",
+            crd: "services.serving.knative.dev",
+          },
+          { apiVersion: "serving.knative.dev/v1" },
+          undefined,
+          true
+        ),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.report).not.toBeNull());
+    expect(getResourceConnections).not.toHaveBeenCalled();
+    expect(
+      result.current.report!.sections.filter(
+        (s) => s.id === "connections" || s.id === "traffic"
+      )
+    ).toEqual([]);
+  });
+
+  /**
    * A Secret has connections and no path traffic takes to it; its report
    * said no Service selects "these pods", so traffic never reaches it.
    */

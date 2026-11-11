@@ -6,7 +6,8 @@ import { useReadEventsUid } from "@/hooks/useReadUid";
 import type { EventInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
-import { ResourceType } from "@/lib/resource-registry";
+import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
+import { builtInKindOf, type ObjectRef } from "@/lib/links";
 import { isRefusal } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { involvedUid } from "@/lib/event-incarnation";
@@ -17,9 +18,16 @@ export const OBJECT_EVENTS_READ = 200;
 
 export type ObjectEventsQuery = ReturnType<typeof useObjectEvents>;
 
-/** A Namespace's events are those of every object in it, which is what a reader opening one asks for. */
-export const eventsOfEveryObject = (kind: string) =>
-  kind === ResourceType.Namespace;
+/**
+ * Whose events are read: a kind of the registry, or a custom one by the
+ * name it goes by. Knative's Service and Volcano's Job share a built-in's
+ * name and nothing else, so no free string is taken for a registry kind.
+ */
+export type EventsKind = ResourceKind | { custom: string };
+
+/** The kind a reference's events are read as: the registry's only where it is that very kind. */
+export const eventsKindOf = (ref: ObjectRef): EventsKind =>
+  builtInKindOf(ref) ?? { custom: ref.kind };
 
 /**
  * The events of the object with `uid`, where it is known: an event that names
@@ -91,7 +99,7 @@ const newestFirst = (a: EventInfo, b: EventInfo) =>
  * what it owns also carries those objects' warnings.
  */
 export function useObjectEvents(
-  kind: string,
+  of: EventsKind,
   name: string | null | undefined,
   namespace: string | null | undefined,
   {
@@ -105,9 +113,18 @@ export function useObjectEvents(
     uid?: string | null;
   }
 ) {
-  const everyObject = eventsOfEveryObject(kind);
+  const builtIn = typeof of === "string" ? of : null;
+  const kind = builtIn ?? (of as { custom: string }).custom;
+  // A Namespace's events are those of every object in it, which is what a
+  // reader opening one asks for.
+  const everyObject = builtIn === ResourceType.Namespace;
   const scope = everyObject ? name : namespace;
-  const read = useReadEventsUid(kind, namespace, name, !everyObject);
+  const read = useReadEventsUid(
+    builtIn ?? "",
+    namespace,
+    name,
+    builtIn !== null && !everyObject
+  );
   const uid = everyObject ? undefined : (known ?? read);
   const select = useCallback(
     (events: EventInfo[]) => ofIncarnation(events, uid) ?? events,
@@ -130,7 +147,7 @@ export function useObjectEvents(
     retry: false,
   });
   const client = useQueryClient();
-  const from = everyObject ? undefined : WARNINGS_OF_OWNED[kind];
+  const from = builtIn && !everyObject ? WARNINGS_OF_OWNED[builtIn] : undefined;
   const readsOwned = enabled && !!name && !!namespace && !!from;
   const owned = useLiveQuery({
     queryKey: [
@@ -187,6 +204,8 @@ export function useObjectEvents(
   );
   return {
     subject: { kind, name: name ?? "", namespace: namespace ?? "" },
+    /** The rows are every object's in the namespace, not one object's. */
+    everyObject,
     data,
     error: own.error,
     isPending: own.isPending || (readsOwned && owned.isPending),

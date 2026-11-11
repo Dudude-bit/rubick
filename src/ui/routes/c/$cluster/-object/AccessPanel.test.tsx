@@ -1,7 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import type { BindingInfo, Scoped } from "@/generated/types";
+import type { AggregationInfo, BindingInfo, Scoped } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 
@@ -11,6 +11,7 @@ const answers = vi.hoisted(() => ({
     return Promise.resolve({ rows: [], unread: [] });
   },
   clusterRoleBindings: (): Promise<BindingInfo[]> => Promise.resolve([]),
+  aggregation: vi.fn((): Promise<AggregationInfo[]> => Promise.resolve([])),
   object: (plural: string, name: string): Promise<unknown> => {
     void plural;
     void name;
@@ -22,6 +23,7 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     listRoleBindingsIn: (scope: string[] | null) => answers.roleBindings(scope),
     listClusterRoleBindings: () => answers.clusterRoleBindings(),
+    listClusterRoleAggregation: () => answers.aggregation(),
     getServedObject: (_group: string, plural: string, name: string) =>
       answers.object(plural, name),
   },
@@ -98,6 +100,7 @@ beforeEach(() => {
   });
   answers.roleBindings = read([]);
   answers.clusterRoleBindings = () => Promise.resolve([]);
+  answers.aggregation.mockReset().mockResolvedValue([]);
   answers.object = () =>
     Promise.reject({ code: "NOT_FOUND", message: "not found" });
 });
@@ -274,6 +277,15 @@ describe("whom a role is bound to", () => {
     ).toBeNull();
   });
 
+  /** Only a ClusterRole is aggregated; a Role's answer waits on no such read. */
+  it("says a Role nothing binds is granted to nobody, without asking who aggregates it", async () => {
+    await open({ kind: "Role", name: "developer", namespace: "team-checkout" });
+    expect(
+      await screen.findByText("No RoleBinding in team-checkout grants it.")
+    ).toBeInTheDocument();
+    expect(answers.aggregation).not.toHaveBeenCalled();
+  });
+
   /** "Nobody" over a refused list would be the same lie as "nothing". */
   it("never says a Role is bound to nobody when the list was refused", async () => {
     answers.roleBindings = () => Promise.reject(refused("rolebindings"));
@@ -342,5 +354,162 @@ describe("whom a role is bound to", () => {
     expect(
       screen.queryByText(/No ClusterRoleBinding, and no RoleBinding in/)
     ).toBeNull();
+  });
+});
+
+describe("whom an aggregated ClusterRole reaches", () => {
+  const AGGREGATED = {
+    kind: "ClusterRole",
+    name: "system:aggregate-to-edit",
+    namespace: null,
+  };
+  const NOBODY = "No ClusterRoleBinding or RoleBinding grants it.";
+  const NOT_NAMED = "No ClusterRoleBinding or RoleBinding read here names it.";
+
+  /**
+   * No binding names `system:aggregate-to-edit`, and everyone bound to
+   * `edit` holds its rules, as do `admin`'s subjects through `edit`. The
+   * panel said "Bound to 0" and that no binding grants it.
+   */
+  it("names the roles that gather its rules and whom those are bound to", async () => {
+    answers.aggregation.mockResolvedValue([
+      { role: "admin", gathers: ["edit"] },
+      { role: "edit", gathers: ["system:aggregate-to-edit"] },
+      { role: "view", gathers: ["system:aggregate-to-view"] },
+    ]);
+    answers.clusterRoleBindings = () =>
+      Promise.resolve([
+        binding(
+          "ClusterRoleBinding",
+          "editors",
+          { kind: "ClusterRole", name: "edit" },
+          [{ kind: "Group", name: "devs", namespace: null }]
+        ),
+        binding(
+          "ClusterRoleBinding",
+          "viewers",
+          { kind: "ClusterRole", name: "view" },
+          [{ kind: "Group", name: "everyone", namespace: null }]
+        ),
+      ]);
+    answers.roleBindings = read([
+      binding(
+        "RoleBinding",
+        "alice-admin",
+        { kind: "ClusterRole", name: "admin" },
+        [{ kind: "User", name: "alice", namespace: null }]
+      ),
+    ]);
+    await open(AGGREGATED);
+    expect(
+      await screen.findByText(
+        "Its rules are aggregated into 2 ClusterRoles. Whoever is bound to one of those holds them too."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(NOT_NAMED)).toBeInTheDocument();
+    expect(screen.queryByText(NOBODY)).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "ClusterRole edit" })
+    ).toHaveAttribute(
+      "href",
+      "/c/test/clusterroles.rbac.authorization.k8s.io/edit"
+    );
+    expect(
+      screen.getByRole("link", { name: "ClusterRole admin" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "ClusterRoleBinding editors" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("devs")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "RoleBinding alice-admin" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("alice")).toBeInTheDocument();
+    // `view` does not gather it, and its subjects hold none of its rules.
+    expect(screen.queryByText("everyone")).toBeNull();
+    expect(screen.getByRole("heading")).toHaveTextContent("Bound to 2");
+  });
+
+  /**
+   * The thesis case: a refused list of ClusterRoles is not "no role gathers
+   * it". Fails if the panel says nobody is granted it, or counts to zero,
+   * over an aggregation it could not read.
+   */
+  it("never says it is granted to nobody when the ClusterRoles could not be read", async () => {
+    answers.aggregation.mockRejectedValue(refused("clusterroles"));
+    await open(AGGREGATED);
+    expect(
+      await screen.findByText(
+        "Could not read the ClusterRoles, so whether another role aggregates this one's rules is not known."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/The cluster refused: clusterroles is forbidden/)
+    ).toBeVisible();
+    expect(screen.getByText(NOT_NAMED)).toBeInTheDocument();
+    expect(screen.queryByText(NOBODY)).toBeNull();
+    expect(screen.getByRole("heading").textContent?.trim()).toBe("Bound to");
+  });
+
+  /** Only every list read, and no role found to gather it, is a no. */
+  it("says it is granted to nobody once the ClusterRoles were read and none gathers it", async () => {
+    answers.aggregation.mockResolvedValue([
+      { role: "edit", gathers: ["widgets-editor"] },
+    ]);
+    await open(AGGREGATED);
+    expect(await screen.findByText(NOBODY)).toBeInTheDocument();
+    expect(screen.getByRole("heading")).toHaveTextContent("Bound to 0");
+    expect(screen.queryByText(/aggregated into/)).toBeNull();
+  });
+
+  /** A role that gathers it and is bound nowhere reaches nobody, and says so. */
+  it("says a role that gathers it is itself bound by nothing read", async () => {
+    answers.aggregation.mockResolvedValue([
+      { role: "edit", gathers: ["system:aggregate-to-edit"] },
+    ]);
+    await open(AGGREGATED);
+    expect(
+      await screen.findByText(
+        "Its rules are aggregated into 1 ClusterRole. Whoever is bound to that role holds them too."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("No binding read here grants this one.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(NOBODY)).toBeNull();
+    expect(screen.getByRole("heading")).toHaveTextContent("Bound to 0");
+  });
+
+  /** An unread binding list leaves a gathering role's subjects unknown too. */
+  it("does not say a role that gathers it is unbound when a binding list was refused", async () => {
+    answers.aggregation.mockResolvedValue([
+      { role: "edit", gathers: ["system:aggregate-to-edit"] },
+    ]);
+    answers.clusterRoleBindings = () =>
+      Promise.reject(refused("clusterrolebindings"));
+    await open(AGGREGATED);
+    expect(
+      await screen.findByRole("link", { name: "ClusterRole edit" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Could not read ClusterRoleBindings across the cluster.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No binding read here grants this one.")
+    ).toBeNull();
+    expect(screen.getByRole("heading").textContent?.trim()).toBe("Bound to");
+  });
+
+  /** A rule nobody could evaluate may gather this role: not a no, and no total. */
+  it("says which role's aggregation rule could not be evaluated, and claims no total", async () => {
+    answers.aggregation.mockResolvedValue([{ role: "odd", gathers: null }]);
+    await open(AGGREGATED);
+    expect(
+      await screen.findByText(
+        "Could not evaluate the aggregation rule of: odd. Each may gather this role's rules too."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(NOBODY)).toBeNull();
+    expect(screen.getByRole("heading").textContent?.trim()).toBe("Bound to");
   });
 });

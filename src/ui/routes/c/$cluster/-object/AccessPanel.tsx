@@ -5,6 +5,7 @@ import {
   ChevronRight,
   EyeOff,
   Globe,
+  Layers,
   ShieldAlert,
   Users,
 } from "lucide-react";
@@ -15,7 +16,7 @@ import { Unknown } from "@/components/ui/unknown";
 import type { BindingInfo } from "@/generated/types";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useT, type T } from "@/i18n/useT";
-import { accessKind, segmentOf } from "@/lib/access-kinds";
+import { accessKind, accessSegment, segmentOf } from "@/lib/access-kinds";
 
 import {
   bindingsOf,
@@ -29,6 +30,7 @@ import {
   type RbacTarget,
 } from "./rbac";
 import {
+  useAggregators,
   useBindingLists,
   useRoleReadings,
   type BindingLists,
@@ -342,38 +344,101 @@ function RoleBound({
   // where the window looks, which is every namespace unless some are picked.
   const namespaces = role.namespace ? [role.namespace] : scope.wire;
   const lists = useBindingLists(namespaces, cluster);
+  const aggregation = useAggregators(cluster ? role.name : null);
   const bindings = bindingsOf(lists.bindings, role);
-  const none = role.namespace
-    ? t("rbac", "notBoundRole", { namespace: role.namespace })
-    : namespaces
-      ? t("rbac", "notBoundClusterRoleIn", {
-          namespaces: namespaces.join(", "),
-        })
-      : t("rbac", "notBoundClusterRole");
+  // Whoever is bound to a role that gathers this one holds its rules too.
+  const through =
+    aggregation.state === "read"
+      ? aggregation.through.map((name) => ({
+          name,
+          bindings: bindingsOf(lists.bindings, {
+            kind: "ClusterRole",
+            name,
+            namespace: null,
+          }),
+        }))
+      : [];
+  const aggregated =
+    aggregation.state !== "read" ||
+    through.length > 0 ||
+    aggregation.unknown.length > 0;
+  // "Grants it" is firm only where no other role was found to carry its
+  // rules, or could have been; otherwise only "names it" is known.
+  const none = aggregated
+    ? t("rbac", "notNamed")
+    : role.namespace
+      ? t("rbac", "notBoundRole", { namespace: role.namespace })
+      : namespaces
+        ? t("rbac", "notBoundClusterRoleIn", {
+            namespaces: namespaces.join(", "),
+          })
+        : t("rbac", "notBoundClusterRole");
+  const total = through.reduce(
+    (sum, via) => sum + via.bindings.length,
+    bindings.length
+  );
+  const whole =
+    known(lists) &&
+    aggregation.state === "read" &&
+    aggregation.unknown.length === 0;
 
   return (
     <div className="flex flex-col gap-2">
-      {heading(
-        t("rbac", "boundTo"),
-        known(lists) ? bindings.length : undefined
-      )}
-      {lists.loading ? (
+      {heading(t("rbac", "boundTo"), whole ? total : undefined)}
+      {lists.loading || aggregation.state === "reading" ? (
         <TextSkeleton lines={3} />
       ) : (
         <>
           {bindings.map((binding) => (
-            <div
-              key={`${binding.kind}/${binding.namespace}/${binding.name}`}
-              className="flex flex-col gap-1 border-t border-hair pt-2 first:border-t-0 first:pt-0"
-            >
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                <BindingRef binding={binding} />
-                <Where binding={binding} t={t} />
-              </div>
-              <Subjects binding={binding} />
-            </div>
+            <BoundRow key={bindingKey(binding)} binding={binding} />
           ))}
           <Verdict found={bindings.length} lists={lists} none={none} />
+          {aggregation.state === "unread" && (
+            <Unknown
+              question={t("rbac", "couldNotReadAggregation")}
+              error={aggregation.error}
+              onRetry={aggregation.retry}
+            />
+          )}
+          {through.length > 0 && (
+            <div className="flex flex-col gap-2 border-t border-hair pt-2">
+              <p className="text-xs text-fg-mut">
+                {t("rbac", "aggregatedInto", { n: through.length })}
+              </p>
+              {through.map((via) => (
+                <div key={via.name} className="flex flex-col gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5 text-xs">
+                    <Layers
+                      className="h-3 w-3 flex-none text-fg-fnt"
+                      aria-hidden
+                    />
+                    <ResourceRef
+                      kind="ClusterRole"
+                      name={via.name}
+                      crd={accessSegment("ClusterRole")}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 pl-[18px]">
+                    {via.bindings.map((binding) => (
+                      <BoundRow key={bindingKey(binding)} binding={binding} />
+                    ))}
+                    {via.bindings.length === 0 && known(lists) && (
+                      <p className="text-xs text-fg-fnt">
+                        {t("rbac", "aggregatorUnbound")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {aggregation.state === "read" && aggregation.unknown.length > 0 && (
+            <p className="text-xs text-warn">
+              {t("rbac", "aggregationUnevaluated", {
+                roles: aggregation.unknown.join(", "),
+              })}
+            </p>
+          )}
         </>
       )}
       {cluster && namespaces && (
@@ -381,6 +446,23 @@ function RoleBound({
           {t("rbac", "readOnlyIn", { namespaces: namespaces.join(", ") })}
         </NotLookedAt>
       )}
+    </div>
+  );
+}
+
+const bindingKey = (binding: BindingInfo) =>
+  `${binding.kind}/${binding.namespace}/${binding.name}`;
+
+/** One binding that grants the role, where it grants it, and to whom. */
+function BoundRow({ binding }: { binding: BindingInfo }) {
+  const t = useT();
+  return (
+    <div className="flex flex-col gap-1 border-t border-hair pt-2 first:border-t-0 first:pt-0">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <BindingRef binding={binding} />
+        <Where binding={binding} t={t} />
+      </div>
+      <Subjects binding={binding} />
     </div>
   );
 }

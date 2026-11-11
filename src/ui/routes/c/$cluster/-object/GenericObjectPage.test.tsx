@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { ApiCatalog, CatalogEntry } from "@/generated/types";
@@ -95,6 +95,50 @@ describe("an object of a kind no screen draws", () => {
     await open();
     expect(await screen.findByText("holderIdentity")).toBeInTheDocument();
     expect(screen.queryByText("Nothing reported yet")).not.toBeInTheDocument();
+  });
+});
+
+describe("an object whose kind is named like a built-in", () => {
+  /**
+   * A CRD may call its kind Deployment. Fails if its page reads its events
+   * as the built-in's, which also asks for that Deployment's ReplicaSets'
+   * warnings.
+   */
+  it("reads its events as its own, not as the built-in's of that name", async () => {
+    answers.catalog = () =>
+      Promise.resolve({
+        entries: [
+          {
+            ...LEASES,
+            group: "apps.example.dev",
+            kind: "Deployment",
+            plural: "deployments",
+          },
+        ],
+        unread: [],
+      });
+    answers.object = () =>
+      Promise.resolve({ metadata: { name: "x" }, spec: { size: 3 } });
+    answers.events.mockClear();
+    await renderWithRouter(
+      <GenericObjectPage
+        resource="deployments.apps.example.dev"
+        namespace="shop"
+        name="x"
+      />
+    );
+    expect(await screen.findByText("size")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(answers.events).toHaveBeenCalledWith(
+        expect.objectContaining({ involved_object_kind: "Deployment" })
+      )
+    );
+    expect(
+      answers.events.mock.calls.map(
+        ([filter]) =>
+          (filter as { involved_object_kind: string }).involved_object_kind
+      )
+    ).not.toContain("ReplicaSet");
   });
 });
 
