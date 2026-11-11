@@ -86,6 +86,36 @@ describe("a typed confirmation on critical infrastructure", () => {
     expect(confirmButton()).toBeEnabled();
   });
 
+  /**
+   * A caller that closes the dialog itself after a success flips `open` and
+   * fires no onOpenChange, so the typed name stayed in the field: the next
+   * uninstall or delete on a critical cluster opened already confirmed.
+   */
+  it("forgets the typed name when its caller closes it, so the next target is typed again", () => {
+    useClusterIdentityStore.getState().setCritical(PROD, true);
+    const dialog = (target: string | null) => (
+      <DangerousConfirmDialog
+        open={target !== null}
+        title="Uninstall release"
+        confirmationText={target ?? ""}
+        confirmLabel="Delete"
+        onOpenChange={() => {}}
+        onConfirm={() => {}}
+      />
+    );
+    const { rerender } = render(dialog("redis"));
+    fireEvent.change(screen.getByPlaceholderText(PROD), {
+      target: { value: PROD },
+    });
+    expect(confirmButton()).toBeEnabled();
+
+    rerender(dialog(null));
+    rerender(dialog("postgres"));
+
+    expect(screen.getByPlaceholderText(PROD)).toHaveValue("");
+    expect(confirmButton()).toBeDisabled();
+  });
+
   it("asks for the object's name everywhere else", () => {
     render(
       <DangerousConfirmDialog

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { act, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -7,6 +8,7 @@ vi.mock("@/lib/commands", () => ({
     listNamespaces: vi.fn(async () => []),
     listHelmRepos: vi.fn(async () => []),
     getHelmHistory: vi.fn(async () => []),
+    helmUpgrade: vi.fn(async () => ""),
     checkHelmAvailability: vi.fn(async () => ({
       available: false,
       version: null,
@@ -20,6 +22,7 @@ vi.mock("@/lib/commands", () => ({
 import { commands } from "@/lib/commands";
 import type { HelmRelease } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { renderWithRouter } from "@/test/render";
 import { Helm } from "./Helm";
 
@@ -38,9 +41,11 @@ const release = (name: string): HelmRelease => ({
 });
 
 const listReleases = vi.mocked(commands.listHelmReleasesIn);
+const history = vi.mocked(commands.getHelmHistory);
 
 beforeEach(() => {
   listReleases.mockReset();
+  useDependenciesStore.setState({ helm: null });
   useClusterStore.setState({ isConnected: true, namespaceScope: [] });
 });
 
@@ -75,5 +80,72 @@ describe("Helm releases whose re-read fails", () => {
       expect(screen.getByText("read failing")).toBeInTheDocument()
     );
     expect(screen.queryByText("polling")).toBeNull();
+  });
+});
+
+describe("the history dialog opened from a release's row", () => {
+  /**
+   * The dialog took the history's rows and never its error, so a refused or
+   * timed-out read was an empty history and the dialog said Helm keeps none,
+   * while the release's own History tab said the same read had failed.
+   */
+  it("says the history could not be read when the read fails", async () => {
+    listReleases.mockResolvedValue({ rows: [release("web")], unread: [] });
+    history.mockRejectedValue(new Error("secrets is forbidden"));
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Open actions" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "View History" })
+    );
+
+    expect(
+      await screen.findByText("Could not read this release's history.")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/secrets is forbidden/)).toBeInTheDocument();
+    expect(screen.queryByText(/Helm keeps none/)).toBeNull();
+  });
+});
+
+describe("upgrading a release from its row", () => {
+  /**
+   * The row's chart column, `nginx-1.0.0`, went to helm as the chart to
+   * upgrade to. It names no repository, path or URL, so no upgrade could find
+   * its chart. Fails if the dialog sends anything but what the reader typed,
+   * or lets Upgrade through before a chart is named.
+   */
+  it("sends the chart the reader named, and nothing before one is named", async () => {
+    useDependenciesStore.setState({
+      helm: { available: true, path: "/usr/bin/helm", version: "v3" },
+    } as never);
+    listReleases.mockResolvedValue({ rows: [release("web")], unread: [] });
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Open actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Upgrade" }));
+    const upgrade = await screen.findByRole("button", { name: "Upgrade" });
+    expect(upgrade).toBeDisabled();
+
+    await user.type(
+      screen.getByLabelText("Chart to upgrade to"),
+      "bitnami/nginx"
+    );
+    await user.click(upgrade);
+
+    await waitFor(() =>
+      expect(commands.helmUpgrade).toHaveBeenCalledWith(
+        expect.objectContaining({ releaseName: "web", chart: "bitnami/nginx" })
+      )
+    );
   });
 });

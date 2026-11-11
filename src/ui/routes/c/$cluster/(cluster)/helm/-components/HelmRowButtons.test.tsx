@@ -48,6 +48,7 @@ const revision = (n: number): HelmRevision => ({
   chart: "web-1.0.0",
   appVersion: "1.0.0",
   description: null,
+  unreadable: null,
 });
 
 describe("the last button of a hand-built Helm table", () => {
@@ -97,6 +98,8 @@ describe("the last button of a hand-built Helm table", () => {
         release={{ name: "web", namespace: "shop" } as HelmRelease}
         history={[revision(1), revision(2)]}
         isLoading={false}
+        error={null}
+        onRetry={vi.fn()}
         helmCliAvailable
         onClose={vi.fn()}
         onRollback={vi.fn()}
@@ -133,5 +136,68 @@ describe("the last button of a hand-built Helm table", () => {
     });
     await screen.findAllByRole("cell");
     expect(cellOf("Roll back")).toHaveStyle({ paddingRight: GUTTER });
+  });
+});
+
+describe("a revision whose secret would not read", () => {
+  const unread: HelmRevision = {
+    ...revision(3),
+    status: "",
+    chart: "",
+    unreadable: "gzip: unexpected end of file",
+  };
+
+  /**
+   * The backend left such a revision out, so the history had a hole nobody
+   * could see. Now it is a row: fails if the dialog draws it with an empty
+   * status, as a revision with nothing to say.
+   */
+  it("is a row in the history dialog saying it could not be read", async () => {
+    await renderWithRouter(
+      <HelmHistoryDialog
+        release={{ name: "web", namespace: "shop" } as HelmRelease}
+        history={[unread, revision(2)]}
+        isLoading={false}
+        error={null}
+        onRetry={vi.fn()}
+        helmCliAvailable
+        onClose={vi.fn()}
+        onRollback={vi.fn()}
+      />,
+      { at: "/c/test/helm", route: "/c/$cluster/helm" }
+    );
+    expect(screen.getByText("could not be read")).toHaveAttribute(
+      "title",
+      "gzip: unexpected end of file"
+    );
+  });
+
+  /** The same row on the release's own History tab, which is other code. */
+  it("is a row on the release's History tab saying it could not be read", async () => {
+    useClusterStore.setState({ isConnected: true });
+    getHelmReleaseDetail.mockResolvedValue({
+      name: "web",
+      namespace: "shop",
+      revision: 2,
+      status: "deployed",
+      chart: "web",
+      chartVersion: "1.0.0",
+      appVersion: "1.0.0",
+      firstDeployed: null,
+      lastDeployed: null,
+      description: null,
+      values: {},
+      manifest: "",
+      notes: null,
+    } satisfies HelmReleaseDetail);
+    getHelmHistory.mockResolvedValue([unread, revision(2)]);
+    await renderWithRouter(<HelmDetail />, {
+      at: "/c/test/helm/native/shop/web?tab=history",
+      route: "/c/$cluster/helm/$source/$namespace/$name",
+    });
+    expect(await screen.findByText("could not be read")).toHaveAttribute(
+      "title",
+      "gzip: unexpected end of file"
+    );
   });
 });

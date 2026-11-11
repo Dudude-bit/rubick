@@ -65,7 +65,7 @@ impl CommandOutput {
 pub struct ShellCommand {
     pub(crate) program: OsString,
     pub(crate) args: Vec<OsString>,
-    pub(crate) envs: HashMap<String, String>,
+    pub(crate) envs: HashMap<String, OsString>,
     pub(crate) timeout: Duration,
     pub(crate) current_dir: Option<PathBuf>,
 }
@@ -104,7 +104,7 @@ impl ShellCommand {
 
     /// Set an environment variable.
     #[must_use]
-    pub fn env(mut self, key: impl Into<String>, val: impl Into<String>) -> Self {
+    pub fn env(mut self, key: impl Into<String>, val: impl Into<OsString>) -> Self {
         self.envs.insert(key.into(), val.into());
         self
     }
@@ -222,7 +222,7 @@ mod tests {
                 OsString::from("!")
             ]
         );
-        assert_eq!(cmd.envs.get("FOO"), Some(&"bar".to_string()));
+        assert_eq!(cmd.envs.get("FOO"), Some(&OsString::from("bar")));
         assert_eq!(cmd.timeout, Duration::from_mins(1));
     }
 

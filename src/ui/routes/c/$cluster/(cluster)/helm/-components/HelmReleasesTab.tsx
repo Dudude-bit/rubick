@@ -37,6 +37,7 @@ import { helmReleaseLink, hrefOf } from "@/lib/links";
 import { noneWhereAnswered } from "@/lib/namespace-scope";
 import { formatDate, formatWhen } from "@/lib/utils";
 
+import { NotRead } from "./NotRead";
 import { SourceIcon } from "./SourceIcon";
 import { isRefusal } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
@@ -121,13 +122,7 @@ export function HelmReleasesTab({
           // nothing else. Painting it with an empty status would be the
           // silence this row exists to break.
           const unreadable = row.original.unreadable;
-          if (unreadable) {
-            return (
-              <span className="text-[11px] text-warn" title={unreadable}>
-                {t("empty", "releaseNotRead")}
-              </span>
-            );
-          }
+          if (unreadable) return <NotRead why={unreadable} />;
           return (
             <div className="flex items-center gap-1.5">
               <StatusBadge status={suspended ? "suspended" : status} showDot />

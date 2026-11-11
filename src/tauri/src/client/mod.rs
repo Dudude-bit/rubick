@@ -190,10 +190,23 @@ pub struct LoadedKubeconfig {
     /// The file `kubeconfig` was read from, the first of them for a merge. A
     /// failed reload leaves it alone, as it leaves `kubeconfig`.
     pub source: Option<PathBuf>,
+    /// Every file `kubeconfig` was read from, in merge order.
+    pub files: Vec<PathBuf>,
     /// The file the load in `error` was reading, since naming the file to fix
     /// is most of the answer. Its own field: in `source` it put the parse of
     /// one file under the name of another.
     pub failed_source: Option<PathBuf>,
+}
+
+/// Where an external CLI has to look to act on the cluster the app shows.
+///
+/// A context name alone is resolved in the CLI's own kubeconfig, which with a
+/// pinned file is another file and can be another cluster under that name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CliTarget {
+    pub context: String,
+    /// The files the app read, joined as the child's `KUBECONFIG`.
+    pub kubeconfig: std::ffi::OsString,
 }
 
 /// Manages Kubernetes client connections for multiple clusters
@@ -359,6 +372,7 @@ impl K8sClientManager {
             kubeconfig: Some(kubeconfig),
             origins: HashMap::new(),
             error: None,
+            files: vec![source.clone()],
             source: Some(source),
             failed_source: None,
         };
@@ -493,6 +507,7 @@ impl K8sClientManager {
             origins,
             error: None,
             source: canonical.first().cloned(),
+            files: canonical,
             failed_source: None,
         };
         Ok(())
@@ -536,6 +551,7 @@ impl K8sClientManager {
             kubeconfig: Some(kubeconfig),
             origins: HashMap::new(),
             error: None,
+            files: vec![path.clone()],
             source: Some(path),
             failed_source: None,
         };
@@ -551,6 +567,25 @@ impl K8sClientManager {
     /// prevent.
     pub async fn kubeconfig_path(&self) -> Option<PathBuf> {
         self.loaded.read().await.source.clone()
+    }
+
+    /// `context` with the files this manager resolves it in, for a CLI run
+    /// against that cluster.
+    ///
+    /// # Errors
+    ///
+    /// Nothing is loaded, or a path cannot be put in a path list.
+    pub async fn cli_target(&self, context: &str) -> Result<CliTarget> {
+        let files = self.loaded.read().await.files.clone();
+        if files.is_empty() {
+            return Err(Error::Config("Kubeconfig not loaded".to_string()));
+        }
+        let kubeconfig = std::env::join_paths(&files)
+            .map_err(|e| Error::Config(format!("kubeconfig paths cannot be joined: {e}")))?;
+        Ok(CliTarget {
+            context: context.to_string(),
+            kubeconfig,
+        })
     }
 
     /// Get list of available contexts
@@ -1308,6 +1343,57 @@ users:
         assert!(loaded.error.is_some());
         assert_eq!(loaded.failed_source, Some(gone));
         assert_eq!(loaded.source, Some(good.canonicalize().unwrap()));
+    }
+
+    /// A CLI given fewer files than the app merged, or its own defaults,
+    /// resolves a context name somewhere the app did not read it.
+    #[tokio::test]
+    async fn a_cli_is_pointed_at_every_file_the_kubeconfig_was_merged_from() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let work = write_kubeconfig(dir.path(), "work.yaml", &["prod"]);
+        let home = write_kubeconfig(dir.path(), "home.yaml", &["lab"]);
+        let both = [work.canonicalize().unwrap(), home.canonicalize().unwrap()];
+
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_resolved(vec![work.clone(), home])
+            .await
+            .expect("merged");
+        let merged = manager.cli_target("lab").await.expect("target");
+        assert_eq!(merged.context, "lab");
+        assert_eq!(merged.kubeconfig, std::env::join_paths(&both).unwrap());
+
+        manager
+            .load_kubeconfig_resolved(vec![work])
+            .await
+            .expect("one file");
+        let single = manager.cli_target("prod").await.expect("target");
+        assert_eq!(single.kubeconfig, both[0].as_os_str());
+    }
+
+    /// A default load reads one file out of `$KUBECONFIG`; the CLI gets that
+    /// file rather than the variable, whose missing entries the app dropped.
+    #[tokio::test]
+    async fn a_cli_is_pointed_at_the_file_a_default_load_read() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let good = write_kubeconfig(dir.path(), "good.yaml", &["prod"]);
+
+        let manager = K8sClientManager::new();
+        let env = KubeconfigEnv::set(&good).await;
+        let loaded = manager.load_kubeconfig().await;
+        drop(env);
+        loaded.expect("loads");
+
+        let target = manager.cli_target("prod").await.expect("target");
+        assert_eq!(target.kubeconfig, good.canonicalize().unwrap().as_os_str());
+    }
+
+    /// With nothing loaded there are no files to name, and a CLI started
+    /// anyway would be reading its own.
+    #[tokio::test]
+    async fn a_cli_has_no_target_before_a_kubeconfig_is_loaded() {
+        let manager = K8sClientManager::new();
+        assert!(manager.cli_target("prod").await.is_err());
     }
 
     fn write_kubeconfig(dir: &std::path::Path, name: &str, contexts: &[&str]) -> PathBuf {

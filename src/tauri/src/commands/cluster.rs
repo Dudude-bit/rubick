@@ -89,11 +89,10 @@ pub async fn connect_cluster(
 ) -> Result<ClusterInfo> {
     let generation = begin(&state, &context);
 
-    let overrides = read_kubeconfig_overrides();
     // Load kubeconfig if not already loaded
     state
         .client_manager
-        .load_kubeconfig_resolved(overrides.clone())
+        .load_kubeconfig_resolved(read_kubeconfig_overrides())
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
 
@@ -129,7 +128,7 @@ pub async fn connect_cluster(
                 state.client_manager.record_attempt(attempt);
                 return Err(direct);
             };
-            match connect_through_proxy(&state, &context, &kubectl, &overrides).await {
+            match connect_through_proxy(&state, &context, &kubectl).await {
                 Ok((info, port)) => {
                     attempt.proxy = ProxyOutcome::Ok { port, kubectl };
                     state.client_manager.record_attempt(attempt);
@@ -326,9 +325,18 @@ async fn connect_through_proxy(
     state: &AppState,
     context: &str,
     kubectl: &str,
-    kubeconfig: &[std::path::PathBuf],
 ) -> std::result::Result<(ClusterInfo, u16), crate::client::ProxyFailure> {
-    let proxy = KubectlProxy::start(kubectl, context, kubeconfig).await?;
+    let unstarted = |error: Error| crate::client::ProxyFailure {
+        error: error.to_string(),
+        stdout: String::new(),
+        stderr: String::new(),
+    };
+    let target = state
+        .client_manager
+        .cli_target(context)
+        .await
+        .map_err(unstarted)?;
+    let proxy = KubectlProxy::start(kubectl, &target).await?;
     let port = proxy.port;
     let stderr = proxy.stderr();
     state

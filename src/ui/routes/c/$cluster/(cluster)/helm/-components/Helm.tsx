@@ -27,6 +27,7 @@ import type {
   HelmRelease,
   HelmChartSearchResult,
   HelmInstallOptions,
+  HelmRevision,
   NamespaceInfo,
   UnreadNamespace,
 } from "@/generated/types";
@@ -40,6 +41,7 @@ import { toastError } from "@/lib/toast-error";
 const namesOf = (namespaces: NamespaceInfo[]) =>
   namespaces.map((ns) => ns.name);
 const NO_RELEASES: HelmRelease[] = [];
+const NO_HISTORY: HelmRevision[] = [];
 const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 export function Helm() {
@@ -86,6 +88,7 @@ export function Helm() {
   const [installWait, setInstallWait] = useState(true);
 
   const [upgradeTarget, setUpgradeTarget] = useState<HelmRelease | null>(null);
+  const [upgradeChart, setUpgradeChart] = useState("");
   const [upgradeVersion, setUpgradeVersion] = useState("");
   const [upgradeValues, setUpgradeValues] = useState("");
   const [upgradeWait, setUpgradeWait] = useState(true);
@@ -125,7 +128,12 @@ export function Helm() {
   const releases = answer?.rows ?? NO_RELEASES;
   const unread = answer?.unread ?? NOTHING_UNREAD;
 
-  const { data: historyData = [], isLoading: historyLoading } = useQuery({
+  const {
+    data: historyData = NO_HISTORY,
+    isLoading: historyLoading,
+    error: historyError,
+    refetch: refetchHistory,
+  } = useQuery({
     queryKey: queryKeys.helm.history(
       historyDialog?.namespace,
       historyDialog?.name
@@ -303,6 +311,7 @@ export function Helm() {
         queryKey: queryKeys.helm.everyRelease(),
       });
       setUpgradeTarget(null);
+      setUpgradeChart("");
       setUpgradeVersion("");
       setUpgradeValues("");
       setUpgradeWait(true);
@@ -377,6 +386,7 @@ export function Helm() {
             onShowHistory={setHistoryDialog}
             onUpgrade={(release) => {
               setUpgradeTarget(release);
+              setUpgradeChart("");
               setUpgradeVersion("");
               setUpgradeValues("");
             }}
@@ -487,6 +497,8 @@ export function Helm() {
       <HelmUpgradeDialog
         release={upgradeTarget}
         onClose={() => setUpgradeTarget(null)}
+        chart={upgradeChart}
+        onChartChange={setUpgradeChart}
         version={upgradeVersion}
         onVersionChange={setUpgradeVersion}
         values={upgradeValues}
@@ -497,7 +509,7 @@ export function Helm() {
           if (upgradeTarget) {
             upgradeMutation.mutate({
               releaseName: upgradeTarget.name,
-              chart: upgradeTarget.chart,
+              chart: upgradeChart.trim(),
               namespace: upgradeTarget.namespace,
               version: upgradeVersion || null,
               values: upgradeValues || null,
@@ -515,6 +527,8 @@ export function Helm() {
           release={historyDialog}
           history={historyData}
           isLoading={historyLoading}
+          error={historyError}
+          onRetry={() => void refetchHistory()}
           helmCliAvailable={helmCliAvailable}
           onClose={() => setHistoryDialog(null)}
           onRollback={(revision) => {

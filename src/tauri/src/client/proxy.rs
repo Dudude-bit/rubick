@@ -55,13 +55,11 @@ impl KubectlProxy {
 
     /// Start `kubectl proxy` for one context and wait until it answers.
     ///
-    /// `kubeconfig` is what the app itself read, handed over as `KUBECONFIG`
-    /// so kubectl resolves the same context from the same files. Empty means
-    /// kubectl's own defaults, which are also the app's.
+    /// The target carries what the app itself read, handed over as
+    /// `KUBECONFIG` so kubectl resolves the same context from the same files.
     pub async fn start(
         kubectl: &str,
-        context: &str,
-        kubeconfig: &[std::path::PathBuf],
+        target: &super::CliTarget,
     ) -> std::result::Result<Self, ProxyFailure> {
         let port = free_port().map_err(|e| ProxyFailure {
             error: format!("no free loopback port: {e}"),
@@ -71,7 +69,7 @@ impl KubectlProxy {
 
         let mut cmd = Command::new(kubectl);
         cmd.arg("--context")
-            .arg(context)
+            .arg(&target.context)
             .arg("proxy")
             .arg("--address")
             .arg("127.0.0.1")
@@ -87,14 +85,7 @@ impl KubectlProxy {
         if !user_path.is_empty() {
             cmd.env("PATH", user_path);
         }
-        if !kubeconfig.is_empty() {
-            let joined = std::env::join_paths(kubeconfig).map_err(|e| ProxyFailure {
-                error: format!("kubeconfig paths cannot be joined for kubectl: {e}"),
-                stdout: String::new(),
-                stderr: String::new(),
-            })?;
-            cmd.env("KUBECONFIG", joined);
-        }
+        cmd.env("KUBECONFIG", &target.kubeconfig);
 
         let mut child = cmd.spawn().map_err(|e| ProxyFailure {
             error: format!("could not start {kubectl}: {e}"),
@@ -204,7 +195,11 @@ mod tests {
     /// must name it rather than time out twenty seconds later.
     #[tokio::test]
     async fn a_missing_kubectl_fails_at_once_with_the_reason() {
-        let failed = KubectlProxy::start("/nonexistent/kubectl", "ctx", &[])
+        let target = crate::client::CliTarget {
+            context: "ctx".to_string(),
+            kubeconfig: "/nonexistent/config".into(),
+        };
+        let failed = KubectlProxy::start("/nonexistent/kubectl", &target)
             .await
             .err()
             .expect("cannot start");

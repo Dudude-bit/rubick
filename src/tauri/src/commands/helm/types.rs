@@ -55,6 +55,8 @@ pub struct HelmRevision {
     pub chart: String,
     pub app_version: Option<String>,
     pub description: Option<String>,
+    /// Why this revision could not be read; it is here by its label alone.
+    pub unreadable: Option<String>,
 }
 
 /// Helm repository info

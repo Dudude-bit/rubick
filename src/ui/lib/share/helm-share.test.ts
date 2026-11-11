@@ -15,6 +15,7 @@ function revision(n: number): HelmRevision {
     chart: "app-1.0.0",
     appVersion: "1.0.0",
     description: null,
+    unreadable: null,
   };
 }
 
@@ -27,6 +28,22 @@ describe("release history", () => {
       throw new Error("expected a table");
     expect(section.body.rows).toHaveLength(50);
     expect(section.body.more).toContain("5");
+  });
+
+  /**
+   * A revision whose secret would not decode is in the history by its number
+   * alone. Fails if the shared file gives it an empty status, which reads as
+   * a revision with nothing to report.
+   */
+  it("says of a revision that could not be read that it was not", () => {
+    const unread = { ...revision(2), status: "", unreadable: "gzip: eof" };
+    const section = helmHistorySection([unread], t);
+    if (!section || section.body.type !== "table")
+      throw new Error("expected a table");
+    expect(section.body.rows[0].cells[1]).toEqual({
+      text: "could not be read",
+      role: "warn",
+    });
   });
 
   /** Written as a time for a person in UTC, not in the sender's zone unmarked. */
