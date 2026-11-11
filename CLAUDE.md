@@ -170,6 +170,10 @@ Claims here are settled by running things, not by reasoning about them.
 - Spawn external binaries through `crate::shell::ShellCommand`. A GUI app
   inherits a stripped `PATH`, so `std::process::Command` works under
   `cargo run` from your terminal and not in the shipped app.
+- A CLI that acts on a cluster — helm, `kubectl proxy` — takes its context
+  and kubeconfig from `client_manager.cli_target(context)`. Left to its own
+  defaults it reads the file's current context, which is not the cluster on
+  screen once two files name a context alike.
 - Write `config.toml` only through `crate::config::private_file::write` — it
   holds bearer tokens, and `std::fs::write` leaves them world-readable.
 - Ask `Error::is_refusal()` whether the cluster refused. A 403 stays
@@ -182,6 +186,10 @@ Claims here are settled by running things, not by reasoning about them.
   code in `src/contracts/error-codes.json`; both sides test against it.
 - Inside a long-running task, get the client per attempt from
   `state.client_manager`; a held `kube::Client` carries a token that expires.
+- State built on a context's client — a cache, an index, a remembered
+  refusal — is let go in `AppState::client_replaced`, which every connect,
+  disconnect and credential renewal calls. A holder not named there keeps
+  answering with the old credentials.
 - A spawned operation that emits events waits on its subscribe gate, exposes a
   `<thing>_subscribed` command to release it, and **always** emits its terminal
   event — including on cancel and on early error. Tauri events have no replay.
@@ -190,6 +198,10 @@ Claims here are settled by running things, not by reasoning about them.
   serde. Listen through `listenEvent` from `@/lib/events`, which takes the
   payload's type from the generated union — a hand-written `listen<T>` is
   the copy nothing compares, and `events.test.ts` refuses it.
+- A file that takes watch events (`listenResourceEvents`) also reads
+  `useRenewals()` and resubscribes when it changes: a watch holds the client
+  it was given, and a renewal leaves that client's token to die.
+  `events.test.ts` refuses a file that does not.
 
 ## Connections and traces
 
