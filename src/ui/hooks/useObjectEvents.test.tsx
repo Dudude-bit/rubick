@@ -33,7 +33,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useWindowActivity } from "@/lib/window-activity";
 import { testQueryClient } from "@/test/render";
 import { ofIncarnation, useObjectEvents } from "./useObjectEvents";
-import { useReadUidAt } from "./useReadUid";
+import { useReadEventsUidAt, useReadUidAt } from "./useReadUid";
 
 const event = (reason: string, uid: string | null): EventInfo => ({
   name: `wd-demo.${reason}`,
@@ -64,7 +64,9 @@ beforeEach(() => {
   ];
 });
 
-function mount(read: { uid: string } | null) {
+function mount(
+  read: { uid: string; annotations?: Record<string, string> } | null
+) {
   const client = testQueryClient();
   if (read)
     client.setQueryData(
@@ -91,6 +93,52 @@ function mount(read: { uid: string } | null) {
  */
 it("keeps the events of the incarnation that was read, and those naming none", async () => {
   const result = mount({ uid: "current" });
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(result.current.data?.map((e) => e.reason)).toEqual([
+    "Started",
+    "Noted",
+  ]);
+});
+
+/**
+ * etcd on a kind control plane: the kubelet records a static pod's events
+ * under the hash in its mirror annotation, and the page said "No events for
+ * this object". Fails if they are matched against the mirror's own uid.
+ */
+it("keeps a static pod's events, which carry the hash in its mirror annotation", async () => {
+  const result = mount({
+    uid: "9f0c2a11",
+    annotations: { "kubernetes.io/config.mirror": "current" },
+  });
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(result.current.data?.map((e) => e.reason)).toEqual([
+    "Started",
+    "Noted",
+  ]);
+});
+
+/** The peek reads its object under a key of its own. Fails if that read is matched by the mirror's uid, which empties a static pod's peek. */
+it("keeps a static pod's events where the peek's own read holds it", async () => {
+  const client = testQueryClient();
+  const key = ["peek", "Pod", "lena-sandbox", "wd-demo"];
+  client.setQueryData(key, {
+    metadata: {
+      uid: "9f0c2a11",
+      annotations: { "kubernetes.io/config.mirror": "current" },
+    },
+  });
+  const { result } = renderHook(
+    () =>
+      useObjectEvents("Pod", "wd-demo", "lena-sandbox", {
+        refresh: "slow",
+        uid: useReadEventsUidAt("Pod", key),
+      }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
   await waitFor(() => expect(result.current.data).toBeDefined());
   expect(result.current.data?.map((e) => e.reason)).toEqual([
     "Started",

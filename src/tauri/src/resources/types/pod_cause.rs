@@ -81,7 +81,7 @@ pub enum PodCause {
     /// Placed on a node whose kubelet has not started a container: its
     /// sandbox waits on the volumes it mounts and on the network plugin.
     Creating {
-        /// The uid of the pod read, whose warnings say why; a workload's names one of its pods.
+        /// The uid the pod's events carry (`events_uid`), whose warnings say why; a workload's names one of its pods.
         uid: String,
         /// When the scheduler placed it.
         since: Option<DateTime<Utc>>,
@@ -526,7 +526,7 @@ fn creating(pod: &Pod) -> Option<PodCause> {
         return None;
     }
     Some(PodCause::Creating {
-        uid: pod.metadata.uid.clone()?,
+        uid: super::events_uid(pod)?.to_string(),
         since: placed.last_transition_time.as_ref().map(Moment::moment),
         sandbox,
         kubelet: Warned::NotRead,
@@ -1578,6 +1578,31 @@ mod tests {
                 kubelet: Warned::NotRead,
             })
         );
+    }
+
+    /// A static pod the kubelet cannot set up: its warnings are recorded under
+    /// the hash in its mirror annotation. Fails if the cause names the mirror's
+    /// own uid, by which every reader of those warnings then finds none.
+    #[test]
+    fn a_static_pod_being_set_up_names_the_uid_its_warnings_carry() {
+        let mut mirror = placed(Some("False"), "ContainerCreating");
+        mirror.metadata.annotations = Some(
+            [(
+                crate::resources::MIRROR_POD_ANNOTATION.to_string(),
+                "5f3c0d7e".to_string(),
+            )]
+            .into(),
+        );
+        let Some(PodCause::Creating { uid, .. }) = pod_cause(&mirror) else {
+            panic!("a placed pod with no sandbox is being set up");
+        };
+        let events = [warning(
+            "5f3c0d7e",
+            "FailedMount",
+            r#"MountVolume.SetUp failed for volume "certs" : hostPath type check failed"#,
+            "2026-10-14T22:59:00Z",
+        )];
+        assert_eq!(setup_warnings(&uid, &events).len(), 1);
     }
 
     /// Sam's big pull: the sandbox is up and the kubelet is pulling. Fails if

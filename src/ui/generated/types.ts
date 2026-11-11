@@ -1022,6 +1022,7 @@ export interface EventInfo {
 }
 
 export interface InvolvedObjectInfo {
+  apiVersion?: string;
   kind: string;
   name: string;
   namespace: string | null;
@@ -2155,6 +2156,7 @@ export interface WarningGroup {
   lastSeen: string | null;
   sample: string | null;
   objectKind: string | null;
+  objectApiVersion?: string;
   objectName: string | null;
   namespace: string | null;
   incarnation: Incarnation;

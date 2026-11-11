@@ -1929,6 +1929,7 @@ export const ru: Catalogue = {
     earlierRows:
       "Строки до {since} приложение записало, когда наблюдало с {from} по {to}",
     unwatchedRefused: "{kinds} не отслеживаются {where}: кластер отказал",
+    unwatchedRefusedThen: "{kinds} не отслеживались {where}: кластер отказал",
     deliveriesUnread: "Не удалось прочитать, кто это доставляет: {reason}",
     claimedOwner:
       "{owner} не перечисляет этот объект; на объекте только метка с его именем",

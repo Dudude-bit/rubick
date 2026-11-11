@@ -125,6 +125,9 @@ pub struct EventInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvolvedObjectInfo {
+    /// What tells a kind from a custom one of the same name; absent where the event names none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_version: Option<String>,
     pub kind: String,
     pub name: String,
     pub namespace: Option<String>,
@@ -142,6 +145,7 @@ impl From<&Event> for EventInfo {
             message: event.message.clone(),
             source: event.source.as_ref().and_then(|s| s.component.clone()),
             involved_object: InvolvedObjectInfo {
+                api_version: event.involved_object.api_version.clone(),
                 kind: event.involved_object.kind.clone().unwrap_or_default(),
                 name: event.involved_object.name.clone().unwrap_or_default(),
                 namespace: event.involved_object.namespace.clone(),
@@ -183,6 +187,24 @@ mod tests {
     use super::*;
     use k8s_openapi::api::core::v1::EventSeries;
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::{MicroTime, Time};
+
+    /// The frontend tells a custom kind from a built-in namesake by the
+    /// group in `apiVersion`. Fails if the field is dropped on the way, or
+    /// written as `null` where the event names none.
+    #[test]
+    fn an_event_carries_the_api_version_of_its_object() {
+        let about = |api_version: Option<&str>| {
+            let mut event = Event::default();
+            event.involved_object.kind = Some("StatefulSet".to_string());
+            event.involved_object.api_version = api_version.map(str::to_string);
+            serde_json::to_value(EventInfo::from(&event)).expect("an event serialises")
+        };
+        assert_eq!(
+            about(Some("apps.kruise.io/v1beta1"))["involvedObject"]["apiVersion"],
+            "apps.kruise.io/v1beta1"
+        );
+        assert!(about(None)["involvedObject"].get("apiVersion").is_none());
+    }
 
     fn at(rfc3339: &str) -> DateTime<Utc> {
         DateTime::parse_from_rfc3339(rfc3339).unwrap().into()

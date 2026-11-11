@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { EventInfo } from "@/generated/types";
-import { involvedUid, namesToAsk, pastObjects } from "./event-incarnation";
+import {
+  involvedUid,
+  nameKey,
+  namedOf,
+  namesToAsk,
+  pastObjects,
+} from "./event-incarnation";
+import { getApiVersion } from "./resource-registry";
 
 let n = 0;
 const event = (
@@ -9,7 +16,8 @@ const event = (
   name: string,
   uid: string | null,
   at: string | null,
-  type = "Normal"
+  type = "Normal",
+  apiVersion = getApiVersion(kind)
 ): EventInfo => ({
   name: `ev-${++n}`,
   namespace: "lena-sandbox",
@@ -18,7 +26,7 @@ const event = (
   reason: "Started",
   message: null,
   source: null,
-  involvedObject: { kind, name, namespace: "lena-sandbox", uid },
+  involvedObject: { apiVersion, kind, name, namespace: "lena-sandbox", uid },
   count: 1,
   firstTimestamp: at,
   lastTimestamp: at,
@@ -110,7 +118,63 @@ describe("which names are worth asking who holds them", () => {
       ...namesToAsk([old, fresh, warned, crashing, quiet]).keys(),
     ]).toEqual([
       "lena-sandbox/Pod/wd-demo",
-      "lena-sandbox/HorizontalPodAutoscaler/hello-web",
+      "lena-sandbox/HorizontalPodAutoscaler.autoscaling/hello-web",
     ]);
+  });
+});
+
+describe("a custom kind that shares a built-in's name", () => {
+  const KNATIVE = "serving.knative.dev/v1";
+  const core = event("Service", "web", "s1", "2026-10-12T01:00:00Z");
+  const knative = event(
+    "Service",
+    "web",
+    "k1",
+    "2026-10-12T01:05:00Z",
+    "Warning",
+    KNATIVE
+  );
+
+  /**
+   * A Knative Service and the core Service it makes under its own name hold
+   * that name at once. Fails if they are read as two objects of one name,
+   * which calls the one whose events began first an earlier object.
+   */
+  it("is another name, not an earlier or a later object of the built-in's", () => {
+    expect([...pastObjects([core, knative])]).toEqual([]);
+    expect([...namesToAsk([core, knative]).keys()]).toEqual([
+      "lena-sandbox/Service.serving.knative.dev/web",
+    ]);
+  });
+
+  /** Fails if whoever is asked who holds the name is not told which group's kind is meant. */
+  it("asks who holds the name with the group its event gave", () => {
+    const asked: unknown[] = [];
+    pastObjects([knative], (named) => {
+      asked.push(named);
+      return undefined;
+    });
+    expect(asked).toEqual([
+      {
+        kind: "Service",
+        group: "serving.knative.dev",
+        namespace: "lena-sandbox",
+        name: "web",
+      },
+    ]);
+  });
+
+  /**
+   * An event that names no `apiVersion` does not say which kind it means.
+   * Fails if it is keyed as the core group's, or as any group's.
+   */
+  it("keeps an event that names no group apart from every kind that has one", () => {
+    const unsaid: EventInfo = {
+      ...core,
+      involvedObject: { ...core.involvedObject, apiVersion: undefined },
+    };
+    expect(namedOf(unsaid).group).toBeNull();
+    const keys = [unsaid, core, knative].map((e) => nameKey(namedOf(e)));
+    expect(new Set(keys).size).toBe(3);
   });
 });

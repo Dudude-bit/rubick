@@ -642,6 +642,22 @@ describe("PeekPanel", () => {
   });
 
   /**
+   * A static pod's events carry the hash in its mirror annotation. Fails if
+   * the peek matches them against the mirror's uid and says there are none.
+   */
+  it("lists a static pod's events, which carry its mirror hash", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(
+      buildPod({
+        uid: "mirror-uid",
+        annotations: { "kubernetes.io/config.mirror": "pod-uid" },
+      })
+    );
+    await wrap(POD_PEEK);
+    expect(await screen.findByText("CrashLoopBackOff")).toBeInTheDocument();
+    expect(await screen.findByText("BackOff")).toBeInTheDocument();
+  });
+
+  /**
    * Sam's node peek said "Recent events 20" where kubectl had 32: the read
    * asked for 20 and the heading called them all. The backend answers at
    * most the limit it is given, as the mock does. Fails if the peek asks

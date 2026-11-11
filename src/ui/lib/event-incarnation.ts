@@ -6,29 +6,48 @@ export function involvedUid(event: EventInfo): string | null {
   return uid && uid !== name ? uid : null;
 }
 
+/** The API group of an `apiVersion`, "" for the core `v1`; `null` where there is none to read. */
+export function groupIn(apiVersion: string | null | undefined): string | null {
+  if (!apiVersion) return null;
+  const slash = apiVersion.indexOf("/");
+  return slash === -1 ? "" : apiVersion.slice(0, slash);
+}
+
 /** Why a name an event gives is not the object there now: another took the name, or none has it. */
 export type Past = "earlier" | "gone";
 
+/**
+ * An object as an event names it. A kind is its group and its name: a custom
+ * kind may share a built-in's, and the two are different objects of one name.
+ */
+export interface Named {
+  kind: string;
+  /** `null` where the event names no `apiVersion`, which is no kind anyone can read. */
+  group: string | null;
+  namespace: string | null;
+  name: string;
+}
+
 /** Who holds a name now: the uid of the object there, `null` for nothing, `undefined` where nothing here has read it. */
-export type Holder = (
-  kind: string,
-  namespace: string | null,
-  name: string
-) => string | null | undefined;
+export type Holder = (named: Named) => string | null | undefined;
 
-/** Where an object lives and what it is called, the key whoever holds the name is read by. */
+/** Where an object lives, its kind and what it is called, the key whoever holds the name is read by. */
 export const nameKey = (
-  kind: string | null,
-  namespace: string | null,
-  name: string
-): string => `${namespace ?? ""}/${kind ?? ""}/${name}`;
+  named: Omit<Named, "kind"> & { kind: string | null }
+): string =>
+  `${named.namespace ?? ""}/${named.kind ?? ""}${
+    named.group === null ? "?" : named.group && `.${named.group}`
+  }/${named.name}`;
 
-const nameOf = (event: EventInfo) =>
-  nameKey(
-    event.involvedObject.kind,
-    event.involvedObject.namespace ?? event.namespace,
-    event.involvedObject.name
-  );
+/** The object an event is about. */
+export const namedOf = (event: EventInfo): Named => ({
+  kind: event.involvedObject.kind,
+  group: groupIn(event.involvedObject.apiVersion),
+  namespace: event.involvedObject.namespace ?? event.namespace,
+  name: event.involvedObject.name,
+});
+
+const nameOf = (event: EventInfo) => nameKey(namedOf(event));
 
 const at = (value: string | null) => {
   const ms = value ? Date.parse(value) : Number.NaN;
@@ -69,8 +88,7 @@ export function pastObjects(
   }
   const past = new Map<string, Past>();
   for (const { event, began } of byName.values()) {
-    const { kind, name, namespace } = event.involvedObject;
-    const now = holder?.(kind, namespace ?? event.namespace, name);
+    const now = holder?.(namedOf(event));
     if (now === null) {
       for (const uid of began.keys()) past.set(uid, "gone");
       continue;
@@ -104,12 +122,6 @@ export const pastOf = (
   return heldByNobody?.has(nameOf(event)) ? "gone" : undefined;
 };
 
-export interface Named {
-  kind: string;
-  namespace: string | null;
-  name: string;
-}
-
 /** The names among `events` worth asking who holds: one several objects have had, or one whose own events warn. */
 export function namesToAsk(events: readonly EventInfo[]): Map<string, Named> {
   const seen = new Map<
@@ -117,19 +129,18 @@ export function namesToAsk(events: readonly EventInfo[]): Map<string, Named> {
     { named: Named; uids: Set<string>; warned: boolean }
   >();
   for (const event of events) {
-    const { kind, name } = event.involvedObject;
-    if (!kind) continue;
-    const namespace = event.involvedObject.namespace ?? event.namespace;
-    const key = nameKey(kind, namespace, name);
+    const named = namedOf(event);
+    if (!named.kind) continue;
+    const key = nameKey(named);
     const entry = seen.get(key) ?? {
-      named: { kind, namespace, name },
+      named,
       uids: new Set<string>(),
       warned: false,
     };
     seen.set(key, entry);
     const uid = involvedUid(event);
     if (uid) entry.uids.add(uid);
-    if (event.type === "Warning" && !FOLDED_INTO_OWNERS.has(kind))
+    if (event.type === "Warning" && !FOLDED_INTO_OWNERS.has(named.kind))
       entry.warned = true;
   }
   return new Map(

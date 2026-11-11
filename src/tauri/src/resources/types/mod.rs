@@ -27,8 +27,8 @@ pub use deployment::{
 pub use metadata::{ConfigMapInfo, EventInfo, InvolvedObjectInfo, NamespaceInfo, SecretInfo};
 pub use node::{NodeAddressInfo, NodeInfo, NodeStatusInfo, ResourceQuantities, TaintInfo};
 pub use pod::{
-    mounts_of, volume_source, ContainerRestarts, PodInfo, PodStatusInfo, PodVolumeInfo,
-    VolumeMountInfo, VolumeObjectRef,
+    events_uid, mounts_of, volume_source, ContainerRestarts, PodInfo, PodStatusInfo, PodVolumeInfo,
+    VolumeMountInfo, VolumeObjectRef, MIRROR_POD_ANNOTATION,
 };
 pub use pod_cause::{
     pod_cause, setup_warnings, shared_cause, shared_cause_by, EndedRun, Evidence, PodCause,

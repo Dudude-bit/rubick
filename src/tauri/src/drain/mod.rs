@@ -31,12 +31,10 @@ use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::{Error, Result};
+use crate::resources::MIRROR_POD_ANNOTATION;
 use crate::state::streams::Streams;
 use crate::state::AppEvent;
 use crate::utils::generate_id;
-
-/// What the kubelet stamps on the API server's copy of a static pod.
-const MIRROR_POD_ANNOTATION: &str = "kubernetes.io/config.mirror";
 
 /// How long to wait before asking again, by attempt.
 ///

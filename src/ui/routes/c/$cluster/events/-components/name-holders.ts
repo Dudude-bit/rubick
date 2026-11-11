@@ -3,12 +3,18 @@ import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 
 import type { ClusterOverview, EventInfo } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { useReadAt } from "@/hooks/useReadUid";
+import { eventsUidIn, useReadAt } from "@/hooks/useReadUid";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
-import { namesToAsk, nameKey, type Named } from "@/lib/event-incarnation";
+import {
+  groupIn,
+  namesToAsk,
+  nameKey,
+  type Named,
+} from "@/lib/event-incarnation";
 import { mayBeGone, subjectKey, type Story } from "@/lib/event-stories";
 import { queryKeys } from "@/lib/query-keys";
+import { isBuiltInGroup } from "@/lib/links";
 import {
   getApiVersion,
   toKind,
@@ -22,12 +28,25 @@ interface Asked extends Named {
 }
 
 /**
+ * The registry's kind an event's object is: `null` for a custom kind, for one
+ * that only shares a built-in's name in another group, and for an event that
+ * names no group. Read at the built-in's address, a namesake is never found.
+ */
+export const registryKindNamed = (
+  named: Pick<Named, "kind" | "group">
+): ResourceKind | null =>
+  named.group !== null && isBuiltInGroup(named.kind, named.group)
+    ? toKind(named.kind)
+    : null;
+
+/**
  * Who holds each name the page speaks of now: the uid of the object there,
  * or `null` where the cluster answered that nothing is. One question for
  * every name, asked again at the steady rate while the page is shown, and
  * the one answer every story, row and chip reads. A refused or failed read
- * leaves its name out, which is unknown; a kind the registry cannot name is
- * not asked. A name the Overview's own check calls gone is asked again at once.
+ * leaves its name out, which is unknown; a kind the registry does not hold
+ * in that group is not asked. A name the Overview's own check calls gone is
+ * asked again at once.
  *
  * The answer is one string, so it draws the page only when a holder
  * changes: the stories follow the watch once a second.
@@ -40,9 +59,9 @@ export function useNameHolders(
   const client = useQueryClient();
   const named = useMemo(() => {
     const seen = new Map<string, Asked>();
-    const ask = (key: string, { kind, namespace, name }: Named) => {
-      const known = toKind(kind);
-      if (known) seen.set(key, { key, kind: known, namespace, name });
+    const ask = (key: string, named: Named) => {
+      const kind = registryKindNamed(named);
+      if (kind) seen.set(key, { ...named, key, kind });
     };
     for (const [key, name] of namesToAsk(events)) ask(key, name);
     for (const story of stories) {
@@ -102,7 +121,10 @@ async function holdersOf(named: readonly Asked[]): Promise<string[]> {
       commands
         .getObjectMetadata(kind, getApiVersion(kind), name, namespace)
         .then(
-          ({ uid }) => (uid ? `${key}\t${uid}` : null),
+          (meta) => {
+            const uid = eventsUidIn(kind, meta);
+            return uid ? `${key}\t${uid}` : null;
+          },
           (error: unknown) =>
             errorCode(error) === ERROR_CODES.NOT_FOUND ? `${key}\t` : null
         )
@@ -123,7 +145,12 @@ function useGoneInOverview() {
     (state?.data as ClusterOverview | undefined)?.warnings
       .filter((group) => group.incarnation === "gone" && group.objectName)
       .map((group) =>
-        nameKey(group.objectKind, group.namespace, group.objectName ?? "")
+        nameKey({
+          kind: group.objectKind,
+          group: groupIn(group.objectApiVersion),
+          namespace: group.namespace,
+          name: group.objectName ?? "",
+        })
       )
       .join("\n")
   );

@@ -16,6 +16,21 @@ use super::pod_display::{
 };
 use crate::utils::Moment;
 
+/// What the kubelet stamps on the API server's copy of a static pod: the
+/// hash it knows the pod by.
+pub const MIRROR_POD_ANNOTATION: &str = "kubernetes.io/config.mirror";
+
+/// The uid the events about `pod` carry: its own, except a static pod's,
+/// which its kubelet records under that hash, as `kubectl describe` reads them.
+#[must_use]
+pub fn events_uid(pod: &Pod) -> Option<&str> {
+    pod.annotations()
+        .get(MIRROR_POD_ANNOTATION)
+        .filter(|hash| !hash.is_empty())
+        .or(pod.metadata.uid.as_ref())
+        .map(String::as_str)
+}
+
 /// One container's share of a pod's restart count.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -496,6 +511,29 @@ mod tests {
         ProjectedVolumeSource, SecretVolumeSource, VolumeMount, VolumeProjection,
     };
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+
+    /// `src/contracts/events-uid-conformance.json` is what makes this and the
+    /// frontend's `eventsUidIn` one answer. Fails if a static pod's events are
+    /// searched by its mirror's uid, under which the kubelet writes none.
+    #[test]
+    fn events_uid_answers_the_shared_corpus() {
+        #[derive(serde::Deserialize)]
+        struct Corpus {
+            cases: Vec<Case>,
+        }
+        #[derive(serde::Deserialize)]
+        struct Case {
+            name: String,
+            pod: Pod,
+            uid: Option<String>,
+        }
+        const CORPUS: &str = include_str!("../../../../contracts/events-uid-conformance.json");
+        let corpus: Corpus = serde_json::from_str(CORPUS).expect("the corpus parses");
+        assert!(corpus.cases.len() >= 4);
+        for case in corpus.cases {
+            assert_eq!(events_uid(&case.pod), case.uid.as_deref(), "{}", case.name);
+        }
+    }
 
     fn init_container(name: &str, sidecar: bool) -> Container {
         Container {

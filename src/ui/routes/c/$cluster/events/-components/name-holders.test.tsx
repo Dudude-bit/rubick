@@ -25,6 +25,7 @@ const story = (name: string, state: Story["state"] = "settled") =>
     state,
     subject: {
       kind: "HorizontalPodAutoscaler",
+      group: "autoscaling",
       name,
       namespace: "lena-sandbox",
       byName: false,
@@ -32,7 +33,7 @@ const story = (name: string, state: Story["state"] = "settled") =>
   }) as Story;
 
 const NOT_FOUND = { code: "NOT_FOUND", message: "not found" };
-const GONE = "lena-sandbox/HorizontalPodAutoscaler/hello-web";
+const GONE = "lena-sandbox/HorizontalPodAutoscaler.autoscaling/hello-web";
 const there = (uid: string | null = "f0644886") => ({
   uid,
   labels: {},
@@ -78,11 +79,76 @@ describe("who holds the names the page speaks of", () => {
     ]);
     await waitFor(() =>
       expect([...result.current]).toEqual([
-        ["lena-sandbox/HorizontalPodAutoscaler/api", "api-uid"],
+        ["lena-sandbox/HorizontalPodAutoscaler.autoscaling/api", "api-uid"],
         [GONE, null],
       ])
     );
     expect(getObjectMetadata).toHaveBeenCalledTimes(3);
+  });
+
+  /**
+   * etcd on a kind control plane: its events carry the hash in its mirror
+   * annotation. Fails if a static pod is held by its mirror's uid, under
+   * which every story of its own reads as an earlier object's.
+   */
+  it("holds a static pod by the uid its events carry", async () => {
+    useClusterStore.setState({ isConnected: true });
+    getObjectMetadata.mockReset();
+    getObjectMetadata.mockResolvedValue({
+      uid: "9f0c2a11",
+      labels: {},
+      annotations: { "kubernetes.io/config.mirror": "5f3c0d7e" },
+    });
+    const crashing = {
+      state: "stillHappening",
+      subject: {
+        kind: "Pod",
+        group: "",
+        name: "etcd-cp",
+        namespace: "kube-system",
+        byName: false,
+      },
+    } as Story;
+    const { result } = mount([crashing]);
+    await waitFor(() =>
+      expect([...result.current]).toEqual([
+        ["kube-system/Pod/etcd-cp", "5f3c0d7e"],
+      ])
+    );
+  });
+
+  /**
+   * An OpenKruise Advanced StatefulSet shares its Kind with the built-in one.
+   * Asked at `apps/v1`, it is never found, and a live workload read as
+   * deleted. Fails if a kind is asked by its bare name: in another group, or
+   * where the events name no group, nobody here can read it.
+   */
+  it("asks the built-in's address only for the built-in's own group", async () => {
+    useClusterStore.setState({ isConnected: true });
+    getObjectMetadata.mockReset();
+    getObjectMetadata.mockRejectedValue(NOT_FOUND);
+    const set = (name: string, group: string | null) =>
+      ({
+        state: "stillHappening",
+        subject: {
+          kind: "StatefulSet",
+          group,
+          name,
+          namespace: "shop",
+          byName: false,
+        },
+      }) as Story;
+    const { result } = mount([
+      set("kruise", "apps.kruise.io"),
+      set("unsaid", null),
+      set("own", "apps"),
+    ]);
+    await waitFor(() =>
+      expect(nobody(result.current)).toEqual(["shop/StatefulSet.apps/own"])
+    );
+    expect(getObjectMetadata.mock.calls).toEqual([
+      ["StatefulSet", "apps/v1", "own", "shop"],
+    ]);
   });
 
   /**
@@ -104,6 +170,7 @@ describe("who holds the names the page speaks of", () => {
       message: null,
       source: null,
       involvedObject: {
+        apiVersion: "autoscaling/v2",
         kind: "HorizontalPodAutoscaler",
         name: "hello-web",
         namespace: "lena-sandbox",
@@ -231,6 +298,7 @@ describe("who holds the names the page speaks of", () => {
           lastSeen: null,
           sample: null,
           objectKind: "HorizontalPodAutoscaler",
+          objectApiVersion: "autoscaling/v2",
           objectName: "hello-web",
           namespace: "lena-sandbox",
           incarnation: "gone",

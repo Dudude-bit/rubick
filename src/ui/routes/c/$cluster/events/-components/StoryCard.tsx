@@ -5,6 +5,7 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { eventLanding } from "../../-object/attachment";
 import { PastObjectRef } from "../../-object/PastObjectRef";
 import { involvedUid } from "@/lib/event-incarnation";
+import { eventsUidIn } from "@/hooks/useReadUid";
 import { commands } from "@/lib/commands";
 import {
   densityOf,
@@ -30,7 +31,7 @@ import { useT } from "@/i18n/useT";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import type { en } from "@/i18n/catalogue";
-import type { TerminationInfo } from "@/generated/types";
+import type { PodInfo, TerminationInfo } from "@/generated/types";
 
 const STATE_LABEL: Record<StoryState, keyof typeof en.readings> = {
   stillHappening: "storyStillHappening",
@@ -369,7 +370,7 @@ function Timeline({ story }: { story: Story }) {
   });
   const marks: StatusMark[] = statuses.flatMap((status, index) => {
     const pod = status.data;
-    if (!pod || !ownPod(story, pods[index].name, pod.uid)) return [];
+    if (!pod || !ownPod(story, pods[index].name, pod)) return [];
     return pod.containers.flatMap((container) =>
       [...new Set([lastTermination(container), container.lastTerminated])]
         .filter(
@@ -483,7 +484,8 @@ function TimelineRow({
 }
 
 /** Whether the pod read under this name is the one the story's events are about, where they say. */
-function ownPod(story: Story, name: string, uid: string): boolean {
+function ownPod(story: Story, name: string, pod: PodInfo): boolean {
+  const uid = eventsUidIn(ResourceType.Pod, pod);
   const said = story.events.flatMap((event) =>
     event.involvedObject.kind === ResourceType.Pod &&
     event.involvedObject.name === name

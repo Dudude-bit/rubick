@@ -79,6 +79,53 @@ describe("the stretches this app watched", () => {
   });
 
   /**
+   * Marco may not watch DaemonSets in team-checkout. While the watch ran the
+   * header named the refusal; after a restart the same stretch read "Watched
+   * … nothing here changed". Fails if a past stretch stops saying what it
+   * was refused inside the page's scope, or says a refusal outside it.
+   */
+  it("says what a past quiet stretch was refused, where the page shows it", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["team-checkout"],
+    });
+    const past = (ago: number, refusedIn: string) => ({
+      from: NOW - (ago + 9) * 60_000,
+      seenAt: NOW - ago * 60_000,
+      to: NOW - ago * 60_000,
+      scope: ["team-checkout", "team-blind"],
+      unwatchedIn: [`DaemonSet/${refusedIn}`],
+    });
+    useChangeJournalStore.setState({
+      entries: [],
+      spans: {
+        prod: [
+          past(40, "team-checkout"),
+          past(20, "team-blind"),
+          {
+            from: NOW - 60_000,
+            seenAt: NOW,
+            to: null,
+            scope: ["team-checkout"],
+          },
+        ],
+      },
+    });
+
+    await mount();
+    expect(
+      screen.getAllByText(/^Watched .+: nothing here changed$/)
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByText(
+        "DaemonSet not watched in team-checkout: the cluster refused"
+      )
+    ).toHaveLength(1);
+    expect(screen.queryByText(/not watched in team-blind/)).toBeNull();
+  });
+
+  /**
    * Marco switched back from team-blind alone at 14:44:00 and read "since
    * 02:42 PM" on the ended stretch for 30 s beside "Watching since 14:44:00":
    * the page's clock is read to the half minute. Fails if the stretch's end

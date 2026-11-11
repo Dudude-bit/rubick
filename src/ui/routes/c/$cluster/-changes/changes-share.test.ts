@@ -32,6 +32,26 @@ describe("the times a shared Changes report prints", () => {
     expect(text).toMatch(/\b0?4:42\b.* UTC$/);
   });
 
+  /** A quiet stretch in the file is as much a claim as on the page. Fails if its row drops what the watch was refused. */
+  it("says what a quiet stretch's watch was refused", () => {
+    const section = changesScreenSection(
+      [
+        {
+          kind: "watched",
+          at: to,
+          gap: { from, to },
+          refused: { unwatched: ["DaemonSet"] },
+        },
+      ],
+      t
+    );
+    if (section.body.type !== "changes") throw new Error("expected changes");
+    expect(section.body.changes[0].parts.map((part) => part.text)).toEqual([
+      expect.stringMatching(/^Watched .+: nothing here changed$/),
+      "DaemonSet not watched across the cluster: the cluster refused",
+    ]);
+  });
+
   it("prints when watching started in UTC", () => {
     const span = { from, seenAt: to, to: null };
     const section = watchedSection(span, [span], [], t);

@@ -266,6 +266,56 @@ describe("the report of any object", () => {
     );
   });
 
+  /**
+   * A static pod's events carry the hash in its mirror annotation, not its
+   * uid. Fails if Share matches them by the uid and reports none beside a
+   * page that lists them.
+   */
+  it("counts a static pod's events, which carry its mirror hash", async () => {
+    const about = (uid: string, reason: string) => ({
+      name: `${reason}.${uid}`,
+      namespace: "kube-system",
+      uid: `event-${reason}-${uid}`,
+      type: "Warning",
+      reason,
+      message: null,
+      source: null,
+      involvedObject: {
+        kind: "Pod",
+        name: "etcd-cp",
+        namespace: "kube-system",
+        uid,
+      },
+      count: 1,
+      firstTimestamp: null,
+      lastTimestamp: null,
+    });
+    listEvents.mockResolvedValue([
+      about("5f3c0d7e", "Unhealthy"),
+      about("5f3c0d7e", "BackOff"),
+      about("0ld0ld0l", "Unhealthy"),
+    ]);
+    const { result } = renderHook(
+      () =>
+        useObjectReport(
+          { kind: "Pod", name: "etcd-cp", namespace: "kube-system" },
+          {
+            name: "etcd-cp",
+            uid: "9f0c2a11",
+            annotations: { "kubernetes.io/config.mirror": "5f3c0d7e" },
+          },
+          undefined,
+          true
+        ),
+      { wrapper }
+    );
+    await waitFor(() =>
+      expect(
+        result.current.report?.sections.find((s) => s.id === "events")?.count
+      ).toBe(2)
+    );
+  });
+
   /** The sender's colouring choice travels with the file rather than being reset to the default. */
   it("carries the sender's resource colouring setting", async () => {
     useDisplaySettingsStore.setState({ resourceColouring: "off" });

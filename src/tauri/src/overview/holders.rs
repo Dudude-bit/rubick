@@ -12,8 +12,9 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
-/// An object a warning names: kind, namespace where it has one, and name.
-pub type Named = (String, Option<String>, String);
+/// An object a warning names: the API group its kind is served in, its kind,
+/// its namespace where it has one, and its name.
+pub type Named = (String, String, Option<String>, String);
 
 /// What a read of one named object found holding its name.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +74,7 @@ mod tests {
 
     fn hpa() -> Named {
         (
+            "autoscaling".to_string(),
             "HorizontalPodAutoscaler".to_string(),
             Some("lena-sandbox".to_string()),
             "hello-web".to_string(),

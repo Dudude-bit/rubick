@@ -16,7 +16,7 @@ import {
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useRouteTls } from "@/hooks/useRouteTls";
-import { uidIn } from "@/hooks/useReadUid";
+import { eventsUidIn } from "@/hooks/useReadUid";
 import { useLocationHref } from "@/hooks/useLocationHref";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { useCapabilities } from "@/integrations";
@@ -151,7 +151,11 @@ export function useObjectReport(
     subject?.kind ?? "",
     subject?.name,
     subject?.namespace,
-    { enabled: capturing && !!subject, refresh: "slow", uid: uidIn(resource) }
+    {
+      enabled: capturing && !!subject,
+      refresh: "slow",
+      uid: eventsUidIn(subject?.kind ?? "", resource),
+    }
   );
 
   const capturedAt = useMemo(() => {

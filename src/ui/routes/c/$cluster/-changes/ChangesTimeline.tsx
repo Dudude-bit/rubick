@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, CirclePlus, Eye } from "lucide-react";
+import { ChevronDown, ChevronRight, CirclePlus, Eye, Lock } from "lucide-react";
 import { RollBackLink } from "./RollBackLink";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -7,6 +7,7 @@ import {
   canRollBackTo,
   gapWords,
   journalWords,
+  unwatchedWords,
   type ChangeItem,
   type Comparison,
   type FieldChange,
@@ -112,13 +113,21 @@ function Row({
           {gapWords(item.gap, t, clock)}
         </div>
       );
-    case "watched":
+    case "watched": {
+      const refused = item.refused && unwatchedWords(item.refused, t, true);
       return (
-        <p className="inline-flex items-center gap-1.5 text-[11px] text-fg-mut">
+        <p className="inline-flex flex-wrap items-center gap-1.5 text-[11px] text-fg-mut">
           <Eye className="h-3 w-3 flex-none text-fg-fnt" aria-hidden="true" />
           {gapWords(item.gap, t, clock, true)}
+          {refused && (
+            <span className="inline-flex items-center gap-1 text-warn">
+              <Lock className="h-3 w-3 flex-none" aria-hidden="true" />
+              {refused}
+            </span>
+          )}
         </p>
       );
+    }
     case "created":
       return (
         <p className="inline-flex items-center gap-1.5 text-[11px] text-fg-mut">

@@ -48,7 +48,7 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW } from "@/components/object/detail-blocks";
 import { EventsTable } from "./EventsTable";
 import { StoryCard } from "./StoryCard";
-import { useNameHolders } from "./name-holders";
+import { registryKindNamed, useNameHolders } from "./name-holders";
 import { useHeldOrder } from "../../-list/held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
@@ -97,6 +97,7 @@ import {
   type EventsView,
 } from "@/stores/displaySettingsStore";
 import type { EventFilters, EventInfo, Scoped } from "@/generated/types";
+import { eventsUidIn } from "@/hooks/useReadUid";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { formatCount } from "@/lib/count";
@@ -476,13 +477,16 @@ export function Events() {
   // Over the whole pool, before the search narrows it: whether an object was
   // replaced is told by its other events, which a search may not match.
   const opened = useCallback<Holder>(
-    (kind, namespace, name) => {
-      const read = client.getQueryData(queryKeys.detail(kind, namespace, name));
-      const uid =
-        read && typeof read === "object" && "uid" in read
-          ? read.uid
-          : undefined;
-      return typeof uid === "string" && uid !== "" ? uid : undefined;
+    (named) => {
+      const kind = registryKindNamed(named);
+      return kind
+        ? eventsUidIn(
+            kind,
+            client.getQueryData(
+              queryKeys.detail(kind, named.namespace, named.name)
+            )
+          )
+        : undefined;
     },
     [client]
   );
@@ -506,9 +510,9 @@ export function Events() {
     () =>
       holders.size === 0
         ? inferred
-        : pastObjects(pool, (kind, namespace, name) => {
-            const held = holders.get(nameKey(kind, namespace, name));
-            return held === undefined ? opened(kind, namespace, name) : held;
+        : pastObjects(pool, (named) => {
+            const held = holders.get(nameKey(named));
+            return held === undefined ? opened(named) : held;
           }),
     [holders, inferred, pool, opened]
   );
