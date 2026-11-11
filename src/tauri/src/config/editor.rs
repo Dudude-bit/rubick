@@ -38,11 +38,68 @@ const MAX_RECENT_ITEMS: usize = 10;
 
 /// Recent items configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", from = "SavedRecents")]
 pub struct RecentItemsConfig {
-    /// Recent items list
+    /// The recents of 4.21 and older, kept as they were saved. Such a build
+    /// cannot read an item here without a `path`, and starts on defaults
+    /// with the whole file moved aside: nothing of this build's goes here.
+    items: Vec<PathedRecent>,
+    /// Recent items list. Its own field for the reason `scopes` is: an older
+    /// build ignores it, and loses these on its next save rather than its
+    /// settings on its next start.
+    pub objects: Vec<RecentItem>,
+}
+
+/// A recent as 4.21 and older save it: an address, in no named cluster.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PathedRecent {
+    name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    namespace: Option<String>,
+    kind: String,
+    path: String,
+    timestamp: i64,
+}
+
+/// What `items` can hold on disk. Builds of this version saved theirs there
+/// for a while, without a `path`.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum SavedRecent {
+    Pathed(PathedRecent),
+    Object(RecentItem),
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedRecents {
     #[serde(default)]
-    pub items: Vec<RecentItem>,
+    items: Vec<SavedRecent>,
+    #[serde(default)]
+    objects: Vec<RecentItem>,
+}
+
+impl From<SavedRecents> for RecentItemsConfig {
+    fn from(saved: SavedRecents) -> Self {
+        let mut recents = Self {
+            items: Vec::new(),
+            objects: saved.objects,
+        };
+        for item in saved.items {
+            match item {
+                SavedRecent::Pathed(old) => recents.items.push(old),
+                // One with no cluster is an older build's that lost its
+                // path here: it opens nowhere, in either build.
+                SavedRecent::Object(object) if object.context.is_some() => {
+                    recents.objects.push(object);
+                }
+                SavedRecent::Object(_) => {}
+            }
+        }
+        recents.objects.truncate(MAX_RECENT_ITEMS);
+        recents
+    }
 }
 
 /// Recent item entry
@@ -80,10 +137,10 @@ impl RecentItem {
 impl RecentItemsConfig {
     /// Add a recent item, maintaining the max limit
     pub fn add_item(&mut self, item: RecentItem) {
-        self.items.retain(|i| !i.same_object(&item));
+        self.objects.retain(|i| !i.same_object(&item));
         // Add to front
-        self.items.insert(0, item);
-        self.items.truncate(MAX_RECENT_ITEMS);
+        self.objects.insert(0, item);
+        self.objects.truncate(MAX_RECENT_ITEMS);
     }
 }
 
@@ -102,17 +159,6 @@ mod tests {
         }
     }
 
-    /// The config written before recents named their cluster still loads;
-    /// rejecting it would empty the palette's history on upgrade.
-    #[test]
-    fn an_item_saved_with_a_path_and_no_cluster_still_reads() {
-        let old =
-            r#"{"name":"api","namespace":"web","kind":"Pod","path":"/pods/web/api","timestamp":1}"#;
-        let read: RecentItem = serde_json::from_str(old).expect("old item");
-        assert_eq!(read.name, "api");
-        assert_eq!(read.context, None);
-    }
-
     /// One pod opened twice is one recent; the same name in two clusters is
     /// two different objects, and keeping only one would drop the other.
     #[test]
@@ -121,6 +167,6 @@ mod tests {
         recents.add_item(item("prod", "api"));
         recents.add_item(item("prod", "api"));
         recents.add_item(item("dev", "api"));
-        assert_eq!(recents.items.len(), 2);
+        assert_eq!(recents.objects.len(), 2);
     }
 }

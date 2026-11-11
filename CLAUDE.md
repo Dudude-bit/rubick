@@ -181,6 +181,11 @@ Claims here are settled by running things, not by reasoning about them.
   screen once two files name a context alike.
 - Write `config.toml` only through `crate::config::private_file::write` — it
   holds bearer tokens, and `std::fs::write` leaves them world-readable.
+- `config.toml` is shared with the release before: a rollback, or a copy
+  still installed. 4.21.2 moves the whole file aside when one item will not
+  parse, so a field it requires is written as it wrote it and what is new
+  goes in a field of its own. `config/as_4_21_2.rs` is that build's shape,
+  and the tests beside `update_at` parse every save with it.
 - Ask `Error::is_refusal()` whether the cluster refused. A 403 stays
   `Error::KubeApi`; only 401 has its own variant.
 - Do not touch the text of `Error::CredentialsExpired` — the `CREDENTIALS_EXPIRED:`
