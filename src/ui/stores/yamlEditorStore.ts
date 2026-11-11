@@ -69,6 +69,10 @@ function getResourceKeyString(key: ResourceKey | null): string {
   return `${key.kind}:${key.namespace || "cluster"}:${key.name}`;
 }
 
+/** Moves on every open and every close, so a read can tell whether the editor
+ *  on screen is still the one that asked for it. */
+let opening = 0;
+
 export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   // Initial state
   open: false,
@@ -88,6 +92,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
 
   openEditor: async ({ title, resourceKey, fetchYaml, readOnly = false }) => {
     const connection = currentConnection();
+    const mine = ++opening;
     set({
       open: true,
       title,
@@ -122,6 +127,8 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
       }
 
       const content = await fetchYaml();
+      // Closed or replaced while it read: the answer is nobody's.
+      if (mine !== opening) return;
       // The read may have left after the window moved, and then it is another
       // cluster's manifest under this one's name: nothing is shown.
       if (connection !== currentConnection()) {
@@ -134,6 +141,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
+      if (mine !== opening) return;
       set({
         open: false,
         isLoading: false,
@@ -143,6 +151,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   },
 
   closeEditor: () => {
+    opening++;
     set({
       open: false,
       title: "",

@@ -1,5 +1,6 @@
 {
-  "about": "The cause most of a workload's pods share, as both halves read it: `share` in src/tauri/src/resources/types/pod_cause.rs (the Overview's rows and a Service's chain) and `sharedCause` in src/ui/lib/pod-cause.ts (every workload's list row, page and peek, which read their pods as a list). Each pod arrives as its `gone` flag (being deleted, or failed and replaced by its controller) and the cause `pod_cause` read; `is` names the pod whose cause is told (`from`), how many share it and how many the workload runs, or null where none has a cause.",
+  "about": "The cause most of a workload's pods share, as both halves read it: `share` in src/tauri/src/resources/types/pod_cause.rs (the Overview's rows and a Service's chain) and `sharedCause` in src/ui/lib/pod-cause.ts (every workload's list row, page and peek, which read their pods as a list). Every cause counts as it stands at `now`: an exit a container has been up since gives way at its `until` to its `later`, and only then is grouped. Each pod arrives as its `gone` flag (being deleted, or failed and replaced by its controller) and the cause `pod_cause` read; `is` names the pod whose cause is told (`from`), how many share it and how many the workload runs, or null where none has a cause.",
+  "now": "2026-10-12T10:30:00Z",
   "cases": [
     {
       "name": "two pods that exit the same way share it, the third has none",
@@ -695,6 +696,195 @@
         "pods": 2,
         "of": 3
       }
+    },
+    {
+      "name": "exits no longer news count with the pods not ready all along, under the probe that keeps them out",
+      "pods": [
+        {
+          "gone": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": "2026-10-12T10:10:00Z",
+            "later": {
+              "says": "notReady",
+              "containers": ["api"],
+              "since": "2026-10-12T10:00:10Z",
+              "countsFrom": "2026-10-12T10:02:10Z",
+              "probe": null
+            }
+          }
+        },
+        {
+          "gone": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": "2026-10-12T10:10:00Z",
+            "later": {
+              "says": "notReady",
+              "containers": ["api"],
+              "since": "2026-10-12T10:00:10Z",
+              "countsFrom": "2026-10-12T10:02:10Z",
+              "probe": null
+            }
+          }
+        },
+        {
+          "gone": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["api"],
+            "since": "2026-10-12T10:00:10Z",
+            "countsFrom": "2026-10-12T10:02:10Z",
+            "probe": null
+          }
+        }
+      ],
+      "is": {
+        "from": 2,
+        "pods": 3,
+        "of": 3
+      }
+    },
+    {
+      "name": "exits still news are their own cause beside a pod that is only not ready",
+      "pods": [
+        {
+          "gone": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": "2026-10-12T10:40:00Z",
+            "later": {
+              "says": "notReady",
+              "containers": ["api"],
+              "since": "2026-10-12T10:00:10Z",
+              "countsFrom": "2026-10-12T10:02:10Z",
+              "probe": null
+            }
+          }
+        },
+        {
+          "gone": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": "2026-10-12T10:40:00Z",
+            "later": {
+              "says": "notReady",
+              "containers": ["api"],
+              "since": "2026-10-12T10:00:10Z",
+              "countsFrom": "2026-10-12T10:02:10Z",
+              "probe": null
+            }
+          }
+        },
+        {
+          "gone": false,
+          "cause": {
+            "says": "notReady",
+            "containers": ["api"],
+            "since": "2026-10-12T10:00:10Z",
+            "countsFrom": "2026-10-12T10:02:10Z",
+            "probe": null
+          }
+        }
+      ],
+      "is": {
+        "from": 0,
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "an exit no longer news with nothing wrong after it is no cause",
+      "pods": [
+        {
+          "gone": false,
+          "cause": {
+            "says": "exits",
+            "container": "api",
+            "restarts": 3,
+            "run": {
+              "code": 1,
+              "signal": null,
+              "reason": "Error",
+              "started": "2026-10-12T10:00:00Z",
+              "ended": "2026-10-12T10:00:03Z",
+              "previous": true,
+              "said": null,
+              "log": {
+                "says": "notRead"
+              },
+              "limit": null
+            },
+            "until": "2026-10-12T10:10:00Z",
+            "later": null
+          }
+        },
+        {
+          "gone": false,
+          "cause": null
+        }
+      ],
+      "is": null
     }
   ]
 }

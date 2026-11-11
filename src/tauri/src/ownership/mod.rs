@@ -3,6 +3,10 @@
 //! and watch, and each owner's dependents gathered from `ownerReferences`.
 //! The API has no reverse lookup; this is one.
 //!
+//! The watches are counted, each holding a connection of its own: a kind past
+//! the count is read by its list alone, again on every turn, until a watch
+//! comes free.
+//!
 //! Started by the first question and stopped after three idle minutes, as the
 //! overview's watches are. Every kind carries how well it was read: a
 //! dependent missing from a kind nobody could read is not a dependent that
@@ -59,13 +63,32 @@ fn open_files() -> Option<u64> {
     None
 }
 
-/// How one watch is doing.
+/// How many kinds with no watch are listed at once, on the connections the
+/// lists share.
+const LISTS_AT_ONCE: usize = 8;
+
+/// How long a turn is kept after its list: with the count above that is at
+/// most thirty-two lists a second, however fast the cluster answers.
+const TURN_PAUSE: Duration = Duration::from_millis(250);
+
+/// How long a kind read by its list alone waits before its next turn.
+const RELIST_EVERY: Duration = Duration::from_secs(30);
+
+/// How old such a list may be and still be the kind as it is: three turns.
+const LISTED_FOR: Duration = RELIST_EVERY.saturating_mul(3);
+
+/// How one kind is being read, across the cluster or in one namespace.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum SlotState {
-    /// Waiting for one of the watches to come free.
+    /// No watch is free, and its first turn to be listed has not come.
     Queued,
     Syncing,
     Live,
+    /// Read by its list at `at` with no watch behind it, and listed again
+    /// on its next turn.
+    Listed {
+        at: chrono::DateTime<chrono::Utc>,
+    },
     Stale {
         since: String,
     },
@@ -83,9 +106,11 @@ enum SlotState {
 pub enum Reading {
     /// Still listing.
     Syncing,
-    /// Not started: the app holds as many watches open as it allows itself.
+    /// Not read yet: the app holds as many watches open as it allows itself,
+    /// and the kind's turn to be listed has not come.
     Queued,
-    /// The watch broke; what it holds is from then.
+    /// The watch broke, or the kind's turn to be listed again is long
+    /// overdue; what it holds is from then.
     Stale {
         since: String,
     },
@@ -198,6 +223,8 @@ pub struct ClusterIndex {
     refusals: Refusals,
     /// One permit per running watch, shared by every cluster's index.
     watches: Arc<Semaphore>,
+    /// One permit per list of a kind that has no watch, shared the same way.
+    turns: Arc<Semaphore>,
 }
 
 /// Slots the cluster refused on one connection, and its words for it.
@@ -209,6 +236,7 @@ pub struct OwnershipIndexes {
     /// when an idle index starts over, which was a 403 and a warning per kind.
     refusals: DashMap<String, Refusals>,
     watches: Arc<Semaphore>,
+    turns: Arc<Semaphore>,
 }
 
 impl Default for OwnershipIndexes {
@@ -217,6 +245,7 @@ impl Default for OwnershipIndexes {
             clusters: Arc::default(),
             refusals: DashMap::new(),
             watches: Arc::new(Semaphore::new(watch_budget(open_files()))),
+            turns: Arc::new(Semaphore::new(LISTS_AT_ONCE)),
         }
     }
 }
@@ -244,6 +273,7 @@ impl OwnershipIndexes {
                     index.watch(kind, served);
                 }
             }
+            self.make_room(&context, &index);
             return Ok(index);
         }
         let client = crate::commands::helpers::ResourceContext::for_list(state, None)?.client;
@@ -261,6 +291,7 @@ impl OwnershipIndexes {
             stop: CancellationToken::new(),
             refusals: self.refusals.entry(context.clone()).or_default().clone(),
             watches: self.watches.clone(),
+            turns: self.turns.clone(),
         });
         let index = self
             .clusters
@@ -306,8 +337,32 @@ impl OwnershipIndexes {
                 resource,
             );
         }
+        self.make_room(&context, &index);
         spawn_reaper(self.clusters.clone(), context, index.clone());
         Ok(index)
+    }
+
+    /// The cluster on screen comes first: where its index is short of a
+    /// watch, those of the clusters the window left stop now, not when idle.
+    fn make_room(&self, context: &str, index: &ClusterIndex) {
+        let short = index
+            .slots
+            .lock()
+            .values()
+            .any(|state| matches!(state, SlotState::Queued | SlotState::Listed { .. }));
+        if !short {
+            return;
+        }
+        self.clusters.retain(|held, left| {
+            if held != context {
+                tracing::info!(
+                    context = held,
+                    "ownership watches given up to the cluster on screen"
+                );
+                left.stop.cancel();
+            }
+            held == context
+        });
     }
 
     /// A context's index where one is already running; none is started.
@@ -421,7 +476,7 @@ impl ClusterIndex {
         kind: &KindKey,
         namespace: Option<&str>,
     ) -> std::result::Result<Vec<(String, Option<String>)>, Reading> {
-        let slots = self.slots.lock().clone();
+        let slots = self.slots_now();
         let whole = SlotKey {
             kind: kind.clone(),
             namespace: None,
@@ -510,11 +565,28 @@ impl ClusterIndex {
         );
     }
 
+    /// The slots as they read now: a list whose next turn is long overdue is
+    /// no longer the kind as it is, and says since when.
+    fn slots_now(&self) -> BTreeMap<SlotKey, SlotState> {
+        let mut slots = self.slots.lock().clone();
+        let overdue = chrono::Utc::now() - LISTED_FOR;
+        for state in slots.values_mut() {
+            if let SlotState::Listed { at } = *state {
+                if at < overdue {
+                    *state = SlotState::Stale {
+                        since: at.to_rfc3339(),
+                    };
+                }
+            }
+        }
+        slots
+    }
+
     /// Every kind that is not live, named, plus every group discovery missed.
     #[must_use]
     pub fn not_read(&self) -> NotRead {
         let unread = self.unread_definitions();
-        let slots = self.slots.lock().clone();
+        let slots = self.slots_now();
         let watched = self.watched.lock();
         let mut kinds: Vec<KindReading> = watched
             .iter()
@@ -635,6 +707,7 @@ impl ClusterIndex {
             stop: CancellationToken::new(),
             refusals,
             watches: Arc::new(Semaphore::new(MAX_WATCHES)),
+            turns: Arc::new(Semaphore::new(LISTS_AT_ONCE)),
         };
         for (kind, key) in kinds {
             let resource = ApiResource {
@@ -741,7 +814,7 @@ fn reading_of(kind: &KindKey, slots: &BTreeMap<SlotKey, SlotState>) -> Option<Re
         return Some(Reading::Syncing);
     };
     match cluster {
-        SlotState::Live => None,
+        SlotState::Live | SlotState::Listed { .. } => None,
         SlotState::Syncing => Some(Reading::Syncing),
         SlotState::Queued => Some(Reading::Queued),
         SlotState::Stale { since } => Some(Reading::Stale {
@@ -769,7 +842,12 @@ fn reading_of(kind: &KindKey, slots: &BTreeMap<SlotKey, SlotState>) -> Option<Re
             }
             let namespaces: BTreeSet<String> = fallbacks
                 .iter()
-                .filter(|(_, state)| matches!(state, SlotState::Live | SlotState::Stale { .. }))
+                .filter(|(_, state)| {
+                    matches!(
+                        state,
+                        SlotState::Live | SlotState::Listed { .. } | SlotState::Stale { .. }
+                    )
+                })
                 .map(|(ns, _)| (*ns).clone())
                 .collect();
             Some(if !namespaces.is_empty() {
@@ -867,6 +945,62 @@ mod tests {
             (slot(Some("shop")), SlotState::Queued),
         ]);
         assert_eq!(reading_of(&kind(), &slots), Some(Reading::Queued));
+    }
+
+    /// A kind read by its list alone is read. Named as not read, no Delete
+    /// on a cluster with more kinds than watches ever said that nothing else
+    /// goes with it. Fails if such a kind is named, or left out of the
+    /// namespaces a refused kind was read in.
+    #[test]
+    fn a_kind_read_by_its_list_alone_is_read() {
+        let listed = SlotState::Listed {
+            at: chrono::Utc::now(),
+        };
+        let whole = BTreeMap::from([(slot(None), listed.clone())]);
+        assert_eq!(reading_of(&kind(), &whole), None);
+
+        let slots = BTreeMap::from([
+            (slot(None), refused()),
+            (slot(Some("shop")), listed),
+            (slot(Some("web")), SlotState::Queued),
+        ]);
+        assert_eq!(
+            reading_of(&kind(), &slots),
+            Some(Reading::Partial {
+                namespaces: vec!["shop".to_string()]
+            })
+        );
+    }
+
+    /// A list is the kind as it was when it answered. Fails if one whose
+    /// next turn never came still reads as the kind as it is, however old,
+    /// or if a list within its turns is called stale.
+    #[tokio::test]
+    async fn a_list_long_past_its_next_turn_is_stale_since_it_answered() {
+        use crate::client::served::test_server::answering;
+        let (client, _) = answering(|_, _| (404, "{}".to_string())).await;
+        let index = ClusterIndex::holding(client, &[("Pod", kind())]);
+        let listed = |at| {
+            index
+                .slots
+                .lock()
+                .insert(slot(None), SlotState::Listed { at });
+            index.not_read().kinds
+        };
+
+        let at = chrono::Utc::now() - LISTED_FOR - Duration::from_secs(1);
+        let [named] = &listed(at)[..] else {
+            panic!("the kind is not named");
+        };
+        assert_eq!(
+            named.reading,
+            Reading::Stale {
+                since: at.to_rfc3339()
+            }
+        );
+        assert_eq!(index.names(&kind(), None), Err(named.reading.clone()));
+
+        assert_eq!(listed(chrono::Utc::now()), []);
     }
 
     /// launchd hands a Finder-launched app 256 open files; where raising
@@ -1333,6 +1467,65 @@ mod tests {
         );
         assert!(!named(&index));
         state.ownership.forget_all();
+    }
+
+    /// The watches are counted across every cluster, and the index of one
+    /// the window left kept its own for three more minutes while the cluster
+    /// on screen was listed in turns. Fails if an index short of a watch does
+    /// not take them from the ones left behind, on its start or on a later
+    /// question, or takes them when it is short of none.
+    #[tokio::test]
+    async fn the_cluster_on_screen_takes_the_watches_of_one_the_window_left() {
+        use crate::client::served::test_server::connected;
+
+        let (state, _) = connected(
+            crate::client::served::ServedIndex::default(),
+            |path, nth| {
+                if path.ends_with("definitions") && nth > 1 {
+                    return (200, String::new());
+                }
+                crds_and_widgets(path, false)
+            },
+        )
+        .await;
+        let indexes = &state.ownership;
+        let context = state.get_current_context().expect("connected");
+        let client = (*state.client_manager.get_client(&context).expect("a client")).clone();
+        let leave = |name: &str| {
+            let left = ClusterIndex::holding(client.clone(), &[]);
+            indexes.clusters.insert(name.to_string(), left.clone());
+            left
+        };
+        let every = u32::try_from(indexes.watches.available_permits()).expect("a count");
+        let held = indexes.watches.clone().try_acquire_many_owned(every);
+
+        let first = leave("first");
+        let index = indexes.ensure(&state, None).await.expect("index");
+        assert!(first.stop.is_cancelled(), "short at its start");
+        assert!(indexes.running("first").is_none());
+
+        drop(held);
+        let whole = SlotKey {
+            kind: definitions(),
+            namespace: None,
+        };
+        for _ in 0..300 {
+            if index.slots.lock().get(&whole) == Some(&SlotState::Live) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let second = leave("second");
+        indexes.ensure(&state, None).await.expect("index");
+        assert!(!second.stop.is_cancelled(), "short of none");
+
+        let at = chrono::Utc::now();
+        index.slots.lock().insert(whole, SlotState::Listed { at });
+        indexes.ensure(&state, None).await.expect("index");
+        assert!(second.stop.is_cancelled(), "short on a later question");
+        assert!(!index.stop.is_cancelled());
+        assert!(indexes.running(&context).is_some());
+        indexes.forget_all();
     }
 
     /// Marco's Delete dialog started the index and the log took ninety lines

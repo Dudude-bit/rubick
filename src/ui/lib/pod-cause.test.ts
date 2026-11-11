@@ -281,6 +281,7 @@ const corpus = JSON.parse(
     "utf8"
   )
 ) as {
+  now: string;
   cases: {
     name: string;
     pods: { gone: boolean; cause: PodCause | null }[];
@@ -297,7 +298,7 @@ describe("sharedCause", () => {
    */
   it("answers every case in the shared corpus as the backend does", () => {
     for (const { name, pods, is } of corpus.cases)
-      expect(sharedCause(pods), name).toEqual(
+      expect(sharedCause(pods, Date.parse(corpus.now)), name).toEqual(
         is && { cause: pods[is.from].cause, pods: is.pods, of: is.of }
       );
   });

@@ -438,7 +438,7 @@ pub(super) async fn follow(
             // Still answering on its way out: it serves until a ready pod is there.
             _ if !gone => {}
             found => {
-                let since = *gone_since.get_or_insert_with(|| {
+                let since = gone_since.get_or_insert_with(|| {
                     report.say(
                         &current.pod,
                         current.remote_port,
@@ -452,6 +452,11 @@ pub(super) async fn follow(
                     );
                     Instant::now()
                 });
+                // Back under its name: its owner has put it up, and how long
+                // it takes to start is not what the patience is for.
+                if now == PodNow::Starting {
+                    *since = Instant::now();
+                }
                 if since.elapsed() >= spec.patience {
                     return match found {
                         Err(err) => ForwardNote::SearchFailed {
@@ -1134,24 +1139,55 @@ mod tests {
     }
 
     /// A pod object that is back with nothing running answers no connection:
-    /// it is still waited for, not announced as reconnected.
+    /// it is not announced as reconnected. It is not given up on either: a
+    /// `StatefulSet` pod re-attaching its volume for longer than the wait
+    /// ended the forward with "no ready pod" while it was coming up. Fails if
+    /// the wait for a deleted pod runs out on one that is back and starting.
     #[tokio::test]
     async fn a_pod_back_with_nothing_running_is_still_waited_for() {
         let back = pod("api-0", "2026-10-04T00:07:00Z", false, api());
         let mut followed = following(stateful_via(), true, restarted(back)).await;
-        let note = tokio::time::timeout(Duration::from_secs(5), &mut followed.ended)
-            .await
-            .unwrap()
-            .unwrap();
+        tokio::time::sleep(Duration::from_millis(900)).await;
         assert!(
-            matches!(note, ForwardNote::NoReplacement { .. }),
-            "{note:?}"
+            !followed.ended.is_finished(),
+            "three times the patience, and still waiting"
         );
         let mut statuses = Vec::new();
         while let Ok(AppEvent::PortForwardStatus { status, .. }) = followed.events.try_recv() {
             statuses.push(status);
         }
         assert_eq!(statuses, ["reconnecting"]);
+        followed.ended.abort();
+    }
+
+    /// The other side of the wait above. Fails if a pod that came back and
+    /// went again is waited for without end: the patience runs from when it
+    /// was last there.
+    #[tokio::test]
+    async fn a_pod_that_came_back_and_went_again_is_given_up_on() {
+        /// The last look that finds the pod; each takes 20 ms and the server's 50.
+        const LAST: usize = 12;
+        let back = pod("api-0", "2026-10-04T00:07:00Z", false, api()).to_string();
+        let followed = following(stateful_via(), true, move |path, nth| match path {
+            "/api/v1/namespaces/shop/pods/api-0" if (3..=LAST).contains(&nth) => {
+                (200, back.clone())
+            }
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        let started = Instant::now();
+        let note = tokio::time::timeout(Duration::from_secs(5), followed.ended)
+            .await
+            .expect("the wait ends")
+            .unwrap();
+        assert!(
+            matches!(note, ForwardNote::NoReplacement { .. }),
+            "{note:?}"
+        );
+        assert!(
+            started.elapsed() >= Duration::from_millis(LAST as u64 * 70 + 300 - 50),
+            "the patience ran from the last look that found it, not the first"
+        );
     }
 
     /// A pod on its way out keeps serving until a ready one is there; it is

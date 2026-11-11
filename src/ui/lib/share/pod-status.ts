@@ -175,14 +175,16 @@ export function workloadCause(
     pods.map((pod) => ({
       gone: pod.status.gone !== undefined,
       cause: countsAt(troubleCause(pod, now), now),
-    }))
+    })),
+    now
   );
   if (trouble) return { shared: trouble, warnedOnly: false };
   const setup = sharedCause(
     pods.map((pod) => ({
       gone: pod.status.gone !== undefined,
       cause: settingUp(pod, now),
-    }))
+    })),
+    now
   );
   return setup && { shared: setup, warnedOnly: true };
 }
