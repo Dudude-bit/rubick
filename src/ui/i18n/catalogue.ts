@@ -1796,6 +1796,11 @@ export const en = {
     },
     outsideScope: "Watching other namespaces, not this one, {from} to {to}",
     watchedQuiet: "Watched {from} to {to}: nothing here changed",
+    watchedSpan: "Watched {from} to {to}",
+    watchedSpanBrief: {
+      one: "Watched for {n} second at {at}",
+      other: "Watched for {n} seconds at {at}",
+    },
     watchedQuietBrief: {
       one: "Watched for {n} second at {at}: nothing here changed",
       other: "Watched for {n} seconds at {at}: nothing here changed",

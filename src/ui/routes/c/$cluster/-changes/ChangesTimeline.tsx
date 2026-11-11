@@ -118,7 +118,7 @@ function Row({
       return (
         <p className="inline-flex flex-wrap items-center gap-1.5 text-[11px] text-fg-mut">
           <Eye className="h-3 w-3 flex-none text-fg-fnt" aria-hidden="true" />
-          {gapWords(item.gap, t, clock, true)}
+          {gapWords(item.gap, t, clock, item.quiet ? "quiet" : "changed")}
           {refused && (
             <span className="inline-flex items-center gap-1 text-warn">
               <Lock className="h-3 w-3 flex-none" aria-hidden="true" />

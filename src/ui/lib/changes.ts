@@ -642,7 +642,8 @@ export function spansWatching(
 }
 
 const GAP_WORDS = {
-  watched: ["watchedQuietBrief", "watchedQuiet", "watchedQuiet"],
+  quiet: ["watchedQuietBrief", "watchedQuiet", "watchedQuiet"],
+  changed: ["watchedSpanBrief", "watchedSpan", "watchedSpan"],
   part: ["partScopeBrief", "partScope", "partScopeStill"],
   partOfAll: ["partAllBrief", "partAll", "partAllStill"],
   elsewhere: ["outsideScopeBrief", "outsideScope", "outsideScopeStill"],
@@ -653,18 +654,19 @@ const GAP_WORDS = {
  * A gap in words; one under a minute by its length, which minutes would draw
  * as 20:23 to 20:23. One still running has no length yet, only a start: a
  * length read while it grew changed the words of a stretch that had ended.
+ * `watched` for a stretch that was: quiet, or one whose rows say what changed.
  */
 export function gapWords(
   gap: Gap,
   t: T,
   clock: (ms: number) => string,
-  watched = false
+  watched: false | "quiet" | "changed" = false
 ): string {
   const ms = gap.to - gap.from;
   const [brief, long, still] =
     GAP_WORDS[
       watched
-        ? "watched"
+        ? watched
         : gap.partial
           ? gap.partial.missed.length > 0
             ? "part"
@@ -725,13 +727,14 @@ export function earlierRowsWords(
 }
 
 /**
- * The stretches `spans` watched within [from, to] and recorded no row in, as
- * rows: Lena's page said nothing about the nine quiet minutes it had watched
- * before a scope switch. The one still running has the header's own line.
- * Each carries what its watch was refused within `scope`: a kind nobody was
- * let watch did not have a quiet hour.
+ * The stretches `spans` watched within [from, to] that need a row to say
+ * so: one that recorded no row, since Lena's page said nothing about the
+ * nine quiet minutes it had watched before a scope switch, and one whose
+ * watch was refused a kind within `scope`, rows or none: a kind nobody was
+ * let watch did not have a quiet hour, and another kind's rows do not speak
+ * for it. The one still running has the header's own line.
  */
-export function quietStretches(
+export function watchedStretches(
   spans: readonly ObservedSpan[],
   items: readonly ChangeItem[],
   from: number,
@@ -755,22 +758,24 @@ export function quietStretches(
     else stretches.push({ ...span });
   }
   return stretches
-    .filter(
-      (stretch) =>
-        stretch.to < to &&
-        !items.some(
-          (item) =>
-            item.kind === "journal" &&
-            item.at >= stretch.from &&
-            item.at <= stretch.to
-        )
-    )
-    .map(({ refused, ...gap }) => ({
-      kind: "watched",
-      at: gap.to,
-      gap,
-      ...(refused && { refused }),
-    }));
+    .filter((stretch) => stretch.to < to)
+    .flatMap(({ refused, ...gap }): ChangeItem[] => {
+      const quiet = !items.some(
+        (item) =>
+          item.kind === "journal" && item.at >= gap.from && item.at <= gap.to
+      );
+      return quiet || refused
+        ? [
+            {
+              kind: "watched",
+              at: gap.to,
+              gap,
+              quiet,
+              ...(refused && { refused }),
+            },
+          ]
+        : [];
+    });
 }
 
 /** When the running watch began, if it has recorded no row since; `null` otherwise. */
@@ -959,8 +964,14 @@ export type ChangeItem =
   | { kind: "helm"; at: number | null; revision: HelmRevision }
   | { kind: "journal"; at: number; entry: JournalEntry }
   | { kind: "gap"; at: number; gap: Gap }
-  /** A stretch watched with nothing recorded, said so it is not read as unaccounted for; `refused` is what its watch was not let see. */
-  | { kind: "watched"; at: number; gap: Gap; refused?: SpanCover }
+  /** A stretch watched: `quiet` with nothing recorded, said so it is not read as unaccounted for; `refused` is what its watch was not let see. */
+  | {
+      kind: "watched";
+      at: number;
+      gap: Gap;
+      quiet: boolean;
+      refused?: SpanCover;
+    }
   /** The object's `creationTimestamp`: nothing before it is this object's history. */
   | { kind: "created"; at: number };
 

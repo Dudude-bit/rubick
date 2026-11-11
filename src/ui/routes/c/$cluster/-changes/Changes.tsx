@@ -13,13 +13,13 @@ import {
 import {
   earlierRowsWords,
   quietSince,
-  quietStretches,
   refusedWhere,
   spansCovering,
   spansWatching,
   timelineOf,
   unwatchedWords,
   watchedSince,
+  watchedStretches,
   windowEnd,
 } from "@/lib/changes";
 import { Eye, History, Lock } from "lucide-react";
@@ -80,7 +80,7 @@ export function Changes() {
     }).filter((item) => item.at !== null && item.at >= from);
     return [
       ...timeline,
-      ...quietStretches(covering, timeline, from, end, scope.scope),
+      ...watchedStretches(covering, timeline, from, end, scope.scope),
     ].sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity));
   }, [mine, ours, covering, now, end, window, scope.scope]);
   const open = ours.find((span) => span.to === null);
@@ -176,7 +176,7 @@ export function Changes() {
               />
               {t("changes", "nothingRecordedSince", {
                 since: formatWhen(quiet, "clock"),
-                kinds: journalKindsWords(t),
+                kinds: journalKindsWords(t, watching),
               })}
             </p>
           )}

@@ -86,6 +86,7 @@ describe("ChangesTimeline", () => {
     await mount([
       {
         kind: "watched",
+        quiet: true,
         at: T0 + HOUR,
         gap: { from: T0, to: T0 + HOUR },
         refused: { unwatched: ["DaemonSet"], scope: ["shop"] },
@@ -97,6 +98,28 @@ describe("ChangesTimeline", () => {
     expect(
       screen.getByText("DaemonSet not watched in shop: the cluster refused")
     ).toBeVisible();
+  });
+
+  /**
+   * A stretch that recorded rows is not a quiet one. Fails if the row saying
+   * what such a stretch was refused calls it quiet, or drops the refusal.
+   */
+  it("says what a stretch with rows was refused without calling it quiet", async () => {
+    await mount([
+      {
+        kind: "watched",
+        quiet: false,
+        at: T0 + HOUR,
+        gap: { from: T0, to: T0 + HOUR },
+        refused: { unwatched: ["DaemonSet"], scope: ["shop"] },
+      },
+    ]);
+    const refused = screen.getByText(
+      "DaemonSet not watched in shop: the cluster refused"
+    );
+    expect(refused).toBeVisible();
+    expect(refused.parentElement?.textContent).toMatch(/^Watched .+ to /);
+    expect(screen.queryByText(/nothing here changed/)).toBeNull();
   });
 
   /**
