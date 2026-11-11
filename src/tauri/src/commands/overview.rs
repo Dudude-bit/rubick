@@ -469,7 +469,9 @@ const NODE: (&str, &str) = ("", "Node");
 /// later, and every other is earlier.
 fn replaced_uids<'a>(events: impl IntoIterator<Item = &'a Event>) -> HashSet<&'a str> {
     type Began<'e> = HashMap<&'e str, Option<DateTime<Utc>>>;
-    let mut began: HashMap<(Option<&str>, &str, Option<&str>, &str), Began> = HashMap::new();
+    /// Group where the event names one, kind, namespace, name.
+    type Name<'e> = (Option<&'e str>, &'e str, Option<&'e str>, &'e str);
+    let mut began: HashMap<Name, Began> = HashMap::new();
     for event in events {
         let object = &event.involved_object;
         let (Some(kind), Some(name), Some(uid)) = (&object.kind, &object.name, &object.uid) else {
