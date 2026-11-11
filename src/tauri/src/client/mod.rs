@@ -192,10 +192,85 @@ pub struct LoadedKubeconfig {
     pub source: Option<PathBuf>,
     /// Every file `kubeconfig` was read from, in merge order.
     pub files: Vec<PathBuf>,
+    /// What each of `files` names, in the same order. Empty for a single file.
+    pub named: Vec<FileNames>,
     /// The file the load in `error` was reading, since naming the file to fix
     /// is most of the answer. Its own field: in `source` it put the parse of
     /// one file under the name of another.
     pub failed_source: Option<PathBuf>,
+}
+
+/// What one merged file names: the merge keeps the first of each name and
+/// nothing of where the others stood.
+#[derive(Debug, Clone, Default)]
+pub struct FileNames {
+    contexts: Vec<String>,
+    clusters: Vec<String>,
+    users: Vec<String>,
+}
+
+impl FileNames {
+    fn of(file: &Kubeconfig) -> Self {
+        Self {
+            contexts: file.contexts.iter().map(|c| c.name.clone()).collect(),
+            clusters: file.clusters.iter().map(|c| c.name.clone()).collect(),
+            users: file.auth_infos.iter().map(|u| u.name.clone()).collect(),
+        }
+    }
+}
+
+/// The files a CLI needs to resolve `context`, and no other that names it.
+///
+/// client-go has merged same-named entries first-wins in some releases and
+/// last-wins in others (kubectl 1.37 takes the first file's, helm 3.12 the
+/// last's), so a CLI handed every file can act as another file's user under
+/// the name on screen. Where the files it needs disagree among themselves no
+/// list of them is safe, and that is an error rather than a guess.
+fn files_for(context: &str, loaded: &LoadedKubeconfig) -> Result<Vec<PathBuf>> {
+    let entry = loaded
+        .kubeconfig
+        .as_ref()
+        .and_then(|merged| merged.contexts.iter().find(|c| c.name == context))
+        .and_then(|named| named.context.as_ref());
+    let Some(entry) = entry.filter(|_| !loaded.named.is_empty()) else {
+        return Ok(loaded.files.clone());
+    };
+    let wanted: [(Option<&str>, fn(&FileNames) -> &[String]); 3] = [
+        (Some(context), |file| &file.contexts),
+        (Some(entry.cluster.as_str()), |file| &file.clusters),
+        (entry.user.as_deref(), |file| &file.users),
+    ];
+    let names = |file: usize, (name, of): &(Option<&str>, fn(&FileNames) -> &[String])| {
+        name.is_some_and(|name| of(&loaded.named[file]).iter().any(|n| n == name))
+    };
+    let first: Vec<Option<usize>> = wanted
+        .iter()
+        .map(|want| (0..loaded.named.len()).find(|&file| names(file, want)))
+        .collect();
+    let mut kept: Vec<usize> = first.iter().flatten().copied().collect();
+    kept.sort_unstable();
+    kept.dedup();
+    for (want, first) in wanted.iter().zip(&first) {
+        let again = kept
+            .iter()
+            .find(|&&file| Some(file) != *first && names(file, want));
+        if let (Some(&again), Some(first)) = (again, first) {
+            return Err(Error::Config(format!(
+                "\"{}\" is named in both {} and {}, and helm and kubectl do not agree from one \
+                 version to the next on which of the two they read. Name it in one of them.",
+                want.0.unwrap_or_default(),
+                loaded.files[*first].display(),
+                loaded.files[again].display(),
+            )));
+        }
+    }
+    if kept.is_empty() {
+        return Ok(loaded.files.clone());
+    }
+    Ok(kept
+        .into_iter()
+        .map(|file| loaded.files[file].clone())
+        .collect())
 }
 
 /// Where an external CLI has to look to act on the cluster the app shows.
@@ -382,6 +457,7 @@ impl K8sClientManager {
             files: vec![source.clone()],
             source: Some(source),
             failed_source: None,
+            named: Vec::new(),
         };
         Ok(())
     }
@@ -468,6 +544,7 @@ impl K8sClientManager {
         let mut merged: Option<Kubeconfig> = None;
         let mut origins: HashMap<String, PathBuf> = HashMap::new();
         let mut canonical: Vec<PathBuf> = Vec::new();
+        let mut named: Vec<FileNames> = Vec::new();
 
         for path in paths {
             let path = self.resolved(&path).await?;
@@ -488,6 +565,7 @@ impl K8sClientManager {
                     .or_insert_with(|| path.clone());
             }
 
+            named.push(FileNames::of(&parsed));
             merged = Some(match merged {
                 None => parsed,
                 Some(first) => match first.merge(parsed) {
@@ -516,6 +594,7 @@ impl K8sClientManager {
             source: canonical.first().cloned(),
             files: canonical,
             failed_source: None,
+            named,
         };
         Ok(())
     }
@@ -561,6 +640,7 @@ impl K8sClientManager {
             files: vec![path.clone()],
             source: Some(path),
             failed_source: None,
+            named: Vec::new(),
         };
         Ok(())
     }
@@ -581,9 +661,10 @@ impl K8sClientManager {
     ///
     /// # Errors
     ///
-    /// Nothing is loaded, or a path cannot be put in a path list.
+    /// Nothing is loaded, a path cannot be put in a path list, or the files
+    /// the context needs name one of its entries twice.
     pub async fn cli_target(&self, context: &str) -> Result<CliTarget> {
-        let files = self.loaded.read().await.files.clone();
+        let files = files_for(context, &*self.loaded.read().await)?;
         if files.is_empty() {
             return Err(Error::Config("Kubeconfig not loaded".to_string()));
         }
@@ -1394,10 +1475,10 @@ users:
         assert_eq!(loaded.source, Some(good.canonicalize().unwrap()));
     }
 
-    /// A CLI given fewer files than the app merged, or its own defaults,
-    /// resolves a context name somewhere the app did not read it.
+    /// A CLI left to its own defaults, or to a file the context is not in,
+    /// resolves the name somewhere the app did not read it.
     #[tokio::test]
-    async fn a_cli_is_pointed_at_every_file_the_kubeconfig_was_merged_from() {
+    async fn a_cli_is_pointed_at_the_file_its_context_was_read_from() {
         let dir = tempfile::tempdir().expect("tempdir");
         let work = write_kubeconfig(dir.path(), "work.yaml", &["prod"]);
         let home = write_kubeconfig(dir.path(), "home.yaml", &["lab"]);
@@ -1410,7 +1491,7 @@ users:
             .expect("merged");
         let merged = manager.cli_target("lab").await.expect("target");
         assert_eq!(merged.context, "lab");
-        assert_eq!(merged.kubeconfig, std::env::join_paths(&both).unwrap());
+        assert_eq!(merged.kubeconfig, both[1].as_os_str());
 
         manager
             .load_kubeconfig_resolved(vec![work])
@@ -1418,6 +1499,108 @@ users:
             .expect("one file");
         let single = manager.cli_target("prod").await.expect("target");
         assert_eq!(single.kubeconfig, both[0].as_os_str());
+    }
+
+    /// helm 3.12 takes the last file's entry for a name two files carry and
+    /// kubectl 1.37 the first's. Handed both files, an uninstall confirmed on
+    /// one cluster ran as the other file's user.
+    #[tokio::test]
+    async fn a_context_two_files_name_reaches_a_cli_in_the_one_file_the_app_took_it_from() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let first = write_whole(dir.path(), "first.yaml", "dup", "dup", "admin");
+        let second = write_whole(dir.path(), "second.yaml", "dup", "dup", "guest");
+
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_resolved(vec![first.clone(), second])
+            .await
+            .expect("merged");
+
+        let target = manager.cli_target("dup").await.expect("target");
+        assert_eq!(target.kubeconfig, first.canonicalize().unwrap().as_os_str());
+    }
+
+    /// A context in one file with its cluster in another needs both, and
+    /// only those: a third file is one more place to name it again.
+    #[tokio::test]
+    async fn a_context_spread_over_two_files_reaches_a_cli_in_both_and_no_other() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let other = write_whole(dir.path(), "other.yaml", "lab", "lab", "lab");
+        let contexts = write_whole(dir.path(), "contexts.yaml", "prod", "", "prod");
+        let clusters = write_whole(dir.path(), "clusters.yaml", "", "prod", "");
+        let wanted = [
+            contexts.canonicalize().unwrap(),
+            clusters.canonicalize().unwrap(),
+        ];
+
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_resolved(vec![other, contexts, clusters])
+            .await
+            .expect("merged");
+
+        let target = manager.cli_target("prod").await.expect("target");
+        assert_eq!(target.kubeconfig, std::env::join_paths(&wanted).unwrap());
+    }
+
+    /// Where the context is in one file and its cluster in a second that
+    /// names the context again, every list of files reads two ways.
+    #[tokio::test]
+    async fn a_cli_has_no_target_where_the_files_a_context_needs_name_it_twice() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let contexts = write_whole(dir.path(), "contexts.yaml", "prod", "", "prod");
+        let again = write_whole(dir.path(), "again.yaml", "prod", "prod", "guest");
+
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_resolved(vec![contexts, again])
+            .await
+            .expect("merged");
+
+        let refused = manager.cli_target("prod").await.expect_err("ambiguous");
+        let said = refused.to_string();
+        assert!(
+            said.contains("contexts.yaml") && said.contains("again.yaml"),
+            "{said}"
+        );
+    }
+
+    /// One file naming a context (cluster and user of the context's name),
+    /// a cluster and a user; an empty name leaves that entry out.
+    fn write_whole(
+        dir: &std::path::Path,
+        file: &str,
+        context: &str,
+        cluster: &str,
+        user: &str,
+    ) -> PathBuf {
+        let path = dir.join(file);
+        let mut text = String::from("apiVersion: v1\nkind: Config\ncontexts:");
+        if context.is_empty() {
+            text.push_str(" []");
+        } else {
+            text.push_str(&format!(
+                "\n  - name: {context}\n    context:\n      cluster: {context}\n      user: {context}"
+            ));
+        }
+        text.push_str("\nclusters:");
+        if cluster.is_empty() {
+            text.push_str(" []");
+        } else {
+            text.push_str(&format!(
+                "\n  - name: {cluster}\n    cluster:\n      server: https://{file}.invalid"
+            ));
+        }
+        text.push_str("\nusers:");
+        if user.is_empty() {
+            text.push_str(" []");
+        } else {
+            text.push_str(&format!(
+                "\n  - name: {context}\n    user:\n      token: {user}"
+            ));
+        }
+        std::fs::write(&path, text + "\n").expect("fixture");
+        path
     }
 
     /// A default load reads one file out of `$KUBECONFIG`; the CLI gets that
