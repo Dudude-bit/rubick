@@ -88,6 +88,31 @@ describe("the hosts an Ingress's controller serves as plain HTTP", () => {
     expect(result.current(rows[1], "shop.example.com")).toBeNull();
   });
 
+  /**
+   * The Ingress list had asked, and the count on every screen still said
+   * "not checked" beside it. Fails if a caller that does not ask stops
+   * reading an answer the cache already holds, or asks for one itself.
+   */
+  it("reads, unasked, what a caller that asks was already told", async () => {
+    const client = testQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const shell = renderHook(() => usePlainHosts(rows, false), { wrapper });
+    expect(shell.result.current(rows[0], "promo.example.com")).toBeNull();
+
+    const list = renderHook(() => usePlainHosts(rows, true), { wrapper });
+    await waitFor(() =>
+      expect(shell.result.current(rows[0], "promo.example.com")).toBe(true)
+    );
+    expect(shell.result.current(rows[1], "shop.example.com")).toBe(false);
+    expect(traefik.ask).toHaveBeenCalledTimes(1);
+
+    list.unmount();
+    shell.rerender();
+    expect(traefik.ask).toHaveBeenCalledTimes(1);
+  });
+
   /** A cloud's supplier only adds to spec.tls, so unasked it leaves the field standing. */
   it("knows no host is plain, unasked, where no controller here replaces spec.tls", async () => {
     const cloud = vi.fn(async () => []);
