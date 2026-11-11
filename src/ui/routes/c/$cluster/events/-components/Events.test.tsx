@@ -95,6 +95,7 @@ const event = (namespace: string, index: number): EventInfo => ({
   message: "Started container",
   source: null,
   involvedObject: {
+    apiVersion: "v1",
     kind: "Pod",
     name: `${namespace}-pod-${index}`,
     namespace,
@@ -494,6 +495,7 @@ describe("a feed a watch keeps", () => {
       reason: "FailedGetResourceMetric",
       message: "failed to get cpu utilization",
       involvedObject: {
+        apiVersion: "autoscaling/v2",
         kind: "HorizontalPodAutoscaler",
         name: "hello-web",
         namespace: "lena-sandbox",
@@ -552,6 +554,51 @@ describe("a feed a watch keeps", () => {
   });
 
   /**
+   * An OpenKruise Advanced StatefulSet shares its Kind with the built-in
+   * one, and read at `apps/v1` it is never found. Fails if its rows are
+   * marked deleted while the workload is alive, or if telling the two apart
+   * stops a deleted built-in StatefulSet being marked.
+   */
+  it("marks a deleted StatefulSet and not a custom kind of its name", async () => {
+    layOutRows();
+    vi.mocked(commands.getObjectMetadata).mockRejectedValue({
+      code: "NOT_FOUND",
+      message: 'statefulsets.apps "web" not found',
+    });
+    try {
+      const { client } = await watched("list");
+      // The built-in namesake's page was open: its read is not this object's.
+      client.setQueryData(queryKeys.detail("StatefulSet", "shop", "web"), {
+        uid: "the-apps-one",
+      });
+      const warned = (apiVersion: string, index: number): EventInfo => ({
+        ...event("shop", index),
+        type: "Warning",
+        reason: "FailedCreate",
+        involvedObject: {
+          apiVersion,
+          kind: "StatefulSet",
+          name: index === 0 ? "web" : "db",
+          namespace: "shop",
+          uid: `uid-${index}`,
+        },
+      });
+      burst([warned("apps.kruise.io/v1beta1", 0), warned("apps/v1", 1)]);
+      await waitFor(() =>
+        expect(rowAt(1)?.querySelector("[data-past='gone']")).not.toBeNull()
+      );
+      expect(rowAt(0)).toHaveTextContent("web");
+      expect(rowAt(0)?.querySelector("[data-past]")).toBeNull();
+    } finally {
+      vi.mocked(commands.getObjectMetadata).mockResolvedValue({
+        uid: null,
+        labels: {},
+        annotations: {},
+      });
+    }
+  });
+
+  /**
    * etcd on a kind control plane, open in its own page: its events carry the
    * hash in its mirror annotation. Fails if the pod the page read is held by
    * its mirror's uid, which marks every row of its own an earlier object's.
@@ -566,6 +613,7 @@ describe("a feed a watch keeps", () => {
     const about = (uid: string, index: number): EventInfo => ({
       ...event("kube-system", index),
       involvedObject: {
+        apiVersion: "v1",
         kind: "Pod",
         name: "etcd-cp",
         namespace: "kube-system",
@@ -795,6 +843,7 @@ describe("a feed a watch keeps", () => {
         reason: "BackOff",
         message: "Back-off restarting failed container app",
         involvedObject: {
+          apiVersion: "v1",
           kind: "Pod",
           name: `worker-${index}`,
           namespace: "prod",

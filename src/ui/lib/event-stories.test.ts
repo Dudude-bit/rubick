@@ -5,6 +5,7 @@ import { translate } from "@/i18n";
 import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import corpus from "./__fixtures__/live-events.json";
+import { getApiVersion } from "./resource-registry";
 import {
   rolloutsAndScales,
   activityOf,
@@ -41,7 +42,13 @@ function event(
     reason: "Started",
     message: "Started container app",
     source: "kubelet",
-    involvedObject: { kind, name, namespace: "shop", uid: null },
+    involvedObject: {
+      apiVersion: getApiVersion(kind),
+      kind,
+      name,
+      namespace: "shop",
+      uid: null,
+    },
     count: 1,
     firstTimestamp: last,
     lastTimestamp: last,
@@ -87,6 +94,7 @@ describe("the recorded hour", () => {
     const rollout = one(stories, "shop-db-pooler-rw");
     expect(rollout.subject).toEqual({
       kind: "Deployment",
+      group: null,
       name: "shop-db-pooler-rw",
       namespace: "cnpg-demo",
       byName: false,
@@ -111,6 +119,7 @@ describe("the recorded hour", () => {
     const pulls = one(stories, "log-demo");
     expect(pulls.subject).toEqual({
       kind: null,
+      group: null,
       name: "log-demo",
       namespace: "k8s-gui-test",
       byName: true,
@@ -295,10 +304,61 @@ describe("placing events", () => {
     expect(stories).toHaveLength(1);
     expect(stories[0].subject).toEqual({
       kind: "Deployment",
+      group: "apps",
       name: "payments",
       namespace: "shop",
       byName: true,
     });
+  });
+
+  /**
+   * An OpenKruise Advanced StatefulSet and the pod it made: the story is the
+   * custom kind's, not the built-in one's of its name. Fails if the subject
+   * forgets the group its own events gave, which is all that tells them apart.
+   */
+  it("keeps the group of the object a story is about, through its pods", () => {
+    const kruise = (over: Partial<EventInfo>): EventInfo => {
+      const made = event({ kind: "StatefulSet", name: "web", ...over });
+      made.involvedObject.apiVersion = "apps.kruise.io/v1beta1";
+      return made;
+    };
+    // The pod first: the story's subject is then read off the pod's owner.
+    const stories = storiesOf(
+      [
+        event({ kind: "Pod", name: "web-0", type: "Warning" }),
+        kruise({
+          reason: "SuccessfulCreate",
+          message: "create Pod web-0 in StatefulSet web successful",
+        }),
+      ],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(stories).toHaveLength(1);
+    expect(stories[0].subject).toMatchObject({
+      kind: "StatefulSet",
+      group: "apps.kruise.io",
+      name: "web",
+    });
+    expect(subjectKey(stories[0].subject)).toBe(
+      "shop/StatefulSet.apps.kruise.io/web"
+    );
+  });
+
+  /**
+   * A Knative Service makes a core Service under its own name. Fails if the
+   * two are folded into one story, which is then about whichever spoke first.
+   */
+  it("tells a custom kind's story apart from its built-in namesake's", () => {
+    const knative = event({ kind: "Service", name: "web", type: "Warning" });
+    knative.involvedObject.apiVersion = "serving.knative.dev/v1";
+    const stories = storiesOf(
+      [event({ kind: "Service", name: "web" }), knative],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(stories.map((story) => story.subject.group).sort()).toEqual([
+      "",
+      "serving.knative.dev",
+    ]);
   });
 
   it("follows Deployment to ReplicaSet to Pod when every link was written", () => {
@@ -333,6 +393,7 @@ describe("placing events", () => {
     });
     expect(stories[0].subject).toEqual({
       kind: "Pod",
+      group: "",
       name: "web-0",
       namespace: "shop",
       byName: false,

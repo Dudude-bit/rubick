@@ -307,6 +307,10 @@ pub struct WarningGroup {
     /// a name *and* a namespace to be resolved against, and two thirds of one
     /// is a guess.
     pub object_kind: Option<String>,
+    /// The `apiVersion` that event gave for it: a kind is its group and its
+    /// name, and a custom kind may share a built-in's name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub object_api_version: Option<String>,
     pub object_name: Option<String>,
     /// The involved object's namespace, not the event's: an event about a
     /// pod is recorded beside it, but a cluster-scoped object's event is not.
@@ -391,13 +395,13 @@ impl<'a> Holders<'a> {
         }
     }
 
-    /// Whether the lists hold `kind` where it lives: `None` for a kind they
-    /// never hold.
-    fn listed(&self, kind: &str, namespace: Option<&str>) -> Option<bool> {
-        if kind == "Node" {
+    /// Whether the lists hold `kind` of `group` where it lives: `None` for
+    /// a kind they never hold, a namesake served in another group among them.
+    fn listed(&self, group: &str, kind: &str, namespace: Option<&str>) -> Option<bool> {
+        if (group, kind) == NODE {
             return Some(self.nodes_known && namespace.is_none());
         }
-        if !HELD_KINDS.contains(&kind) {
+        if !HELD_KINDS.contains(&(group, kind)) {
             return None;
         }
         Some(namespace.is_some_and(|namespace| {
@@ -419,7 +423,9 @@ impl<'a> Holders<'a> {
             return Incarnation::Unchecked;
         }
         let namespace = object.namespace.as_deref();
-        let now = match self.listed(kind, namespace) {
+        // An event that names no apiVersion does not say which kind it means.
+        let group = object.api_version.as_deref().map(crate::utils::group_of);
+        let now = group.and_then(|group| match self.listed(group, kind, namespace) {
             Some(true) => Some(
                 self.uids
                     .get(&(kind.as_str(), namespace, name.as_str()))
@@ -428,9 +434,14 @@ impl<'a> Holders<'a> {
             Some(false) => None,
             None => self
                 .looked
-                .get(&(kind.clone(), namespace.map(str::to_string), name.clone()))
+                .get(&(
+                    group.to_string(),
+                    kind.clone(),
+                    namespace.map(str::to_string),
+                    name.clone(),
+                ))
                 .cloned(),
-        };
+        });
         match now {
             Some(Held::By(now)) if now == *uid => Incarnation::Current,
             Some(Held::By(_)) => Incarnation::Earlier,
@@ -441,7 +452,16 @@ impl<'a> Holders<'a> {
     }
 }
 
-const HELD_KINDS: [&str; 5] = ["Pod", "Deployment", "StatefulSet", "DaemonSet", "Job"];
+/// The kinds the lists hold, each with the group it is served in: a custom
+/// kind of the same name is another kind, and the lists say nothing of it.
+const HELD_KINDS: [(&str, &str); 5] = [
+    ("", "Pod"),
+    ("apps", "Deployment"),
+    ("apps", "StatefulSet"),
+    ("apps", "DaemonSet"),
+    ("batch", "Job"),
+];
+const NODE: (&str, &str) = ("", "Node");
 
 /// The uids among `events` whose name another object has had since, by the
 /// events alone: two objects never hold one name at once, so of several
@@ -449,7 +469,7 @@ const HELD_KINDS: [&str; 5] = ["Pod", "Deployment", "StatefulSet", "DaemonSet", 
 /// later, and every other is earlier.
 fn replaced_uids<'a>(events: impl IntoIterator<Item = &'a Event>) -> HashSet<&'a str> {
     type Began<'e> = HashMap<&'e str, Option<DateTime<Utc>>>;
-    let mut began: HashMap<(&str, Option<&str>, &str), Began> = HashMap::new();
+    let mut began: HashMap<(Option<&str>, &str, Option<&str>, &str), Began> = HashMap::new();
     for event in events {
         let object = &event.involved_object;
         let (Some(kind), Some(name), Some(uid)) = (&object.kind, &object.name, &object.uid) else {
@@ -464,8 +484,9 @@ fn replaced_uids<'a>(events: impl IntoIterator<Item = &'a Event>) -> HashSet<&'a
             .or(event.last_timestamp.as_ref())
             .map(Moment::moment)
             .or_else(|| event.event_time.as_ref().map(Moment::moment));
+        let group = object.api_version.as_deref().map(crate::utils::group_of);
         let earliest = began
-            .entry((kind, object.namespace.as_deref(), name))
+            .entry((group, kind, object.namespace.as_deref(), name))
             .or_default()
             .entry(uid)
             .or_insert(at);
@@ -1606,6 +1627,7 @@ fn recent_warnings<'a>(
                 last_seen: None,
                 sample: None,
                 object_kind: None,
+                object_api_version: None,
                 object_name: None,
                 namespace: None,
                 incarnation: Incarnation::Unchecked,
@@ -1639,6 +1661,9 @@ fn recent_warnings<'a>(
             entry.last_seen = last_rfc;
             entry.sample.clone_from(&event.message);
             entry.object_kind.clone_from(&event.involved_object.kind);
+            entry
+                .object_api_version
+                .clone_from(&event.involved_object.api_version);
             entry.object_name.clone_from(&event.involved_object.name);
             // Deliberately not `event.metadata.namespace`, which is `default`
             // for an event about a Node — inheriting it would file a
@@ -2723,8 +2748,8 @@ pub async fn cluster_overview(
 /// The most names a poll reads one by one to say who holds them.
 const MAX_HOLDER_LOOKUPS: usize = 16;
 
-/// A name to read, the API version to read it at, and the uids its events give.
-type ToLookUp = (String, Named, BTreeSet<String>);
+/// A name to read and the uids its events give.
+type ToLookUp = (Named, BTreeSet<String>);
 
 /// The names recent warnings give whose kind the lists do not hold, newest
 /// first: one metadata read each for who holds the name now.
@@ -2734,7 +2759,6 @@ fn names_to_look_up<'a>(
 ) -> Vec<ToLookUp> {
     struct Warned {
         last: Option<DateTime<Utc>>,
-        api_version: String,
         uids: BTreeSet<String>,
     }
     let cutoff = Utc::now() - chrono::Duration::minutes(RECENT_WARNING_WINDOW_MINUTES);
@@ -2751,21 +2775,26 @@ fn names_to_look_up<'a>(
         else {
             continue;
         };
+        let group = crate::utils::group_of(api_version);
         if event.type_.as_deref() != Some("Warning")
             || last.is_some_and(|at| at < cutoff)
             || uid == name
-            || kind == "Node"
-            || HELD_KINDS.contains(&kind.as_str())
+            || (group, kind.as_str()) == NODE
+            || HELD_KINDS.contains(&(group, kind.as_str()))
             || object.namespace.as_ref().is_some_and(|namespace| {
                 scope.is_some_and(|scope| !scope.iter().any(|n| n == namespace))
             })
         {
             continue;
         }
-        let named = (kind.clone(), object.namespace.clone(), name.clone());
+        let named = (
+            group.to_string(),
+            kind.clone(),
+            object.namespace.clone(),
+            name.clone(),
+        );
         let seen = newest.entry(named).or_insert_with(|| Warned {
             last,
-            api_version: api_version.clone(),
             uids: BTreeSet::new(),
         });
         seen.last = seen.last.max(last);
@@ -2776,7 +2805,7 @@ fn names_to_look_up<'a>(
     names
         .into_iter()
         .take(MAX_HOLDER_LOOKUPS)
-        .map(|(named, warned)| (warned.api_version, named, warned.uids))
+        .map(|(named, warned)| (named, warned.uids))
         .collect()
 }
 
@@ -2792,18 +2821,16 @@ async fn look_up_holders<'a>(
     let now = std::time::Instant::now();
     let mut looked = Looked::new();
     let mut unread = Vec::new();
-    for (api_version, named, uids) in names_to_look_up(events, scope) {
+    for (named, uids) in names_to_look_up(events, scope) {
         match memo.recall(&named, &uids, now) {
             Some(held) => looked.extend(held.map(|held| (named, held))),
-            None => unread.push((api_version, named, uids)),
+            None => unread.push((named, uids)),
         }
     }
-    let reads = unread
-        .into_iter()
-        .map(|(api_version, named, uids)| async move {
-            let held = holder_of(state, &api_version, &named).await;
-            (named, uids, held)
-        });
+    let reads = unread.into_iter().map(|(named, uids)| async move {
+        let held = holder_of(state, &named).await;
+        (named, uids, held)
+    });
     for (named, uids, held) in join_all(reads).await {
         memo.remember(named.clone(), uids, held.clone(), now);
         looked.extend(held.map(|held| (named, held)));
@@ -2811,9 +2838,8 @@ async fn look_up_holders<'a>(
     looked
 }
 
-async fn holder_of(state: &AppState, api_version: &str, named: &Named) -> Option<Held> {
-    let (kind, namespace, name) = named;
-    let group = crate::utils::group_of(api_version);
+async fn holder_of(state: &AppState, named: &Named) -> Option<Held> {
+    let (group, kind, namespace, name) = named;
     let plural = state
         .served_kinds(group)
         .await
@@ -3283,7 +3309,10 @@ mod tests {
             "lastTimestamp": (Utc::now() - chrono::Duration::minutes(3))
                 .format("%Y-%m-%dT%H:%M:%SZ")
                 .to_string(),
-            "involvedObject": { "kind": "Pod", "name": name, "namespace": namespace, "uid": uid },
+            "involvedObject": {
+                "apiVersion": "v1", "kind": "Pod",
+                "name": name, "namespace": namespace, "uid": uid,
+            },
         }))
         .expect("an event this test wrote");
         event.message = Some("MountVolume.SetUp failed".to_string());
@@ -3365,6 +3394,151 @@ mod tests {
         assert_eq!(warned("9f0c2a11"), Incarnation::Earlier);
     }
 
+    /// A warning about `kind` web in shop, as its `apiVersion` names the kind.
+    fn web_warning(api_version: Option<&str>, kind: &str, uid: &str, began: i64) -> Event {
+        let mut event = metric_warning(uid, 1, began);
+        event.metadata.name = Some(format!("web.{uid}"));
+        event.involved_object.api_version = api_version.map(str::to_string);
+        event.involved_object.kind = Some(kind.to_string());
+        event.involved_object.name = Some("web".to_string());
+        event.involved_object.namespace = Some("shop".to_string());
+        event
+    }
+
+    fn incarnations(
+        events: Vec<Event>,
+        stateful_sets: &[StatefulSet],
+        looked: &Looked,
+    ) -> Vec<(Option<String>, Incarnation)> {
+        let mut rows: Vec<_> = build_overview(&OverviewInputs {
+            scoped_pods: &[],
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &arcs(stateful_sets.to_vec()),
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &arcs(events),
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+            looked,
+        })
+        .warnings
+        .into_iter()
+        .map(|group| (group.object_api_version, group.incarnation))
+        .collect();
+        rows.sort_by(|a, b| a.0.cmp(&b.0));
+        rows
+    }
+
+    const KRUISE: &str = "apps.kruise.io/v1beta1";
+
+    fn kruise_web() -> Named {
+        (
+            "apps.kruise.io".to_string(),
+            "StatefulSet".to_string(),
+            Some("shop".to_string()),
+            "web".to_string(),
+        )
+    }
+
+    /// An `OpenKruise` Advanced `StatefulSet` shares its Kind with the built-in
+    /// one. Fails if its warnings are answered from the `apps/v1` list, where
+    /// it is never found and so read as deleted, or as an earlier object
+    /// where a built-in namesake holds the name there.
+    #[test]
+    fn a_custom_kind_named_like_a_built_in_is_not_read_from_the_built_ins_list() {
+        let kruise = || vec![web_warning(Some(KRUISE), "StatefulSet", "k1", 10)];
+        let said =
+            |sets: &[StatefulSet], looked: &Looked| incarnations(kruise(), sets, looked)[0].1;
+        assert_eq!(said(&[], &Looked::new()), Incarnation::Unchecked);
+
+        let namesake: StatefulSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web", "namespace": "shop", "uid": "a1" },
+        }))
+        .expect("a StatefulSet this test wrote");
+        assert_eq!(said(&[namesake], &Looked::new()), Incarnation::Unchecked);
+
+        let read = Looked::from([(kruise_web(), Held::By("k1".to_string()))]);
+        assert_eq!(said(&[], &read), Incarnation::Current);
+        let deleted = Looked::from([(kruise_web(), Held::Nobody)]);
+        assert_eq!(said(&[], &deleted), Incarnation::Gone);
+    }
+
+    /// The built-in kind is still answered by its list. Fails if telling the
+    /// namesake apart stops a deleted `apps/v1` `StatefulSet` reading as gone.
+    #[test]
+    fn a_built_in_kind_is_still_read_from_its_list() {
+        let own = vec![web_warning(Some("apps/v1"), "StatefulSet", "a1", 10)];
+        assert_eq!(
+            incarnations(own, &[], &Looked::new()),
+            vec![(Some("apps/v1".to_string()), Incarnation::Gone)]
+        );
+    }
+
+    /// A Knative Service beside the core Service of its name: two objects that
+    /// hold the name at once. Fails if the one whose events began first is
+    /// called an earlier object of the other.
+    #[test]
+    fn two_kinds_of_one_name_are_not_each_others_predecessor() {
+        let events = vec![
+            web_warning(Some("v1"), "Service", "s1", 30),
+            web_warning(Some("serving.knative.dev/v1"), "Service", "k1", 10),
+        ];
+        let said: Vec<_> = incarnations(events, &[], &Looked::new())
+            .into_iter()
+            .map(|(_, incarnation)| incarnation)
+            .collect();
+        // One row: an earlier object's warnings are kept on a row of their own.
+        assert_eq!(said, vec![Incarnation::Unchecked]);
+    }
+
+    /// An event that names no `apiVersion` does not say which kind it means.
+    /// Fails if it is taken for the built-in one and, not found in its list,
+    /// read as deleted.
+    #[test]
+    fn an_event_that_names_no_api_version_is_not_checked_against_the_lists() {
+        let unnamed = vec![web_warning(None, "StatefulSet", "k1", 10)];
+        assert_eq!(
+            incarnations(unnamed, &[], &Looked::new()),
+            vec![(None, Incarnation::Unchecked)]
+        );
+    }
+
+    /// A cluster-scoped custom kind called `Node`, as an operator may define
+    /// one. Fails if it is looked for among the cluster's nodes, where it is
+    /// never found and so read as deleted.
+    #[test]
+    fn a_custom_kind_named_node_is_not_one_of_the_clusters_nodes() {
+        let about = |api_version: &str| {
+            let mut event = web_warning(Some(api_version), "Node", "n1", 10);
+            event.involved_object.namespace = None;
+            incarnations(vec![event], &[], &Looked::new())[0].1
+        };
+        assert_eq!(about("v1"), Incarnation::Gone);
+        assert_eq!(about("infra.example.io/v1"), Incarnation::Unchecked);
+    }
+
+    /// Fails if a namesake of a held kind is left unread, which leaves its
+    /// warnings unchecked for good, or the held kind itself costs a read.
+    #[test]
+    fn a_namesake_of_a_held_kind_is_read_one_by_one() {
+        let events = [
+            web_warning(Some(KRUISE), "StatefulSet", "k1", 5),
+            web_warning(Some("apps/v1"), "StatefulSet", "a1", 5),
+        ];
+        assert_eq!(
+            names_to_look_up(&events, None),
+            vec![(kruise_web(), BTreeSet::from(["k1".to_string()]))]
+        );
+    }
+
     fn metric_warning(uid: &str, count: i32, first_minutes_ago: i64) -> Event {
         serde_json::from_value(serde_json::json!({
             "apiVersion": "v1",
@@ -3430,6 +3604,7 @@ mod tests {
             ]
         };
         let hello_web = (
+            "autoscaling".to_string(),
             "HorizontalPodAutoscaler".to_string(),
             Some("lena-sandbox".to_string()),
             "hello-web".to_string(),
@@ -3466,6 +3641,7 @@ mod tests {
         ];
         let deleted = Looked::from([(
             (
+                "autoscaling".to_string(),
                 "HorizontalPodAutoscaler".to_string(),
                 Some("lena-sandbox".to_string()),
                 "hello-web".to_string(),
@@ -3556,6 +3732,7 @@ mod tests {
         let (state, _) = hpa_server().await;
         let named = |name: &str| {
             (
+                "autoscaling".to_string(),
                 "HorizontalPodAutoscaler".to_string(),
                 Some("lena-sandbox".to_string()),
                 name.to_string(),
@@ -3566,11 +3743,7 @@ mod tests {
             ("deleted", Some(Held::Nobody)),
             ("refused", None),
         ] {
-            assert_eq!(
-                holder_of(&state, "autoscaling/v2", &named(name)).await,
-                expected,
-                "{name}"
-            );
+            assert_eq!(holder_of(&state, &named(name)).await, expected, "{name}");
         }
     }
 
@@ -3597,8 +3770,8 @@ mod tests {
         assert_eq!(
             names,
             vec![(
-                "autoscaling/v2".to_string(),
                 (
+                    "autoscaling".to_string(),
                     "HorizontalPodAutoscaler".to_string(),
                     Some("lena-sandbox".to_string()),
                     "hello-web".to_string(),
@@ -3617,6 +3790,7 @@ mod tests {
         let (state, hits) = hpa_server().await;
         let memo = HolderMemo::default();
         let hello_web = (
+            "autoscaling".to_string(),
             "HorizontalPodAutoscaler".to_string(),
             Some("lena-sandbox".to_string()),
             "hello-web".to_string(),

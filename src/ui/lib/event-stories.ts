@@ -9,7 +9,13 @@
 
 import type { EventInfo } from "@/generated/types";
 import type { Saying } from "@/i18n/say";
-import { involvedUid, nameKey, pastOf, type Past } from "./event-incarnation";
+import {
+  groupIn,
+  involvedUid,
+  nameKey,
+  pastOf,
+  type Past,
+} from "./event-incarnation";
 
 export type Activity =
   | "crash"
@@ -42,6 +48,8 @@ const ACTIVITY_RANK: Activity[] = [
 export interface Subject {
   /** `null` when pods were folded by name alone and no controller claimed them. */
   kind: string | null;
+  /** The API group its own events name for that kind; `null` where none of them does. */
+  group: string | null;
   name: string;
   namespace: string | null;
   /** Some member was placed here by its name's generated suffix, not by an event. */
@@ -150,6 +158,7 @@ const CREATED_JOB = /(?:Created|Deleted) job:? (\S+)/;
 
 interface Owner {
   kind: string;
+  group: string | null;
   name: string;
 }
 
@@ -263,11 +272,16 @@ function evidenceOf(events: EventInfo[]): Map<string, Owner> {
   const owner = new Map<string, Owner>();
   for (const event of events) {
     const { kind, name } = event.involvedObject;
+    const group = groupIn(event.involvedObject.apiVersion);
     const namespace = event.involvedObject.namespace ?? event.namespace;
     const message = event.message ?? "";
     const claim = (childKind: string, child: string | undefined) => {
       if (child)
-        owner.set(objectKey(namespace, childKind, child), { kind, name });
+        owner.set(objectKey(namespace, childKind, child), {
+          kind,
+          group,
+          name,
+        });
     };
     if (kind === "Deployment" && event.reason === "ScalingReplicaSet") {
       claim("ReplicaSet", scalingOf(event)?.rs);
@@ -294,25 +308,25 @@ function place(
 ): Placement {
   const namespace = event.involvedObject.namespace ?? event.namespace;
   let kind = event.involvedObject.kind;
+  let group = groupIn(event.involvedObject.apiVersion);
   let name = event.involvedObject.name;
   const past = pastOf(event, pastObjects);
   if (past) {
     return {
       key: `${objectKey(namespace, kind, name)}@${involvedUid(event)}`,
-      subject: { kind, name, namespace, byName: false, past },
+      subject: { kind, group, name, namespace, byName: false, past },
     };
   }
   if (!FOLDED_KINDS.has(kind)) {
     return {
-      key: objectKey(namespace, kind, name),
-      subject: { kind, name, namespace, byName: false },
+      key: nameKey({ kind, group, namespace, name }),
+      subject: { kind, group, name, namespace, byName: false },
     };
   }
   for (let hop = 0; hop < 3; hop += 1) {
     const owner = evidence.get(objectKey(namespace, kind, name));
     if (!owner) break;
-    kind = owner.kind;
-    name = owner.name;
+    ({ kind, group, name } = owner);
   }
   // Only a Pod is folded by its name. A ReplicaSet reached on its own — no
   // Deployment event in the window named it — is the object that spoke, and
@@ -323,13 +337,19 @@ function place(
     if (family !== name) {
       return {
         key: `${namespace ?? ""}/${family}`,
-        subject: { kind: null, name: family, namespace, byName: true },
+        subject: {
+          kind: null,
+          group: null,
+          name: family,
+          namespace,
+          byName: true,
+        },
       };
     }
   }
   return {
     key: `${namespace ?? ""}/${name}`,
-    subject: { kind, name, namespace, byName: false },
+    subject: { kind, group, name, namespace, byName: false },
   };
 }
 
@@ -900,8 +920,7 @@ const STATE_RANK: Record<StoryState, number> = {
 };
 
 /** Where a story's object lives and what it is called, the key its existence is read by. */
-export const subjectKey = (subject: Subject): string =>
-  nameKey(subject.kind, subject.namespace, subject.name);
+export const subjectKey = (subject: Subject): string => nameKey(subject);
 
 /** Whether a story's object may have been deleted, its warnings still recent or not, which only reading it can say. */
 export const mayBeGone = (story: Story): boolean =>

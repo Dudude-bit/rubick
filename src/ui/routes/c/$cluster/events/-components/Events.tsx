@@ -48,7 +48,7 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW } from "@/components/object/detail-blocks";
 import { EventsTable } from "./EventsTable";
 import { StoryCard } from "./StoryCard";
-import { useNameHolders } from "./name-holders";
+import { registryKindNamed, useNameHolders } from "./name-holders";
 import { useHeldOrder } from "../../-list/held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
@@ -477,11 +477,17 @@ export function Events() {
   // Over the whole pool, before the search narrows it: whether an object was
   // replaced is told by its other events, which a search may not match.
   const opened = useCallback<Holder>(
-    (kind, namespace, name) =>
-      eventsUidIn(
-        kind,
-        client.getQueryData(queryKeys.detail(kind, namespace, name))
-      ),
+    (named) => {
+      const kind = registryKindNamed(named);
+      return kind
+        ? eventsUidIn(
+            kind,
+            client.getQueryData(
+              queryKeys.detail(kind, named.namespace, named.name)
+            )
+          )
+        : undefined;
+    },
     [client]
   );
   const inferred = useMemo(() => pastObjects(pool, opened), [pool, opened]);
@@ -504,9 +510,9 @@ export function Events() {
     () =>
       holders.size === 0
         ? inferred
-        : pastObjects(pool, (kind, namespace, name) => {
-            const held = holders.get(nameKey(kind, namespace, name));
-            return held === undefined ? opened(kind, namespace, name) : held;
+        : pastObjects(pool, (named) => {
+            const held = holders.get(nameKey(named));
+            return held === undefined ? opened(named) : held;
           }),
     [holders, inferred, pool, opened]
   );
