@@ -24,7 +24,9 @@ import { useClusterStore } from "@/stores/clusterStore";
 
 interface Asked extends Named {
   key: string;
-  kind: ResourceKind;
+  group: string;
+  /** The registry's kind where the name is one of its own; any other is read where the cluster's discovery serves it. */
+  registry: ResourceKind | null;
 }
 
 /**
@@ -44,9 +46,10 @@ export const registryKindNamed = (
  * or `null` where the cluster answered that nothing is. One question for
  * every name, asked again at the steady rate while the page is shown, and
  * the one answer every story, row and chip reads. A refused or failed read
- * leaves its name out, which is unknown; a kind the registry does not hold
- * in that group is not asked. A name the Overview's own check calls gone is
- * asked again at once.
+ * leaves its name out, which is unknown. A kind the registry does not hold
+ * in that group is asked through discovery, as the Overview asks it; one
+ * whose events name no group is not asked. A name the Overview's own check
+ * calls gone is asked again at once.
  *
  * The answer is one string, so it draws the page only when a holder
  * changes: the stories follow the watch once a second.
@@ -60,8 +63,14 @@ export function useNameHolders(
   const named = useMemo(() => {
     const seen = new Map<string, Asked>();
     const ask = (key: string, named: Named) => {
-      const kind = registryKindNamed(named);
-      if (kind) seen.set(key, { ...named, key, kind });
+      const { group } = named;
+      if (group !== null)
+        seen.set(key, {
+          ...named,
+          group,
+          key,
+          registry: registryKindNamed(named),
+        });
     };
     for (const [key, name] of namesToAsk(events)) ask(key, name);
     for (const story of stories) {
@@ -114,21 +123,33 @@ export function useNameHolders(
   );
 }
 
+/** Who holds one name: its uid, `null` for nobody, `undefined` where the read could not say. */
+const holderOf = ({ registry, group, kind, name, namespace }: Asked) =>
+  registry
+    ? commands
+        .getObjectMetadata(registry, getApiVersion(registry), name, namespace)
+        .then(
+          (meta) => eventsUidIn(registry, meta),
+          (error: unknown) =>
+            errorCode(error) === ERROR_CODES.NOT_FOUND ? null : undefined
+        )
+    : commands.nameHolder(group, kind, name, namespace).then(
+        (holder) =>
+          holder.held === "by"
+            ? holder.uid
+            : holder.held === "nobody"
+              ? null
+              : undefined,
+        () => undefined
+      );
+
 /** One line per name the cluster answered for: its key, a tab, and the uid there now or nothing. */
 async function holdersOf(named: readonly Asked[]): Promise<string[]> {
   const answers = await Promise.all(
-    named.map(({ key, kind, name, namespace }) =>
-      commands
-        .getObjectMetadata(kind, getApiVersion(kind), name, namespace)
-        .then(
-          (meta) => {
-            const uid = eventsUidIn(kind, meta);
-            return uid ? `${key}\t${uid}` : null;
-          },
-          (error: unknown) =>
-            errorCode(error) === ERROR_CODES.NOT_FOUND ? `${key}\t` : null
-        )
-    )
+    named.map(async (asked) => {
+      const held = await holderOf(asked);
+      return held === undefined ? null : `${asked.key}\t${held ?? ""}`;
+    })
   );
   return answers.filter((line): line is string => line !== null);
 }

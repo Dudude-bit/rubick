@@ -2979,7 +2979,57 @@ async fn look_up_holders<'a>(
     looked
 }
 
+/// Who holds a name, as it crosses to a screen that asks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "held", rename_all = "camelCase")]
+pub enum Holder {
+    By {
+        uid: String,
+    },
+    Nobody,
+    /// The read could not say: refused, failed, or a kind not served here.
+    NotRead,
+}
+
+/// Who holds one name now, read as the Overview's own warnings read it:
+/// through discovery, so a custom kind is asked where it is served.
+#[tauri::command]
+pub async fn name_holder(
+    group: String,
+    kind: String,
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Holder> {
+    crate::validation::validate_path_segment(&name)?;
+    if !group.is_empty() {
+        crate::validation::validate_dns_subdomain(&group)?;
+    }
+    if let Some(namespace) = &namespace {
+        crate::validation::validate_namespace(namespace)?;
+    }
+    let named = (group, kind, namespace, name);
+    Ok(
+        crate::client::clock::timed(&state.perf, "nameHolder", name_holder_of(&state, &named))
+            .await,
+    )
+}
+
+async fn name_holder_of(state: &AppState, named: &Named) -> Holder {
+    match holder_read(state, named, true).await {
+        Some(Held::By(uid)) => Holder::By { uid },
+        Some(Held::Nobody) => Holder::Nobody,
+        None => Holder::NotRead,
+    }
+}
+
 async fn holder_of(state: &AppState, named: &Named) -> Option<Held> {
+    holder_read(state, named, false).await
+}
+
+/// `of_event` where the namespace may be the event's own rather than its
+/// object's: an event about a cluster-scoped object is itself in one.
+async fn holder_read(state: &AppState, named: &Named, of_event: bool) -> Option<Held> {
     let (group, kind, namespace, name) = named;
     let plural = state
         .served_kinds(group)
@@ -2989,10 +3039,13 @@ async fn holder_of(state: &AppState, named: &Named) -> Option<Held> {
         .find(|served| served.kind == *kind)?
         .plural;
     let served = state.served(group, &plural).await.ok()??;
-    if served.namespaced != namespace.is_some() {
-        return None;
-    }
-    match crate::commands::ownership::metadata(state, &served, name, namespace.clone()).await {
+    let namespace = match (served.namespaced, namespace) {
+        (true, Some(namespace)) => Some(namespace.clone()),
+        (false, None) => None,
+        (false, Some(_)) if of_event => None,
+        _ => return None,
+    };
+    match crate::commands::ownership::metadata(state, &served, name, namespace).await {
         Ok(meta) => meta.uid.map(Held::By),
         Err(error) if error.code() == "NOT_FOUND" => Some(Held::Nobody),
         Err(_) => None,
@@ -3830,7 +3883,8 @@ mod tests {
     const HPAS_AT: &str = "/apis/autoscaling/v2/namespaces/lena-sandbox/horizontalpodautoscalers";
 
     /// An API server serving HPAs in lena-sandbox: hello-web is 8b3e3d88,
-    /// `refused` is forbidden, and every other name is not found.
+    /// `refused` is forbidden, and every other name is not found. It serves
+    /// cert-manager's cluster-scoped `ClusterIssuer` too: letsencrypt is c1.
     async fn hpa_server() -> (AppState, crate::client::served::test_server::Hits) {
         use crate::client::served::test_server::{connected, failure};
         use crate::client::served::ServedIndex;
@@ -3842,7 +3896,31 @@ mod tests {
                     "name": "autoscaling",
                     "versions": [{ "groupVersion": "autoscaling/v2", "version": "v2" }],
                     "preferredVersion": { "groupVersion": "autoscaling/v2", "version": "v2" },
+                }, {
+                    "name": "cert-manager.io",
+                    "versions": [{ "groupVersion": "cert-manager.io/v1", "version": "v1" }],
+                    "preferredVersion": { "groupVersion": "cert-manager.io/v1", "version": "v1" },
                 }]})
+                .to_string(),
+            ),
+            "/apis/cert-manager.io/v1" => (
+                200,
+                serde_json::json!({
+                    "kind": "APIResourceList", "groupVersion": "cert-manager.io/v1",
+                    "resources": [{
+                        "name": "clusterissuers", "singularName": "",
+                        "namespaced": false, "kind": "ClusterIssuer",
+                        "verbs": ["get", "list", "watch"],
+                    }],
+                })
+                .to_string(),
+            ),
+            "/apis/cert-manager.io/v1/clusterissuers/letsencrypt" => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "cert-manager.io/v1", "kind": "ClusterIssuer",
+                    "metadata": { "name": "letsencrypt", "uid": "c1" },
+                })
                 .to_string(),
             ),
             "/apis/autoscaling/v2" => (
@@ -3891,6 +3969,80 @@ mod tests {
         ] {
             assert_eq!(holder_of(&state, &named(name)).await, expected, "{name}");
         }
+    }
+
+    /// The Events page asks the same read for a kind it holds no reader of.
+    /// Fails if a read that could not say, or a kind this cluster does not
+    /// serve, crosses as nobody holding the name: the page then calls a live
+    /// object deleted.
+    #[tokio::test]
+    async fn a_name_asked_from_a_screen_is_not_read_where_the_read_could_not_say() {
+        let (state, _) = hpa_server().await;
+        let of = |group: &str, kind: &str, name: &str| {
+            (
+                group.to_string(),
+                kind.to_string(),
+                Some("lena-sandbox".to_string()),
+                name.to_string(),
+            )
+        };
+        let hpa = |name: &str| of("autoscaling", "HorizontalPodAutoscaler", name);
+        assert_eq!(
+            name_holder_of(&state, &hpa("hello-web")).await,
+            Holder::By {
+                uid: "8b3e3d88".to_string()
+            }
+        );
+        assert_eq!(
+            name_holder_of(&state, &hpa("deleted")).await,
+            Holder::Nobody
+        );
+        assert_eq!(
+            name_holder_of(&state, &hpa("refused")).await,
+            Holder::NotRead
+        );
+        let unserved = of("serving.knative.dev", "Service", "web");
+        assert_eq!(name_holder_of(&state, &unserved).await, Holder::NotRead);
+    }
+
+    /// An event about a cluster-scoped object sits in a namespace of its own,
+    /// which is all a screen holding the event can hand over. Fails if such a
+    /// kind is left unread for it, or looked for inside that namespace; or if
+    /// a namespaced kind handed no namespace is read in whichever is default,
+    /// where "not found" would call an object elsewhere deleted.
+    #[tokio::test]
+    async fn a_cluster_scoped_kind_asked_from_a_screen_is_read_without_its_events_namespace() {
+        let (state, _) = hpa_server().await;
+        let issuer = |name: &str, namespace: Option<&str>| {
+            (
+                "cert-manager.io".to_string(),
+                "ClusterIssuer".to_string(),
+                namespace.map(str::to_string),
+                name.to_string(),
+            )
+        };
+        let found = Holder::By {
+            uid: "c1".to_string(),
+        };
+        let asked = issuer("letsencrypt", Some("default"));
+        assert_eq!(name_holder_of(&state, &asked).await, found);
+        assert_eq!(
+            name_holder_of(&state, &issuer("letsencrypt", None)).await,
+            found
+        );
+        assert_eq!(
+            name_holder_of(&state, &issuer("deleted", Some("default"))).await,
+            Holder::Nobody
+        );
+        assert_eq!(holder_of(&state, &asked).await, None, "the Overview's own");
+
+        let unplaced = (
+            "autoscaling".to_string(),
+            "HorizontalPodAutoscaler".to_string(),
+            None,
+            "hello-web".to_string(),
+        );
+        assert_eq!(name_holder_of(&state, &unplaced).await, Holder::NotRead);
     }
 
     /// Fails if a poll reads a name the lists already answer, one outside the

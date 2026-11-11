@@ -3084,6 +3084,11 @@ export type EventsShort =
   | { why: "capped"; namespace: string | null }
   | { why: "failed"; namespace: string | null; code: string; message: string };
 
+export type Holder =
+  | { held: "by"; uid: string }
+  | { held: "nobody" }
+  | { held: "notRead" };
+
 export type CertificateProblem =
   | { says: "noSecret" }
   | { says: "secretUnreadable"; said: string }

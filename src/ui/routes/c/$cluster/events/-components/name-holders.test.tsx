@@ -12,8 +12,9 @@ import { testQueryClient } from "@/test/render";
 
 const getObjectMetadata = vi.hoisted(() => vi.fn());
 const getClusterOverview = vi.hoisted(() => vi.fn());
+const nameHolder = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/commands", () => ({
-  commands: { getObjectMetadata, getClusterOverview },
+  commands: { getObjectMetadata, getClusterOverview, nameHolder },
 }));
 
 const { useNameHolders } = await import("./name-holders");
@@ -120,13 +121,16 @@ describe("who holds the names the page speaks of", () => {
   /**
    * An OpenKruise Advanced StatefulSet shares its Kind with the built-in one.
    * Asked at `apps/v1`, it is never found, and a live workload read as
-   * deleted. Fails if a kind is asked by its bare name: in another group, or
-   * where the events name no group, nobody here can read it.
+   * deleted. Fails if a kind is asked by its bare name: in another group it
+   * is asked where that group serves it, and where the events name no group
+   * nobody can read it.
    */
   it("asks the built-in's address only for the built-in's own group", async () => {
     useClusterStore.setState({ isConnected: true });
     getObjectMetadata.mockReset();
     getObjectMetadata.mockRejectedValue(NOT_FOUND);
+    nameHolder.mockReset();
+    nameHolder.mockResolvedValue({ held: "by", uid: "k1" });
     const set = (name: string, group: string | null) =>
       ({
         state: "stillHappening",
@@ -149,6 +153,54 @@ describe("who holds the names the page speaks of", () => {
     expect(getObjectMetadata.mock.calls).toEqual([
       ["StatefulSet", "apps/v1", "own", "shop"],
     ]);
+    expect(nameHolder.mock.calls).toEqual([
+      ["apps.kruise.io", "StatefulSet", "kruise", "shop"],
+    ]);
+  });
+
+  /**
+   * The Overview read a deleted Knative Service through discovery and called
+   * it deleted, while its story and rows here linked to it as an object still
+   * there: a custom kind was asked of nobody. Fails if a custom kind's name
+   * is not asked where its group serves it, or if a read that could not say,
+   * refused or failed, is taken for nobody holding the name.
+   */
+  it("asks who holds a custom kind's name through the cluster's discovery", async () => {
+    useClusterStore.setState({ isConnected: true });
+    getObjectMetadata.mockReset();
+    nameHolder.mockReset();
+    nameHolder.mockImplementation(async (_group, _kind, name) => {
+      if (name === "gone") return { held: "nobody" };
+      if (name === "blind") return { held: "notRead" };
+      if (name === "broken") throw { code: "KUBE_API_ERROR", message: "boom" };
+      return { held: "by", uid: "k1" };
+    });
+    const knative = (name: string) =>
+      ({
+        state: "stillHappening",
+        subject: {
+          kind: "Service",
+          group: "serving.knative.dev",
+          name,
+          namespace: "shop",
+          byName: false,
+        },
+      }) as Story;
+    const { result } = mount(["web", "gone", "blind", "broken"].map(knative));
+    await waitFor(() =>
+      expect([...result.current]).toEqual([
+        ["shop/Service.serving.knative.dev/gone", null],
+        ["shop/Service.serving.knative.dev/web", "k1"],
+      ])
+    );
+    expect(nameHolder.mock.calls).toContainEqual([
+      "serving.knative.dev",
+      "Service",
+      "gone",
+      "shop",
+    ]);
+    expect(nameHolder).toHaveBeenCalledTimes(4);
+    expect(getObjectMetadata).not.toHaveBeenCalled();
   });
 
   /**
