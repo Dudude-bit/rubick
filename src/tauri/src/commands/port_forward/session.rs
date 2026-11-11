@@ -17,7 +17,7 @@ use crate::state::streams::{Opened, SUBSCRIBE_TIMEOUT};
 use crate::state::{AppState, PortForwardSession};
 use crate::utils::require_namespace;
 
-use super::follow::{current_client, follow, owner_of, replacement, Follow, Target};
+use super::follow::{current_client, follow, owner_of, replacement, Follow, Left, Target};
 use super::types::{ForwardNote, ForwardVia, PortForwardRequest, PortForwardSessionInfo, Reporter};
 
 /// How many failures in a row before a connection stops claiming it is coming back.
@@ -393,8 +393,8 @@ pub async fn port_forward_pod(
     )
 }
 
-/// Start port forwarding to a Service, through a ready pod behind it, the way
-/// `kubectl port-forward svc/...` does. `config.remote_port` is the Service
+/// Start port forwarding to a Service, through a ready pod behind it or, with
+/// none ready, a running one, the way `kubectl port-forward svc/...` does. `config.remote_port` is the Service
 /// port; the pod-side port is resolved from its `targetPort`.
 #[tauri::command]
 pub async fn port_forward_service(
@@ -415,9 +415,15 @@ pub async fn port_forward_service(
         name: service.clone(),
         port: config.remote_port,
     };
-    let target = replacement(&client, &namespace, &via, "", config.remote_port)
-        .await?
-        .ok_or(Error::NoReadyPod { service })?;
+    let target = replacement(
+        &client,
+        &namespace,
+        &via,
+        &Left::default(),
+        config.remote_port,
+    )
+    .await?
+    .ok_or(Error::NoReadyPod { service })?;
     let listener = bind(config.local_port).await?;
     start(
         &state,

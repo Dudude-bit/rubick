@@ -126,20 +126,50 @@ fn ready(pod: &Pod) -> bool {
             })
 }
 
-/// Ready pods the selector matches, other than `leaving_pod`, newest first so
-/// a rollout lands the forward on its own new pods.
-fn candidates<'a>(pods: &'a [Pod], selector: Selector<'_>, leaving_pod: &str) -> Vec<&'a Pod> {
+/// A container of its own is running. `Ready` is a whole-pod verdict, and a
+/// pod whose sidecar cannot pull its image still serves from the one that is
+/// up; `kubectl port-forward svc/...` takes such a pod too. A crash-looping
+/// container is waiting, and init containers are listed elsewhere.
+fn up(pod: &Pod) -> bool {
+    !leaving(pod)
+        && pod
+            .status
+            .as_ref()
+            .and_then(|status| status.container_statuses.as_ref())
+            .is_some_and(|containers| {
+                containers.iter().any(|container| {
+                    container
+                        .state
+                        .as_ref()
+                        .is_some_and(|state| state.running.is_some())
+                })
+            })
+}
+
+/// The pod a forward is leaving. The default is no pod at all: a start.
+#[derive(Default)]
+pub(super) struct Left<'a> {
+    pub pod: &'a str,
+    /// Still answering, so only a ready pod is worth leaving it for.
+    pub serving: bool,
+}
+
+/// Pods the selector matches, other than the one left: ready ones first, then,
+/// where nothing is serving, ones merely up. Newest first within each, so a
+/// rollout lands the forward on its own new pods.
+fn candidates<'a>(pods: &'a [Pod], selector: Selector<'_>, left: &Left<'_>) -> Vec<&'a Pod> {
     let mut found: Vec<&Pod> = pods
         .iter()
         .filter(|pod| {
-            pod.name_any() != leaving_pod
-                && ready(pod)
+            pod.name_any() != left.pod
+                && (ready(pod) || !left.serving && up(pod))
                 && selector.matches(pod.labels()) == Some(true)
         })
         .collect();
     found.sort_by(|a, b| {
-        b.creation_timestamp()
-            .cmp(&a.creation_timestamp())
+        ready(b)
+            .cmp(&ready(a))
+            .then_with(|| b.creation_timestamp().cmp(&a.creation_timestamp()))
             .then_with(|| a.name_any().cmp(&b.name_any()))
     });
     found
@@ -222,15 +252,15 @@ async fn owner_selector(
     })
 }
 
-/// A ready pod `via` would send a new connection to, other than `leaving_pod`.
+/// The pod `via` would send a new connection to, other than the one left.
 ///
-/// `Ok(None)` is an answer, nothing ready; `Err` is not having been able to
+/// `Ok(None)` is an answer, nothing to move to; `Err` is not having been able to
 /// look, which is never reported as nothing ready.
 pub(super) async fn replacement(
     client: &kube::Client,
     namespace: &str,
     via: &ForwardVia,
-    leaving_pod: &str,
+    left: &Left<'_>,
     remote_port: u16,
 ) -> std::result::Result<Option<Target>, Error> {
     let pods = Api::<Pod>::namespaced(client.clone(), namespace);
@@ -244,7 +274,7 @@ pub(super) async fn replacement(
                 .list(&list_params(selector.match_labels.as_ref()))
                 .await?;
             Ok(
-                candidates(&listed.items, Selector::Query(Some(&selector)), leaving_pod)
+                candidates(&listed.items, Selector::Query(Some(&selector)), left)
                     .first()
                     .map(|pod| Target {
                         pod: pod.name_any(),
@@ -266,7 +296,7 @@ pub(super) async fn replacement(
             };
             let listed = pods.list(&list_params(Some(selector))).await?;
             Ok(
-                candidates(&listed.items, Selector::Equality(selector), leaving_pod)
+                candidates(&listed.items, Selector::Equality(selector), left)
                     .into_iter()
                     .find_map(|pod| {
                         pod_port(&service, *port, pod).map(|remote_port| Target {
@@ -353,7 +383,10 @@ pub(super) async fn follow(
                     &client,
                     &spec.namespace,
                     &spec.via,
-                    &current.pod,
+                    &Left {
+                        pod: &current.pod,
+                        serving: !gone,
+                    },
                     current.remote_port,
                 )
                 .await
@@ -477,10 +510,17 @@ mod tests {
         .chain([leaving_one])
         .collect();
         let labels = std::collections::BTreeMap::from([("app".to_string(), "api".to_string())]);
-        let chosen: Vec<String> = candidates(&pods, Selector::Equality(&labels), "api-0")
-            .iter()
-            .map(|pod| pod.name_any())
-            .collect();
+        let chosen: Vec<String> = candidates(
+            &pods,
+            Selector::Equality(&labels),
+            &Left {
+                pod: "api-0",
+                serving: true,
+            },
+        )
+        .iter()
+        .map(|pod| pod.name_any())
+        .collect();
         assert_eq!(chosen, ["api-1"]);
     }
 
@@ -561,9 +601,18 @@ mod tests {
             owner_kind: "Deployment".into(),
             name: "api".into(),
         };
-        assert!(replacement(&client, "shop", &via, "api-0", 8080)
-            .await
-            .is_err());
+        assert!(replacement(
+            &client,
+            "shop",
+            &via,
+            &Left {
+                pod: "api-0",
+                serving: false
+            },
+            8080
+        )
+        .await
+        .is_err());
     }
 
     /// A forward to a Service starts on a ready pod behind it, on the port
@@ -596,7 +645,9 @@ mod tests {
         ])
         .await;
         assert_eq!(
-            replacement(&client, "shop", &via, "", 80).await.unwrap(),
+            replacement(&client, "shop", &via, &Left::default(), 80)
+                .await
+                .unwrap(),
             Some(Target {
                 pod: "api-1".into(),
                 remote_port: 8080
@@ -613,9 +664,73 @@ mod tests {
         ])
         .await;
         assert_eq!(
-            replacement(&client, "shop", &via, "", 80).await.unwrap(),
+            replacement(&client, "shop", &via, &Left::default(), 80)
+                .await
+                .unwrap(),
             None
         );
+    }
+
+    /// The pod with its own container running, whatever `Ready` says.
+    fn running(mut pod: Value) -> Value {
+        pod["status"]["containerStatuses"] = json!([{ "name": "app", "state": { "running": {} } }]);
+        pod
+    }
+
+    fn service() -> String {
+        json!({
+            "metadata": { "name": "api", "namespace": "shop" },
+            "spec": { "selector": { "app": "api" }, "ports": [{ "port": 80, "targetPort": "http" }] },
+        })
+        .to_string()
+    }
+
+    fn service_via() -> ForwardVia {
+        ForwardVia::Service {
+            name: "api".into(),
+            port: 80,
+        }
+    }
+
+    async fn behind_the_service(pods: &[Value]) -> Option<Target> {
+        let (client, _) = server(vec![
+            ("/api/v1/namespaces/shop/services/api", 200, service()),
+            ("/api/v1/namespaces/shop/pods", 200, listing(pods)),
+        ])
+        .await;
+        replacement(&client, "shop", &service_via(), &Left::default(), 80)
+            .await
+            .unwrap()
+    }
+
+    /// A pod whose sidecar is broken is not Ready and still serves from its
+    /// own container: a Service with nothing ready forwards there instead of
+    /// refusing. A ready pod wins over it, and a pod with nothing running,
+    /// crash-looping or still in its init containers, is never settled for.
+    #[tokio::test]
+    async fn a_service_forward_settles_for_a_pod_whose_own_container_runs() {
+        let mut crashing = pod("api-2", "2026-10-04T00:02:00Z", false, api());
+        crashing["status"]["containerStatuses"] = json!([
+            { "name": "app", "state": { "waiting": { "reason": "CrashLoopBackOff" } } }
+        ]);
+        let mut initialising = pod("api-3", "2026-10-04T00:03:00Z", false, api());
+        initialising["status"]["initContainerStatuses"] =
+            json!([{ "name": "init", "state": { "running": {} } }]);
+        let sidecar_broken = running(pod("api-1", "2026-10-04T00:01:00Z", false, api()));
+
+        let settled = behind_the_service(&[
+            sidecar_broken.clone(),
+            crashing.clone(),
+            initialising.clone(),
+        ])
+        .await;
+        assert_eq!(settled.map(|target| target.pod), Some("api-1".into()));
+
+        let ready = pod("api-0", "2026-10-04T00:00:00Z", true, api());
+        let preferred = behind_the_service(&[sidecar_broken, ready]).await;
+        assert_eq!(preferred.map(|target| target.pod), Some("api-0".into()));
+
+        assert_eq!(behind_the_service(&[crashing, initialising]).await, None);
     }
 
     struct Followed {
@@ -799,6 +914,64 @@ mod tests {
         .await;
         tokio::time::sleep(Duration::from_millis(400)).await;
         assert!(!followed.ended.is_finished());
+        followed.ended.abort();
+    }
+
+    /// A Service forward whose pod went moves to another pod behind the
+    /// Service, on the port the targetPort names in that pod.
+    #[tokio::test]
+    async fn a_service_forward_moves_to_another_pod_behind_its_service() {
+        let mut next = pod("api-new", "2026-10-04T00:05:00Z", true, api());
+        next["spec"]["containers"][0]["ports"][0]["containerPort"] = json!(9090);
+        let mut followed = following(service_via(), true, move |path, _| match path {
+            "/api/v1/namespaces/shop/services/api" => (200, service()),
+            "/api/v1/namespaces/shop/pods" => (200, listing(std::slice::from_ref(&next))),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        let AppEvent::PortForwardStatus { status, pod, .. } =
+            tokio::time::timeout(Duration::from_secs(5), followed.events.recv())
+                .await
+                .unwrap()
+                .unwrap()
+        else {
+            panic!("a port-forward status");
+        };
+        assert_eq!((status.as_str(), pod.as_str()), ("moved", "api-new"));
+        assert_eq!(
+            *followed.target.borrow(),
+            Target {
+                pod: "api-new".into(),
+                remote_port: 9090
+            }
+        );
+        assert_eq!(followed.sessions.get("pf-1").unwrap().remote_port, 9090);
+        followed.ended.abort();
+    }
+
+    /// A terminating pod still answers, so it is left only for a ready pod:
+    /// one merely up may be seconds from serving, or never.
+    #[tokio::test]
+    async fn a_terminating_pod_is_not_left_for_one_that_is_not_ready() {
+        let mut leaving = pod("api-0", "2026-10-04T00:00:00Z", true, api());
+        leaving["metadata"]["deletionTimestamp"] = json!("2026-10-04T00:06:00Z");
+        let followed = following(deployment_via(), true, move |path, _| match path {
+            "/api/v1/namespaces/shop/pods/api-0" => (200, leaving.to_string()),
+            "/apis/apps/v1/namespaces/shop/deployments/api" => (200, deployment()),
+            "/api/v1/namespaces/shop/pods" => (
+                200,
+                listing(&[running(pod(
+                    "api-new",
+                    "2026-10-04T00:05:00Z",
+                    false,
+                    api(),
+                ))]),
+            ),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(followed.target.borrow().pod, "api-0");
         followed.ended.abort();
     }
 
