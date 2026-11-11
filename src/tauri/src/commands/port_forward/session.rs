@@ -30,7 +30,8 @@ const MAX_ATTEMPTS: u32 = 12;
 const LOOK_EVERY: Duration = Duration::from_secs(3);
 
 /// How long a gone pod's owner has to put a ready one up before the forward
-/// ends. Covers a `Recreate` rollout and a one-replica `StatefulSet` restart.
+/// ends. Covers a `Recreate` rollout and a `StatefulSet` or operator's pod
+/// coming back under its own name.
 const PATIENCE: Duration = Duration::from_secs(60);
 
 /// What to do after a failed attempt, and what to say about it.

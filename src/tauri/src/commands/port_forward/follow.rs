@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
-use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet};
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::{Pod, Service};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, OwnerReference};
@@ -32,15 +32,6 @@ pub(super) struct Target {
     pub pod: String,
     pub remote_port: u16,
 }
-
-/// The owner kinds whose selector says which pods replace one of theirs.
-const FOLLOWED: [&str; 5] = [
-    "Deployment",
-    "StatefulSet",
-    "DaemonSet",
-    "ReplicaSet",
-    "Job",
-];
 
 /// The client to forward through, looked up fresh.
 ///
@@ -65,8 +56,9 @@ fn controller(owners: &[OwnerReference]) -> Option<&OwnerReference> {
 /// What puts this pod back when it goes: the top of its controller chain.
 ///
 /// A pod a `ReplicaSet` owns is followed through the Deployment above it,
-/// because a restart replaces the `ReplicaSet` too. Anything unreadable, or
-/// owned by a kind whose selector this does not know, is followed as itself.
+/// because a restart replaces the `ReplicaSet` too. Any other controller is
+/// named as it is: an operator's pod comes back under its own name, and is
+/// waited for. Only a pod nothing owns, or an unreadable one, is on its own.
 pub(super) async fn owner_of(client: &kube::Client, namespace: &str, pod: &str) -> ForwardVia {
     let Ok(found) = Api::<Pod>::namespaced(client.clone(), namespace)
         .get(pod)
@@ -92,13 +84,9 @@ pub(super) async fn owner_of(client: &kube::Client, namespace: &str, pod: &str) 
             }
         }
     }
-    if FOLLOWED.contains(&owner.kind.as_str()) {
-        ForwardVia::Owner {
-            owner_kind: owner.kind.clone(),
-            name: owner.name.clone(),
-        }
-    } else {
-        ForwardVia::Pod
+    ForwardVia::Owner {
+        owner_kind: owner.kind.clone(),
+        name: owner.name.clone(),
     }
 }
 
@@ -150,6 +138,8 @@ fn up(pod: &Pod) -> bool {
 #[derive(Default)]
 pub(super) struct Left<'a> {
     pub pod: &'a str,
+    /// Where it was last seen running.
+    pub node: Option<&'a str>,
     /// Still answering, so only a ready pod is worth leaving it for.
     pub serving: bool,
 }
@@ -215,6 +205,11 @@ fn list_params(labels: Option<&std::collections::BTreeMap<String, String>>) -> L
     }
 }
 
+/// The selector of an owner whose pods stand in for one another.
+///
+/// `None` for every other kind, a `StatefulSet` among them: its pods are not
+/// interchangeable (`pg-1` is a different database from `pg-0`), and the one
+/// that went comes back under its own name.
 async fn owner_selector(
     client: &kube::Client,
     namespace: &str,
@@ -224,11 +219,6 @@ async fn owner_selector(
     let client = client.clone();
     Ok(match kind {
         "Deployment" => Api::<Deployment>::namespaced(client, namespace)
-            .get(name)
-            .await?
-            .spec
-            .map(|spec| spec.selector),
-        "StatefulSet" => Api::<StatefulSet>::namespaced(client, namespace)
             .get(name)
             .await?
             .spec
@@ -273,9 +263,17 @@ pub(super) async fn replacement(
             let listed = pods
                 .list(&list_params(selector.match_labels.as_ref()))
                 .await?;
+            // A DaemonSet's pod is its node's: the one on another node is a
+            // different agent, and a node not known is not any node.
+            let here = |pod: &&Pod| {
+                owner_kind != "DaemonSet"
+                    || left.node.is_some()
+                        && pod.spec.as_ref().and_then(|spec| spec.node_name.as_deref()) == left.node
+            };
             Ok(
                 candidates(&listed.items, Selector::Query(Some(&selector)), left)
-                    .first()
+                    .into_iter()
+                    .find(here)
                     .map(|pod| Target {
                         pod: pod.name_any(),
                         remote_port,
@@ -321,17 +319,29 @@ enum PodNow {
     Unknown,
 }
 
-async fn pod_now(clients: &K8sClientManager, context: &str, namespace: &str, pod: &str) -> PodNow {
+/// The pod now, and the node it is on where the look could tell.
+async fn pod_now(
+    clients: &K8sClientManager,
+    context: &str,
+    namespace: &str,
+    pod: &str,
+) -> (PodNow, Option<String>) {
     let Ok(client) = current_client(clients, context) else {
-        return PodNow::Unknown;
+        return (PodNow::Unknown, None);
     };
-    match Api::<Pod>::namespaced(client, namespace).get_opt(pod).await {
-        Ok(None) => PodNow::Gone,
-        Ok(Some(found)) if leaving(&found) => PodNow::Leaving,
-        Ok(Some(found)) if ready(&found) || up(&found) => PodNow::Serving,
-        Ok(Some(_)) => PodNow::Starting,
-        Err(_) => PodNow::Unknown,
-    }
+    let found = match Api::<Pod>::namespaced(client, namespace).get_opt(pod).await {
+        Ok(None) => return (PodNow::Gone, None),
+        Ok(Some(found)) => found,
+        Err(_) => return (PodNow::Unknown, None),
+    };
+    let now = if leaving(&found) {
+        PodNow::Leaving
+    } else if ready(&found) || up(&found) {
+        PodNow::Serving
+    } else {
+        PodNow::Starting
+    };
+    (now, found.spec.and_then(|spec| spec.node_name))
 }
 
 /// What one forward follows, and how long it waits for a replacement.
@@ -361,13 +371,16 @@ pub(super) async fn follow(
     suspect: &Notify,
 ) -> ForwardNote {
     let mut gone_since: Option<Instant> = None;
+    let mut node: Option<String> = None;
     loop {
         tokio::select! {
             () = tokio::time::sleep(spec.every) => {}
             () = suspect.notified() => {}
         }
         let current = target.borrow().clone();
-        let now = pod_now(&spec.clients, &spec.context, &spec.namespace, &current.pod).await;
+        let (now, seen_on) =
+            pod_now(&spec.clients, &spec.context, &spec.namespace, &current.pod).await;
+        node = seen_on.or(node);
         match now {
             // Back under its own name: the wait that was announced is over,
             // and nothing else would take "reconnecting" off the row.
@@ -397,6 +410,7 @@ pub(super) async fn follow(
                     &spec.via,
                     &Left {
                         pod: &current.pod,
+                        node: node.as_deref(),
                         serving: !gone,
                     },
                     current.remote_port,
@@ -527,6 +541,7 @@ mod tests {
             Selector::Equality(&labels),
             &Left {
                 pod: "api-0",
+                node: None,
                 serving: true,
             },
         )
@@ -587,6 +602,14 @@ mod tests {
                 200,
                 json!({ "metadata": { "name": "bare" } }).to_string(),
             ),
+            (
+                "/api/v1/namespaces/shop/pods/pg-1",
+                200,
+                json!({ "metadata": { "name": "pg-1", "ownerReferences": [
+                    { "apiVersion": "postgresql.cnpg.io/v1", "kind": "Cluster", "name": "pg", "uid": "c", "controller": true }
+                ] } })
+                .to_string(),
+            ),
         ])
         .await;
         assert_eq!(
@@ -597,6 +620,14 @@ mod tests {
             }
         );
         assert_eq!(owner_of(&client, "shop", "bare").await, ForwardVia::Pod);
+        assert_eq!(
+            owner_of(&client, "shop", "pg-1").await,
+            ForwardVia::Owner {
+                owner_kind: "Cluster".into(),
+                name: "pg".into()
+            },
+            "an operator puts its pod back, so the forward waits for it"
+        );
     }
 
     /// Not being allowed to look is not "nothing ready": the answer is an error.
@@ -619,6 +650,7 @@ mod tests {
             &via,
             &Left {
                 pod: "api-0",
+                node: None,
                 serving: false
             },
             8080
@@ -1006,7 +1038,10 @@ mod tests {
             "/apis/apps/v1/namespaces/shop/statefulsets/api" => {
                 (200, deployment().replace("Deployment", "StatefulSet"))
             }
-            "/api/v1/namespaces/shop/pods" => (200, listing(&[])),
+            "/api/v1/namespaces/shop/pods" => (
+                200,
+                listing(&[pod("api-1", "2026-10-04T00:01:00Z", true, api())]),
+            ),
             _ => failure(404, "NotFound"),
         }
     }
@@ -1039,7 +1074,63 @@ mod tests {
         );
         tokio::time::sleep(Duration::from_millis(400)).await;
         assert!(!followed.ended.is_finished(), "the forward goes on");
+        assert_eq!(
+            followed.target.borrow().pod,
+            "api-0",
+            "the ready sibling api-1 is another instance, not a replacement"
+        );
         followed.ended.abort();
+    }
+
+    fn on_node(mut pod: Value, node: &str) -> Value {
+        pod["spec"]["nodeName"] = json!(node);
+        pod
+    }
+
+    async fn daemon_forward_after(others: Vec<Value>) -> Followed {
+        let mut leaving = on_node(pod("api-0", "2026-10-04T00:00:00Z", true, api()), "node-a");
+        leaving["metadata"]["deletionTimestamp"] = json!("2026-10-04T00:06:00Z");
+        let via = ForwardVia::Owner {
+            owner_kind: "DaemonSet".into(),
+            name: "api".into(),
+        };
+        following(via, true, move |path, nth| match path {
+            "/api/v1/namespaces/shop/pods/api-0" if nth == 1 => (200, leaving.to_string()),
+            "/apis/apps/v1/namespaces/shop/daemonsets/api" => {
+                (200, deployment().replace("Deployment", "DaemonSet"))
+            }
+            "/api/v1/namespaces/shop/pods" => (200, listing(&others)),
+            _ => failure(404, "NotFound"),
+        })
+        .await
+    }
+
+    /// A DaemonSet forward is to one node's agent. Its pod is replaced by
+    /// the new pod on that node, never by the ready pod of another node,
+    /// newer though that one is.
+    #[tokio::test]
+    async fn a_daemonset_forward_stays_on_its_node() {
+        let elsewhere = on_node(pod("api-b", "2026-10-04T00:09:00Z", true, api()), "node-b");
+        let here = on_node(pod("api-a", "2026-10-04T00:08:00Z", true, api()), "node-a");
+
+        let mut followed = daemon_forward_after(vec![elsewhere.clone(), here]).await;
+        tokio::time::timeout(Duration::from_secs(5), followed.target.changed())
+            .await
+            .expect("a move within five seconds")
+            .unwrap();
+        assert_eq!(followed.target.borrow().pod, "api-a");
+        followed.ended.abort();
+
+        let followed = daemon_forward_after(vec![elsewhere]).await;
+        let note = tokio::time::timeout(Duration::from_secs(5), followed.ended)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(note, ForwardNote::NoReplacement { .. }),
+            "{note:?}"
+        );
+        assert_eq!(followed.target.borrow().pod, "api-0");
     }
 
     /// A pod object that is back with nothing running answers no connection:
