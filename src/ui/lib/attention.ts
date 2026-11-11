@@ -47,6 +47,7 @@ import {
   serviceHealthWords,
   type ServiceHealth,
   type StopCause,
+  shutUnchecked,
 } from "@/lib/service-health";
 
 export type AttentionTone = "err" | "warn";
@@ -321,6 +322,17 @@ const serviceItems = remember(
       })
     )
 );
+
+/**
+ * The namespaces where a Service serves and its NetworkPolicies went unread:
+ * one of them may be shut, which is an item this check then never raised.
+ */
+function shutUncheckedIn(answered: ServiceHealthInputs[]): Unread[] {
+  return answered.flatMap(({ namespace, groups }) => {
+    const why = groups.map(shutUnchecked).find((reason) => reason !== null);
+    return why === undefined ? [] : [{ namespace, code: "", message: why }];
+  });
+}
 
 interface Judged {
   items: AttentionItem[];
@@ -852,6 +864,10 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
   ];
   const items = ranked([...backend, ...ours]);
 
+  const servicesUnread =
+    services.unread === "reading"
+      ? []
+      : [...services.unread, ...shutUncheckedIn(services.answered)];
   const checks: AttentionCheck[] = [
     ...BACKEND_KINDS.map((kind): AttentionCheck => {
       const unread = overview.unread.filter((entry) => entry.kind === kind);
@@ -862,12 +878,12 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
       : {
           kind: "Service",
           state:
-            services.unread.length > 0
+            servicesUnread.length > 0
               ? "unread"
               : services.overdue
                 ? "reading"
                 : "read",
-          unread: services.unread,
+          unread: servicesUnread,
         },
     checkOf(
       "Ingress",

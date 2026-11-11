@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use super::pod_display::{
-    blocking_init, condition_is_true, container_restarting_until, counted, gone, last_terminated,
-    pod_verdict, BLOCKED_WAITING_REASONS,
+    blocking_init, condition_is_true, container_looping_until, container_restarting_until, counted,
+    gone, last_terminated, pod_verdict, BLOCKED_WAITING_REASONS,
 };
 use super::EventInfo;
 use crate::utils::Moment;
@@ -37,6 +37,10 @@ pub enum PodCause {
         /// For a container up again since, when that exit stops being news;
         /// `None` while it is down. The reader compares it with its own clock.
         until: Option<DateTime<Utc>>,
+        /// What is wrong with the pod once `until` passes, where it is not
+        /// Ready now: an exit that is no longer news explains nothing.
+        #[serde(default)]
+        later: Option<Box<PodCause>>,
     },
     /// No node takes the pod, in the scheduler's words and what they come to.
     Unplaced {
@@ -336,6 +340,21 @@ fn cause_key(cause: &PodCause) -> String {
 }
 
 impl PodCause {
+    /// The cause still true at `now`: an exit a container has been up since
+    /// gives way at its `until` to what is wrong after it. `currentCause` in
+    /// `src/ui/lib/pod-cause.ts` is the same reading for a watched row.
+    #[must_use]
+    pub fn at(self, now: DateTime<Utc>) -> Option<Self> {
+        match self {
+            Self::Exits {
+                until: Some(until),
+                later,
+                ..
+            } if until <= now => later.and_then(|cause| cause.at(now)),
+            cause => Some(cause),
+        }
+    }
+
     /// The cause with the kubelet's warnings a reader fetched beside it.
     #[must_use]
     pub fn warned(self, warned: Warned) -> Self {
@@ -425,9 +444,10 @@ fn quoted_after(text: &str, prefix: &str) -> Option<String> {
 
 /// What is wrong with this pod and why, or `None` where nothing this reads is.
 ///
-/// Read without a clock, so a watched row stays true: a container down now
-/// comes before one up since its last exit, which carries when it stops
-/// counting. A pod being deleted, or one with the kubelet's own verdict on it
+/// Read without a clock, so a watched row stays true. What holds the pod now
+/// comes first: a container down, one the kubelet cannot start, a sandbox not
+/// up. An exit a container has been up since comes after those, and carries
+/// when it stops counting and what is wrong past then. A pod being deleted, or one with the kubelet's own verdict on it
 /// as a whole, is not explained by its containers.
 #[must_use]
 pub fn pod_cause(pod: &Pod) -> Option<PodCause> {
@@ -448,11 +468,17 @@ pub fn pod_cause(pod: &Pod) -> Option<PodCause> {
     candidates
         .iter()
         .find_map(|cs| down(cs))
-        .or_else(|| candidates.iter().find_map(|cs| up_again(cs, running)))
-        .map(|cause| with_limit(cause, pod))
         .or_else(|| candidates.iter().find_map(|cs| blocked(cs, pod)))
         .or_else(|| creating(pod))
-        .or_else(|| not_ready(pod))
+        .or_else(|| {
+            let not_ready = not_ready(pod);
+            candidates
+                .iter()
+                .find_map(|cs| up_again(cs, not_ready.clone()))
+                .or(not_ready)
+        })
+        .or_else(|| candidates.iter().find_map(|cs| unreported(cs, running)))
+        .map(|cause| with_limit(cause, pod))
 }
 
 /// What the kubelet calls a sandbox that is up, by the name each release gave it.
@@ -808,13 +834,25 @@ fn down(cs: &ContainerStatus) -> Option<PodCause> {
         .then(|| exits(cs, last_terminated(cs).map(|t| ended_run(t, true)), None))
 }
 
-/// A container up again after exits that are still news, or after restarts
-/// the kubelet reported no exit for.
-fn up_again(cs: &ContainerStatus, running: bool) -> Option<PodCause> {
-    if let Some(until) = container_restarting_until(cs) {
-        let run = last_terminated(cs).map(|t| ended_run(t, true));
-        return Some(exits(cs, run, Some(until)));
-    }
+/// A container up again after exits that are still news. In a pod that is
+/// not Ready they are the reason only while the loop can come round again;
+/// past that it is `later`, the probe that keeps the pod out.
+fn up_again(cs: &ContainerStatus, later: Option<PodCause>) -> Option<PodCause> {
+    let until = match later {
+        Some(_) => container_looping_until(cs),
+        None => container_restarting_until(cs),
+    }?;
+    Some(PodCause::Exits {
+        container: cs.name.clone(),
+        restarts: cs.restart_count,
+        run: last_terminated(cs).map(|t| ended_run(t, true)),
+        until: Some(until),
+        later: later.map(Box::new),
+    })
+}
+
+/// A container up after restarts the kubelet reported no exit for.
+fn unreported(cs: &ContainerStatus, running: bool) -> Option<PodCause> {
     let unreported = running
         && cs.restart_count > 0
         && last_terminated(cs).is_none()
@@ -832,6 +870,7 @@ fn exits(cs: &ContainerStatus, run: Option<EndedRun>, until: Option<DateTime<Utc
         restarts: cs.restart_count,
         run,
         until,
+        later: None,
     }
 }
 
@@ -906,6 +945,7 @@ mod tests {
             restarts,
             run: Some(run),
             until,
+            ..
         }) = pod_cause(&backing_off())
         else {
             panic!("a crash loop has a cause");
@@ -988,6 +1028,10 @@ mod tests {
             serde_json::json!({"running": {"startedAt": "2026-10-12T10:00:30Z"}}),
         )
         .unwrap();
+        cs.ready = true;
+        pod.status.as_mut().unwrap().conditions =
+            serde_json::from_value(serde_json::json!([{"type": "Ready", "status": "True"}]))
+                .unwrap();
         let Some(PodCause::Exits {
             until: Some(until),
             run: Some(run),
@@ -1363,6 +1407,94 @@ mod tests {
             }
         }));
         assert_eq!(pod_cause(&healthy), None);
+    }
+
+    /// The exits a container left behind before the run it is in: two short
+    /// ones, the last at `ended`.
+    fn after_short_exits(mut pod: Pod, ended: &str) -> Pod {
+        let cs = &mut pod
+            .status
+            .as_mut()
+            .unwrap()
+            .container_statuses
+            .as_mut()
+            .unwrap()[0];
+        cs.restart_count = 2;
+        cs.last_state = serde_json::from_value(serde_json::json!({"terminated": {
+            "exitCode": 1, "reason": "Error",
+            "startedAt": "2026-10-05T08:00:00Z", "finishedAt": ended
+        }}))
+        .unwrap();
+        pod
+    }
+
+    fn at(time: &str) -> DateTime<Utc> {
+        time.parse().unwrap()
+    }
+
+    /// A pod that crashed at boot last week and fails its probe today was
+    /// explained by last week's exit, and by nothing once that expired.
+    /// Fails if the exit leads past the loop or the probe is not what follows.
+    #[test]
+    fn a_pod_not_ready_is_explained_by_its_probe_once_its_exits_are_old() {
+        let pod = after_short_exits(not_ready_pod(), "2026-10-05T08:00:03Z");
+        let cause = pod_cause(&pod).expect("a cause");
+        let PodCause::Exits { until, later, .. } = &cause else {
+            panic!("the exits lead while the loop can come round: {cause:?}");
+        };
+        assert_eq!(*until, Some(at("2026-10-05T08:15:03Z")));
+        assert!(matches!(later.as_deref(), Some(PodCause::NotReady { .. })));
+        assert!(matches!(
+            cause.clone().at(at("2026-10-05T08:01:00Z")),
+            Some(PodCause::Exits { .. })
+        ));
+        assert!(matches!(
+            cause.at(at("2026-10-12T10:05:00Z")),
+            Some(PodCause::NotReady { probe: Some(_), .. })
+        ));
+    }
+
+    /// A Ready pod's old exits are over with nothing after them. Fails if an
+    /// expired exit is still told, or told for less than the hour it is news.
+    #[test]
+    fn a_ready_pods_exits_stop_counting_after_an_hour_with_nothing_after() {
+        let mut pod = after_short_exits(not_ready_pod(), "2026-10-05T08:00:03Z");
+        let status = pod.status.as_mut().unwrap();
+        status.conditions.as_mut().unwrap()[0].status = "True".to_string();
+        status.container_statuses.as_mut().unwrap()[0].ready = true;
+        let cause = pod_cause(&pod).expect("a cause");
+        assert!(matches!(cause, PodCause::Exits { later: None, .. }));
+        assert!(cause.clone().at(at("2026-10-05T08:59:00Z")).is_some());
+        assert_eq!(cause.at(at("2026-10-05T09:00:03Z")), None);
+    }
+
+    /// A container the kubelet cannot start now was explained by the short
+    /// exits before it. Fails if history comes ahead of what holds it now.
+    #[test]
+    fn a_container_the_kubelet_cannot_start_is_blocked_whatever_exited_before() {
+        let pod = after_short_exits(
+            waiting_pod("CreateContainerConfigError", "secret \"db\" not found"),
+            "2026-10-05T08:00:03Z",
+        );
+        assert!(matches!(
+            pod_cause(&pod),
+            Some(PodCause::Blocked { reason, .. }) if reason == "CreateContainerConfigError"
+        ));
+    }
+
+    /// Restarts with no exit reported are a question left open; a failing
+    /// probe is an answer. Fails if the open question hides the probe.
+    #[test]
+    fn a_pod_not_ready_is_explained_by_its_probe_before_an_unreported_exit() {
+        let mut pod = not_ready_pod();
+        pod.status
+            .as_mut()
+            .unwrap()
+            .container_statuses
+            .as_mut()
+            .unwrap()[0]
+            .restart_count = 3;
+        assert!(matches!(pod_cause(&pod), Some(PodCause::NotReady { .. })));
     }
 
     /// The corpus both halves answer. Fails if this side tells another pod's

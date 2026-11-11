@@ -4892,6 +4892,8 @@ export const ru: Catalogue = {
       "У Service {name} нет готовых адресов, а его поды прочитать не удалось, поэтому неизвестно, запускаются ли они ещё",
     healthBackendUnconfirmedShort: "бэкенд не проверен",
     healthBackendIdleShort: "бэкенд простаивает",
+    healthPoliciesUnread:
+      "NetworkPolicy над его подами прочитать не удалось, поэтому не проверено, закрывает ли какая-то из них эти поды: {why}",
     healthBackendPoliciesUnread:
       "Service {name}: NetworkPolicy над его подами прочитать не удалось, поэтому не проверено, может ли подключиться {client}: {why}",
     healthBackendEgressUnread:

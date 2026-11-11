@@ -662,6 +662,7 @@ describe("a workload's pods under its row", () => {
                 restarts: 4,
                 run: null,
                 until: null,
+                later: null,
               },
               by: null,
             },
@@ -701,6 +702,7 @@ describe("what a row's fold already counted", () => {
       restarts: 0,
       run: null,
       until: null,
+      later: null,
     };
     const job = (name: string, of: number): ClusterProblem => ({
       severity: "critical",

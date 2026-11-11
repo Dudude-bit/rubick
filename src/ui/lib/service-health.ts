@@ -57,6 +57,8 @@ export type ServiceHealth =
   | { state: "noEndpoints"; published: PublishedCounts }
   /** Its pods are ready and a NetworkPolicy lets no connection to them through. */
   | { state: "shut"; ready: number; stop: PolicyStop }
+  /** Its pods are ready, and whether a NetworkPolicy shuts them was not read. */
+  | { state: "policiesUnread"; ready: number; why: string }
   /** No pods by intent: every workload behind it is scaled to zero. */
   | { state: "idle"; stop: Extract<ChainStop, { reason: "scaledToZero" }> }
   /** A DNS alias: no endpoints, by design. */
@@ -88,6 +90,19 @@ export type ServiceHealthInput = ServiceShape &
   Pick<ServiceHealthGroup, "targets"> &
   Partial<Pick<ServiceHealthInputs, "networks">>;
 
+/**
+ * Why nobody checked whether a NetworkPolicy shuts what a Service serves:
+ * the cluster's words refusing the policies, or null where they were read.
+ * A count of ready addresses is then no verdict that anything reaches them.
+ */
+export function shutUnchecked(published: PublishedCounts): string | null {
+  return servingCount(published) > 0 &&
+    !isPolicyStop(published.stop) &&
+    published.door?.state === "unread"
+    ? published.door.reason
+    : null;
+}
+
 export function serviceHealthOf(
   service: ServiceShape,
   published: PublishedCounts | undefined,
@@ -105,7 +120,11 @@ export function serviceHealthOf(
     const { ready, draining } = published;
     if (isPolicyStop(published.stop))
       return { state: "shut", ready, stop: published.stop };
-    if (ready === total) return { state: "ready", ready };
+    const why = shutUnchecked(published);
+    if (ready === total)
+      return why === null
+        ? { state: "ready", ready }
+        : { state: "policiesUnread", ready, why };
     return ready > 0
       ? {
           state: "partly",
@@ -309,6 +328,14 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         label: t("empty", "stopPolicyShutUnder"),
         role: "err",
         reason: describeStop(health.stop, t).title,
+      };
+    case "policiesUnread":
+      return {
+        code: health.state,
+        label: t("count", "nReady", { n: health.ready }),
+        role: "neutral",
+        reason: t("readings", "healthPoliciesUnread", { why: health.why }),
+        glyph: EyeOff,
       };
     case "idle":
       return {

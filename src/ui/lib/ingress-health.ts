@@ -129,6 +129,7 @@ const BACKEND_PROBLEM: Record<
   noneReady: "backendDown",
   noEndpoints: "backendDown",
   shut: "backendDown",
+  policiesUnread: null,
   comingUp: "backendStarting",
   podsUnread: "backendUnconfirmed",
   idle: "backendIdle",

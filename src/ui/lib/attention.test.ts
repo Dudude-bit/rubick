@@ -791,6 +791,7 @@ describe("what Needs attention lists beyond pods", () => {
       restarts: 4,
       run: null,
       until: null,
+      later: null,
     };
     const row = (
       kind: string,
@@ -1020,6 +1021,38 @@ describe("what Needs attention could not look at", () => {
     expect(state.HorizontalPodAutoscaler).toBe("reading");
     expect(state.Service).toBe("reading");
     expect(listed.complete).toBe(false);
+  });
+
+  /**
+   * With the NetworkPolicies refused, a Service one of them shuts is never
+   * raised, and the count read as complete. Fails if the Service check
+   * counts as read in a namespace whose serving Services were not checked
+   * for a shut door, or stops counting as read where the door was.
+   */
+  it("is not complete where a serving Service's NetworkPolicies went unread", () => {
+    const read = services([["web"], 2]);
+    const group = read.answered[0].groups[0];
+    const unchecked = attention({
+      services: {
+        unread: [],
+        answered: [
+          {
+            ...read.answered[0],
+            groups: [
+              { ...group, door: { state: "unread", reason: "forbidden" } },
+            ],
+          },
+        ],
+      },
+    });
+    expect(unchecked.items).toEqual([]);
+    expect(unchecked.complete).toBe(false);
+    expect(unchecked.checks.find((check) => check.kind === "Service")).toEqual({
+      kind: "Service",
+      state: "unread",
+      unread: [{ namespace: "net", code: "", message: "forbidden" }],
+    });
+    expect(attention({ services: read }).complete).toBe(true);
   });
 
   /** Every kind read and nothing flagged is the one complete, empty answer. */

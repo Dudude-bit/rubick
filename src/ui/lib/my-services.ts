@@ -28,6 +28,7 @@ import type { IngressAddress } from "@/lib/ingress-health";
 import { isPolicyStop } from "@/lib/policy-door";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { endpointCount, servingCount } from "@/lib/published";
+import { shutUnchecked } from "@/lib/service-health";
 import { isOpen, type Watch } from "@/lib/tell-me-when";
 import type { RefreshRate } from "@/lib/refresh";
 
@@ -374,7 +375,8 @@ function publishedEntry(published: ServicePublished): EntryPoint {
     // one answer that is nobody's read is a deduction from pods that matched
     // nothing — possibly because nobody could list them.
     servingKnown:
-      published.source !== "podReadiness" || endpointCount(published) > 0,
+      (published.source !== "podReadiness" || endpointCount(published) > 0) &&
+      shutUnchecked(published) === null,
     shut,
     unsure: false,
     address: null,

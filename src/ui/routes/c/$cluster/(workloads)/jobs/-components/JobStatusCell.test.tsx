@@ -85,6 +85,7 @@ describe("the cause a Job's pods share, in its row", () => {
           restarts: 0,
           run: null,
           until: null,
+          later: null,
         },
       },
     };

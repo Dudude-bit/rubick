@@ -1,7 +1,12 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { PodCause, PodStart } from "@/generated/types";
+import { countsAt } from "@/lib/pod-cause";
 import {
+  causeDeadlines,
+  troubleCause,
   withKubeletWarned,
   workloadCause,
   type PodBadgeInput,
@@ -54,6 +59,47 @@ function creating(start: PodStart): PodBadgeInput {
   } as PodBadgeInput;
 }
 
+/** Not Ready now, behind two short exits its container has been up since. */
+function notReadyAfterExits(until: string): PodBadgeInput {
+  const pod = notReady(300);
+  return {
+    ...pod,
+    status: {
+      ...pod.status,
+      cause: {
+        says: "exits",
+        container: "web",
+        restarts: 2,
+        run: null,
+        until,
+        later: pod.status.cause!,
+      },
+    },
+  };
+}
+
+describe("troubleCause", () => {
+  /**
+   * The pod's page, peek and hover named no failing probe once the old exit
+   * expired. Fails if the pod leads with the exit past its until, or with
+   * nothing.
+   */
+  it("leads with the probe once the exits before it have passed", () => {
+    expect(troubleCause(notReadyAfterExits(ago(-60)), NOW)?.says).toBe("exits");
+    expect(troubleCause(notReadyAfterExits(ago(60)), NOW)?.says).toBe(
+      "notReady"
+    );
+  });
+
+  /** Fails if a row is not redrawn when the cause after its exit starts to count. */
+  it("turns on the clock where the cause after an exit starts counting", () => {
+    const pod = notReadyAfterExits(ago(60));
+    expect(causeDeadlines(pod)).toEqual(
+      expect.arrayContaining([NOW - 60_000, NOW - 180_000])
+    );
+  });
+});
+
 describe("workloadCause", () => {
   /**
    * A rollout's new pod fails its readiness probe for its first seconds on
@@ -103,6 +149,55 @@ describe("workloadCause", () => {
     expect(
       workloadCause([notReady(300), evicted, evicted], NOW)?.shared
     ).toMatchObject({ pods: 1, of: 1 });
+  });
+});
+
+const corpus = JSON.parse(
+  readFileSync(
+    resolve(process.cwd(), "src/contracts/trouble-cause-conformance.json"),
+    "utf8"
+  )
+) as {
+  now: string;
+  cases: {
+    name: string;
+    pods: { row: PodBadgeInput; is: string | null; warned?: boolean }[];
+    is: { says: string; pods: number; of: number } | null;
+  }[];
+};
+
+describe("the pods a workload counts as trouble", () => {
+  /**
+   * The Overview's rows count them in Rust and a workload's list row, page
+   * and peek count them here. Fails if this side counts any pod of the
+   * shared corpus, or tells any workload's cause, differently, which puts
+   * two reasons on one Deployment.
+   */
+  it("counts every pod in the shared corpus as the backend does", () => {
+    const now = Date.parse(corpus.now);
+    for (const { name, pods, is } of corpus.cases) {
+      const rows = pods.map(({ row, warned }) => ({
+        ...row,
+        kubeletWarned: warned,
+      }));
+      rows.forEach((row, at) =>
+        expect(
+          countsAt(troubleCause(row, now), now)?.says ?? null,
+          `${name}: pod ${at}`
+        ).toBe(pods[at].is)
+      );
+      const told = workloadCause(rows, now);
+      expect(
+        told && !told.warnedOnly
+          ? {
+              says: told.shared.cause.says,
+              pods: told.shared.pods,
+              of: told.shared.of,
+            }
+          : null,
+        name
+      ).toEqual(is);
+    }
   });
 });
 

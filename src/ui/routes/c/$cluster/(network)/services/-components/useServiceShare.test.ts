@@ -87,6 +87,21 @@ describe("what the Service report leads with", () => {
   });
 
   /**
+   * Whole counts over pods nobody could check for a shut door were shared
+   * green. Fails if the file colours them as a verdict or drops why.
+   */
+  it("shares whole counts without colour where the NetworkPolicies went unread", () => {
+    const stats = serviceStats(
+      service,
+      published({ door: { state: "unread", reason: "forbidden" } }),
+      t
+    );
+    const last = stats.at(-1);
+    expect(last).toMatchObject({ value: "2/2", role: "neutral", unread: true });
+    expect(last?.note).toContain("forbidden");
+  });
+
+  /**
    * Zero ready of zero is not "all ready": the Published tab says the
    * Service publishes nothing and the chain ends in a red stop, and the
    * file led with `0/0` and a green check above it.

@@ -2640,6 +2640,7 @@ export type PodCause =
       restarts: number;
       run: EndedRun | null;
       until: string | null;
+      later: PodCause | null;
     }
   | {
       says: "unplaced";

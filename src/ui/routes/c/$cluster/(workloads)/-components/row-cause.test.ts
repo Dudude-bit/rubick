@@ -20,6 +20,7 @@ const exits: PodCause = {
   restarts: 7,
   run: null,
   until: null,
+  later: null,
 };
 
 function pod(

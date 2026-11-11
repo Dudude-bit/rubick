@@ -1,0 +1,1664 @@
+{
+  "about": "Which of a workload's pods count as trouble at `now`, and by what cause, as both halves read it: `trouble_cause` in src/tauri/src/commands/overview.rs (the Overview's rows) and `troubleCause` with `countsAt` in src/ui/lib/share/pod-status.ts (a workload's list row, page and peek). Each pod is given as the cluster returns it (`pod`) and as the backend ships it (`row`, which the Rust test holds to what `PodRow` serialises); `warned` marks one its kubelet warned about. A pod's `is` names its cause's `says`, or null where it does not count; a case's `is` is what the workload tells: the cause most share, how many share it, of how many it runs.",
+  "now": "2026-10-15T10:00:00Z",
+  "cases": [
+    {
+      "name": "one pod no node takes beside two Ready again since their short exits: the exits are not why it is short",
+      "pods": [
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-a",
+              "namespace": "shop",
+              "uid": "uid-web-a",
+              "creationTimestamp": "2026-10-15T09:50:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "False",
+                  "reason": "Unschedulable",
+                  "lastTransitionTime": "2026-10-15T09:50:00Z",
+                  "message": "0/3 nodes are available: 3 Insufficient cpu."
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "type": "unknown"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "starting",
+              "until": "2026-10-15T09:51:00Z"
+            },
+            "status": {
+              "cause": {
+                "nodes": 3,
+                "said": "0/3 nodes are available: 3 Insufficient cpu.",
+                "says": "unplaced",
+                "since": "2026-10-15T09:50:00Z",
+                "why": [
+                  {
+                    "nodes": 3,
+                    "resource": "cpu",
+                    "says": "short"
+                  }
+                ]
+              },
+              "display": "Pending",
+              "phase": "Pending"
+            }
+          },
+          "is": "unplaced"
+        },
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-b",
+              "namespace": "shop",
+              "uid": "uid-web-b",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-15T09:41:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": true,
+                  "restartCount": 2,
+                  "state": {
+                    "running": {
+                      "startedAt": "2026-10-15T09:40:05Z"
+                    }
+                  },
+                  "lastState": {
+                    "terminated": {
+                      "exitCode": 1,
+                      "reason": "Error",
+                      "startedAt": "2026-10-15T09:39:57Z",
+                      "finishedAt": "2026-10-15T09:40:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": true,
+                "started": false,
+                "state": {
+                  "type": "running"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "settled"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "later": null,
+                "restarts": 2,
+                "run": {
+                  "code": 1,
+                  "ended": "2026-10-15T09:40:00Z",
+                  "limit": null,
+                  "log": {
+                    "says": "notRead"
+                  },
+                  "previous": true,
+                  "reason": "Error",
+                  "said": null,
+                  "signal": null,
+                  "started": "2026-10-15T09:39:57Z"
+                },
+                "says": "exits",
+                "until": "2026-10-15T10:40:00Z"
+              },
+              "display": "Running",
+              "loopingUntil": "2026-10-15T09:45:05Z",
+              "phase": "Running",
+              "restartingUntil": "2026-10-15T10:40:00Z"
+            }
+          },
+          "is": null
+        },
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-c",
+              "namespace": "shop",
+              "uid": "uid-web-c",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-15T09:41:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": true,
+                  "restartCount": 2,
+                  "state": {
+                    "running": {
+                      "startedAt": "2026-10-15T09:40:05Z"
+                    }
+                  },
+                  "lastState": {
+                    "terminated": {
+                      "exitCode": 1,
+                      "reason": "Error",
+                      "startedAt": "2026-10-15T09:39:57Z",
+                      "finishedAt": "2026-10-15T09:40:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": true,
+                "started": false,
+                "state": {
+                  "type": "running"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "settled"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "later": null,
+                "restarts": 2,
+                "run": {
+                  "code": 1,
+                  "ended": "2026-10-15T09:40:00Z",
+                  "limit": null,
+                  "log": {
+                    "says": "notRead"
+                  },
+                  "previous": true,
+                  "reason": "Error",
+                  "said": null,
+                  "signal": null,
+                  "started": "2026-10-15T09:39:57Z"
+                },
+                "says": "exits",
+                "until": "2026-10-15T10:40:00Z"
+              },
+              "display": "Running",
+              "loopingUntil": "2026-10-15T09:45:05Z",
+              "phase": "Running",
+              "restartingUntil": "2026-10-15T10:40:00Z"
+            }
+          },
+          "is": null
+        }
+      ],
+      "is": {
+        "says": "unplaced",
+        "pods": 1,
+        "of": 3
+      }
+    },
+    {
+      "name": "up between the crashes of a loop, Ready or not, counts by its exits; not Ready for seconds does not count",
+      "pods": [
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-a",
+              "namespace": "shop",
+              "uid": "uid-web-a",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "False",
+                  "lastTransitionTime": "2026-10-15T09:30:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": false,
+                  "restartCount": 4,
+                  "state": {
+                    "running": {
+                      "startedAt": "2026-10-15T09:59:30Z"
+                    }
+                  },
+                  "lastState": {
+                    "terminated": {
+                      "exitCode": 1,
+                      "reason": "Error",
+                      "startedAt": "2026-10-15T09:58:57Z",
+                      "finishedAt": "2026-10-15T09:59:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "type": "running"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "failing"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "later": {
+                  "containers": ["web"],
+                  "countsFrom": "2026-10-15T09:32:00Z",
+                  "probe": {
+                    "path": "/ready",
+                    "port": "8080",
+                    "says": "http",
+                    "scheme": "HTTP"
+                  },
+                  "says": "notReady",
+                  "since": "2026-10-15T09:30:00Z"
+                },
+                "restarts": 4,
+                "run": {
+                  "code": 1,
+                  "ended": "2026-10-15T09:59:00Z",
+                  "limit": null,
+                  "log": {
+                    "says": "notRead"
+                  },
+                  "previous": true,
+                  "reason": "Error",
+                  "said": null,
+                  "signal": null,
+                  "started": "2026-10-15T09:58:57Z"
+                },
+                "says": "exits",
+                "until": "2026-10-15T10:04:30Z"
+              },
+              "display": "Running",
+              "loopingUntil": "2026-10-15T10:04:30Z",
+              "phase": "Running",
+              "restartingUntil": "2026-10-15T10:59:00Z"
+            }
+          },
+          "is": "exits"
+        },
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-b",
+              "namespace": "shop",
+              "uid": "uid-web-b",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-15T09:41:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": true,
+                  "restartCount": 4,
+                  "state": {
+                    "running": {
+                      "startedAt": "2026-10-15T09:58:10Z"
+                    }
+                  },
+                  "lastState": {
+                    "terminated": {
+                      "exitCode": 1,
+                      "reason": "Error",
+                      "startedAt": "2026-10-15T09:57:57Z",
+                      "finishedAt": "2026-10-15T09:58:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": true,
+                "started": false,
+                "state": {
+                  "type": "running"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "settled"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "later": null,
+                "restarts": 4,
+                "run": {
+                  "code": 1,
+                  "ended": "2026-10-15T09:58:00Z",
+                  "limit": null,
+                  "log": {
+                    "says": "notRead"
+                  },
+                  "previous": true,
+                  "reason": "Error",
+                  "said": null,
+                  "signal": null,
+                  "started": "2026-10-15T09:57:57Z"
+                },
+                "says": "exits",
+                "until": "2026-10-15T10:58:00Z"
+              },
+              "display": "Running",
+              "loopingUntil": "2026-10-15T10:03:10Z",
+              "phase": "Running",
+              "restartingUntil": "2026-10-15T10:58:00Z"
+            }
+          },
+          "is": "exits"
+        },
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-c",
+              "namespace": "shop",
+              "uid": "uid-web-c",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "False",
+                  "lastTransitionTime": "2026-10-15T09:59:30Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": false,
+                  "restartCount": 0,
+                  "state": {
+                    "running": {
+                      "startedAt": "2026-10-15T09:59:25Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "type": "running"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "starting",
+              "until": "2026-10-08T08:10:00Z"
+            },
+            "status": {
+              "cause": {
+                "containers": ["web"],
+                "countsFrom": "2026-10-15T10:01:30Z",
+                "probe": {
+                  "path": "/ready",
+                  "port": "8080",
+                  "says": "http",
+                  "scheme": "HTTP"
+                },
+                "says": "notReady",
+                "since": "2026-10-15T09:59:30Z"
+              },
+              "display": "Running",
+              "phase": "Running"
+            }
+          },
+          "is": null
+        }
+      ],
+      "is": {
+        "says": "exits",
+        "pods": 2,
+        "of": 3
+      }
+    },
+    {
+      "name": "not Ready long after its short exits counts by its probe; unplaced inside its wait does not count",
+      "pods": [
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-a",
+              "namespace": "shop",
+              "uid": "uid-web-a",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "False",
+                  "lastTransitionTime": "2026-10-15T09:00:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": false,
+                  "restartCount": 2,
+                  "state": {
+                    "running": {
+                      "startedAt": "2026-10-08T08:00:10Z"
+                    }
+                  },
+                  "lastState": {
+                    "terminated": {
+                      "exitCode": 1,
+                      "reason": "Error",
+                      "startedAt": "2026-10-08T08:00:02Z",
+                      "finishedAt": "2026-10-08T08:00:05Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "type": "running"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "failing"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "later": {
+                  "containers": ["web"],
+                  "countsFrom": "2026-10-15T09:02:00Z",
+                  "probe": {
+                    "path": "/ready",
+                    "port": "8080",
+                    "says": "http",
+                    "scheme": "HTTP"
+                  },
+                  "says": "notReady",
+                  "since": "2026-10-15T09:00:00Z"
+                },
+                "restarts": 2,
+                "run": {
+                  "code": 1,
+                  "ended": "2026-10-08T08:00:05Z",
+                  "limit": null,
+                  "log": {
+                    "says": "notRead"
+                  },
+                  "previous": true,
+                  "reason": "Error",
+                  "said": null,
+                  "signal": null,
+                  "started": "2026-10-08T08:00:02Z"
+                },
+                "says": "exits",
+                "until": "2026-10-08T08:05:10Z"
+              },
+              "display": "Running",
+              "loopingUntil": "2026-10-08T08:05:10Z",
+              "phase": "Running",
+              "restartingUntil": "2026-10-08T09:00:05Z"
+            }
+          },
+          "is": "notReady"
+        },
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-b",
+              "namespace": "shop",
+              "uid": "uid-web-b",
+              "creationTimestamp": "2026-10-15T09:59:40Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "False",
+                  "reason": "Unschedulable",
+                  "lastTransitionTime": "2026-10-15T09:59:40Z",
+                  "message": "0/3 nodes are available: 3 Insufficient cpu."
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "type": "unknown"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "starting",
+              "until": "2026-10-15T10:00:40Z"
+            },
+            "status": {
+              "cause": {
+                "nodes": 3,
+                "said": "0/3 nodes are available: 3 Insufficient cpu.",
+                "says": "unplaced",
+                "since": "2026-10-15T09:59:40Z",
+                "why": [
+                  {
+                    "nodes": 3,
+                    "resource": "cpu",
+                    "says": "short"
+                  }
+                ]
+              },
+              "display": "Pending",
+              "phase": "Pending"
+            }
+          },
+          "is": null
+        }
+      ],
+      "is": {
+        "says": "notReady",
+        "pods": 1,
+        "of": 2
+      }
+    },
+    {
+      "name": "being set up inside its wait counts only where its kubelet warned",
+      "pods": [
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-a",
+              "namespace": "shop",
+              "uid": "uid-web-a",
+              "creationTimestamp": "2026-10-15T09:59:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-15T09:59:00Z"
+                },
+                {
+                  "type": "PodReadyToStartContainers",
+                  "status": "False",
+                  "lastTransitionTime": "2026-10-15T09:59:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": false,
+                  "restartCount": 0,
+                  "state": {
+                    "waiting": {
+                      "reason": "ContainerCreating"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "message": null,
+                  "reason": "ContainerCreating",
+                  "type": "waiting"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "starting",
+              "until": "2026-10-15T10:09:00Z"
+            },
+            "status": {
+              "cause": {
+                "kubelet": {
+                  "says": "notRead"
+                },
+                "sandbox": false,
+                "says": "creating",
+                "since": "2026-10-15T09:59:00Z",
+                "uid": "uid-web-a"
+              },
+              "display": "ContainerCreating",
+              "phase": "Pending"
+            }
+          },
+          "is": "creating",
+          "warned": true
+        },
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-b",
+              "namespace": "shop",
+              "uid": "uid-web-b",
+              "creationTimestamp": "2026-10-15T09:59:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-15T09:59:00Z"
+                },
+                {
+                  "type": "PodReadyToStartContainers",
+                  "status": "False",
+                  "lastTransitionTime": "2026-10-15T09:59:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": false,
+                  "restartCount": 0,
+                  "state": {
+                    "waiting": {
+                      "reason": "ContainerCreating"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "message": null,
+                  "reason": "ContainerCreating",
+                  "type": "waiting"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "starting",
+              "until": "2026-10-15T10:09:00Z"
+            },
+            "status": {
+              "cause": {
+                "kubelet": {
+                  "says": "notRead"
+                },
+                "sandbox": false,
+                "says": "creating",
+                "since": "2026-10-15T09:59:00Z",
+                "uid": "uid-web-b"
+              },
+              "display": "ContainerCreating",
+              "phase": "Pending"
+            }
+          },
+          "is": null
+        }
+      ],
+      "is": {
+        "says": "creating",
+        "pods": 1,
+        "of": 2
+      }
+    },
+    {
+      "name": "restarted with no exit reported counts; a pod its controller replaced is not among its pods",
+      "pods": [
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-a",
+              "namespace": "shop",
+              "uid": "uid-web-a",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-15T09:41:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": true,
+                  "restartCount": 3,
+                  "state": {
+                    "running": {
+                      "startedAt": "2026-10-15T08:00:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": true,
+                "started": false,
+                "state": {
+                  "type": "running"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "settled"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "later": null,
+                "restarts": 3,
+                "run": null,
+                "says": "exits",
+                "until": null
+              },
+              "display": "Running",
+              "exitUnreported": true,
+              "phase": "Running"
+            }
+          },
+          "is": "exits"
+        },
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-b",
+              "namespace": "shop",
+              "uid": "uid-web-b",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Failed",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "False",
+                  "lastTransitionTime": "2026-10-15T09:00:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": false,
+                  "restartCount": 0,
+                  "state": {
+                    "terminated": {
+                      "exitCode": 1,
+                      "reason": "Error",
+                      "startedAt": "2026-10-15T08:00:00Z",
+                      "finishedAt": "2026-10-15T09:00:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "termination": {
+                    "exitCode": 1,
+                    "finishedAt": "2026-10-15T09:00:00Z",
+                    "message": null,
+                    "reason": "Error",
+                    "signal": null,
+                    "startedAt": "2026-10-15T08:00:00Z"
+                  },
+                  "type": "terminated"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "failing"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "later": null,
+                "restarts": 0,
+                "run": {
+                  "code": 1,
+                  "ended": "2026-10-15T09:00:00Z",
+                  "limit": null,
+                  "log": {
+                    "says": "notRead"
+                  },
+                  "previous": false,
+                  "reason": "Error",
+                  "said": null,
+                  "signal": null,
+                  "started": "2026-10-15T08:00:00Z"
+                },
+                "says": "exits",
+                "until": null
+              },
+              "display": "Error",
+              "gone": "replaced",
+              "phase": "Failed"
+            }
+          },
+          "is": "exits"
+        }
+      ],
+      "is": {
+        "says": "exits",
+        "pods": 1,
+        "of": 1
+      }
+    },
+    {
+      "name": "a container the kubelet cannot pull counts by that, whatever exited before",
+      "pods": [
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-a",
+              "namespace": "shop",
+              "uid": "uid-web-a",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Pending",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "False",
+                  "lastTransitionTime": "2026-10-15T09:00:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": false,
+                  "restartCount": 2,
+                  "state": {
+                    "waiting": {
+                      "reason": "ImagePullBackOff",
+                      "message": "Back-off pulling image \"shop/web:1\""
+                    }
+                  },
+                  "lastState": {
+                    "terminated": {
+                      "exitCode": 1,
+                      "reason": "Error",
+                      "startedAt": "2026-10-08T08:00:02Z",
+                      "finishedAt": "2026-10-08T08:00:05Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "message": "Back-off pulling image \"shop/web:1\"",
+                  "reason": "ImagePullBackOff",
+                  "type": "waiting"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "failing"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "image": "shop/web:1",
+                "pull": "backingOff",
+                "reason": "ImagePullBackOff",
+                "said": "Back-off pulling image \"shop/web:1\"",
+                "says": "blocked",
+                "secrets": []
+              },
+              "display": "ImagePullBackOff",
+              "phase": "Pending"
+            }
+          },
+          "is": "blocked"
+        }
+      ],
+      "is": {
+        "says": "blocked",
+        "pods": 1,
+        "of": 1
+      }
+    },
+    {
+      "name": "backing off between runs counts by its exits; Ready with exits an hour old does not count",
+      "pods": [
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-a",
+              "namespace": "shop",
+              "uid": "uid-web-a",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "False",
+                  "lastTransitionTime": "2026-10-15T09:00:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": false,
+                  "restartCount": 9,
+                  "state": {
+                    "waiting": {
+                      "reason": "CrashLoopBackOff",
+                      "message": "back-off 5m0s restarting failed container"
+                    }
+                  },
+                  "lastState": {
+                    "terminated": {
+                      "exitCode": 1,
+                      "reason": "Error",
+                      "startedAt": "2026-10-15T09:56:57Z",
+                      "finishedAt": "2026-10-15T09:57:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": false,
+                "started": false,
+                "state": {
+                  "message": "back-off 5m0s restarting failed container",
+                  "reason": "CrashLoopBackOff",
+                  "type": "waiting"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "failing"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "later": null,
+                "restarts": 9,
+                "run": {
+                  "code": 1,
+                  "ended": "2026-10-15T09:57:00Z",
+                  "limit": null,
+                  "log": {
+                    "says": "notRead"
+                  },
+                  "previous": true,
+                  "reason": "Error",
+                  "said": null,
+                  "signal": null,
+                  "started": "2026-10-15T09:56:57Z"
+                },
+                "says": "exits",
+                "until": null
+              },
+              "display": "CrashLoopBackOff",
+              "loopingUntil": "2026-10-15T10:12:00Z",
+              "phase": "Running",
+              "restartingUntil": "2026-10-15T10:57:00Z"
+            }
+          },
+          "is": "exits"
+        },
+        {
+          "pod": {
+            "metadata": {
+              "name": "web-b",
+              "namespace": "shop",
+              "uid": "uid-web-b",
+              "creationTimestamp": "2026-10-08T08:00:00Z",
+              "ownerReferences": [
+                {
+                  "apiVersion": "apps/v1",
+                  "kind": "ReplicaSet",
+                  "name": "web-7c9",
+                  "uid": "rs-1",
+                  "controller": true
+                }
+              ]
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/ready",
+                      "port": 8080
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "phase": "Running",
+              "conditions": [
+                {
+                  "type": "PodScheduled",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-08T08:00:00Z"
+                },
+                {
+                  "type": "Ready",
+                  "status": "True",
+                  "lastTransitionTime": "2026-10-15T09:41:00Z"
+                }
+              ],
+              "containerStatuses": [
+                {
+                  "name": "web",
+                  "image": "shop/web:1",
+                  "imageID": "",
+                  "ready": true,
+                  "restartCount": 2,
+                  "state": {
+                    "running": {
+                      "startedAt": "2026-10-15T08:30:05Z"
+                    }
+                  },
+                  "lastState": {
+                    "terminated": {
+                      "exitCode": 1,
+                      "reason": "Error",
+                      "startedAt": "2026-10-15T08:29:57Z",
+                      "finishedAt": "2026-10-15T08:30:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "row": {
+            "containers": [
+              {
+                "name": "web",
+                "phase": "app",
+                "ready": true,
+                "started": false,
+                "state": {
+                  "type": "running"
+                }
+              }
+            ],
+            "initContainers": [],
+            "start": {
+              "state": "settled"
+            },
+            "status": {
+              "cause": {
+                "container": "web",
+                "later": null,
+                "restarts": 2,
+                "run": {
+                  "code": 1,
+                  "ended": "2026-10-15T08:30:00Z",
+                  "limit": null,
+                  "log": {
+                    "says": "notRead"
+                  },
+                  "previous": true,
+                  "reason": "Error",
+                  "said": null,
+                  "signal": null,
+                  "started": "2026-10-15T08:29:57Z"
+                },
+                "says": "exits",
+                "until": "2026-10-15T09:30:00Z"
+              },
+              "display": "Running",
+              "loopingUntil": "2026-10-15T08:35:05Z",
+              "phase": "Running",
+              "restartingUntil": "2026-10-15T09:30:00Z"
+            }
+          },
+          "is": null
+        }
+      ],
+      "is": {
+        "says": "exits",
+        "pods": 1,
+        "of": 2
+      }
+    }
+  ]
+}

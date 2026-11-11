@@ -1316,6 +1316,7 @@ describe("PeekPanel reads what the detail pages read", () => {
               limit: null,
             },
             until: null,
+            later: null,
           },
         },
         ownerReferences: [
@@ -1404,6 +1405,7 @@ describe("PeekPanel reads what the detail pages read", () => {
               limit: null,
             },
             until: null,
+            later: null,
           },
         },
         ownerReferences: [],

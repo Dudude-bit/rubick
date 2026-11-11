@@ -45,6 +45,7 @@ export const WAITS: Record<ServiceHealth["state"], boolean> = {
   noneReady: false,
   noEndpoints: false,
   shut: false,
+  policiesUnread: false,
   externalName: false,
   selectorless: false,
   byHand: false,

@@ -436,7 +436,9 @@ const UNTOLD: ReadonlySet<NotServing> = new Set([
 export function stopCause(stop: ChainStop): SharedCause | null {
   if (stop.reason !== "noneReady" || !stop.cause || UNTOLD.has(stop.why))
     return null;
-  return currentCause(stop.cause.cause) ? stop.cause : null;
+  const cause = currentCause(stop.cause.cause);
+  if (cause === stop.cause.cause) return stop.cause;
+  return cause && { ...stop.cause, cause };
 }
 
 /** Where a none-ready count comes from: the slices' addresses, or the pods the selector picked. */

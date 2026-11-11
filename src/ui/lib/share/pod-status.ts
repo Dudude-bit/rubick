@@ -73,14 +73,20 @@ export function podDeadlines(
 }
 
 /** A word that would read healthy, said in the seconds a crash-looping container is up. */
-export const upBetweenCrashes = (pod: { status: LoopStatus }) =>
+export const upBetweenCrashes = (
+  pod: { status: LoopStatus },
+  now: number = Date.now()
+) =>
   statusRole(pod.status.display) === "ok" &&
-  loopState(pod.status) === "looping";
+  loopState(pod.status, now) === "looping";
 
 /** A word that would read healthy, said of a pod that restarted with no exit reported. */
-export const exitUnreported = (pod: { status: LoopStatus }) =>
+export const exitUnreported = (
+  pod: { status: LoopStatus },
+  now: number = Date.now()
+) =>
   statusRole(pod.status.display) === "ok" &&
-  loopState(pod.status) === "unreported";
+  loopState(pod.status, now) === "unreported";
 
 /**
  * The colour of a pod's word on every screen. kubectl prints `Running` for a
@@ -96,11 +102,12 @@ export function podRole(
   now: number = Date.now()
 ): StatusRole {
   if (silence) return "neutral";
-  if (upBetweenCrashes(pod) || pod.status.phase === "Failed") return "err";
+  if (upBetweenCrashes(pod, now) || pod.status.phase === "Failed") return "err";
   const role = statusRole(pod.status.display);
   if (role === "pending" && (pod.kubeletWarned || pendingTooLong(pod, now)))
     return "warn";
-  return role === "ok" && (!podReadiness(pod).allReady || exitUnreported(pod))
+  return role === "ok" &&
+    (!podReadiness(pod).allReady || exitUnreported(pod, now))
     ? "warn"
     : role;
 }
@@ -147,15 +154,12 @@ export function settingUp(
 /** The moments a pod's cause starts or stops counting on the clock alone. */
 export function causeDeadlines(pod: PodBadgeInput): number[] {
   const cause = pod.status.cause;
-  const turns =
-    cause?.says === "exits"
-      ? cause.until
-      : cause?.says === "notReady"
-        ? cause.countsFrom
-        : null;
-  return [...podDeadlines(pod), Date.parse(turns ?? "")].filter(
-    Number.isFinite
-  );
+  const later = cause?.says === "exits" ? cause.later : cause;
+  return [
+    ...podDeadlines(pod),
+    Date.parse((cause?.says === "exits" && cause.until) || ""),
+    Date.parse((later?.says === "notReady" && later.countsFrom) || ""),
+  ].filter(Number.isFinite);
 }
 
 /**

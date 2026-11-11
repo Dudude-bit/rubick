@@ -34,14 +34,17 @@ export interface CauseWords {
   tone: CauseTone;
 }
 
-/** A cause still true at `now`: an exit a container has been up since stops counting at its `until`. */
+/**
+ * A cause still true at `now`: an exit a container has been up since gives
+ * way at its `until` to what is wrong after it, as `PodCause::at` reads it.
+ */
 export function currentCause(
   cause: PodCause | null | undefined,
   now: number = Date.now()
 ): PodCause | null {
   if (!cause) return null;
   if (cause.says === "exits" && cause.until && Date.parse(cause.until) <= now)
-    return null;
+    return currentCause(cause.later, now);
   return cause;
 }
 
@@ -522,8 +525,9 @@ export const sameCause = (a: PodCause, b: PodCause): boolean =>
 
 /**
  * The cause most of a workload's pods share, how many share it and how many
- * it runs. `share` in pod_cause.rs answers the Overview and a Deployment's
- * read; src/contracts/shared-cause-conformance.json holds both to one answer.
+ * it runs. `share` in pod_cause.rs answers the Overview's rows;
+ * src/contracts/shared-cause-conformance.json holds both to one answer, and
+ * trouble-cause-conformance.json the pods each side counts.
  */
 export function sharedCause(
   pods: readonly { gone?: boolean; cause?: PodCause | null }[]

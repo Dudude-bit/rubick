@@ -4360,6 +4360,8 @@ export const en = {
       "Service {name} has no ready address, and its pods could not be read to tell whether they are still starting",
     healthBackendUnconfirmedShort: "backend not checked",
     healthBackendIdleShort: "backend idle",
+    healthPoliciesUnread:
+      "The NetworkPolicies over its pods could not be read, so whether one of them shuts these pods is not checked: {why}",
     healthBackendPoliciesUnread:
       "Service {name}: the NetworkPolicies over its pods could not be read, so whether {client} may connect is not checked: {why}",
     healthBackendEgressUnread:
