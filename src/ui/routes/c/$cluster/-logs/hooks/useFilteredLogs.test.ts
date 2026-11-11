@@ -83,6 +83,63 @@ describe("useFilteredLogs", () => {
     expect(result.current.scoped.at(-1)?.id).toBe(SLICE_LINES + 390);
   });
 
+  /**
+   * A lane attached again reads back lines that stand among the held ones,
+   * while the cap takes the head. Fails if the held lines after them are
+   * looked at again, if the view is short of them for a render meanwhile,
+   * or if a read-back line is missing from the view or out of its place.
+   */
+  it("looks only at the lines a read-back put among the held ones", () => {
+    let logs = lines(0, SLICE_LINES);
+    const { result, rerender } = renderHook(
+      ({ logs }) => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER),
+      { initialProps: { logs } }
+    );
+    reads = 0;
+    const back = lines(SLICE_LINES, 40);
+    logs = [
+      ...logs.slice(100, 1000),
+      ...back.slice(0, 15),
+      ...logs.slice(1000, 1003),
+      ...back.slice(15),
+      ...logs.slice(1003),
+    ];
+    rerender({ logs });
+
+    expect(reads).toBe(40);
+    expect(result.current.settling).toBe(false);
+    expect(result.current.scoped.map((l) => l.id)).toEqual(
+      logs.filter((l) => l.raw.startsWith("hit")).map((l) => l.id)
+    );
+  });
+
+  /**
+   * Fails if a read-back longer than a slice is looked at in one go, which
+   * is the stall the slices exist to prevent, or if the view ends up short.
+   */
+  it("walks a read-back longer than a slice in slices", () => {
+    let logs = lines(0, 2000);
+    const { result, rerender } = renderHook(
+      ({ logs }) => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER),
+      { initialProps: { logs } }
+    );
+    reads = 0;
+    logs = [
+      ...logs.slice(0, 500),
+      ...lines(2000, SLICE_LINES + 500),
+      ...logs.slice(500),
+    ];
+    rerender({ logs });
+
+    expect(reads).toBe(SLICE_LINES);
+    expect(result.current.settling).toBe(true);
+    act(() => vi.runAllTimers());
+    expect(result.current.settling).toBe(false);
+    expect(result.current.scoped.map((l) => l.id)).toEqual(
+      logs.filter((l) => l.raw.startsWith("hit")).map((l) => l.id)
+    );
+  });
+
   /** A big buffer is walked in slices with the event loop between them, so the input keeps answering; the caller is told the walk is on. */
   it("walks a new query over a big buffer in slices and says so", () => {
     const logs = lines(0, SLICE_LINES * 3);

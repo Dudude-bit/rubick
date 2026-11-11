@@ -315,6 +315,7 @@ export function LogViewer({
     logs: live,
     fields,
     dropped,
+    merged,
     frozenLines,
     isStreaming,
     previousRead,
@@ -544,13 +545,14 @@ export function LogViewer({
   // What the strip's accumulator treats as "the same set, extended".
   // Anything that reshuffles the filtered array has to appear here or the
   // histogram would go on adding to slices built from a different query.
+  // `merged` is a lane's read-back, which stands among lines already counted.
   const scopeKey = useMemo(
     () =>
-      `${namespace}/${pane}|${[...hidden].sort().join(",")}|${effectiveTerms
+      `${namespace}/${pane}|${merged}|${[...hidden].sort().join(",")}|${effectiveTerms
         .filter((term) => term.kind !== "time")
         .map(termLabel)
         .join(",")}`,
-    [namespace, pane, hidden, effectiveTerms]
+    [namespace, pane, merged, hidden, effectiveTerms]
   );
 
   // Grouping runs after filtering, so a filter that leaves two repeats

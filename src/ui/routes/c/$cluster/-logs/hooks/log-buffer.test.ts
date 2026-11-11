@@ -114,6 +114,112 @@ const fielded = (
   fields: Record<string, string>
 ) => ({ ...line(id), container, fields }) as StreamedLogLine;
 
+/**
+ * A lane attached again reads back what it wrote while it was down: lines
+ * older than what the other lanes have put in the buffer since.
+ */
+describe("a window a lane read back", () => {
+  const from = (container: string, id: number, epoch: number) =>
+    ({ ...line(id, epoch), container }) as StreamedLogLine;
+  const READ_BACK = true;
+  const epochs = (buffer: LogBuffer) => buffer.lines.map((l) => l.epoch);
+  const held = () =>
+    buffered([10, 20, 30, 40, 50].map((epoch, id) => from("web", id, epoch)));
+
+  /**
+   * Appended, the lines stood after newer ones with older stamps: the pane
+   * read out of order and the rate over its tail was a negative span.
+   * Fails if a read-back line stands anywhere but where its timestamp says,
+   * or ahead of a held line of the same instant.
+   */
+  it("stands where its timestamps say, after held lines of the same instant", () => {
+    const back = [25, 30, 45, 60].map((epoch, i) =>
+      from("api", 100 + i, epoch)
+    );
+    const next = appendCapped(held(), back, 100, null, READ_BACK);
+
+    expect(epochs(next)).toEqual([10, 20, 25, 30, 30, 40, 45, 50, 60]);
+    expect(next.lines[3].container).toBe("web");
+    expect(next.lines[4].container).toBe("api");
+    expect(next.merged).toBe(1);
+  });
+
+  /**
+   * Lanes a window apart land a few milliseconds out of order all day, and
+   * every reader of the buffer counts on those going to the tail. Fails if
+   * a late window that is not a read-back is moved, or counted as a merge.
+   */
+  it("still goes to the tail when it is only late", () => {
+    const next = appendCapped(held(), [from("api", 100, 45)], 100);
+
+    expect(epochs(next)).toEqual([10, 20, 30, 40, 50, 45]);
+    expect(next.merged).toBe(0);
+  });
+
+  /** Fails if a read-back with nothing older than the tail counts as a merge: a reader of the tail would start over for nothing. */
+  it("is an append when nothing in it is older than the tail", () => {
+    const next = appendCapped(held(), [from("api", 100, 50)], 100, null, true);
+
+    expect(epochs(next)).toEqual([10, 20, 30, 40, 50, 50]);
+    expect(next.merged).toBe(0);
+  });
+
+  /**
+   * One lane's catch-up took the head, and with it other lanes' lines newer
+   * than the ones it brought, under a notice that says "older lines".
+   * Fails if anything but the oldest lines goes, whoever wrote them, if the
+   * loss is not counted, or if the index still counts a line that went.
+   */
+  it("costs the oldest lines when it overflows the cap, and says how many", () => {
+    const back = [5, 15, 25, 35].map((epoch, i) => from("api", 100 + i, epoch));
+    const next = appendCapped(held(), back, 6, null, READ_BACK);
+
+    expect(epochs(next)).toEqual([20, 25, 30, 35, 40, 50]);
+    expect(next.dropped).toBe(3);
+    expect(next.fields.values.get("container")).toEqual(
+      new Map([
+        ["web", 4],
+        ["api", 2],
+      ])
+    );
+  });
+
+  /**
+   * A window that fills the cap on its own replaces the buffer: right for a
+   * backfill, and for a read-back it threw away every other lane's lines,
+   * the newest included. Fails if a read-back as long as the cap does that.
+   */
+  it("does not replace the lines other lanes wrote after it", () => {
+    const back = [1, 2, 3, 4, 45].map((epoch, i) =>
+      from("api", 100 + i, epoch)
+    );
+    const next = appendCapped(held(), back, 5, null, READ_BACK);
+
+    expect(epochs(next)).toEqual([20, 30, 40, 45, 50]);
+    expect(next.dropped).toBe(5);
+  });
+
+  /** Fails if lines newer than the read-back are spared the cap while a kept interval holds the head. */
+  it("takes what the cap is owed from the lines after it when the head is kept", () => {
+    const frozen = { from: 10, to: 30 };
+    const next = appendCapped(held(), [from("api", 100, 25)], 1, frozen, true);
+
+    expect(epochs(next)).toEqual([10, 20, 25, 30, 50]);
+    expect(next.dropped).toBe(1);
+  });
+
+  /** Fails if a kept interval's lines go to make room for a read-back. */
+  it("leaves a frozen interval alone", () => {
+    const frozen = { from: 10, to: 20 };
+    const back = [15, 35].map((epoch, i) => from("api", 100 + i, epoch));
+    const next = appendCapped(held(), back, 3, frozen, READ_BACK);
+
+    expect(epochs(next)).toEqual([10, 15, 20, 35, 40, 50]);
+    expect(next.frozenLines).toBe(3);
+    expect(next.dropped).toBe(1);
+  });
+});
+
 describe("a frozen interval", () => {
   const frozen = { from: 5, to: 9 };
 

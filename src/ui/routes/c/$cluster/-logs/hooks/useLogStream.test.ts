@@ -1099,6 +1099,81 @@ describe("useLogStream attaching one lane again", () => {
     ]);
   });
 
+  const fromB = (...lines: ReturnType<typeof at>[]) =>
+    act(() =>
+      listeners["log-batch"]!({
+        payload: { stream_id: "stream-api-b-app", lines },
+      })
+    );
+
+  /**
+   * The other lane kept writing while this one was down, and what this one
+   * reads back is older than that. Fails if the read-back lines stand after
+   * newer lines of the other lane, or if the pane does not say it merged.
+   */
+  it("puts what it read back among the lines the other lane wrote meanwhile", async () => {
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    fromA(at(9, "a before the break"));
+    fromB(at(10, "b one"));
+    broke();
+    fromB(at(11, "b two"), at(13, "b three"));
+    await waitFor(() => expect(result.current.logs).toHaveLength(4));
+    await again(result);
+    holdTheClock();
+
+    fromA(
+      at(9, "a before the break"),
+      at(12, "a while it was down"),
+      at(14, "a live again")
+    );
+    fromB(at(15, "b four"));
+    await pastTheWindow();
+
+    expect(result.current.logs.map((line) => line.message)).toEqual([
+      "a before the break",
+      "b one",
+      "b two",
+      "a while it was down",
+      "b three",
+      "a live again",
+      "b four",
+    ]);
+    expect(result.current.merged).toBe(1);
+  });
+
+  /**
+   * Once the lane has caught up with the pane it is a lane like any other.
+   * Fails if its later windows are still merged, or if a lane that was
+   * never attached again has a late line moved off the tail.
+   */
+  it("goes back to the tail once it has caught up, and never moves another lane's late line", async () => {
+    const { result } = lanes();
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    fromA(at(9, "a before the break"));
+    broke();
+    fromB(at(11, "b two"));
+    await waitFor(() => expect(result.current.logs).toHaveLength(2));
+    await again(result);
+    holdTheClock();
+    fromA(at(10, "a while it was down"), at(12, "a caught up"));
+    await pastTheWindow();
+    expect(result.current.merged).toBe(1);
+
+    fromB(at(20, "b later"));
+    await pastTheWindow();
+    fromA(at(19, "a a window behind"));
+    fromB(at(18, "b a window behind"));
+    await pastTheWindow();
+
+    expect(result.current.logs.map((line) => line.message).slice(-3)).toEqual([
+      "b later",
+      "b a window behind",
+      "a a window behind",
+    ]);
+    expect(result.current.merged).toBe(1);
+  });
+
   /** A lane that broke before its first line has no last line. Fails if it reads on from now and skips what it wrote since the pane opened. */
   it("reads a lane that never said a line on from when the pane opened", async () => {
     const opened = Date.now();

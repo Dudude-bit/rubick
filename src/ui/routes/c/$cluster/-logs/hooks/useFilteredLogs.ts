@@ -36,6 +36,8 @@ interface Pass {
   source: StreamedLogLine[];
   /** Index into `source` of the next line the pass has not looked at. */
   cursor: number;
+  /** The highest id looked at. Ids ascend with arrival, so a line above it arrived since. */
+  top: number;
   result: StreamedLogLine[];
 }
 
@@ -43,13 +45,16 @@ function scanned(pass: Pass, budget: number): Pass {
   const end = Math.min(pass.source.length, pass.cursor + budget);
   if (pass.cursor >= end) return pass;
   const found: StreamedLogLine[] = [];
+  let top = pass.top;
   for (let i = pass.cursor; i < end; i++) {
     const line = pass.source[i];
+    if (line.id > top) top = line.id;
     if (pass.keep(line)) found.push(line);
   }
   return {
     ...pass,
     cursor: end,
+    top,
     result: found.length > 0 ? [...pass.result, ...found] : pass.result,
   };
 }
@@ -64,31 +69,56 @@ function scanned(pass: Pass, budget: number): Pass {
  * carry the cursor across: the survivors ahead of it are where it lands.
  * A buffer that is not the old one extended finds no survivors and is
  * walked from the start.
+ *
+ * The one thing put among the old lines is a lane's read-back
+ * (`appendCapped`). Those are looked at here, where they stand, up to
+ * `budget` of them, which is returned less what they took; past it the walk
+ * goes on from there in slices like any other.
  */
-function advanced(pass: Pass, logs: StreamedLogLine[]): Pass {
+function advanced(
+  pass: Pass,
+  logs: StreamedLogLine[],
+  budget: number
+): [Pass, number] {
   const { source, result } = pass;
   let j = 0;
   let r = 0;
   let cursor = -1;
-  let evicted = false;
+  let top = pass.top;
+  let changed = false;
   const kept: StreamedLogLine[] = [];
   for (let i = 0; i < source.length; i++) {
     if (i === pass.cursor) cursor = j;
     const line = source[i];
+    for (
+      ;
+      cursor < 0 && budget > 0 && j < logs.length && logs[j] !== line;
+      j++, budget--
+    ) {
+      const arrived = logs[j];
+      if (arrived.id <= pass.top) break;
+      if (arrived.id > top) top = arrived.id;
+      if (pass.keep(arrived)) {
+        kept.push(arrived);
+        changed = true;
+      }
+    }
     const present = j < logs.length && logs[j] === line;
     if (present) j++;
     if (r < result.length && result[r] === line) {
       r++;
       if (present) kept.push(line);
-      else evicted = true;
+      else changed = true;
     }
   }
-  return {
+  const next = {
     ...pass,
     source: logs,
     cursor: cursor < 0 ? j : cursor,
-    result: evicted ? kept : result,
+    top,
+    result: changed ? kept : result,
   };
+  return [next, budget];
 }
 
 function started(
@@ -101,7 +131,7 @@ function started(
   const keep = (line: StreamedLogLine) =>
     !hidden.has(laneOf(line)) && matchesQuery(line, terms);
   return scanned(
-    { key, laneOf, keep, source: logs, cursor: 0, result: [] },
+    { key, laneOf, keep, source: logs, cursor: 0, top: -Infinity, result: [] },
     SLICE_LINES
   );
 }
@@ -144,7 +174,7 @@ export function useFilteredLogs(
     current = started(key, logs, hidden, terms, laneOf);
     setPass(current);
   } else if (pass.source !== logs) {
-    current = scanned(advanced(pass, logs), SLICE_LINES);
+    current = scanned(...advanced(pass, logs, SLICE_LINES));
     setPass(current);
   }
   const settling = current.cursor < current.source.length;
