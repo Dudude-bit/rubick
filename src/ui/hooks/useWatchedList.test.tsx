@@ -16,6 +16,7 @@ vi.mock("@/hooks/useResourceWatch", () => ({
   },
 }));
 
+import { credentialsRenewed } from "@/lib/credentials";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useListFollowed, useListLive, useWatchedList } from "./useWatchedList";
@@ -114,6 +115,25 @@ describe("a list kept current by a watch", () => {
       }))
     );
     expect(callbacks.enabled).toBe(true);
+  });
+
+  /**
+   * A watch refused under the old groups is one the renewed credentials may
+   * be allowed. Fails if a renewal does not subscribe it again, or if a watch
+   * refused a second time is subscribed on every visit after it.
+   */
+  it("subscribes a refused watch again on renewed credentials, and stops again when those are refused", () => {
+    const refusal =
+      'ApiError: daemonsets.apps is forbidden: User "marco" cannot watch resource "daemonsets"';
+    watched();
+    act(() => callbacks.onError?.(refusal));
+    expect(callbacks.enabled).toBe(false);
+
+    act(() => credentialsRenewed());
+    expect(callbacks.enabled).toBe(true);
+
+    act(() => callbacks.onError?.(refusal));
+    expect(callbacks.enabled).toBe(false);
   });
 
   /** Fails if the cluster's own words reach the toast again. */

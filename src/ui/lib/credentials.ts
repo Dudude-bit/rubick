@@ -23,7 +23,7 @@
  * `refusals`, which imports neither, and both sides may have it.
  */
 
-import { currentConnection } from "@/lib/refusals";
+import { currentConnection, forgetRefusals } from "@/lib/refusals";
 
 /**
  * The marker `Error::CredentialsExpired` puts at the front of its message.
@@ -104,8 +104,12 @@ export function subscribeToCredentials(
 let renewals = 0;
 const renewalListeners = new Set<() => void>();
 
-/** Called from the backend's `credentials-renewed` event. */
+/**
+ * Called from the backend's `credentials-renewed` event. A refusal was an
+ * answer to the old credentials, so it is let go before anything asks again.
+ */
 export function credentialsRenewed(): void {
+  forgetRefusals();
   renewals += 1;
   for (const listener of renewalListeners) listener();
 }

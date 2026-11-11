@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { commands } from "@/lib/commands";
+import { credentialsRenewed } from "@/lib/credentials";
 import { isRefusal } from "@/lib/error-utils";
 import { listPodRows } from "@/lib/pod-rows";
 import { askedAgainFirst } from "@/lib/refusals";
@@ -90,6 +91,18 @@ describe("a read the cluster refused on this connection", () => {
   it("is asked again after a reconnect", async () => {
     await refusedIn(["team-checkout"]);
     reconnect();
+    answer = () => ({ items: [], unread: [] });
+    expect(await refusedIn(["team-checkout"])).toBe("answered");
+    expect(asked).toHaveLength(2);
+  });
+
+  /**
+   * An OIDC refresh that brought new groups kept the 403 the old ones got
+   * until a reconnect. Fails if a renewal leaves a refusal standing.
+   */
+  it("is asked again after the credentials are renewed", async () => {
+    await refusedIn(["team-checkout"]);
+    credentialsRenewed();
     answer = () => ({ items: [], unread: [] });
     expect(await refusedIn(["team-checkout"])).toBe("answered");
     expect(asked).toHaveLength(2);

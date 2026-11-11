@@ -1,7 +1,7 @@
 /**
  * What the cluster refused on this connection. A refusal is a verdict on who
- * asks, so a refused read is answered from here until the next connect
- * instead of asking the cluster again on every poll and every page visit.
+ * asks, so a refused read is answered from here until the next connect or
+ * credential renewal, not asked again on every poll and every page visit.
  * Imports nothing that reaches `commands` or `clusterStore`, which both use it.
  */
 
