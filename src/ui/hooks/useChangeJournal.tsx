@@ -21,6 +21,7 @@ import {
   useChangeJournalStore,
 } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useRenewals } from "@/hooks/useCredentialRenewal";
 
 interface Row {
   name: string;
@@ -74,6 +75,10 @@ export function useChangeJournal() {
   const baselines = useRef(new Map<string, Seen>());
   const established = useRef(new Set<string>());
   const [restarts, setRestarts] = useState(0);
+  // A watch holds the client it was opened on, and a renewal leaves that
+  // client's token to die: the watches are opened again on the new one, and
+  // the hand-over below keeps the old ones watching until those have synced.
+  const renewals = useRenewals();
   const record = useChangeJournalStore((s) => s.record);
   const seenCluster = useChangeJournalStore((s) => s.seenCluster);
   const beginSpan = useChangeJournalStore((s) => s.beginSpan);
@@ -359,6 +364,7 @@ export function useChangeJournal() {
     connected,
     namespaces,
     restarts,
+    renewals,
     record,
     seenCluster,
     beginSpan,
