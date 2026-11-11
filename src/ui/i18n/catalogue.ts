@@ -2297,6 +2297,8 @@ export const en = {
       "Its process 1 is not a container of this pod: the pod's containers share one process namespace, or the debug container was pointed at none of them. It stays on the pod.",
     restartedSince:
       "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
+    restartedUnlisted:
+      "Container {container} has restarted (restart {restarts}) before anything in it was listed here.",
     readNewContainer: "Read the new container",
     filterNamesReading: "filter names…",
     shownOf: "{shown} of {n} shown",

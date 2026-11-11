@@ -436,10 +436,13 @@ export function FilesTab({
       )}
       {restartedSinceRead && target !== null && (
         <Notice tone="warn">
-          {t("files", "restartedSince", {
-            container: container.name,
-            restarts: container.restartCount,
-          })}{" "}
+          {/* A tab opened between runs, or restarted before its read
+              answered, has no listing for the restart to be "since". */}
+          {t(
+            "files",
+            answeredIn === scope ? "restartedSince" : "restartedUnlisted",
+            { container: container.name, restarts: container.restartCount }
+          )}{" "}
           <button
             type="button"
             onClick={readNow}
