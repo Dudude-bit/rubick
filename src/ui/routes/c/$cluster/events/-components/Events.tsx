@@ -368,13 +368,21 @@ export function Events() {
     notifyOnChangeProps: sampled ? [] : undefined,
   });
   useWakeOnChange(watchKey, sampled ? STORIES_FOLLOW_MS : null);
-  const watching = watch.live;
+  const kept = streamed.data?.rows;
+  const cut = streamed.data?.cut ?? NONE_CUT;
+  // The watch lists every event of the scope before it has a row to show:
+  // forty requests for 20 000 events. Until it has, the feed is polled as it
+  // was before the watch, four pages at most.
+  const watching = watch.live && kept !== undefined;
+  // Except with no limit, where the poll is the whole scope in one answer.
+  const awaited = watch.live && kept === undefined && whole;
+  const polling = !watching && !awaited;
 
-  // Where no watch runs, the feed is polled as it always was.
+  // Where no watch feeds it, the feed is polled as it always was.
   const single = useLiveQuery({
     queryKey: [...queryKeys.events(currentNamespace), eventType, eventLimit],
     queryFn: () => read(filtersFor(currentNamespace, eventType, limit)),
-    enabled: isConnected && !several && !watching,
+    enabled: isConnected && !several && polling,
     refresh: "fast",
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.fast,
@@ -401,7 +409,7 @@ export function Events() {
     // and the previous data it would keep lives on the observer that was just
     // replaced. The feed draws its skeleton until every namespace has answered
     // the question actually being asked, which is one fast read away.
-    queries: (several && !watching ? scope.scope : []).map((namespace) => ({
+    queries: (several && polling ? scope.scope : []).map((namespace) => ({
       queryKey: [...queryKeys.events(namespace), eventType, eventLimit],
       queryFn: () => read(filtersFor(namespace, eventType, limit)),
       enabled: isConnected,
@@ -417,7 +425,7 @@ export function Events() {
   const answers = parts.data;
   const polled = useMemo(
     () =>
-      watching
+      !polling
         ? undefined
         : several
           ? answers.some((part) => part !== undefined)
@@ -426,12 +434,17 @@ export function Events() {
               answers.flatMap((part) => part ?? []).sort(byNewest)
             : undefined
           : single.data,
-    [watching, several, answers, single.data]
+    [polling, several, answers, single.data]
   );
-  const kept = streamed.data?.rows;
-  const cut = streamed.data?.cut ?? NONE_CUT;
-  // A watch that failed leaves its rows on screen until a poll answers.
-  const fromWatch = watching || (polled === undefined && kept !== undefined);
+  // A watch that failed leaves its rows on screen until a poll answers after
+  // them: the poll that drew the page ahead of the watch is older than they are.
+  const polledAt = several
+    ? parts.freshness.dataUpdatedAt
+    : single.dataUpdatedAt;
+  const fromWatch =
+    watching ||
+    (kept !== undefined &&
+      (polled === undefined || polledAt < streamed.dataUpdatedAt));
   // The read can fail, and until now nothing here asked. An empty feed then
   // drew the quiet-scope sentence, which for the stories tab went as far as
   // "the read succeeded and returned no events", a claim about a request that
@@ -578,9 +591,8 @@ export function Events() {
     keyOfStory
   );
 
-  const isLoading = watching
-    ? kept === undefined
-    : !fromWatch && (several ? parts.isLoading : single.isLoading);
+  const isLoading =
+    awaited || (!fromWatch && (several ? parts.isLoading : single.isLoading));
   const freshness = fromWatch
     ? streamed.freshness
     : several
