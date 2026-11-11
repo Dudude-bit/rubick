@@ -1,12 +1,14 @@
 //! Cluster management commands
 
+use std::sync::Arc;
+
 use tauri::State;
 use tokio::time::{timeout, Duration};
 
 use crate::auth::{prepare_kubeconfig_for_context, AuthMode};
 use crate::client::{
-    ClusterInfo, ConnectAttempt, ConnectFailure, ContextInfo, KubectlProxy, PathOutcome,
-    ProxyOutcome,
+    ClusterInfo, ConnectAttempt, ConnectFailure, ConnectionPath, ContextInfo, K8sClientManager,
+    KubectlProxy, PathOutcome, ProxyOutcome,
 };
 use crate::error::{Error, Result};
 use crate::state::AppState;
@@ -96,55 +98,78 @@ pub async fn connect_cluster(
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
 
-    let info = match connect_direct(&state, &context).await {
-        Ok(info) => {
-            state.client_manager.record_attempt(ConnectAttempt {
-                context: context.clone(),
+    let info = attempt(&state, &context, generation).await?;
+    // After the landing: one arranged for an attempt that did not land runs
+    // the plugin for nobody.
+    match info.connected_through {
+        ConnectionPath::Direct => crate::auth::renew::schedule(
+            &app,
+            &context,
+            state.client_manager.credential_deadline(&context),
+        ),
+        ConnectionPath::KubectlProxy => crate::auth::renew::delegated(&app, &context),
+    }
+    Ok(info)
+}
+
+/// One way into a cluster, proved by a `/version` answer and held by the
+/// attempt alone until it lands.
+struct Reached {
+    info: ClusterInfo,
+    client: Arc<kube::Client>,
+    deadline: Option<chrono::DateTime<chrono::Utc>>,
+    proxy: Option<KubectlProxy>,
+}
+
+/// One attempt at a context, both ways. It holds what it builds to itself
+/// and installs it only by landing, so one that was abandoned and returns
+/// late has nothing of a newer session's to take down or write over.
+async fn attempt(state: &AppState, context: &str, generation: u64) -> Result<ClusterInfo> {
+    let file = |direct: PathOutcome, proxy: ProxyOutcome| {
+        state.client_manager.record_attempt(
+            generation,
+            ConnectAttempt {
+                context: context.to_string(),
                 at: chrono::Utc::now().to_rfc3339(),
-                direct: PathOutcome::Ok,
-                proxy: ProxyOutcome::NotTried,
-            });
-            arrange_renewal(&app, &state, &context);
-            info
+                direct,
+                proxy,
+            },
+        );
+    };
+    let reached = match connect_direct(state, context).await {
+        Ok(reached) => {
+            file(PathOutcome::Ok, ProxyOutcome::NotTried);
+            reached
         }
         Err((direct, dialled)) => {
-            state.client_manager.disconnect(&context);
-            state.remove_session(&context);
-            let mut attempt = ConnectAttempt {
-                context: context.clone(),
-                at: chrono::Utc::now().to_rfc3339(),
-                direct: PathOutcome::Failed {
-                    error: direct.to_string(),
-                    failure: ConnectFailure::of(&direct),
-                },
-                proxy: ProxyOutcome::NotTried,
+            let failed = PathOutcome::Failed {
+                error: direct.to_string(),
+                failure: ConnectFailure::of(&direct),
             };
             if !proxy_could_help(&direct, dialled) {
-                state.client_manager.record_attempt(attempt);
+                file(failed, ProxyOutcome::NotTried);
                 return Err(direct);
             }
             let Some(kubectl) = crate::commands::binaries::locate_on_user_path("kubectl") else {
-                attempt.proxy = ProxyOutcome::NoKubectl;
-                state.client_manager.record_attempt(attempt);
+                file(failed, ProxyOutcome::NoKubectl);
                 return Err(direct);
             };
-            match connect_through_proxy(&state, &context, &kubectl).await {
-                Ok((info, port)) => {
-                    attempt.proxy = ProxyOutcome::Ok { port, kubectl };
-                    state.client_manager.record_attempt(attempt);
-                    crate::auth::renew::delegated(&app, &context);
-                    info
+            match connect_through_proxy(state, context, &kubectl).await {
+                Ok(reached) => {
+                    let port = reached.proxy.as_ref().map_or(0, |proxy| proxy.port);
+                    file(failed, ProxyOutcome::Ok { port, kubectl });
+                    reached
                 }
                 Err(failure) => {
-                    state.client_manager.disconnect(&context);
-                    state.remove_session(&context);
-                    attempt.proxy = ProxyOutcome::Failed {
-                        error: failure.error,
-                        stdout: failure.stdout,
-                        stderr: failure.stderr,
-                        kubectl,
-                    };
-                    state.client_manager.record_attempt(attempt);
+                    file(
+                        failed,
+                        ProxyOutcome::Failed {
+                            error: failure.error,
+                            stdout: failure.stdout,
+                            stderr: failure.stderr,
+                            kubectl,
+                        },
+                    );
                     // The first failure is the one to read; the proxy's is
                     // in the attempt record, one click away.
                     return Err(direct);
@@ -153,15 +178,9 @@ pub async fn connect_cluster(
         }
     };
 
-    if !land(&state, generation, &info) {
-        state.client_manager.disconnect(&context);
-        state.remove_session(&context);
-        return Err(crate::error::Error::Connection(
-            "Connection superseded by a newer attempt.".to_string(),
-        ));
-    }
-
-    Ok(info)
+    land(state, generation, reached).ok_or_else(|| {
+        crate::error::Error::Connection("Connection superseded by a newer attempt.".to_string())
+    })
 }
 
 /// The start of a connect: this context's own session is let go for a fresh
@@ -187,14 +206,26 @@ fn begin(state: &AppState, context: &str) -> u64 {
 }
 
 /// The connect's answer, kept only if nothing newer was asked meanwhile.
-fn land(state: &AppState, generation: u64, info: &ClusterInfo) -> bool {
+/// The one place an attempt's client becomes the context's: one that does
+/// not land is dropped here with its proxy, having replaced nothing.
+fn land(state: &AppState, generation: u64, reached: Reached) -> Option<ClusterInfo> {
     let _lifecycle = state.cluster_lifecycle.lock();
     if !state.is_latest_connect_generation(generation) {
-        return false;
+        return None;
     }
+    let Reached {
+        info,
+        client,
+        deadline,
+        proxy,
+    } = reached;
+    state.client_manager.install(&info.context, client, proxy);
+    state
+        .client_manager
+        .set_credential_deadline(&info.context, deadline);
     state.set_current_context(Some(info.context.clone()));
-    state.create_session(info);
-    true
+    state.create_session(&info);
+    Some(info)
 }
 
 /// A context's session as it stands, if the window still holds one.
@@ -286,7 +317,7 @@ fn release(state: &AppState, keep: &[String]) -> Vec<String> {
 async fn connect_direct(
     state: &AppState,
     context: &str,
-) -> std::result::Result<ClusterInfo, (Error, bool)> {
+) -> std::result::Result<Reached, (Error, bool)> {
     let before = |error: Error| (error, false);
     let kubeconfig = state
         .client_manager
@@ -297,25 +328,19 @@ async fn connect_direct(
         prepare_kubeconfig_for_context(state, kubeconfig, context, AuthMode::Interactive)
             .await
             .map_err(|e| before(prepared_failure(e)))?;
-    state
-        .client_manager
-        .set_credential_deadline(context, prepared.expires_at);
-    state
-        .client_manager
-        .connect_with_kubeconfig(context, prepared.kubeconfig)
+    let client = K8sClientManager::prepared_client(context, prepared.kubeconfig)
         .await
         .map_err(before)?;
-    probe(state, context).await.map_err(|error| (error, true))
-}
-
-/// Arrange for the context to renew itself, after the connect succeeded: one
-/// scheduled against a failed connection runs the plugin for nobody.
-fn arrange_renewal(app: &tauri::AppHandle, state: &AppState, context: &str) {
-    crate::auth::renew::schedule(
-        app,
-        context,
-        state.client_manager.credential_deadline(context),
-    );
+    let deadline = prepared.expires_at;
+    let info = probe(context, &client, deadline, ConnectionPath::Direct)
+        .await
+        .map_err(|error| (error, true))?;
+    Ok(Reached {
+        info,
+        client,
+        deadline,
+        proxy: None,
+    })
 }
 
 /// Through `kubectl proxy`: kubectl runs the plugin and holds the token.
@@ -323,7 +348,7 @@ async fn connect_through_proxy(
     state: &AppState,
     context: &str,
     kubectl: &str,
-) -> std::result::Result<(ClusterInfo, u16), crate::client::ProxyFailure> {
+) -> std::result::Result<Reached, crate::client::ProxyFailure> {
     let unstarted = |error: Error| crate::client::ProxyFailure {
         error: error.to_string(),
         stdout: String::new(),
@@ -335,33 +360,35 @@ async fn connect_through_proxy(
         .await
         .map_err(unstarted)?;
     let proxy = KubectlProxy::start(kubectl, &target).await?;
-    let port = proxy.port;
     let stderr = proxy.stderr();
-    state
-        .client_manager
-        .connect_through_proxy(context, proxy)
-        .map_err(|e| crate::client::ProxyFailure {
-            error: e.to_string(),
-            stdout: String::new(),
-            stderr: stderr.clone(),
-        })?;
+    let said = |e: Error, stderr: String| crate::client::ProxyFailure {
+        error: e.to_string(),
+        stdout: String::new(),
+        stderr,
+    };
+    let client = K8sClientManager::proxy_client(&proxy).map_err(|e| said(e, stderr.clone()))?;
     // No deadline: kubectl renews what it holds, and the app never sees it.
-    state.client_manager.set_credential_deadline(context, None);
-    let info = probe(state, context)
+    let info = probe(context, &client, None, ConnectionPath::KubectlProxy)
         .await
-        .map_err(|e| crate::client::ProxyFailure {
-            error: e.to_string(),
-            stdout: String::new(),
-            stderr,
-        })?;
-    Ok((info, port))
+        .map_err(|e| said(e, stderr))?;
+    Ok(Reached {
+        info,
+        client,
+        deadline: None,
+        proxy: Some(proxy),
+    })
 }
 
 /// `/version`, with a ceiling so an auth flow nobody finishes does not hang.
-async fn probe(state: &AppState, context: &str) -> Result<ClusterInfo> {
+async fn probe(
+    context: &str,
+    client: &kube::Client,
+    deadline: Option<chrono::DateTime<chrono::Utc>>,
+    path: ConnectionPath,
+) -> Result<ClusterInfo> {
     match timeout(
         Duration::from_mins(2),
-        state.client_manager.test_connection(context),
+        K8sClientManager::ask_version(context, client, deadline, path),
     )
     .await
     {
@@ -764,34 +791,46 @@ mod proxy_tests {
 
 #[cfg(test)]
 mod lifecycle_tests {
-    use super::{begin, focus, land, live, release};
-    use crate::client::{ClusterInfo, ConnectionPath};
+    use super::{begin, focus, land, live, release, Reached};
+    use crate::client::{ClusterInfo, ConnectionPath, K8sClientManager};
     use crate::error::Error;
     use crate::state::AppState;
 
-    fn info(context: &str) -> ClusterInfo {
-        ClusterInfo {
-            context: context.to_string(),
-            server_version: "1.31".to_string(),
-            platform: "linux/amd64".to_string(),
-            git_version: "v1.31.0".to_string(),
-            credentials_expire_at: None,
-            connected_through: ConnectionPath::Direct,
-        }
-    }
-
-    /// A client built for `context`; nothing is dialled until it is asked.
-    async fn dial(state: &AppState, context: &str) {
-        let kubeconfig = kube::config::Kubeconfig::from_yaml(&format!(
+    fn kubeconfig(context: &str) -> kube::config::Kubeconfig {
+        kube::config::Kubeconfig::from_yaml(&format!(
             "apiVersion: v1\nkind: Config\ncurrent-context: {context}\n\
              clusters: [{{name: {context}, cluster: {{server: 'http://127.0.0.1:9'}}}}]\n\
              users: [{{name: {context}, user: {{}}}}]\n\
              contexts: [{{name: {context}, context: {{cluster: {context}, user: {context}}}}}]\n"
         ))
-        .expect("kubeconfig");
+        .expect("kubeconfig")
+    }
+
+    /// What an attempt at `context` holds once `/version` has answered it;
+    /// nothing is dialled until the client is asked.
+    async fn reached(context: &str) -> Reached {
+        Reached {
+            info: ClusterInfo {
+                context: context.to_string(),
+                server_version: "1.31".to_string(),
+                platform: "linux/amd64".to_string(),
+                git_version: "v1.31.0".to_string(),
+                credentials_expire_at: None,
+                connected_through: ConnectionPath::Direct,
+            },
+            client: K8sClientManager::prepared_client(context, kubeconfig(context))
+                .await
+                .expect("client"),
+            deadline: None,
+            proxy: None,
+        }
+    }
+
+    /// A client in the manager with no session behind it.
+    async fn dial(state: &AppState, context: &str) {
         state
             .client_manager
-            .connect_with_kubeconfig(context, kubeconfig)
+            .connect_with_kubeconfig(context, kubeconfig(context))
             .await
             .expect("client");
     }
@@ -799,8 +838,7 @@ mod lifecycle_tests {
     /// A connect to `context` that lands.
     async fn hold(state: &AppState, context: &str) {
         let generation = begin(state, context);
-        dial(state, context).await;
-        assert!(land(state, generation, &info(context)));
+        assert!(land(state, generation, reached(context).await).is_some());
     }
 
     fn current(state: &AppState) -> Option<String> {
@@ -848,13 +886,13 @@ mod lifecycle_tests {
         let state = AppState::new().expect("state");
         hold(&state, "staging").await;
         let generation = begin(&state, "prod-eu");
-        dial(&state, "prod-eu").await;
 
         focus(&state, Some("staging"));
 
-        assert!(!land(&state, generation, &info("prod-eu")));
+        assert!(land(&state, generation, reached("prod-eu").await).is_none());
         assert_eq!(current(&state).as_deref(), Some("staging"));
         assert!(!state.sessions.contains_key("prod-eu"));
+        assert!(state.client_manager.get_client("prod-eu").is_none());
     }
 
     /// A disconnect issued mid-switch is the last word too. Fails if the
@@ -863,12 +901,75 @@ mod lifecycle_tests {
     async fn focusing_nothing_leaves_no_cluster_current_and_no_connect_to_land() {
         let state = AppState::new().expect("state");
         let generation = begin(&state, "prod-eu");
-        dial(&state, "prod-eu").await;
 
         assert!(focus(&state, None).is_none());
 
-        assert!(!land(&state, generation, &info("prod-eu")));
+        assert!(land(&state, generation, reached("prod-eu").await).is_none());
         assert_eq!(current(&state), None);
+    }
+
+    /// Cancel on a connect whose `/version` hangs, then the same cluster
+    /// opened again: the second attempt lands, and half a minute later the
+    /// first comes back. Fails if the returning attempt takes the newer
+    /// session's client or session with it, or lays its own over them:
+    /// every read then answers "not connected" under a bar saying connected.
+    #[tokio::test]
+    async fn an_abandoned_attempt_that_returns_late_leaves_the_newer_session_alone() {
+        use crate::client::served::{test_server::reconnectable, ServedIndex};
+        use std::sync::Arc;
+        crate::tls::provider();
+        let version = r#"{"major":"1","minor":"31","gitVersion":"v1.31.0","gitCommit":"","gitTreeState":"","buildDate":"","goVersion":"","compiler":"","platform":"linux/amd64"}"#;
+        let (state, _hits, reachable) =
+            reconnectable(ServedIndex::default(), move |path, _| match path {
+                "/version" => (200, version.to_string()),
+                _ => (404, "{}".to_string()),
+            })
+            .await;
+        state.client_manager.disconnect("fake");
+        let mut unreachable = reachable.clone();
+        unreachable.clusters[0]
+            .cluster
+            .as_mut()
+            .expect("cluster")
+            .server = Some("http://127.0.0.1:1".to_string());
+        let dir = tempfile::tempdir().expect("dir");
+        let the_cluster_is = async |name: &str, kubeconfig: &kube::config::Kubeconfig| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, serde_yaml::to_string(kubeconfig).expect("yaml"))
+                .expect("written");
+            state
+                .client_manager
+                .load_kubeconfig_from_path(path)
+                .await
+                .expect("loaded");
+        };
+
+        let abandoned = begin(&state, "fake");
+        let newer = begin(&state, "fake");
+        the_cluster_is("reachable", &reachable).await;
+        super::attempt(&state, "fake", newer).await.expect("lands");
+        let held = state.client_manager.get_client("fake").expect("connected");
+
+        // The abandoned attempt comes back refused, and again answered.
+        for (returns, kubeconfig) in [("refused", &unreachable), ("answered", &reachable)] {
+            the_cluster_is(returns, kubeconfig).await;
+            assert!(
+                super::attempt(&state, "fake", abandoned).await.is_err(),
+                "{returns}: it is not the latest attempt"
+            );
+            let now = state.client_manager.get_client("fake");
+            assert!(
+                now.is_some_and(|now| Arc::ptr_eq(&now, &held)),
+                "{returns}: the newer session's client"
+            );
+            assert!(state.sessions.contains_key("fake"), "{returns}");
+            assert!(state.current_client().is_ok(), "{returns}");
+        }
+        let filed = state.client_manager.attempt_for("fake").expect("filed");
+        assert!(
+            matches!(filed.direct, crate::client::PathOutcome::Ok),
+            "the last attempt at the context is the one that landed"
+        );
     }
 
     /// A context the window holds no session for is not brought back: the
@@ -933,7 +1034,7 @@ mod lifecycle_tests {
 #[cfg(test)]
 mod failure_tests {
     use super::probe;
-    use crate::client::ConnectFailure;
+    use crate::client::{ConnectFailure, ConnectionPath};
     use crate::error::{AuthError, Error};
 
     /// Dana's dead cluster read "Connection error: Connection error: ...":
@@ -941,7 +1042,7 @@ mod failure_tests {
     /// prefix comes back twice, or if the refusal loses the cause that names it.
     #[tokio::test]
     async fn a_refused_connection_is_said_once_and_named() {
-        let state = crate::state::AppState::new().expect("state");
+        crate::tls::provider();
         let kubeconfig = kube::config::Kubeconfig::from_yaml(
             "apiVersion: v1\nkind: Config\ncurrent-context: dead\n\
              clusters: [{name: dead, cluster: {server: 'http://127.0.0.1:1'}}]\n\
@@ -949,13 +1050,13 @@ mod failure_tests {
              contexts: [{name: dead, context: {cluster: dead, user: dead}}]\n",
         )
         .expect("kubeconfig");
-        state
-            .client_manager
-            .connect_with_kubeconfig("dead", kubeconfig)
+        let client = crate::client::K8sClientManager::prepared_client("dead", kubeconfig)
             .await
             .expect("client");
 
-        let error = probe(&state, "dead").await.expect_err("nothing listens");
+        let error = probe("dead", &client, None, ConnectionPath::Direct)
+            .await
+            .expect_err("nothing listens");
         let said = error.to_string();
 
         assert_eq!(said.matches("Connection error:").count(), 1, "{said}");

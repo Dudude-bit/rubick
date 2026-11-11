@@ -231,8 +231,9 @@ pub struct K8sClientManager {
     /// Which way each connected context is reached.
     paths: DashMap<String, ConnectionPath>,
 
-    /// What the last connect to each context found, both ways.
-    attempts: DashMap<String, ConnectAttempt>,
+    /// What the last connect to each context found, both ways, under the
+    /// number of the attempt that found it.
+    attempts: DashMap<String, (u64, ConnectAttempt)>,
 
     /// Where custom kinds are served, per context.
     served: served::ServedIndex,
@@ -657,6 +658,16 @@ impl K8sClientManager {
     ) -> Result<Arc<Client>> {
         // Built before the old one is let go: a failure between the two
         // used to leave the context with no client at all.
+        let client = Self::prepared_client(context, kubeconfig).await?;
+        self.install(context, client.clone(), None);
+        tracing::info!("Connected to cluster with prepared config: {}", context);
+        Ok(client)
+    }
+
+    /// A client for `context` as a prepared kubeconfig describes it, held by
+    /// nobody. A connect or a renewal asks it one question before it takes
+    /// the place of anything, and one that is abandoned drops it unseen.
+    pub async fn prepared_client(context: &str, kubeconfig: Kubeconfig) -> Result<Arc<Client>> {
         let options = KubeConfigOptions {
             context: Some(context.to_string()),
             ..Default::default()
@@ -670,36 +681,49 @@ impl K8sClientManager {
                     "Failed to create config for context {context}: {e}"
                 ))
             })?;
-        let client = build_client(config)?;
-        let client = Arc::new(client);
-        self.clients.insert(context.to_string(), client.clone());
-        self.proxies.remove(context);
-        self.paths
-            .insert(context.to_string(), ConnectionPath::Direct);
-        tracing::info!("Connected to cluster with prepared config: {}", context);
-        Ok(client)
+        Ok(Arc::new(build_client(config)?))
+    }
+
+    /// Make `client` the one `context` is reached with: through `proxy`
+    /// where there is one, which then lives as long as the client does.
+    pub fn install(&self, context: &str, client: Arc<Client>, proxy: Option<KubectlProxy>) {
+        self.clients.insert(context.to_string(), client);
+        match proxy {
+            Some(proxy) => {
+                self.paths
+                    .insert(context.to_string(), ConnectionPath::KubectlProxy);
+                self.proxies.insert(context.to_string(), proxy);
+            }
+            None => {
+                self.proxies.remove(context);
+                self.paths
+                    .insert(context.to_string(), ConnectionPath::Direct);
+            }
+        }
     }
 
     /// Connect through a proxy the caller already brought up. The client
     /// carries no credentials: the proxy has them, and refreshes them.
     pub fn connect_through_proxy(&self, context: &str, proxy: KubectlProxy) -> Result<Arc<Client>> {
-        let url: http::Uri = proxy
-            .url()
-            .parse()
-            .map_err(|e| Error::Connection(format!("proxy address: {e}")))?;
-        let config = without_client_retries(Config::new(url));
-        let client = build_client(config)?;
-        let client = Arc::new(client);
-        self.clients.insert(context.to_string(), client.clone());
-        self.paths
-            .insert(context.to_string(), ConnectionPath::KubectlProxy);
+        let client = Self::proxy_client(&proxy)?;
         tracing::info!(
             "Connected to cluster {} through kubectl proxy on port {}",
             context,
             proxy.port
         );
-        self.proxies.insert(context.to_string(), proxy);
+        self.install(context, client.clone(), Some(proxy));
         Ok(client)
+    }
+
+    /// A client that talks through `proxy`, held by nobody.
+    pub fn proxy_client(proxy: &KubectlProxy) -> Result<Arc<Client>> {
+        let url: http::Uri = proxy
+            .url()
+            .parse()
+            .map_err(|e| Error::Connection(format!("proxy address: {e}")))?;
+        Ok(Arc::new(build_client(without_client_retries(
+            Config::new(url),
+        ))?))
     }
 
     /// Which way a connected context is reached; `None` when it is not.
@@ -707,17 +731,25 @@ impl K8sClientManager {
         self.paths.get(context).map(|p| *p)
     }
 
-    pub fn record_attempt(&self, attempt: ConnectAttempt) {
-        self.attempts.insert(attempt.context.clone(), attempt);
+    /// File what the attempt numbered `generation` found. One that returns
+    /// after a later attempt at the same context has filed is not the last.
+    pub fn record_attempt(&self, generation: u64, attempt: ConnectAttempt) {
+        let mut filed = self
+            .attempts
+            .entry(attempt.context.clone())
+            .or_insert_with(|| (generation, attempt.clone()));
+        if filed.0 <= generation {
+            *filed = (generation, attempt);
+        }
     }
 
     pub fn attempt_for(&self, context: &str) -> Option<ConnectAttempt> {
-        self.attempts.get(context).map(|a| a.clone())
+        self.attempts.get(context).map(|a| a.1.clone())
     }
 
     /// Every context's last attempt, newest first.
     pub fn attempts(&self) -> Vec<ConnectAttempt> {
-        let mut all: Vec<ConnectAttempt> = self.attempts.iter().map(|a| a.clone()).collect();
+        let mut all: Vec<ConnectAttempt> = self.attempts.iter().map(|a| a.1.clone()).collect();
         all.sort_by(|a, b| b.at.cmp(&a.at));
         all
     }
@@ -823,8 +855,23 @@ impl K8sClientManager {
     /// Test connection to a cluster
     pub async fn test_connection(&self, context: &str) -> Result<ClusterInfo> {
         let client = self.connect(context).await?;
+        Self::ask_version(
+            context,
+            &client,
+            self.credential_deadline(context),
+            self.path_of(context).unwrap_or(ConnectionPath::Direct),
+        )
+        .await
+    }
 
-        // Try to get server version
+    /// `/version` asked of `client` itself, whoever holds it: the proof a
+    /// connect or a renewal needs before its client replaces the context's.
+    pub async fn ask_version(
+        context: &str,
+        client: &Client,
+        deadline: Option<chrono::DateTime<chrono::Utc>>,
+        connected_through: ConnectionPath,
+    ) -> Result<ClusterInfo> {
         let version = client.apiserver_version().await.map_err(|e| {
             Error::Connection(format!("Failed to get server version: {}", with_causes(&e)))
         })?;
@@ -834,11 +881,8 @@ impl K8sClientManager {
             server_version: format!("{}.{}", version.major, version.minor),
             platform: version.platform,
             git_version: version.git_version,
-            credentials_expire_at: self
-                .credential_deadlines
-                .get(context)
-                .map(|at| at.to_rfc3339()),
-            connected_through: self.path_of(context).unwrap_or(ConnectionPath::Direct),
+            credentials_expire_at: deadline.map(|at| at.to_rfc3339()),
+            connected_through,
         })
     }
 }
