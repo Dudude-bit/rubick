@@ -17,8 +17,9 @@ import { commands } from "@/lib/commands";
 import { crdInstancesLink, objectLink } from "@/lib/links";
 import type { CustomResourceInfo } from "@/generated/types";
 
-import { getValueByPath, readyStatus } from "../kit";
+import { conditionOf, getValueByPath, readyStatus } from "../kit";
 import type { VendorFact } from "../registry";
+import { attemptFailed } from "./model";
 
 const CERTIFICATES_CRD = "certificates.cert-manager.io";
 
@@ -52,14 +53,19 @@ export async function facts(): Promise<VendorFact[]> {
 
   for (const certificate of certificates) {
     const says = readyStatus(certificate);
-    if (says === "True") {
-      ready.push(certificate);
-    } else if (says !== "False") {
-      unanswered += 1;
-    } else if (textAt(certificate, "status.notAfter")) {
-      failingRenewal.push(certificate);
-    } else {
+    if (says === "False" && !textAt(certificate, "status.notAfter")) {
       neverIssued.push(certificate);
+    } else if (
+      says === "False" ||
+      // Still Ready on the old certificate, and the attempt to replace it
+      // failed: the same row the page draws in red.
+      attemptFailed(conditionOf(certificate, "Issuing"))
+    ) {
+      failingRenewal.push(certificate);
+    } else if (says === "True") {
+      ready.push(certificate);
+    } else {
+      unanswered += 1;
     }
   }
 
