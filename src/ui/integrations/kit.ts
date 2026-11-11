@@ -86,6 +86,18 @@ export function readyStatus(
 }
 
 /**
+ * A condition as a yes or a no. `Unknown` is `null`, as one not written is:
+ * the controller has said neither, and reading it as a no painted every
+ * object still reconciling as failed.
+ */
+export function conditionSays(
+  condition: VendorCondition | null
+): boolean | null {
+  if (condition?.status === "True") return true;
+  return condition?.status === "False" ? false : null;
+}
+
+/**
  * The same read as {@link conditionsOf}, for `object.report`: that
  * capability hands a vendor the object's `status` on its own, already one
  * level in, rather than a whole `CustomResourceInfo` to walk a path through.

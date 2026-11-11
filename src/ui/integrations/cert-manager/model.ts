@@ -20,7 +20,7 @@ import { expiryText, managedExpiryOf, type Expiry } from "@/lib/certificates";
 import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
-import { conditionOf, getValueByPath } from "../kit";
+import { conditionOf, conditionSays, getValueByPath } from "../kit";
 import type { Tone } from "../page-kit";
 import { certificateUse, type CertificateUse } from "./serves";
 
@@ -90,7 +90,7 @@ export interface IssuerRow {
   /** ACME, CA, SelfSigned, Vault, Venafi — or `null` where the spec is new to us. */
   type: string | null;
   detail: string | null;
-  /** `null` where the controller has not written a `Ready` condition yet. */
+  /** `null` where the controller has written no `Ready`, or `Unknown`. */
   ready: boolean | null;
   message: string | null;
   /** How many Certificates name it. Nobody's issuer is a real finding. */
@@ -517,7 +517,7 @@ export function issuerRows(
       crd: kind === "ClusterIssuer" ? CLUSTER_ISSUERS_CRD : ISSUERS_CRD,
       type: shape?.type ?? null,
       detail: shape?.detail ?? null,
-      ready: ready ? ready.status === "True" : null,
+      ready: conditionSays(ready),
       message: ready?.status === "True" ? null : (ready?.message ?? null),
       serves: certificates.filter(
         (certificate) =>

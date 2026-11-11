@@ -260,6 +260,66 @@ describe("a source that stopped fetching freezes everything under it", () => {
   });
 });
 
+describe("a Ready that is Unknown is a reconcile under way", () => {
+  const progressing: Condition = {
+    type: "Ready",
+    status: "Unknown",
+    reason: "Progressing",
+    message: "Reconciliation in progress",
+  };
+
+  /**
+   * Flux writes `Ready=Unknown` while it reconciles. Read as "not True", it
+   * was a red "not ready" with a finding on every object mid-reconcile, and
+   * the list beside it said Progressing. Fails if Unknown reads as False.
+   */
+  it("does not call a reconciler Flux is still reconciling not ready", () => {
+    const { reconcilers } = picture(
+      [kustomization("apps", {}, [progressing], REVISION)],
+      [gitRepository("podinfo", [ready("stored artifact")], REVISION)]
+    );
+    expect(reconcilers[0].ready).toBeNull();
+    expect(reconcilers[0].findings).toEqual([]);
+    expect(reconcilerState(reconcilers[0], t)).toEqual({
+      text: "Progressing",
+      tone: "warn",
+    });
+  });
+
+  /** The same on a source: a new revision being fetched is not a failed fetch. */
+  it("does not call a source Flux is still fetching failing", () => {
+    const { reconcilers, sources } = picture(
+      [
+        kustomization(
+          "apps",
+          {},
+          [ready(`Applied revision: ${REVISION}`)],
+          REVISION
+        ),
+      ],
+      [gitRepository("podinfo", [progressing], REVISION)]
+    );
+    expect(sources[0].ready).toBeNull();
+    expect(sources[0].findings).toEqual([]);
+    expect(sourceState(sources[0], t)).toEqual({
+      text: "Progressing",
+      tone: "warn",
+    });
+    // And nothing under it is called frozen by a fetch that has not failed.
+    expect(reconcilers[0].findings).toEqual([]);
+  });
+
+  /** With no condition at all there is no reason to quote, and the row says so. */
+  it("says not reconciled yet where Flux has written no Ready at all", () => {
+    const { reconcilers, sources } = picture(
+      [kustomization("apps", {}, [])],
+      [gitRepository("podinfo", [])]
+    );
+    expect(reconcilerState(reconcilers[0], t).text).toBe("not reconciled yet");
+    expect(sourceState(sources[0], t).text).toBe("not fetched yet");
+  });
+});
+
 describe("dependsOn is an ordering, and its consequence is named", () => {
   /**
    * Flux writes `dependency 'flux-system/platform' is not ready` on each
