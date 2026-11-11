@@ -1046,7 +1046,7 @@ mod tests {
         }
     }
 
-    /// A restarted StatefulSet pod returns under its own name. The row said
+    /// A restarted `StatefulSet` pod returns under its own name. The row said
     /// "reconnecting" when it went and kept saying it over a working forward;
     /// a look that could not read the pod in between must not lose that.
     #[tokio::test]
@@ -1105,7 +1105,7 @@ mod tests {
         .await
     }
 
-    /// A DaemonSet forward is to one node's agent. Its pod is replaced by
+    /// A `DaemonSet` forward is to one node's agent. Its pod is replaced by
     /// the new pod on that node, never by the ready pod of another node,
     /// newer though that one is.
     #[tokio::test]
