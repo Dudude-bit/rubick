@@ -7,7 +7,7 @@
 //!       cargo test --test live live_overview_scope:: -- --ignored --nocapture
 
 use k8s_gui_lib::commands::overview::{
-    cluster_overview, Census, ClusterOverview, PodComposition, ReasonCount, ResourceCounts,
+    cluster_overview, Census, ClusterOverview, JobCount, PodComposition, ResourceCounts,
 };
 use k8s_gui_lib::AppState;
 use std::collections::{BTreeMap, BTreeSet};
@@ -100,7 +100,7 @@ fn differences(whole: &ClusterOverview, parts: &[ClusterOverview]) -> Vec<String
     if whole.pods.as_ref().and_then(phases) != summed {
         wrong.push("pod composition is not the parts' sum".to_string());
     }
-    let job_total = |jobs: &Census<Vec<ReasonCount>>| {
+    let job_total = |jobs: &Census<Vec<JobCount>>| {
         jobs.complete
             .then(|| jobs.read.iter().map(|e| e.count).sum::<usize>())
     };
