@@ -444,7 +444,7 @@ pub(super) async fn follow(
                 // The row follows the pod: gone, back and starting, gone again.
                 if gone_since.is_none() || starting != said_starting {
                     let pod = current.pod.clone();
-                    let note = if starting {
+                    let says = if starting {
                         ForwardNote::Starting { pod }
                     } else {
                         ForwardNote::Waiting {
@@ -457,7 +457,7 @@ pub(super) async fn follow(
                         &current.pod,
                         current.remote_port,
                         "reconnecting",
-                        Some(note),
+                        Some(says),
                         None,
                     );
                     said_starting = starting;
@@ -1159,18 +1159,18 @@ mod tests {
         said
     }
 
-    fn waiting() -> Option<ForwardNote> {
-        Some(ForwardNote::Waiting {
+    fn waiting() -> ForwardNote {
+        ForwardNote::Waiting {
             pod: "api-0".into(),
             kind: "StatefulSet".into(),
             name: "api".into(),
-        })
+        }
     }
 
-    fn starting() -> Option<ForwardNote> {
-        Some(ForwardNote::Starting {
+    fn starting() -> ForwardNote {
+        ForwardNote::Starting {
             pod: "api-0".into(),
-        })
+        }
     }
 
     /// A pod object that is back with nothing running answers no connection:
@@ -1192,8 +1192,8 @@ mod tests {
         assert_eq!(
             said(&mut followed),
             [
-                ("reconnecting".to_string(), waiting()),
-                ("reconnecting".to_string(), starting()),
+                ("reconnecting".to_string(), Some(waiting())),
+                ("reconnecting".to_string(), Some(starting())),
             ]
         );
         followed.ended.abort();
@@ -1234,7 +1234,7 @@ mod tests {
             .collect();
         assert_eq!(
             notes,
-            [waiting(), starting(), waiting()],
+            [Some(waiting()), Some(starting()), Some(waiting())],
             "gone again is said again, over a row that read \"starting\""
         );
     }
