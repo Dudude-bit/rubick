@@ -11,14 +11,14 @@ import { useOwnershipKeys } from "./ownership-keys";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { yamlTab } from "./yaml-tab";
 import { eventsTab } from "./events-tab";
-import { useObjectEvents } from "@/hooks/useObjectEvents";
+import { eventsKindOf, useObjectEvents } from "@/hooks/useObjectEvents";
 import { readTarget, servedOf, useServed, type Served } from "./served";
 import { Unserved } from "./Unserved";
 import { WordTable } from "./WordTable";
 import { AccessPanel } from "./AccessPanel";
 import { AutoscalerScales } from "./AutoscalerScales";
 import { ShareObjectAction } from "@/components/share/ShareAction";
-import { accessSegment, listTitleOf } from "@/lib/access-kinds";
+import { accessSegment, listTitleOf, segmentOf } from "@/lib/access-kinds";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
 import { ProblemSummary } from "@/components/object/detail-blocks";
@@ -113,11 +113,17 @@ export function GenericObjectPage({
     served.state === "served" ? served.entry.kind : (registryKind ?? resource);
   const uid = useLineage(read, name, namespace).data?.uid ?? null;
   useOwnershipKeys(read, name, namespace);
-  const events = useObjectEvents(kind, name, namespace, {
-    enabled: read !== null,
-    refresh: "slow",
-    uid,
-  });
+  const crd = segmentOf(target);
+  const events = useObjectEvents(
+    eventsKindOf({ kind, name, crd }),
+    name,
+    namespace,
+    {
+      enabled: read !== null,
+      refresh: "slow",
+      uid,
+    }
+  );
   const activeTab = useAppSearch().tab ?? "overview";
   const setSearch = useSetSearch();
 
@@ -153,10 +159,7 @@ export function GenericObjectPage({
             />
           )
         )}
-        {accessSegment(kind) ===
-          (target.group
-            ? `${target.plural}.${target.group}`
-            : target.plural) && (
+        {accessSegment(kind) === crd && (
           <Section>
             <AccessPanel
               kind={kind}
@@ -193,8 +196,9 @@ export function GenericObjectPage({
         ]
       : [];
   const subject = useMemo(
-    () => (object.data ? { kind, name, namespace: namespace ?? null } : null),
-    [object.data, kind, name, namespace]
+    () =>
+      object.data ? { kind, name, namespace: namespace ?? null, crd } : null,
+    [object.data, kind, name, namespace, crd]
   );
   const tabs: DetailTab[] = [
     overview,

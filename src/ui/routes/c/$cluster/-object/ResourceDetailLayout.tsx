@@ -14,7 +14,8 @@
  * the occasional hairline, which is the same rhythm the overview uses.
  */
 
-import type { AppLink } from "@/lib/links";
+import { segmentOf } from "@/lib/access-kinds";
+import { builtInKindOf, type AppLink } from "@/lib/links";
 import { useEffect, useMemo, type ReactNode } from "react";
 import { AlertCircle, ArrowLeft, Network, RefreshCw } from "lucide-react";
 
@@ -291,14 +292,23 @@ export function ResourceDetailLayout({
     [pageTabs, uid, namespace, t]
   );
   const { deliveries } = useDelivery(delivery ?? null);
-  const owners = useLastOwners({ kind: resourceKind, name: title, namespace });
+  // A page handed where its kind is served is not the registry's page of
+  // that name, and nothing below takes it for one.
+  const crd = served ? segmentOf(served) : undefined;
+  const owners = useLastOwners({
+    kind: resourceKind,
+    name: title,
+    namespace,
+    crd,
+  });
   const subject = useMemo(
     () =>
       resource
-        ? { kind: resourceKind, name: title, namespace: namespace ?? null }
+        ? { kind: resourceKind, name: title, namespace: namespace ?? null, crd }
         : null,
-    [resource, resourceKind, title, namespace]
+    [resource, resourceKind, title, namespace, crd]
   );
+  const builtIn = builtInKindOf({ kind: resourceKind, name: title, crd });
 
   // A page key (`l`, `y`, `e`, `o`) names a tab, and this frame is the one
   // thing every detail page renders through, so it answers for all of them:
@@ -325,7 +335,7 @@ export function ResourceDetailLayout({
     <>
       <AttachedFrom />
       <AlertBanner
-        kind={resourceKind}
+        kind={builtIn ?? ""}
         name={title}
         namespace={namespace ?? null}
         now={resource && !error ? statusBadge : undefined}

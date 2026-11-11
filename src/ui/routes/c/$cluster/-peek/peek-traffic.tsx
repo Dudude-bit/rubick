@@ -19,6 +19,7 @@ import { publishedFor } from "@/lib/published";
 import { parts } from "@/i18n/parts";
 import type { NearMiss } from "@/generated/types";
 import type { PeekTarget } from "@/hooks/usePeek";
+import type { ResourceKind } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -50,34 +51,43 @@ import { queryKeys } from "@/lib/query-keys";
  * what is above it is how traffic arrives, what is below is what answers.
  * Two flat headings used to say that order in words, and read as prose.
  */
-export function PeekTraffic({ target }: { target: PeekTarget }) {
-  const isServiceish = target.kind === "Service" || target.kind === "Endpoints";
+export function PeekTraffic({
+  target,
+  kind,
+}: {
+  target: PeekTarget;
+  /** The registry's kind the target is: a custom resource of that name has no such chain. */
+  kind: ResourceKind;
+}) {
+  const isServiceish = kind === "Service" || kind === "Endpoints";
   // A Service's own Status row beside this follows it; any other object's
   // chain is followed here, under every Service in front of it.
   const chain = useChainAnswer(
-    target.kind,
+    kind,
     isServiceish ? undefined : target.name,
     target.namespace ?? ""
   );
   return (
     <>
       <ChainWatches services={chain.services} reads={[chain.key]} />
-      <TrafficPath target={target} chain={chain.read} />
+      <TrafficPath target={target} kind={kind} chain={chain.read} />
     </>
   );
 }
 
 function TrafficPath({
   target,
+  kind,
   chain,
 }: {
   target: PeekTarget;
+  kind: ResourceKind;
   chain: ConnectionsRead;
 }) {
   const t = useT();
   const namespace = target.namespace ?? "";
   const service = { namespace, name: target.name };
-  const isServiceish = target.kind === "Service" || target.kind === "Endpoints";
+  const isServiceish = kind === "Service" || kind === "Endpoints";
 
   // The core's own edges and the vendors' routes, cached by the same keys
   // their pages use. A Service and its Endpoints share a name by contract,
@@ -95,7 +105,7 @@ function TrafficPath({
     false
   );
   const conns = isServiceish ? answer.read : chain;
-  const behind = useProxyBehind(target.kind === "Service" ? service : null);
+  const behind = useProxyBehind(kind === "Service" ? service : null);
 
   const edges = conns.data?.edges ?? [];
   // The Gateways behind the doors carry their addresses on their own list —
@@ -197,7 +207,7 @@ function TrafficPath({
   ];
 
   const stop =
-    target.kind === "Service" && conns.data
+    kind === "Service" && conns.data
       ? publishedFor(conns.data, conns.data.subject)?.stop
       : null;
   const nearMiss = stop?.reason === "selectsNothing" ? stop.near : null;
@@ -336,7 +346,7 @@ function TrafficPath({
       )),
     });
   }
-  if (target.kind === "Endpoints") {
+  if (kind === "Endpoints") {
     levels.push({
       key: "publishes",
       entries: [
@@ -358,17 +368,13 @@ function TrafficPath({
       <p key="self" className="text-[11px] text-fg-fnt">
         {/* The selection tint the app already means "current" by. */}
         <span className={cn(RESOURCE_NAME_SHELL, "bg-sel")}>
-          <ResourceName
-            kind={target.kind}
-            name={target.name}
-            showKind={false}
-          />
+          <ResourceName kind={kind} name={target.name} showKind={false} />
         </span>{" "}
-        ({t("empty", "thisKind", { kind: target.kind })})
+        ({t("empty", "thisKind", { kind: kind })})
       </p>,
     ],
   });
-  if (target.kind === "Service") {
+  if (kind === "Service") {
     levels.push({
       key: "behind",
       tone: stop ? stopTone(stop) : undefined,

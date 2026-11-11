@@ -7,7 +7,6 @@ import {
 } from "@/components/object/detail-tab";
 import { Section, SectionHeader } from "@/components/ui/section";
 import {
-  eventsOfEveryObject,
   eventsUnreadWords,
   eventTotal,
   OBJECT_EVENTS_READ,
@@ -28,7 +27,7 @@ export function eventsTab(
   subject: { kind: string; name: string; none?: string }
 ): DetailTab {
   const { data, error } = query;
-  const everyObject = eventsOfEveryObject(subject.kind);
+  const { everyObject } = query;
   return {
     id: "events",
     label: t("columns", "events"),

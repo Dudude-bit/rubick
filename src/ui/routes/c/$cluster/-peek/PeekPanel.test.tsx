@@ -62,6 +62,19 @@ vi.mock("@/hooks/useServiceRoutes", () => ({
   useProxyBehind: () => null,
 }));
 
+// What the header asks the delivery vendors, seen on its way to the real hook.
+const deliveryAsked = vi.fn();
+vi.mock("../-delivery/useDelivery", async (original) => {
+  const real = await original<typeof import("../-delivery/useDelivery")>();
+  return {
+    ...real,
+    useDelivery: (query: Parameters<typeof real.useDelivery>[0]) => {
+      deliveryAsked(query);
+      return real.useDelivery(query);
+    },
+  };
+});
+
 vi.mock("../-object/AlertsAbout", () => ({
   AlertsAbout: ({ kind, name }: { kind: string; name: string }) => (
     <p>{`alerts about ${kind} ${name}`}</p>
@@ -1709,6 +1722,15 @@ describe("PeekPanel on a custom resource", () => {
 
   const APP_PEEK =
     "/c/prod/events?peek=applications.argoproj.io/Application/argocd/shop";
+  const KNATIVE_PEEK =
+    "/c/prod/events?peek=services.serving.knative.dev/Service/storefront/frontend";
+  const knativeService = (): CustomResourceDetailInfo => ({
+    ...buildApplication(),
+    name: "frontend",
+    namespace: "storefront",
+    apiVersion: "serving.knative.dev/v1",
+    kind: "Service",
+  });
 
   it("reads it through its CRD rather than the core API", async () => {
     await wrap(APP_PEEK);
@@ -1757,6 +1779,113 @@ describe("PeekPanel on a custom resource", () => {
     await waitFor(() =>
       expect(location()).toBe("/c/prod/applications.argoproj.io/argocd/shop")
     );
+  });
+
+  /**
+   * Knative makes a core Service named like its own. Decided by the kind's
+   * name, the panel drew that Service's traffic chain, BackendTLSPolicies
+   * and alerts under the custom resource, as if they were its own.
+   */
+  it("draws nothing of the built-in a custom resource shares its kind name with", async () => {
+    vi.mocked(commands.getCustomResource).mockResolvedValue(knativeService());
+    vi.mocked(commands.detectGatewayApi).mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "BackendTLSPolicy" }],
+    } as never);
+
+    await wrap(KNATIVE_PEEK);
+
+    expect(await screen.findByText("health.status")).toBeInTheDocument();
+    await waitFor(() => expect(commands.listEvents).toHaveBeenCalled());
+    expect(commands.getCustomResource).toHaveBeenCalledWith(
+      "services.serving.knative.dev",
+      "frontend",
+      "storefront"
+    );
+    expect(commands.getService).not.toHaveBeenCalled();
+    expect(commands.getResourceConnections).not.toHaveBeenCalled();
+    expect(commands.listBackendTlsPolicies).not.toHaveBeenCalled();
+    expect(screen.queryByText("Traffic path")).toBeNull();
+    expect(screen.queryByText(/alerts about/)).toBeNull();
+  });
+
+  /**
+   * A vendor's inventory names an object by group and kind. Asked as the
+   * core Service, a delivered Knative one read "labelled and disowned".
+   */
+  it("asks no vendor who delivers the built-in of a custom resource's name", async () => {
+    vi.mocked(commands.getCustomResource).mockResolvedValue(knativeService());
+    deliveryAsked.mockClear();
+    await wrap(KNATIVE_PEEK);
+    expect(await screen.findByText("health.status")).toBeInTheDocument();
+    expect(deliveryAsked).toHaveBeenCalled();
+    expect(
+      deliveryAsked.mock.calls.filter(([query]) => query !== null)
+    ).toEqual([]);
+  });
+
+  /**
+   * The core Service a Knative one makes is watched by its own page. Seen
+   * there after this panel's 404, it read as this object coming back, and
+   * the panel waited on a read that had already answered.
+   */
+  it("says a custom resource is gone while the built-in of its name is still there", async () => {
+    vi.mocked(commands.getCustomResource).mockRejectedValue(
+      Object.assign(new Error('services "frontend" not found'), {
+        code: "NOT_FOUND",
+      })
+    );
+    forgetLastOwners();
+    await wrap(KNATIVE_PEEK);
+    await screen.findByText("This Service does not exist.");
+    // The watch's row lands after the 404, and its readers hear of it a tick later.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      wrap.client.setQueryData(
+        queryKeys.objectWatch("Service", "storefront", "frontend"),
+        { rows: [buildServiceInfo()], unread: [] }
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByText("This Service does not exist.")).toBeVisible();
+    expect(screen.queryByTestId("peek-skeleton")).toBeNull();
+  });
+
+  /**
+   * A custom kind may be called Pod or Job. Fails if its peek watches the
+   * pod of its name, reads the custom object as a pod's status, or explains
+   * its status in the built-in Job's words.
+   */
+  it("reads a custom kind called Pod or Job as itself", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    vi.mocked(commands.subscribeObjectWatch).mockClear();
+    vi.mocked(commands.getPodSetupWarnings).mockClear();
+    vi.mocked(commands.getCustomResource).mockResolvedValue({
+      ...knativeService(),
+      apiVersion: "example.dev/v1",
+      kind: "Pod",
+      status: null,
+    });
+    const pod = await wrap(
+      "/c/prod/events?peek=pods.example.dev/Pod/storefront/frontend"
+    );
+    expect(await screen.findByText("project")).toBeInTheDocument();
+    expect(commands.subscribeObjectWatch).not.toHaveBeenCalled();
+    expect(commands.getPodSetupWarnings).not.toHaveBeenCalled();
+    pod.unmount();
+
+    vi.mocked(commands.getCustomResource).mockResolvedValue({
+      ...knativeService(),
+      apiVersion: "batch.volcano.sh/v1alpha1",
+      kind: "Job",
+      status: { phase: "Failed" },
+    });
+    await wrap(
+      "/c/prod/events?peek=jobs.batch.volcano.sh/Job/storefront/frontend"
+    );
+    await screen.findAllByText("Failed");
+    expect(document.querySelector('[title*="controller gave up"]')).toBeNull();
+    useClusterStore.setState({ currentContext: null, isConnected: false });
   });
 
   it("reads the manifest through the CRD too", async () => {

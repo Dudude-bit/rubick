@@ -16,7 +16,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "../yaml-tab";
 import { eventsTab } from "../events-tab";
-import { useObjectEvents } from "@/hooks/useObjectEvents";
+import { eventsKindOf, useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../ResourceDetailLayout";
 import { servedOf } from "../served";
 import { noteDenied, useDenied } from "@/lib/access";
@@ -237,7 +237,12 @@ export function CustomResourceDetail({
     staleTime: STALE_TIMES.resourceDetail,
   });
 
-  const events = useObjectEvents(crdInfo?.kind ?? "", name, namespace, {
+  const eventsOf = eventsKindOf({
+    kind: crdInfo?.kind ?? "",
+    name: name ?? "",
+    crd: crdName,
+  });
+  const events = useObjectEvents(eventsOf, name, namespace, {
     enabled: !!crdInfo?.kind,
     refresh: "slow",
     uid: resource?.uid || null,
