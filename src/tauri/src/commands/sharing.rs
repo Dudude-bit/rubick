@@ -342,7 +342,7 @@ pub async fn publish_report(
 /// upload: a target removed or re-keyed meanwhile must stay that way.
 async fn record_draft(target_id: String, object: String, draft: Option<String>) -> Result<()> {
     crate::commands::settings::with_config(move |config| {
-        set_draft(&mut config.sharing, &target_id, &object, draft)
+        set_draft(&mut config.sharing, &target_id, &object, draft);
     })
     .await
 }
