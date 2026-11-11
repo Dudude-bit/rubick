@@ -92,6 +92,10 @@ pub(super) fn spawn(index: &Arc<ClusterIndex>, slot: SlotKey, resource: ApiResou
                             index.refused(&slot, message, Some(&stop));
                             break 'list;
                         }
+                        if gone(&error) {
+                            index.retire(&slot.kind);
+                            break 'list;
+                        }
                         index.failed(&slot, message, &stop);
                         tokio::select! {
                             biased;
@@ -174,6 +178,16 @@ fn refused(error: &watcher::Error) -> bool {
     }
 }
 
+/// The cluster no longer serves the kind: its CRD was deleted.
+fn gone(error: &watcher::Error) -> bool {
+    use watcher::Error as Watch;
+    matches!(
+        error,
+        Watch::InitialListFailed(kube::Error::Api(status))
+            | Watch::WatchStartFailed(kube::Error::Api(status)) if status.code == 404
+    )
+}
+
 fn node_of(meta: &Meta, resource: &ApiResource) -> Option<(String, Node)> {
     let metadata = &meta.metadata;
     let uid = metadata.uid.clone()?;
@@ -218,9 +232,13 @@ impl ClusterIndex {
         }
         let mut graph = self.graph.write();
         match event {
+            // The marker comes before a list that may still fail: what a
+            // broken watch held stays stale until the list has answered.
             Event::Init => {
                 graph.relist(slot);
-                slots.insert(slot.clone(), SlotState::Syncing);
+                if !matches!(slots.get(slot), Some(SlotState::Stale { .. })) {
+                    slots.insert(slot.clone(), SlotState::Syncing);
+                }
             }
             Event::InitApply(meta) | Event::Apply(meta) => {
                 if let Some((uid, node)) = node_of(&meta, resource) {
@@ -245,6 +263,25 @@ impl ClusterIndex {
         if !stop.is_cancelled() {
             slots.insert(slot.clone(), SlotState::Syncing);
         }
+    }
+
+    /// A kind the cluster stopped serving holds nothing and is no longer one
+    /// of the kinds: it is neither read nor named as not read.
+    fn retire(&self, kind: &super::KindKey) {
+        self.watched.lock().remove(kind);
+        let mut slots = self.slots.lock();
+        let mut stops = self.stops.lock();
+        let mut graph = self.graph.write();
+        slots.retain(|slot, _| {
+            if slot.kind != *kind {
+                return true;
+            }
+            if let Some(stop) = stops.remove(slot) {
+                stop.cancel();
+            }
+            graph.drop_slot(slot);
+            false
+        });
     }
 
     /// A live watch that breaks keeps what it held, marked as of now; one
@@ -380,6 +417,35 @@ mod tests {
         )
     }
 
+    /// The marker of a new list comes before the list, which may fail again:
+    /// taken for an answer, it turned "stale since 14:02" into "still
+    /// listing" and then "failed" while the cluster stayed away. Fails if a
+    /// stale kind stops being stale before its list has answered.
+    #[tokio::test]
+    async fn a_broken_watch_stays_stale_until_its_new_list_has_answered() {
+        let (client, _) = answering(|_, _| (404, "{}".to_string())).await;
+        let (slot, resource) = pods();
+        let index = ClusterIndex::holding(client, &[("Pod", slot.kind.clone())]);
+        let stop = CancellationToken::new();
+        let state = || index.slots.lock().get(&slot).cloned();
+
+        index.saw(&slot, &resource, Event::InitDone, &stop);
+        index.failed(&slot, "reset".to_string(), &stop);
+        let broken = state();
+        assert!(
+            matches!(broken, Some(SlotState::Stale { .. })),
+            "{broken:?}"
+        );
+
+        index.saw(&slot, &resource, Event::Init, &stop);
+        index.failed(&slot, "reset".to_string(), &stop);
+        assert_eq!(state(), broken);
+
+        index.saw(&slot, &resource, Event::Init, &stop);
+        index.saw(&slot, &resource, Event::InitDone, &stop);
+        assert_eq!(state(), Some(SlotState::Live));
+    }
+
     /// A watch per kind, and per namespace for each refused kind, each on a
     /// connection of its own, had no ceiling: a few hundred took every file
     /// the process may open. Fails if a watch starts with none free, or if
@@ -422,6 +488,31 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         assert_eq!(reading(), None);
+        index.stop.cancel();
+    }
+
+    /// A deleted CRD's kind answered 404 to every list, for ever, and stood
+    /// among the kinds not read where no object of it can exist. Fails if a
+    /// kind the cluster no longer serves is still watched or still named.
+    #[tokio::test]
+    async fn a_kind_the_cluster_stopped_serving_is_no_longer_one_of_the_kinds() {
+        let (client, hits) = answering(|_, _| failure(404, "NotFound")).await;
+        let (slot, resource) = pods();
+        let index = ClusterIndex::holding(client, &[("Pod", slot.kind.clone())]);
+
+        spawn(&index, slot.clone(), resource);
+        for _ in 0..300 {
+            if index.kinds().is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+
+        assert!(index.kinds().is_empty());
+        assert!(index.slots.lock().is_empty());
+        assert_eq!(index.not_read().kinds, []);
+        assert_eq!(hits.lock().unwrap().get("/api/v1/pods"), Some(&1));
         index.stop.cancel();
     }
 
