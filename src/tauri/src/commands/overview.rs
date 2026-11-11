@@ -184,7 +184,7 @@ fn workload_detail<'a>(
     warned: &HashSet<&str>,
     now: DateTime<Utc>,
 ) -> Option<ProblemDetail> {
-    match crate::resources::shared_cause_by(pods, |pod| trouble_cause(pod, warned, now)) {
+    match crate::resources::shared_cause_by(pods, now, |pod| trouble_cause(pod, warned, now)) {
         Some(shared) => Some(ProblemDetail::PodsCause {
             cause: shared.cause,
             pods: shared.pods,

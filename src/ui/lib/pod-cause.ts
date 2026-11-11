@@ -525,18 +525,21 @@ export const sameCause = (a: PodCause, b: PodCause): boolean =>
 
 /**
  * The cause most of a workload's pods share, how many share it and how many
- * it runs. `share` in pod_cause.rs answers the Overview's rows;
+ * it runs, each cause counted as it stands at `now`. `share` in pod_cause.rs
+ * answers the Overview's rows and a Service's chain;
  * src/contracts/shared-cause-conformance.json holds both to one answer, and
  * trouble-cause-conformance.json the pods each side counts.
  */
 export function sharedCause(
-  pods: readonly { gone?: boolean; cause?: PodCause | null }[]
+  pods: readonly { gone?: boolean; cause?: PodCause | null }[],
+  now: number
 ): SharedCause | null {
   let of = 0;
   const groups = new Map<string, { cause: PodCause; pods: number }>();
-  for (const { gone, cause } of pods) {
-    if (gone) continue;
+  for (const pod of pods) {
+    if (pod.gone) continue;
     of += 1;
+    const cause = currentCause(pod.cause, now);
     if (!cause) continue;
     const key = causeKey(cause);
     const group = groups.get(key) ?? { cause, pods: 0 };

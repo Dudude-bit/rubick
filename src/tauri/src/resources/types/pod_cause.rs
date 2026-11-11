@@ -278,28 +278,39 @@ pub struct SharedCause {
 /// longer than a readiness probe's usual first passes.
 pub const NOT_READY_GRACE: chrono::Duration = chrono::Duration::minutes(2);
 
-/// Read once here for the Overview's rows and a workload's own page alike.
+/// Read once here for the Overview's rows and a Service's chain alike.
 #[must_use]
-pub fn shared_cause<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> Option<SharedCause> {
-    shared_cause_by(pods, pod_cause)
+pub fn shared_cause<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
+) -> Option<SharedCause> {
+    shared_cause_by(pods, now, pod_cause)
 }
 
 /// [`shared_cause`] over the cause each pod counts by, as `cause_of` reads it.
 pub fn shared_cause_by<'a>(
     pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
     cause_of: impl Fn(&Pod) -> Option<PodCause>,
 ) -> Option<SharedCause> {
     share(
         pods.into_iter()
             .map(|pod| (gone(pod).is_some(), cause_of(pod))),
+        now,
     )
 }
 
 /// The rule `shared_cause` applies, over whether each pod is gone and its cause.
 ///
+/// Each cause counts as it stands at `now`: grouped before the clock, an exit
+/// that is no longer news keeps its own count and is shown as what came after.
+///
 /// `src/contracts/shared-cause-conformance.json` holds the answers, and
 /// `sharedCause` in `src/ui/lib/pod-cause.ts` owes the same ones.
-fn share(pods: impl IntoIterator<Item = (bool, Option<PodCause>)>) -> Option<SharedCause> {
+fn share(
+    pods: impl IntoIterator<Item = (bool, Option<PodCause>)>,
+    now: DateTime<Utc>,
+) -> Option<SharedCause> {
     let mut of = 0;
     let mut groups: Vec<(String, PodCause, i32)> = Vec::new();
     for (gone, cause) in pods {
@@ -307,7 +318,7 @@ fn share(pods: impl IntoIterator<Item = (bool, Option<PodCause>)>) -> Option<Sha
             continue;
         }
         of += 1;
-        let Some(cause) = cause else {
+        let Some(cause) = cause.and_then(|cause| cause.at(now)) else {
             continue;
         };
         let key = cause_key(&cause);
@@ -1364,7 +1375,8 @@ mod tests {
             "status": {"phase": "Failed", "reason": "Evicted"}
         }));
         let blocked = waiting_pod("CreateContainerConfigError", "couldn't find key");
-        let shared = shared_cause([&blocked, &replaced, &replaced]).expect("a shared cause");
+        let shared =
+            shared_cause([&blocked, &replaced, &replaced], Utc::now()).expect("a shared cause");
         assert_eq!((shared.pods, shared.of), (1, 1));
     }
 
@@ -1520,6 +1532,7 @@ mod tests {
         }
         #[derive(Deserialize)]
         struct Corpus {
+            now: DateTime<Utc>,
             cases: Vec<Case>,
         }
         let corpus: Corpus = serde_json::from_str(include_str!(
@@ -1532,7 +1545,7 @@ mod tests {
                 pods: is.pods,
                 of: is.of,
             });
-            let read = share(case.pods.into_iter().map(|p| (p.gone, p.cause)));
+            let read = share(case.pods.into_iter().map(|p| (p.gone, p.cause)), corpus.now);
             assert_eq!(read, want, "{}", case.name);
         }
     }

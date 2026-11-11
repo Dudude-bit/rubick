@@ -867,7 +867,7 @@ pub fn service_stop(
                 count(selected.len())
             },
             why,
-            cause: crate::resources::shared_cause(selected.iter().copied()),
+            cause: crate::resources::shared_cause(selected.iter().copied(), chrono::Utc::now()),
         });
     }
     Some(ChainStop::PublishesNothing {
@@ -2742,6 +2742,68 @@ mod tests {
             stop_of(&svc, &[not_ready_slice()], None),
             Some(ChainStop::NoneReady { cause: None, .. })
         ));
+    }
+
+    /// Two of a Service's three not-Ready pods also crashed twenty minutes
+    /// ago: counted by those exits and shown under the probe all three fail,
+    /// the stop said 2 of 3 beside a workload saying 3 of 3. Fails if the
+    /// chain groups its pods by a cause that is no longer the one shown.
+    #[test]
+    fn a_service_counts_pods_past_their_exits_with_the_ones_not_ready_all_along() {
+        use crate::resources::PodCause;
+        use k8s_openapi::api::core::v1::{ContainerStateRunning, ContainerStateTerminated};
+        let svc = selecting("web");
+        let ago = |minutes| {
+            let at = chrono::Utc::now() - chrono::Duration::minutes(minutes);
+            Some(Time(
+                crate::utils::moment::as_cluster_time(at).expect("a time"),
+            ))
+        };
+        let not_ready = |name: &str, crashed: bool| {
+            let mut pod = in_state(name, Some("n1"), "Running", None);
+            pod.status.as_mut().unwrap().container_statuses = Some(vec![ContainerStatus {
+                name: "web".to_string(),
+                restart_count: if crashed { 3 } else { 0 },
+                state: Some(ContainerState {
+                    running: Some(ContainerStateRunning {
+                        started_at: ago(20),
+                    }),
+                    ..Default::default()
+                }),
+                last_state: crashed.then(|| ContainerState {
+                    terminated: Some(ContainerStateTerminated {
+                        exit_code: 1,
+                        finished_at: ago(20),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }]);
+            pod
+        };
+        let pods = [
+            not_ready("a", true),
+            not_ready("b", true),
+            not_ready("c", false),
+        ];
+        assert!(
+            matches!(
+                crate::resources::pod_cause(&pods[0]),
+                Some(PodCause::Exits { later: Some(_), .. })
+            ),
+            "a crashed pod still carries its exits"
+        );
+        let refs: Vec<&Pod> = pods.iter().collect();
+        let Some(ChainStop::NoneReady {
+            cause: Some(shared),
+            ..
+        }) = stop_of(&svc, &[], Some(&refs))
+        else {
+            panic!("a stop with the pods' cause");
+        };
+        assert_eq!((shared.pods, shared.of), (3, 3));
+        assert!(matches!(shared.cause, PodCause::NotReady { .. }));
     }
 
     #[test]
