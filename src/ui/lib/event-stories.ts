@@ -17,6 +17,7 @@ import {
   refOfNamed,
   type Past,
 } from "./event-incarnation";
+import { isBuiltInGroup } from "./links";
 
 export type Activity =
   | "crash"
@@ -150,6 +151,24 @@ const FOLDED_KINDS = new Set([
   "Job",
   "CronJob",
 ]);
+
+/**
+ * The folded built-in an object is, by its group as well as its name: a
+ * custom kind of the same name is folded with nothing and shares none of
+ * its vocabulary. An event that names no group is read by its kind's name.
+ */
+const foldedKind = (kind: string | null, group: string | null) =>
+  kind !== null &&
+  FOLDED_KINDS.has(kind) &&
+  (group === null || isBuiltInGroup(kind, group))
+    ? kind
+    : null;
+
+const foldedOf = (event: EventInfo) =>
+  foldedKind(
+    event.involvedObject.kind,
+    groupIn(event.involvedObject.apiVersion)
+  );
 
 const CREATED_POD = /(?:Created|Deleted) pod: (\S+)/;
 const STATEFUL_POD = /(?:create|delete) Pod (\S+) in StatefulSet/;
@@ -318,16 +337,16 @@ function place(
       subject: { kind, group, name, namespace, byName: false, past },
     };
   }
-  if (!FOLDED_KINDS.has(kind)) {
+  for (let hop = 0; hop < 3 && foldedKind(kind, group); hop += 1) {
+    const owner = evidence.get(objectKey(namespace, kind, name));
+    if (!owner) break;
+    ({ kind, group, name } = owner);
+  }
+  if (!foldedKind(kind, group)) {
     return {
       key: nameKey({ kind, group, namespace, name }),
       subject: { kind, group, name, namespace, byName: false },
     };
-  }
-  for (let hop = 0; hop < 3; hop += 1) {
-    const owner = evidence.get(objectKey(namespace, kind, name));
-    if (!owner) break;
-    ({ kind, group, name } = owner);
   }
   // Only a Pod is folded by its name. A ReplicaSet reached on its own — no
   // Deployment event in the window named it — is the object that spoke, and
@@ -455,7 +474,7 @@ export function activityOf(
 ): Activity {
   const reason = event.reason ?? "";
   const message = event.message ?? "";
-  const kind = event.involvedObject.kind;
+  const kind = foldedOf(event);
   const ofJob = subjectKind === "Job" || subjectKind === "CronJob";
   if (reason === "BackOff")
     return /pulling image/i.test(message) ? "pull" : "crash";
@@ -841,12 +860,13 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
     const occurrences = reasons.reduce((sum, r) => sum + r.count, 0);
     const warningEvents = sorted.filter((e) => e.type === "Warning");
     const latestWarning = warningEvents.at(-1);
+    const told = foldedKind(group.subject.kind, group.subject.group);
     // The story is about what went wrong last; the rest stays in the chips.
     const activity = latestWarning
-      ? activityOf(latestWarning, group.subject.kind)
-      : normalActivity(sorted, group.subject.kind);
+      ? activityOf(latestWarning, told)
+      : normalActivity(sorted, told);
     const ofActivity = warningEvents.filter(
-      (e) => activityOf(e, group.subject.kind) === activity
+      (e) => activityOf(e, told) === activity
     );
     // `null`, not `now`: an event the cluster gave no time to is one this
     // cannot place, and reading it as "this instant" makes the quietest
