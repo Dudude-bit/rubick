@@ -201,7 +201,10 @@ Claims here are settled by running things, not by reasoning about them.
 - A file that takes watch events (`listenResourceEvents`) also reads
   `useRenewals()` and resubscribes when it changes: a watch holds the client
   it was given, and a renewal leaves that client's token to die.
-  `events.test.ts` refuses a file that does not.
+  `events.test.ts` refuses a file that does not. It hears the bridge drop
+  events through `listenBridgeLag`, which says how long to wait before
+  subscribing again: each new stream lists its collection through the same
+  bridge, and answering every notice at once is the next lag.
 
 ## Connections and traces
 
