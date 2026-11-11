@@ -5312,6 +5312,17 @@ export const en = {
     notBoundClusterRole: "No ClusterRoleBinding or RoleBinding grants it.",
     notBoundClusterRoleIn:
       "No ClusterRoleBinding, and no RoleBinding in {namespaces}, grants it.",
+    notNamed: "No ClusterRoleBinding or RoleBinding read here names it.",
+    aggregatedInto: {
+      one: "Its rules are aggregated into {n} ClusterRole. Whoever is bound to that role holds them too.",
+      other:
+        "Its rules are aggregated into {n} ClusterRoles. Whoever is bound to one of those holds them too.",
+    },
+    aggregatorUnbound: "No binding read here grants this one.",
+    couldNotReadAggregation:
+      "Could not read the ClusterRoles, so whether another role aggregates this one's rules is not known.",
+    aggregationUnevaluated:
+      "Could not evaluate the aggregation rule of: {roles}. Each may gather this role's rules too.",
     readOnlyIn:
       "RoleBindings were read only in {namespaces}. The other namespaces were not looked at.",
   },

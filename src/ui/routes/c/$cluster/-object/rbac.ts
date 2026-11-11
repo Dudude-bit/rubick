@@ -1,4 +1,4 @@
-import type { BindingInfo } from "@/generated/types";
+import type { AggregationInfo, BindingInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { RBAC_GROUP } from "@/lib/access-kinds";
 import type { WordTable } from "../-peek/peek-sources-kit";
@@ -288,4 +288,41 @@ export function bindingsOf(
         (a.namespace ?? "").localeCompare(b.namespace ?? "") ||
         a.name.localeCompare(b.name)
     );
+}
+
+/** Through which ClusterRoles a role's rules reach subjects no binding of its own names. */
+export interface Aggregators {
+  /** The roles that gather it, and those that gather them in turn. */
+  through: string[];
+  /** Roles whose selectors could not be evaluated: each may gather it too. */
+  unknown: string[];
+}
+
+/**
+ * The control plane copies an aggregated role's rules into every role that
+ * gathers it, so whoever is bound to `edit` holds `system:aggregate-to-edit`,
+ * and `admin`'s subjects hold it through `edit`.
+ */
+export function aggregatorsOf(
+  aggregation: AggregationInfo[],
+  role: string
+): Aggregators {
+  const through: string[] = [];
+  const held = new Set([role]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const { role: gatherer, gathers } of aggregation) {
+      if (held.has(gatherer) || !gathers?.some((name) => held.has(name)))
+        continue;
+      held.add(gatherer);
+      through.push(gatherer);
+      grew = true;
+    }
+  }
+  return {
+    through,
+    unknown: aggregation
+      .filter(({ role: name, gathers }) => gathers === null && !held.has(name))
+      .map(({ role: name }) => name),
+  };
 }

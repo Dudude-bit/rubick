@@ -217,6 +217,7 @@ fn main() {
             commands::access::review_own_rules,
             commands::rbac::list_role_bindings_in,
             commands::rbac::list_cluster_role_bindings,
+            commands::rbac::list_cluster_role_aggregation,
             commands::binaries::locate_binaries,
             commands::diagnostics::collect_diagnostics,
             commands::diagnostics::path_identity,

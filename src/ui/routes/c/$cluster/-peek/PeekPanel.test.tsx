@@ -124,6 +124,7 @@ vi.mock("@/lib/commands", () => ({
     listApiCatalog: vi.fn(() => new Promise(() => {})),
     listRoleBindingsIn: vi.fn(() => new Promise(() => {})),
     listClusterRoleBindings: vi.fn(() => new Promise(() => {})),
+    listClusterRoleAggregation: vi.fn(() => new Promise(() => {})),
     subscribeObjectWatch: vi.fn(async () => "pod-stream"),
     subscribeOwnedPodWatch: vi.fn(async () => "owned-pods"),
     resourceWatchSubscribed: vi.fn(async () => undefined),

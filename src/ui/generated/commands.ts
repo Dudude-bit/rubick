@@ -5,6 +5,7 @@ import { invoke } from "@/lib/transport";
 import type {
   AccessAnswer,
   AccessQuery,
+  AggregationInfo,
   AlertRule,
   ApiCatalog,
   AppEvent,
@@ -1362,6 +1363,10 @@ export async function listPortForwards(): Promise<PortForwardSessionInfo[]> {
 
 export async function listClusterRoleBindings(): Promise<BindingInfo[]> {
   return invoke<BindingInfo[]>("list_cluster_role_bindings");
+}
+
+export async function listClusterRoleAggregation(): Promise<AggregationInfo[]> {
+  return invoke<AggregationInfo[]>("list_cluster_role_aggregation");
 }
 
 export async function detectGatewayApi(): Promise<GatewayApiDetection> {

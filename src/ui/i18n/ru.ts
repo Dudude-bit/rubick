@@ -5906,6 +5906,20 @@ export const ru: Catalogue = {
       "Ни один ClusterRoleBinding и ни один RoleBinding её не выдают.",
     notBoundClusterRoleIn:
       "Ни один ClusterRoleBinding и ни один RoleBinding в {namespaces} её не выдают.",
+    notNamed:
+      "Ни один прочитанный здесь ClusterRoleBinding или RoleBinding её не называет.",
+    aggregatedInto: {
+      one: "Её правила агрегированы в {n} ClusterRole. Они есть у каждого, кому выдана та роль.",
+      few: "Её правила агрегированы в {n} ClusterRole. Они есть у каждого, кому выдана одна из них.",
+      many: "Её правила агрегированы в {n} ClusterRole. Они есть у каждого, кому выдана одна из них.",
+      other:
+        "Её правила агрегированы в {n} ClusterRole. Они есть у каждого, кому выдана одна из них.",
+    },
+    aggregatorUnbound: "Ни одна прочитанная здесь привязка её не выдаёт.",
+    couldNotReadAggregation:
+      "Не удалось прочитать ClusterRole, поэтому неизвестно, агрегирует ли правила этой роли другая.",
+    aggregationUnevaluated:
+      "Не удалось вычислить правило агрегации у: {roles}. Каждая может включать и правила этой роли.",
     readOnlyIn:
       "RoleBinding прочитаны только в {namespaces}. Остальные пространства имён не просматривались.",
   },
