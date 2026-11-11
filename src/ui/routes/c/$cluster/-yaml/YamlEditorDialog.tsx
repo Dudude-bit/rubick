@@ -49,7 +49,11 @@ import {
   withheldKeysIn,
 } from "./manifest-reads";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useYamlEditorStore, type ResultShown } from "@/stores/yamlEditorStore";
+import {
+  editorSession,
+  useYamlEditorStore,
+  type ResultShown,
+} from "@/stores/yamlEditorStore";
 import { useAsk } from "../-object/useAsk";
 import { askableKind } from "@/lib/tell-me-when";
 import { AlertTriangle, Play, FileCheck } from "lucide-react";
@@ -261,6 +265,8 @@ export function YamlEditorDialog() {
   }, [editedContent, toast, t]);
 
   const handleValidate = useCallback(async () => {
+    const session = editorSession();
+    const mine = () => session === editorSession();
     setIsValidating(true);
     setValidationResult(null);
 
@@ -269,6 +275,7 @@ export function YamlEditorDialog() {
         editedContent,
         resourceKey?.namespace || currentNamespace || null
       );
+      if (!mine()) return;
       setValidationResult(result);
 
       if (result.success) {
@@ -278,6 +285,7 @@ export function YamlEditorDialog() {
         });
       }
     } catch (error) {
+      if (!mine()) return;
       setValidationResult({
         success: false,
         stdout: "",
@@ -285,7 +293,7 @@ export function YamlEditorDialog() {
         exit_code: 1,
       });
     } finally {
-      setIsValidating(false);
+      if (mine()) setIsValidating(false);
     }
   }, [
     editedContent,
@@ -298,6 +306,11 @@ export function YamlEditorDialog() {
   ]);
 
   const handleApply = useCallback(async () => {
+    // The answer can outlast the editor: closed, or opened on another object
+    // since, it is told in the toast and filed under the object it was
+    // applied to, and the editor on screen is left alone.
+    const session = editorSession();
+    const mine = () => session === editorSession();
     setShowApplyConfirm(false);
     setIsApplying(true);
     setApplyResult(null);
@@ -308,11 +321,11 @@ export function YamlEditorDialog() {
         resourceKey?.namespace || currentNamespace || null
       );
       const shown = applyShown(applied, t);
-      setApplyResult(shown);
+      if (mine()) setApplyResult(shown);
       const lines = [shown.stdout, shown.stderr].filter(Boolean).join("\n");
 
       if (shown.verdict === "ok") {
-        addHistoryEntry(editedContent, "Applied");
+        addHistoryEntry(editedContent, "Applied", { resourceKey, openedOn });
         const askable = resourceKey ? askableKind(resourceKey.kind) : null;
         if (askable && resourceKey && askable !== "Pod" && askable !== "Job") {
           asking.ask(
@@ -355,19 +368,21 @@ export function YamlEditorDialog() {
     } catch (error) {
       // The command itself failed: nothing was sent, or the session is over.
       const errorMessage = errorToShow(error);
-      setApplyResult({ verdict: "failed", stdout: "", stderr: errorMessage });
+      if (mine())
+        setApplyResult({ verdict: "failed", stdout: "", stderr: errorMessage });
       toast({
         title: t("action", "applyFailed"),
         description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      setIsApplying(false);
+      if (mine()) setIsApplying(false);
     }
   }, [
     asking,
     editedContent,
     resourceKey,
+    openedOn,
     currentNamespace,
     setIsApplying,
     setApplyResult,

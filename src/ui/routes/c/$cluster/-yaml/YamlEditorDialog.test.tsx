@@ -35,6 +35,8 @@ const applyManifest = vi.fn();
 const dryRunManifest = vi.fn();
 const checkAccess = vi.fn();
 const toast = vi.fn();
+const validateManifest = vi.fn();
+const addYamlHistoryEntry = vi.fn(async (..._: unknown[]) => {});
 /** The neighbourhood the dialog asks about, per test. */
 let connections: () => {
   object: null;
@@ -55,7 +57,8 @@ vi.mock("@/lib/commands", () => ({
     checkAccess: (...args: unknown[]) => checkAccess(...args),
     getResourceConnections: async () => connections(),
     getYamlHistory: async () => [],
-    addYamlHistoryEntry: async () => {},
+    addYamlHistoryEntry: (...args: unknown[]) => addYamlHistoryEntry(...args),
+    validateManifest: (...args: unknown[]) => validateManifest(...args),
   },
 }));
 
@@ -449,6 +452,103 @@ describe("what an apply says when it ends", () => {
     expect(toast).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Apply succeeded" })
     );
+  });
+});
+
+describe("an answer that comes back after its editor is gone", () => {
+  const APPLIED = {
+    documents: [{ id: "deployment/shop api", outcome: { says: "applied" } }],
+  };
+  const EDITED = PLAIN.replace("replicas: 2", "replicas: 4");
+  const settings = {
+    title: "Edit ConfigMap: settings",
+    resourceKey: { kind: "ConfigMap", name: "settings", namespace: "shop" },
+    fetchYaml: async () => "kind: ConfigMap\n",
+  };
+
+  /** Sends `command` from the editor on the Deployment and holds its answer. */
+  async function pending(command: typeof applyManifest, confirm: boolean) {
+    let answer: (value: unknown) => void = () => {};
+    command.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const user = await openWith(PLAIN);
+    await user.click(
+      screen.getByRole("button", { name: confirm ? /^Apply$/ : /Validate/ })
+    );
+    if (confirm)
+      await user.click(
+        screen.getAllByRole("button", { name: /^Apply$/ }).at(-1) as HTMLElement
+      );
+    await waitFor(() => expect(command).toHaveBeenCalledTimes(1));
+    return { user, answer: (value: unknown) => act(async () => answer(value)) };
+  }
+
+  /**
+   * Close is live while an apply is out, and the history key was read from
+   * the store when the answer came: with no editor open it was empty and the
+   * applied revision was never recorded. Fails if it is not filed under the
+   * object it was applied to.
+   */
+  it("files the applied manifest under its own object when the editor has closed", async () => {
+    const { answer } = await pending(applyManifest, true);
+    act(() => useYamlEditorStore.getState().closeEditor());
+    await answer(APPLIED);
+
+    expect(addYamlHistoryEntry).toHaveBeenCalledWith(
+      "test:Deployment:shop:api",
+      expect.objectContaining({ content: EDITED, label: "Applied" })
+    );
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Apply succeeded" })
+    );
+  });
+
+  /**
+   * With another object's editor opened meanwhile, the answer landed there:
+   * "Success" under a manifest nobody applied, the first object's manifest
+   * in the second one's history, and the second editor's own apply released
+   * while still out. Fails if any of the three reaches the editor on screen.
+   */
+  it("leaves an editor opened on another object since untouched", async () => {
+    const { user, answer } = await pending(applyManifest, true);
+    act(() => useYamlEditorStore.getState().closeEditor());
+    await act(() => useYamlEditorStore.getState().openEditor(settings));
+    act(() =>
+      useYamlEditorStore.getState().setEditedContent("kind: ConfigMap\n#\n")
+    );
+    applyManifest.mockReturnValueOnce(new Promise(() => {}));
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+    await user.click(
+      screen.getAllByRole("button", { name: /^Apply$/ }).at(-1) as HTMLElement
+    );
+    await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(2));
+
+    await answer(APPLIED);
+
+    const store = useYamlEditorStore.getState();
+    expect(screen.queryByTestId("yaml-result")).toBeNull();
+    expect(store.isApplying).toBe(true);
+    expect(store.history["test:ConfigMap:shop:settings"] ?? []).toEqual([]);
+    expect(store.history["test:Deployment:shop:api"]).toEqual([
+      expect.objectContaining({ content: EDITED }),
+    ]);
+  });
+
+  /** The same for Validate: "valid" about one manifest must not appear under another. */
+  it("does not answer a validation in an editor opened on another object since", async () => {
+    const { answer } = await pending(validateManifest, false);
+    act(() => useYamlEditorStore.getState().closeEditor());
+    await act(() => useYamlEditorStore.getState().openEditor(settings));
+    act(() => useYamlEditorStore.getState().setIsValidating(true));
+
+    await answer({ success: true, stdout: "ok", stderr: "", exit_code: 0 });
+
+    expect(screen.queryByTestId("yaml-result")).toBeNull();
+    expect(useYamlEditorStore.getState().isValidating).toBe(true);
+    expect(toast).not.toHaveBeenCalled();
   });
 });
 
