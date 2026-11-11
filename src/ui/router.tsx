@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { routeTree } from "@/generated/routeTree.gen";
 import { setRouter } from "@/lib/links";
+import { pagePerObject } from "@/lib/page-remount";
 import { pageScroll } from "@/lib/page-scroll";
 import { navigationRendered } from "@/lib/perf-navigation";
 
@@ -15,6 +16,7 @@ export function makeRouter(queryClient: QueryClient) {
     // a preload the watch has already replaced.
     defaultPreloadStaleTime: 0,
     ...pageScroll,
+    ...pagePerObject,
   });
   router.subscribe("onRendered", ({ toLocation }) => {
     const match = router.state.matches.at(-1);

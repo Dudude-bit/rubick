@@ -14,6 +14,7 @@ import { useSyncExternalStore, type ReactElement, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { appSearch } from "@/lib/app-search";
 import { setRouter } from "@/lib/links";
+import { pagePerObject } from "@/lib/page-remount";
 import { shareStructure } from "@/lib/watched-rows";
 
 /**
@@ -96,6 +97,7 @@ function testRouterWith(
     ]),
     history: createMemoryHistory({ initialEntries: [at] }),
     defaultPendingMinMs: 0,
+    ...pagePerObject,
   });
   setRouter(router);
   return router;
