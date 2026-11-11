@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import type { EventInfo } from "@/generated/types";
+import { nameKey, namedOf } from "@/lib/event-incarnation";
 import type { Story } from "@/lib/event-stories";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -201,6 +202,47 @@ describe("who holds the names the page speaks of", () => {
     ]);
     expect(nameHolder).toHaveBeenCalledTimes(4);
     expect(getObjectMetadata).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A node the autoscaler removed: its kubelet's warnings name no
+   * `apiVersion`, so nobody was asked and their card stayed "still
+   * happening" beside a link to a page that answers not found. Fails if the
+   * kubelet's Node warning is not asked at the Node's own address, or the
+   * answer is not held under the key its rows and its story read.
+   */
+  it("asks who holds a Node whose kubelet warned with no apiVersion", async () => {
+    useClusterStore.setState({ isConnected: true });
+    getObjectMetadata.mockReset();
+    getObjectMetadata.mockRejectedValue(NOT_FOUND);
+    nameHolder.mockReset();
+    const kubelet: EventInfo = {
+      name: "n1.17f",
+      namespace: "default",
+      uid: "e1",
+      type: "Warning",
+      reason: "EvictionThresholdMet",
+      message: null,
+      source: "kubelet",
+      involvedObject: {
+        kind: "Node",
+        name: "n1",
+        namespace: null,
+        uid: "n1",
+      },
+      count: 1,
+      firstTimestamp: null,
+      lastTimestamp: null,
+    };
+    const { result } = mount([], [kubelet]);
+    await waitFor(() =>
+      expect([...result.current]).toEqual([["default/Node/n1", null]])
+    );
+    expect(result.current.has(nameKey(namedOf(kubelet)))).toBe(true);
+    expect(getObjectMetadata.mock.calls).toEqual([
+      ["Node", "v1", "n1", "default"],
+    ]);
+    expect(nameHolder).not.toHaveBeenCalled();
   });
 
   /**

@@ -94,7 +94,7 @@ describe("the recorded hour", () => {
     const rollout = one(stories, "shop-db-pooler-rw");
     expect(rollout.subject).toEqual({
       kind: "Deployment",
-      group: null,
+      group: "apps",
       name: "shop-db-pooler-rw",
       namespace: "cnpg-demo",
       byName: false,
@@ -359,6 +359,43 @@ describe("placing events", () => {
       "",
       "serving.knative.dev",
     ]);
+  });
+
+  /**
+   * The kubelet names its Node with no `apiVersion` and the name for a uid;
+   * the node controller writes `v1` and the real uid. Keyed by the group as
+   * written, one node had two cards with half its history each, and the
+   * kubelet's was never read as deleted. Fails if the two are not one story
+   * under the key its object is asked by, or it does not end with the node.
+   */
+  it("tells one Node's story from its kubelet's events and the node controller's", () => {
+    const kubelet = event({
+      kind: "Node",
+      name: "n1",
+      type: "Warning",
+      reason: "EvictionThresholdMet",
+    });
+    kubelet.involvedObject = {
+      kind: "Node",
+      name: "n1",
+      namespace: null,
+      uid: "n1",
+    };
+    const controller = event({
+      kind: "Node",
+      name: "n1",
+      reason: "NodeNotReady",
+    });
+    controller.involvedObject.uid = "5e1f";
+    const stories = storiesOf([kubelet, controller], {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+    });
+    expect(stories.map((story) => story.events.length)).toEqual([2]);
+    expect(stories[0].subject).toMatchObject({ kind: "Node", group: "" });
+    expect(subjectKey(stories[0].subject)).toBe("shop/Node/n1");
+    expect(withGone(stories, new Set(["shop/Node/n1"]))[0].state).toBe("gone");
   });
 
   /**
