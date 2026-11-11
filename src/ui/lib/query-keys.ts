@@ -362,11 +362,11 @@ export const queryKeys = {
     namespace: string | null | undefined,
     name: string
   ): (string | null)[] => ["lineage", group, plural, home(namespace), name],
-  dependents: (uid: string, namespace: string | null): string[] => [
-    "dependents",
-    uid,
-    scope(namespace),
-  ],
+  dependents: (
+    uid: string,
+    namespace: string | null,
+    page: number
+  ): string[] => ["dependents", uid, scope(namespace), String(page)],
   cascade: (uid: string, namespace: string | null): string[] => [
     "cascade",
     uid,

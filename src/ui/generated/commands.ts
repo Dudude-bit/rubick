@@ -14,6 +14,7 @@ import type {
   AzureProfileInfo,
   BackendTlsPolicyInfo,
   BatchLogResult,
+  Beside,
   BinaryLocation,
   BindingInfo,
   Cascade,
@@ -1166,9 +1167,10 @@ export async function setAutoscalerBounds(
 
 export async function listDependents(
   uid: string,
-  scope: string[] | null
+  scope: string[] | null,
+  page: number | null
 ): Promise<Dependents> {
-  return invoke<Dependents>("list_dependents", { uid, scope });
+  return invoke<Dependents>("list_dependents", { uid, scope, page });
 }
 
 export async function previewCascade(
@@ -2127,4 +2129,12 @@ export async function listCronjobsIn(
   scope: string[] | null
 ): Promise<Scoped<CronJobInfo>> {
   return invoke<Scoped<CronJobInfo>>("list_cronjobs_in", { scope });
+}
+
+export async function listDependentsBeside(
+  owner: string,
+  uid: string,
+  scope: string[] | null
+): Promise<Beside> {
+  return invoke<Beside>("list_dependents_beside", { owner, uid, scope });
 }

@@ -27,7 +27,7 @@ use crate::commands::catalog::UnreadGroup;
 use crate::error::Result;
 use crate::state::AppState;
 
-pub use graph::{Dependent, KindCount, KindKey};
+pub use graph::{Dependent, KindCount, KindKey, DEPENDENTS_PAGE};
 use graph::{Graph, SlotKey};
 
 /// Watches nobody has asked anything of for this long are stopped.
@@ -303,10 +303,18 @@ fn spawn_reaper(
 }
 
 impl ClusterIndex {
-    /// The direct dependents of `uid`, and what was not read.
+    /// One page of the direct dependents of `uid`, which page it is, how
+    /// many there are in all, and what was not read.
     #[must_use]
-    pub fn dependents(&self, uid: &str) -> (Vec<Dependent>, NotRead) {
-        (self.graph.read().dependents_of(uid), self.not_read())
+    pub fn dependents(&self, uid: &str, page: usize) -> (Vec<Dependent>, usize, usize, NotRead) {
+        let (rows, page, total) = self.graph.read().dependents_of(uid, page);
+        (rows, page, total, self.not_read())
+    }
+
+    /// The dependents of `owner` before and after `uid` among those of its kind.
+    #[must_use]
+    pub fn beside(&self, owner: &str, uid: &str) -> (Option<Dependent>, Option<Dependent>) {
+        self.graph.read().beside(owner, uid)
     }
 
     /// What deleting `uid` would take with it, what it holds besides, and

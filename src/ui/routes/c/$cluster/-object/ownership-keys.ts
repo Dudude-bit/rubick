@@ -31,8 +31,8 @@ export function useOwnershipKeys(
     if (!lineage) return;
     const dependentsOf = (uid: string) =>
       client.query({
-        queryKey: queryKeys.dependents(uid, scopeCacheKey(scope.scope)),
-        queryFn: () => commands.listDependents(uid, scope.wire),
+        queryKey: queryKeys.dependents(uid, scopeCacheKey(scope.scope), 0),
+        queryFn: () => commands.listDependents(uid, scope.wire, 0),
       });
     const owner = lineage.ancestors[0];
 
@@ -56,12 +56,13 @@ export function useOwnershipKeys(
         lineage.uid
       ) {
         event.preventDefault();
-        const siblings = (await dependentsOf(owner.uid)).dependents;
-        const self = siblings.find((entry) => entry.uid === lineage.uid);
-        const same = siblings.filter((entry) => entry.kind === self?.kind);
-        const at = same.findIndex((entry) => entry.uid === lineage.uid);
-        const next = same[at + (event.key === "ArrowRight" ? 1 : -1)];
-        if (at !== -1 && next) go(servedObjectLink(next));
+        const beside = await commands.listDependentsBeside(
+          owner.uid,
+          lineage.uid,
+          scope.wire
+        );
+        const next = event.key === "ArrowRight" ? beside.next : beside.previous;
+        if (next) go(servedObjectLink(next));
       }
     };
     window.addEventListener("keydown", onKey);

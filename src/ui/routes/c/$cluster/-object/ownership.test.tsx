@@ -14,7 +14,12 @@ import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   lineage: null as unknown as () => Promise<Lineage>,
-  dependents: null as unknown as (uid: string) => Promise<Dependents>,
+  dependents: null as unknown as (
+    uid: string,
+    page: number
+  ) => Promise<
+    Pick<Dependents, "dependents" | "notRead"> & Partial<Dependents>
+  >,
   cascade: null as unknown as () => Promise<Cascade>,
   asked: [] as string[],
 }));
@@ -22,9 +27,15 @@ const answers = vi.hoisted(() => ({
 vi.mock("@/lib/commands", () => ({
   commands: {
     objectLineage: () => answers.lineage(),
-    listDependents: (uid: string) => {
+    listDependents: async (uid: string, _scope: unknown, page: number) => {
       answers.asked.push(uid);
-      return answers.dependents(uid);
+      const answer = await answers.dependents(uid, page);
+      return {
+        page: 0,
+        pageSize: 100,
+        total: answer.dependents.length,
+        ...answer,
+      };
     },
     previewCascade: () => answers.cascade(),
   },
@@ -339,6 +350,58 @@ describe("what an object owns", () => {
     expect(screen.queryByText(/not read in full/)).toBeNull();
     expect(chipOf("ComponentStatus")).toHaveTextContent("cannot be watched");
     expect(chipOf("ComponentStatus")).not.toHaveTextContent("cannot be listed");
+  });
+
+  /**
+   * An Argo Workflow's 5000 step pods came in one answer and were all drawn
+   * as rows. Fails if more than the page answered is drawn, if the rest are
+   * not counted, or if the next page cannot be reached.
+   */
+  it("draws an owner of thousands a page at a time and says which rows these are", async () => {
+    const pages: number[] = [];
+    answers.dependents = (_uid, page) => {
+      pages.push(page);
+      return Promise.resolve({
+        dependents: Array.from({ length: page === 2 ? 50 : 100 }, (_, n) =>
+          dependent("Pod", `step-${page * 100 + n}`)
+        ),
+        page,
+        total: 250,
+        notRead: NOTHING_UNREAD,
+      });
+    };
+    await renderWithRouter(<OwnsPanel uid="w" namespace="shop" />);
+    expect(await screen.findByText("1–100 of 250")).toBeInTheDocument();
+    expect(screen.getAllByRole("treeitem")).toHaveLength(100);
+    expect(
+      screen.getByRole("button", { name: "Previous page" })
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(await screen.findByText("101–200 of 250")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Pod step-100" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pod step-0" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(await screen.findByText("201–250 of 250")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    expect(pages).toContain(2);
+  });
+
+  /** One page that holds everything has nowhere else to go. */
+  it("offers no pages where one holds every dependent", async () => {
+    answers.dependents = () =>
+      Promise.resolve({
+        dependents: [dependent("Pod", "api-7f9-a")],
+        notRead: NOTHING_UNREAD,
+      });
+    await renderWithRouter(<OwnsPanel uid="d" />);
+    expect(
+      await screen.findByRole("link", { name: "Pod api-7f9-a" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Next page" })).toBeNull();
   });
 
   /** Asking starts a cluster-wide index; a tab nobody opened must not. */

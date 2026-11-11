@@ -246,6 +246,7 @@ fn main() {
             commands::catalog::get_served_object_yaml,
             commands::catalog::list_served_objects,
             commands::ownership::list_dependents,
+            commands::ownership::list_dependents_beside,
             commands::ownership::preview_cascade,
             commands::ownership::object_lineage,
             commands::crds::delete_custom_resource,

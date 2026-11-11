@@ -45,15 +45,18 @@ export function useLineage(
   });
 }
 
-/** What `uid` owns. Asking is what keeps the index running. */
-export function useDependents(uid: string | null, enabled: boolean) {
+/** One page of what `uid` owns. Asking is what keeps the index running. */
+export function useDependents(uid: string | null, enabled: boolean, page = 0) {
   const scope = useNamespaceScope();
   const isConnected = useClusterStore((state) => state.isConnected);
   return useLiveQuery({
-    queryKey: queryKeys.dependents(uid ?? "", scopeCacheKey(scope.scope)),
-    queryFn: () => commands.listDependents(uid!, scope.wire),
+    queryKey: queryKeys.dependents(uid ?? "", scopeCacheKey(scope.scope), page),
+    queryFn: () => commands.listDependents(uid!, scope.wire, page),
     enabled: enabled && isConnected && !!uid,
     refresh: "resourceDetail",
+    // The page before stays up while the next one is read, the same owner's only.
+    placeholderData: (previous, query) =>
+      query?.queryKey[1] === uid ? previous : undefined,
   });
 }
 

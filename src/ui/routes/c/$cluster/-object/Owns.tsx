@@ -1,7 +1,13 @@
-import { ChevronRight, EyeOff, Inbox, Link2Off } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  EyeOff,
+  Inbox,
+  Link2Off,
+} from "lucide-react";
 import { useState } from "react";
 
-import type { Dependent, NotRead } from "@/generated/types";
+import type { Dependent, Dependents, NotRead } from "@/generated/types";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -28,7 +34,8 @@ export function OwnsPanel({
 }) {
   const t = useT();
   const visible = useSurfaceVisible();
-  const owned = useDependents(uid, visible);
+  const [page, setPage] = useState(0);
+  const owned = useDependents(uid, visible, page);
 
   if (owned.isError && !owned.data)
     return (
@@ -46,15 +53,18 @@ export function OwnsPanel({
   return (
     <div className="flex flex-col gap-4">
       {dependents.length > 0 ? (
-        <ul role="tree" className="flex flex-col">
-          {dependents.map((dependent) => (
-            <DependentRow
-              key={dependent.uid}
-              dependent={dependent}
-              parentNamespace={namespace ?? null}
-            />
-          ))}
-        </ul>
+        <div className="flex flex-col gap-1">
+          <ul role="tree" className="flex flex-col">
+            {dependents.map((dependent) => (
+              <DependentRow
+                key={dependent.uid}
+                dependent={dependent}
+                parentNamespace={namespace ?? null}
+              />
+            ))}
+          </ul>
+          <Pager owned={owned.data} onPage={setPage} />
+        </div>
       ) : reading ? null : (
         <p className="flex items-center gap-2 text-sm text-fg-mut">
           <Inbox className="h-4 w-4 text-fg-fnt" aria-hidden="true" />
@@ -137,26 +147,73 @@ function Children({
   uid: string;
   namespace: string | null;
 }) {
-  const owned = useDependents(uid, true);
+  const [page, setPage] = useState(0);
+  const owned = useDependents(uid, true, page);
   return (
     <ul
       role="group"
       className="ml-3 flex flex-col border-l border-hair pl-2 duration-200 animate-in fade-in motion-reduce:animate-none"
     >
       {owned.data ? (
-        owned.data.dependents.map((dependent) => (
-          <DependentRow
-            key={dependent.uid}
-            dependent={dependent}
-            parentNamespace={namespace}
-          />
-        ))
+        <>
+          {owned.data.dependents.map((dependent) => (
+            <DependentRow
+              key={dependent.uid}
+              dependent={dependent}
+              parentNamespace={namespace}
+            />
+          ))}
+          <li role="none">
+            <Pager owned={owned.data} onPage={setPage} />
+          </li>
+        </>
       ) : (
         <li className="py-1 pl-8">
           <TextSkeleton lines={1} />
         </li>
       )}
     </ul>
+  );
+}
+
+/**
+ * Which of an owner's dependents are on screen, and the way to the rest: a
+ * page of them is all an answer carries. Nothing where one page holds all.
+ */
+function Pager({
+  owned,
+  onPage,
+}: {
+  owned: Dependents;
+  onPage: (page: number) => void;
+}) {
+  const t = useT();
+  const { page, pageSize, total, dependents } = owned;
+  if (total <= dependents.length) return null;
+  const from = page * pageSize + 1;
+  const to = page * pageSize + dependents.length;
+  return (
+    <div className="flex items-center gap-1 pl-6 text-xs tabular-nums text-fg-mut">
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={page === 0}
+        onClick={() => onPage(page - 1)}
+        aria-label={t("owns", "previousPage")}
+      >
+        <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+      </Button>
+      {t("owns", "range", { from, to, total })}
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={to >= total}
+        onClick={() => onPage(page + 1)}
+        aria-label={t("owns", "nextPage")}
+      >
+        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+      </Button>
+    </div>
   );
 }
 
