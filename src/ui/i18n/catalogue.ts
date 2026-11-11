@@ -3384,6 +3384,7 @@ export const en = {
     forwardPodGone: "pod {pod} was deleted",
     forwardWaiting:
       "pod {pod} was deleted; waiting for a ready pod of {kind} {name}",
+    forwardStarting: "pod {pod} is back and starting; waiting for it to be up",
     forwardNoReplacement:
       "pod {pod} was deleted and {kind} {name} has no ready pod to move to",
     forwardSearchFailed:

@@ -3690,6 +3690,8 @@ export const ru: Catalogue = {
     },
     forwardPodGone: "Pod {pod} удалён",
     forwardWaiting: "Pod {pod} удалён; ожидается готовый под от {kind} {name}",
+    forwardStarting:
+      "Pod {pod} создан заново и запускается; ожидается, пока он поднимется",
     forwardNoReplacement:
       "Pod {pod} удалён, а у {kind} {name} нет готового пода, на который можно переключиться",
     forwardSearchFailed: "Pod {pod} удалён, а найти другой не удалось: {text}",

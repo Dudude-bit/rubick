@@ -77,6 +77,8 @@ pub enum ForwardNote {
         kind: String,
         name: String,
     },
+    /// The pod is back under its name with nothing of its own running yet.
+    Starting { pod: String },
     /// The wait ran out with no ready pod behind `kind`/`name`.
     NoReplacement {
         pod: String,
