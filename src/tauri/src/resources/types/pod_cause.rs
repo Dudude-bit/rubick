@@ -304,6 +304,7 @@ pub fn shared_cause_by<'a>(
 ///
 /// Each cause counts as it stands at `now`: grouped before the clock, an exit
 /// that is no longer news keeps its own count and is shown as what came after.
+/// One that does not count yet leaves its pod in the whole with no cause.
 ///
 /// `src/contracts/shared-cause-conformance.json` holds the answers, and
 /// `sharedCause` in `src/ui/lib/pod-cause.ts` owes the same ones.
@@ -318,7 +319,10 @@ fn share(
             continue;
         }
         of += 1;
-        let Some(cause) = cause.and_then(|cause| cause.at(now)) else {
+        let Some(cause) = cause
+            .and_then(|cause| cause.at(now))
+            .filter(|cause| cause.counts_at(now))
+        else {
             continue;
         };
         let key = cause_key(&cause);
@@ -364,6 +368,14 @@ impl PodCause {
             } if until <= now => later.and_then(|cause| cause.at(now)),
             cause => Some(cause),
         }
+    }
+
+    /// Whether it counts at `now`: a running pod not Ready is every pod's
+    /// first moments until its `counts_from`. A Service's chain and a
+    /// workload both count by this, as `countsAt` in `pod-cause.ts` does.
+    #[must_use]
+    pub fn counts_at(&self, now: DateTime<Utc>) -> bool {
+        !matches!(self, Self::NotReady { counts_from: Some(at), .. } if now < *at)
     }
 
     /// The cause with the kubelet's warnings a reader fetched beside it.

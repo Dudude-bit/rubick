@@ -2806,6 +2806,53 @@ mod tests {
         assert!(matches!(shared.cause, PodCause::NotReady { .. }));
     }
 
+    /// One of a Service's three not-Ready pods restarted half a minute ago:
+    /// the stop said 3 of 3 fail the probe beside a workload that says 2 of
+    /// 3, a probe's first passes being no trouble yet. Fails if the chain
+    /// counts a pod its workload does not, or drops it from the whole.
+    #[test]
+    fn a_service_counts_a_pod_not_ready_as_its_workload_does() {
+        use k8s_openapi::api::core::v1::{ContainerStateRunning, PodCondition};
+        let svc = selecting("web");
+        let not_ready_for = |name: &str, seconds: i64| {
+            let since = chrono::Utc::now() - chrono::Duration::seconds(seconds);
+            let mut pod = in_state(name, Some("n1"), "Running", None);
+            let status = pod.status.as_mut().unwrap();
+            status.conditions = Some(vec![PodCondition {
+                type_: "Ready".to_string(),
+                status: "False".to_string(),
+                last_transition_time: Some(Time(
+                    crate::utils::moment::as_cluster_time(since).expect("a time"),
+                )),
+                ..Default::default()
+            }]);
+            status.container_statuses = Some(vec![ContainerStatus {
+                name: "web".to_string(),
+                state: Some(ContainerState {
+                    running: Some(ContainerStateRunning::default()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }]);
+            pod
+        };
+        let pods = [
+            not_ready_for("a", 600),
+            not_ready_for("b", 600),
+            not_ready_for("c", 30),
+        ];
+        let refs: Vec<&Pod> = pods.iter().collect();
+        let Some(ChainStop::NoneReady {
+            pods: none_ready,
+            cause: Some(shared),
+            ..
+        }) = stop_of(&svc, &[], Some(&refs))
+        else {
+            panic!("a stop with the pods' cause");
+        };
+        assert_eq!((none_ready, shared.pods, shared.of), (3, 2, 3));
+    }
+
     #[test]
     fn pods_not_ready_for_different_reasons_are_mixed() {
         let svc = selecting("web");

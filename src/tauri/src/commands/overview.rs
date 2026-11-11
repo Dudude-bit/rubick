@@ -1032,10 +1032,7 @@ fn trouble_cause(
         return None;
     }
     cause_at(pod, now).filter(|cause| match cause {
-        PodCause::NotReady {
-            counts_from: Some(at),
-            ..
-        } => now >= *at,
+        PodCause::NotReady { .. } => cause.counts_at(now),
         PodCause::Exits { until: Some(_), .. } => {
             crash_looping(pod, now) || !crate::resources::counts_ready(pod)
         }
@@ -4686,6 +4683,27 @@ mod tests {
             }
         }))
         .unwrap()
+    }
+
+    /// The same three pods read "3 of 3" on their Service and "2 of 3" on
+    /// their workload: one had been not Ready for half a minute. Fails if
+    /// the rule a Service's chain counts by and a workload's part again.
+    #[test]
+    fn a_workload_and_a_service_count_the_same_pods_not_ready() {
+        let now = Utc::now();
+        let pods = [
+            not_ready_for(600, now),
+            not_ready_for(600, now),
+            not_ready_for(30, now),
+        ];
+        let Some(ProblemDetail::PodsCause { pods: n, of, .. }) =
+            workload_detail(pods.iter(), None, &HashSet::new(), now)
+        else {
+            panic!("two pods past the grace are the workload's cause");
+        };
+        let chain = crate::resources::shared_cause(pods.iter(), now).expect("the chain's cause");
+        assert_eq!((n, of), (2, 3));
+        assert_eq!((chain.pods, chain.of), (n, of));
     }
 
     /// A pod that runs and stays out of its Services had no row at all.
