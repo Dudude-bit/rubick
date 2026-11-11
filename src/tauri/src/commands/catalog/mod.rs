@@ -10,13 +10,16 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use futures::future::join_all;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::APIGroupList;
 use kube::api::{Api, DynamicObject};
 use kube::core::params::ListParams;
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use tokio::sync::Semaphore;
 use tokio::time::timeout;
 
 use crate::client::served::Served;
+use crate::client::ASKS_AT_ONCE;
 use crate::commands::helpers::{clean_yaml_for_editor, scope_of, ResourceContext};
 use crate::error::{Error, Result};
 use crate::state::AppState;
@@ -90,18 +93,50 @@ pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
     catalog_within(state, GROUP_DEADLINE).await
 }
 
+/// The kinds of the groups `wanted` picks and nothing else, short names
+/// left out: for a reader that holds the rest and asks about what is new.
+pub(crate) async fn catalog_of(
+    state: &AppState,
+    wanted: impl Fn(&str) -> bool,
+) -> Result<ApiCatalog> {
+    let client = ResourceContext::for_list(state, None)?.client;
+    let listed = timeout(GROUP_DEADLINE, client.list_api_groups())
+        .await
+        .map_err(|_| Error::ReadDeadline {
+            after_secs: GROUP_DEADLINE.as_secs(),
+        })??;
+    let names = group_names(listed).filter(|group| wanted(group)).collect();
+    Ok(read_groups(state, names, &HashMap::new(), GROUP_DEADLINE).await)
+}
+
 async fn catalog_within(state: &AppState, deadline: Duration) -> Result<ApiCatalog> {
     let client = ResourceContext::for_list(state, None)?.client;
     let (groups, short) = futures::join!(
         client.list_api_groups(),
         timeout(deadline, short_names(&client))
     );
-    let groups = groups?;
-    let short = short.unwrap_or_default();
-    let names: Vec<String> = std::iter::once(String::new())
-        .chain(groups.groups.into_iter().map(|group| group.name))
-        .collect();
+    let names = group_names(groups?).collect();
+    Ok(read_groups(state, names, &short.unwrap_or_default(), deadline).await)
+}
+
+/// The core group, then every group the cluster lists.
+fn group_names(listed: APIGroupList) -> impl Iterator<Item = String> {
+    std::iter::once(String::new()).chain(listed.groups.into_iter().map(|group| group.name))
+}
+
+/// Each group read on its turn; one that fails is named in `unread`.
+async fn read_groups(
+    state: &AppState,
+    names: Vec<String>,
+    short: &HashMap<(String, String), Vec<String>>,
+    deadline: Duration,
+) -> ApiCatalog {
+    // A cluster of operators serves a hundred groups, each a read of its
+    // own. A group's deadline starts on its turn: one that waited is not one
+    // that did not answer.
+    let turns = &Semaphore::new(ASKS_AT_ONCE);
     let answers = join_all(names.iter().map(|group| async move {
+        let _turn = turns.acquire().await;
         timeout(deadline, state.served_recommended(group))
             .await
             .unwrap_or(Err(Error::ReadDeadline {
@@ -147,7 +182,7 @@ async fn catalog_within(state: &AppState, deadline: Duration) -> Result<ApiCatal
             }),
         }
     }
-    Ok(catalog)
+    catalog
 }
 
 /// kubectl's short names by group and plural. Only aggregated discovery says
@@ -435,6 +470,53 @@ mod tests {
         assert_eq!(found.unread.len(), 1);
         assert_eq!(found.unread[0].group, "hung.example.com");
         assert_eq!(found.unread[0].code, "READ_DEADLINE");
+    }
+
+    /// Every group was asked at once: on a cluster of operators that is a
+    /// few hundred requests in one burst. Fails if more than a few groups
+    /// are read at a time, or if a group that waited its turn for longer
+    /// than the deadline is named as one that did not answer.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+    async fn a_catalogue_of_many_groups_reads_a_few_at_a_time() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let names: Vec<String> = (0..40).map(|n| format!("g{n}.example.com")).collect();
+        let listed = json!({
+            "kind": "APIGroupList",
+            "groups": names.iter().map(|name| group(name)).collect::<Vec<_>>(),
+        })
+        .to_string();
+        let (reading, most) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+        let (now, peak) = (reading.clone(), most.clone());
+        let (state, _) = connected(ServedIndex::default(), move |path, _| {
+            let Some(group) = path
+                .strip_prefix("/apis/")
+                .and_then(|rest| rest.strip_suffix("/v1"))
+            else {
+                return match path {
+                    "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+                    "/api/v1" => (200, resources("v1", &[])),
+                    "/apis" => (200, listed.clone()),
+                    _ => (404, "{}".to_string()),
+                };
+            };
+            peak.fetch_max(now.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(100));
+            now.fetch_sub(1, Ordering::SeqCst);
+            (200, resources(&format!("{group}/v1"), &[("widgets", "Widget")]))
+        })
+        .await;
+
+        // Five rounds of eight: the last starts after the deadline has run.
+        let found = catalog_within(&state, Duration::from_millis(600))
+            .await
+            .expect("catalog");
+
+        assert_eq!(found.unread, []);
+        assert_eq!(found.entries.len(), 40);
+        let most = most.load(Ordering::SeqCst);
+        assert!((2..=ASKS_AT_ONCE).contains(&most), "{most} at once");
     }
 
     /// A CRD applied while its list page said "not served" stayed missing

@@ -22,18 +22,25 @@ use crate::watch::backoff_for;
 const WATCH_TIMEOUT_SECS: u32 = 290;
 const PAGE_SIZE: u32 = 500;
 
+/// How long one page of a list may take, body included. The client's own
+/// deadline ends at the response head, so a body that stalled part-way kept
+/// its kind listing, and the turn it was listed on, for good.
+const PAGE_WITHIN: Duration = crate::client::READ_DEADLINE;
+
 type Meta = PartialObjectMeta<DynamicObject>;
 
 pub(super) fn spawn(index: &Arc<ClusterIndex>, slot: SlotKey, resource: ApiResource) {
-    spawn_relisting(index, slot, resource, RELIST_EVERY);
+    spawn_relisting(index, slot, resource, RELIST_EVERY, PAGE_WITHIN);
 }
 
-/// The wait between turns is a parameter so a test can use one it can wait out.
+/// The wait between turns and the deadline of a page are parameters so a test
+/// can use ones it can wait out.
 fn spawn_relisting(
     index: &Arc<ClusterIndex>,
     slot: SlotKey,
     resource: ApiResource,
     relist_every: Duration,
+    page_within: Duration,
 ) {
     let known = index.refusals.lock().get(&slot).cloned();
     if let Some(message) = known {
@@ -88,16 +95,26 @@ fn spawn_relisting(
             let wait = {
                 let stream = watcher::watcher(api.clone(), config.clone());
                 futures::pin_mut!(stream);
+                // Until the list is whole each step is a page; after it, a
+                // watch that may say nothing for minutes.
+                let mut listing = true;
                 loop {
                     let next = tokio::select! {
                         biased;
                         () = stop.cancelled() => break 'list,
                         next = stream.next() => next,
+                        () = tokio::time::sleep(page_within), if listing => {
+                            let after_secs = page_within.as_secs();
+                            let late = crate::error::Error::ReadDeadline { after_secs };
+                            index.failed(&slot, late.said(), &stop);
+                            break failures.failed(Instant::now());
+                        }
                     };
                     match next {
                         Some(Ok(event)) => {
                             let listed = matches!(event, Event::InitDone);
                             if listed {
+                                listing = false;
                                 failures.live(Instant::now());
                             }
                             index.saw(&slot, &resource, event, &stop);
@@ -615,7 +632,13 @@ mod tests {
         let _held = every_watch(&index);
         let names = || index.names(&slot.kind, None);
 
-        spawn_relisting(&index, slot.clone(), maps, Duration::from_millis(50));
+        spawn_relisting(
+            &index,
+            slot.clone(),
+            maps,
+            Duration::from_millis(50),
+            PAGE_WITHIN,
+        );
         until(|| names() == Ok(shop(&["web"]))).await;
 
         assert_eq!(names(), Ok(shop(&["web"])));
@@ -636,7 +659,7 @@ mod tests {
         let index = ClusterIndex::holding(client, &[("ConfigMap", slot.kind.clone())]);
         let _held = every_watch(&index);
 
-        spawn_relisting(&index, slot, maps, Duration::ZERO);
+        spawn_relisting(&index, slot, maps, Duration::ZERO, PAGE_WITHIN);
         tokio::time::sleep(TURN_PAUSE * 3).await;
 
         let asked = hits.lock().unwrap().get("/api/v1/configmaps").copied();
@@ -674,6 +697,104 @@ mod tests {
             index.watches.available_permits(),
             crate::ownership::MAX_WATCHES - 1
         );
+        index.stop.cancel();
+    }
+
+    fn secrets() -> (SlotKey, ApiResource) {
+        (
+            SlotKey {
+                kind: KindKey {
+                    group: String::new(),
+                    plural: "secrets".to_string(),
+                },
+                namespace: None,
+            },
+            ApiResource::erase::<k8s_openapi::api::core::v1::Secret>(&()),
+        )
+    }
+
+    /// An API server that lists one object of every kind, except that the
+    /// list at `stalls` sends its head, the start of its body, and no more.
+    async fn stalling(stalls: &'static str) -> kube::Client {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let url = format!("http://{}", listener.local_addr().expect("addr"));
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 8192];
+                    let n = socket.read(&mut buf).await.unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let path = request.split_whitespace().nth(1).unwrap_or("");
+                    let body = list("5").1;
+                    let (length, sent) = if path.starts_with(stalls) {
+                        (body.len(), &body[..body.len() / 2])
+                    } else {
+                        (body.len(), body.as_str())
+                    };
+                    let head = format!(
+                        "HTTP/1.1 200 X\r\ncontent-type: application/json\r\ncontent-length: {length}\r\nconnection: close\r\n\r\n"
+                    );
+                    let _ = socket.write_all(head.as_bytes()).await;
+                    let _ = socket.write_all(sent.as_bytes()).await;
+                    if sent.len() < length {
+                        tokio::time::sleep(Duration::from_mins(10)).await;
+                    }
+                });
+            }
+        });
+        kube::Client::try_from(kube::Config::new(url.parse().expect("url"))).expect("client")
+    }
+
+    /// The client's deadline ends at the response head. A list whose body
+    /// stalled part-way kept its turn for as long as the connection lived,
+    /// and eight of them left every kind past the watches unread. Fails if
+    /// the kind queued behind a stalled list is never listed, or if the
+    /// stalled kind reads as anything but could not be read.
+    #[tokio::test]
+    async fn a_list_whose_body_stalls_gives_its_turn_back_and_reads_as_failed() {
+        use crate::ownership::{reading_of, Reading, LISTS_AT_ONCE};
+
+        let client = stalling("/api/v1/configmaps").await;
+        let (stalled, maps) = configmaps();
+        let (behind, kept) = secrets();
+        let index = ClusterIndex::holding(
+            client,
+            &[
+                ("ConfigMap", stalled.kind.clone()),
+                ("Secret", behind.kind.clone()),
+            ],
+        );
+        let _held = every_watch(&index);
+        let but_one = u32::try_from(LISTS_AT_ONCE - 1).expect("a count");
+        let _taken = index.turns.clone().try_acquire_many_owned(but_one);
+        let state = |slot: &SlotKey| index.slots.lock().get(slot).cloned();
+
+        let page_within = Duration::from_millis(200);
+        spawn_relisting(&index, stalled.clone(), maps, RELIST_EVERY, page_within);
+        until(|| state(&stalled) == Some(SlotState::Syncing)).await;
+        spawn(&index, behind.clone(), kept);
+
+        until(|| index.names(&behind.kind, None).is_ok()).await;
+        assert_eq!(index.names(&behind.kind, None), Ok(shop(&["api"])));
+        // Its next turn reads "still listing" again, so the answer is caught.
+        let mut readings = Vec::new();
+        for _ in 0..300 {
+            readings.push(reading_of(&stalled.kind, &index.slots.lock().clone()));
+            if matches!(readings.last(), Some(Some(Reading::Failed { .. }))) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            matches!(readings.last(), Some(Some(Reading::Failed { .. }))),
+            "{:?}",
+            readings.last()
+        );
+        assert!(!readings.contains(&None), "read as live with nothing in it");
         index.stop.cancel();
     }
 

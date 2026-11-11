@@ -18,7 +18,9 @@ use k8s_openapi::api::authorization::v1::{
 use kube::api::{Api, PostParams};
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use tokio::sync::Semaphore;
 
+use crate::client::ASKS_AT_ONCE;
 use crate::commands::helpers::ResourceContext;
 use crate::error::Result;
 use crate::state::AppState;
@@ -92,10 +94,11 @@ pub async fn check_access(
 async fn access_answers(state: &AppState, queries: Vec<AccessQuery>) -> Result<Vec<AccessAnswer>> {
     let ctx = ResourceContext::for_list(state, None)?;
     let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
+    let turns = &Semaphore::new(ASKS_AT_ONCE);
     let answers = join_all(queries.iter().map(|query| {
         let api = api.clone();
         let attributes = access_attributes(query);
-        async move { ask(&api, attributes).await }
+        async move { ask(&api, attributes, turns).await }
     }))
     .await;
     Ok(queries
@@ -177,19 +180,19 @@ async fn list_answers(
 ) -> Result<Vec<ListAccess>> {
     let ctx = ResourceContext::for_list(state, None)?;
     let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
+    let turns = &Semaphore::new(ASKS_AT_ONCE);
 
-    // Asked at once: a review per kind per namespace in sequence is a visible
+    // Asked together: a review per kind per namespace in sequence is a visible
     // pause on a remote cluster, and none of them depends on another.
     let answers = join_all(queries.iter().map(|query| {
         let api = api.clone();
         let asked = places_to_ask(query, &namespaces);
         async move {
-            let each = join_all(
-                asked
-                    .into_iter()
-                    .map(|namespace| ask(&api, list_attributes(query, namespace.as_deref()))),
-            )
-            .await;
+            let each =
+                join_all(asked.into_iter().map(|namespace| {
+                    ask(&api, list_attributes(query, namespace.as_deref()), turns)
+                }))
+                .await;
             resolve(&each)
         }
     }))
@@ -262,11 +265,12 @@ async fn namespace_answers(
     let ctx = ResourceContext::for_list(state, None)?;
     let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
     let probe = namespace_probe_query();
+    let turns = &Semaphore::new(ASKS_AT_ONCE);
 
     let answers = join_all(namespaces.iter().map(|namespace| {
         let api = api.clone();
         let attributes = list_attributes(&probe, Some(namespace));
-        async move { ask(&api, attributes).await }
+        async move { ask(&api, attributes, turns).await }
     }))
     .await;
     let rules: Api<SelfSubjectRulesReview> = Api::all(ctx.client.clone());
@@ -276,6 +280,7 @@ async fn namespace_answers(
             if *allowed != Some(false) {
                 return None;
             }
+            let _turn = turns.acquire().await;
             review(&rules, namespace)
                 .await
                 .ok()
@@ -333,7 +338,14 @@ fn resolve(answers: &[Option<bool>]) -> Option<bool> {
     None
 }
 
-async fn ask(api: &Api<SelfSubjectAccessReview>, attributes: ResourceAttributes) -> Option<bool> {
+/// One question, asked on its turn. Every review goes through here, so no
+/// caller's fan-out reaches the API server as a few hundred at once.
+async fn ask(
+    api: &Api<SelfSubjectAccessReview>,
+    attributes: ResourceAttributes,
+    turns: &Semaphore,
+) -> Option<bool> {
+    let _turn = turns.acquire().await;
     let review = SelfSubjectAccessReview {
         spec: SelfSubjectAccessReviewSpec {
             resource_attributes: Some(attributes),
@@ -486,6 +498,82 @@ mod tests {
         let rules = own_rules("team-checkout".to_string(), None);
         assert!(rules.incomplete);
         assert!(rules.rules.is_empty());
+    }
+
+    /// The CNPG page asks about every cluster and namespace in one call, and
+    /// the sidebar about every kind in every picked namespace: a few hundred
+    /// reviews sent together. Fails if more than a few are in flight at once,
+    /// or if a question that waited its turn comes back unanswered.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+    async fn the_authorizer_is_asked_a_few_questions_at_a_time() {
+        use crate::client::served::test_server::connected;
+        use crate::client::served::ServedIndex;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let (asking, most) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+        let (now, peak) = (asking.clone(), most.clone());
+        // The first 72 reviews are allowed; the namespaces asked after them
+        // are refused, so each is asked for its rules as well.
+        let (state, _) = connected(ServedIndex::default(), move |path, nth| {
+            let (kind, status) = if path.ends_with("/selfsubjectaccessreviews") {
+                (
+                    "SelfSubjectAccessReview",
+                    serde_json::json!({ "allowed": nth <= 72 }),
+                )
+            } else if path.ends_with("/selfsubjectrulesreviews") {
+                let lists = serde_json::json!({
+                    "apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["list"],
+                });
+                (
+                    "SelfSubjectRulesReview",
+                    serde_json::json!({
+                        "incomplete": false, "nonResourceRules": [], "resourceRules": [lists],
+                    }),
+                )
+            } else {
+                return (404, "{}".to_string());
+            };
+            peak.fetch_max(now.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            now.fetch_sub(1, Ordering::SeqCst);
+            let review = serde_json::json!({
+                "apiVersion": "authorization.k8s.io/v1", "kind": kind,
+                "metadata": {}, "spec": {}, "status": status,
+            });
+            (201, review.to_string())
+        })
+        .await;
+        let named: Vec<String> = (0..24).map(|n| format!("pg-{n}")).collect();
+
+        let about: Vec<AccessQuery> = named
+            .iter()
+            .map(|name| AccessQuery {
+                group: "postgresql.cnpg.io".to_string(),
+                resource: "clusters".to_string(),
+                verb: "patch".to_string(),
+                namespace: Some("shop".to_string()),
+                subresource: None,
+                name: Some(name.clone()),
+            })
+            .collect();
+        let answers = access_answers(&state, about).await.expect("answers");
+        assert_eq!(answers.len(), 24);
+        assert!(answers.iter().all(|answer| answer.allowed == Some(true)));
+
+        let kinds = vec![query("", "pods", true), query("apps", "deployments", true)];
+        let listable = list_answers(&state, kinds, named.clone())
+            .await
+            .expect("answers");
+        assert!(listable.iter().all(|kind| kind.allowed == Some(true)));
+
+        let usable = namespace_answers(&state, named).await.expect("answers");
+        assert!(usable
+            .iter()
+            .all(|place| place.allowed == Some(false) && place.other_lists == Some(true)));
+
+        let most = most.load(Ordering::SeqCst);
+        assert!((2..=ASKS_AT_ONCE).contains(&most), "{most} at once");
     }
 
     fn query(group: &str, resource: &str, namespaced: bool) -> ListQuery {

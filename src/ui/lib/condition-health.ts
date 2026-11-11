@@ -25,6 +25,8 @@ const HEALTHY_WHEN_FALSE = new Set([
   // Gateway API listeners: a controller that looked writes these False.
   "conflicted",
   "overlappingtlsconfig",
+  // An HPA inside its range says False; True is the floor or the ceiling.
+  "scalinglimited",
 ]);
 
 /**
@@ -66,8 +68,38 @@ const LIFECYCLE_STEP = new Set(["podreadytostartcontainers", "initialized"]);
  * A Gateway listener on `*.example.com` beside one on `foo.example.com` gets
  * `OverlappingTLSConfig=True`, and both go on serving: the spec raises it for
  * what HTTP/2 connection coalescing may do, not for a listener that broke.
+ * An HPA at its ceiling, or blind to its metrics, holds the workload at the
+ * size it has: the amber `autoscalerVerdict` gives the same two.
  */
-const CAUTION = new Set(["overlappingtlsconfig"]);
+const CAUTION = new Set([
+  "overlappingtlsconfig",
+  "scalinglimited",
+  "scalingactive",
+]);
+
+/**
+ * What a reason says that its status word does not, as `type=status/reason`;
+ * a bare `type=status` is that status whatever the reason. Read first: the
+ * sets above know a type by its status alone, and painted a healthy
+ * certificate red and a renewal under way green.
+ */
+const SAID: Record<string, StatusRole> = {
+  // cert-manager: True while a request is out. A success takes the condition
+  // away, or under server-side apply leaves it False with `Issued`; any other
+  // False is the last attempt, failed and in its backoff.
+  "issuing=true": "pending",
+  "issuing=false/Issued": "ok",
+  // The kubelet's reason on a pod that ran to completion.
+  "ready=false/PodCompleted": "neutral",
+  "containersready=false/PodCompleted": "neutral",
+  // Held at minReplicas, and scaled to zero by hand: at rest, not limited.
+  "scalinglimited=true/TooFewReplicas": "neutral",
+  "scalingactive=false/ScalingDisabled": "neutral",
+  // The disruption controller could not work the budget out at all.
+  "disruptionallowed=false/SyncFailed": "err",
+  // Somebody paused the rollout; the controller did not stop reporting.
+  "progressing=unknown/DeploymentPaused": "neutral",
+};
 
 const normalize = (type: string) => type.toLowerCase().replace(/[\s_-]/g, "");
 
@@ -79,11 +111,15 @@ const normalize = (type: string) => type.toLowerCase().replace(/[\s_-]/g, "");
  */
 export function conditionRole(condition: ConditionInfo): StatusRole {
   const status = condition.status.toLowerCase();
+  const type = normalize(condition.type);
+  const said =
+    SAID[`${type}=${status}/${condition.reason ?? ""}`] ??
+    SAID[`${type}=${status}`];
+  if (said) return said;
   // Unknown is the kubelet having stopped reporting. That is not the object
   // failing, it is the object being unreadable, which is `warn` everywhere
   // else in the app.
   if (status !== "true" && status !== "false") return "warn";
-  const type = normalize(condition.type);
   const healthyValue = HEALTHY_WHEN_FALSE.has(type) ? "false" : "true";
   if (status === healthyValue) return "ok";
   if (ADVISORY.has(type)) return "neutral";

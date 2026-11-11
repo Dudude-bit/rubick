@@ -28,7 +28,7 @@ use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
 use crate::client::served::Served;
-use crate::commands::catalog::UnreadGroup;
+use crate::commands::catalog::{CatalogEntry, UnreadGroup};
 use crate::error::Result;
 use crate::state::AppState;
 
@@ -65,7 +65,7 @@ fn open_files() -> Option<u64> {
 
 /// How many kinds with no watch are listed at once, on the connections the
 /// lists share.
-const LISTS_AT_ONCE: usize = 8;
+const LISTS_AT_ONCE: usize = crate::client::ASKS_AT_ONCE;
 
 /// How long a turn is kept after its list: with the count above that is at
 /// most thirty-two lists a second, however fast the cluster answers.
@@ -198,6 +198,18 @@ pub struct NotRead {
     pub groups: Vec<UnreadGroup>,
     /// How many kinds the index watches, so a reader can say how far it got.
     pub watched: usize,
+    /// The kinds read by their list alone, where there are any: what the
+    /// index holds of them is as of their last turn, not live.
+    #[serde(default)]
+    pub listed: Option<ListedKinds>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListedKinds {
+    pub kinds: usize,
+    /// When the oldest of their lists answered.
+    pub since: String,
 }
 
 struct Watched {
@@ -225,6 +237,8 @@ pub struct ClusterIndex {
     watches: Arc<Semaphore>,
     /// One permit per list of a kind that has no watch, shared the same way.
     turns: Arc<Semaphore>,
+    /// When the cluster's groups were last held against the ones read here.
+    regrouped: Mutex<Instant>,
 }
 
 /// Slots the cluster refused on one connection, and its words for it.
@@ -237,6 +251,9 @@ pub struct OwnershipIndexes {
     refusals: DashMap<String, Refusals>,
     watches: Arc<Semaphore>,
     turns: Arc<Semaphore>,
+    /// How often a running index looks for groups served since it started:
+    /// as often as discovery itself is read again.
+    regroup_every: Duration,
 }
 
 impl Default for OwnershipIndexes {
@@ -246,6 +263,7 @@ impl Default for OwnershipIndexes {
             refusals: DashMap::new(),
             watches: Arc::new(Semaphore::new(watch_budget(open_files()))),
             turns: Arc::new(Semaphore::new(LISTS_AT_ONCE)),
+            regroup_every: crate::client::served::FRESH_FOR,
         }
     }
 }
@@ -273,6 +291,7 @@ impl OwnershipIndexes {
                     index.watch(kind, served);
                 }
             }
+            self.regroup(state, &index).await;
             self.make_room(&context, &index);
             return Ok(index);
         }
@@ -292,6 +311,7 @@ impl OwnershipIndexes {
             refusals: self.refusals.entry(context.clone()).or_default().clone(),
             watches: self.watches.clone(),
             turns: self.turns.clone(),
+            regrouped: Mutex::new(Instant::now()),
         });
         let index = self
             .clusters
@@ -302,44 +322,33 @@ impl OwnershipIndexes {
             return Ok(index);
         }
         for entry in catalog.entries {
-            let key = KindKey {
-                group: entry.group.clone(),
-                plural: entry.plural.clone(),
-            };
-            if let Some(reading) = unwatched(&entry.group, &entry.plural, &entry.verbs) {
-                index.unwatched.lock().insert(key, (entry.kind, reading));
-                continue;
-            }
-            let resource = ApiResource {
-                group: entry.group.clone(),
-                version: entry.version.clone(),
-                api_version: if entry.group.is_empty() {
-                    entry.version.clone()
-                } else {
-                    format!("{}/{}", entry.group, entry.version)
-                },
-                kind: entry.kind,
-                plural: entry.plural,
-            };
-            index.watched.lock().insert(
-                key.clone(),
-                Watched {
-                    resource: resource.clone(),
-                    namespaced: entry.namespaced,
-                },
-            );
-            slots::spawn(
-                &index,
-                SlotKey {
-                    kind: key,
-                    namespace: None,
-                },
-                resource,
-            );
+            index.take(entry);
         }
         self.make_room(&context, &index);
         spawn_reaper(self.clusters.clone(), context, index.clone());
         Ok(index)
+    }
+
+    /// Asks every group the cluster lists and the index reads no kind of:
+    /// an aggregated API installed since the index started has no CRD to
+    /// tell it, and a group that did not answer then may answer now. One
+    /// that fails is named, as at the start.
+    async fn regroup(&self, state: &AppState, index: &Arc<ClusterIndex>) {
+        {
+            let mut last = index.regrouped.lock();
+            if last.elapsed() < self.regroup_every {
+                return;
+            }
+            *last = Instant::now();
+        }
+        let unread = |group: &str| !index.reads(group);
+        let Ok(found) = crate::commands::catalog::catalog_of(state, unread).await else {
+            return;
+        };
+        *index.unread_groups.lock() = found.unread;
+        for entry in found.entries {
+            index.take(entry);
+        }
     }
 
     /// The cluster on screen comes first: where its index is short of a
@@ -539,6 +548,54 @@ impl ClusterIndex {
         self.watched.lock().contains_key(kind) || self.unwatched.lock().contains_key(kind)
     }
 
+    /// Whether the index holds any kind of `group`, watched or left out.
+    fn reads(&self, group: &str) -> bool {
+        let of_group = |kind: &KindKey| kind.group == group;
+        self.watched.lock().keys().any(of_group) || self.unwatched.lock().keys().any(of_group)
+    }
+
+    /// Starts reading one served kind, or files it as never watched. A kind
+    /// the index already holds is left as it is.
+    fn take(self: &Arc<Self>, entry: CatalogEntry) {
+        let key = KindKey {
+            group: entry.group.clone(),
+            plural: entry.plural.clone(),
+        };
+        if self.knows(&key) {
+            return;
+        }
+        if let Some(reading) = unwatched(&entry.group, &entry.plural, &entry.verbs) {
+            self.unwatched.lock().insert(key, (entry.kind, reading));
+            return;
+        }
+        let resource = ApiResource {
+            group: entry.group.clone(),
+            version: entry.version.clone(),
+            api_version: if entry.group.is_empty() {
+                entry.version.clone()
+            } else {
+                format!("{}/{}", entry.group, entry.version)
+            },
+            kind: entry.kind,
+            plural: entry.plural,
+        };
+        self.watched.lock().insert(
+            key.clone(),
+            Watched {
+                resource: resource.clone(),
+                namespaced: entry.namespaced,
+            },
+        );
+        slots::spawn(
+            self,
+            SlotKey {
+                kind: key,
+                namespace: None,
+            },
+            resource,
+        );
+    }
+
     /// Starts reading a kind served since the index began: a CRD installed
     /// after it.
     pub fn watch(self: &Arc<Self>, kind: KindKey, served: Served) {
@@ -622,6 +679,7 @@ impl ClusterIndex {
             kinds,
             groups: self.unread_groups.lock().clone(),
             watched: watched.len(),
+            listed: listed_in(&slots),
         }
     }
 
@@ -708,6 +766,7 @@ impl ClusterIndex {
             refusals,
             watches: Arc::new(Semaphore::new(MAX_WATCHES)),
             turns: Arc::new(Semaphore::new(LISTS_AT_ONCE)),
+            regrouped: Mutex::new(Instant::now()),
         };
         for (kind, key) in kinds {
             let resource = ApiResource {
@@ -803,6 +862,23 @@ fn cascade_in(
         reading,
     };
     (graph.cascade(uid, &objects), Some(holds))
+}
+
+/// The kinds with a slot read by its list alone, and the oldest such list.
+fn listed_in(slots: &BTreeMap<SlotKey, SlotState>) -> Option<ListedKinds> {
+    let listed: Vec<(&KindKey, chrono::DateTime<chrono::Utc>)> = slots
+        .iter()
+        .filter_map(|(slot, state)| match state {
+            SlotState::Listed { at } => Some((&slot.kind, *at)),
+            _ => None,
+        })
+        .collect();
+    let since = listed.iter().map(|(_, at)| *at).min()?;
+    let kinds: BTreeSet<&KindKey> = listed.iter().map(|(kind, _)| *kind).collect();
+    Some(ListedKinds {
+        kinds: kinds.len(),
+        since: since.to_rfc3339(),
+    })
 }
 
 /// One kind's reading from its slots: `None` where it is simply live.
@@ -1003,6 +1079,56 @@ mod tests {
         assert_eq!(listed(chrono::Utc::now()), []);
     }
 
+    /// A kind past the watches is read by a list up to three turns old and
+    /// counted among the kinds read, and nothing told the reader that its
+    /// answer is not live. Fails if an answer does not say how many kinds are
+    /// read that way and since when, or says it of a kind that is watched or
+    /// already named as stale.
+    #[tokio::test]
+    async fn an_answer_says_how_many_kinds_it_read_by_their_list_and_since_when() {
+        use crate::client::served::test_server::answering;
+        let (client, _) = answering(|_, _| (404, "{}".to_string())).await;
+        let secrets = KindKey {
+            group: String::new(),
+            plural: "secrets".to_string(),
+        };
+        let index = ClusterIndex::holding(client, &[("Pod", kind()), ("Secret", secrets.clone())]);
+        let of = |kind: KindKey, namespace: Option<&str>| SlotKey {
+            kind,
+            namespace: namespace.map(str::to_string),
+        };
+        let set = |slot: SlotKey, state: SlotState| index.slots.lock().insert(slot, state);
+        let now = chrono::Utc::now();
+        let (older, newer) = (now - Duration::from_secs(20), now - Duration::from_secs(5));
+
+        index.go_live(&kind(), &[]);
+        index.go_live(&secrets, &[]);
+        assert_eq!(index.not_read().listed, None);
+
+        // Two namespaces of one refused kind are one kind.
+        set(slot(None), refused());
+        set(slot(Some("shop")), SlotState::Listed { at: newer });
+        set(slot(Some("web")), SlotState::Listed { at: now });
+        set(of(secrets.clone(), None), SlotState::Listed { at: older });
+        assert_eq!(
+            index.not_read().listed,
+            Some(ListedKinds {
+                kinds: 2,
+                since: older.to_rfc3339()
+            })
+        );
+
+        let overdue = now - LISTED_FOR - Duration::from_secs(1);
+        set(of(secrets, None), SlotState::Listed { at: overdue });
+        assert_eq!(
+            index.not_read().listed,
+            Some(ListedKinds {
+                kinds: 1,
+                since: newer.to_rfc3339()
+            })
+        );
+    }
+
     /// launchd hands a Finder-launched app 256 open files; where raising
     /// that fails, 300 watches would take every one. Fails if the watches
     /// may take more than half of what the process is allowed.
@@ -1109,6 +1235,7 @@ mod tests {
             }],
             groups: Vec::new(),
             watched: 1,
+            listed: None,
         };
         let (_, holds) = cascade_in(&widgets(), "crd", &not_read, |_| None, None);
         assert_eq!(objects(holds).2, Some(refused));
@@ -1466,6 +1593,120 @@ mod tests {
             Ok(vec![("one".to_string(), None)])
         );
         assert!(!named(&index));
+        state.ownership.forget_all();
+    }
+
+    const GAUGES: (&str, &str) = ("metrics.example.com", "gauges");
+
+    /// A cluster that serves CRDs and, from `step` 1, an aggregated API no
+    /// CRD defines: listed with its discovery failing, then, from 2, served.
+    fn aggregated(path: &str, nth: usize, step: usize) -> (u16, String) {
+        use crate::client::served::test_server::failure;
+        use serde_json::json;
+
+        let group = |name: &str| {
+            json!({
+                "name": name,
+                "versions": [{ "groupVersion": format!("{name}/v1"), "version": "v1" }],
+                "preferredVersion": { "groupVersion": format!("{name}/v1"), "version": "v1" },
+            })
+        };
+        let kinds = |group: &str, plural: &str, kind: &str| {
+            json!({
+                "kind": "APIResourceList",
+                "groupVersion": format!("{group}/v1"),
+                "resources": [{
+                    "name": plural, "singularName": "", "namespaced": false,
+                    "kind": kind, "verbs": ["get", "list", "watch"],
+                }],
+            })
+        };
+        let listing = |items: serde_json::Value| {
+            json!({
+                "apiVersion": "meta.k8s.io/v1",
+                "kind": "PartialObjectMetadataList",
+                "metadata": { "resourceVersion": "5" },
+                "items": items,
+            })
+        };
+        let gauge = json!({
+            "apiVersion": "meta.k8s.io/v1",
+            "kind": "PartialObjectMetadata",
+            "metadata": { "name": "one", "uid": "g1", "resourceVersion": "5" },
+        });
+        let collection = path.ends_with("definitions") || path.ends_with("gauges");
+        let body = match path {
+            // The watch after a collection's list stays quiet.
+            _ if collection && nth > 1 => return (200, String::new()),
+            "/apis" if step > 0 => {
+                json!({ "kind": "APIGroupList", "groups": [group(DEFINITIONS.0), group(GAUGES.0)] })
+            }
+            "/apis" => json!({ "kind": "APIGroupList", "groups": [group(DEFINITIONS.0)] }),
+            "/apis/apiextensions.k8s.io/v1" => {
+                kinds(DEFINITIONS.0, DEFINITIONS.1, "CustomResourceDefinition")
+            }
+            "/apis/apiextensions.k8s.io/v1/customresourcedefinitions" => listing(json!([])),
+            "/apis/metrics.example.com/v1" if step == 1 => {
+                return failure(503, "ServiceUnavailable")
+            }
+            "/apis/metrics.example.com/v1" if step > 1 => kinds(GAUGES.0, GAUGES.1, "Gauge"),
+            "/apis/metrics.example.com/v1/gauges" if step > 1 => listing(json!([gauge])),
+            _ => return (404, "{}".to_string()),
+        };
+        (200, body.to_string())
+    }
+
+    /// A metrics adapter installed while an Owns tab kept the index running:
+    /// an aggregated API has no CRD, so nothing told the index, and what its
+    /// kinds held was neither read nor named until the index idled out.
+    /// Fails if a group served since the index started is not named while
+    /// its discovery fails, or is not read once it answers.
+    #[tokio::test]
+    async fn a_kind_an_aggregated_api_serves_after_the_index_started_is_read() {
+        use crate::client::served::test_server::connected;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let step = Arc::new(AtomicUsize::new(0));
+        let now = step.clone();
+        let (mut state, _) = connected(
+            crate::client::served::ServedIndex::default(),
+            move |path, nth| aggregated(path, nth, now.load(Ordering::SeqCst)),
+        )
+        .await;
+        state.ownership = Arc::new(OwnershipIndexes {
+            regroup_every: Duration::ZERO,
+            ..OwnershipIndexes::default()
+        });
+        let gauges = KindKey {
+            group: GAUGES.0.to_string(),
+            plural: GAUGES.1.to_string(),
+        };
+        let index = state.ownership.ensure(&state, None).await.expect("index");
+        let unread = |index: &ClusterIndex| {
+            let groups = index.not_read().groups;
+            groups.into_iter().any(|group| group.group == GAUGES.0)
+        };
+        state.ownership.ensure(&state, None).await.expect("index");
+        assert!(!unread(&index), "not served yet, so nothing to name");
+
+        step.store(1, Ordering::SeqCst);
+        state.ownership.ensure(&state, None).await.expect("index");
+        assert!(unread(&index), "served and not read is not named");
+        assert_eq!(index.names(&gauges, None), Err(Reading::Syncing));
+
+        step.store(2, Ordering::SeqCst);
+        for _ in 0..300 {
+            state.ownership.ensure(&state, None).await.expect("index");
+            if index.names(&gauges, None).is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            index.names(&gauges, None),
+            Ok(vec![("one".to_string(), None)])
+        );
+        assert!(!unread(&index));
         state.ownership.forget_all();
     }
 

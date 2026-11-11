@@ -276,6 +276,12 @@ fn without_client_retries(mut config: Config) -> Config {
 #[allow(clippy::duration_suboptimal_units)]
 pub const READ_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
 
+/// How many requests one fan-out keeps in flight on a cluster: the ownership
+/// index's lists, the catalogue's groups, the authorizer's questions. The
+/// rest wait their turn, and a wait is not a failure: a deadline on one
+/// starts when its turn comes.
+pub const ASKS_AT_ONCE: usize = 8;
+
 /// The one place a client is built, so every client carries the deadline.
 fn build_client(config: Config) -> Result<Client> {
     client_with_deadline(config, READ_DEADLINE)

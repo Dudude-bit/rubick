@@ -398,6 +398,35 @@ describe("a certificate", () => {
   });
 });
 
+describe("a certificate under cert-manager's server-side apply", () => {
+  /**
+   * There a healthy certificate keeps Issuing=False with the reason `Issued`
+   * and "The certificate has been successfully issued": every watch on one
+   * answered "issuance failed" with those words on its second look. Fails if
+   * an issued certificate is told as a failed issuance.
+   */
+  it("does not say issuance failed of a certificate whose Issuing says Issued", () => {
+    const issued = {
+      annotations: { "cert-manager.io/certificate-revision": "3" },
+      status: {
+        notAfter: "2026-10-01T00:00:00Z",
+        conditions: [
+          { type: "Ready", status: "True" },
+          {
+            type: "Issuing",
+            status: "False",
+            reason: "Issued",
+            message: "The certificate has been successfully issued",
+          },
+        ],
+      },
+    } as unknown as CustomResourceInfo;
+    expect(
+      walk(watchOn("Certificate", "renewed"), [issued, issued, issued])
+    ).toEqual([]);
+  });
+});
+
 describe("coalescing", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
