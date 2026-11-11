@@ -239,6 +239,11 @@ impl OwnershipIndexes {
         if let Some(index) = self.clusters.get(&context).map(|held| held.clone()) {
             *index.last_used.lock() = Instant::now();
             index.rescope(scope);
+            for kind in index.unread_definitions() {
+                if let Ok(Some(served)) = state.served(&kind.group, &kind.plural).await {
+                    index.watch(kind, served);
+                }
+            }
             return Ok(index);
         }
         let client = crate::commands::helpers::ResourceContext::for_list(state, None)?.client;
@@ -454,6 +459,27 @@ impl ClusterIndex {
             .collect()
     }
 
+    /// Kinds a CRD the index holds defines and the index does not know: one
+    /// installed after it started, or in a group discovery missed.
+    fn unread_definitions(&self) -> Vec<KindKey> {
+        let defined: Vec<KindKey> = {
+            let graph = self.graph.read();
+            let definitions = KindKey {
+                group: DEFINITIONS.0.to_string(),
+                plural: DEFINITIONS.1.to_string(),
+            };
+            graph
+                .of_kind(&definitions)
+                .iter()
+                .filter_map(|uid| defined_by(&graph.node(uid)?.name))
+                .collect()
+        };
+        defined
+            .into_iter()
+            .filter(|kind| !self.knows(kind))
+            .collect()
+    }
+
     fn knows(&self, kind: &KindKey) -> bool {
         self.watched.lock().contains_key(kind) || self.unwatched.lock().contains_key(kind)
     }
@@ -487,6 +513,7 @@ impl ClusterIndex {
     /// Every kind that is not live, named, plus every group discovery missed.
     #[must_use]
     pub fn not_read(&self) -> NotRead {
+        let unread = self.unread_definitions();
         let slots = self.slots.lock().clone();
         let watched = self.watched.lock();
         let mut kinds: Vec<KindReading> = watched
@@ -511,6 +538,14 @@ impl ClusterIndex {
                     reading: reading.clone(),
                 }),
         );
+        // Metadata does not say the kind's own name; the plural stands in
+        // until discovery serves it.
+        kinds.extend(unread.into_iter().map(|key| KindReading {
+            kind: key.plural.clone(),
+            group: key.group,
+            plural: key.plural,
+            reading: Reading::Syncing,
+        }));
         NotRead {
             kinds,
             groups: self.unread_groups.lock().clone(),
@@ -699,10 +734,12 @@ fn cascade_in(
 
 /// One kind's reading from its slots: `None` where it is simply live.
 fn reading_of(kind: &KindKey, slots: &BTreeMap<SlotKey, SlotState>) -> Option<Reading> {
-    let cluster = slots.get(&SlotKey {
+    let Some(cluster) = slots.get(&SlotKey {
         kind: kind.clone(),
         namespace: None,
-    })?;
+    }) else {
+        return Some(Reading::Syncing);
+    };
     match cluster {
         SlotState::Live => None,
         SlotState::Syncing => Some(Reading::Syncing),
@@ -808,6 +845,17 @@ mod tests {
             reading_of(&kind(), &slots),
             Some(Reading::Refused { .. })
         ));
+    }
+
+    /// A kind the index watches and has no watch for yet read as live: a
+    /// kind served a moment ago was "read, and nothing there". Fails if a
+    /// watched kind with no slot says nothing.
+    #[test]
+    fn a_watched_kind_with_no_watch_yet_is_still_listing() {
+        assert_eq!(
+            reading_of(&kind(), &BTreeMap::new()),
+            Some(Reading::Syncing)
+        );
     }
 
     /// Refused across the cluster, with its namespaces waiting for a free
@@ -1142,6 +1190,149 @@ mod tests {
         assert!(index.graph.read().node("web-api").is_none());
         assert_eq!(web(), asked, "the web namespace is still being watched");
         index.stop.cancel();
+    }
+
+    fn definitions() -> KindKey {
+        KindKey {
+            group: DEFINITIONS.0.to_string(),
+            plural: DEFINITIONS.1.to_string(),
+        }
+    }
+
+    /// cert-manager installed while an Owns tab kept the index running: its
+    /// kinds were in neither list, so Delete said in green that an Ingress
+    /// takes nothing with it while its Certificate would go. Fails if a kind
+    /// whose CRD the index holds, and which it does not watch, is not named.
+    #[tokio::test]
+    async fn a_kind_whose_crd_arrived_after_the_index_started_is_named_as_not_read() {
+        use crate::client::served::test_server::answering;
+
+        let (client, _) = answering(|_, _| (404, "{}".to_string())).await;
+        let index = ClusterIndex::holding(client, &[("CustomResourceDefinition", definitions())]);
+        index.go_live(&definitions(), &[("widgets.demo.example.com", None)]);
+
+        let named: Vec<_> = index
+            .not_read()
+            .kinds
+            .into_iter()
+            .map(|kind| (kind.group, kind.plural, kind.reading))
+            .collect();
+        assert_eq!(
+            named,
+            [(
+                WIDGETS.0.to_string(),
+                WIDGETS.1.to_string(),
+                Reading::Syncing
+            )]
+        );
+    }
+
+    fn crds_and_widgets(path: &str, served: bool) -> (u16, String) {
+        use serde_json::json;
+        let group = |name: &str| {
+            json!({
+                "name": name,
+                "versions": [{ "groupVersion": format!("{name}/v1"), "version": "v1" }],
+                "preferredVersion": { "groupVersion": format!("{name}/v1"), "version": "v1" },
+            })
+        };
+        let kinds = |group: &str, plural: &str, kind: &str| {
+            json!({
+                "kind": "APIResourceList",
+                "groupVersion": format!("{group}/v1"),
+                "resources": [{
+                    "name": plural, "singularName": "", "namespaced": false,
+                    "kind": kind, "verbs": ["get", "list", "watch"],
+                }],
+            })
+        };
+        let listing = |name: &str, uid: &str| {
+            json!({
+                "apiVersion": "meta.k8s.io/v1",
+                "kind": "PartialObjectMetadataList",
+                "metadata": { "resourceVersion": "5" },
+                "items": [{
+                    "apiVersion": "meta.k8s.io/v1",
+                    "kind": "PartialObjectMetadata",
+                    "metadata": { "name": name, "uid": uid, "resourceVersion": "5" },
+                }],
+            })
+        };
+        let body = match path {
+            "/apis" if served => {
+                json!({ "kind": "APIGroupList", "groups": [group(DEFINITIONS.0), group(WIDGETS.0)] })
+            }
+            "/apis" => json!({ "kind": "APIGroupList", "groups": [group(DEFINITIONS.0)] }),
+            "/apis/apiextensions.k8s.io/v1" => {
+                kinds(DEFINITIONS.0, DEFINITIONS.1, "CustomResourceDefinition")
+            }
+            "/apis/demo.example.com/v1" if served => kinds(WIDGETS.0, WIDGETS.1, "Widget"),
+            "/apis/apiextensions.k8s.io/v1/customresourcedefinitions" => {
+                listing("widgets.demo.example.com", "crd")
+            }
+            "/apis/demo.example.com/v1/widgets" if served => listing("one", "w1"),
+            _ => return (404, "{}".to_string()),
+        };
+        (200, body.to_string())
+    }
+
+    /// The same install, from the other end: the index went on watching the
+    /// kinds it started with for as long as anything polled it. Fails if the
+    /// next question does not start reading a kind the cluster now serves.
+    #[tokio::test]
+    async fn a_kind_served_after_the_index_started_is_read_from_the_next_question() {
+        use crate::client::served::test_server::connected;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let served = Arc::new(AtomicBool::new(false));
+        let now = served.clone();
+        let (state, _) = connected(
+            crate::client::served::ServedIndex::default(),
+            move |path, nth| {
+                // The first answer to a collection is its list; the watch after
+                // it stays quiet.
+                let collection = path.ends_with("definitions") || path.ends_with("widgets");
+                if collection && nth > 1 {
+                    return (200, String::new());
+                }
+                crds_and_widgets(path, now.load(Ordering::SeqCst))
+            },
+        )
+        .await;
+        let widgets = KindKey {
+            group: WIDGETS.0.to_string(),
+            plural: WIDGETS.1.to_string(),
+        };
+        let index = state.ownership.ensure(&state, None).await.expect("index");
+        let named = |index: &ClusterIndex| {
+            index
+                .not_read()
+                .kinds
+                .into_iter()
+                .any(|kind| kind.group == WIDGETS.0)
+        };
+        for _ in 0..300 {
+            if named(&index) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(named(&index), "the CRD was never listed");
+
+        served.store(true, Ordering::SeqCst);
+        for _ in 0..300 {
+            state.ownership.ensure(&state, None).await.expect("index");
+            if index.names(&widgets, None).is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            index.names(&widgets, None),
+            Ok(vec![("one".to_string(), None)])
+        );
+        assert!(!named(&index));
+        state.ownership.forget_all();
     }
 
     /// Marco's Delete dialog started the index and the log took ninety lines
