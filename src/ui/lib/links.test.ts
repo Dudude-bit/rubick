@@ -5,6 +5,7 @@ import { QueryClient } from "@tanstack/react-query";
 
 import { routeTree } from "@/generated/routeTree.gen";
 import {
+  builtInKindOf,
   clusterOf,
   crdFor,
   crdInGroup,
@@ -325,6 +326,25 @@ describe("a reference that knows its group but not its plural", () => {
         crd: unknown,
       })
     ).toBeNull();
+  });
+});
+
+describe("the registry's kind a reference is", () => {
+  const hello = { kind: "Service", name: "hello", namespace: "default" };
+
+  /**
+   * Every action table is keyed by the registry's kind, and Knative's
+   * `Service` reached them by its bare name, so its Delete ran the core
+   * Service's command. Fails if a CRD's object, or a namesake no CRD names
+   * yet, is taken for the built-in kind.
+   */
+  it("is the built-in only for the built-in's own reference, never for a namesake", () => {
+    expect(builtInKindOf(hello)).toBe("Service");
+    expect(
+      builtInKindOf({ ...hello, crd: "services.serving.knative.dev" })
+    ).toBeNull();
+    expect(builtInKindOf({ ...hello, crd: null })).toBeNull();
+    expect(builtInKindOf({ ...hello, kind: "Rollout" })).toBeNull();
   });
 });
 
