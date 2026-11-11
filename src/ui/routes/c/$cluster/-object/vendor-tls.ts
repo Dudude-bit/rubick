@@ -1,7 +1,7 @@
 import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import { covers } from "@/lib/certificates";
-import { hostTls } from "@/lib/ingress-tls";
+import { hostTls, type TlsUnread } from "@/lib/ingress-tls";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import type { IngressInfo } from "@/generated/types";
 import type { IngressTlsAnswers } from "@/hooks/useIngressTls";
@@ -100,6 +100,35 @@ export function hostTlsOf(
   if (vendor?.plain.includes(host)) return false;
   if (vendor?.unchecked.includes(host)) return null;
   return specCovers(ingress, host) || Boolean(vendor?.hosts.includes(host));
+}
+
+/** Whether an Ingress is served over TLS at all; `unknown` where its controllers have not said or could not tell. */
+export type IngressTlsVerdict = "yes" | "no" | "unknown";
+
+/**
+ * The one verdict an Ingress's page, its peek, its shared file and its list
+ * row say. "no TLS" is a claim about the whole way in, and `spec.tls` is
+ * only part of it on every managed cloud, and not all of it under Traefik:
+ * it cannot say yes for the controller whose answer replaces it.
+ */
+export function ingressTlsVerdict(
+  ingress: Pick<
+    IngressInfo,
+    "rules" | "tlsHosts" | "hasCatchAllTls" | "tlsConfigs"
+  >,
+  vendor: VendorTlsAnswer | null,
+  unread: TlsUnread
+): IngressTlsVerdict {
+  const verdicts = ingress.rules.flatMap((rule) =>
+    rule.host ? [hostTlsOf(ingress, rule.host, vendor)] : []
+  );
+  const named =
+    ingress.tlsConfigs.length > 0 && (vendor?.plain.length ?? 0) === 0;
+  return verdicts.includes(true) || (named && unread !== "replaces")
+    ? "yes"
+    : verdicts.includes(null) || named
+      ? "unknown"
+      : "no";
 }
 
 /** The address to open an Ingress at, or `null` where its scheme is not known. */

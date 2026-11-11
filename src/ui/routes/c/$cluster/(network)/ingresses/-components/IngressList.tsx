@@ -37,8 +37,10 @@ import {
 import type { QuickAction } from "@/components/ui/quick-actions";
 import {
   TlsBadge,
+  ingressTlsVerdict,
   ingressOpenUrl,
   vendorTlsAnswer,
+  type IngressTlsVerdict,
   type VendorTlsAnswer,
 } from "../../-components";
 import { useWatchedList } from "@/hooks/useWatchedList";
@@ -61,16 +63,21 @@ import { widestText } from "@/lib/text-width";
  * managed clouds.
  */
 const VendorTls = createContext<
-  ((ingress: IngressInfo) => VendorTlsAnswer | null) | null
+  | ((ingress: IngressInfo) => {
+      vendor: VendorTlsAnswer | null;
+      tls: IngressTlsVerdict;
+    })
+  | null
 >(null);
 
 function VendorTlsCell({ ingress }: { ingress: IngressInfo }) {
-  const of = useContext(VendorTls);
+  const said = useContext(VendorTls)?.(ingress);
   return (
     <TlsBadge
       tlsHosts={ingress.tlsHosts}
       hasCatchAllTls={ingress.hasCatchAllTls}
-      vendor={of?.(ingress) ?? null}
+      vendor={said?.vendor ?? null}
+      tls={said?.tls ?? "unknown"}
     />
   );
 }
@@ -398,6 +405,14 @@ export function IngressList() {
     (ingress: IngressInfo) => vendorTlsAnswer(ingress, vendorTls, t),
     [t, vendorTls]
   );
+  const { unread } = vendorTls;
+  const tlsFor = useCallback(
+    (ingress: IngressInfo) => {
+      const vendor = vendorFor(ingress);
+      return { vendor, tls: ingressTlsVerdict(ingress, vendor, unread) };
+    },
+    [vendorFor, unread]
+  );
 
   const quickActions = useMemo<
     (setDeleteTarget: (item: IngressInfo) => void) => QuickAction<IngressInfo>[]
@@ -430,7 +445,7 @@ export function IngressList() {
 
   return (
     <Health.Provider value={healthOf}>
-      <VendorTls.Provider value={vendorFor}>
+      <VendorTls.Provider value={tlsFor}>
         <ResourceList<IngressInfo>
           title="Ingresses"
           kind={ResourceType.Ingress}
