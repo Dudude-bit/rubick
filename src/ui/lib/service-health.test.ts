@@ -412,6 +412,40 @@ describe("one verdict for a Service on every surface", () => {
     ).toBe("NetworkPolicies a, b admit nothing on port 8080");
   });
 
+  /**
+   * A token refused the NetworkPolicies left a Service a default-deny shuts
+   * green "2 ready": nobody had checked for the shut door. Fails if ready
+   * counts read as a verdict while the policies over them went unread, or
+   * if a door that was read stops being trusted.
+   */
+  it("gives no green verdict to ready pods whose NetworkPolicies went unread", () => {
+    const unread = serviceHealthOf(
+      SELECTING,
+      published({
+        ready: 2,
+        door: { state: "unread", reason: "networkpolicies is forbidden" },
+      }),
+      null
+    );
+    expect(unread).toEqual({
+      state: "policiesUnread",
+      ready: 2,
+      why: "networkpolicies is forbidden",
+    });
+    const words = serviceHealthWords(unread, t);
+    expect(words).toMatchObject({ label: "2 ready", role: "neutral" });
+    expect(words.reason).toContain("networkpolicies is forbidden");
+    expect(words.glyph).toBeDefined();
+    for (const door of [
+      undefined,
+      { state: "open" as const },
+      { state: "guarded" as const, isolating: [], unsettled: [], ports: [] },
+    ])
+      expect(
+        serviceHealthOf(SELECTING, published({ ready: 2, door }), null).state
+      ).toBe("ready");
+  });
+
   /** A controller's own egress policies shut the way as surely as the pods' ingress ones. */
   it("calls a Service shut where a controller's own policies hold it back from the pods", () => {
     const stop: ChainStop = {

@@ -51,11 +51,12 @@ export function serviceStats(
       null
     );
     // Waiting on its workload's pods is the page's verdict, not a fault, and
-    // a shut door is the page's red verdict over counts that look whole.
+    // a shut door, or one nobody could check, is the page's verdict over
+    // counts that look whole.
+    const unread =
+      health.state === "podsUnread" || health.state === "policiesUnread";
     const told =
-      health.state === "comingUp" ||
-      health.state === "podsUnread" ||
-      health.state === "shut"
+      health.state === "comingUp" || unread || health.state === "shut"
         ? serviceHealthWords(health, t)
         : null;
     stats.push({
@@ -75,7 +76,7 @@ export function serviceStats(
               : published.ready === total
                 ? "ok"
                 : "warn",
-      unread: health.state === "podsUnread" || undefined,
+      unread: unread || undefined,
       note:
         idle && published.stop
           ? describeStop(published.stop, t).title

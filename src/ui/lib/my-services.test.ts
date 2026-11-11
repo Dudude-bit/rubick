@@ -592,6 +592,25 @@ describe("more ways in", () => {
   });
 
   /**
+   * Ready addresses a refused NetworkPolicy read never checked for a shut
+   * door are not known to serve. Fails if the card counts the way in as
+   * serving on the slices' word alone.
+   */
+  it("does not call a way in served where the NetworkPolicies over its pods went unread", () => {
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([
+        publishedHop({
+          ready: 3,
+          door: { state: "unread", reason: "forbidden" },
+        }),
+      ])
+    );
+    expect(entries[0].servingKnown).toBe(false);
+    expect(wayState(entries[0])).toBe("unread");
+  });
+
+  /**
    * A card's neighbourhood is a summary: three ready addresses arrive as one
    * with `whole: false`. Reading `whole` as "the counts were partial" put
    * "not read yet" on every Service with more than one replica.
