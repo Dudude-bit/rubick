@@ -122,6 +122,7 @@ vi.mock("@/lib/commands", () => ({
     detectGatewayApi: vi.fn(),
     listBackendTlsPolicies: vi.fn(),
     listApiCatalog: vi.fn(() => new Promise(() => {})),
+    listCrds: vi.fn(async () => []),
     listRoleBindingsIn: vi.fn(() => new Promise(() => {})),
     listClusterRoleBindings: vi.fn(() => new Promise(() => {})),
     listClusterRoleAggregation: vi.fn(() => new Promise(() => {})),
@@ -144,6 +145,7 @@ status:
 
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { deliveryOf } from "@/lib/delivery";
 import { ROLE_TEXT } from "@/lib/status-role";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
 import { useWindowActivity } from "@/lib/window-activity";
@@ -1812,17 +1814,70 @@ describe("PeekPanel on a custom resource", () => {
 
   /**
    * A vendor's inventory names an object by group and kind. Asked as the
-   * core Service, a delivered Knative one read "labelled and disowned".
+   * core Service, a delivered Knative one read "labelled and disowned"; not
+   * asked at all, its peek drew no delivery mark while its page drew one.
+   * Fails if the peek asks about any object but the one its page asks about.
    */
-  it("asks no vendor who delivers the built-in of a custom resource's name", async () => {
-    vi.mocked(commands.getCustomResource).mockResolvedValue(knativeService());
+  it("asks who delivers a custom resource by its own group, as its page does", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    vi.mocked(commands.listCrds).mockResolvedValue([
+      {
+        group: "serving.knative.dev",
+        crds: [{ name: "services.serving.knative.dev" }],
+      },
+    ] as never);
+    const resource = knativeService();
+    vi.mocked(commands.getCustomResource).mockResolvedValue(resource);
     deliveryAsked.mockClear();
-    await wrap(KNATIVE_PEEK);
-    expect(await screen.findByText("health.status")).toBeInTheDocument();
-    expect(deliveryAsked).toHaveBeenCalled();
-    expect(
-      deliveryAsked.mock.calls.filter(([query]) => query !== null)
-    ).toEqual([]);
+    try {
+      await wrap(KNATIVE_PEEK);
+      expect(await screen.findByText("health.status")).toBeInTheDocument();
+      const asked = () =>
+        deliveryAsked.mock.calls
+          .map(([query]) => query)
+          .filter((query) => query !== null);
+      await waitFor(() =>
+        expect(asked().at(-1)).toEqual(
+          deliveryOf("serving.knative.dev", "Service", resource)
+        )
+      );
+      expect(
+        asked().filter((query) => query.group !== "serving.knative.dev")
+      ).toEqual([]);
+    } finally {
+      vi.mocked(commands.listCrds).mockResolvedValue([]);
+      useClusterStore.setState({ isConnected: false });
+    }
+  });
+
+  /**
+   * A ServiceAccount opens on the generic page, which draws no delivery
+   * mark. Fails if the peek of a served kind no CRD defines asks the vendors
+   * and so draws a mark its page does not.
+   */
+  it("asks nobody who delivers a served kind that no CRD defines", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    vi.mocked(commands.getCustomResource).mockResolvedValue({
+      ...buildApplication(),
+      name: "marco",
+      namespace: "checkout",
+      apiVersion: "v1",
+      kind: "ServiceAccount",
+    });
+    deliveryAsked.mockClear();
+    try {
+      await wrap(
+        "/c/prod/events?peek=serviceaccounts/ServiceAccount/checkout/marco"
+      );
+      expect(await screen.findByText("health.status")).toBeInTheDocument();
+      await waitFor(() => expect(commands.listCrds).toHaveBeenCalled());
+      expect(deliveryAsked).toHaveBeenCalled();
+      expect(
+        deliveryAsked.mock.calls.filter(([query]) => query !== null)
+      ).toEqual([]);
+    } finally {
+      useClusterStore.setState({ isConnected: false });
+    }
   });
 
   /**

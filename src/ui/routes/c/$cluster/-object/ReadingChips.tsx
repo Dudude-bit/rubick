@@ -15,6 +15,7 @@ import {
 
 import type { KindReading, NotRead, Reading } from "@/generated/types";
 import { KindIcon } from "@/components/object/KindIcon";
+import { segmentOf } from "@/lib/access-kinds";
 import { useT } from "@/i18n/useT";
 import { cn, formatWhen } from "@/lib/utils";
 import { leftOut, listing } from "./ownership";
@@ -87,7 +88,11 @@ export function ReadingChips({
             key={`${reading.group}/${reading.plural}`}
             className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-[11px]"
           >
-            <KindIcon kind={reading.kind} className="h-3 w-3" />
+            <KindIcon
+              kind={reading.kind}
+              crd={segmentOf(reading)}
+              className="h-3 w-3"
+            />
             <span className="font-mono text-fg">
               {reading.kind}
               {(named.get(reading.kind) ?? 0) > 1 && reading.group && (

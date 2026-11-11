@@ -1,7 +1,9 @@
+import { CircleDashed, type LucideIcon } from "lucide-react";
+
+import { accessKindOf, builtInKindOf, type KindRef } from "./links";
 import {
   RESOURCE_REGISTRY,
-  isResourceType,
-  toKind,
+  getResourceDefinition,
   type ResourceKind,
 } from "./resource-registry";
 
@@ -115,10 +117,26 @@ const KIND_HUES = new Map<ResourceKind, number>(
   })
 );
 
-export function kindHue(kind: string): number {
-  const resolved = isResourceType(kind) ? toKind(kind) : null;
-  if (!resolved) return NEUTRAL_HUE;
-  return KIND_HUES.get(resolved) ?? NEUTRAL_HUE;
+/**
+ * The glyph and hue a kind is drawn with: the registry's, or an access
+ * kind's glyph, where the reference is that very kind; a dashed circle in
+ * the neutral hue for a custom kind, a namesake of a built-in among them.
+ */
+export function kindMark(ref: KindRef): { Icon: LucideIcon; hue: number } {
+  const builtIn = builtInKindOf(ref);
+  return {
+    Icon: builtIn
+      ? getResourceDefinition(builtIn).icon
+      : (accessKindOf(ref)?.icon ?? CircleDashed),
+    hue: (builtIn && KIND_HUES.get(builtIn)) ?? NEUTRAL_HUE,
+  };
+}
+
+export function kindHue(kind: ResourceKind): number;
+/** A kind read from the cluster says the segment it is served at, known or not. */
+export function kindHue(kind: string, crd: string | null | undefined): number;
+export function kindHue(kind: string, crd?: string | null): number {
+  return kindMark({ kind, crd }).hue;
 }
 
 /**

@@ -12,11 +12,12 @@ import { columnHeader } from "@/i18n/column-header";
 import { eventReasonMark } from "@/lib/event-reason";
 import { cn, formatDate } from "@/lib/utils";
 import { widestText } from "@/lib/text-width";
-import { hrefOf, objectLink } from "@/lib/links";
+import { crdFor, hrefOf, objectLink } from "@/lib/links";
 import type { PeekTarget } from "@/hooks/usePeek";
+import type { CrdLookup } from "@/hooks/useCrdIndex";
 import { eventLanding } from "../../-object/attachment";
 import { PastObjectRef } from "../../-object/PastObjectRef";
-import type { Past } from "@/lib/event-incarnation";
+import { namedOf, refOfNamed, type Past } from "@/lib/event-incarnation";
 import { tallyOf } from "@/lib/event-stories";
 import { sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
@@ -68,18 +69,18 @@ function ReasonCell({ row }: { row: { original: EventInfo } }) {
   );
 }
 
-const landingOf = (event: EventInfo) =>
-  eventLanding(event.involvedObject.kind, event);
+const landingOf = (event: EventInfo) => eventLanding(namedOf(event), event);
 
 type PastOf = (event: EventInfo) => Past | undefined;
 
 const NO_PAST: PastOf = () => undefined;
 const PastRows = createContext<PastOf>(NO_PAST);
+const Crds = createContext<CrdLookup>(() => null);
 
 /** A link to where the Event belongs; the row's whitespace is the peek. The glyph alone says the kind, on every row. */
 function ObjectCell({ row }: { row: { original: EventInfo } }) {
   const pastOf = useContext(PastRows);
-  const subject = subjectOf(row.original);
+  const subject = refOfNamed(namedOf(row.original), useContext(Crds));
   const landing = landingOf(row.original);
   const past = pastOf(row.original);
   if (past)
@@ -87,6 +88,7 @@ function ObjectCell({ row }: { row: { original: EventInfo } }) {
       <PastObjectRef
         kind={subject.kind}
         name={subject.name}
+        crd={subject.crd}
         namespace={subject.namespace}
         showKind={false}
         past={past}
@@ -98,6 +100,7 @@ function ObjectCell({ row }: { row: { original: EventInfo } }) {
       kind={subject.kind}
       name={subject.name}
       namespace={subject.namespace}
+      crd={subject.crd}
       showKind={false}
       linkOptions={landing}
       opens={landing ? "page" : "peek"}
@@ -274,8 +277,16 @@ function hrefOfEvent(event: EventInfo, pastOf: PastOf): string {
   return link ? hrefOf(link) : "";
 }
 
-const peekOfEvent = (event: EventInfo, pastOf: PastOf): PeekTarget | null =>
-  pastOf(event) ? null : { ...subjectOf(event), via: landingOf(event)?.via };
+/** The object's peek, as its link in the row opens it; none for a namesake no CRD here defines. */
+function peekOfEvent(
+  event: EventInfo,
+  pastOf: PastOf,
+  crdOf: CrdLookup
+): PeekTarget | null {
+  const ref = refOfNamed(namedOf(event), crdOf);
+  if (pastOf(event) || ref.crd === null) return null;
+  return { ...subjectOf(event), crd: crdFor(ref), via: landingOf(event)?.via };
+}
 
 const Waiting = createContext<{ n: number; show: () => void }>({
   n: 0,
@@ -297,6 +308,7 @@ const NO_QUICK_ACTIONS: never[] = [];
  */
 export function EventsTable({
   events,
+  crdOf,
   past = NO_PAST,
   showNamespace,
   emptyMessage,
@@ -305,6 +317,8 @@ export function EventsTable({
   cutAt,
 }: {
   events: EventInfo[];
+  /** The cluster's CRDs: a row about a custom kind opens that kind, never a built-in of its name. */
+  crdOf: CrdLookup;
   /** Where a row's object does not hold its name now: such a row links to no object. */
   past?: PastOf;
   showNamespace: boolean;
@@ -325,8 +339,8 @@ export function EventsTable({
     [past]
   );
   const rowPeek = useCallback(
-    (event: EventInfo) => peekOfEvent(event, past),
-    [past]
+    (event: EventInfo) => peekOfEvent(event, past, crdOf),
+    [past, crdOf]
   );
   const rowMenu = useRowMenu<EventInfo>({
     kind: "Event",
@@ -356,9 +370,11 @@ export function EventsTable({
   );
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PastRows.Provider value={past}>
-        <Waiting.Provider value={waitingValue}>{table}</Waiting.Provider>
-      </PastRows.Provider>
+      <Crds.Provider value={crdOf}>
+        <PastRows.Provider value={past}>
+          <Waiting.Provider value={waitingValue}>{table}</Waiting.Provider>
+        </PastRows.Provider>
+      </Crds.Provider>
       {rowMenu.element(NO_QUICK_ACTIONS)}
     </div>
   );

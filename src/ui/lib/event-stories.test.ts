@@ -361,6 +361,88 @@ describe("placing events", () => {
     ]);
   });
 
+  /**
+   * An OpenKruise StatefulSet and the built-in one of its name shared a card:
+   * the kinds folded by name were keyed by namespace and name alone. Fails if
+   * a custom kind named like a folded built-in joins the built-in's story.
+   */
+  it("gives a custom kind named like a folded built-in a story of its own", () => {
+    const kruise = event({
+      kind: "StatefulSet",
+      name: "web",
+      type: "Warning",
+      reason: "FailedCreate",
+    });
+    kruise.involvedObject.apiVersion = "apps.kruise.io/v1beta1";
+    const stories = storiesOf(
+      [event({ kind: "StatefulSet", name: "web" }), kruise],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(stories.map((story) => story.subject.group).sort()).toEqual([
+      "apps",
+      "apps.kruise.io",
+    ]);
+    expect(new Set(stories.map((story) => story.key)).size).toBe(2);
+  });
+
+  /**
+   * A Volcano Job made a pod, and a CronJob made a batch Job of the Volcano
+   * Job's name. Fails if the pod's story climbs from the Volcano Job to the
+   * CronJob, whose claim was on the built-in Job of that name.
+   */
+  it("stops climbing at an owner that only shares a built-in's name", () => {
+    const volcano = event({
+      kind: "Job",
+      name: "train",
+      reason: "SuccessfulCreate",
+      message: "Created pod: train-0",
+    });
+    volcano.involvedObject.apiVersion = "batch.volcano.sh/v1alpha1";
+    const stories = storiesOf(
+      [
+        event({
+          kind: "CronJob",
+          name: "nightly",
+          reason: "SuccessfulCreate",
+          message: "Created job train",
+        }),
+        volcano,
+        event({ kind: "Pod", name: "train-0", type: "Warning" }),
+      ],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    const pods = stories.find((story) => story.members.includes("Pod/train-0"));
+    expect(pods?.subject).toMatchObject({
+      kind: "Job",
+      group: "batch.volcano.sh",
+      name: "train",
+    });
+  });
+
+  /**
+   * A Volcano Job's `Completed` was counted as a batch Job's run, and its
+   * story said how many jobs a CronJob had created. Fails if a namesake's
+   * reasons are read with the built-in's vocabulary.
+   */
+  it("does not read a namesake's reasons as the built-in Job's", () => {
+    const volcano = event({ kind: "Job", name: "train", reason: "Completed" });
+    volcano.involvedObject.apiVersion = "batch.volcano.sh/v1alpha1";
+    expect(activityOf(volcano, null)).toBe("other");
+    expect(
+      activityOf(
+        event({ kind: "Job", name: "train", reason: "Completed" }),
+        null
+      )
+    ).toBe("job");
+    const [story] = storiesOf([volcano], {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+    });
+    expect(story.activity).toBe("other");
+    expect(story.says.key).toBe("storyQuiet");
+  });
+
   it("follows Deployment to ReplicaSet to Pod when every link was written", () => {
     const stories = storiesOf(
       [

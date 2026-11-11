@@ -19,8 +19,10 @@ import { ChevronRight } from "lucide-react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { commands } from "@/lib/commands";
 import { replicaSetter, replicaSetterWords } from "@/lib/connections";
-import { isScalable, toKind, isResourceType } from "@/lib/resource-registry";
-import { ResourceRef } from "@/components/object/ResourceRef";
+import { isScalable } from "@/lib/resource-registry";
+import { isBuiltInGroup } from "@/lib/links";
+import { groupOf } from "@/hooks/useCrdIndex";
+import { OwnerRef } from "../../-peek/OwnerRef";
 import { KeyValueRow } from "../../-object/detail-kv";
 import type { OwnerReference, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -32,11 +34,12 @@ interface RelatedResourcesProps {
   connections?: ResourceConnections;
 }
 
-/** One hop up: what owns the thing below it. */
-interface Hop {
-  kind: string;
-  name: string;
-}
+/** One hop up: what owns the thing below it, with the group that says which kind it is. */
+type Hop = Pick<OwnerReference, "api_version" | "kind" | "name">;
+
+/** Whether an owner is the built-in of its kind's name, not a custom kind that shares it. */
+const isBuiltIn = (hop: Hop) =>
+  isBuiltInGroup(hop.kind, groupOf(hop.api_version));
 
 /**
  * The kinds whose own owner can be read back.
@@ -61,10 +64,9 @@ const OWNER_OF: Record<
 };
 
 /** The controller, or the first owner where nothing claims to control. */
-function controllerOf(owners: OwnerReference[] | undefined) {
+function controllerOf(owners: OwnerReference[] | undefined): Hop | null {
   if (!owners?.length) return null;
-  const owner = owners.find((entry) => entry.controller) ?? owners[0];
-  return { kind: owner.kind, name: owner.name };
+  return owners.find((entry) => entry.controller) ?? owners[0];
 }
 
 /**
@@ -81,13 +83,12 @@ async function walkUp(start: Hop, namespace: string): Promise<Hop[]> {
   let current: Hop | null = start;
 
   while (current && hops.length < 4) {
-    const key = `${current.kind}/${current.name}`;
+    const key = `${current.api_version}/${current.kind}/${current.name}`;
     if (seen.has(key)) break;
     seen.add(key);
     hops.push(current);
 
-    const kind = isResourceType(current.kind) ? toKind(current.kind) : null;
-    const fetchOwner = kind ? OWNER_OF[kind] : undefined;
+    const fetchOwner = isBuiltIn(current) ? OWNER_OF[current.kind] : undefined;
     if (!fetchOwner) break;
     try {
       const parent = await fetchOwner(current.name, namespace);
@@ -112,7 +113,13 @@ export function RelatedResources({
   const others = (ownerReferences ?? []).filter((ref) => !ref.controller);
 
   const { data: chain } = useQuery({
-    queryKey: ["owner-chain", namespace, controller?.kind, controller?.name],
+    queryKey: [
+      "owner-chain",
+      namespace,
+      controller?.api_version,
+      controller?.kind,
+      controller?.name,
+    ],
     queryFn: () => walkUp(controller!, namespace!),
     enabled: !!controller && !!namespace,
     staleTime: 60_000,
@@ -128,7 +135,7 @@ export function RelatedResources({
   const hops = chain ?? (controller ? [controller] : []);
   const top = hops[hops.length - 1];
   const setter =
-    top && connections && isScalable(top.kind)
+    top && connections && isBuiltIn(top) && isScalable(top.kind)
       ? replicaSetterWords(
           replicaSetter(connections, { ...top, namespace: namespace ?? null }),
           t
@@ -144,7 +151,7 @@ export function RelatedResources({
             <span className="flex flex-wrap items-baseline gap-x-2">
               {hops.map((hop, index) => (
                 <span
-                  key={`${hop.kind}/${hop.name}`}
+                  key={`${hop.api_version}/${hop.kind}/${hop.name}`}
                   className="inline-flex items-baseline gap-x-2"
                 >
                   {index > 0 && (
@@ -181,12 +188,7 @@ export function RelatedResources({
 function OwnerName({ hop, namespace }: { hop: Hop; namespace?: string }) {
   return (
     <span className="inline-flex items-baseline gap-x-2">
-      <ResourceRef
-        kind={hop.kind}
-        name={hop.name}
-        namespace={namespace}
-        showKind={false}
-      />
+      <OwnerRef owner={hop} namespace={namespace ?? null} />
       {/* The kind qualifies the name. It is not a state, so it is quiet
        *  text rather than a badge. */}
       <span className="text-[11px] text-fg-fnt">{hop.kind}</span>

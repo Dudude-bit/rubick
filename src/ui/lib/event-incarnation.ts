@@ -1,4 +1,5 @@
 import type { EventInfo } from "@/generated/types";
+import { crdInGroup, type ObjectRef } from "./links";
 
 /** The uid of the object an event is about; the kubelet writes a Node's name there, which names no incarnation. */
 export function involvedUid(event: EventInfo): string | null {
@@ -48,6 +49,21 @@ export const namedOf = (event: EventInfo): Named => ({
 });
 
 const nameOf = (event: EventInfo) => nameKey(namedOf(event));
+
+/**
+ * How the object an event names is addressed: by the CRD of its group, so a
+ * namesake of a built-in opens itself or nothing; by its kind's name alone
+ * where the event names no group.
+ */
+export const refOfNamed = (
+  named: Named,
+  crdOf: (group: string, kind: string) => string | null
+): ObjectRef => ({
+  kind: named.kind,
+  name: named.name,
+  namespace: named.namespace,
+  crd: named.group === null ? undefined : crdInGroup(named, crdOf),
+});
 
 const at = (value: string | null) => {
   const ms = value ? Date.parse(value) : Number.NaN;

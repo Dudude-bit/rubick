@@ -43,3 +43,43 @@ describe("the reading beside the name", () => {
     expect(container.querySelector("[data-text]")).toBeNull();
   });
 });
+
+describe("the mark beside the name", () => {
+  const header = (served?: { group: string; plural: string }) => (
+    <ResourceDetailHeader
+      name="web"
+      kind="Service"
+      namespace="shop"
+      served={served}
+      onBack={() => {}}
+    />
+  );
+
+  /**
+   * A Knative Service's page was titled with the core Service's glyph.
+   * Fails if a page told where its kind is served draws the built-in's mark
+   * for a namesake, or stops drawing it for the built-in itself.
+   */
+  it("is the kind's own where the page is of a custom kind named like a built-in", async () => {
+    const custom = await renderWithRouter(
+      header({ group: "serving.knative.dev", plural: "services" })
+    );
+    expect(screen.getByTestId("resource-ref-icon")).toHaveClass(
+      "lucide-circle-dashed"
+    );
+    custom.unmount();
+
+    const core = await renderWithRouter(
+      header({ group: "", plural: "services" })
+    );
+    expect(screen.getByTestId("resource-ref-icon")).not.toHaveClass(
+      "lucide-circle-dashed"
+    );
+    core.unmount();
+
+    await renderWithRouter(header());
+    expect(screen.getByTestId("resource-ref-icon")).not.toHaveClass(
+      "lucide-circle-dashed"
+    );
+  });
+});

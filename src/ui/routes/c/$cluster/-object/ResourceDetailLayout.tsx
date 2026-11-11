@@ -308,7 +308,7 @@ export function ResourceDetailLayout({
         : null,
     [resource, resourceKind, title, namespace, crd]
   );
-  const builtIn = builtInKindOf({ kind: resourceKind, name: title, crd });
+  const builtIn = builtInKindOf({ kind: resourceKind, crd });
 
   // A page key (`l`, `y`, `e`, `o`) names a tab, and this frame is the one
   // thing every detail page renders through, so it answers for all of them:

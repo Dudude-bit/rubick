@@ -49,12 +49,24 @@ describe("a story card held between watch ticks", () => {
     };
     const [story] = storiesOf([backOff], whole);
     const { rerender } = await renderWithRouter(
-      <StoryCard story={story} options={whole} showNamespace={false} />
+      <StoryCard
+        crd={undefined}
+        story={story}
+        options={whole}
+        showNamespace={false}
+      />
     );
     expect(unreadSlices()).toBe(0);
 
     const cut: StoryOptions = { ...whole, readFrom: NOW - HOUR / 2 };
-    rerender(<StoryCard story={story} options={cut} showNamespace={false} />);
+    rerender(
+      <StoryCard
+        crd={undefined}
+        story={story}
+        options={cut}
+        showNamespace={false}
+      />
+    );
     expect(unreadSlices()).toBe(12);
   });
 
@@ -79,13 +91,23 @@ describe("a story card held between watch ticks", () => {
     const narrowed: StoryOptions = { ...whole, narrowed: true };
     const [done] = storiesOf([started], whole);
     const { rerender } = await renderWithRouter(
-      <StoryCard story={done} options={whole} showNamespace={false} />
+      <StoryCard
+        crd={undefined}
+        story={done}
+        options={whole}
+        showNamespace={false}
+      />
     );
     expect(screen.getByText("done")).toBeInTheDocument();
 
     const [unsure] = storiesOf([started], narrowed);
     rerender(
-      <StoryCard story={unsure} options={narrowed} showNamespace={false} />
+      <StoryCard
+        crd={undefined}
+        story={unsure}
+        options={narrowed}
+        showNamespace={false}
+      />
     );
     expect(screen.getByText("cannot say")).toBeInTheDocument();
   });
@@ -112,7 +134,12 @@ describe("a story about an earlier object of a name", () => {
     };
     const [story] = storiesOf([earlier], options);
     const { container } = await renderWithRouter(
-      <StoryCard story={story} options={options} showNamespace={false} />
+      <StoryCard
+        crd={undefined}
+        story={story}
+        options={options}
+        showNamespace={false}
+      />
     );
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.getByText("earlier object")).toBeInTheDocument();
@@ -142,7 +169,12 @@ describe("a story about an earlier object of a name", () => {
     };
     const [story] = storiesOf([earlier], options);
     await renderWithRouter(
-      <StoryCard story={story} options={options} showNamespace={false} />
+      <StoryCard
+        crd={undefined}
+        story={story}
+        options={options}
+        showNamespace={false}
+      />
     );
     expect(screen.queryByText("still happening")).toBeNull();
     const badge = screen.getByText("ended with it");
@@ -177,6 +209,7 @@ describe("a story about an object read as deleted", () => {
     expect(settled.state).toBe("settled");
     const { container } = await renderWithRouter(
       <StoryCard
+        crd={undefined}
         story={withGone([settled], new Set([subjectKey(settled.subject)]))[0]}
         options={options}
         showNamespace={false}
@@ -217,7 +250,12 @@ describe("a story about pods folded by their name", () => {
     });
     const [one] = storiesOf([started("hello-web-5966d9b889-7nvr5")], options);
     const { rerender } = await renderWithRouter(
-      <StoryCard story={one} options={options} showNamespace={false} />
+      <StoryCard
+        crd={undefined}
+        story={one}
+        options={options}
+        showNamespace={false}
+      />
     );
     expect(screen.getByText("pod of hello-web")).toBeInTheDocument();
     expect(screen.getByText(/^The pod within /)).toBeInTheDocument();
@@ -229,14 +267,26 @@ describe("a story about pods folded by their name", () => {
       ],
       options
     );
-    rerender(<StoryCard story={two} options={options} showNamespace={false} />);
+    rerender(
+      <StoryCard
+        crd={undefined}
+        story={two}
+        options={options}
+        showNamespace={false}
+      />
+    );
     expect(screen.getByText("pods of hello-web")).toBeInTheDocument();
     expect(screen.getByText(/^Pods within /)).toBeInTheDocument();
 
     useLocaleStore.setState({ choice: "ru" });
     try {
       rerender(
-        <StoryCard story={one} options={options} showNamespace={false} />
+        <StoryCard
+          crd={undefined}
+          story={one}
+          options={options}
+          showNamespace={false}
+        />
       );
       expect(await screen.findByText("под из hello-web")).toBeInTheDocument();
       expect(screen.getByText(/^Под за /)).toBeInTheDocument();
@@ -297,7 +347,12 @@ describe("a story's clock for a static pod", () => {
       options
     );
     await renderWithRouter(
-      <StoryCard story={story} options={options} showNamespace={false} />,
+      <StoryCard
+        crd={undefined}
+        story={story}
+        options={options}
+        showNamespace={false}
+      />,
       { client }
     );
     fireEvent.click(screen.getByRole("button", { name: "Timeline" }));

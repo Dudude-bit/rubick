@@ -64,9 +64,16 @@ interface YamlEditorState {
   formatYaml: () => Promise<boolean>;
 }
 
-function getResourceKeyString(key: ResourceKey | null): string {
+/**
+ * What an object's history is filed under: the cluster first, since the same
+ * kind, namespace and name on another cluster is another object.
+ */
+function historyKey({
+  resourceKey: key,
+  openedOn,
+}: Pick<YamlEditorState, "resourceKey" | "openedOn">): string {
   if (!key) return "";
-  return `${key.kind}:${key.namespace || "cluster"}:${key.name}`;
+  return `${openedOn ?? ""}:${key.kind}:${key.namespace || "cluster"}:${key.name}`;
 }
 
 /** Moves on every open and every close, so a read can tell whether the editor
@@ -93,11 +100,12 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   openEditor: async ({ title, resourceKey, fetchYaml, readOnly = false }) => {
     const connection = currentConnection();
     const mine = ++opening;
+    const openedOn = useClusterStore.getState().currentContext;
     set({
       open: true,
       title,
       resourceKey,
-      openedOn: useClusterStore.getState().currentContext,
+      openedOn,
       readOnly,
       originalContent: "",
       editedContent: "",
@@ -109,7 +117,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
 
     try {
       // Load history for this resource from backend
-      const key = getResourceKeyString(resourceKey);
+      const key = historyKey({ resourceKey, openedOn });
       if (key) {
         try {
           const entries = await commands.getYamlHistory(key);
@@ -198,8 +206,8 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   },
 
   addHistoryEntry: (content, label) => {
-    const { resourceKey, history } = get();
-    const key = getResourceKeyString(resourceKey);
+    const { history } = get();
+    const key = historyKey(get());
     if (!key) return;
 
     const newEntry: HistoryEntry = {
@@ -232,8 +240,8 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   },
 
   restoreFromHistory: (timestamp) => {
-    const { resourceKey, history } = get();
-    const key = getResourceKeyString(resourceKey);
+    const { history } = get();
+    const key = historyKey(get());
     if (!key) return;
 
     const entry = history[key]?.find((e) => e.timestamp === timestamp);
@@ -247,8 +255,8 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   },
 
   getResourceHistory: () => {
-    const { resourceKey, history } = get();
-    const key = getResourceKeyString(resourceKey);
+    const { history } = get();
+    const key = historyKey(get());
     if (!key) return [];
     return history[key] || [];
   },

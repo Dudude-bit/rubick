@@ -344,6 +344,66 @@ describe("the events of an object no screen draws", () => {
   });
 });
 
+describe("the events of an object whose kind discovery has not named yet", () => {
+  const APPLICATION: CatalogEntry = {
+    ...LEASES,
+    group: "argoproj.io",
+    version: "v1alpha1",
+    kind: "Application",
+    plural: "applications",
+  };
+  const askedKinds = () =>
+    answers.events.mock.calls.map(
+      ([filter]) =>
+        (filter as { involved_object_kind: string }).involved_object_kind
+    );
+  const openApplication = () =>
+    renderWithRouter(
+      <GenericObjectPage
+        resource="applications.argoproj.io"
+        namespace="argocd"
+        name="shop"
+      />
+    );
+
+  /**
+   * While discovery was still reading, the page asked for the events of the
+   * kind `applications.argoproj.io`, its own address segment, which no event
+   * names. Fails if a question goes out before the kind is known, or with
+   * anything but the kind's name once it is.
+   */
+  it("asks nothing until discovery names the kind, then asks by that name", async () => {
+    let served = (_catalog: ApiCatalog) => {};
+    answers.catalog = () => new Promise((resolve) => (served = resolve));
+    answers.object = () => new Promise(() => {});
+    answers.events.mockClear();
+    await openApplication();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 30)));
+    expect(askedKinds()).toEqual([]);
+
+    await act(async () => served({ entries: [APPLICATION], unread: [] }));
+    await waitFor(() => expect(askedKinds()).toEqual(["Application"]));
+  });
+
+  /**
+   * Discovery may never answer for a group while the object itself reads.
+   * Fails if the page then asks by its address segment, or never asks though
+   * the object has said its own kind.
+   */
+  it("asks by the kind the object itself names where discovery has not answered", async () => {
+    answers.catalog = () => new Promise(() => {});
+    answers.object = () =>
+      Promise.resolve({
+        apiVersion: "argoproj.io/v1alpha1",
+        kind: "Application",
+        metadata: { name: "shop" },
+      });
+    answers.events.mockClear();
+    await openApplication();
+    await waitFor(() => expect(askedKinds()).toEqual(["Application"]));
+  });
+});
+
 describe("an autoscaler's page", () => {
   const HPAS: CatalogEntry = {
     group: "autoscaling",

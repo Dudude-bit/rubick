@@ -12,6 +12,7 @@ import type { LucideIcon } from "lucide-react";
 import { failingCondition } from "@/lib/condition-health";
 import type { T } from "@/i18n/useT";
 import { statusRole } from "@/lib/status-role";
+import type { ResourceKind } from "@/lib/resource-registry";
 import type { ConditionInfo, PodInfo } from "@/generated/types";
 
 /**
@@ -27,7 +28,7 @@ import type { ConditionInfo, PodInfo } from "@/generated/types";
  * and a hue would claim it is a resource.
  */
 export type DetailTabGlyph =
-  | { names: "kind"; kind: string }
+  | { names: "kind"; kind: string; crd?: string | null }
   | { names: "view"; icon: LucideIcon };
 
 /**
@@ -81,10 +82,15 @@ export interface DetailTab {
  * their tabs in a bare array literal, where `{ names: "kind", … }` widens to
  * `names: string` and stops being assignable to the union at all.
  */
-export const kindGlyph = (kind: string): DetailTabGlyph => ({
-  names: "kind",
-  kind,
-});
+export function kindGlyph(kind: ResourceKind): DetailTabGlyph;
+/** A kind read from the cluster says where it is served, so a namesake of a built-in keeps its own mark. */
+export function kindGlyph(
+  kind: string,
+  crd: string | null | undefined
+): DetailTabGlyph;
+export function kindGlyph(kind: string, crd?: string | null): DetailTabGlyph {
+  return { names: "kind", kind, crd };
+}
 
 export const viewGlyph = (icon: LucideIcon): DetailTabGlyph => ({
   names: "view",

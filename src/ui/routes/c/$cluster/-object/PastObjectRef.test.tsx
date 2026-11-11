@@ -12,7 +12,13 @@ describe("a name that is not the object there now", () => {
    */
   it("gives a narrow cell's room to the name and keeps the mark's word for wider ones", async () => {
     const { container } = await renderWithRouter(
-      <PastObjectRef kind="Pod" name="wd-demo" past="earlier" fit />
+      <PastObjectRef
+        kind="Pod"
+        name="wd-demo"
+        crd={undefined}
+        past="earlier"
+        fit
+      />
     );
     const word = screen.getByText("earlier object");
     expect(word).toHaveClass("sr-only", "@[15rem]:not-sr-only");
@@ -22,10 +28,20 @@ describe("a name that is not the object there now", () => {
     );
   });
 
+  /** A deleted Volcano Job's row wore the batch Job's glyph; fails if the name's mark ignores where its kind is served. */
+  it("draws a custom kind named like a built-in with a mark of its own", async () => {
+    await renderWithRouter(
+      <PastObjectRef kind="Job" name="train" crd={null} past="gone" />
+    );
+    expect(screen.getByTestId("resource-ref-icon")).toHaveClass(
+      "lucide-circle-dashed"
+    );
+  });
+
   /** A story card's header has the room; fails if the word is hidden where nothing asked. */
   it("says the mark's word in full where it is not fitted to a cell", async () => {
     await renderWithRouter(
-      <PastObjectRef kind="Pod" name="wd-demo" past="earlier" />
+      <PastObjectRef kind="Pod" name="wd-demo" crd={undefined} past="earlier" />
     );
     expect(screen.getByText("earlier object")).not.toHaveClass("sr-only");
   });

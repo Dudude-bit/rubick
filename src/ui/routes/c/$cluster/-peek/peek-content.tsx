@@ -58,7 +58,7 @@ import { PeekActions } from "./PeekActions";
 import { CopyName } from "../-object/CopyName";
 import { DeliveryMarks, HelmMark } from "../-delivery/delivery";
 import { useDelivery } from "../-delivery/useDelivery";
-import { deliveryOfKind } from "@/lib/delivery";
+import { deliveryOf, deliveryOfKind } from "@/lib/delivery";
 import {
   getResourceDefinition,
   ResourceType,
@@ -193,18 +193,23 @@ export function PeekContent({
   );
   // "Where do I change this" is the same question in a preview as on the page,
   // and the answer is the same size — one small element beside the status.
+  const labelled = data as
+    | {
+        name: string;
+        namespace?: string | null;
+        labels?: Record<string, string>;
+        annotations?: Record<string, string>;
+      }
+    | undefined;
+  // A custom resource is asked about by its CRD's group, as its page asks;
+  // a served kind no CRD defines opens on a page that asks nothing.
+  const { isCrd } = useCrdIndex();
   const { deliveries } = useDelivery(
-    deliveryOfKind(
-      builtIn ?? "",
-      data as
-        | {
-            name: string;
-            namespace?: string | null;
-            labels?: Record<string, string>;
-            annotations?: Record<string, string>;
-          }
-        | undefined
-    )
+    builtIn
+      ? deliveryOfKind(builtIn, labelled)
+      : target.crd && isCrd(target.crd)
+        ? deliveryOf(servedOf(target.crd).group, target.kind, labelled)
+        : null
   );
   // The tab the reader is on comes along: leaving Logs for the page and
   // landing on Overview is a second click nobody asked for.

@@ -1,7 +1,6 @@
 import {
   AlignLeft,
   BadgeCheck,
-  CircleDashed,
   EyeOff,
   ExternalLink,
   History,
@@ -37,12 +36,10 @@ import {
   type ReportSection,
   type ReportWords,
 } from "./report";
-import {
-  getResourceDefinition,
-  isResourceType,
-  toKind,
-} from "./resource-registry";
-import { identHue, kindHue, splitName } from "./resource-identity";
+import type { ResourceKind } from "./resource-registry";
+import { identHue, kindHue, kindMark, splitName } from "./resource-identity";
+import { namedOf } from "./event-incarnation";
+import { drawnCrd } from "./links";
 import { ROLE_ICON, statusRole } from "./status-role";
 
 /**
@@ -123,16 +120,22 @@ const JOURNAL_WINDOW_MS = 7 * 24 * 60 * 60_000;
 /** Enough events to see a pattern; the Events screen has the rest. */
 const MAX_EVENTS = 25;
 
-export function kindIcon(kind: string): LucideIcon {
-  const resolved = isResourceType(kind) ? toKind(kind) : null;
-  return resolved ? getResourceDefinition(resolved).icon : CircleDashed;
+export function kindIcon(kind: ResourceKind): LucideIcon;
+/** A kind read from the cluster says the segment it is served at, known or not. */
+export function kindIcon(
+  kind: string,
+  crd: string | null | undefined
+): LucideIcon;
+export function kindIcon(kind: string, crd?: string | null): LucideIcon {
+  return kindMark({ kind, crd }).Icon;
 }
 
-/** The object the way `ResourceName` draws it, so the file and the app agree on its colours. */
+/** The object the way `ResourceName` draws it, so the file and the app agree on its glyph and colours. */
 export function refOf(object: {
   kind: string;
   name: string;
   namespace: string | null;
+  crd?: string | null;
 }): ReportRef {
   const { stem, tail } = splitName(object.name);
   return {
@@ -140,8 +143,8 @@ export function refOf(object: {
     namespace: object.namespace,
     stem,
     tail,
-    icon: iconSvg(kindIcon(object.kind)),
-    kindHue: kindHue(object.kind),
+    icon: iconSvg(kindIcon(object.kind, object.crd)),
+    kindHue: kindHue(object.kind, object.crd),
     identHue: identHue(object.kind, object.name),
   };
 }
@@ -245,6 +248,7 @@ export function eventsSection(
               kind: event.involvedObject.kind,
               name: event.involvedObject.name,
               namespace: event.namespace || null,
+              crd: drawnCrd(namedOf(event)),
             })
           : undefined,
       })),
@@ -303,10 +307,10 @@ const TEMPLATE_HASH = /^(.+)-[bcdfghjklmnpqrstvwxz2456789]{5,10}$/;
  * `null` when there is none, and then nothing about changes can be said.
  */
 function watchedAs(
-  subject: { kind: string; name: string },
+  subject: { kind: ResourceKind | null; name: string },
   owners: readonly { kind: string; name: string }[]
 ): { kind: string; name: string }[] | null {
-  if (hasChangesTab(subject.kind))
+  if (subject.kind && hasChangesTab(subject.kind))
     return [{ kind: subject.kind, name: subject.name }];
   const out = owners.flatMap((owner) => {
     if (hasChangesTab(owner.kind)) return [owner];
@@ -330,9 +334,11 @@ export function changesSection(
   },
   context: string,
   subject: {
-    kind: string;
+    /** The registry's kind, `null` for a custom one: a namesake is not the workload the journal watched. */
+    kind: ResourceKind | null;
     name: string;
     namespace: string | null;
+    /** The built-in kinds that own it. */
     owners: readonly { kind: string; name: string }[];
   },
   capturedAt: string,

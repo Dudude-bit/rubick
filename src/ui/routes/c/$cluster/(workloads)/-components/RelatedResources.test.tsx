@@ -157,4 +157,59 @@ describe("RelatedResources", () => {
     expect(getReplicaset).not.toHaveBeenCalled();
     expect(getJob).not.toHaveBeenCalled();
   });
+
+  /**
+   * A pod an OpenKruise StatefulSet or a Volcano Job controls named its
+   * owner as the built-in of that name: the link opened `statefulsets/…/web`
+   * and the chain read the batch Job `train` for its owner. Fails if an owner
+   * in another group is linked to, or read as, the built-in it shares a kind
+   * name with.
+   */
+  it("neither links nor reads an owner in another group as the built-in of its name", async () => {
+    getJob.mockResolvedValue({
+      ownerReferences: [owner("CronJob", "nightly")],
+    });
+    const custom = (apiVersion: string, kind: string, name: string) => ({
+      ...owner(kind, name),
+      api_version: apiVersion,
+    });
+    const volcano = await wrap(
+      <RelatedResources
+        ownerReferences={[custom("batch.volcano.sh/v1alpha1", "Job", "train")]}
+        namespace="k8s-gui-test"
+      />
+    );
+    expect(await screen.findByText("train")).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(getJob).not.toHaveBeenCalled();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText("nightly")).toBeNull();
+    volcano.unmount();
+
+    // Nor is it said to set its own replica count: nobody looked for what scales it.
+    await wrap(
+      <RelatedResources
+        ownerReferences={[
+          custom("apps.kruise.io/v1beta1", "StatefulSet", "web"),
+        ]}
+        namespace="k8s-gui-test"
+        connections={{
+          subject: {
+            kind: "Pod",
+            name: "web-0",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          edges: [],
+          stops: [],
+          published: [],
+          notLookedAt: [],
+        }}
+      />
+    );
+    expect(await screen.findByText("web")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText(/replica count/)).toBeNull();
+  });
 });

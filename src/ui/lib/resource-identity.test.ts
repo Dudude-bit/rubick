@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vite-plus/test";
 import { contrast, type Rgb } from "./color";
+import { CircleDashed } from "lucide-react";
 import {
   splitName,
   identHue,
   kindHue,
+  kindMark,
   crdWidthsKey,
   IDENT_HUES,
 } from "./resource-identity";
@@ -180,7 +182,45 @@ describe("kindHue", () => {
   });
 
   it("falls back for an unknown kind", () => {
-    expect(kindHue("Frobnicator")).toBe(kindHue("Node"));
+    expect(kindHue("Frobnicator", undefined)).toBe(kindHue("Node"));
+  });
+});
+
+describe("how a kind read from the cluster is drawn", () => {
+  const service = kindMark({ kind: "Service", crd: undefined });
+
+  /**
+   * A Knative Service wore the core Service's glyph and hue wherever a kind
+   * was drawn by its name. Fails if a kind served by another CRD, or one no
+   * CRD here defines, is drawn as the built-in it shares a name with.
+   */
+  it("draws a namesake of a built-in as a kind of its own", () => {
+    for (const crd of ["services.serving.knative.dev", null]) {
+      const drawn = kindMark({ kind: "Service", crd });
+      expect(drawn.Icon).toBe(CircleDashed);
+      expect(drawn.Icon).not.toBe(service.Icon);
+      expect(drawn.hue).toBe(kindHue("Frobnicator", undefined));
+      expect(kindHue("Service", crd)).not.toBe(service.hue);
+    }
+  });
+
+  /** Fails if a built-in addressed by its own served segment loses its glyph. */
+  it("draws a built-in addressed by its own segment as the built-in", () => {
+    expect(kindMark({ kind: "Service", crd: "services" })).toEqual(service);
+    expect(kindMark({ kind: "Deployment", crd: "deployments.apps" })).toEqual(
+      kindMark({ kind: "Deployment", crd: undefined })
+    );
+  });
+
+  /** An access kind has a glyph outside the registry; fails if a namesake of one takes it. */
+  it("gives an access kind its glyph and a namesake of one a dashed circle", () => {
+    const account = kindMark({ kind: "ServiceAccount", crd: undefined }).Icon;
+    expect(account).not.toBe(CircleDashed);
+    expect(
+      kindMark({ kind: "ServiceAccount", crd: "serviceaccounts" }).Icon
+    ).toBe(account);
+    for (const crd of ["serviceaccounts.example.dev", null])
+      expect(kindMark({ kind: "ServiceAccount", crd }).Icon).toBe(CircleDashed);
   });
 });
 

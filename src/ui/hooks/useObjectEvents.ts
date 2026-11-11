@@ -6,11 +6,16 @@ import { useReadEventsUid } from "@/hooks/useReadUid";
 import type { EventInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
-import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
-import { builtInKindOf, type ObjectRef } from "@/lib/links";
+import {
+  getResourceDefinition,
+  ResourceType,
+  type ResourceKind,
+} from "@/lib/resource-registry";
+import { builtInKindOf, crdFor, type ObjectRef } from "@/lib/links";
+import { servedOf } from "@/lib/served-segment";
 import { isRefusal } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { involvedUid } from "@/lib/event-incarnation";
+import { groupIn, involvedUid } from "@/lib/event-incarnation";
 import { cronJobRunsKey, readCronJobRuns } from "@/lib/cron-runs";
 
 /** Enough of one object's events that a short list shown from them has a true total behind it. */
@@ -22,12 +27,33 @@ export type ObjectEventsQuery = ReturnType<typeof useObjectEvents>;
  * Whose events are read: a kind of the registry, or a custom one by the
  * name it goes by. Knative's Service and Volcano's Job share a built-in's
  * name and nothing else, so no free string is taken for a registry kind.
+ * Its group tells its events from a namesake's; `null` where nobody knows it.
  */
-export type EventsKind = ResourceKind | { custom: string };
+export type EventsKind =
+  | ResourceKind
+  | { custom: string; group: string | null };
 
 /** The kind a reference's events are read as: the registry's only where it is that very kind. */
-export const eventsKindOf = (ref: ObjectRef): EventsKind =>
-  builtInKindOf(ref) ?? { custom: ref.kind };
+export function eventsKindOf(ref: ObjectRef): EventsKind {
+  const builtIn = builtInKindOf(ref);
+  if (builtIn) return builtIn;
+  const crd = ref.crd === null ? undefined : crdFor(ref);
+  return { custom: ref.kind, group: crd ? servedOf(crd).group : null };
+}
+
+/**
+ * Without the events of a namesake kind: events are asked for by the kind's
+ * name, which a kind in another group may share. An event that names no
+ * group could be either's and is kept.
+ */
+export function ofGroup(events: EventInfo[], group: string | null) {
+  if (group === null) return events;
+  const own = events.filter((event) => {
+    const said = groupIn(event.involvedObject.apiVersion);
+    return said === null || said === group;
+  });
+  return own.length === events.length ? events : own;
+}
 
 /**
  * The events of the object with `uid`, where it is known: an event that names
@@ -55,7 +81,7 @@ const WARNINGS_OF_OWNED: Partial<
   Record<
     string,
     {
-      kind: string;
+      kind: ResourceKind;
       owned: (
         client: QueryClient,
         name: string,
@@ -114,7 +140,9 @@ export function useObjectEvents(
   }
 ) {
   const builtIn = typeof of === "string" ? of : null;
-  const kind = builtIn ?? (of as { custom: string }).custom;
+  const kind = typeof of === "string" ? of : of.custom;
+  const group =
+    typeof of === "string" ? getResourceDefinition(of).group : of.group;
   // A Namespace's events are those of every object in it, which is what a
   // reader opening one asks for.
   const everyObject = builtIn === ResourceType.Namespace;
@@ -127,8 +155,9 @@ export function useObjectEvents(
   );
   const uid = everyObject ? undefined : (known ?? read);
   const select = useCallback(
-    (events: EventInfo[]) => ofIncarnation(events, uid) ?? events,
-    [uid]
+    (events: EventInfo[]) =>
+      ofIncarnation(ofGroup(events, group), uid) ?? events,
+    [uid, group]
   );
   const own = useLiveQuery({
     queryKey: [...queryKeys.events(scope ?? null), "object", kind, name ?? ""],
@@ -170,7 +199,8 @@ export function useObjectEvents(
       ]);
       const uids = new Set(sets.map((set) => set.uid));
       const names = new Set(sets.map((set) => set.name));
-      return warnings.filter((event) => {
+      const theirs = ofGroup(warnings, getResourceDefinition(from!.kind).group);
+      return theirs.filter((event) => {
         const of = involvedUid(event);
         return of ? uids.has(of) : names.has(event.involvedObject.name);
       });

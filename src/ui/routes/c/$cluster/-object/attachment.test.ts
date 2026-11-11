@@ -377,14 +377,36 @@ describe("a parent whose kind the catalogue does not list", () => {
 });
 
 describe("where an Event about an object opens", () => {
+  const about = (kind: string, group: string | null = null) => ({
+    kind,
+    group,
+  });
+
   /** A Lease's page has no Events tab; fails if an Event about one is sent to a tab that is not there. */
   it("lands on the Events tab only where the kind's page has one", () => {
     const event = { namespace: "shop", name: "web.17f3" };
-    expect(eventLanding("Service", event)).toEqual({
+    expect(eventLanding(about("Service"), event)).toEqual({
       tab: "events",
       via: "events/shop/web.17f3",
     });
-    expect(eventLanding("Lease", event)).toBeUndefined();
+    expect(eventLanding(about("Lease"), event)).toBeUndefined();
+  });
+
+  /**
+   * A Knative Service's Event was sent to the Events tab of the core
+   * Service's page. Fails if a kind in another group lands where the
+   * built-in of its name does, or if the built-in named with its own group
+   * stops landing there.
+   */
+  it("does not send a namesake in another group to the built-in's Events tab", () => {
+    const event = { namespace: "shop", name: "web.17f3" };
+    expect(
+      eventLanding(about("Service", "serving.knative.dev"), event)
+    ).toBeUndefined();
+    expect(eventLanding(about("Service", ""), event)?.tab).toBe("events");
+    expect(eventLanding(about("Deployment", "apps"), event)?.tab).toBe(
+      "events"
+    );
   });
 
   /**
@@ -395,12 +417,12 @@ describe("where an Event about an object opens", () => {
   it("keeps an attached kind on its own page", () => {
     const event = { namespace: "shop", name: "cart.18dc" };
     for (const kind of ["HorizontalPodAutoscaler", "Endpoints"])
-      expect(eventLanding(kind, event)).toEqual({
+      expect(eventLanding(about(kind), event)).toEqual({
         tab: "events",
         via: "events/shop/cart.18dc",
         view: "own",
       });
-    expect(eventLanding("Deployment", event)?.view).toBeUndefined();
+    expect(eventLanding(about("Deployment"), event)?.view).toBeUndefined();
   });
 
   /** The peek's Open full page went where the row's link did not; fails if they part. */
@@ -411,7 +433,7 @@ describe("where an Event about an object opens", () => {
         via: "events/shop/cart.18dc",
       })
     ).toEqual(
-      eventLanding("HorizontalPodAutoscaler", {
+      eventLanding(about("HorizontalPodAutoscaler"), {
         namespace: "shop",
         name: "cart.18dc",
       })

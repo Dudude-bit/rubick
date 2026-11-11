@@ -13,6 +13,8 @@ import {
 
 import type { Cascade, Holds, KindCount } from "@/generated/types";
 import { KindIcon } from "@/components/object/KindIcon";
+import { segmentOf } from "@/lib/access-kinds";
+import { drawnCrd } from "@/lib/links";
 import { RouteLink } from "@/components/ui/route-link";
 import { useT } from "@/i18n/useT";
 import { useConnections } from "@/hooks/useConnections";
@@ -147,6 +149,7 @@ function Dependents({
               >
                 <KindIcon
                   kind={object.kind}
+                  crd={drawnCrd(object)}
                   className="h-3 w-3 flex-none self-center"
                 />
                 <span className="flex-none font-mono text-fg">
@@ -277,7 +280,11 @@ function Answer({
                 key={`${reading.group}/${reading.plural}`}
                 className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-[11px]"
               >
-                <KindIcon kind={reading.kind} className="h-3 w-3" />
+                <KindIcon
+                  kind={reading.kind}
+                  crd={segmentOf(reading)}
+                  className="h-3 w-3"
+                />
                 <span className="font-mono text-fg">{reading.kind}</span>
               </li>
             ))}
@@ -316,7 +323,11 @@ function Counts({ title, counts }: { title: string; counts: KindCount[] }) {
             key={`${count.group}/${count.plural}`}
             className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1"
           >
-            <KindIcon kind={count.kind} className="h-3 w-3" />
+            <KindIcon
+              kind={count.kind}
+              crd={segmentOf(count)}
+              className="h-3 w-3"
+            />
             <span className="font-mono text-fg">{count.kind}</span>
             <span className="font-semibold tabular-nums text-err">
               {count.count}
@@ -349,7 +360,7 @@ function DefinedObjects({ holds }: { holds: Defined }) {
       <div className="flex flex-wrap items-center gap-1.5">
         {!holds.reading ? (
           <span className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1">
-            <KindIcon kind={kind} className="h-3 w-3" />
+            <KindIcon kind={kind} crd={crd} className="h-3 w-3" />
             <span className="font-mono text-fg">{kind}</span>
             <span className="font-semibold tabular-nums text-err">
               {holds.count}

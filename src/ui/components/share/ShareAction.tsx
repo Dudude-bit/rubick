@@ -12,6 +12,7 @@ import { useT } from "@/i18n/useT";
 import { buildDeepLink } from "@/lib/deep-link";
 import { iconSvg } from "@/lib/icon-svg";
 import type { Report, ReportStat } from "@/lib/report";
+import type { ResourceKind } from "@/lib/resource-registry";
 import {
   frameIcons,
   frameWords,
@@ -57,7 +58,7 @@ export function ShareObjectAction({
 export interface ScreenSubject {
   title: string;
   /** The kind the screen lists, for its icon and hue; `null` for a screen of mixed things. */
-  kind?: string | null;
+  kind?: ResourceKind | null;
   icon?: LucideIcon;
   namespace?: string | null;
   stats?: () => ReportStat[];

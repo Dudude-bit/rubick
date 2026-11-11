@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { act, cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { renderWithRouter } from "@/test/render";
+import { renderWithRouter, testQueryClient } from "@/test/render";
+import { queryKeys } from "@/lib/query-keys";
+import { useClusterStore } from "@/stores/clusterStore";
 import { unreadLines } from "@/lib/report-parts";
 import { AttentionPanel, WarningsPanel, WorkloadsPanel } from "./health";
 import {
@@ -177,6 +179,69 @@ describe("the overview's two event panels", () => {
     expect(
       screen.getByRole("link", { name: "Deployment meshed-demo" })
     ).toHaveAttribute("href", "/c/prod/deployments/k8s-gui-test/meshed-demo");
+  });
+
+  /**
+   * A warning about a Knative Service linked to the core Service of its
+   * name. Fails if the row opens anything but the namesake's own CRD, or if
+   * a warning that names no group loses its link.
+   */
+  it("offers a custom kind named like a built-in at its own address", async () => {
+    useClusterStore.setState({ isConnected: true });
+    const client = testQueryClient();
+    client.setQueryData(queryKeys.crds(), [
+      {
+        group: "serving.knative.dev",
+        crds: [
+          {
+            name: "services.serving.knative.dev",
+            group: "serving.knative.dev",
+            kind: "Service",
+          },
+        ],
+      },
+    ]);
+    const knative = {
+      ...warning,
+      reason: "RevisionFailed",
+      objectKind: "Service",
+      objectApiVersion: "serving.knative.dev/v1",
+      objectName: "web",
+    };
+    await renderWithRouter(
+      <WarningsPanel
+        warnings={[
+          knative,
+          { ...knative, reason: "Unhealthy", objectApiVersion: undefined },
+        ]}
+        known
+      />,
+      { at: "/c/prod", route: "/c/$cluster", client }
+    );
+    expect(
+      screen
+        .getAllByRole("link", { name: "Service web" })
+        .map((link) => link.getAttribute("href"))
+    ).toEqual([
+      "/c/prod/services.serving.knative.dev/k8s-gui-test/web",
+      "/c/prod/services/k8s-gui-test/web",
+    ]);
+  });
+
+  /** The shared file drew a warning about a Knative Service under the core Service's glyph; fails if the group the warning names is ignored. */
+  it("shares a warning about a custom kind named like a built-in with a mark of its own", () => {
+    const iconOf = (objectApiVersion?: string) => {
+      const section = warningsShare(
+        [{ ...warning, objectKind: "Service", objectApiVersion }],
+        true,
+        t
+      );
+      return section.body.type === "events"
+        ? section.body.rows[0].ref?.icon
+        : undefined;
+    };
+    expect(iconOf("v1")).toBe(iconOf());
+    expect(iconOf("serving.knative.dev/v1")).not.toBe(iconOf("v1"));
   });
 
   /**

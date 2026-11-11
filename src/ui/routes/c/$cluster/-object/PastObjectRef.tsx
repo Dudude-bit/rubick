@@ -27,6 +27,7 @@ const MARK: Record<
 export function PastObjectRef({
   kind,
   name,
+  crd,
   namespace,
   past,
   showKind = true,
@@ -35,6 +36,8 @@ export function PastObjectRef({
 }: {
   kind: string;
   name: string;
+  /** The segment the event's object is served at (`refOfNamed`): its glyph is its own kind's. */
+  crd: string | null | undefined;
   namespace?: string | null;
   past: Past;
   showKind?: boolean;
@@ -57,6 +60,7 @@ export function PastObjectRef({
         <ResourceName
           kind={kind}
           name={name}
+          crd={crd}
           namespace={showNamespace ? namespace : undefined}
           showKind={showKind}
         />

@@ -199,16 +199,18 @@ const EVENTS_TAB = new Set([
 const EVENTS_VIA = "events/";
 
 /**
- * Where an Event about `kind` opens: that object's own Events tab, noting the
- * Event, if its page has one. Own, so an attached kind does not go on to its
+ * Where an Event about an object opens: that object's own Events tab, noting
+ * the Event, if its page has one. Own, so an attached kind does not go on to its
  * parent, whose Events tab has none of this object's events.
  */
 export function eventLanding(
-  kind: string,
+  about: { kind: string; group: string | null },
   event: { namespace: string; name: string }
 ): ObjectLinkOptions | undefined {
-  if (!EVENTS_TAB.has(`${groupOf(getApiVersion(kind))}/${kind}`))
-    return undefined;
+  const { kind } = about;
+  // An event that names no group is read as the built-in of its kind's name.
+  const group = about.group ?? groupOf(getApiVersion(kind));
+  if (!EVENTS_TAB.has(`${group}/${kind}`)) return undefined;
   return {
     tab: "events",
     via: `${EVENTS_VIA}${event.namespace}/${event.name}`,

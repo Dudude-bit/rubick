@@ -35,9 +35,11 @@ vi.mock("@/integrations", async (original) => ({
     key === "object.report" ? [vendorReport] : [],
 }));
 
+import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { testRouter } from "@/test/render";
+import { refOf } from "@/lib/report-parts";
 import { useObjectReport } from "./useObjectReport";
 
 const router = testRouter(null, {
@@ -456,6 +458,81 @@ describe("the report of any object", () => {
         (s) => s.id === "connections" || s.id === "traffic"
       )
     ).toEqual([]);
+    // Nor is it headed with the built-in's glyph and hue.
+    const core = refOf({ kind: "Service", name: "frontend", namespace: null });
+    expect(result.current.report!.hero.icon).not.toBe(core.icon);
+    expect(result.current.report!.hero.hue).not.toBe(core.kindHue);
+    expect(result.current.report!.hero.ref?.icon).not.toBe(core.icon);
+  });
+
+  /**
+   * The journal is of the built-in workloads this app watches. Fails if an
+   * OpenKruise StatefulSet's report, or the report of a pod one owns, carries
+   * the changes of the built-in StatefulSet of the same name, or if a pod the
+   * built-in one owns loses them.
+   */
+  it("carries the changes of the built-in workload only, never a namesake's", async () => {
+    useChangeJournalStore.setState({
+      entries: [
+        {
+          id: "1",
+          context: "prod-eu",
+          kind: "StatefulSet",
+          namespace: "shop",
+          name: "web",
+          at: Date.now() - 60_000,
+          field: "image",
+          key: "app",
+          from: "web:1",
+          to: "web:2",
+        },
+      ],
+      spans: {},
+    });
+    const changesOf = async (
+      subject: Parameters<typeof useObjectReport>[0],
+      resource: unknown
+    ) => {
+      const { result, unmount } = renderHook(
+        () => useObjectReport(subject, resource, undefined, true),
+        { wrapper }
+      );
+      await waitFor(() => expect(result.current.report).not.toBeNull());
+      const found = result.current.report!.sections.find(
+        (section) => section.id === "changes"
+      );
+      unmount();
+      return found?.count ?? null;
+    };
+    const pod = { kind: "Pod", name: "web-0", namespace: "shop" };
+    const ownedBy = (apiVersion: string) => ({
+      ownerReferences: [{ apiVersion, kind: "StatefulSet", name: "web" }],
+    });
+    try {
+      expect(
+        await changesOf(
+          {
+            kind: "StatefulSet",
+            name: "web",
+            namespace: "shop",
+            crd: "statefulsets.apps.kruise.io",
+          },
+          { apiVersion: "apps.kruise.io/v1beta1" }
+        )
+      ).toBeNull();
+      expect(
+        await changesOf(pod, ownedBy("apps.kruise.io/v1beta1"))
+      ).toBeNull();
+      expect(await changesOf(pod, ownedBy("apps/v1"))).toBe(1);
+      expect(
+        await changesOf(
+          { kind: "StatefulSet", name: "web", namespace: "shop" },
+          { apiVersion: "apps/v1" }
+        )
+      ).toBe(1);
+    } finally {
+      useChangeJournalStore.setState({ entries: [], spans: {} });
+    }
   });
 
   /**

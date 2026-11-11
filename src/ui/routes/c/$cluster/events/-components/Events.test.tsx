@@ -48,6 +48,7 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     forgetDiscovery: vi.fn(async () => {}),
     listEvents: vi.fn(async () => []),
+    listCrds: vi.fn(async () => []),
     getPod: vi.fn(async () => ({ containers: [] })),
     checkListAccess: vi.fn(async () => []),
     getObjectMetadata: vi.fn(async () => ({
@@ -785,6 +786,123 @@ describe("a feed a watch keeps", () => {
     expect(router.state.location.search).toMatchObject({
       tab: "events",
       via: "events/shop/cart.17f3",
+    });
+  });
+
+  describe("about a custom kind named like a built-in", () => {
+    const knative = (index: number): EventInfo => ({
+      ...dated("shop", index),
+      name: "web.17f3",
+      type: "Warning",
+      reason: "RevisionFailed",
+      message: "Revision web-00002 failed to become ready",
+      involvedObject: {
+        apiVersion: "serving.knative.dev/v1",
+        kind: "Service",
+        name: "web",
+        namespace: "shop",
+        uid: null,
+      },
+    });
+    const volcano = (index: number): EventInfo => ({
+      ...dated("shop", index),
+      name: "train.18aa",
+      message: "PodGroup train is pending",
+      involvedObject: {
+        apiVersion: "batch.volcano.sh/v1alpha1",
+        kind: "Job",
+        name: "train",
+        namespace: "shop",
+        uid: null,
+      },
+    });
+
+    beforeEach(() => {
+      vi.mocked(commands.listCrds).mockResolvedValue([
+        {
+          group: "serving.knative.dev",
+          crds: [
+            {
+              name: "services.serving.knative.dev",
+              group: "serving.knative.dev",
+              kind: "Service",
+              plural: "services",
+              scope: "Namespaced",
+              version: "v1",
+              shortNames: [],
+              categories: [],
+              createdAt: null,
+            },
+          ],
+        },
+      ]);
+    });
+    afterEach(() => {
+      vi.mocked(commands.listCrds).mockResolvedValue([]);
+    });
+
+    /**
+     * A row about a Knative Service linked to, and peeked, the core Service
+     * of its name. Fails if its link or its click opens anything but its own
+     * CRD's address, or if a namesake no CRD here defines (a Volcano Job on a
+     * cluster without Volcano's CRDs read) opens the built-in Job.
+     */
+    it("opens it at its own address from the row's link and from a click on the row", async () => {
+      const { router } = await watched();
+      burst([knative(0), volcano(1)]);
+      await waitFor(() => expect(drawnRows()).toBe(2));
+      const search = () =>
+        router.state.location.search as Record<string, string>;
+
+      await waitFor(() =>
+        expect(
+          within(rowAt(0)!).getByRole("link", { name: "Service web" })
+        ).toHaveAttribute(
+          "href",
+          "/c/prod/services.serving.knative.dev/shop/web"
+        )
+      );
+      expect(within(rowAt(1)!).queryByRole("link")).toBeNull();
+      expect(rowAt(1)).toHaveTextContent("train");
+
+      await userEvent.click(within(rowAt(0)!).getByText(/failed to become/));
+      expect(search().peek).toBe(
+        "services.serving.knative.dev/Service/shop/web"
+      );
+
+      // No object to open: the row goes to the Event itself, as a past one's does.
+      await userEvent.click(within(rowAt(1)!).getByText(/is pending/));
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe(
+          "/c/prod/events/shop/train.18aa"
+        )
+      );
+      expect(search().peek).not.toBe("jobs/shop/train");
+    });
+
+    /**
+     * The story card of a Knative Service opened the core Service. Fails if
+     * the card's title or a click on its body opens the built-in of its name.
+     */
+    it("opens it at its own address from its story card", async () => {
+      const { router } = await watched("stories");
+      const now = Date.now();
+      burst([
+        { ...knative(0), lastTimestamp: new Date(now - 60_000).toISOString() },
+      ]);
+      const card = await screen.findByRole("article", { name: "Service web" });
+      await waitFor(() =>
+        expect(
+          within(card).getByRole("link", { name: "Service web" })
+        ).toHaveAttribute(
+          "href",
+          "/c/prod/services.serving.knative.dev/shop/web"
+        )
+      );
+      await userEvent.click(within(card).getAllByText(/failed to become/)[0]);
+      expect(
+        (router.state.location.search as Record<string, string>).peek
+      ).toBe("services.serving.knative.dev/Service/shop/web");
     });
   });
 

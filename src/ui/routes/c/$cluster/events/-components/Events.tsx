@@ -71,6 +71,7 @@ import { scopeCacheKey } from "@/lib/namespace-scope";
 import {
   sortStories,
   storiesOf,
+  subjectCrd,
   withGone,
   STORY_WINDOWS,
   WINDOW_MS,
@@ -79,6 +80,7 @@ import {
   type StoryWindow,
 } from "@/lib/event-stories";
 import { useNow } from "@/hooks/useNow";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
 import {
   nameKey,
   pastObjects,
@@ -540,6 +542,7 @@ export function Events() {
     [view, matching, inferredOptions]
   );
   const holders = useNameHolders(folded, pool);
+  const { crdFor: crdOf } = useCrdIndex();
   const past = useMemo(
     () =>
       holders.size === 0
@@ -921,6 +924,7 @@ export function Events() {
                   <StoryCard
                     key={story.key}
                     story={story}
+                    crd={subjectCrd(story.subject, crdOf)}
                     options={storyOptions}
                     showNamespace={!currentNamespace}
                   />
@@ -933,6 +937,7 @@ export function Events() {
           ) : (
             <EventsTable
               events={events}
+              crdOf={crdOf}
               past={pastOfRow}
               showNamespace={!currentNamespace}
               question={[cacheKey, eventType, eventLimit, query].join("\n")}

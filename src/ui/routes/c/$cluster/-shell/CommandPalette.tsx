@@ -39,6 +39,7 @@ import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { KindIcon } from "@/components/object/KindIcon";
+import { segmentOf } from "@/lib/access-kinds";
 import { ResourceName } from "@/components/object/ResourceName";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { buildDeepLink } from "@/lib/deep-link";
@@ -1164,6 +1165,7 @@ function EntryRow({
           <ResourceName
             kind={entry.target.kind}
             name={entry.target.name}
+            crd={segmentOf(entry.target)}
             namespace={entry.target.namespace}
           />
         </span>
@@ -1307,6 +1309,7 @@ function EntryRow({
             <ResourceName
               kind={entry.target.kind}
               name={entry.target.name}
+              crd={segmentOf(entry.target)}
               showKind={false}
             />
           </span>
@@ -1386,7 +1389,11 @@ function EntryRow({
     case "kind":
       return (
         <Row {...shared}>
-          <KindIcon kind={entry.entry.kind} className="h-3.5 w-3.5" />
+          <KindIcon
+            kind={entry.entry.kind}
+            crd={segmentOf(entry.entry)}
+            className="h-3.5 w-3.5"
+          />
           <span className="min-w-0 truncate font-mono">{entry.entry.kind}</span>
           <span className="truncate font-mono text-fg-fnt">
             {entry.entry.group

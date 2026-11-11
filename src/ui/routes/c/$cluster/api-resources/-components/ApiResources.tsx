@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import { catalogQuery } from "../../-object/served";
 import { catalogGroups, listable, type CatalogGroup } from "./catalog-groups";
 import { KindIcon } from "@/components/object/KindIcon";
+import { segmentOf } from "@/lib/access-kinds";
 import { ReadAgain } from "@/components/ui/read-again";
 import { RouteLink } from "@/components/ui/route-link";
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -198,7 +199,11 @@ function KindRow({ entry }: { entry: CatalogEntry }) {
     : t("apiResources", "clusterWide");
   const name = (
     <>
-      <KindIcon kind={entry.kind} className="h-3.5 w-3.5" />
+      <KindIcon
+        kind={entry.kind}
+        crd={segmentOf(entry)}
+        className="h-3.5 w-3.5"
+      />
       <span className="truncate font-mono text-xs text-fg" title={entry.kind}>
         {entry.kind}
       </span>

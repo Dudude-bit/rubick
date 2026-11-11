@@ -5,6 +5,7 @@ import type {
   ShareFrame,
 } from "@/components/share/contribution";
 import { useAppInfo } from "@/hooks/useAppInfo";
+import { groupOf } from "@/hooks/useCrdIndex";
 import { useChainAnswer } from "@/hooks/useChainAnswer";
 import { useConnections } from "@/hooks/useConnections";
 import { useServiceAnswer } from "@/hooks/useServiceAnswer";
@@ -23,7 +24,7 @@ import { useCapabilities } from "@/integrations";
 import { useT } from "@/i18n/useT";
 import { buildDeepLink } from "@/lib/deep-link";
 import { errorToShow } from "@/lib/error-utils";
-import { builtInKindOf } from "@/lib/links";
+import { builtInKindOf, isBuiltInGroup } from "@/lib/links";
 import { iconSvg } from "@/lib/icon-svg";
 import type { Report } from "@/lib/report";
 import {
@@ -81,7 +82,10 @@ function conditionsIn(resource: unknown): ConditionInfo[] | null {
   return null;
 }
 
-/** Who owns the object, wherever its shape keeps `ownerReferences`. */
+/**
+ * The built-in kinds that own the object, wherever its shape keeps
+ * `ownerReferences`: an owner in another group only shares a kind's name.
+ */
 function ownersIn(resource: unknown): { kind: string; name: string }[] {
   const object = resource as {
     ownerReferences?: unknown;
@@ -89,19 +93,21 @@ function ownersIn(resource: unknown): { kind: string; name: string }[] {
   } | null;
   const refs = object?.ownerReferences ?? object?.metadata?.ownerReferences;
   return Array.isArray(refs)
-    ? refs.filter(
-        (ref): ref is { kind: string; name: string } =>
-          typeof ref?.kind === "string" && typeof ref?.name === "string"
-      )
+    ? refs.filter((ref): ref is { kind: string; name: string } => {
+        if (typeof ref?.kind !== "string" || typeof ref?.name !== "string")
+          return false;
+        const said = ref.apiVersion ?? ref.api_version;
+        return (
+          typeof said !== "string" || isBuiltInGroup(ref.kind, groupOf(said))
+        );
+      })
     : [];
 }
 
-function groupOf(resource: unknown): string {
+const groupIn = (resource: unknown): string => {
   const apiVersion = (resource as { apiVersion?: unknown })?.apiVersion;
-  return typeof apiVersion === "string" && apiVersion.includes("/")
-    ? apiVersion.split("/")[0]
-    : "";
-}
+  return typeof apiVersion === "string" ? groupOf(apiVersion) : "";
+};
 
 /**
  * The report of one object, from what every object has plus what its page
@@ -155,7 +161,7 @@ export function useObjectReport(
   const tlsOf = useRouteTls(capturing ? connections.data : undefined);
   const door = useDoorAsk(capturing);
   const events = useObjectEvents(
-    subject ? eventsKindOf(subject) : { custom: "" },
+    subject ? eventsKindOf(subject) : { custom: "", group: null },
     subject?.name,
     subject?.namespace,
     {
@@ -203,7 +209,12 @@ export function useObjectReport(
     const changes = changesSection(
       { entries: journal, spans: spans[context] ?? [] },
       context,
-      { ...subject, owners: ownersIn(resource) },
+      {
+        kind: builtIn,
+        name: subject.name,
+        namespace: subject.namespace,
+        owners: ownersIn(resource),
+      },
       capturedAt,
       t
     );
@@ -231,7 +242,7 @@ export function useObjectReport(
     for (const vendor of vendors) {
       const theirs = vendor(
         {
-          group: groupOf(resource),
+          group: groupIn(resource),
           kind: subject.kind,
           namespace: subject.namespace,
           name: subject.name,
@@ -259,8 +270,8 @@ export function useObjectReport(
       hero: {
         ref,
         title: subject.name,
-        icon: iconSvg(kindIcon(subject.kind)),
-        hue: kindHue(subject.kind),
+        icon: iconSvg(kindIcon(subject.kind, subject.crd)),
+        hue: kindHue(subject.kind, subject.crd),
       },
       kicker: t("share", "kicker"),
       capturedAt,
@@ -297,6 +308,7 @@ export function useObjectReport(
     spans,
     silent,
     context,
+    builtIn,
     graphed,
     connections,
     routed.certificates,
