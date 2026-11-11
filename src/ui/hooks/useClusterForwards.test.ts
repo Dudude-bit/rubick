@@ -36,6 +36,7 @@ vi.mock("@/integrations", () => ({
 import type { PortForwardSessionInfo } from "@/generated/types";
 import { useClusterForwardStore } from "@/stores/clusterForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { commands } from "@/lib/commands";
 import { orphansIn, useClusterForwards, wake } from "./useClusterForwards";
 
 const session = (
@@ -71,6 +72,7 @@ beforeEach(() => {
   tunnels.forward.mockClear();
   tunnels.save.mockClear();
   useClusterForwardStore.setState({ forwards: {} });
+  useClusterStore.setState({ currentContext: "staging", isConnected: true });
 });
 
 describe("the tunnels a reconnect leaves behind", () => {
@@ -158,5 +160,38 @@ describe("a saved address another cluster's tunnel is answering", () => {
     });
 
     await waitFor(() => expect(tunnels.forward).toHaveBeenCalled());
+  });
+});
+
+describe("a wake the window moved on from", () => {
+  const moved = () => useClusterStore.setState({ currentContext: "prod" });
+
+  /**
+   * Every call a wake makes goes to the window's cluster: after Ctrl+Tab the
+   * tunnel opened on prod's namesake Service and was saved as staging's
+   * Prometheus. Fails if a wake opens a tunnel once the window has left.
+   */
+  it("opens no tunnel on the cluster the window moved to", async () => {
+    vi.mocked(commands.listServices).mockImplementationOnce(async () => {
+      moved();
+      return [];
+    });
+
+    await wake("prometheus", "staging", preference);
+
+    expect(tunnels.forward).not.toHaveBeenCalled();
+  });
+
+  /** Fails if a tunnel that came up after the window left is filed as the first cluster's address. */
+  it("does not file a tunnel opened after the move as the first cluster's", async () => {
+    tunnels.forward.mockImplementationOnce(async () => {
+      moved();
+      return { ...preference, localPort: 20009, subpath: "", url: "" };
+    });
+
+    await wake("prometheus", "staging", preference);
+
+    expect(tunnels.save).not.toHaveBeenCalled();
+    expect(useClusterForwardStore.getState().forwards.staging).toBeUndefined();
   });
 });

@@ -103,6 +103,15 @@ async function orphansOf(
   return orphansIn(sessions, context, preference, keep);
 }
 
+function asSaved(preference: ForwardPreference): Forwarded {
+  const subpath = normalisedSubpath(preference.subpath);
+  return {
+    ...preference,
+    subpath,
+    url: `http://localhost:${preference.localPort}${subpath}`,
+  };
+}
+
 /**
  * Put a saved forward back up.
  *
@@ -126,15 +135,15 @@ export async function wake(
     )) {
       await commands.stopPortForward(id).catch(() => undefined);
     }
-    const subpath = normalisedSubpath(preference.subpath);
-    return {
-      ...preference,
-      subpath,
-      url: `http://localhost:${preference.localPort}${subpath}`,
-    };
+    return asSaved(preference);
   }
 
+  // Every call below goes to the window's cluster. Once it has moved on they
+  // would look for the Service, open the tunnel and read the connection on
+  // the other one, and file the result as this cluster's address.
+  const left = () => useClusterStore.getState().currentContext !== context;
   const service = await serviceOf(preference);
+  if (left()) return asSaved(preference);
   if (!service) {
     throw new SaidError(
       {
@@ -156,7 +165,7 @@ export async function wake(
     preference.localPort,
     preference.subpath
   );
-  if (found.localPort !== preference.localPort) {
+  if (found.localPort !== preference.localPort && !left()) {
     await moveAddress(vendorId, context, preference, found.localPort);
   }
   return found;
