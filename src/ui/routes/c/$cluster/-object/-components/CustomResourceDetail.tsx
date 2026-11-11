@@ -18,6 +18,7 @@ import { yamlTab } from "../yaml-tab";
 import { eventsTab } from "../events-tab";
 import { eventsKindOf, useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../ResourceDetailLayout";
+import { stateOf } from "../facets";
 import { servedOf } from "../served";
 import { noteDenied, useDenied } from "@/lib/access";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
@@ -38,7 +39,6 @@ import { ResourceType } from "@/lib/resource-registry";
 import { objectLink } from "@/lib/links";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useClusterStore } from "@/stores/clusterStore";
-import type { CustomResourceDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
@@ -150,34 +150,6 @@ function JsonTree({ data }: { data: unknown }) {
   return <JsonEntries data={data} depth={0} />;
 }
 
-/**
- * Custom resources report health in whatever field their author picked.
- * These four cover cert-manager, Flux, Argo and most operators; anything
- * else simply gets no badge rather than a wrong one.
- */
-function statusOf(resource: CustomResourceDetailInfo): string | null {
-  if (!resource.status || typeof resource.status !== "object") return null;
-  const status = resource.status as Record<string, unknown>;
-
-  if (typeof status.phase === "string") return status.phase;
-  if (typeof status.state === "string") return status.state;
-
-  if (Array.isArray(status.conditions)) {
-    const ready = status.conditions.find(
-      (c: unknown) =>
-        typeof c === "object" &&
-        c !== null &&
-        (c as Record<string, unknown>).type === "Ready"
-    ) as Record<string, unknown> | undefined;
-    if (ready) return ready.status === "True" ? "Ready" : "NotReady";
-  }
-
-  if (typeof status.ready === "boolean")
-    return status.ready ? "Ready" : "NotReady";
-
-  return null;
-}
-
 export function CustomResourceDetail({
   crdName,
   namespace,
@@ -283,7 +255,7 @@ export function CustomResourceDetail({
     },
   });
 
-  const status = resource ? statusOf(resource) : null;
+  const status = stateOf(resource?.status) ?? null;
   const owners = resource?.ownerReferences ?? [];
   const finalizers = resource?.finalizers ?? [];
 

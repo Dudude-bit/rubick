@@ -1769,7 +1769,7 @@ describe("PeekPanel on a custom resource", () => {
   /** A `Ready` condition is the nearest thing to a universal verdict. */
   it("badges it from a Ready condition where there is no phase", async () => {
     await wrap(APP_PEEK);
-    expect(await screen.findByText("Not ready")).toBeInTheDocument();
+    expect(await screen.findByText("NotReady")).toBeInTheDocument();
   });
 
   it("offers its own page, which for a custom resource is the CRD's", async () => {

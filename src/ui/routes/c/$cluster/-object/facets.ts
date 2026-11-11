@@ -51,20 +51,25 @@ const record = (value: unknown): Json =>
 
 /**
  * The one word for a header badge, from where operators conventionally put
- * one: `phase`, `state`, or a `Ready` condition. Anything else is left
- * unsaid rather than guessed.
+ * one: `phase`, `state`, a `Ready` condition or a `ready` flag. Anything
+ * else is left unsaid rather than guessed. The page and the peek both read
+ * it here.
+ *
+ * A Ready that is `Unknown` is not a no: the controller has said neither,
+ * and its own reason (Flux's `Progressing`) is the word, where it gave one.
  */
 export function stateOf(status: unknown): string | undefined {
   const fields = record(status);
   const said = asText(fields.phase) ?? asText(fields.state);
   if (said) return said;
   const conditions = Array.isArray(fields.conditions) ? fields.conditions : [];
-  const ready = conditions.find(
-    (condition): condition is { type: string; status: string } =>
-      record(condition).type === "Ready"
-  );
-  if (!ready) return undefined;
-  return ready.status === "True" ? "Ready" : "Not ready";
+  const ready = conditions.map(record).find((each) => each.type === "Ready");
+  if (ready?.status === "True") return "Ready";
+  if (ready?.status === "False") return "NotReady";
+  if (ready) return asText(ready.reason) ?? "Unknown";
+  if (typeof fields.ready === "boolean")
+    return fields.ready ? "Ready" : "NotReady";
+  return undefined;
 }
 
 interface Walked {
