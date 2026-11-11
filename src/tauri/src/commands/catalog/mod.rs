@@ -405,7 +405,7 @@ mod tests {
     }
 
     /// Every list of a served kind waits for the catalogue: one wedged
-    /// aggregated API kept Roles and ServiceAccounts blank for the minute
+    /// aggregated API kept Roles and `ServiceAccounts` blank for the minute
     /// the read deadline allows it.
     #[tokio::test(flavor = "multi_thread")]
     async fn a_group_that_hangs_is_named_once_the_others_have_answered() {

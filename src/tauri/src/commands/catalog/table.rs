@@ -371,7 +371,7 @@ mod tests {
         assert_eq!(table.cursor, None);
     }
 
-    /// metrics-server answers a list of 10 000 PodMetrics whole whatever
+    /// metrics-server answers a list of 10 000 `PodMetrics` whole whatever
     /// `limit` says: megabytes in one IPC message, re-sent on every poll.
     #[tokio::test]
     async fn a_server_that_ignores_the_limit_is_still_read_a_page_at_a_time() {
