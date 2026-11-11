@@ -5,6 +5,7 @@ import {
   coverageOf,
   labelsOf,
   selects,
+  sourcedLabelsOf,
   type KubernetesPolicies,
 } from "./coverage";
 
@@ -75,9 +76,9 @@ const API = endpoint("shop", [
 describe("the labels a policy is matched against", () => {
   /**
    * Cilium prefixes what it took from Kubernetes with `k8s:` and mixes in
-   * its own (`reserved:`, `container:`). A selector names a Kubernetes
-   * label, so only that half may be matched — taking `reserved:init` for a
-   * pod label would let a selector match on something no manifest wrote.
+   * its own (`reserved:`, `container:`). A NetworkPolicy names a Kubernetes
+   * label, so only that half may be matched: taking `reserved:init` for a
+   * pod label would let one match on something no manifest wrote.
    */
   it("keeps the pod's own labels and drops Cilium's", () => {
     expect([...labelsOf(API)]).toEqual([
@@ -89,7 +90,7 @@ describe("the labels a policy is matched against", () => {
 });
 
 describe("whether a selector picks an endpoint", () => {
-  const labels = labelsOf(API);
+  const labels = sourcedLabelsOf(API);
 
   it("reads matchLabels and every expression operator", () => {
     expect(selects({}, labels)).toBe(true);
@@ -127,6 +128,31 @@ describe("whether a selector picks an endpoint", () => {
         labels
       )
     ).toBe(false);
+  });
+
+  /**
+   * Cilium's docs write `k8s:io.kubernetes.pod.namespace`, and a key with no
+   * source means one from any. Looked up verbatim, `k8s:app` matched no
+   * label, and every endpoint such a policy covers was "unrestricted".
+   */
+  it("reads the source a selector key names the way Cilium does", () => {
+    expect(selects({ matchLabels: { "k8s:app": "api" } }, labels)).toBe(true);
+    expect(selects({ matchLabels: { "any:app": "api" } }, labels)).toBe(true);
+    expect(selects({ matchLabels: { "k8s:app": "db" } }, labels)).toBe(false);
+    expect(
+      selects(
+        { matchLabels: { "k8s:io.kubernetes.pod.namespace": "shop" } },
+        labels
+      )
+    ).toBe(true);
+    const exists = (key: string) =>
+      selects({ matchExpressions: [{ key, operator: "Exists" }] }, labels);
+    expect(exists("k8s:app")).toBe(true);
+    // A named source has to be the label's own.
+    expect(exists("reserved:app")).toBe(false);
+    expect(exists("k8s:init")).toBe(false);
+    expect(exists("reserved:init")).toBe(true);
+    expect(exists("init")).toBe(true);
   });
 
   /**
@@ -205,6 +231,28 @@ describe("what covers an endpoint", () => {
       NONE
     );
     expect(both.verdict).toBe("covered");
+  });
+
+  /**
+   * The page's whole answer for a policy written as the docs write one.
+   * Fails if the join goes back to looking a prefixed key up verbatim.
+   */
+  it("covers an endpoint a policy selects by a key written with its source", () => {
+    const [api] = coverageOf(
+      [API],
+      [],
+      [
+        policy(null, {
+          endpointSelector: {
+            matchLabels: { "k8s:io.kubernetes.pod.namespace": "shop" },
+          },
+          ...RULES,
+        }),
+      ],
+      NONE
+    );
+    expect(api.selecting).toHaveLength(1);
+    expect(api.verdict).toBe("covered");
   });
 
   /** Nothing names it, and that is a fact rather than a gap. */

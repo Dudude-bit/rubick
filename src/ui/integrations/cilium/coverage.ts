@@ -20,7 +20,11 @@ import type {
   NetworkPolicyInfo,
   UnreadNamespace,
 } from "@/generated/types";
-import { labelSelectorMatches, type LabelSelector } from "@/lib/label-selector";
+import {
+  holds,
+  requirementsOf,
+  type LabelSelector,
+} from "@/lib/label-selector";
 import { selectsPod } from "@/lib/network-policy";
 import { getValueByPath } from "../kit";
 import { directionsOf, enforcementOf, selectsNodes } from "./model";
@@ -28,18 +32,44 @@ import { directionsOf, enforcementOf, selectsNodes } from "./model";
 /** The prefix Cilium puts on a label it took from Kubernetes. */
 const FROM_K8S = "k8s:";
 
-/** A pod's labels as Cilium resolved them, without its own prefixes. */
-export function labelsOf(endpoint: CustomResourceInfo): Map<string, string> {
+/** The source a selector key has when it names none: a label from anywhere. */
+const FROM_ANY = "any:";
+
+function identityLabels(endpoint: CustomResourceInfo): string[] {
   const raw = getValueByPath(endpoint, "status.identity.labels");
+  return Array.isArray(raw)
+    ? raw.filter((entry) => typeof entry === "string")
+    : [];
+}
+
+/** The pod's own labels, which a NetworkPolicy selects on: the `k8s:` half. */
+export function labelsOf(endpoint: CustomResourceInfo): Map<string, string> {
   const labels = new Map<string, string>();
-  if (!Array.isArray(raw)) return labels;
-  for (const entry of raw) {
-    if (typeof entry !== "string" || !entry.startsWith(FROM_K8S)) continue;
+  for (const entry of identityLabels(endpoint)) {
+    if (!entry.startsWith(FROM_K8S)) continue;
     const [key, ...rest] = entry.slice(FROM_K8S.length).split("=");
     labels.set(key, rest.join("="));
   }
   return labels;
 }
+
+/** Every label, keyed both ways a Cilium selector names one: `k8s:app`, `any:app`. */
+export function sourcedLabelsOf(
+  endpoint: CustomResourceInfo
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const entry of identityLabels(endpoint)) {
+    const [sourced, ...rest] = entry.split("=");
+    const value = rest.join("=");
+    labels.set(sourced, value);
+    const any = FROM_ANY + sourced.slice(sourced.indexOf(":") + 1);
+    if (!labels.has(any)) labels.set(any, value);
+  }
+  return labels;
+}
+
+/** A key that names no source is one from any; verbatim, `k8s:app` matched nothing. */
+const sourcedKey = (key: string) => (key.includes(":") ? key : FROM_ANY + key);
 
 /**
  * Whether a selector picks these labels, or `null` where that cannot be
@@ -49,10 +79,14 @@ export function labelsOf(endpoint: CustomResourceInfo): Map<string, string> {
  */
 export function selects(
   selector: unknown,
-  labels: Map<string, string>
+  sourced: Map<string, string>
 ): boolean | null {
   if (selector === undefined || selector === null) return null;
-  return labelSelectorMatches(selector as LabelSelector, labels);
+  const requirements = requirementsOf(selector as LabelSelector);
+  if (requirements === null) return null;
+  return requirements.every((requirement) =>
+    holds({ ...requirement, key: sourcedKey(requirement.key) }, sourced)
+  );
 }
 
 export type Direction = "ingress" | "egress";
@@ -150,6 +184,7 @@ export function coverageOf(
 ): Coverage[] {
   return endpoints.map((endpoint) => {
     const labels = labelsOf(endpoint);
+    const sourced = sourcedLabelsOf(endpoint);
     const selecting: Selecting[] = [];
     let unreadable = 0;
 
@@ -164,7 +199,7 @@ export function coverageOf(
       }
       const answer = selects(
         (spec as Record<string, unknown>).endpointSelector,
-        labels
+        sourced
       );
       if (answer === null) {
         unreadable += 1;

@@ -53,6 +53,42 @@ describe("the sidebar's number for Cilium", () => {
   });
 
   /**
+   * The number beside the page reads the same join: a policy whose selector
+   * key names its source covers the endpoint here too. Fails if the sidebar
+   * counts an endpoint the page calls covered.
+   */
+  it("does not count an endpoint selected by a key written with its source", () => {
+    const endpoint = {
+      name: "api",
+      namespace: "shop",
+      kind: "CiliumEndpoint",
+      spec: null,
+      status: { identity: { id: 1, labels: ["k8s:app=api"] } },
+    } as CustomResourceInfo;
+    const policy = {
+      name: "p",
+      namespace: "shop",
+      kind: "CiliumNetworkPolicy",
+      spec: {
+        endpointSelector: { matchLabels: { "k8s:app": "api" } },
+        ingress: [{}],
+        egress: [{}],
+      },
+      status: { conditions: [{ type: "Valid", status: "True" }] },
+    } as CustomResourceInfo;
+    const picture = {
+      endpoints: [endpoint],
+      policies: [policy],
+      clusterwide: [],
+      kubernetes: { read: true as const, policies: [], unread: [] },
+    };
+    expect(countUnrestricted(picture)).toBe(0);
+    expect(coverageTone(picture)).toBeNull();
+    // And it is the selector that covers it, not an empty picture.
+    expect(countUnrestricted({ ...picture, policies: [] })).toBe(1);
+  });
+
+  /**
    * A refused NetworkPolicy read is not "no NetworkPolicies": the count must
    * not take the endpoint as unrestricted, and the dot says it left it out.
    */
