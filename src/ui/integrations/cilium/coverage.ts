@@ -73,8 +73,17 @@ export function sourcedLabelsOf(
   return labels;
 }
 
-/** A key that names no source is one from any; verbatim, `k8s:app` matched nothing. */
-const sourcedKey = (key: string) => (key.includes(":") ? key : FROM_ANY + key);
+/**
+ * A selector key as Cilium's `parseSource` reads one: `$host` is short for
+ * `reserved:host`, and a key that names no source is one from any. Verbatim,
+ * `k8s:app` matched nothing.
+ */
+const sourcedKey = (key: string) =>
+  key.startsWith("$")
+    ? `reserved:${key.slice(1)}`
+    : key.includes(":")
+      ? key
+      : FROM_ANY + key;
 
 /**
  * Whether a selector picks these labels, or `null` where that cannot be
