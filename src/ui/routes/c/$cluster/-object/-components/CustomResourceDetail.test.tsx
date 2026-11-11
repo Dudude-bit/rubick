@@ -11,6 +11,7 @@ import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   crd: {} as unknown,
+  crds: [] as unknown[],
   resource: {} as unknown,
   events: vi.fn((_filter: { involved_object_kind: string | null }) =>
     Promise.resolve([])
@@ -28,8 +29,11 @@ vi.mock("@/lib/commands", () => ({
     getDeploymentReplicasets: answers.replicaSets,
     getResourceConnections: answers.connections,
     getAppInfo: () => Promise.resolve({ version: "5.0.0" }),
-    listCrds: () => Promise.resolve([]),
+    listCrds: () => Promise.resolve(answers.crds),
     listApiCatalog: () => new Promise(() => {}),
+    detectInClusterExtensions: () => Promise.resolve([]),
+    detectGatewayApi: () => Promise.resolve({ installed: false, kinds: [] }),
+    listGatewayClasses: () => Promise.resolve([]),
     objectLineage: () => Promise.reject({ code: "NOT_FOUND", message: "" }),
   },
 }));
@@ -60,13 +64,14 @@ const object = (
   fields: {},
 });
 
-const open = (crdName: string) =>
+const open = (crdName: string, tab = "overview") =>
   renderWithRouter(
     <CustomResourceDetail
       crdName={crdName}
       namespace="storefront"
       name="frontend"
-    />
+    />,
+    { at: `/c/test/${crdName}/storefront/frontend?tab=${tab}` }
   );
 
 beforeEach(() => {
@@ -114,5 +119,44 @@ describe("the page of a custom resource named like a built-in", () => {
       expect(answers.events.mock.calls.length).toBeGreaterThan(1)
     );
     expect(answers.connections).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A Knative Configuration is owned by a Knative Service, and Knative makes
+   * a core Service of that name. Fails if the owner opens the core one.
+   */
+  it("opens an owner named like a built-in by its group", async () => {
+    answers.crds = [
+      {
+        group: "serving.knative.dev",
+        crds: [
+          {
+            name: "services.serving.knative.dev",
+            group: "serving.knative.dev",
+            kind: "Service",
+          },
+        ],
+      },
+    ];
+    answers.crd = crd("serving.knative.dev", "Configuration", "configurations");
+    answers.resource = {
+      ...object("serving.knative.dev/v1", "Configuration"),
+      ownerReferences: [
+        {
+          apiVersion: "serving.knative.dev/v1",
+          kind: "Service",
+          name: "frontend",
+          uid: "owner",
+          controller: true,
+        },
+      ],
+    };
+    await open("configurations.serving.knative.dev", "metadata");
+    expect(
+      await screen.findByRole("link", { name: /Service frontend/ })
+    ).toHaveAttribute(
+      "href",
+      "/c/test/services.serving.knative.dev/storefront/frontend"
+    );
   });
 });
