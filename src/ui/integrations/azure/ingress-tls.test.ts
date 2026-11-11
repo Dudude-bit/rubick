@@ -69,4 +69,23 @@ describe("whether an AGIC Ingress serves TLS", () => {
     } as never);
     await expect(ingressTls(ask())).resolves.toEqual([[]]);
   });
+
+  /**
+   * A GET that failed came back as an empty answer, which every caller reads
+   * as "AGIC has nothing to say" and so as plain HTTP. Fails if a failed
+   * read is silence rather than a host nobody could tell about.
+   */
+  it("leaves the hosts of an Ingress it could not read unknown", async () => {
+    vi.mocked(commands.getIngress).mockRejectedValue(new Error("forbidden"));
+
+    await expect(ingressTls(ask())).resolves.toEqual([
+      [
+        {
+          host: "shop.example.com",
+          terminated: null,
+          by: { key: "verbatimLine", values: { said: "forbidden" } },
+        },
+      ],
+    ]);
+  });
 });
