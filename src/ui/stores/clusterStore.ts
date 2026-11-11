@@ -21,6 +21,7 @@ import type { ContextInfo } from "@/generated/types";
 import { errorToShow } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { credentialsRestored } from "@/lib/credentials";
+import { namesRebound } from "@/lib/kept-by-name";
 import { followConnections } from "@/lib/refusals";
 import {
   clampScope,
@@ -139,7 +140,8 @@ interface ClusterState {
   /**
    * The backend let go of every session, as it does when the kubeconfig
    * files change. The cluster on screen is connected again where the new
-   * files still name it, and left where they do not.
+   * files still name it, and left where they do not. Either way a name may
+   * be another cluster now, and what was kept under one is let go.
    */
   sessionsDropped: () => Promise<void>;
 }
@@ -553,6 +555,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
 
   sessionsDropped: async () => {
     const { currentContext, contexts, isConnected, isAuthenticating } = get();
+    namesRebound();
     set({ live: [], paths: {}, wayBack: null });
     if (!currentContext || (!isConnected && !isAuthenticating)) return;
     if (!contexts.some((c) => c.name === currentContext)) {

@@ -1,6 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, expect, it } from "vite-plus/test";
 
+import { namesRebound } from "@/lib/kept-by-name";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   forgetLastOwners,
@@ -37,5 +38,19 @@ it("keeps a custom resource's owners apart from the built-in of its name", () =>
   expect(renderHook(() => useLastOwners(KNATIVE)).result.current).toEqual([
     owner,
   ]);
+  expect(renderHook(() => useLastOwners(CORE)).result.current).toBeUndefined();
+});
+
+/**
+ * The owners are kept under the context name, and after a kubeconfig change
+ * that name can be another cluster. Fails if a pod gone there is said to
+ * belong to the owner its namesake had in the cluster before.
+ */
+it("forgets them when the kubeconfig files change under the name", () => {
+  renderHook(() => useRememberOwners(CORE, { ownerReferences: [owner] }));
+  expect(renderHook(() => useLastOwners(CORE)).result.current).toEqual([owner]);
+
+  namesRebound();
+
   expect(renderHook(() => useLastOwners(CORE)).result.current).toBeUndefined();
 });

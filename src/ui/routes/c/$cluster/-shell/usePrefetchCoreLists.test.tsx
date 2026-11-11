@@ -25,6 +25,7 @@ vi.mock("@/lib/pod-rows", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import { namesRebound } from "@/lib/kept-by-name";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -139,6 +140,44 @@ describe("usePrefetchCoreLists", () => {
     act(() => useClusterStore.setState({ isConnected: true }));
     await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
     expect(client.getQueryData(PARKED)).toEqual([{ name: "shop-db-1" }]);
+  });
+
+  /**
+   * k3s names every cluster `default`. Once the kubeconfig files change, the
+   * name the window lands on again can be another cluster, and its lists
+   * mounted onto the last one's rows. Fails if a landing under the same name
+   * after the files changed keeps what was cached before, or drops it only
+   * after the frame.
+   */
+  it("drops them when the kubeconfig files changed under the name it lands on again", async () => {
+    client.setQueryDefaults(PARKED, { gcTime: Infinity });
+    client.setQueryData(PARKED, [{ name: "shop-db-1" }]);
+    renderHook(() => usePrefetchCoreLists(), { wrapper });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+
+    namesRebound();
+    act(() => useClusterStore.setState({ isConnected: false }));
+    expect(client.getQueryData(PARKED)).toEqual([{ name: "shop-db-1" }]);
+    useClusterStore.setState({ isConnected: true });
+
+    expect(client.getQueryData(PARKED)).toBeUndefined();
+  });
+
+  /**
+   * The files can change at the front door, where the shell and this hook
+   * are not mounted. Fails if the change is forgotten by the time the shell
+   * mounts and the window lands on the name it was last on.
+   */
+  it("drops them when the files changed while the shell was away", async () => {
+    client.setQueryDefaults(PARKED, { gcTime: Infinity });
+    client.setQueryData(PARKED, [{ name: "shop-db-1" }]);
+    useClusterStore.setState({ isConnected: false });
+    namesRebound();
+
+    renderHook(() => usePrefetchCoreLists(), { wrapper });
+    useClusterStore.setState({ isConnected: true });
+
+    expect(client.getQueryData(PARKED)).toBeUndefined();
   });
 
   it("does not flush again for a mere re-render of the same landing", async () => {

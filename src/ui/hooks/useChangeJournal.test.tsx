@@ -57,6 +57,7 @@ import { gapsOf } from "@/lib/changes";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { credentialsRenewed } from "@/lib/credentials";
+import { namesRebound } from "@/lib/kept-by-name";
 import { useChangeJournal } from "./useChangeJournal";
 
 const REFUSED =
@@ -527,6 +528,32 @@ describe("one change seen by two scopes' watches", () => {
       "hello-web replicas 1->2",
       "hello-web generation 4->5",
       "hello-web replicas 2->3",
+    ]);
+  });
+
+  /**
+   * k3s names every cluster `default`: the kubeconfig files change and the
+   * window connects to the same name again, which is another cluster. Fails
+   * if its first list is compared with the cluster before, which wrote every
+   * workload there as created and every one here as deleted.
+   */
+  it("reads another cluster under the same name as a first sight, not as changes", async () => {
+    namesRebound();
+    act(() => useClusterStore.setState({ isConnected: false }));
+    const before = bus.handlers.length;
+    act(() => useClusterStore.setState({ isConnected: true }));
+    await waitFor(() => expect(bus.handlers).toHaveLength(before + 3));
+    await relist([deployment("checkout", 7, 2)]);
+    await syncRest();
+
+    expect(written()).toEqual([]);
+
+    await send(await latest(commands.subscribeDeploymentWatch), [
+      ["applied", deployment("checkout", 8, 3)],
+    ]);
+    expect(written()).toEqual([
+      "checkout generation 7->8",
+      "checkout replicas 2->3",
     ]);
   });
 

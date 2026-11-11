@@ -145,6 +145,11 @@ Claims here are settled by running things, not by reasoning about them.
   from the object alone has to be merged at render — never written into the
   watched cache entry, and never assumed to survive. This is how a Gateway
   correct on first read went wrong a second later.
+- What is kept under a context name and nothing else, in a module-level
+  store, a ref or an open editor, is named with `keptByName` from
+  `@/lib/kept-by-name`. A kubeconfig change can put another cluster behind
+  the name (k3s calls every one `default`), and a holder not named there goes
+  on answering for the cluster before.
 - **The peek panel renders the same objects as the detail pages.** A fix on one
   leaves the other wrong; check both.
 - **A scroller sized in per cent does not scroll here.** `height: 100%`

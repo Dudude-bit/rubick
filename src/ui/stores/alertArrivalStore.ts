@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import type { AlertReading } from "@/lib/alerts";
+import { keptByName } from "@/lib/kept-by-name";
 
 /**
  * The alert a page was opened from, until it is dismissed or the reader
@@ -46,3 +47,5 @@ export const useAlertArrivalStore = create<AlertArrivalState>((set) => ({
   arrive: (reading, at) => set({ reading, at }),
   dismiss: () => set({ reading: null, at: null }),
 }));
+
+keptByName(() => useAlertArrivalStore.getState().dismiss());

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { commands } from "@/lib/commands";
+import { keptByName } from "@/lib/kept-by-name";
 import { currentConnection } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ManifestResult } from "@/generated/types";
@@ -293,3 +294,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
     }
   },
 }));
+
+// The manifest was read from the cluster the name meant then, and Apply goes
+// to whichever cluster it means now.
+keptByName(() => useYamlEditorStore.getState().closeEditor());

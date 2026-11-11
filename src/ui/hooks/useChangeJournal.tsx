@@ -3,6 +3,7 @@ import { listenBridgeLag, listenResourceEvents } from "@/lib/events";
 
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
+import { keptByName } from "@/lib/kept-by-name";
 import {
   currentConnection,
   noteRefusal,
@@ -74,6 +75,16 @@ export function useChangeJournal() {
   // watches over one namespace, and each change is still one entry.
   const baselines = useRef(new Map<string, Seen>());
   const established = useRef(new Set<string>());
+  // Another cluster under the name is a first sight, not a relist: compared
+  // with these, everything in it was created and everything here deleted.
+  useEffect(
+    () =>
+      keptByName(() => {
+        baselines.current.clear();
+        established.current.clear();
+      }),
+    []
+  );
   const [restarts, setRestarts] = useState(0);
   // A watch holds the client it was opened on, and a renewal leaves that
   // client's token to die: the watches are opened again on the new one, and

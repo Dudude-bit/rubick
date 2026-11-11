@@ -31,6 +31,7 @@ import {
   credentialsRestored,
   readExpiredCredentials,
 } from "@/lib/credentials";
+import { keptByName } from "@/lib/kept-by-name";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import { currentConnection } from "@/lib/refusals";
 import type { ClusterInfo, ContextInfo } from "@/generated/types";
@@ -841,5 +842,38 @@ describe("the kubeconfig files changed under a connected window", () => {
     expect(commands.connectCluster).not.toHaveBeenCalled();
     expect(state().isConnected).toBe(false);
     expect(state().live).toEqual([]);
+  });
+
+  /**
+   * k3s names every cluster `default`: after the files change, the name on
+   * screen can be another cluster. Fails if what was kept under a context
+   * name is not let go before the window connects to that name again.
+   */
+  it("lets go of what was kept by context name before connecting again", async () => {
+    const connectedAt: boolean[] = [];
+    const off = keptByName(() =>
+      connectedAt.push(vi.mocked(commands.connectCluster).mock.calls.length > 0)
+    );
+
+    await state().sessionsDropped();
+    off();
+
+    expect(connectedAt).toEqual([false]);
+    expect(commands.connectCluster).toHaveBeenCalledWith("acme-staging");
+  });
+
+  /**
+   * At the front door the last cluster's answers are still cached under its
+   * name. Fails if a file change there leaves them for the next connect.
+   */
+  it("lets go of it for a window that was not connected too", async () => {
+    const forget = vi.fn();
+    const off = keptByName(forget);
+    useClusterStore.setState({ isConnected: false, currentContext: null });
+
+    await state().sessionsDropped();
+    off();
+
+    expect(forget).toHaveBeenCalledTimes(1);
   });
 });

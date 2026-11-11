@@ -10,6 +10,7 @@ import {
   WATCHED_COUNTS,
 } from "@/hooks/useClusterOverview";
 import type { Attention } from "@/lib/attention";
+import { keptByName } from "@/lib/kept-by-name";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { EVERY_NAMESPACE } from "@/lib/query-keys";
 import { longestInterval, REFRESH_INTERVALS } from "@/lib/refresh";
@@ -42,6 +43,7 @@ interface Held {
 }
 
 const useHeld = create<Record<string, Held>>(() => ({}));
+keptByName(() => useHeld.setState({}, true));
 
 /**
  * When the count under `key` on screen was taken: the stores' last answer
