@@ -99,7 +99,7 @@ export function useWatchedList<
   // polling with nothing left to clear it.
   const subscription = JSON.stringify(queryKey);
   const connection = useClusterStore((s) => s.connectionAttemptId);
-  // Refused once, not subscribed again until a reconnect: each try is two
+  // Refused once, not subscribed again until a reconnect or renewal: each try is two
   // warnings in the log and a 403 in the cluster's audit.
   const refusedBefore = useRefusedOn(connection, "watch", [subscription]);
   const [failedFor, setFailedFor] = useState<string | null>(null);
@@ -108,14 +108,16 @@ export function useWatchedList<
 
   const onError = useCallback(
     (message: string) => {
-      if (failed.current === subscription) return;
-      failed.current = subscription;
-      setFailedFor(subscription);
+      // Before the early return: a watch asked again and refused again was
+      // already failing, and is not to be subscribed a third time.
       const refused = isRefusal(message);
       if (refused) {
         const read = readOf("watch", [subscription]);
         if (read !== null) noteRefusal(read, message, currentConnection());
       }
+      if (failed.current === subscription) return;
+      failed.current = subscription;
+      setFailedFor(subscription);
       if (typeof reportFailure === "function") {
         reportFailure(message);
         return;

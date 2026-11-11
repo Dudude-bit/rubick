@@ -6,6 +6,7 @@ import { TONE_TEXT } from "@/lib/tone";
 import { renderWithRouter } from "@/test/render";
 import { ControllerLine, OperatorActionButton } from "./operator-kit";
 import { OperatorStrip } from "./cloudnativepg/page";
+import { OperatorStrip as ScyllaStrip } from "./scylla/page";
 
 const UNREADABLE = en.operators.deploymentsUnreadable;
 const wrap = (ui: React.ReactElement) =>
@@ -78,6 +79,75 @@ describe("the controller's line on an operator page", () => {
     await wrap(<OperatorStrip operator={undefined} pending={false} />);
     expect(screen.getByText(UNREADABLE)).toBeInTheDocument();
     expect(screen.queryByText(en.operators.controllerNotFound)).toBeNull();
+  });
+});
+
+describe("whether the reader can act, on an operator's tab", () => {
+  const controller = {
+    controller: null,
+    controllerKnown: true,
+    controllerReason: null,
+    version: null,
+    checkedAt: Date.now(),
+  };
+  const fact = () => screen.getByText(en.operators.canActFact).parentElement!;
+
+  /**
+   * A namespace-scoped reader may patch their own Clusters and no others:
+   * the tab said "refused", the cluster-wide answer, beside rows that
+   * offered the action. Fails if either verb is worded from the
+   * cluster-wide answer alone, on either operator's tab.
+   */
+  it("says a reader allowed on some is allowed on some, not refused", async () => {
+    await wrap(
+      <OperatorStrip
+        pending={false}
+        operator={{
+          ...controller,
+          canPatchClusters: false,
+          canCreateBackups: false,
+          patchOn: new Map([
+            ["shop/main", true],
+            ["billing/main", false],
+          ]),
+          createIn: new Map([
+            ["shop", false],
+            ["billing", false],
+          ]),
+        }}
+      />
+    );
+    expect(fact()).toHaveTextContent(
+      `patch clusters: ${en.operators.allowedOnSome}`
+    );
+    expect(fact()).toHaveTextContent(`create backups: ${en.operators.refused}`);
+  });
+
+  /** Scylla's tab words the same fact. Fails if it reads the cluster-wide answer alone. */
+  it("says the same of a ScyllaCluster reader allowed on some", async () => {
+    await wrap(
+      <ScyllaStrip
+        pending={false}
+        operator={{
+          operator: null,
+          operatorKnown: true,
+          operatorReason: null,
+          manager: null,
+          managerKnown: true,
+          managerReason: null,
+          version: null,
+          canPatchClusters: false,
+          patchOn: new Map([
+            ["shop/main", true],
+            ["billing/main", false],
+          ]),
+          checkedAt: Date.now(),
+        }}
+      />
+    );
+    expect(fact()).toHaveTextContent(
+      `patch scyllaclusters: ${en.operators.allowedOnSome}`
+    );
   });
 });
 

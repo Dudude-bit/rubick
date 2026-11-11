@@ -9,6 +9,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { useDenied } = await import("@/lib/access");
+const { credentialsRenewed } = await import("@/lib/credentials");
 const { forgetRefusals } = await import("@/lib/refusals");
 const { useClusterStore } = await import("@/stores/clusterStore");
 
@@ -30,5 +31,21 @@ describe("a refused action asked again", () => {
     act(() => forgetRefusals());
     await waitFor(() => expect(checkAccess).toHaveBeenCalledTimes(2));
     expect(await screen.findByText(/delete pods -n shop/)).toBeVisible();
+  });
+
+  /**
+   * The review is asked once per connection, so a Delete the old groups were
+   * refused kept its mark under credentials that may. Fails if a renewal
+   * does not ask the authorizer again.
+   */
+  it("loses its mark when renewed credentials are allowed it", async () => {
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    checkAccess.mockReset();
+    checkAccess.mockResolvedValue([{ allowed: false }, { allowed: false }]);
+    renderWithProviders(<Delete />);
+    expect(await screen.findByText(/delete pods -n shop/)).toBeVisible();
+    checkAccess.mockResolvedValue([{ allowed: true }, { allowed: true }]);
+    act(() => credentialsRenewed());
+    expect(await screen.findByText("allowed")).toBeVisible();
   });
 });

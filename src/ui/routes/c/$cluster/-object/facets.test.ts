@@ -8,7 +8,7 @@ import type { ReactElement } from "react";
 import { ScaleTargetRef } from "./AutoscalerScales";
 import type { ScaleTarget } from "./scale-target";
 import { ProblemSummary } from "@/components/object/detail-blocks";
-import { objectFacets, objectFinding } from "./facets";
+import { objectFacets, objectFinding, stateOf } from "./facets";
 
 /** The key itself, so a group is found by the catalogue key it is titled with. */
 const t = ((_section: string, key: string) => key) as never;
@@ -61,7 +61,43 @@ describe("what any object says about itself", () => {
       { status: { conditions: [{ type: "Ready", status: "False" }] } },
       t
     );
-    expect(summary.status).toBe("Not ready");
+    expect(summary.status).toBe("NotReady");
+  });
+});
+
+describe("the one word for a custom resource's state", () => {
+  const ready = (condition: Record<string, unknown>) =>
+    stateOf({ conditions: [{ type: "Ready", ...condition }] });
+
+  /**
+   * A Flux Kustomization mid-reconcile is `Ready=Unknown, reason
+   * Progressing`: its list row said Progressing and its page NotReady. Fails
+   * if an Unknown Ready is read as a no, or says anything but the
+   * controller's own reason where it gave one.
+   */
+  it("says a Ready that is Unknown in the controller's own word, never as not ready", () => {
+    expect(ready({ status: "Unknown", reason: "Progressing" })).toBe(
+      "Progressing"
+    );
+    expect(ready({ status: "Unknown" })).toBe("Unknown");
+    expect(ready({ status: "Unknown", reason: "" })).toBe("Unknown");
+  });
+
+  /** Fails if a yes or a no stops being said, or the page's `ready` flag is lost to the peek. */
+  it("says a written yes or no, from a condition or a flag", () => {
+    expect(ready({ status: "True", reason: "Succeeded" })).toBe("Ready");
+    expect(ready({ status: "False", reason: "BuildFailed" })).toBe("NotReady");
+    expect(stateOf({ ready: true })).toBe("Ready");
+    expect(stateOf({ ready: false })).toBe("NotReady");
+  });
+
+  /** Fails if a status nobody wrote, or one with no Ready in it, is given a word. */
+  it("says nothing where the controller has written no Ready", () => {
+    expect(stateOf(null)).toBeUndefined();
+    expect(stateOf({})).toBeUndefined();
+    expect(
+      stateOf({ conditions: [{ type: "Synced", status: "True" }] })
+    ).toBeUndefined();
   });
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { listenEvent, listenResourceEvents } from "@/lib/events";
+import { listenBridgeLag, listenResourceEvents } from "@/lib/events";
 
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
@@ -330,25 +330,35 @@ export function useChangeJournal() {
       })();
     }
 
+    const stop = () => {
+      for (const stream of streams) {
+        stream.off?.();
+        stream.off = null;
+        if (stream.id) {
+          void commands.unsubscribeResourceWatch(stream.id).catch(() => {});
+        }
+        stream.id = null;
+      }
+    };
     // The bridge dropping events blinds every watch at once: what it dropped
-    // is unknown, so the stretch is a gap, and every watch is re-subscribed
-    // rather than left waiting for a relist that may never come.
-    const lagged = listenEvent("event-bridge-lagged", () => {
+    // is unknown, so the stretch is a gap. The streams stop here, and every
+    // watch is subscribed again after the wait rather than left waiting for
+    // a relist that may never come.
+    let again: ReturnType<typeof setTimeout> | null = null;
+    const lagged = listenBridgeLag((_dropped, waitMs) => {
       for (const go of blind) go();
       retirePredecessor(Date.now());
-      if (active) setRestarts((n) => n + 1);
+      if (!active || again !== null) return;
+      stop();
+      again = setTimeout(() => setRestarts((n) => n + 1), waitMs);
     });
 
     const retire = (at: number) => {
       active = false;
+      if (again !== null) clearTimeout(again);
       void lagged.then((off) => off());
       closeSpan(at);
-      for (const stream of streams) {
-        stream.off?.();
-        if (stream.id) {
-          void commands.unsubscribeResourceWatch(stream.id).catch(() => {});
-        }
-      }
+      stop();
     };
 
     return () => {

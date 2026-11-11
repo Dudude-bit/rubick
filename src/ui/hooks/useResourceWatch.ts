@@ -9,7 +9,7 @@ import {
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import {
-  listenEvent,
+  listenBridgeLag,
   listenResourceEvents,
   type ResourceChange,
 } from "@/lib/events";
@@ -177,6 +177,8 @@ export function useResourceWatch<
     let unlisten: (() => void) | null = null;
     // The bridge dropped events of this stream: nothing more of it is taken.
     let over = false;
+    // The wait `listenBridgeLag` asked for before the collection is listed again.
+    let again: ReturnType<typeof setTimeout> | null = null;
     // Tracks whether the last stream state was a failure, so `onRecovered`
     // fires once per failure→recovery transition and not on every event.
     let inFailedState = failedFor.current === queryKey;
@@ -267,6 +269,7 @@ export function useResourceWatch<
 
     const teardown = async () => {
       active = false;
+      if (again !== null) clearTimeout(again);
       offReads();
       abandonResync();
       if (unlisten) {
@@ -414,7 +417,7 @@ export function useResourceWatch<
         // stale, it is short, and nothing polls it back while it believes it
         // is live. Same treatment as a failed stream: say so, drop the badge,
         // start polling again.
-        const offLagged = await listenEvent("event-bridge-lagged", (event) => {
+        const offLagged = await listenBridgeLag((dropped, waitMs) => {
           if (over) return;
           fail();
           // A resync missing an unknown number of its own rows is not a
@@ -423,16 +426,20 @@ export function useResourceWatch<
           // A read out now is truer than rows short of what was dropped.
           missed = null;
           onErrorRef.current?.(
-            tRef.current("action", "eventBridgeLagged", {
-              n: event.payload.missed,
-            })
+            tRef.current("action", "eventBridgeLagged", { n: dropped })
           );
           // Nothing sends again what the bridge dropped, and this stream's
           // next event would end the failure over a list still short of it.
-          // So the stream is over, and another lists the collection whole:
-          // the first thing that one says is what ends the failure.
+          // So the stream is over, and stopped rather than left sending
+          // through a bridge that is behind; another lists the collection
+          // whole after the wait, and the first thing that one says is what
+          // ends the failure. The consumer polls until then.
           over = true;
-          setDropped((n) => n + 1);
+          streamId = null;
+          void commands.unsubscribeResourceWatch(id).catch(() => {});
+          const relist = () => setDropped((n) => n + 1);
+          if (waitMs === 0) relist();
+          else again = setTimeout(relist, waitMs);
         });
 
         if (!active) {
@@ -449,7 +456,7 @@ export function useResourceWatch<
         // the session was already torn down (race with cleanup): log, no crash.
         try {
           listedFrom = Date.now();
-          await commands.resourceWatchSubscribed(id);
+          if (!over) await commands.resourceWatchSubscribed(id);
         } catch (err) {
           if (active) {
             console.error("Failed to subscribe resource watch:", err);

@@ -245,13 +245,39 @@ export function troubleMark(
   );
 }
 
-/** A permission check's answer, with the third one it can have. */
-export function allowedWord(allowed: boolean | null, t: T): string {
-  return allowed === null
-    ? t("operators", "couldNotTell")
-    : allowed
-      ? t("operators", "allowed")
-      : t("operators", "refused");
+/** How far a reader's leave to act reaches over the objects a page lists. */
+export type Reach = "everywhere" | "some" | "nowhere" | "unknown";
+
+/**
+ * `everywhere` is the authorizer asked with no namespace and no name, `each`
+ * the same verb asked of every object listed. A reader granted the verb in
+ * their own namespace answers no to the first and yes to some of the rest,
+ * so the first alone said "refused" beside rows that offered the action.
+ */
+export function reachOf(
+  everywhere: boolean | null,
+  each: Iterable<boolean | null>
+): Reach {
+  if (everywhere === true) return "everywhere";
+  const answers = [...each];
+  if (answers.includes(true)) return "some";
+  return everywhere === null || answers.includes(null) ? "unknown" : "nowhere";
+}
+
+const REACH_WORD = {
+  everywhere: "allowed",
+  some: "allowedOnSome",
+  nowhere: "refused",
+  unknown: "couldNotTell",
+} as const satisfies Record<Reach, string>;
+
+/** {@link reachOf}, in the reader's words. */
+export function reachWord(
+  everywhere: boolean | null,
+  each: Iterable<boolean | null>,
+  t: T
+): string {
+  return t("operators", REACH_WORD[reachOf(everywhere, each)]);
 }
 
 /** Three names and a tally: a row is a summary, not the whole list. */

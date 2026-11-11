@@ -9,7 +9,8 @@ import { HIDDEN_FIELD_KEYS, type StreamedLogLine } from "../types";
  * fact — sorting the whole retained buffer on every batch is an O(n log n)
  * pass over 40 000 entries twenty times a second. So: hold, sort, commit.
  * Everything arriving inside one window is emitted in timestamp order, and
- * the committed buffer is append-only and never reordered afterwards.
+ * the committed buffer is append-only and never reordered afterwards. The
+ * one window that is not appended is a read-back: see `appendCapped`.
  *
  * 250ms is five of the backend's own 50ms flushes wide, so a container a
  * flush or two behind still lands in the same window as its peers. It
@@ -91,6 +92,12 @@ export interface LogBuffer {
   frozen: Frozen | null;
   /** How many of `lines` fall inside `frozen`; zero when nothing is. */
   frozenLines: number;
+  /**
+   * Windows put among the held lines instead of after them. Whoever counts
+   * only what the tail gained since it last looked starts over when this
+   * moves.
+   */
+  merged: number;
 }
 
 /**
@@ -103,6 +110,7 @@ export const emptyBuffer = (): LogBuffer => ({
   fields: { keys: new Map(), values: new Map() },
   frozen: null,
   frozenLines: 0,
+  merged: 0,
 });
 
 export function isFrozen(
@@ -275,11 +283,19 @@ export function lostLines(dropped: number, frozen: Frozen | null): LostLines {
   return frozen === null ? "head" : "aroundKept";
 }
 
+/**
+ * `readBack` is a window from a lane attached again, reading what it wrote
+ * while it was down: older than lines the other lanes have added since. It
+ * is put where its timestamps say, a walk back from the tail as long as the
+ * lines newer than its first, so the cap goes on taking the oldest lines
+ * and "older lines dropped" stays true of what went.
+ */
 export function appendCapped(
   prev: LogBuffer,
   batch: readonly StreamedLogLine[],
   limit: number,
-  frozen: Frozen | null = prev.frozen
+  frozen: Frozen | null = prev.frozen,
+  readBack = false
 ): LogBuffer {
   const refrozen = !sameInterval(frozen, prev.frozen);
   const heldFrozen = refrozen
@@ -298,18 +314,28 @@ export function appendCapped(
   const frozenLines = heldFrozen + batchFrozen;
   const dropped = prev.dropped + overflow;
 
-  if (frozen === null && batch.length >= limit) {
-    for (const line of prev.lines) unindexLine(index, line);
+  // The held lines the window stands after: all of them, unless it is a
+  // read-back with lines older than the tail.
+  const held = prev.lines;
+  let from = held.length;
+  if (readBack && batch.length > 0)
+    while (from > 0 && held[from - 1].epoch > batch[0].epoch) from--;
+  const merged = prev.merged + (from < held.length ? 1 : 0);
+
+  if (frozen === null && batch.length >= limit && from === held.length) {
+    for (const line of held) unindexLine(index, line);
     const lines = batch.slice(batch.length - Math.max(0, limit));
     for (const line of lines) indexLine(index, line);
-    return { lines, dropped, fields, frozen, frozenLines };
+    return { lines, dropped, fields, frozen, frozenLines, merged };
   }
 
   // Evict `overflow` lines from the head, stepping over the frozen ones:
   // the interval keeps its place in the order, everything around it goes.
   const lines: StreamedLogLine[] = [];
   let evict = overflow;
-  for (const line of prev.lines) {
+  let at = 0;
+  for (; at < from; at++) {
+    const line = held[at];
     if (evict > 0 && !isFrozen(line, frozen)) {
       unindexLine(index, line);
       evict--;
@@ -317,7 +343,20 @@ export function appendCapped(
       lines.push(line);
     }
   }
+  // Only a read-back has held lines left to stand between or after its own.
+  const keepHeldUpTo = (epoch: number) => {
+    for (; at < held.length && held[at].epoch <= epoch; at++) {
+      const line = held[at];
+      if (evict > 0 && !isFrozen(line, frozen)) {
+        unindexLine(index, line);
+        evict--;
+      } else {
+        lines.push(line);
+      }
+    }
+  };
   for (const line of batch) {
+    if (at < held.length) keepHeldUpTo(line.epoch);
     if (evict > 0 && !isFrozen(line, frozen)) {
       evict--;
       continue;
@@ -325,7 +364,8 @@ export function appendCapped(
     lines.push(line);
     indexLine(index, line);
   }
-  return { lines, dropped, fields, frozen, frozenLines };
+  keepHeldUpTo(Infinity);
+  return { lines, dropped, fields, frozen, frozenLines, merged };
 }
 
 /**

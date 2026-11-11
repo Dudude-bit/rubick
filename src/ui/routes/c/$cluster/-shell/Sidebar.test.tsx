@@ -111,13 +111,19 @@ type OverviewStub = Pick<
   Partial<Pick<ClusterOverview, "servedFrom" | "countsPartial">>;
 let overview: OverviewStub | undefined;
 /** When the overview on screen landed, and whether a read of it is late. */
-const read = vi.hoisted(() => ({ at: 0, slowRead: false, stale: false }));
+const read = vi.hoisted(() => ({
+  at: 0,
+  followedAt: null as number | null,
+  slowRead: false,
+  stale: false,
+}));
 vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useClusterOverview")>()),
   // Deliberately ignores `enabled`, the way React Query's own
   // `keepPreviousData` does: the hook goes on handing back the last cluster's
   // answer after a disconnect, which is the condition the rail must survive.
   useClusterOverview: () => ({ data: overview }),
+  useOverviewFollowedAt: () => read.followedAt,
   useScopedOverview: () => ({
     data: overview,
     dataUpdatedAt: read.at,
@@ -167,6 +173,7 @@ beforeEach(() => {
   listServiceEndpoints.mockResolvedValue([]);
   overview = undefined;
   read.at = 0;
+  read.followedAt = null;
   read.slowRead = false;
   read.stale = false;
   pageFollows.clear();
@@ -422,11 +429,14 @@ describe("how old a row's count is", () => {
    * Deployment was gone, with nothing saying the number was a poll's. Fails
    * if a count the overview's watched stores hold is not said to follow the
    * cluster while they serve it, or a polled one does not say when it was
-   * counted and how often.
+   * counted and how often. A followed count is from its stores' last
+   * answer, six seconds after the whole read here: fails if it is stamped
+   * with the whole read's time, or a polled one with the stores'.
    */
   it("says a watched count follows the cluster and a polled one when it was counted", async () => {
     useWindowActivity.setState({ visible: true });
     read.at = AT;
+    read.followedAt = AT + 6000;
     overview = {
       ...overviewWithPods(41),
       counts: { pods: 41, services: 3 } as ClusterOverview["counts"],
@@ -436,13 +446,26 @@ describe("how old a row's count is", () => {
 
     expect(await counted("Pods")).toHaveAttribute(
       "title",
-      "Follows the cluster's changes. Counted at 15:03:41."
+      "Follows the cluster's changes. Counted at 15:03:47."
     );
     expect(await counted("Services")).toHaveAttribute(
       "title",
       "Counted at 15:03:41, and again at least every 30 s."
     );
     watched.unmount();
+
+    read.slowRead = true;
+    const late = await wrap(<Sidebar />);
+    expect(await counted("Pods")).toHaveAttribute(
+      "title",
+      "Still reading. This count is from 15:03:47."
+    );
+    expect(await counted("Services")).toHaveAttribute(
+      "title",
+      "Still reading. This count is from 15:03:41."
+    );
+    late.unmount();
+    read.slowRead = false;
 
     overview = { ...overview, servedFrom: "list" };
     await wrap(<Sidebar />);

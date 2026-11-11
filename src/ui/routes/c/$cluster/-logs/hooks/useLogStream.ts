@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { commands } from "@/lib/commands";
-import { listenEvent } from "@/lib/events";
+import { listenBridgeLag, listenEvent } from "@/lib/events";
 import type { LogLineEvent, StreamLogConfig } from "@/generated/types";
 import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import {
@@ -153,6 +153,8 @@ interface UseLogStreamResult {
    * which the viewer used to do silently.
    */
   dropped: number;
+  /** See `LogBuffer.merged`. */
+  merged: number;
   /**
    * When a batch last landed, and the two ids that divide the buffer
    * into what arrived under intake and what arrived without it.
@@ -276,6 +278,10 @@ interface Session {
   after: Map<string, Heard>;
   /** Sources to attach again: they read on from where they stopped. */
   again: Set<string>;
+  /** The newest stamp any lane has said: how far the pane has got. */
+  high: number;
+  /** Streams attached again that are still behind `high`: what they say is a read-back. */
+  catching: Set<string>;
   /**
    * Sources whose open was rejected. Kept out of `opened` so nothing thinks
    * they are attached, and out of `added` so an unrelated pod joining the
@@ -426,6 +432,7 @@ export function useLogStream({
         s.live.delete(id);
         s.lastEpoch.delete(id);
         s.after.delete(id);
+        s.catching.delete(id);
         void commands
           .stopLogStream(id)
           .catch((err) => console.error("Failed to stop log streaming:", err));
@@ -523,6 +530,7 @@ export function useLogStream({
             }
             s.opened.set(key, streamId);
             s.sourceOf.set(streamId, source);
+            if (again) s.catching.add(streamId);
             if (heard) s.after.set(streamId, heard);
             if (!previous) s.live.add(streamId);
             // It answered: whatever it said last time is no longer true.
@@ -613,12 +621,16 @@ export function useLogStream({
       heard: new Map(),
       after: new Map(),
       again: new Set(),
+      high: -Infinity,
+      catching: new Set(),
       refused: new Set(),
       unlistens: [],
     };
     session.current = s;
 
     let pending: StreamedLogLine[] = [];
+    // Some of `pending` is a lane's read-back, older than lines already held.
+    let readBack = false;
     let releaseTimer: ReturnType<typeof setTimeout> | null = null;
 
     const release = () => {
@@ -628,8 +640,12 @@ export function useLogStream({
       }
       if (pending.length === 0 || !s.active) return;
       const window = orderByTimestamp(pending);
+      const among = readBack;
       pending = [];
-      setBuffer((prev) => appendCapped(prev, window, limit, frozenRef.current));
+      readBack = false;
+      setBuffer((prev) =>
+        appendCapped(prev, window, limit, frozenRef.current, among)
+      );
       setLastBatchAt(Date.now());
     };
 
@@ -725,8 +741,10 @@ export function useLogStream({
         // The bridge dropped events and cannot say whose: lines, a failure,
         // the end of a read. Every lane not already known to have stopped is
         // attached again and reads on from its last line, which brings back
-        // the lines and finds the lane that died unheard.
-        unlistenLagged = await listenEvent("event-bridge-lagged", () => {
+        // the lines and finds the lane that died unheard. It stops at once
+        // and attaches after the wait: what it reads back crosses the bridge
+        // that has just dropped it.
+        unlistenLagged = await listenBridgeLag((_dropped, waitMs) => {
           if (!s.active) return;
           const stopped = new Set(
             failuresRef.current.map((f) =>
@@ -745,6 +763,7 @@ export function useLogStream({
             s.live.delete(id);
             s.lastEpoch.delete(id);
             s.after.delete(id);
+            s.catching.delete(id);
             void commands.stopLogStream(id).catch(() => {});
           }
           setReads((prev) => {
@@ -752,7 +771,13 @@ export function useLogStream({
             for (const [key] of lanes) next.delete(key);
             return next;
           });
-          void sync(s, sourcesRef.current, false);
+          const attach = () => {
+            if (s.active) void sync(s, sourcesRef.current, false);
+          };
+          if (waitMs === 0) return attach();
+          setIsStreaming(s.live.size > 0);
+          setIsConnecting(true);
+          setTimeout(attach, waitMs);
         });
         unlistenRead = await listenEvent("log-read", (event) => {
           const source = s.sourceOf.get(event.payload.stream_id);
@@ -799,6 +824,10 @@ export function useLogStream({
               if (!heard || stamp > heard.epoch)
                 s.heard.set(from, { epoch: stamp, lines: new Set([said]) });
               else if (stamp === heard.epoch) heard.lines.add(said);
+              if (stamp >= s.high) {
+                s.high = stamp;
+                s.catching.delete(streamId);
+              } else if (s.catching.has(streamId)) readBack = true;
               epoch = stamp;
             }
             pending.push(
@@ -933,6 +962,7 @@ export function useLogStream({
     limit,
     fields: buffer.fields,
     dropped: buffer.dropped,
+    merged: buffer.merged,
     lastBatchAt,
     intakeFrom,
     unfilteredFrom,

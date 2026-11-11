@@ -836,6 +836,56 @@ describe("the density strip", () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * The strip counts what the tail gained since it last looked, and a lane
+   * attached again after a lag reads back lines that stand among older
+   * ones. Fails if the errors it read back never reach the strip's count.
+   */
+  it("counts the lines a lane read back among the ones it already held", async () => {
+    const batch = (stream_id: string, level: string, stamps: number[]): void =>
+      act(() =>
+        listeners["log-batch"]!({
+          payload: {
+            stream_id,
+            lines: stamps.map((at) => ({
+              message: `${level} at ${at}`,
+              timestamp: new Date(at).toISOString(),
+              level,
+              format: "plain",
+              fields: null,
+              raw: `${level} at ${at}`,
+            })),
+          },
+        })
+      );
+    await mount(
+      <LogViewer
+        {...props}
+        containers={[container("app"), container("sidecar")]}
+      />
+    );
+    await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
+    batch("stream-sidecar", "info", [START]);
+    batch(
+      "stream-id-1",
+      "info",
+      Array.from({ length: 120 }, (_, i) => START + 1000 + i * 167)
+    );
+    await screen.findByRole("listbox");
+
+    act(() => listeners["event-bridge-lagged"]!({ payload: { missed: 5 } }));
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(4)
+    );
+    batch(
+      "stream-sidecar",
+      "error",
+      Array.from({ length: 10 }, (_, i) => START + 5000 + i * 100)
+    );
+
+    expect(await screen.findByText(/10 errors in \d+ slice/)).toBeVisible();
+  });
+
   it("never leaves an error visible only as a colour", async () => {
     const strip = await renderWithShape();
 

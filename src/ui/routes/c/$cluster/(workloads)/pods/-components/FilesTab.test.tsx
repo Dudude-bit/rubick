@@ -1152,7 +1152,7 @@ describe("FilesTab", () => {
       />
     );
     await userEvent.click(screen.getByRole("tab", { name: "sidecar" }));
-    expect(screen.queryByText(/has restarted since/)).toBeNull();
+    expect(screen.queryByText(/has restarted/)).toBeNull();
   });
 
   const restarted = (restartCount: number) => {
@@ -1187,7 +1187,8 @@ describe("FilesTab", () => {
   /**
    * The tab was opened on a container between runs, and the run that started
    * next is not the one the reader was looking at. Fails if it is listed, or
-   * asked where it works, before the reader says so.
+   * asked where it works, before the reader says so, or if the banner
+   * speaks of a listing that was never taken.
    */
   it("asks a container that started after the tab was opened nothing until the reader does", async () => {
     listing.mockReturnValue({ phase: "idle" });
@@ -1201,6 +1202,11 @@ describe("FilesTab", () => {
     view.rerender(tab(restarted(4)));
     await waitFor(() => expect(lastListed()[1]).toBe(true));
     expect(containerWorkingDir).not.toHaveBeenCalled();
+    // Nothing was listed in the run it was opened on: there is no "this listing".
+    expect(
+      screen.getByText(/has restarted \(restart 4\) before anything in it/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/since this listing/)).toBeNull();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Read the new container" })
@@ -1224,7 +1230,7 @@ describe("FilesTab", () => {
     );
 
     expect(lastListed()).toMatchObject([{ life: "uid-1:app:4" }, false]);
-    expect(screen.queryByText(/has restarted since/)).toBeNull();
+    expect(screen.queryByText(/has restarted/)).toBeNull();
   });
 
   /**
@@ -1243,7 +1249,7 @@ describe("FilesTab", () => {
       { life: "uid-1:app:4", path: "/etc/app/conf.d" },
       false,
     ]);
-    expect(screen.queryByText(/has restarted since/)).toBeNull();
+    expect(screen.queryByText(/has restarted/)).toBeNull();
   });
 
   /**

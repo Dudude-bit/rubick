@@ -25,7 +25,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { podTotal } from "../-overview/health-share";
 import { ActivityPanel } from "./ActivityPanel";
-import { useShellCounts } from "./useShellCounts";
+import { countedAt, useShellCounts } from "./useShellCounts";
 import { NOTHING_MISSING, type ScopeMissing } from "@/hooks/useScopeMissing";
 import { listWords } from "@/i18n/say";
 import { useWindowCluster } from "./useWindowCluster";
@@ -303,7 +303,10 @@ export function StatusBar({
                     "cluster",
                     counts.late ? "countsLateAll" : "countsFailedAll",
                     {
-                      at: formatWhen(counts.readAt, "clock"),
+                      at: formatWhen(
+                        countedAt(counts, "pods") ?? counts.readAt,
+                        "clock"
+                      ),
                     }
                   )}
                 </p>

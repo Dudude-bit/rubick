@@ -160,3 +160,30 @@ describe("the page of a custom resource named like a built-in", () => {
     );
   });
 });
+
+describe("the page of a custom resource still reconciling", () => {
+  /**
+   * The header read `Ready=Unknown` as NotReady while the Flux list row of
+   * the same object said Progressing, and the peek "Not ready". Fails if
+   * the header words Ready with anything but the reader the peek uses.
+   */
+  it("says an Unknown Ready in the controller's own word, as its peek does", async () => {
+    answers.crd = crd(
+      "kustomize.toolkit.fluxcd.io",
+      "Kustomization",
+      "kustomizations"
+    );
+    answers.resource = {
+      ...object("kustomize.toolkit.fluxcd.io/v1", "Kustomization"),
+      status: {
+        conditions: [
+          { type: "Ready", status: "Unknown", reason: "Progressing" },
+        ],
+      },
+    };
+    await open("kustomizations.kustomize.toolkit.fluxcd.io");
+
+    expect(await screen.findByText("Progressing")).toBeVisible();
+    expect(screen.queryByText("NotReady")).toBeNull();
+  });
+});

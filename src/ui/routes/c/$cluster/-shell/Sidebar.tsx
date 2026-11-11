@@ -33,7 +33,7 @@ import {
   useLocks,
   type Lock as ListLock,
 } from "@/hooks/useListAccess";
-import { useShellCounts, type ShellCounts } from "./useShellCounts";
+import { countedAt, useShellCounts, type ShellCounts } from "./useShellCounts";
 import { useWindowCluster } from "./useWindowCluster";
 import { useAppSearchValue } from "@/hooks/useSearchParam";
 import { useListFollowed, useListLive } from "@/hooks/useWatchedList";
@@ -955,7 +955,7 @@ function AttentionCount({
       )}
       title={
         behind || complete
-          ? countAge(counts, false, t)
+          ? countAge(counts, false, counts.readAt, t)
           : t("cluster", "problemsNotAllChecked")
       }
       aria-label={attentionWords({ total: n, complete }, t)}
@@ -1039,6 +1039,7 @@ function NavCount({
           counts,
           pageFollows ||
             (item.count !== undefined && counts.followed.has(item.count)),
+          countedAt(counts, item.count),
           t
         )
       : t("cluster", "countsFollowedLive"),
@@ -1156,11 +1157,12 @@ function pageListKey(kind: ResourceKind, scope: readonly string[]) {
 function countAge(
   counts: ShellCounts,
   followed: boolean,
+  counted: number | null,
   t: Translate
 ): string {
   if (counts.heldAt !== null) return t("cluster", "countsHeld");
-  if (counts.readAt === null) return "";
-  const at = formatWhen(counts.readAt, "clock");
+  if (counted === null) return "";
+  const at = formatWhen(counted, "clock");
   if (counts.late) return t("cluster", "countsLate", { at });
   if (counts.failed) return t("cluster", "countsFailed", { at });
   if (followed) return t("cluster", "countsFollowed", { at });

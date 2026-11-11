@@ -1,6 +1,14 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { listenEvent, listenResourceEvents, type EventPayload } from "./events";
+import {
+  LAG_QUIET_MS,
+  LAG_WAIT_MAX_MS,
+  LAG_WAIT_MS,
+  listenBridgeLag,
+  listenEvent,
+  listenResourceEvents,
+  type EventPayload,
+} from "./events";
 import { setTransport, transport, type Transport } from "./transport";
 
 const SOURCES = import.meta.glob<string>(
@@ -59,6 +67,94 @@ describe("listening to the backend", () => {
     expect(taking.length).toBeGreaterThanOrEqual(3);
     expect(deaf).toEqual([]);
   });
+
+  /**
+   * Each of those files subscribes its streams again when the bridge drops
+   * events, and each new stream lists its collection through that bridge.
+   * Fails when one hears the notice bare, where nothing paces the lists.
+   */
+  it("hears a lagging bridge through listenBridgeLag wherever watch streams are held", () => {
+    const unpaced = Object.entries(SOURCES)
+      .filter(
+        ([path, source]) =>
+          path !== "/src/ui/lib/events.ts" &&
+          source.includes("listenResourceEvents") &&
+          source.includes('"event-bridge-lagged"')
+      )
+      .map(([path]) => path);
+    expect(unpaced).toEqual([]);
+  });
+});
+
+describe("streams subscribed again after the bridge dropped events", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const lagging = async () => {
+    const { fake, emit } = tauriLike();
+    setTransport(fake);
+    const waits: number[] = [];
+    const others: number[] = [];
+    await listenBridgeLag((_missed, waitMs) => waits.push(waitMs));
+    await listenBridgeLag((_missed, waitMs) => others.push(waitMs));
+    const notice = () => emit({ channel: "event-bridge-lagged", missed: 1200 });
+    return { waits, others, notice };
+  };
+
+  /**
+   * Every mounted watch listed its collection again on every notice, and
+   * those lists were the next lag. Fails if a notice that follows another
+   * closely is answered at once, if the wait stops growing before the cap,
+   * or if a notice long after the last is still made to wait.
+   */
+  it("waits nothing after a lone notice and twice as long after each that follows closely", async () => {
+    const real = transport();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(1_000_000);
+    try {
+      const { waits, notice } = await lagging();
+      for (let n = 0; n < 8; n++) {
+        notice();
+        vi.setSystemTime(Date.now() + 300);
+      }
+      expect(waits).toEqual([
+        0,
+        LAG_WAIT_MS,
+        2 * LAG_WAIT_MS,
+        4 * LAG_WAIT_MS,
+        8 * LAG_WAIT_MS,
+        16 * LAG_WAIT_MS,
+        LAG_WAIT_MAX_MS,
+        LAG_WAIT_MAX_MS,
+      ]);
+
+      vi.setSystemTime(Date.now() + LAG_WAIT_MAX_MS + 300);
+      notice();
+      expect(waits.at(-1)).toBe(LAG_WAIT_MAX_MS);
+
+      vi.setSystemTime(Date.now() + LAG_QUIET_MS + 1);
+      notice();
+      expect(waits.at(-1)).toBe(0);
+    } finally {
+      setTransport(real);
+    }
+  });
+
+  /**
+   * Fifty watches hear one notice. Fails if each of them counts it as a
+   * notice of its own, which reaches the cap on the first lag.
+   */
+  it("counts one notice once, however many holders hear it", async () => {
+    const real = transport();
+    try {
+      const { waits, others, notice } = await lagging();
+      notice();
+      notice();
+      expect(waits).toEqual([0, LAG_WAIT_MS]);
+      expect(others).toEqual(waits);
+    } finally {
+      setTransport(real);
+    }
+  });
 });
 
 /**
@@ -88,7 +184,11 @@ function tauriLike() {
     status: () => "open",
     onStatus: () => () => {},
   };
-  const emit = (payload: EventPayload<"resource-event" | "log-batch">) => {
+  const emit = (
+    payload: EventPayload<
+      "resource-event" | "log-batch" | "event-bridge-lagged"
+    >
+  ) => {
     for (const id of backend) {
       const callback = callbacks.get(id);
       if (callback) callback(payload);

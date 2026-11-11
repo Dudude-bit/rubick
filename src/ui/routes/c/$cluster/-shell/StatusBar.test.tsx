@@ -44,6 +44,7 @@ const scoped = vi.hoisted(() => ({
   data: undefined as unknown,
   isPlaceholderData: false,
   dataUpdatedAt: 0,
+  followedAt: null as number | null,
   freshness: {
     everyMs: 10_000 as number | false,
     slowRead: false,
@@ -54,6 +55,7 @@ const scoped = vi.hoisted(() => ({
 vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useClusterOverview")>()),
   useScopedOverview: () => scoped,
+  useOverviewFollowedAt: () => scoped.followedAt,
 }));
 
 const overviewOf = (
@@ -95,6 +97,7 @@ vi.mock("@/hooks/useCredentialRenewal", () => ({
 }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useWindowActivity } from "@/lib/window-activity";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDeepLinkStore } from "@/stores/deepLinkStore";
 import { StatusBar } from "./StatusBar";
@@ -108,6 +111,7 @@ beforeEach(() => {
   attentions.cluster = attentionOf(0);
   scoped.data = overviewOf(3, 0);
   scoped.isPlaceholderData = false;
+  scoped.followedAt = null;
   scoped.freshness.slowRead = false;
   scoped.freshness.stale = false;
   useClusterStore.setState({
@@ -398,6 +402,29 @@ describe("what the problem count counts", () => {
       expect(
         screen.getAllByText(
           "Still reading the counts. These are from 15:03:41."
+        )
+      ).not.toHaveLength(0)
+    );
+  });
+
+  /**
+   * The pod count follows the overview's stores, which answered six seconds
+   * after the whole read that is now late. Fails if the bar says the count
+   * is from the whole read.
+   */
+  it("says a followed pod count is from its stores' last answer while the whole read is late", async () => {
+    useWindowActivity.setState({ visible: true });
+    scoped.data = { ...(scoped.data as object), servedFrom: "watch" };
+    scoped.dataUpdatedAt = new Date(2026, 9, 12, 15, 3, 41).getTime();
+    scoped.followedAt = scoped.dataUpdatedAt + 6000;
+    scoped.freshness.slowRead = true;
+    bar();
+
+    await userEvent.hover(screen.getByTestId("scope-counts"));
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(
+          "Still reading the counts. These are from 15:03:47."
         )
       ).not.toHaveLength(0)
     );
