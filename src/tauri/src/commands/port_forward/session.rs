@@ -614,6 +614,23 @@ mod tests {
         assert!(sessions.is_empty());
     }
 
+    /// Stop removes the row first and the task's guard drops after it: the
+    /// second removal has to be a no-op, not a panic inside a drop.
+    #[test]
+    fn the_guard_dropping_after_stop_took_the_row_is_safe() {
+        let sessions: Arc<DashMap<String, PortForwardSession>> = Arc::new(DashMap::new());
+        sessions.insert("k".into(), session("k", "api-0"));
+        sessions.insert("other".into(), session("other", "api-1"));
+        let leave = Leave {
+            sessions: sessions.clone(),
+            key: "k".into(),
+        };
+        sessions.remove("k");
+        drop(leave);
+        assert!(sessions.contains_key("other"));
+        assert_eq!(sessions.len(), 1);
+    }
+
     fn session(id: &str, pod: &str) -> PortForwardSession {
         PortForwardSession {
             id: id.into(),
@@ -756,6 +773,67 @@ mod tests {
         })
         .await
         .expect("a second attempt within five seconds");
+    }
+
+    /// A forward that ends by itself, nobody pressing Stop, takes its
+    /// connections with it: one left retrying held the client's socket open
+    /// against a forward that no longer existed.
+    #[tokio::test]
+    async fn a_forward_ending_on_its_own_closes_the_connections_it_took() {
+        use tokio::io::AsyncReadExt;
+        let mut forward = running(ForwardVia::Pod, true, |path, nth| match path {
+            "/api/v1/namespaces/shop/pods/api-0" if nth <= 10 => (200, there()),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        assert!(forward.state.port_forwards.subscribed("pf-1"));
+        assert_eq!(next_status(&mut forward.events).await.0, "listening");
+        let mut client = tokio::net::TcpStream::connect(("127.0.0.1", forward.port))
+            .await
+            .unwrap();
+        assert_eq!(next_status(&mut forward.events).await.0, "failed");
+        let mut byte = [0u8; 1];
+        let read = tokio::time::timeout(Duration::from_millis(500), client.read(&mut byte))
+            .await
+            .expect("the connection closes with the forward");
+        assert!(matches!(read, Ok(0) | Err(_)), "{read:?}");
+    }
+
+    /// A connection accepted in the same breath as Stop must not open a
+    /// stream to the pod for a session that no longer exists.
+    #[tokio::test]
+    async fn a_connection_accepted_after_stop_asks_the_cluster_for_nothing() {
+        let (state, hits) =
+            connected(ServedIndex::default(), |_, _| failure(404, "NotFound")).await;
+        let listener = bind(0).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (_target_tx, target) = watch::channel(Target {
+            pod: "api-0".into(),
+            remote_port: 8080,
+        });
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        let shared = Shared {
+            clients: state.client_manager.clone(),
+            context: "fake".into(),
+            namespace: "shop".into(),
+            auto_reconnect: true,
+            report: Reporter {
+                event_tx: state.event_tx.clone(),
+                id: "pf-1".into(),
+                namespace: "shop".into(),
+                local_port: port,
+            },
+            target,
+            suspect: Arc::new(Notify::new()),
+            cancel,
+        };
+        let _client = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        forward_connection(shared, stream).await;
+        assert_eq!(hits.lock().unwrap().get(FORWARD), None);
     }
 
     /// Tauri events have no replay, so nothing is said before the frontend

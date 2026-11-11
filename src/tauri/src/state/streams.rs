@@ -218,6 +218,33 @@ mod tests {
         assert!(!streams.stop("s-1"));
     }
 
+    /// A task that ends without a stop, by returning or by panicking, drops
+    /// what holds its entry, and everything it spawned hears that: a
+    /// port-forward's connections outlived their session otherwise.
+    #[tokio::test]
+    async fn a_stream_ending_without_a_stop_cancels_the_tasks_it_spawned() {
+        let streams = Streams::default();
+        let (cancel, held) = streams.open("s-1".into()).split();
+        let worker = cancel.clone();
+        drop(cancel);
+        assert!(!worker.is_cancelled());
+        drop(held);
+        assert!(worker.is_cancelled());
+    }
+
+    /// A stop removes the entry, and the task's hold on it drops afterwards:
+    /// that second removal is a no-op and leaves every other stream alone.
+    #[tokio::test]
+    async fn dropping_the_hold_after_a_stop_is_safe() {
+        let streams = Streams::default();
+        let (_, held) = streams.open("s-1".into()).split();
+        let (other, _other) = streams.open("s-2".into()).split();
+        assert!(streams.stop("s-1"));
+        drop(held);
+        assert!(streams.contains("s-2"));
+        assert!(!other.is_cancelled());
+    }
+
     /// A search's clusters and a drain's pass and pause all wait on one stop.
     /// A single-receiver cancel reached only one of them, which is why both
     /// kept their own tables.
