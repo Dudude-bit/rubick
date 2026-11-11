@@ -35,6 +35,7 @@ import { UnreadList } from "../../../-list/UnreadList";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { helmReleaseLink, hrefOf } from "@/lib/links";
 import { noneWhereAnswered } from "@/lib/namespace-scope";
+import { getResourceRowId } from "@/lib/table-utils";
 import { formatDate, formatWhen } from "@/lib/utils";
 
 import { NotRead } from "./NotRead";
@@ -45,7 +46,7 @@ import { T } from "@/i18n/T";
 import { None } from "@/components/ui/none";
 
 const getHelmReleaseRowId = (row: HelmRelease) =>
-  `${row.source}-${row.namespace}-${row.name}`;
+  `${row.source}/${getResourceRowId(row)}`;
 
 const helmReleaseHref = (row: HelmRelease) => hrefOf(helmReleaseLink(row));
 
