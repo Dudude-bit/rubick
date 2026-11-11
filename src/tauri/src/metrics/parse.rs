@@ -3,7 +3,7 @@
 //! status mapping and dynamic-API construction.
 
 use crate::commands::helpers::ResourceContext;
-use crate::error::{page_status, server_words, Result};
+use crate::error::{page_status, server_words, session_over, Result};
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use kube::api::ListParams;
@@ -36,10 +36,7 @@ pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
                     status: MetricsStatusKind::NotInstalled,
                     message: Some(server_words(api_err)),
                 }
-            } else if matches!(api_err.code, 401 | 403)
-                || api_err.reason == "Forbidden"
-                || api_err.reason == "Unauthorized"
-            {
+            } else if api_err.code == 403 || api_err.reason == "Forbidden" {
                 MetricsStatus {
                     status: MetricsStatusKind::Forbidden,
                     message: Some(server_words(api_err)),
@@ -150,7 +147,9 @@ pub(super) async fn fetch_metrics<T>(
     })
 }
 
-/// The samples, or the API's refusal or fault kept whole.
+/// The samples, or the API's refusal or fault kept whole. A 401 is neither:
+/// it is the session ending, and leaves as the error every other read gives,
+/// so nothing files it as an answer about metrics.
 pub(super) async fn list_metrics<T>(
     state: &AppState,
     namespace: Option<&str>,
@@ -159,10 +158,10 @@ pub(super) async fn list_metrics<T>(
 ) -> Result<std::result::Result<Vec<T>, kube::Error>> {
     let ctx = ResourceContext::for_list_from_app_state(state, namespace.map(str::to_string))?;
     let api = metrics_api(&ctx, kind);
-    Ok(api
-        .list(&ListParams::default())
-        .await
-        .map(|list| list.items.iter().filter_map(parse).collect()))
+    match api.list(&ListParams::default()).await {
+        Err(err) if session_over(&err).is_some() => Err(err.into()),
+        answer => Ok(answer.map(|list| list.items.iter().filter_map(parse).collect())),
+    }
 }
 
 #[cfg(test)]

@@ -348,6 +348,17 @@ impl AppState {
         Ok((context, client))
     }
 
+    /// A context's client was replaced or let go: a connect, a disconnect,
+    /// a credential renewal. Everything in this process built on the old one
+    /// lets go here, so a holder added later has one place to be named. The
+    /// overview's watches and the ownership index hold the client itself; a
+    /// metrics refusal was an answer to its credentials.
+    pub fn client_replaced(&self, context: &str) {
+        self.overview_cache.forget(context);
+        self.ownership.forget(context);
+        self.metrics_unserved.forget_refusals(context);
+    }
+
     /// Set current context
     pub fn set_current_context(&self, context: Option<String>) {
         *self.current_context.write() = context;

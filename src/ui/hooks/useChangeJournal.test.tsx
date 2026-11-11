@@ -49,6 +49,7 @@ import { commands } from "@/lib/commands";
 import { gapsOf } from "@/lib/changes";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { credentialsRenewed } from "@/lib/credentials";
 import { useChangeJournal } from "./useChangeJournal";
 
 const REFUSED =
@@ -290,6 +291,63 @@ describe("the change journal across a namespace switch", () => {
       ])
     );
     expect(spans().at(-1)?.to).toBe(now);
+  });
+});
+
+describe("the change journal across a credential renewal", () => {
+  const KINDS = [
+    [commands.subscribeDeploymentWatch, "deploy"],
+    [commands.subscribeStatefulsetWatch, "sts"],
+    [commands.subscribeDaemonsetWatch, "ds"],
+  ] as const;
+  let client = 1;
+  const syncAll = async () => {
+    for (const [, id] of KINDS) await emit(`${id}#${client}`, "synced");
+  };
+  const spans = () => useChangeJournalStore.getState().spans.dev ?? [];
+  const unsubscribed = () =>
+    vi.mocked(commands.unsubscribeResourceWatch).mock.calls.map(([id]) => id);
+
+  beforeEach(() => {
+    client = 1;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(2_000_000);
+    vi.mocked(commands.unsubscribeResourceWatch).mockClear();
+    for (const [subscribe, id] of KINDS)
+      vi.mocked(subscribe).mockImplementation(async () => `${id}#${client}`);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    for (const [subscribe, id] of KINDS)
+      vi.mocked(subscribe).mockImplementation(async () => id);
+  });
+
+  /**
+   * A watch holds the client it was opened on. After a renewal the old
+   * token dies, the three watches fail with 401, and Changes says "not
+   * watching this cluster's workloads" until the reader reconnects. Fails
+   * if a renewal does not open the watches again on the new client, or if
+   * moving onto it is drawn as a stretch nobody watched.
+   */
+  it("opens every watch again on the renewed client, and draws no gap", async () => {
+    renderHook(() => useChangeJournal());
+    await waitFor(() => expect(bus.handlers).toHaveLength(3));
+    await syncAll();
+    vi.setSystemTime(2_060_000);
+
+    client = 2;
+    act(() => credentialsRenewed());
+    await waitFor(() => expect(bus.handlers).toHaveLength(6));
+    expect(unsubscribed()).toEqual([]);
+    vi.setSystemTime(2_061_500);
+    await syncAll();
+
+    const [before, after] = spans();
+    expect(before.to).toBe(after.from);
+    expect(after.to).toBeNull();
+    expect(gapsOf(spans(), before.from, 2_061_500)).toEqual([]);
+    expect(unsubscribed().sort()).toEqual(["deploy#1", "ds#1", "sts#1"]);
   });
 });
 

@@ -353,8 +353,19 @@ impl DrainManager {
     /// two nodes can legitimately be draining together, and stopping one
     /// because another started would be the tool making a cluster-wide
     /// decision on its own.
+    ///
+    /// `renewed` is asked before every pass for the context's client as it
+    /// is now: a credential renewal replaces it, and the one a drain started
+    /// with carries a token that expires under a long wait. `None` once the
+    /// window has let the context go, and the drain goes on with what it has.
     #[must_use]
-    pub fn start(&self, client: Client, node: String, options: DrainOptions) -> DrainHandle {
+    pub fn start(
+        &self,
+        client: Client,
+        renewed: impl Fn() -> Option<Client> + Send + Sync + 'static,
+        node: String,
+        options: DrainOptions,
+    ) -> DrainHandle {
         let drain_id = generate_id("drain");
         let mut opened = self.streams.open(drain_id.clone());
         let event_tx = self.event_tx.clone();
@@ -386,7 +397,7 @@ impl DrainManager {
             }
             let (cancel, _held) = opened.split();
 
-            run(&event_tx, &id, &client, &node, options, &cancel).await;
+            run(&event_tx, &id, client, &renewed, &node, options, &cancel).await;
         });
 
         DrainHandle { drain_id }
@@ -509,7 +520,8 @@ struct Progress {
 async fn run(
     event_tx: &broadcast::Sender<AppEvent>,
     drain_id: &str,
-    client: &Client,
+    mut client: Client,
+    renewed: &(dyn Fn() -> Option<Client> + Send + Sync),
     node: &str,
     options: DrainOptions,
     cancel: &CancellationToken,
@@ -534,7 +546,7 @@ async fn run(
     // that skipped it would leave the drain evicting pods onto a node still
     // accepting them, forever.
     let cordoned = tokio::select! {
-        result = cordon(client, node) => result,
+        result = cordon(&client, node) => result,
         () = cancel.cancelled() => bail!(DrainOutcome::Cancelled, &empty, None),
     };
     if let Err(err) = cordoned {
@@ -544,7 +556,7 @@ async fn run(
     }
 
     let surveyed = tokio::select! {
-        result = survey(client, node, options) => result,
+        result = survey(&client, node, options) => result,
         () = cancel.cancelled() => bail!(DrainOutcome::Cancelled, &empty, None),
     };
     let Survey {
@@ -573,8 +585,11 @@ async fn run(
         // The survey already listed for attempt 1. Later attempts look again
         // — for departures only, never for new work.
         if attempt > 1 {
+            if let Some(current) = renewed() {
+                client = current;
+            }
             let seen = tokio::select! {
-                result = present_on(client, node) => result,
+                result = present_on(&client, node) => result,
                 () = cancel.cancelled() => {
                     let report = assemble(&progress, daemonset_pods_left, static_pods_left, &terminal);
                     bail!(DrainOutcome::Cancelled, &report, None);
@@ -602,7 +617,7 @@ async fn run(
             }
 
             let outcome = tokio::select! {
-                result = evict(client, &target) => result,
+                result = evict(&client, &target) => result,
                 () = cancel.cancelled() => {
                     progress.waiting = still_waiting;
                     let report = assemble(&progress, daemonset_pods_left, static_pods_left, &terminal);
@@ -1088,8 +1103,8 @@ mod tests {
     async fn starting_a_second_drain_leaves_the_first_running() {
         let (manager, _rx) = manager();
 
-        let first = manager.start(nowhere(), "node-a".to_string(), safe());
-        let second = manager.start(nowhere(), "node-b".to_string(), safe());
+        let first = manager.start(nowhere(), || None, "node-a".to_string(), safe());
+        let second = manager.start(nowhere(), || None, "node-b".to_string(), safe());
 
         assert_eq!(manager.active_drains(), 2);
         assert_ne!(first.drain_id, second.drain_id);
@@ -1103,7 +1118,7 @@ mod tests {
     #[tokio::test]
     async fn cancel_is_idempotent_and_unknown_ids_do_not_panic() {
         let (manager, _rx) = manager();
-        let handle = manager.start(nowhere(), "node-a".to_string(), safe());
+        let handle = manager.start(nowhere(), || None, "node-a".to_string(), safe());
 
         manager.cancel(&handle.drain_id);
         manager.cancel(&handle.drain_id);
@@ -1118,7 +1133,7 @@ mod tests {
     #[tokio::test]
     async fn a_drain_that_cannot_reach_the_cluster_says_so_and_stops() {
         let (manager, mut rx) = manager();
-        let handle = manager.start(nowhere(), "node-a".to_string(), safe());
+        let handle = manager.start(nowhere(), || None, "node-a".to_string(), safe());
         manager
             .mark_subscribed(&handle.drain_id)
             .expect("the drain is there to subscribe to");
@@ -1151,12 +1166,77 @@ mod tests {
         );
     }
 
+    /// A drain waiting on a pod to leave outlives the token it started with.
+    /// The first server stands for that token: it takes the eviction, then
+    /// answers 401 to everything, as the cluster does once the token is
+    /// dead. The second is the client a renewal put in its place. Fails if a
+    /// later pass still asks through the client the drain was started with,
+    /// which ends a renewed session's drain in Unauthorized.
+    #[tokio::test]
+    async fn a_drain_asks_each_pass_through_the_client_a_renewal_left() {
+        use crate::client::served::test_server::{answering, failure, Hits};
+        crate::tls::provider();
+        let node = r#"{"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a"}}"#;
+        let pods = |items: &str| {
+            format!(r#"{{"apiVersion":"v1","kind":"PodList","metadata":{{}},"items":[{items}]}}"#)
+        };
+        let held = r#"{"metadata":{"name":"p","namespace":"n","uid":"u1","ownerReferences":[{"apiVersion":"apps/v1","kind":"ReplicaSet","name":"rs","uid":"o"}]},"spec":{"containers":[]}}"#;
+        let accepted = r#"{"kind":"Status","apiVersion":"v1","status":"Success"}"#;
+        let (expiring, asked_expiring) = answering(move |path, nth| match path {
+            "/api/v1/nodes/node-a" => (200, node.to_string()),
+            "/api/v1/pods" if nth == 1 => (200, pods(held)),
+            "/api/v1/namespaces/n/pods/p/eviction" => (201, accepted.to_string()),
+            _ => failure(401, "Unauthorized"),
+        })
+        .await;
+        let (renewed, asked_renewed) = answering(move |path, _| match path {
+            "/api/v1/pods" => (200, pods("")),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+
+        let (manager, mut rx) = manager();
+        let current = std::sync::Arc::new(parking_lot::Mutex::new(None::<Client>));
+        let source = current.clone();
+        let handle = manager.start(
+            expiring,
+            move || source.lock().clone(),
+            "node-a".to_string(),
+            safe(),
+        );
+        manager.mark_subscribed(&handle.drain_id).expect("there");
+
+        let finished = tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                match rx.recv().await.expect("the channel stays open") {
+                    AppEvent::DrainProgress {
+                        attempt: 1, report, ..
+                    } => {
+                        assert_eq!(report.leaving, 1, "evicted and not gone yet");
+                        *current.lock() = Some(renewed.clone());
+                    }
+                    AppEvent::DrainFinished {
+                        outcome, message, ..
+                    } => return (outcome, message),
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("the drain finishes");
+
+        assert_eq!(finished, (DrainOutcome::Drained, None));
+        let lists = |hits: &Hits| hits.lock().unwrap().get("/api/v1/pods").copied();
+        assert_eq!(lists(&asked_expiring), Some(1), "the survey, and no more");
+        assert_eq!(lists(&asked_renewed), Some(1), "the second pass");
+    }
+
     /// Stop pressed while the gate still held the drain. Its dialog waits on
     /// one terminal event, and a bare return left it on "starting" for good.
     #[tokio::test]
     async fn a_drain_stopped_before_anyone_listened_still_says_it_was_cancelled() {
         let (manager, mut rx) = manager();
-        let handle = manager.start(nowhere(), "node-a".to_string(), safe());
+        let handle = manager.start(nowhere(), || None, "node-a".to_string(), safe());
         manager.cancel(&handle.drain_id);
 
         let outcome = tokio::time::timeout(Duration::from_secs(5), async {

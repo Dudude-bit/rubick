@@ -136,6 +136,12 @@ interface ClusterState {
   disconnect: () => Promise<void>;
   /** Disconnect every held cluster nothing on screen uses any longer. */
   release: () => Promise<void>;
+  /**
+   * The backend let go of every session, as it does when the kubeconfig
+   * files change. The cluster on screen is connected again where the new
+   * files still name it, and left where they do not.
+   */
+  sessionsDropped: () => Promise<void>;
 }
 
 export interface ConnectFailed {
@@ -543,6 +549,20 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     )
       return;
     set({ live });
+  },
+
+  sessionsDropped: async () => {
+    const { currentContext, contexts, isConnected, isAuthenticating } = get();
+    set({ live: [], paths: {}, wayBack: null });
+    if (!currentContext || (!isConnected && !isAuthenticating)) return;
+    if (!contexts.some((c) => c.name === currentContext)) {
+      await get().disconnect();
+      return;
+    }
+    // A connect in flight was dropped with the rest, so it is not the
+    // attempt `connect` would wait on.
+    set({ pendingContext: null, isAuthenticating: false });
+    await get().connect(currentContext, { keepRoute: true });
   },
 }));
 

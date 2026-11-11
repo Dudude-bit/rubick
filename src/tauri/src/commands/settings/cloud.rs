@@ -344,12 +344,9 @@ pub async fn set_kubeconfig_paths(
     })
     .await?;
 
-    // Drop any cached clients / current context — they were bound to
-    // the previous kubeconfig and would now point at the wrong cluster.
-    state.client_manager.disconnect_all();
-    state.overview_cache.forget_all();
-    state.ownership.forget_all();
-    state.set_current_context(None);
+    // Every session was bound to the previous kubeconfig and would now
+    // point at the wrong cluster. The caller reconnects the one on screen.
+    crate::commands::cluster::teardown_all(&state);
 
     Ok(())
 }
@@ -370,10 +367,7 @@ pub async fn clear_kubeconfig_path(state: tauri::State<'_, crate::state::AppStat
         .load_kubeconfig_resolved(Vec::new())
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
-    state.client_manager.disconnect_all();
-    state.overview_cache.forget_all();
-    state.ownership.forget_all();
-    state.set_current_context(None);
+    crate::commands::cluster::teardown_all(&state);
 
     Ok(())
 }

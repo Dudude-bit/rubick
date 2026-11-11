@@ -38,6 +38,27 @@ describe("listening to the backend", () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThan(500);
     expect(bare).toEqual([]);
   });
+
+  /**
+   * A watch is handed a client once and holds it, and a credential renewal
+   * leaves that client's token to die. The change journal and "tell me
+   * when" each subscribed on their own and never moved: one stopped
+   * watching for good, the other ended a day-long ask as "lost sight".
+   * Fails when a file takes watch events without the renewals count that
+   * opens its streams again.
+   */
+  it("takes watch events only where a credential renewal reopens the stream", () => {
+    const taking = Object.entries(SOURCES).filter(
+      ([path, source]) =>
+        path !== "/src/ui/lib/events.ts" &&
+        source.includes("listenResourceEvents")
+    );
+    const deaf = taking
+      .filter(([, source]) => !/\buseRenewals\(\)/.test(source))
+      .map(([path]) => path);
+    expect(taking.length).toBeGreaterThanOrEqual(3);
+    expect(deaf).toEqual([]);
+  });
 });
 
 /**

@@ -123,6 +123,7 @@ async fn drained_means_the_pods_are_gone() {
     let mut events = state.subscribe();
     let handle = state.drain_manager.start(
         client.clone(),
+        || None,
         node.clone(),
         DrainOptions {
             ignore_daemonsets: true,
@@ -212,6 +213,7 @@ async fn a_control_plane_drain_leaves_the_static_pods_alone() {
     let mut events = state.subscribe();
     let handle = state.drain_manager.start(
         client.clone(),
+        || None,
         node.clone(),
         DrainOptions {
             ignore_daemonsets: true,
@@ -290,6 +292,7 @@ async fn a_spent_budget_keeps_its_pods() {
     let mut events = state.subscribe();
     let handle = state.drain_manager.start(
         client.clone(),
+        || None,
         node.clone(),
         DrainOptions {
             ignore_daemonsets: true,

@@ -25,6 +25,7 @@ import {
 } from "@/lib/tell-me-when";
 import { useActivityPanelStore } from "@/stores/activityPanelStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useRenewals } from "@/hooks/useCredentialRenewal";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { useT, type T } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -214,6 +215,9 @@ export function useTellMeWhen() {
   const coalescer = useRef<Coalescer<Answer> | null>(null);
   const deliver = useRef<(answers: Answer[]) => void>(() => {});
   const reopenAll = useRef<() => void>(() => {});
+  const renewals = useRenewals();
+  // The renewal the open streams were last moved after.
+  const movedAfter = useRef(renewals);
 
   useEffect(() => {
     deliver.current = (answers) => {
@@ -271,10 +275,12 @@ export function useTellMeWhen() {
       }
     };
 
-    // A lag dropped events nobody can name, so each watch looks again from a
-    // fresh list and is lost until that list answers. The lost timer carries
+    // Each watch looks again from a fresh list. A lag dropped events nobody
+    // can name, so the watch is lost until that list answers. A renewal
+    // dropped nothing: the stream holds a client whose token is about to
+    // die, and moves to the new one without a word. The lost timer carries
     // over, or a watch already lost would never be reported.
-    reopenAll.current = () => {
+    const reopen = (lost: boolean) => {
       for (const watchId of [...live.keys()]) {
         const old = live.get(watchId);
         if (!old) continue;
@@ -288,15 +294,19 @@ export function useTellMeWhen() {
         old.lostTimer = null;
         close(watchId);
         live.set(watchId, stream);
-        loseSight(watchId, stream, coalescer);
+        if (lost) loseSight(watchId, stream, coalescer);
         void open(watchId, stream);
       }
     };
+    reopenAll.current = () => reopen(true);
 
     for (const id of [...live.keys()]) {
       if (!wanted.has(id) || !connected) close(id);
     }
+    const renewed = movedAfter.current !== renewals;
+    movedAfter.current = renewals;
     if (!connected) return;
+    if (renewed) reopen(false);
 
     for (const watchId of wanted) {
       if (live.has(watchId)) continue;
@@ -414,7 +424,7 @@ export function useTellMeWhen() {
 
     // No cleanup here on purpose: this effect re-runs on every list change,
     // and the streams it did not touch have to outlive the run.
-  }, [openIds, connected, queryClient]);
+  }, [openIds, connected, queryClient, renewals]);
 
   useEffect(() => {
     const kept = aside.current;

@@ -761,3 +761,85 @@ describe("switching clusters keeps the one left until the new one lands", () => 
     ).toBeGreaterThan(1);
   });
 });
+
+describe("the kubeconfig files changed under a connected window", () => {
+  const listed = (...names: string[]) =>
+    names.map((name) => ({ name }) as ContextInfo);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    holdClusters(() => []);
+    useClusterStore.setState({
+      contexts: listed("acme-staging", "acme-prod-eu"),
+      currentContext: "acme-staging",
+      isConnected: true,
+      pendingContext: null,
+      isAuthenticating: false,
+      error: null,
+      errorContext: null,
+      live: ["acme-staging", "acme-prod-eu"],
+      paths: { "acme-staging": "direct", "acme-prod-eu": "direct" },
+      wayBack: null,
+    });
+  });
+
+  /**
+   * Adding a second file drops every client in the backend. Fails if the
+   * window goes on saying connected with nothing behind it: every read then
+   * answers "No cluster connected" until the reader picks the cluster again.
+   */
+  it("connects the cluster on screen again, as a new connection", async () => {
+    const before = currentConnection();
+
+    await state().sessionsDropped();
+
+    expect(commands.connectCluster).toHaveBeenCalledWith("acme-staging");
+    expect(state().isConnected).toBe(true);
+    expect(state().currentContext).toBe("acme-staging");
+    expect(Object.keys(state().paths)).toEqual(["acme-staging"]);
+    expect(currentConnection()).toBeGreaterThan(before);
+  });
+
+  /** Fails if a cluster the new files no longer name stays "connected". */
+  it("leaves a cluster the new files do not name", async () => {
+    useClusterStore.setState({ contexts: listed("acme-prod-eu") });
+
+    await state().sessionsDropped();
+
+    expect(commands.connectCluster).not.toHaveBeenCalled();
+    expect(state().isConnected).toBe(false);
+    expect(state().currentContext).toBeNull();
+    expect(state().live).toEqual([]);
+  });
+
+  /**
+   * A connect in flight was made from the old files and can no longer land.
+   * Fails if the window waits on it instead of asking again.
+   */
+  it("asks again for a cluster whose connect was in flight", async () => {
+    useClusterStore.setState({
+      isConnected: false,
+      isAuthenticating: true,
+      pendingContext: "acme-staging",
+    });
+
+    await state().sessionsDropped();
+
+    expect(commands.connectCluster).toHaveBeenCalledWith("acme-staging");
+    expect(state().isConnected).toBe(true);
+  });
+
+  /**
+   * Fails if a window that was not connected is connected by a file change,
+   * or still counts the sessions the backend dropped as held.
+   */
+  it("connects nothing for a window that was not connected", async () => {
+    useClusterStore.setState({ isConnected: false });
+
+    await state().sessionsDropped();
+
+    expect(commands.connectCluster).not.toHaveBeenCalled();
+    expect(state().isConnected).toBe(false);
+    expect(state().live).toEqual([]);
+  });
+});
