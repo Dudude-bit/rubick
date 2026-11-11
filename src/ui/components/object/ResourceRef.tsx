@@ -1,7 +1,8 @@
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import {
+  clusterOf,
   crdFor,
   hrefOf,
   objectLink,
@@ -92,6 +93,7 @@ export function ObjectLink({
   const gesture = useLinkGesture();
   const { open } = usePeek();
   const navigate = useNavigate();
+  const router = useRouter();
 
   const link = objectLink({ kind, name, namespace, crd }, linkOptions);
   if (link === null) return null;
@@ -105,8 +107,13 @@ export function ObjectLink({
     if (readLinkIntent(event) === "none") return;
     onClick?.(event);
     if (event.defaultPrevented) return;
+    // The peek reads the window's cluster: an object of another one opens
+    // at its own address, never as this cluster's namesake.
+    const elsewhere =
+      linkOptions?.cluster !== undefined &&
+      linkOptions.cluster !== clusterOf(router.state.location.pathname);
     gesture(event, hrefOf(link), () =>
-      opens === "page"
+      opens === "page" || elsewhere
         ? navigate(link)
         : open({
             kind,
