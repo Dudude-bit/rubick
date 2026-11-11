@@ -994,6 +994,110 @@ describe("useResourceWatch", () => {
     expect(rowsIn(client)!.map((i) => i.name)).toEqual(["a"]);
   });
 
+  describe("a read of the list that lands after the watch changed it", () => {
+    const BEFORE: Item[] = [{ name: "a" }, { name: "b" }, { name: "c" }];
+
+    /** A read of the list left now, answered when the test says. */
+    function reading(client: QueryClient) {
+      let answer: (rows: Item[]) => void = () => {};
+      const landed = client.fetchQuery({
+        queryKey: KEY,
+        queryFn: () =>
+          new Promise<Scoped<Item>>((resolve) => {
+            answer = (rows) => resolve({ rows, unread: [] });
+          }),
+      });
+      return { answer: (rows: Item[]) => (answer(rows), landed) };
+    }
+
+    /**
+     * Dana deleted a pod with kubectl while the Pods list was read again:
+     * the watch took the row away, the read's answer, listed before the
+     * delete, put it back under "live", and no event ever removed it. Fails
+     * if a read's answer undoes what the watch changed while it was out, or
+     * if the watch loses its rows' places in that answer.
+     */
+    it("keeps what the watch deleted, changed and added while the read was out", async () => {
+      const client = new QueryClient();
+      seed(client, BEFORE);
+      await start(client);
+      const read = reading(client);
+      emit("stream-cm-1", "deleted", { name: "a" });
+      emit("stream-cm-1", "applied", { name: "b", data: 2 });
+      emit("stream-cm-1", "applied", { name: "d" });
+
+      await read.answer(BEFORE);
+      expect(rowsIn(client)).toEqual([
+        { name: "b", data: 2 },
+        { name: "c" },
+        { name: "d" },
+      ]);
+
+      emit("stream-cm-1", "applied", { name: "c", data: 3 });
+      expect(rowsIn(client)).toEqual([
+        { name: "b", data: 2 },
+        { name: "c", data: 3 },
+        { name: "d" },
+      ]);
+    });
+
+    /** Fails if the watch stops a read's answer from landing when nothing changed while it was out. */
+    it("takes the read's answer as it is when the watch changed nothing meanwhile", async () => {
+      const client = new QueryClient();
+      seed(client, BEFORE);
+      await start(client);
+      emit("stream-cm-1", "deleted", { name: "c" });
+
+      await reading(client).answer([{ name: "a" }, { name: "z" }]);
+      expect(rowsIn(client)).toEqual([{ name: "a" }, { name: "z" }]);
+    });
+
+    /**
+     * A resync is the whole list, listed after the read left. Fails if the
+     * read's answer replaces it, which drops every change between the two
+     * that the watch will never send again.
+     */
+    it("keeps a resync that landed while the read was out, and what followed it", async () => {
+      const client = new QueryClient();
+      seed(client, BEFORE);
+      await start(client);
+      const read = reading(client);
+      emitBatch("stream-cm-1", [
+        { op: "restarted", resource: null },
+        { op: "applied", resource: { name: "x" } },
+        { op: "applied", resource: { name: "y" } },
+        { op: "synced", resource: null },
+      ]);
+      emit("stream-cm-1", "applied", { name: "z" });
+
+      await read.answer(BEFORE);
+      expect(rowsIn(client)).toEqual([
+        { name: "x" },
+        { name: "y" },
+        { name: "z" },
+      ]);
+    });
+
+    /**
+     * A page reads its list and starts its watch at once, and on a large
+     * cluster the watch's list lands first. Fails if only a read that left
+     * after the watch started is told from one that was already out.
+     */
+    it("keeps the watch's first list when the read that was out before it lands", async () => {
+      const client = new QueryClient();
+      const read = reading(client);
+      await start(client);
+      emitBatch("stream-cm-1", [
+        { op: "restarted", resource: null },
+        { op: "applied", resource: { name: "x" } },
+        { op: "synced", resource: null },
+      ]);
+
+      await read.answer(BEFORE);
+      expect(rowsIn(client)).toEqual([{ name: "x" }]);
+    });
+  });
+
   /**
    * The API's own order is not this one where a namespace's name starts
    * another's, so a row's sorted place is not always where it is. Fails if a

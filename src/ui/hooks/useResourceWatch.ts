@@ -191,6 +191,67 @@ export function useResourceWatch<
     const held = new Map<string, Slot<T>>();
     let indexedList: T[] | undefined;
 
+    /** The entry as the watch last wrote it. */
+    let wrote: Kept<T> | undefined;
+    /** `changes` written into the cached list; whether it grew or shrank. */
+    const apply = (changes: Array<ResourceChange<T>>): boolean => {
+      let recounted = false;
+      wrote = queryClient.setQueryData<Kept<T>>(queryKey, (prev) => {
+        if (prev?.rows !== indexedList) {
+          held.clear();
+          prev?.rows.forEach((row, at) => held.set(identify(row), { row, at }));
+        }
+        const keep = keepRef.current;
+        const cut = new Set(prev?.cut);
+        const rows = applyChanges(
+          prev?.rows ?? [],
+          changes,
+          held,
+          orderRef.current,
+          keep,
+          cut
+        );
+        if (prev && rows === prev.rows) return prev;
+        recounted = rows.length !== (prev?.rows.length ?? 0);
+        return watched({
+          rows,
+          unread: prev?.unread ?? [],
+          ...(keep && {
+            cut: prev?.cut?.length === cut.size ? prev.cut : [...cut].sort(),
+          }),
+        });
+      });
+      indexedList = wrote?.rows;
+      return recounted;
+    };
+
+    // A read of the list replaces the cached rows with an answer that may
+    // have been taken before a change the watch delivered while it was out,
+    // and the watch does not send that change twice: Dana's deleted pod came
+    // back under "live" and stayed. So what the watch changed during a read
+    // is applied to its answer again; a resync during it is the whole list,
+    // and stands instead.
+    let missed: Array<ResourceChange<T>> | null =
+      queryClient.getQueryState(queryKey)?.fetchStatus === "fetching"
+        ? []
+        : null;
+    let swapped = false;
+    const hash = hashKey(queryKey);
+    const offReads = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== "updated" || event.query.queryHash !== hash) return;
+      if (event.action.type === "fetch") {
+        missed = [];
+        swapped = false;
+        return;
+      }
+      if (!missed || event.query.state.fetchStatus !== "idle") return;
+      const changes = missed;
+      missed = null;
+      if (!swapped) apply(changes);
+      else if (event.query.state.data !== wrote)
+        queryClient.setQueryData(queryKey, wrote);
+    });
+
     // Give up on a resync that can no longer complete. What was staged is
     // dropped rather than committed — a half-delivered burst is not a
     // state — and the surface stops waiting on one, which it would
@@ -202,6 +263,7 @@ export function useResourceWatch<
 
     const teardown = async () => {
       active = false;
+      offReads();
       abandonResync();
       if (unlisten) {
         unlisten();
@@ -299,12 +361,16 @@ export function useResourceWatch<
                   readSoon(queryClient, queryKeys.everyOverview(), COUNTS_MS);
                 // Synced is every namespace of the stream answering, so
                 // nothing in the scope is unread any more.
-                queryClient.setQueryData<Kept<T>>(queryKey, {
+                wrote = queryClient.setQueryData<Kept<T>>(queryKey, {
                   rows,
                   unread: [],
                   ...(keepRef.current &&
                     !(done instanceof Map) && { cut: [...done.cut].sort() }),
                 });
+                if (missed) {
+                  missed = [];
+                  swapped = true;
+                }
                 held.clear();
                 indexedList = undefined;
                 if (behindRef.current)
@@ -325,46 +391,12 @@ export function useResourceWatch<
           stageBurst();
 
           if (live.length > 0) {
-            const changes = live;
-            let recounted = false;
-            const stored = queryClient.setQueryData<Kept<T>>(
-              queryKey,
-              (prev) => {
-                if (prev?.rows !== indexedList) {
-                  held.clear();
-                  prev?.rows.forEach((row, at) =>
-                    held.set(identify(row), { row, at })
-                  );
-                }
-                const keep = keepRef.current;
-                const cut = new Set(prev?.cut);
-                const rows = applyChanges(
-                  prev?.rows ?? [],
-                  changes,
-                  held,
-                  orderRef.current,
-                  keep,
-                  cut
-                );
-                if (prev && rows === prev.rows) return prev;
-                recounted = rows.length !== (prev?.rows.length ?? 0);
-                return watched({
-                  rows,
-                  unread: prev?.unread ?? [],
-                  ...(keep && {
-                    cut:
-                      prev?.cut?.length === cut.size
-                        ? prev.cut
-                        : [...cut].sort(),
-                  }),
-                });
-              }
-            );
-            indexedList = stored?.rows;
+            missed?.push(...live);
+            const recounted = apply(live);
             onChangeRef.current?.();
             readAgain(
               queryClient,
-              changes,
+              live,
               detailRef.current,
               recounted && recountRef.current,
               settleRef.current
