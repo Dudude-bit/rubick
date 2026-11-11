@@ -404,20 +404,22 @@ fn rung_with_room(
 
 /// Where the ladder goes after an attempt, and how long until then; or the
 /// last word, when nothing later is left to ask at. An attempt answered with
-/// the credentials in use moves to the next rung with room; new credentials
-/// start the ladder again for their own deadline.
+/// the credentials in use moves to the next rung with room. New credentials
+/// are scheduled as a connect's are, and not at all once this clock has
+/// their deadline behind it: walked down the rungs they reach the one past
+/// it at once, and a plugin that mints every time is run in a loop.
 fn after_attempt(
     unchanged: bool,
     timing: Timing,
     deadline: DateTime<Utc>,
     now: DateTime<Utc>,
 ) -> std::result::Result<(Timing, std::time::Duration), Renewal> {
-    let from = if unchanged {
-        timing.next().ok_or(Renewal::RanOut)?
-    } else {
-        Timing::Margin
-    };
-    rung_with_room(deadline, now, from).ok_or(Renewal::RanOut)
+    if !unchanged {
+        let wait = wait_for(deadline, now).ok_or(Renewal::Passed)?;
+        return Ok((Timing::Margin, wait));
+    }
+    let later = timing.next().ok_or(Renewal::RanOut)?;
+    rung_with_room(deadline, now, later).ok_or(Renewal::RanOut)
 }
 
 /// When to wake next for a given timing, or `None` when it has no moment
@@ -847,5 +849,31 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A clock ahead of the issuer's reads new credentials as already gone,
+    /// and the only rung with room was the one past the deadline, zero
+    /// seconds away: the plugin ran, minted, and ran again, every watch
+    /// restarting each round. Fails if such credentials are scheduled at all,
+    /// or if the outcome says the plugin minted nothing.
+    #[test]
+    fn credentials_minted_with_a_deadline_already_gone_are_not_renewed_again_at_once() {
+        let now = Utc::now();
+        assert_eq!(
+            after_attempt(false, Timing::Past, now - Duration::seconds(10), now),
+            Err(Renewal::Passed)
+        );
+        assert_eq!(
+            after_attempt(true, Timing::Past, now + Duration::hours(1), now),
+            Err(Renewal::RanOut)
+        );
+        let (rung, wait) =
+            after_attempt(false, Timing::Past, now + Duration::hours(1), now).expect("ahead");
+        assert_eq!(
+            rung,
+            Timing::Margin,
+            "new credentials start the ladder again"
+        );
+        assert!(wait >= FLOOR);
     }
 }
