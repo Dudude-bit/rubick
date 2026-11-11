@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { commands } from "@/lib/commands";
+import { currentConnection } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ManifestResult } from "@/generated/types";
 
@@ -86,6 +87,7 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   history: {},
 
   openEditor: async ({ title, resourceKey, fetchYaml, readOnly = false }) => {
+    const connection = currentConnection();
     set({
       open: true,
       title,
@@ -120,6 +122,12 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
       }
 
       const content = await fetchYaml();
+      // The read may have left after the window moved, and then it is another
+      // cluster's manifest under this one's name: nothing is shown.
+      if (connection !== currentConnection()) {
+        get().closeEditor();
+        return;
+      }
       set({
         originalContent: content,
         editedContent: content,
