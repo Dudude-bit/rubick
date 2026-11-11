@@ -65,7 +65,7 @@ fn open_files() -> Option<u64> {
 
 /// How many kinds with no watch are listed at once, on the connections the
 /// lists share.
-const LISTS_AT_ONCE: usize = 8;
+const LISTS_AT_ONCE: usize = crate::client::ASKS_AT_ONCE;
 
 /// How long a turn is kept after its list: with the count above that is at
 /// most thirty-two lists a second, however fast the cluster answers.
