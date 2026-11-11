@@ -253,6 +253,17 @@ pub async fn probe_prometheus(
         },
     };
 
+    if let Err(reason) = super::own_tunnel(&state, &context, &entry.url) {
+        return Ok(PrometheusProbe {
+            ok: false,
+            at: now_ms(),
+            latency_ms: 0,
+            reason: Some(reason),
+            no_address: false,
+            version: None,
+        });
+    }
+
     let started = Instant::now();
     let answer = get_json(&entry, "/api/v1/query", &[("query", "1".to_string())]).await;
     let latency_ms = crate::utils::elapsed_ms(started);
@@ -300,8 +311,10 @@ fn unreachable(reason: String) -> Error {
 
 fn configured(state: &State<'_, AppState>) -> Result<PrometheusEntry> {
     let context = context_of(state)?;
-    entry_for(&context)?
-        .ok_or_else(|| Error::Config("No Prometheus is configured for this cluster".into()))
+    let entry = entry_for(&context)?
+        .ok_or_else(|| Error::Config("No Prometheus is configured for this cluster".into()))?;
+    super::own_tunnel(state, &context, &entry.url).map_err(Error::Connection)?;
+    Ok(entry)
 }
 
 /// One instant query — the fullness of a volume, and nothing that needs a past.

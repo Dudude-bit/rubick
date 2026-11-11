@@ -281,6 +281,19 @@ pub async fn probe_loki(
         },
     };
 
+    if let Err(reason) = super::own_tunnel(&state, &context, &entry.url) {
+        return Ok(LokiProbe {
+            ok: false,
+            at: now_ms(),
+            latency_ms: 0,
+            reason: Some(reason),
+            no_address: false,
+            version: None,
+            retention: None,
+            labels: Vec::new(),
+        });
+    }
+
     let started = Instant::now();
     let answer = get_json(&entry, "/loki/api/v1/labels", &[]).await;
     let latency_ms = crate::utils::elapsed_ms(started);
@@ -355,8 +368,10 @@ fn retention_from_config(body: &str) -> Option<String> {
 
 fn configured(state: &State<'_, AppState>) -> Result<LokiEntry> {
     let context = context_of(state)?;
-    entry_for(&context)?
-        .ok_or_else(|| Error::Config("No Loki is configured for this cluster".into()))
+    let entry = entry_for(&context)?
+        .ok_or_else(|| Error::Config("No Loki is configured for this cluster".into()))?;
+    super::own_tunnel(state, &context, &entry.url).map_err(Error::Connection)?;
+    Ok(entry)
 }
 
 /// One page of a range, newest-first on the wire and oldest-first on the way

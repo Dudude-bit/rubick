@@ -219,6 +219,52 @@ fn version_from<C: ResourceExt>(crds: &[C], name: &str) -> Option<String> {
         .cloned()
 }
 
+/// Refuses a loopback `url` that another cluster's port-forward listens on.
+///
+/// A parked cluster stays connected and its tunnels stay up, so an address
+/// saved on the same local port is answered with that cluster's data and
+/// nothing fails. Asked wherever a saved address is about to be queried.
+pub(crate) fn own_tunnel(
+    state: &AppState,
+    context: &str,
+    url: &str,
+) -> std::result::Result<(), String> {
+    let tunnels: Vec<(u16, String)> = state
+        .port_forward_sessions
+        .iter()
+        .map(|session| (session.local_port, session.context.clone()))
+        .collect();
+    match tunnel_of_another(url, context, &tunnels) {
+        Some(other) => Err(format!(
+            "{url} is a port-forward into {other}, not into {context}"
+        )),
+        None => Ok(()),
+    }
+}
+
+/// The other cluster whose tunnel holds a loopback `url`'s port, if one does.
+fn tunnel_of_another<'a>(
+    url: &str,
+    context: &str,
+    tunnels: &'a [(u16, String)],
+) -> Option<&'a str> {
+    let url = url::Url::parse(url).ok()?;
+    let loopback = match url.host()? {
+        url::Host::Domain(name) => name == "localhost",
+        url::Host::Ipv4(ip) => ip.is_loopback(),
+        url::Host::Ipv6(ip) => ip.is_loopback(),
+    };
+    let port = url.port_or_known_default()?;
+    let mut holders = tunnels
+        .iter()
+        .filter(|(local, _)| loopback && *local == port)
+        .map(|(_, of)| of.as_str());
+    if holders.clone().any(|of| of == context) {
+        return None;
+    }
+    holders.next()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,6 +406,41 @@ mod tests {
         for (id, markers) in MARKERS {
             assert!(!markers.is_empty(), "{id} has no marker to detect it by");
             assert_eq!(detect_by_marker(&other, id, markers).installed, Some(false));
+        }
+    }
+
+    fn tunnels() -> Vec<(u16, String)> {
+        vec![(20000, "prod".to_string()), (20001, "staging".to_string())]
+    }
+
+    /// Would break if staging's Prometheus, saved on the port prod's parked
+    /// tunnel holds, were queried: staging's alerts were prod's, in green.
+    #[test]
+    fn an_address_on_another_clusters_tunnel_is_named_as_that_clusters() {
+        for url in [
+            "http://localhost:20000",
+            "http://127.0.0.1:20000/prometheus",
+            "http://[::1]:20000",
+        ] {
+            assert_eq!(
+                tunnel_of_another(url, "staging", &tunnels()),
+                Some("prod"),
+                "{url}"
+            );
+        }
+    }
+
+    /// Would break if the guard refused a cluster its own tunnel, or an
+    /// address that is no tunnel of this app's at all.
+    #[test]
+    fn an_address_on_its_own_tunnel_or_on_none_is_left_alone() {
+        for url in [
+            "http://localhost:20001",
+            "http://localhost:9090",
+            "http://prometheus.example.com:20000",
+            "not an address",
+        ] {
+            assert_eq!(tunnel_of_another(url, "staging", &tunnels()), None, "{url}");
         }
     }
 }
