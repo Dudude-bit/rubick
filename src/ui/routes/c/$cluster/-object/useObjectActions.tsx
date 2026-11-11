@@ -327,8 +327,13 @@ export function useObjectActions({
   const openShell = () => {
     const container =
       reachableContainer(pod) ?? (pod ? lifetimeContainers(pod)[0] : undefined);
-    if (!container || !namespace) return;
-    useShellAskStore.getState().askFor(namespace, name);
+    if (!pod || !container || !namespace) return;
+    useShellAskStore.getState().askFor({
+      namespace,
+      pod: name,
+      uid: pod.uid,
+      container: container.name,
+    });
     navigate({
       ...objectLink({ kind: "Pod", name, namespace })!,
       search: { shell: container.name },
@@ -337,8 +342,13 @@ export function useObjectActions({
 
   const handleDebugStart = (result: DebugResult) => {
     setDialog(null);
-    if (!result.isNewPod)
-      useShellAskStore.getState().askFor(result.namespace, result.podName);
+    if (!result.isNewPod && pod)
+      useShellAskStore.getState().askFor({
+        namespace: result.namespace,
+        pod: result.podName,
+        uid: pod.uid,
+        container: result.containerName,
+      });
     navigate({
       ...objectLink({
         kind: "Pod",

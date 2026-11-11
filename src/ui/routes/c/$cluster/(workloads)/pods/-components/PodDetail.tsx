@@ -110,6 +110,7 @@ import { failingCondition } from "@/lib/condition-health";
 import {
   lifetimeContainers,
   offeredContainers,
+  shellTarget,
   podContainers,
   podReadiness,
 } from "@/lib/container-sequence";
@@ -143,9 +144,26 @@ import { toastError } from "@/lib/toast-error";
 import { errorToShow } from "@/lib/error-utils";
 import { TONE_TEXT } from "@/lib/tone";
 
-/** Tabs that run a command in the container, and so open only when asked on this page. */
-const RUNS_IN_CONTAINER: ReadonlySet<string> = new Set(["shell", "files"]);
-const NOTHING_ASKED: ReadonlySet<string> = new Set();
+type InContainer = { uid: string; container: string };
+const sameShell = (a: InContainer, b: InContainer) =>
+  a.uid === b.uid && a.container === b.container;
+
+/**
+ * The shell the reader asked for: one container of one pod, by uid, so it
+ * follows neither a restart into a sibling nor the name into a new pod.
+ */
+interface ShellPane {
+  /** The page it was asked on, which stays mounted across a move to another pod. */
+  pod: string;
+  uid: string;
+  container: string;
+  /** The reader ended it, which leaves the tab offering a new one. */
+  ended: boolean;
+  /** Its pane has not opened the exec yet: the only one this ask may open. */
+  unspent: boolean;
+  /** The ask from outside the page it answers, by its stamp, so one ask is one pane. */
+  from: number | null;
+}
 
 interface PodProblem {
   /** The kubelet's own word for it, for the header row. */
@@ -419,17 +437,7 @@ export function PodDetail() {
   const requestedShell = useAppSearch().shell ?? null;
   const setSearch = useSetSearch();
 
-  // Which container the Shell tab is attached to, once the reader has said,
-  // and whether they ended that shell, which leaves the tab offering a new one.
-  //
-  // Carried with the pod it was chosen on, for the reason `logRequest` is: this
-  // page stays mounted across a move to another pod, and `app` means a
-  // different container there.
-  const [shellChoice, setShellChoice] = useState<{
-    pod: string;
-    container: string | null;
-    ended: boolean;
-  } | null>(null);
+  const [shellPane, setShellPane] = useState<ShellPane | null>(null);
   const [debugDialogOpen, setDebugDialogOpen] = useState(false);
   // Which tab asked for the debug container: the shell opens a terminal in
   // it, the files tab reads through it.
@@ -562,35 +570,15 @@ export function PodDetail() {
   const podKey = `${namespace}/${name}`;
   const logContainer = logRequest?.pod === podKey ? logRequest.container : null;
 
-  // What the reader asked to run on this pod from this page. Landing on the
+  // What the reader asked to run in this pod from this page. Landing on the
   // tab is not asking: a link, a restored tab and a page moved to the next
-  // pod all land there with nobody having said a word.
-  const [asked, setAsked] = useState<{
-    pod: string;
-    tabs: ReadonlySet<string>;
-  }>({ pod: podKey, tabs: NOTHING_ASKED });
-  const askedTabs = asked.pod === podKey ? asked.tabs : NOTHING_ASKED;
-  const ask = useCallback(
-    (tab: string) =>
-      setAsked((prev) => {
-        const tabs = prev.pod === podKey ? prev.tabs : NOTHING_ASKED;
-        return tabs.has(tab)
-          ? prev
-          : { pod: podKey, tabs: new Set([...tabs, tab]) };
-      }),
-    [podKey]
-  );
-  const shellAsk = useShellAskStore((state) => state.ask);
-  const dropShellAsk = useShellAskStore((state) => state.drop);
-  const askedElsewhere = asksFor(shellAsk, namespace, name);
-  if (askedElsewhere && !askedTabs.has("shell"))
-    setAsked({ pod: podKey, tabs: new Set([...askedTabs, "shell"]) });
-  useEffect(() => {
-    if (askedElsewhere) dropShellAsk();
-  }, [askedElsewhere, dropShellAsk]);
+  // pod all land there with nobody having said a word. Each ask is for the
+  // pod it was made on, by uid: one re-created under the name was not asked.
+  const pane = shellPane?.pod === podKey ? shellPane : null;
+  const [filesAsked, setFilesAsked] = useState<string | null>(null);
 
   // The shell this tab started here and kept while the reader was elsewhere:
-  // their ask, still standing, on the container they chose.
+  // their ask, already spent on the shell it attaches to.
   const tabId = useScopeTabStore((state) => state.activeId);
   const kept = useKeptShellStore((state) =>
     keptOn(state.shells, {
@@ -600,22 +588,68 @@ export function PodDetail() {
       pod: name,
     })
   );
-  if (kept && !askedTabs.has("shell")) {
-    setAsked({ pod: podKey, tabs: new Set([...askedTabs, "shell"]) });
-    setShellChoice({ pod: podKey, container: kept.container, ended: false });
-  }
+  const shellAsk = useShellAskStore((state) => state.ask);
+  const dropShellAsk = useShellAskStore((state) => state.drop);
+  const askedElsewhere = asksFor(shellAsk, namespace, name) ? shellAsk : null;
+  if (askedElsewhere && pane?.from !== askedElsewhere.at)
+    setShellPane({
+      pod: podKey,
+      uid: askedElsewhere.uid,
+      container: askedElsewhere.container,
+      ended: false,
+      unspent: true,
+      from: askedElsewhere.at,
+    });
+  else if (kept && !pane)
+    setShellPane({
+      pod: podKey,
+      uid: kept.uid,
+      container: kept.container,
+      ended: false,
+      unspent: false,
+      from: null,
+    });
+  useEffect(() => {
+    if (!askedElsewhere) return;
+    dropShellAsk();
+    if (kept && !sameShell(kept, askedElsewhere)) void endShell(kept.id);
+  }, [askedElsewhere, dropShellAsk, kept]);
+
+  // The reader's click for a shell: in the container it names, else the one
+  // the pane already has, else the one on offer. A live pane is left alone.
+  const askShell = useCallback(
+    (container?: string) => {
+      if (!pod) return;
+      const here = pane?.uid === pod.uid ? pane : null;
+      const wanted =
+        container ?? here?.container ?? shellTarget(pod, requestedShell);
+      if (!wanted || (here && !here.ended && here.container === wanted)) return;
+      const next = { uid: pod.uid, container: wanted };
+      if (kept && !sameShell(kept, next)) void endShell(kept.id);
+      setShellPane({
+        ...next,
+        pod: podKey,
+        ended: false,
+        unspent: true,
+        from: null,
+      });
+    },
+    [pod, pane, requestedShell, kept, podKey]
+  );
+  const claimShell = () => {
+    if (!pane?.unspent) return false;
+    setShellPane({ ...pane, unspent: false });
+    return true;
+  };
+  const askFiles = useCallback(() => setFilesAsked(pod?.uid ?? null), [pod]);
 
   // A click on the tab, open or not, is the ask, and after an end it asks again.
   const askOn = useCallback(
     (tab: string) => {
-      if (!RUNS_IN_CONTAINER.has(tab)) return;
-      ask(tab);
-      if (tab === "shell")
-        setShellChoice((prev) =>
-          prev?.pod === podKey && prev.ended ? { ...prev, ended: false } : prev
-        );
+      if (tab === "shell") askShell();
+      else if (tab === "files") askFiles();
     },
-    [ask, podKey]
+    [askShell, askFiles]
   );
 
   const openTab = useCallback(
@@ -626,16 +660,9 @@ export function PodDetail() {
     [askOn, setActiveTab]
   );
 
-  // The URL's `?shell=` is about this route, so it needs no pod key of its
-  // own; a choice made by clicking does.
-  const choice = shellChoice?.pod === podKey ? shellChoice : null;
-  const shellContainer = choice ? choice.container : requestedShell;
-  const shellEnded = choice?.ended ?? false;
-
   const openTerminal = (containerName: string) => {
-    if (kept && kept.container !== containerName) void endShell(kept.id);
-    setShellChoice({ pod: podKey, container: containerName, ended: false });
-    openTab("shell");
+    askShell(containerName);
+    setActiveTab("shell");
   };
 
   const openLogs = (containerName: string) => {
@@ -668,43 +695,42 @@ export function PodDetail() {
     pod?.labels?.["k8s-gui/debug-pod"] === "true" ||
     pod?.labels?.["k8s-gui/check-pod"] === "true";
 
-  const handleTerminalClose = useCallback(
-    (container: string) => {
-      setShellChoice({ pod: podKey, container, ended: true });
-      // The URL asked for this shell; once it is closed it would be lying, and
-      // a reload would reopen a terminal nobody asked for again.
-      if (requestedShell) setSearch({ shell: undefined }, { replace: true });
+  const handleTerminalClose = useCallback(() => {
+    setShellPane((prev) =>
+      prev?.pod === podKey ? { ...prev, ended: true, unspent: false } : prev
+    );
+    // The URL asked for this shell; once it is closed it would be lying, and
+    // a reload would reopen a terminal nobody asked for again.
+    if (requestedShell) setSearch({ shell: undefined }, { replace: true });
 
-      if (isDebugPod && pod) {
-        toast({
-          title: t("action", "debugPodStillRunning"),
-          description: t("action", "debugPodDeleteHint"),
-          action: (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={async () => {
-                try {
-                  await commands.deleteDebugPod(pod.name, pod.namespace);
-                  toast({
-                    title: t("action", "debugPodDeleted"),
-                    description: pod.name,
-                  });
-                  router.history.back();
-                } catch (err) {
-                  toastError(t("action", "failedToDelete"), err);
-                }
-              }}
-            >
-              {t("action", "deleteNow")}
-            </Button>
-          ),
-          duration: 10000,
-        });
-      }
-    },
-    [isDebugPod, pod, podKey, t, toast, router, requestedShell, setSearch]
-  );
+    if (isDebugPod && pod) {
+      toast({
+        title: t("action", "debugPodStillRunning"),
+        description: t("action", "debugPodDeleteHint"),
+        action: (
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={async () => {
+              try {
+                await commands.deleteDebugPod(pod.name, pod.namespace);
+                toast({
+                  title: t("action", "debugPodDeleted"),
+                  description: pod.name,
+                });
+                router.history.back();
+              } catch (err) {
+                toastError(t("action", "failedToDelete"), err);
+              }
+            }}
+          >
+            {t("action", "deleteNow")}
+          </Button>
+        ),
+        duration: 10000,
+      });
+    }
+  }, [isDebugPod, pod, podKey, t, toast, router, requestedShell, setSearch]);
 
   const handleFindReplacement = savedLabels
     ? () =>
@@ -862,7 +888,7 @@ export function PodDetail() {
         onFindReplacement={handleFindReplacement}
         isSearchingReplacement={isSearchingReplacement}
         goneNote={
-          ((askedTabs.has("shell") && !shellEnded) || shellSession) && (
+          ((pane && !pane.ended) || shellSession) && (
             <p className="flex items-center gap-1.5 text-xs text-warn">
               <SquareTerminal className="h-3.5 w-3.5 flex-none" aria-hidden />
               {t("empty", "shellEndedPodGone")}
@@ -1119,10 +1145,10 @@ export function PodDetail() {
             content: pod ? (
               <PodShell
                 pod={pod}
-                container={shellContainer}
-                ended={shellEnded}
-                started={askedTabs.has("shell")}
-                onStart={() => askOn("shell")}
+                asked={pane?.uid === pod.uid ? pane : null}
+                named={requestedShell}
+                onStart={askShell}
+                onClaim={claimShell}
                 onChoose={openTerminal}
                 onOpenLogs={openLogs}
                 onDebug={() => {
@@ -1139,7 +1165,7 @@ export function PodDetail() {
             label: t("columns", "files"),
             glyph: viewGlyph(FolderOpen),
             kind: "surface",
-            content: !pod ? null : askedTabs.has("files") ||
+            content: !pod ? null : filesAsked === pod.uid ||
               !filesWouldRun(pod, filesVia) ? (
               <FilesTab
                 key={`files:${pod.uid}`}
@@ -1161,7 +1187,7 @@ export function PodDetail() {
                   tab: t("columns", "files"),
                 })}
                 action={t("action", "readFiles")}
-                onStart={() => ask("files")}
+                onStart={askFiles}
               />
             ),
           },

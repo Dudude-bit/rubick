@@ -22,7 +22,7 @@ import {
   nodeCellPx,
   yielding,
 } from "../../../-list/columns";
-import { podReadiness } from "@/lib/container-sequence";
+import { podReadiness, shellTargets } from "@/lib/container-sequence";
 import { restartsAreNews } from "@/lib/crash-loop";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "../../../-list/ResourceList";
@@ -305,7 +305,15 @@ export function PodList() {
         icon: SquareTerminal,
         label: t("action", "shell"),
         onClick: (item) => {
-          useShellAskStore.getState().askFor(item.namespace, item.name);
+          // No container that can take one: the tab says why, and offers.
+          const container = shellTargets(item)[0]?.name;
+          if (container)
+            useShellAskStore.getState().askFor({
+              namespace: item.namespace,
+              pod: item.name,
+              uid: item.uid,
+              container,
+            });
           navigate(
             objectLink({ kind: ResourceType.Pod, ...item }, { tab: "shell" })!
           );

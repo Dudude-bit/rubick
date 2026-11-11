@@ -21,19 +21,28 @@ import {
 export interface PodTerminalProps {
   podName: string;
   namespace: string;
+  /** The pod the reader asked about: one re-created under the name is another. */
+  uid: string;
   containerName: string;
+  /**
+   * Spends the reader's ask for this shell, once. The only thing that lets
+   * the pane open one by itself; a pane mounted again finds it spent.
+   */
+  claim: () => boolean;
   onClose?: () => void;
 }
 
 /**
- * Pod-specific terminal wrapper: opens the shell, or attaches to the one this
- * tab already keeps here, and ends it when the reader or the pod does. Going
- * away does not end it; its tab does (`useKeptShells`).
+ * Pod-specific terminal wrapper: attaches to the shell this tab already keeps
+ * here, or opens the one the reader asked for, and ends it when the reader or
+ * the pod does. Going away does not end it; its tab does (`useKeptShells`).
  */
 export function PodTerminal({
   podName,
   namespace,
+  uid,
   containerName,
+  claim,
   onClose,
 }: PodTerminalProps) {
   const t = useT();
@@ -44,7 +53,9 @@ export function PodTerminal({
       namespace,
       pod: podName,
     });
-    return shell?.container === containerName ? shell.id : null;
+    return shell?.uid === uid && shell.container === containerName
+      ? shell.id
+      : null;
   });
   const [sessionId, setSessionId] = useState<string | null>(kept);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +115,7 @@ export function PodTerminal({
         context: useClusterStore.getState().currentContext ?? "",
         namespace,
         pod: podName,
+        uid,
         container: containerName,
       });
       sessionIdRef.current = sid;
@@ -117,7 +129,7 @@ export function PodTerminal({
         setIsConnecting(false);
       }
     }
-  }, [namespace, podName, containerName]);
+  }, [namespace, podName, uid, containerName]);
 
   const disconnect = useCallback(() => {
     const sid = sessionIdRef.current;
@@ -174,10 +186,14 @@ export function PodTerminal({
   }, []);
 
   // Opens once the pane has its size, unless there is a kept one to attach
-  // to. A shell still being opened when the pane goes is closed by `connect`
-  // when its id arrives; an open one stays with its tab.
+  // to, and only on an ask nobody has spent: a pane that comes back after its
+  // shell died has neither, and says the shell ended. A shell still being
+  // opened when the pane goes is closed by `connect` when its id arrives; an
+  // open one stays with its tab.
   useEffect(() => {
-    if (measured && !kept) connect();
+    if (!measured || kept) return;
+    if (claim()) connect();
+    else onClose?.();
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [measured]);
   useEffect(

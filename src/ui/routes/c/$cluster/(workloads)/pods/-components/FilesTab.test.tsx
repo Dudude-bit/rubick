@@ -16,8 +16,8 @@ const reload = vi.fn();
 const listed = vi.fn();
 
 vi.mock("./useContainerFiles", () => ({
-  useContainerFiles: (target: unknown) => {
-    listed(target);
+  useContainerFiles: (target: unknown, held: boolean) => {
+    listed(target, held);
     return { state: listing(), stop, reload };
   },
 }));
@@ -347,7 +347,8 @@ describe("FilesTab", () => {
       screen.getByRole("grid", { name: "Files in /srv/app" })
     ).toBeInTheDocument();
     expect(listed).toHaveBeenLastCalledWith(
-      expect.objectContaining({ path: "/srv/app" })
+      expect.objectContaining({ path: "/srv/app" }),
+      false
     );
     expect(
       screen.queryByRole("button", {
@@ -1077,5 +1078,121 @@ describe("FilesTab", () => {
     );
     await userEvent.click(screen.getByRole("tab", { name: "sidecar" }));
     expect(screen.queryByText(/has restarted since/)).toBeNull();
+  });
+
+  const restarted = (restartCount: number) => {
+    const next = pod();
+    next.containers[0].restartCount = restartCount;
+    return next;
+  };
+  const lastListed = () => listed.mock.calls.at(-1)!;
+  const tab = (of: PodInfo) => (
+    <FilesTab pod={of} via={null} onDebug={() => {}} onStopVia={() => {}} />
+  );
+
+  /**
+   * Dana's Files tab on a crash-looping pod ran its listing again each time
+   * the container came back, under a banner saying the rows were the old
+   * container's. Fails if a restart is not handed to the listing as held, or
+   * if the working directory is asked of the new container.
+   */
+  it("holds the listing, and asks the new container nothing, once the container restarts", async () => {
+    listing.mockReturnValue(done([file("app.conf")]));
+    const view = await wrap(tab(pod()));
+    expect(lastListed()[1]).toBe(false);
+    expect(containerWorkingDir).toHaveBeenCalledOnce();
+
+    view.rerender(tab(restarted(4)));
+
+    expect(lastListed()).toMatchObject([{ life: "uid-1:app:3" }, true]);
+    expect(screen.getByText(/has restarted since/)).toBeInTheDocument();
+    expect(containerWorkingDir).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * The tab was opened on a container between runs, and the run that started
+   * next is not the one the reader was looking at. Fails if it is listed, or
+   * asked where it works, before the reader says so.
+   */
+  it("asks a container that started after the tab was opened nothing until the reader does", async () => {
+    listing.mockReturnValue({ phase: "idle" });
+    const waiting = pod();
+    waiting.containers[0].state = {
+      type: "waiting",
+      reason: "CrashLoopBackOff",
+      message: null,
+    };
+    const view = await wrap(tab(waiting));
+    view.rerender(tab(restarted(4)));
+    await waitFor(() => expect(lastListed()[1]).toBe(true));
+    expect(containerWorkingDir).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Read the new container" })
+    );
+
+    await waitFor(() => expect(containerWorkingDir).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(lastListed()).toMatchObject([{ life: "uid-1:app:4" }, false])
+    );
+  });
+
+  /** Fails if the offer to read the new container is hidden when no rows of the old one are left. */
+  it("offers the new container when nothing of the old one is left to show", async () => {
+    listing.mockReturnValue(done([file("app.conf")]));
+    const view = await wrap(tab(pod()));
+    listing.mockReturnValue({ phase: "idle" });
+    view.rerender(tab(restarted(4)));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Read the new container" })
+    );
+
+    expect(lastListed()).toMatchObject([{ life: "uid-1:app:4" }, false]);
+    expect(screen.queryByText(/has restarted since/)).toBeNull();
+  });
+
+  /**
+   * A click into a folder is the reader asking, and what answers is the
+   * container that is there now. Fails if it reads the new container while
+   * the banner still calls the rows the old one's.
+   */
+  it("reads the container that is there now when the reader opens a folder", async () => {
+    listing.mockReturnValue(done([file("conf.d", { kind: "dir" })]));
+    const view = await wrap(tab(pod()));
+    view.rerender(tab(restarted(4)));
+
+    await userEvent.dblClick(screen.getByText("conf.d"));
+
+    expect(lastListed()).toMatchObject([
+      { life: "uid-1:app:4", path: "/etc/app/conf.d" },
+      false,
+    ]);
+    expect(screen.queryByText(/has restarted since/)).toBeNull();
+  });
+
+  /**
+   * The strip's other container restarted and was listed again with no word:
+   * the life on record was still the first container's. Fails if a container
+   * picked on the strip is not held to the life it was picked in.
+   */
+  it("holds a container picked on the strip to the life it was picked in", async () => {
+    listing.mockReturnValue(done([file("app.conf")]));
+    const two = pod();
+    two.containers.push({
+      ...two.containers[0],
+      name: "sidecar",
+      phase: "sidecar",
+      restartCount: 0,
+    });
+    const view = await wrap(tab(two));
+    await userEvent.click(screen.getByRole("tab", { name: "sidecar" }));
+    expect(lastListed()).toMatchObject([{ life: "uid-1:sidecar:0" }, false]);
+
+    const again = structuredClone(two);
+    again.containers[1].restartCount = 1;
+    view.rerender(tab(again));
+
+    expect(lastListed()).toMatchObject([{ life: "uid-1:sidecar:0" }, true]);
   });
 });

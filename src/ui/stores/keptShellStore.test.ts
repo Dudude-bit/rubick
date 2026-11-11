@@ -14,6 +14,7 @@ const shell = (tab: string, pod = "cart-4f68h"): KeptShell => ({
   context: "acme-staging",
   namespace: "shop",
   pod,
+  uid: `uid-${pod}`,
   container: "app",
 });
 

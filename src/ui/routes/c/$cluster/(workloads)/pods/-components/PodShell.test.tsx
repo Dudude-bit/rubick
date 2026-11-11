@@ -63,13 +63,17 @@ function pod(overrides: Partial<PodInfo>): PodInfo {
 }
 
 const handlers = {
-  started: true,
+  named: null,
   onStart: () => {},
+  onClaim: () => true,
   onChoose: () => {},
   onOpenLogs: () => {},
   onDebug: () => {},
   onEnd: () => {},
 };
+
+/** The reader asked for a shell in this container, and it is open. */
+const askedIn = (container: string) => ({ container, ended: false });
 
 /** `sidecar-demo`: a finished init container, a sidecar and an app container. */
 const threeWay = pod({
@@ -104,25 +108,60 @@ const threeWay = pod({
  * the reader wonder whether they misremembered its name.
  */
 describe("PodShell's container chooser", () => {
-  it("attaches to the app container when nobody has chosen", () => {
-    render(
-      <PodShell pod={threeWay} container={null} ended={false} {...handlers} />
-    );
-    expect(screen.getByTestId("pod-terminal")).toHaveTextContent("app");
+  it("offers the app container when nobody has asked", () => {
+    render(<PodShell pod={threeWay} asked={null} {...handlers} />);
     expect(screen.getByRole("radio", { name: /^app/ })).toBeChecked();
+    expect(
+      screen.getByRole("button", { name: "Start a shell in app" })
+    ).toBeInTheDocument();
   });
 
-  it("attaches to the sidecar when that is the one chosen", () => {
-    render(
-      <PodShell pod={threeWay} container="proxy" ended={false} {...handlers} />
-    );
+  it("opens the shell in the container the reader asked for", () => {
+    render(<PodShell pod={threeWay} asked={askedIn("proxy")} {...handlers} />);
     expect(screen.getByTestId("pod-terminal")).toHaveTextContent("proxy");
+    expect(screen.getByRole("radio", { name: /^proxy/ })).toBeChecked();
+  });
+
+  /**
+   * Dana's shell in `app` moved to the mesh proxy when `app` crashed: the pane
+   * was thrown away with its scrollback and a prompt opened in a container she
+   * never asked about. Fails if the shell follows the pod to whatever runs.
+   */
+  it("stays on the container asked for once it stops, with a sibling still running", () => {
+    const crashed = pod({
+      containers: [
+        container({ name: "proxy", phase: "sidecar" }),
+        container({
+          name: "app",
+          ready: false,
+          state: {
+            type: "waiting",
+            reason: "CrashLoopBackOff",
+            message: null,
+          },
+        }),
+      ],
+    });
+    render(<PodShell pod={crashed} asked={askedIn("app")} {...handlers} />);
+    expect(screen.getByTestId("pod-terminal")).toHaveTextContent(/^app$/);
+  });
+
+  /**
+   * A debug container is not on the pod's own lists, and the shell the Debug
+   * dialog asked for in it opened in the first app container under that name.
+   * Fails if the pane opens anywhere but where it was asked.
+   */
+  it("opens the shell in a debug container the pod does not list", () => {
+    render(
+      <PodShell pod={threeWay} asked={askedIn("debugger-x7k2")} {...handlers} />
+    );
+    expect(screen.getByTestId("pod-terminal")).toHaveTextContent(
+      /^debugger-x7k2$/
+    );
   });
 
   it("keeps a finished container on the list, with why it cannot take one", () => {
-    render(
-      <PodShell pod={threeWay} container={null} ended={false} {...handlers} />
-    );
+    render(<PodShell pod={threeWay} asked={null} {...handlers} />);
     const prepare = screen.getByRole("radio", { name: /prepare/ });
     expect(prepare).toHaveTextContent("finished, nothing to attach to");
     expect(prepare).toBeDisabled();
@@ -131,26 +170,19 @@ describe("PodShell's container chooser", () => {
   it("hands the chosen name back rather than attaching on its own", async () => {
     const onChoose = vi.fn();
     render(
-      <PodShell
-        pod={threeWay}
-        container={null}
-        ended={false}
-        {...handlers}
-        onChoose={onChoose}
-      />
+      <PodShell pod={threeWay} asked={null} {...handlers} onChoose={onChoose} />
     );
     await userEvent.click(screen.getByRole("radio", { name: /proxy/ }));
     expect(onChoose).toHaveBeenCalledWith("proxy");
   });
 
-  /** Fails if the page is not told which container the shell it picked by itself ran in. */
-  it("names the container whose shell the reader ended", async () => {
+  /** Fails if ending the shell in the pane does not reach the page, which then goes on showing it open. */
+  it("tells the page when the reader ends the shell", async () => {
     const onEnd = vi.fn();
     render(
       <PodShell
         pod={threeWay}
-        container={null}
-        ended={false}
+        asked={askedIn("app")}
         {...handlers}
         onEnd={onEnd}
       />
@@ -158,7 +190,7 @@ describe("PodShell's container chooser", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "end the shell" })
     );
-    expect(onEnd).toHaveBeenCalledWith("app");
+    expect(onEnd).toHaveBeenCalledOnce();
   });
 
   /**
@@ -171,8 +203,7 @@ describe("PodShell's container chooser", () => {
     render(
       <PodShell
         pod={threeWay}
-        container="proxy"
-        ended
+        asked={{ container: "proxy", ended: true }}
         {...handlers}
         onStart={onStart}
       />
@@ -184,7 +215,7 @@ describe("PodShell's container chooser", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Start a shell in proxy" })
     );
-    expect(onStart).toHaveBeenCalledOnce();
+    expect(onStart).toHaveBeenCalledWith("proxy");
   });
 });
 
@@ -195,15 +226,7 @@ describe("PodShell's container chooser", () => {
 describe("PodShell before the reader asks for a shell", () => {
   /** Fails if landing on the tab mounts the terminal, which opens the exec. */
   it("offers to start one and attaches nothing", () => {
-    render(
-      <PodShell
-        pod={threeWay}
-        container={null}
-        ended={false}
-        {...handlers}
-        started={false}
-      />
-    );
+    render(<PodShell pod={threeWay} asked={null} {...handlers} />);
     expect(screen.queryByTestId("pod-terminal")).not.toBeInTheDocument();
     expect(
       screen.getByText("No shell is running here yet")
@@ -217,19 +240,12 @@ describe("PodShell before the reader asks for a shell", () => {
   it("starts on the button", async () => {
     const onStart = vi.fn();
     render(
-      <PodShell
-        pod={threeWay}
-        container={null}
-        ended={false}
-        {...handlers}
-        started={false}
-        onStart={onStart}
-      />
+      <PodShell pod={threeWay} asked={null} {...handlers} onStart={onStart} />
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Start a shell in app" })
     );
-    expect(onStart).toHaveBeenCalledOnce();
+    expect(onStart).toHaveBeenCalledWith("app");
   });
 });
 
@@ -300,9 +316,7 @@ describe("PodShell when there is nothing to attach to", () => {
   });
 
   it("names the step the pod is stuck on and how often it has failed", () => {
-    renderWithProviders(
-      <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
-    );
+    renderWithProviders(<PodShell pod={initDemo} asked={null} {...handlers} />);
     // Whole sentences rather than clauses glued with "and" / "—": the join
     // was English grammar, and a sentence assembled from fragments cannot be
     // translated. Same facts, in the same order.
@@ -321,9 +335,7 @@ describe("PodShell when there is nothing to attach to", () => {
       ...initDemo,
       status: { ...initDemo.status, phase: "Failed", reason: "Evicted" },
     };
-    renderWithProviders(
-      <PodShell pod={evicted} container={null} ended={false} {...handlers} />
-    );
+    renderWithProviders(<PodShell pod={evicted} asked={null} {...handlers} />);
     const hollow = screen.getByTestId("shell-hollow");
     expect(hollow).toHaveTextContent(
       "The pod is Evicted: it stopped in init on migrate, which has failed 33 times. None of its containers is running, and none will run again."
@@ -336,8 +348,7 @@ describe("PodShell when there is nothing to attach to", () => {
     renderWithProviders(
       <PodShell
         pod={initDemo}
-        container={null}
-        ended={false}
+        asked={null}
         {...handlers}
         onOpenLogs={onOpenLogs}
       />
@@ -352,9 +363,7 @@ describe("PodShell when there is nothing to attach to", () => {
   });
 
   it("draws no chooser at all when no container could take a shell", () => {
-    renderWithProviders(
-      <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
-    );
+    renderWithProviders(<PodShell pod={initDemo} asked={null} {...handlers} />);
     expect(screen.queryByTestId("shell-chooser")).not.toBeInTheDocument();
   });
 
@@ -372,9 +381,7 @@ describe("PodShell when there is nothing to attach to", () => {
           })
         : undefined
     );
-    renderWithProviders(
-      <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
-    );
+    renderWithProviders(<PodShell pod={initDemo} asked={null} {...handlers} />);
     expect(
       await screen.findByText("The node no longer has that run's log.")
     ).toBeInTheDocument();
@@ -392,9 +399,7 @@ describe("PodShell when there is nothing to attach to", () => {
         ? Promise.reject({ code: "LOG_NOT_KEPT", message: "gone" })
         : undefined
     );
-    renderWithProviders(
-      <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
-    );
+    renderWithProviders(<PodShell pod={initDemo} asked={null} {...handlers} />);
     await screen.findByText("The node no longer has that run's log.");
     expect(
       screen.queryByRole("button", { name: "Read migrate's last run" })
@@ -442,8 +447,7 @@ describe("PodShell when there is nothing to attach to", () => {
           },
           containers: [ended],
         } as Partial<PodInfo>)}
-        container={null}
-        ended={false}
+        asked={null}
         {...handlers}
         onOpenLogs={onOpenLogs}
       />
@@ -474,8 +478,7 @@ describe("PodShell where the cluster refuses this user", () => {
     renderWithProviders(
       <PodShell
         pod={threeWay}
-        container={null}
-        ended={false}
+        asked={askedIn("app")}
         {...handlers}
         denied={{ shell: NO_EXEC }}
       />
@@ -511,8 +514,7 @@ describe("PodShell where the cluster refuses this user", () => {
             }),
           ],
         } as Partial<PodInfo>)}
-        container={null}
-        ended={false}
+        asked={null}
         {...handlers}
         onDebug={onDebug}
         denied={{ ephemeral: NO_EPHEMERAL }}

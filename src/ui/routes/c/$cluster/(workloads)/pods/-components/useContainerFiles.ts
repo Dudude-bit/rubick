@@ -67,8 +67,14 @@ const EMPTY: FileEntry[] = [];
 /**
  * One directory listing, streamed. Subscribes, listens, releases the gate,
  * and stops the stream when the target changes or the tab goes away.
+ *
+ * `held` is the life the target names being over: what was listed of it
+ * stays, and nothing is read in the container that took its place.
  */
-export function useContainerFiles(target: ContainerFilesTarget | null): {
+export function useContainerFiles(
+  target: ContainerFilesTarget | null,
+  held: boolean
+): {
   state: ListingState;
   stop: () => void;
   reload: () => void;
@@ -101,10 +107,12 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
       ? { phase: "idle" }
       : snapshot.key === key
         ? snapshot.state
-        : { phase: "reading", entries: EMPTY, startedAt: 0 };
+        : held
+          ? { phase: "idle" }
+          : { phase: "reading", entries: EMPTY, startedAt: 0 };
 
   useEffect(() => {
-    if (!target || key === null) return;
+    if (!target || key === null || held) return;
     stopWanted.current = false;
     let active = true;
     let off: Array<() => void> = [];
@@ -241,6 +249,12 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
     return () => {
       active = false;
       takeDown();
+      // A read taken down unfinished is not a listing to come back to.
+      setSnapshot((was) =>
+        was.key === key && was.state.phase === "reading"
+          ? { key: null, state: { phase: "idle" } }
+          : was
+      );
     };
     // `target` is read through `key`: a new object with the same facts is
     // the same listing, and re-subscribing on it would restart the read.

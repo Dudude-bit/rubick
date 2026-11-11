@@ -8,6 +8,9 @@ import { create } from "zustand";
 export interface ShellAsk {
   namespace: string;
   pod: string;
+  /** The pod the reader was looking at: one re-created under the name was not asked about. */
+  uid: string;
+  container: string;
   at: number;
 }
 
@@ -15,13 +18,13 @@ const FRESH_MS = 5_000;
 
 interface ShellAskState {
   ask: ShellAsk | null;
-  askFor: (namespace: string, pod: string) => void;
+  askFor: (ask: Omit<ShellAsk, "at">) => void;
   drop: () => void;
 }
 
 export const useShellAskStore = create<ShellAskState>((set) => ({
   ask: null,
-  askFor: (namespace, pod) => set({ ask: { namespace, pod, at: Date.now() } }),
+  askFor: (ask) => set({ ask: { ...ask, at: Date.now() } }),
   drop: () => set({ ask: null }),
 }));
 

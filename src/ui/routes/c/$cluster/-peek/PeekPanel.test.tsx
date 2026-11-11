@@ -2302,6 +2302,8 @@ describe("PeekPanel actions", () => {
     expect(useShellAskStore.getState().ask).toMatchObject({
       namespace: "k8s-gui-test",
       pod: "log-demo-1",
+      uid: RUNNING_POD.uid,
+      container: "app",
     });
   });
 
