@@ -76,3 +76,97 @@ describe("a manifest still being read when the window moves", () => {
     useYamlEditorStore.getState().closeEditor();
   });
 });
+
+describe("a manifest read that answers after its editor is gone", () => {
+  const other = { kind: "Deployment", name: "cart", namespace: "shop" };
+  const openOn = (name: string, fetchYaml: () => Promise<string>) =>
+    useYamlEditorStore.getState().openEditor({
+      title: name,
+      resourceKey: { kind: "Deployment", name, namespace: "shop" },
+      fetchYaml,
+    });
+  /** A read the test answers when it chooses. */
+  const slow = () => {
+    let answer!: (yaml: string) => void;
+    let fail!: (error: Error) => void;
+    const read = new Promise<string>((resolve, reject) => {
+      answer = resolve;
+      fail = reject;
+    });
+    return { read, answer, fail };
+  };
+  const editing = async () => {
+    await openOn("cart", async () => "kind: Deployment\n");
+    useYamlEditorStore.getState().setEditedContent("replicas: 3\n");
+  };
+  const stillEditing = () =>
+    expect(useYamlEditorStore.getState()).toMatchObject({
+      open: true,
+      resourceKey: other,
+      originalContent: "kind: Deployment\n",
+      editedContent: "replicas: 3\n",
+    });
+
+  beforeEach(() => useYamlEditorStore.getState().closeEditor());
+
+  /**
+   * The guard against another cluster's manifest closed the store, and the
+   * store is whatever editor is open by then: a slow read from the cluster
+   * left behind closed the editor being typed into on the next one. Fails if
+   * a read on a stale connection touches an editor it did not open.
+   */
+  it("leaves the editor opened since on another cluster open, edits included", async () => {
+    let connection = 1;
+    followConnections(() => connection);
+    const { read, answer } = slow();
+    const first = openOn("api", () => read);
+
+    useYamlEditorStore.getState().closeEditor();
+    connection = 2;
+    await editing();
+    answer("kind: Deployment\nmetadata: {name: api}\n");
+    await first;
+
+    stillEditing();
+    followConnections(() => 0);
+  });
+
+  /** The same read on one cluster: fails if the first object's manifest
+   *  replaces the buffer of the editor opened after it. */
+  it("does not put its manifest into the editor opened after it", async () => {
+    const { read, answer } = slow();
+    const first = openOn("api", () => read);
+
+    await editing();
+    answer("kind: Deployment\nmetadata: {name: api}\n");
+    await first;
+
+    stillEditing();
+  });
+
+  /** Fails if a read that failed late closes the editor opened after it, or
+   *  raises its toast over it. */
+  it("keeps its failure to itself", async () => {
+    const { read, fail } = slow();
+    const first = openOn("api", () => read);
+
+    await editing();
+    fail(new Error("timed out"));
+
+    await expect(first).resolves.toBeUndefined();
+    stillEditing();
+  });
+
+  /** Fails if a read that fails after Close raises "could not read the
+   *  manifest" over a screen that no longer asks for it. */
+  it("says nothing of a failure once its own editor was closed", async () => {
+    const { read, fail } = slow();
+    const first = openOn("api", () => read);
+
+    useYamlEditorStore.getState().closeEditor();
+    fail(new Error("timed out"));
+
+    await expect(first).resolves.toBeUndefined();
+    expect(useYamlEditorStore.getState().open).toBe(false);
+  });
+});
