@@ -41,6 +41,7 @@ import {
   byTrouble,
   readCluster,
   readPooler,
+  readyWords,
   schedulesOf,
   type PgCluster,
   type PgFinding,
@@ -472,12 +473,7 @@ function ClusterRow({
               )}
             </Fact>
             <Fact label={t("operators", "readyFact")}>
-              {/* `n` is what the plural resolver reads, and the noun it
-               *  governs is the declared count, not the ready one. */}
-              {t("operators", "readyOfDeclared", {
-                ready: cluster.ready,
-                n: cluster.declared,
-              })}
+              {readyWords(cluster, t)}
               {cluster.readyCondition.status === "False" && (
                 <span className="ml-2 text-err">
                   {t("operators", "readyConditionFalse")}

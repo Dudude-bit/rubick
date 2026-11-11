@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { CustomResourceInfo } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { actionsFor } from "./actions";
 import { FENCED } from "./model";
 import {
@@ -8,8 +10,11 @@ import {
   byTrouble,
   postgresVersionOf,
   readCluster,
+  readyWords,
   schedulesOf,
 } from "./model";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 function cluster(
   name: string,
@@ -73,6 +78,34 @@ describe("readCluster", () => {
     expect(read.worst).toBeNull();
     // CNPG writes no observedGeneration; the page must not pretend to know.
     expect(read.specSeen).toBe("unknown");
+  });
+
+  /**
+   * A Cluster the operator has not reconciled read "0 of 3 instances": a
+   * count nobody made. Fails if an unwritten status is zero again.
+   */
+  it("does not count ready instances the operator has not written", () => {
+    for (const status of [{}, null]) {
+      const read = readCluster({ ...cluster("new-db", {}), status });
+      expect(read.ready).toBeNull();
+      expect(readyWords(read, t)).toBe("3 declared, ready not written");
+    }
+    expect(readyWords(readCluster(cluster("shop-db", HEALTHY)), t)).toBe(
+      "3 of 3 instances"
+    );
+  });
+
+  /**
+   * CNPG's `readyInstances` is `omitempty`: a status it wrote without the
+   * field says zero. Fails if a cluster with every instance down reads as
+   * one nobody has counted.
+   */
+  it("reads a written status without readyInstances as none ready", () => {
+    const read = readCluster(
+      cluster("down-db", { phase: "Setting up primary" })
+    );
+    expect(read.ready).toBe(0);
+    expect(readyWords(read, t)).toBe("0 of 3 instances");
   });
 
   /** `currentPrimary` and `targetPrimary` are CNPG's own two fields; a switchover is exactly their disagreement. */
