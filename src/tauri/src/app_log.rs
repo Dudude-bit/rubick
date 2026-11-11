@@ -326,7 +326,7 @@ mod tests {
             .expect("the first launch writes the log");
         writeln!(log, "the running instance").expect("written");
 
-        for _link in 0..KEPT + 1 {
+        for _link in 0..=KEPT {
             assert!(this_runs_log(&dir).expect("readable").is_none());
         }
         assert_eq!(

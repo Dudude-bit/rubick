@@ -688,17 +688,14 @@ impl K8sClientManager {
     /// where there is one, which then lives as long as the client does.
     pub fn install(&self, context: &str, client: Arc<Client>, proxy: Option<KubectlProxy>) {
         self.clients.insert(context.to_string(), client);
-        match proxy {
-            Some(proxy) => {
-                self.paths
-                    .insert(context.to_string(), ConnectionPath::KubectlProxy);
-                self.proxies.insert(context.to_string(), proxy);
-            }
-            None => {
-                self.proxies.remove(context);
-                self.paths
-                    .insert(context.to_string(), ConnectionPath::Direct);
-            }
+        if let Some(proxy) = proxy {
+            self.paths
+                .insert(context.to_string(), ConnectionPath::KubectlProxy);
+            self.proxies.insert(context.to_string(), proxy);
+        } else {
+            self.proxies.remove(context);
+            self.paths
+                .insert(context.to_string(), ConnectionPath::Direct);
         }
     }
 
