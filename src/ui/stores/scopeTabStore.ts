@@ -40,7 +40,7 @@ import {
   getDisplayPlural,
   isResourceType,
 } from "@/lib/resource-registry";
-import { useClusterStore } from "./clusterStore";
+import { scopeFor, useClusterStore } from "./clusterStore";
 import { holdClusters } from "./heldClusters";
 
 /** The front door: no cluster yet, and a tab's address before it has one. */
@@ -192,6 +192,13 @@ async function applyScope(tab: ScopeTab) {
     await cluster.connect(tab.context, { keepRoute: true });
   }
   const live = useClusterStore.getState();
+  // A connect the reader moved on from returns quietly, and this tab's scope
+  // would land on whichever tab and cluster are on screen by then.
+  if (
+    useScopeTabStore.getState().activeId !== tab.id ||
+    live.currentContext !== tab.context
+  )
+    return;
   const scope = tabScope(tab);
   if (!sameScope(live.namespaceScope, scope)) {
     await live.setNamespaceScope(scope);
@@ -254,12 +261,17 @@ export const useScopeTabStore = create<ScopeTabState>()(
         // A new tab inherits the cluster the reader is already looking at:
         // the common reason to open one is a second view of the same
         // cluster, and inheriting makes the shortcut instant instead of
-        // routing through a connect and possibly an auth prompt.
-        const tabContext = context ?? live.currentContext;
+        // routing through a connect and possibly an auth prompt. An address
+        // naming its cluster is that cluster's tab, whatever is on screen.
+        const tabContext =
+          (href ? clusterOf(href) : null) ?? context ?? live.currentContext;
         const to = href ?? homeOf(tabContext);
         const scope = scopeShowing(
           namespace === undefined
-            ? live.namespaceScope
+            ? tabContext === null
+              ? live.namespaceScope
+              : scopeFor(live, tabContext, tabContext !== live.currentContext)
+                  .namespaceScope
             : namespace
               ? [namespace]
               : [],

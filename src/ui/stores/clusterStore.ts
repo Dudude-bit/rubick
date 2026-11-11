@@ -170,7 +170,7 @@ function without<T>(record: Record<string, T>, key: string) {
  * was last left on — clearing it was the behaviour somebody with rights to
  * two namespaces in each of six clusters had to undo on every switch.
  */
-function scopeFor(
+export function scopeFor(
   state: {
     savedScopes: Record<string, string[]>;
     namespaceScope: string[];

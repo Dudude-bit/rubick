@@ -192,8 +192,10 @@ export function CommandPalette() {
         : null,
     [onScreen, currentContext, isConnected, catalog.data?.entries]
   );
-  const hostTarget =
-    pinned ?? (open ? (actionsOf?.target ?? pageObject) : null);
+  const wanted = pinned ?? (open ? (actionsOf?.target ?? pageObject) : null);
+  // Every action runs on the window's cluster, so a target picked on another
+  // one, before a tab switch or a link moved the window, gets no host.
+  const hostTarget = wanted?.context === currentContext ? wanted : null;
   const hostReport =
     hostTarget && report?.target === targetKey(hostTarget) ? report : null;
 
@@ -1269,6 +1271,7 @@ function EntryRow({
               kind={entry.hit.kind}
               name={entry.hit.name}
               namespace={entry.hit.namespace}
+              linkOptions={{ cluster: entry.hit.context }}
               showKind={false}
               onClick={(event) => {
                 // The row underneath picks too; without stopping here a
@@ -1340,6 +1343,7 @@ function EntryRow({
               kind={entry.resourceKind}
               name={entry.name}
               namespace={entry.namespace}
+              linkOptions={{ cluster: entry.context }}
               showKind={false}
               onClick={(event) => {
                 // The row underneath picks too; without stopping here a

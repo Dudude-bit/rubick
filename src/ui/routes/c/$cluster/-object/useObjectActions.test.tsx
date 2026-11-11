@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
 const scaleDeployment = vi.hoisted(() => vi.fn(async () => undefined));
 const restartDeployment = vi.hoisted(() => vi.fn(async () => undefined));
@@ -124,5 +130,43 @@ describe("the restart dialog of a workload whose pods are failing", () => {
   it("says nothing of the kind when every pod is ready", async () => {
     const dialog = await restartOf(2);
     expect(within(dialog).queryByText(/Not every pod is ready/)).toBeNull();
+  });
+});
+
+describe("a dialog opened on one cluster after the window moves to another", () => {
+  beforeEach(() => {
+    restartDeployment.mockClear();
+    scaleDeployment.mockClear();
+  });
+
+  /**
+   * Every command these dialogs send goes to the window's cluster, and the
+   * peek, the row menu and the palette's host all outlive a tab switch: a
+   * Restart confirmed on staging after Ctrl+Tab restarted prod's cart. Fails
+   * if a confirmation survives the move, or comes back on the way home.
+   */
+  it("closes a confirmation for good and restarts nothing", async () => {
+    await peek();
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+    await screen.findByRole("dialog");
+
+    act(() => useClusterStore.setState({ currentContext: "acme-prod" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    act(() => useClusterStore.setState({ currentContext: "acme-staging" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(restartDeployment).not.toHaveBeenCalled();
+  });
+
+  /** The same for the Scale, port-forward and debug dialogs, which are held apart from confirmations. */
+  it("closes the Scale dialog and scales nothing", async () => {
+    await peek();
+    fireEvent.click(screen.getByRole("button", { name: "Scale" }));
+    await screen.findByRole("dialog");
+
+    act(() => useClusterStore.setState({ currentContext: "acme-prod" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(scaleDeployment).not.toHaveBeenCalled();
   });
 });

@@ -173,17 +173,17 @@ pub async fn get_loki_connection(state: State<'_, AppState>) -> Result<Option<Lo
     .await
 }
 
-/// Save this cluster's Loki. An empty `token` keeps whatever is stored — the
-/// form never receives the credential, so it cannot send it back.
+/// Save `context`'s Loki, named by the caller for the reason Prometheus's
+/// save is. An empty `token` keeps whatever is stored — the form never
+/// receives the credential, so it cannot send it back.
 #[tauri::command]
 pub async fn save_loki_connection(
+    context: String,
     url: String,
     auth_type: String,
     token: Option<String>,
     insecure_tls: bool,
-    state: State<'_, AppState>,
 ) -> Result<()> {
-    let context = context_of(&state)?;
     let url = url.trim().trim_end_matches('/').to_string();
     if url.is_empty() {
         return Err(Error::InvalidInput("A Loki needs an address".into()));
@@ -211,10 +211,9 @@ pub async fn save_loki_connection(
     .await
 }
 
-/// Forget this cluster's Loki, credential included.
+/// Forget `context`'s Loki, credential included.
 #[tauri::command]
-pub async fn forget_loki_connection(state: State<'_, AppState>) -> Result<()> {
-    let context = context_of(&state)?;
+pub async fn forget_loki_connection(context: String) -> Result<()> {
     crate::commands::settings::with_config(move |config| {
         config.integrations.loki.remove(&context);
     })
@@ -281,6 +280,19 @@ pub async fn probe_loki(
             }
         },
     };
+
+    if let Err(reason) = super::own_tunnel(&state, &context, &entry.url) {
+        return Ok(LokiProbe {
+            ok: false,
+            at: now_ms(),
+            latency_ms: 0,
+            reason: Some(reason),
+            no_address: false,
+            version: None,
+            retention: None,
+            labels: Vec::new(),
+        });
+    }
 
     let started = Instant::now();
     let answer = get_json(&entry, "/loki/api/v1/labels", &[]).await;
@@ -356,8 +368,10 @@ fn retention_from_config(body: &str) -> Option<String> {
 
 fn configured(state: &State<'_, AppState>) -> Result<LokiEntry> {
     let context = context_of(state)?;
-    entry_for(&context)?
-        .ok_or_else(|| Error::Config("No Loki is configured for this cluster".into()))
+    let entry = entry_for(&context)?
+        .ok_or_else(|| Error::Config("No Loki is configured for this cluster".into()))?;
+    super::own_tunnel(state, &context, &entry.url).map_err(Error::Connection)?;
+    Ok(entry)
 }
 
 /// One page of a range, newest-first on the wire and oldest-first on the way

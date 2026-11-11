@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 
 import { peekTargetOfHref } from "@/hooks/usePeek";
+import { clusterOf } from "@/lib/links";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
 import type { Listed } from "../-list/RowMenu";
 import { useRowMenu } from "../-list/useRowMenu";
 
-type Linked = Listed & { href: string };
+type Linked = Listed & { href: string; here: boolean };
 
 const hrefOfRow = (row: Linked) => row.href;
+const peekOfRow = (row: Linked) =>
+  row.here ? peekTargetOfHref(row.href) : null;
 
 /**
  * The right-click menu of an object link: the list row's menu, with the
@@ -16,7 +20,11 @@ const hrefOfRow = (row: Linked) => row.href;
  */
 export function ObjectMenu() {
   const [kind, setKind] = useState<string | null>(null);
-  const menu = useRowMenu<Linked>({ kind, getRowHref: hrefOfRow });
+  const menu = useRowMenu<Linked>({
+    kind,
+    getRowHref: hrefOfRow,
+    getRowPeek: peekOfRow,
+  });
   const { open } = menu;
 
   // Taken from the store as it is asked for, and the ask consumed.
@@ -25,9 +33,18 @@ export function ObjectMenu() {
       useObjectMenuStore.subscribe(({ target, close }) => {
         if (!target) return;
         const object = peekTargetOfHref(target.to);
-        setKind(object?.crd ? null : (object?.kind ?? null));
+        // Its actions and its peek act on the window's cluster, so an object
+        // of another one is offered only what its own address can do.
+        const here =
+          clusterOf(target.to) === useClusterStore.getState().currentContext;
+        setKind(!here || object?.crd ? null : (object?.kind ?? null));
         open(
-          { name: target.name, namespace: object?.namespace, href: target.to },
+          {
+            name: target.name,
+            namespace: object?.namespace,
+            href: target.to,
+            here,
+          },
           { x: target.x, y: target.y }
         );
         close();

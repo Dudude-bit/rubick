@@ -422,6 +422,38 @@ describe("ResourceRef", () => {
       await goesTo("/c/prod/events?peek=pods%2Fns%2Fa-1");
     });
 
+    /**
+     * The peek reads the window's cluster, and its Delete acts there: a
+     * staging object clicked on a prod page opened prod's namesake beside
+     * it. Fails if a reference to another cluster's object opens a peek.
+     */
+    it("opens an object of another cluster at its own address, not in a peek", async () => {
+      await wrap(
+        <ResourceRef
+          kind="Pod"
+          name="a-1"
+          namespace="ns"
+          linkOptions={{ cluster: "staging" }}
+        />
+      );
+      await userEvent.click(screen.getByRole("link"));
+      await goesTo("/c/staging/pods/ns/a-1");
+    });
+
+    /** Fails if naming the window's own cluster costs the reader the peek. */
+    it("still peeks an object whose link names the window's own cluster", async () => {
+      await wrap(
+        <ResourceRef
+          kind="Pod"
+          name="a-1"
+          namespace="ns"
+          linkOptions={{ cluster: "prod" }}
+        />
+      );
+      await userEvent.click(screen.getByRole("link"));
+      await goesTo("/c/prod/events?peek=pods%2Fns%2Fa-1");
+    });
+
     // The webview has no second window, so the modified click that used to
     // fall through to the browser opens a scope tab — the same promise.
     it.each([

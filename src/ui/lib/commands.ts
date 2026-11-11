@@ -65,6 +65,7 @@ export function wrapCommand<T extends AsyncFn>(fn: T, commandName?: string): T {
 
 function wrapErrors<T extends AsyncFn>(fn: T, commandName?: string): T {
   return (async (...args: Parameters<T>) => {
+    const connection = currentConnection();
     try {
       return await fn(...args);
     } catch (error) {
@@ -76,7 +77,7 @@ function wrapErrors<T extends AsyncFn>(fn: T, commandName?: string): T {
       // once, centrally, is what stops the next command added from
       // forgetting to.
       if (isCredentialsExpired(message)) {
-        credentialsExpired(expiryReason(message));
+        credentialsExpired(expiryReason(message), connection);
       }
       // `cause` carries the backend's `{ code, message }`; `errorCode` reads it.
       throw new Error(`Tauri command '${name}' failed: ${message}`, {

@@ -93,14 +93,15 @@ export default defineVendor({
       ],
     },
     read: readSavedConnection,
-    save: (draft: ConnectionDraft) =>
+    save: (context: string, draft: ConnectionDraft) =>
       commands.savePrometheusConnection(
+        context,
         draft.url,
         draft.authType,
         draft.token,
         draft.insecureTls
       ),
-    forget: () => commands.forgetPrometheusConnection(),
+    forget: (context: string) => commands.forgetPrometheusConnection(context),
     probe: async (draft?: ConnectionDraft): Promise<ProbeResult> => {
       try {
         const answer = await commands.probePrometheus(

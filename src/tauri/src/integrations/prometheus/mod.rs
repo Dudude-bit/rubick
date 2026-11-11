@@ -143,7 +143,9 @@ pub async fn get_prometheus_connection(
     .await
 }
 
-/// Save this cluster's Prometheus.
+/// Save `context`'s Prometheus. The caller names the cluster: a save queued
+/// behind another config write would otherwise land on the one the window
+/// had moved to by then.
 ///
 /// An empty `token` keeps whatever is already stored — the form never
 /// receives the credential, so it cannot send it back, and treating empty as
@@ -151,13 +153,12 @@ pub async fn get_prometheus_connection(
 /// reader edited the URL.
 #[tauri::command]
 pub async fn save_prometheus_connection(
+    context: String,
     url: String,
     auth_type: String,
     token: Option<String>,
     insecure_tls: bool,
-    state: State<'_, AppState>,
 ) -> Result<()> {
-    let context = context_of(&state)?;
     let url = url.trim().trim_end_matches('/').to_string();
     if url.is_empty() {
         return Err(Error::InvalidInput("A Prometheus needs an address".into()));
@@ -185,10 +186,9 @@ pub async fn save_prometheus_connection(
     .await
 }
 
-/// Forget this cluster's Prometheus, credential included.
+/// Forget `context`'s Prometheus, credential included.
 #[tauri::command]
-pub async fn forget_prometheus_connection(state: State<'_, AppState>) -> Result<()> {
-    let context = context_of(&state)?;
+pub async fn forget_prometheus_connection(context: String) -> Result<()> {
     crate::commands::settings::with_config(move |config| {
         config.integrations.prometheus.remove(&context);
     })
@@ -253,6 +253,17 @@ pub async fn probe_prometheus(
         },
     };
 
+    if let Err(reason) = super::own_tunnel(&state, &context, &entry.url) {
+        return Ok(PrometheusProbe {
+            ok: false,
+            at: now_ms(),
+            latency_ms: 0,
+            reason: Some(reason),
+            no_address: false,
+            version: None,
+        });
+    }
+
     let started = Instant::now();
     let answer = get_json(&entry, "/api/v1/query", &[("query", "1".to_string())]).await;
     let latency_ms = crate::utils::elapsed_ms(started);
@@ -300,8 +311,10 @@ fn unreachable(reason: String) -> Error {
 
 fn configured(state: &State<'_, AppState>) -> Result<PrometheusEntry> {
     let context = context_of(state)?;
-    entry_for(&context)?
-        .ok_or_else(|| Error::Config("No Prometheus is configured for this cluster".into()))
+    let entry = entry_for(&context)?
+        .ok_or_else(|| Error::Config("No Prometheus is configured for this cluster".into()))?;
+    super::own_tunnel(state, &context, &entry.url).map_err(Error::Connection)?;
+    Ok(entry)
 }
 
 /// One instant query — the fullness of a volume, and nothing that needs a past.

@@ -26,6 +26,7 @@ import {
   normalisedSubpath,
 } from "./forwarded";
 import type { ServiceInfo } from "@/generated/types";
+import { useClusterForwardStore } from "@/stores/clusterForwardStore";
 
 import { translate } from "@/i18n";
 import { SaidError, sayWords } from "@/i18n/say";
@@ -345,6 +346,39 @@ describe("keeping the address a connection was saved under", () => {
     );
     const found = await forward(svc(), [9090], 20000);
     expect(found.localPort).not.toBe(20000);
+  });
+});
+
+describe("a port for a new forward", () => {
+  /**
+   * Prod's Prometheus was set up on 20000 one day and staging's on another,
+   * with prod's tunnel down, so staging got 20000 too and both saved
+   * addresses named one socket. Fails if a port another cluster's saved
+   * forward owns is handed out again.
+   */
+  it("is none another cluster's saved forward is on", async () => {
+    useClusterForwardStore.setState({
+      forwards: {
+        prod: {
+          prometheus: {
+            namespace: "mon",
+            service: "prom",
+            remotePort: 9090,
+            localPort: 20000,
+            autoStart: false,
+          },
+        },
+      },
+    });
+    vi.mocked(commands.portForwardService).mockImplementationOnce(
+      async (_name, _namespace, request) =>
+        ({ id: "s", localPort: request.localPort }) as never
+    );
+
+    const found = await forward(service("prom", "mon", [9090]), [9090]);
+
+    expect(found.localPort).toBe(20001);
+    useClusterForwardStore.setState({ forwards: {} });
   });
 });
 

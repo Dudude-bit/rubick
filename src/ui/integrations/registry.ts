@@ -793,10 +793,10 @@ export type CapabilityState<K extends CapabilityKey> =
  * powers are gated on {@link probe} rather than on a CRD scan, and the
  * Integrations row grows a Connect button instead of the word "detected".
  *
- * Every function takes no context argument — the backend reads the current
- * kubeconfig context itself and stores per cluster, because a Prometheus is
- * per cluster and threading the context through the UI would make it
- * possible to save one cluster's address against another.
+ * The reads take no context argument — the backend reads the window's
+ * cluster itself. The writes name theirs: a config write can wait behind
+ * another one, and by the time it ran the window could be on a cluster
+ * other than the one whose form was saved.
  */
 export interface Connect {
   /** Shown in the empty address field, so the expected shape is visible. */
@@ -817,8 +817,8 @@ export interface Connect {
   inCluster?: InClusterHint;
   /** What this cluster has saved, or `null` where nobody configured one. */
   read: () => Promise<SavedConnection | null>;
-  save: (draft: ConnectionDraft) => Promise<void>;
-  forget: () => Promise<void>;
+  save: (context: string, draft: ConnectionDraft) => Promise<void>;
+  forget: (context: string) => Promise<void>;
   /**
    * The Test button's answer, and the same check that decides whether the
    * powers are offered at all. Given a draft it answers the form on screen;

@@ -40,6 +40,7 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { scaleWarnings } from "@/lib/governance";
 import { readinessOf } from "@/lib/restart-plan";
 import { objectLink } from "@/lib/links";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useShellAskStore } from "@/stores/shellAskStore";
 import { toKind } from "@/lib/resource-registry";
 import type {
@@ -148,6 +149,15 @@ export function useObjectActions({
   const [confirming, setConfirming] = useState<
     "delete" | "restart" | "rolling" | "managedRestart" | null
   >(null);
+  // Every command here goes to the window's cluster, so a dialog opened on
+  // one cluster is closed, not carried, when the window moves to another.
+  const cluster = useClusterStore((state) => state.currentContext);
+  const [openedOn, setOpenedOn] = useState(cluster);
+  if (openedOn !== cluster) {
+    setOpenedOn(cluster);
+    setDialog(null);
+    setConfirming(null);
+  }
 
   // Asked for only once the dialog is open — a neighbourhood read on every row
   // somebody arrows past would be six lists per keystroke, and the query key

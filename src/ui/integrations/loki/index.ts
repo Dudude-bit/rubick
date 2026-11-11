@@ -73,14 +73,15 @@ export default defineVendor({
       ],
     },
     read: () => commands.getLokiConnection().then(asSaved),
-    save: (draft: ConnectionDraft) =>
+    save: (context: string, draft: ConnectionDraft) =>
       commands.saveLokiConnection(
+        context,
         draft.url,
         draft.authType,
         draft.token,
         draft.insecureTls
       ),
-    forget: () => commands.forgetLokiConnection(),
+    forget: (context: string) => commands.forgetLokiConnection(context),
     probe: async (draft?: ConnectionDraft): Promise<ProbeResult> => {
       try {
         const answer = await commands.probeLoki(

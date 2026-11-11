@@ -163,3 +163,48 @@ describe("the saved Prometheus address", () => {
     );
   });
 });
+
+describe("saving a connection while the window moves", () => {
+  afterEach(() => {
+    useClusterStore.setState({ isConnected: false, currentContext: null });
+  });
+
+  /**
+   * A save waits behind any config write still on disk, and the backend
+   * used to read the window's cluster when the save finally ran: a tab
+   * switch in between filed staging's address under prod with prod's token.
+   * Fails if the save names any cluster but the one Save was pressed on.
+   */
+  it("files the address under the cluster Save was pressed on", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    useClusterStore.setState({ currentContext: "staging", isConnected: true });
+    const editor = renderHook(() => useConnectionEditor("prometheus"), {
+      wrapper,
+    });
+    vi.mocked(commands.savePrometheusConnection).mockClear();
+
+    await act(async () => {
+      const saved = editor.result.current.save({
+        url: "http://localhost:20000",
+        authType: "none",
+        token: "",
+        insecureTls: false,
+      });
+      useClusterStore.setState({ currentContext: "prod" });
+      await saved;
+    });
+
+    expect(commands.savePrometheusConnection).toHaveBeenCalledWith(
+      "staging",
+      "http://localhost:20000",
+      "none",
+      "",
+      false
+    );
+  });
+});
