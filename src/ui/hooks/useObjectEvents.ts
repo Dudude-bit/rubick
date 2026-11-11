@@ -41,32 +41,27 @@ export function eventsKindOf(ref: ObjectRef): EventsKind {
   return { custom: ref.kind, group: crd ? servedOf(crd).group : null };
 }
 
-/**
- * Without the events of a namesake kind: events are asked for by the kind's
- * name, which a kind in another group may share. An event that names no
- * group could be either's and is kept.
- */
-export function ofGroup(events: EventInfo[], group: string | null) {
-  if (group === null) return events;
-  const own = events.filter((event) => {
-    const said = groupIn(event.involvedObject.apiVersion);
-    return said === null || said === group;
-  });
-  return own.length === events.length ? events : own;
+/** Whether an event may be about a kind of `group`: it names that group, or none, which could be any kind's. */
+function mayBeOf(event: EventInfo, group: string | null) {
+  const said = groupIn(event.involvedObject.apiVersion);
+  return group === null || said === null || said === group;
 }
 
 /**
- * The events of the object with `uid`, where it is known: an event that names
- * a uid is about that incarnation alone, and one with none is kept by name.
+ * The object's own among events asked for by its kind's name and its own.
+ * A uid settles it where the event names one and the object's is known,
+ * whatever group the event was written with: a controller may name a legacy
+ * one. Only where no uid does, the group tells a namesake kind's events
+ * apart; an event that names neither is kept by name.
  */
-export function ofIncarnation(
-  events: EventInfo[] | undefined,
+export function ofObject(
+  events: EventInfo[],
+  group: string | null,
   uid: string | undefined
-): EventInfo[] | undefined {
-  if (!uid || !events) return events;
+): EventInfo[] {
   const own = events.filter((event) => {
     const of = involvedUid(event);
-    return of === null || of === uid;
+    return uid && of !== null ? of === uid : mayBeOf(event, group);
   });
   return own.length === events.length ? events : own;
 }
@@ -155,8 +150,7 @@ export function useObjectEvents(
   );
   const uid = everyObject ? undefined : (known ?? read);
   const select = useCallback(
-    (events: EventInfo[]) =>
-      ofIncarnation(ofGroup(events, group), uid) ?? events,
+    (events: EventInfo[]) => ofObject(events, group, uid),
     [uid, group]
   );
   const own = useLiveQuery({
@@ -199,10 +193,12 @@ export function useObjectEvents(
       ]);
       const uids = new Set(sets.map((set) => set.uid));
       const names = new Set(sets.map((set) => set.name));
-      const theirs = ofGroup(warnings, getResourceDefinition(from!.kind).group);
-      return theirs.filter((event) => {
+      const group = getResourceDefinition(from!.kind).group;
+      return warnings.filter((event) => {
         const of = involvedUid(event);
-        return of ? uids.has(of) : names.has(event.involvedObject.name);
+        return of
+          ? uids.has(of)
+          : names.has(event.involvedObject.name) && mayBeOf(event, group);
       });
     },
     enabled: readsOwned,

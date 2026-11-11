@@ -37,7 +37,7 @@ import { useWindowActivity } from "@/lib/window-activity";
 import { testQueryClient } from "@/test/render";
 import {
   eventsKindOf,
-  ofIncarnation,
+  ofObject,
   useObjectEvents,
   type EventsKind,
 } from "./useObjectEvents";
@@ -176,7 +176,7 @@ it("keeps an event that names its object by name where the uid belongs", () => {
       uid: "node-1",
     },
   };
-  expect(ofIncarnation([kubelet], "a1b2-real-uid")).toEqual([kubelet]);
+  expect(ofObject([kubelet], "", "a1b2-real-uid")).toEqual([kubelet]);
 });
 
 /** A page that reads its object outside the shared entry passes the uid itself; fails if that uid is ignored. */
@@ -245,6 +245,11 @@ const onObject = (
   type: kind === "ReplicaSet" ? "Warning" : "Normal",
   involvedObject: { kind, name, namespace: "lena-sandbox", uid },
   lastTimestamp: at(second),
+});
+
+const inGroup = (event: EventInfo, apiVersion: string): EventInfo => ({
+  ...event,
+  involvedObject: { ...event.involvedObject, apiVersion },
 });
 
 function mountDeployment(kind: EventsKind = "Deployment", name = "web") {
@@ -411,11 +416,6 @@ it("names the group a custom reference's events are read by, and none where its 
   });
 });
 
-const inGroup = (event: EventInfo, apiVersion: string): EventInfo => ({
-  ...event,
-  involvedObject: { ...event.involvedObject, apiVersion },
-});
-
 /**
  * The list is asked by the kind's name, which a custom kind may share: a
  * Deployment and a custom Deployment of one name each showed the other's
@@ -466,6 +466,70 @@ it("leaves out the events a namesake kind in another group has under the same na
     "Reconciled",
     "Noted",
   ]);
+});
+
+/**
+ * A controller built against an old API writes `extensions/v1beta1` where the
+ * object is served from `apps`, and its events left the object's Events tab,
+ * which then said there were none. Fails if an event carrying the object's
+ * own uid, or that of a ReplicaSet it owns, is left out for the group it
+ * names, or if the uid of another object is let in by its group.
+ */
+it("keeps an event that carries the object's own uid whatever group it names", async () => {
+  const about = (
+    kind: string,
+    name: string,
+    uid: string | null,
+    apiVersion: string,
+    reason: string,
+    second: number
+  ): EventInfo => ({
+    ...onObject(kind, name, "", reason, second),
+    involvedObject: {
+      apiVersion,
+      kind,
+      name,
+      namespace: "lena-sandbox",
+      uid,
+    },
+  });
+  answer.events = [
+    about("Deployment", "web", "deploy", "extensions/v1beta1", "Reloaded", 4),
+    about("Deployment", "web", "custom", "apps/v1", "Reconciled", 3),
+    about("Deployment", "web", null, "apps.example.io/v1", "Synced", 2),
+  ];
+  answer.sets = [{ uid: "rs-web", name: "web-7d9f" }];
+  answer.setEvents = [
+    about(
+      "ReplicaSet",
+      "web-7d9f",
+      "rs-web",
+      "extensions/v1beta1",
+      "FailedCreate",
+      6
+    ),
+    about("ReplicaSet", "web-7d9f", null, "apps.example.io/v1", "Paused", 5),
+  ];
+  const client = testQueryClient();
+  client.setQueryData(queryKeys.detail("Deployment", "lena-sandbox", "web"), {
+    uid: "deploy",
+  });
+  const { result } = renderHook(
+    () =>
+      useObjectEvents("Deployment", "web", "lena-sandbox", { refresh: "slow" }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(result.current.data?.map((e) => e.reason)).toEqual([
+    "FailedCreate",
+    "Reloaded",
+  ]);
+  answer.sets = [];
+  answer.setEvents = [];
 });
 
 /**
