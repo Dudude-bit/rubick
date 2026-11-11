@@ -201,9 +201,10 @@ fn workload_detail<'a>(
 fn with_kubelet_words<'a>(
     mut problems: Vec<ClusterProblem>,
     events: impl IntoIterator<Item = &'a Event> + Clone,
-    known: bool,
+    short: &[EventsShort],
 ) -> Vec<ClusterProblem> {
     for problem in &mut problems {
+        let known = events_read_in(short, problem.namespace.as_deref());
         let Some(ProblemDetail::Cause { cause, .. } | ProblemDetail::PodsCause { cause, .. }) =
             problem.detail.as_mut()
         else {
@@ -619,6 +620,69 @@ pub struct ReasonCount {
     pub count: usize,
 }
 
+/// How many Jobs one word holds, and whether it stands without the Warning
+/// events that tell a Job whose pods the cluster refuses from one waiting.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobCount {
+    pub reason: String,
+    pub count: usize,
+    pub events_unread: bool,
+}
+
+/// One reach whose Warning events were not read to their end, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "why", rename_all = "camelCase")]
+pub enum EventsShort {
+    /// The list stopped at its page cap: what was read stands.
+    Capped {
+        /// `None` for a read of the whole cluster.
+        namespace: Option<String>,
+    },
+    /// The list failed, a refusal among them.
+    Failed {
+        namespace: Option<String>,
+        /// One of `src/contracts/error-codes.json`.
+        code: String,
+        message: String,
+    },
+}
+
+impl EventsShort {
+    fn of(namespace: Option<&str>, stopped: &Stopped) -> Self {
+        let namespace = namespace.map(str::to_string);
+        match stopped {
+            Stopped::Capped => Self::Capped { namespace },
+            Stopped::Failed(error) => Self::Failed {
+                namespace,
+                code: error.code().to_string(),
+                message: error.said(),
+            },
+        }
+    }
+
+    /// Whether the events of `namespace` are among those not read whole.
+    fn covers(&self, namespace: Option<&str>) -> bool {
+        let (Self::Capped { namespace: short }
+        | Self::Failed {
+            namespace: short, ..
+        }) = self;
+        short.is_none() || short.as_deref() == namespace
+    }
+}
+
+/// Whether the Warning events were read to their end where `namespace` is.
+fn events_read_in(short: &[EventsShort], namespace: Option<&str>) -> bool {
+    !short.iter().any(|entry| entry.covers(namespace))
+}
+
+/// Why a walk of the Warning events ended before the list did.
+#[derive(Debug)]
+enum Stopped {
+    Capped,
+    Failed(Error),
+}
+
 /// How many workloads one rollout word holds, and whether it is the
 /// controller's word alone because their pods could not be read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -663,10 +727,10 @@ pub struct ClusterOverview {
     /// the panels say so rather than drawing a cluster with zero headroom.
     pub nodes_known: bool,
     pub warnings: Vec<WarningGroup>,
-    /// False when an events list failed or was cut at the page cap:
+    /// Where an events list failed or was cut at the page cap, and which:
     /// `warnings` then holds only what was read, and an empty one is not
-    /// "no warnings".
-    pub warnings_known: bool,
+    /// "no warnings". Empty when every list was read to its end.
+    pub warnings_short: Vec<EventsShort>,
     pub namespaces: Vec<NamespaceLoad>,
     /// Objects per kind in the requested scope, for the sidebar and the
     /// composition bars.
@@ -681,11 +745,11 @@ pub struct ClusterOverview {
     pub pods: Option<Census<PodComposition>>,
     /// The uids of pods inside their wait that the kubelet has already warned
     /// it cannot set up, uncapped unlike `problems`: every screen that would
-    /// call one starting reads it here. Empty when `warnings_known` is false
-    /// means not looked, not none.
+    /// call one starting reads it here. Empty beside a `warnings_short` that
+    /// is not means not looked, not none.
     pub pods_warned: Vec<String>,
     /// Jobs per word the Jobs list prints; `None` when no Job list answered.
-    pub jobs: Option<Census<Vec<ReasonCount>>>,
+    pub jobs: Option<Census<Vec<JobCount>>>,
     /// Deployments per rollout word the Deployments list prints, the words
     /// only the controller's counts stand behind apart; `None` when no
     /// Deployment list answered.
@@ -1924,21 +1988,6 @@ fn unlisted_pods<'a>(
         .collect()
 }
 
-/// How many objects each word covers, in the order the words first appear.
-fn count_codes<'a>(codes: impl IntoIterator<Item = &'a str>) -> Vec<ReasonCount> {
-    let mut counts: Vec<ReasonCount> = Vec::new();
-    for code in codes {
-        match counts.iter_mut().find(|entry| entry.reason == code) {
-            Some(entry) => entry.count += 1,
-            None => counts.push(ReasonCount {
-                reason: code.to_string(),
-                count: 1,
-            }),
-        }
-    }
-    counts
-}
-
 /// How many verdicts each word covers, a word whose pods went unread counted
 /// apart from the same word with them read.
 fn count_rollouts(rollouts: &[Rollout]) -> Vec<RolloutCount> {
@@ -1963,14 +2012,32 @@ fn count_rollouts(rollouts: &[Rollout]) -> Vec<RolloutCount> {
     counts
 }
 
+/// Jobs per word. A Pending one where the Warning events were not read to
+/// their end is counted apart: no refusal found there is not none written.
 fn job_composition<'a>(
     jobs: impl IntoIterator<Item = &'a Job>,
     beside: Beside<'_>,
-) -> Vec<ReasonCount> {
-    count_codes(
-        jobs.into_iter()
-            .map(|job| job_state_beside(job, beside).0.code()),
-    )
+    short: &[EventsShort],
+) -> Vec<JobCount> {
+    let mut counts: Vec<JobCount> = Vec::new();
+    for job in jobs {
+        let state = job_state_beside(job, beside).0;
+        let events_unread =
+            state == JobState::Pending && !events_read_in(short, job.metadata.namespace.as_deref());
+        let reason = state.code();
+        match counts
+            .iter_mut()
+            .find(|entry| entry.reason == reason && entry.events_unread == events_unread)
+        {
+            Some(entry) => entry.count += 1,
+            None => counts.push(JobCount {
+                reason: reason.to_string(),
+                count: 1,
+                events_unread,
+            }),
+        }
+    }
+    counts
 }
 
 /// What one page of a limited list says about the size of the whole
@@ -2218,10 +2285,10 @@ fn rank_and_cap(mut problems: Vec<ClusterProblem>) -> (Vec<ClusterProblem>, usiz
     (problems, truncated)
 }
 
-/// Warning events from the pages the API will hand over cheaply, and whether
-/// they are the whole list: a failure, or a `continue` still left at the
-/// page cap, keeps what was collected and says it is not.
-async fn list_warning_events(events_api: &Api<Event>) -> (Vec<Event>, bool) {
+/// Warning events from the pages the API will hand over cheaply, and why the
+/// walk stopped short of the whole list where it did: a failure, or a
+/// `continue` still left at the page cap, keeps what was collected.
+async fn list_warning_events(events_api: &Api<Event>) -> (Vec<Event>, Option<Stopped>) {
     let mut items = Vec::new();
     let mut token: Option<String> = None;
 
@@ -2234,8 +2301,9 @@ async fn list_warning_events(events_api: &Api<Event>) -> (Vec<Event>, bool) {
         if let Some(token) = token.as_deref() {
             params = params.continue_token(token);
         }
-        let Ok(mut page) = events_api.list(&params).await else {
-            return (items, false);
+        let mut page = match events_api.list(&params).await {
+            Ok(page) => page,
+            Err(error) => return (items, Some(Stopped::Failed(error.into()))),
         };
         token = page.metadata.continue_.take().filter(|t| !t.is_empty());
         items.append(&mut page.items);
@@ -2244,7 +2312,7 @@ async fn list_warning_events(events_api: &Api<Event>) -> (Vec<Event>, bool) {
         }
     }
 
-    (items, token.is_none())
+    (items, token.map(|_| Stopped::Capped))
 }
 
 /// Borrowed from the watch stores or from a fresh list alike: `Arc`s so the
@@ -2268,8 +2336,8 @@ struct OverviewInputs<'a> {
     /// The workload, Job and Node lists that were not read, and where.
     unread: &'a [OverviewUnread],
     events: &'a [Arc<Event>],
-    /// False when an events list failed.
-    events_known: bool,
+    /// Where an events list was not read to its end.
+    events_short: &'a [EventsShort],
     usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
     /// Counts for the kinds this query does not otherwise need to read.
     counts: ResourceCounts,
@@ -2370,7 +2438,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         .collect();
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
     let problems = fold_replaced(problems, refs(input.scoped_pods));
-    let problems = with_kubelet_words(problems, events.iter().copied(), input.events_known);
+    let problems = with_kubelet_words(problems, events.iter().copied(), input.events_short);
     let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
     // One namespace's breakdown restates it; several are each the picker's.
     let namespaces = match input.scope {
@@ -2408,7 +2476,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
             let holders = Holders::of(input);
             recent_warnings(refs(input.events), |event| holders.incarnation(event))
         },
-        warnings_known: input.events_known,
+        warnings_short: input.events_short.to_vec(),
         counts,
         pods: census("Pod").map(|complete| Census {
             read: pod_composition(refs(input.scoped_pods), input.now, &warned),
@@ -2416,7 +2484,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         }),
         pods_warned,
         jobs: census("Job").map(|complete| Census {
-            read: job_composition(refs(input.jobs), beside),
+            read: job_composition(refs(input.jobs), beside, input.events_short),
             complete,
         }),
         deployments: census("Deployment").map(|complete| Census {
@@ -2908,7 +2976,57 @@ async fn look_up_holders<'a>(
     looked
 }
 
+/// Who holds a name, as it crosses to a screen that asks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "held", rename_all = "camelCase")]
+pub enum Holder {
+    By {
+        uid: String,
+    },
+    Nobody,
+    /// The read could not say: refused, failed, or a kind not served here.
+    NotRead,
+}
+
+/// Who holds one name now, read as the Overview's own warnings read it:
+/// through discovery, so a custom kind is asked where it is served.
+#[tauri::command]
+pub async fn name_holder(
+    group: String,
+    kind: String,
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Holder> {
+    crate::validation::validate_path_segment(&name)?;
+    if !group.is_empty() {
+        crate::validation::validate_dns_subdomain(&group)?;
+    }
+    if let Some(namespace) = &namespace {
+        crate::validation::validate_namespace(namespace)?;
+    }
+    let named = (group, kind, namespace, name);
+    Ok(
+        crate::client::clock::timed(&state.perf, "nameHolder", name_holder_of(&state, &named))
+            .await,
+    )
+}
+
+async fn name_holder_of(state: &AppState, named: &Named) -> Holder {
+    match holder_read(state, named, true).await {
+        Some(Held::By(uid)) => Holder::By { uid },
+        Some(Held::Nobody) => Holder::Nobody,
+        None => Holder::NotRead,
+    }
+}
+
 async fn holder_of(state: &AppState, named: &Named) -> Option<Held> {
+    holder_read(state, named, false).await
+}
+
+/// `of_event` where the namespace may be the event's own rather than its
+/// object's: an event about a cluster-scoped object is itself in one.
+async fn holder_read(state: &AppState, named: &Named, of_event: bool) -> Option<Held> {
     let (group, kind, namespace, name) = named;
     let plural = state
         .served_kinds(group)
@@ -2918,10 +3036,13 @@ async fn holder_of(state: &AppState, named: &Named) -> Option<Held> {
         .find(|served| served.kind == *kind)?
         .plural;
     let served = state.served(group, &plural).await.ok()??;
-    if served.namespaced != namespace.is_some() {
-        return None;
-    }
-    match crate::commands::ownership::metadata(state, &served, name, namespace.clone()).await {
+    let namespace = match (served.namespaced, namespace) {
+        (true, Some(namespace)) => Some(namespace.clone()),
+        (false, None) => None,
+        (false, Some(_)) if of_event => None,
+        _ => return None,
+    };
+    match crate::commands::ownership::metadata(state, &served, name, namespace).await {
         Ok(meta) => meta.uid.map(Held::By),
         Err(error) if error.code() == "NOT_FOUND" => Some(Held::Nobody),
         Err(_) => None,
@@ -2991,7 +3112,7 @@ fn from_snapshot(
         jobs: &scoped.jobs,
         unread: &[],
         events: &scoped.events,
-        events_known: true,
+        events_short: &[],
         usage_by_node: sides.usage_by_node,
         counts: sides.counts,
         scope,
@@ -3014,7 +3135,7 @@ struct Listed {
     daemon_sets: Result<Vec<DaemonSet>>,
     jobs: Result<Vec<Job>>,
     events: Vec<Event>,
-    events_known: bool,
+    events_stopped: Option<Stopped>,
 }
 
 async fn list_in(client: &Client, reach: Option<&str>) -> Listed {
@@ -3033,7 +3154,7 @@ async fn list_in(client: &Client, reach: Option<&str>) -> Listed {
         jobs_api.list(&params),
         list_warning_events(&events_api),
     );
-    let (events, events_known) = events;
+    let (events, events_stopped) = events;
     Listed {
         reach: reach.map(str::to_string),
         pods: pods.map(|list| list.items).map_err(Error::from),
@@ -3042,7 +3163,7 @@ async fn list_in(client: &Client, reach: Option<&str>) -> Listed {
         daemon_sets: daemon_sets.map(|list| list.items).map_err(Error::from),
         jobs: jobs.map(|list| list.items).map_err(Error::from),
         events,
-        events_known,
+        events_stopped,
     }
 }
 
@@ -3054,7 +3175,7 @@ struct Gathered {
     daemon_sets: Vec<Arc<DaemonSet>>,
     jobs: Vec<Arc<Job>>,
     events: Vec<Arc<Event>>,
-    events_known: bool,
+    events_short: Vec<EventsShort>,
     unread: Vec<OverviewUnread>,
 }
 
@@ -3100,7 +3221,7 @@ fn gather(parts: Vec<Listed>) -> Result<Gathered> {
         daemon_sets: Vec::new(),
         jobs: Vec::new(),
         events: Vec::new(),
-        events_known: parts.iter().all(|part| part.events_known),
+        events_short: Vec::new(),
         unread: Vec::new(),
     };
     for part in parts {
@@ -3134,6 +3255,11 @@ fn gather(parts: Vec<Listed>) -> Result<Gathered> {
         );
         take("Job", reach, part.jobs, &mut gathered.jobs, unread);
         gathered.events.extend(arcs(part.events));
+        gathered.events_short.extend(
+            part.events_stopped
+                .as_ref()
+                .map(|stopped| EventsShort::of(reach, stopped)),
+        );
     }
     Ok(gathered)
 }
@@ -3227,7 +3353,7 @@ async fn by_listing(
         unread: &unread,
         jobs: &listed.jobs,
         events: &listed.events,
-        events_known: listed.events_known,
+        events_short: &listed.events_short,
         usage_by_node: sides.usage_by_node,
         counts: sides.counts,
         scope,
@@ -3358,7 +3484,7 @@ mod tests {
             unread: &[],
             jobs: &[],
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: scope.as_deref(),
@@ -3401,7 +3527,7 @@ mod tests {
             unread,
             jobs: &[],
             events: &arcs([event]),
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -3491,7 +3617,7 @@ mod tests {
             unread: &[],
             jobs: &[],
             events: &arcs(events),
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -3644,7 +3770,7 @@ mod tests {
             unread: &[],
             jobs: &[],
             events: &arcs(events),
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -3729,7 +3855,7 @@ mod tests {
             unread: &[],
             jobs: &[],
             events: &arcs(events),
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -3754,7 +3880,8 @@ mod tests {
     const HPAS_AT: &str = "/apis/autoscaling/v2/namespaces/lena-sandbox/horizontalpodautoscalers";
 
     /// An API server serving HPAs in lena-sandbox: hello-web is 8b3e3d88,
-    /// `refused` is forbidden, and every other name is not found.
+    /// `refused` is forbidden, and every other name is not found. It serves
+    /// cert-manager's cluster-scoped `ClusterIssuer` too: letsencrypt is c1.
     async fn hpa_server() -> (AppState, crate::client::served::test_server::Hits) {
         use crate::client::served::test_server::{connected, failure};
         use crate::client::served::ServedIndex;
@@ -3766,7 +3893,31 @@ mod tests {
                     "name": "autoscaling",
                     "versions": [{ "groupVersion": "autoscaling/v2", "version": "v2" }],
                     "preferredVersion": { "groupVersion": "autoscaling/v2", "version": "v2" },
+                }, {
+                    "name": "cert-manager.io",
+                    "versions": [{ "groupVersion": "cert-manager.io/v1", "version": "v1" }],
+                    "preferredVersion": { "groupVersion": "cert-manager.io/v1", "version": "v1" },
                 }]})
+                .to_string(),
+            ),
+            "/apis/cert-manager.io/v1" => (
+                200,
+                serde_json::json!({
+                    "kind": "APIResourceList", "groupVersion": "cert-manager.io/v1",
+                    "resources": [{
+                        "name": "clusterissuers", "singularName": "",
+                        "namespaced": false, "kind": "ClusterIssuer",
+                        "verbs": ["get", "list", "watch"],
+                    }],
+                })
+                .to_string(),
+            ),
+            "/apis/cert-manager.io/v1/clusterissuers/letsencrypt" => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "cert-manager.io/v1", "kind": "ClusterIssuer",
+                    "metadata": { "name": "letsencrypt", "uid": "c1" },
+                })
                 .to_string(),
             ),
             "/apis/autoscaling/v2" => (
@@ -3815,6 +3966,80 @@ mod tests {
         ] {
             assert_eq!(holder_of(&state, &named(name)).await, expected, "{name}");
         }
+    }
+
+    /// The Events page asks the same read for a kind it holds no reader of.
+    /// Fails if a read that could not say, or a kind this cluster does not
+    /// serve, crosses as nobody holding the name: the page then calls a live
+    /// object deleted.
+    #[tokio::test]
+    async fn a_name_asked_from_a_screen_is_not_read_where_the_read_could_not_say() {
+        let (state, _) = hpa_server().await;
+        let of = |group: &str, kind: &str, name: &str| {
+            (
+                group.to_string(),
+                kind.to_string(),
+                Some("lena-sandbox".to_string()),
+                name.to_string(),
+            )
+        };
+        let hpa = |name: &str| of("autoscaling", "HorizontalPodAutoscaler", name);
+        assert_eq!(
+            name_holder_of(&state, &hpa("hello-web")).await,
+            Holder::By {
+                uid: "8b3e3d88".to_string()
+            }
+        );
+        assert_eq!(
+            name_holder_of(&state, &hpa("deleted")).await,
+            Holder::Nobody
+        );
+        assert_eq!(
+            name_holder_of(&state, &hpa("refused")).await,
+            Holder::NotRead
+        );
+        let unserved = of("serving.knative.dev", "Service", "web");
+        assert_eq!(name_holder_of(&state, &unserved).await, Holder::NotRead);
+    }
+
+    /// An event about a cluster-scoped object sits in a namespace of its own,
+    /// which is all a screen holding the event can hand over. Fails if such a
+    /// kind is left unread for it, or looked for inside that namespace; or if
+    /// a namespaced kind handed no namespace is read in whichever is default,
+    /// where "not found" would call an object elsewhere deleted.
+    #[tokio::test]
+    async fn a_cluster_scoped_kind_asked_from_a_screen_is_read_without_its_events_namespace() {
+        let (state, _) = hpa_server().await;
+        let issuer = |name: &str, namespace: Option<&str>| {
+            (
+                "cert-manager.io".to_string(),
+                "ClusterIssuer".to_string(),
+                namespace.map(str::to_string),
+                name.to_string(),
+            )
+        };
+        let found = Holder::By {
+            uid: "c1".to_string(),
+        };
+        let asked = issuer("letsencrypt", Some("default"));
+        assert_eq!(name_holder_of(&state, &asked).await, found);
+        assert_eq!(
+            name_holder_of(&state, &issuer("letsencrypt", None)).await,
+            found
+        );
+        assert_eq!(
+            name_holder_of(&state, &issuer("deleted", Some("default"))).await,
+            Holder::Nobody
+        );
+        assert_eq!(holder_of(&state, &asked).await, None, "the Overview's own");
+
+        let unplaced = (
+            "autoscaling".to_string(),
+            "HorizontalPodAutoscaler".to_string(),
+            None,
+            "hello-web".to_string(),
+        );
+        assert_eq!(name_holder_of(&state, &unplaced).await, Holder::NotRead);
     }
 
     /// Fails if a poll reads a name the lists already answer, one outside the
@@ -3948,7 +4173,7 @@ mod tests {
             unread: &[],
             jobs: &[],
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: Some(&["team-a".to_string()]),
@@ -4028,7 +4253,7 @@ mod tests {
             unread: &[],
             jobs: &[],
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: usage_index(Some(node_metrics_response(
                 MetricsStatusKind::Available,
                 vec![],
@@ -4139,7 +4364,7 @@ mod tests {
             unread: &[],
             jobs: &[],
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -4365,7 +4590,7 @@ mod tests {
             unread: &[],
             jobs: &[],
             events: &arcs(vec![mount_warning("u1")]),
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -4419,7 +4644,7 @@ mod tests {
                 unread: &[],
                 jobs: &[],
                 events: &arcs(events),
-                events_known: true,
+                events_short: &[],
                 usage_by_node: None,
                 counts: ResourceCounts::default(),
                 scope: None,
@@ -4444,7 +4669,7 @@ mod tests {
     fn a_pod_the_kubelet_cannot_set_up_quotes_its_warnings_on_its_row() {
         let now = Utc::now();
         let pods = [creating_pod("web", "u1", now)];
-        let rows = with_kubelet_words(pod_problems(&pods, now), &[mount_warning("u1")], true);
+        let rows = with_kubelet_words(pod_problems(&pods, now), &[mount_warning("u1")], &[]);
         let read = warned(&rows);
         let [crate::resources::Warned::Read { warnings }] = read.as_slice() else {
             panic!("the row quotes its warnings: {rows:?}");
@@ -4454,7 +4679,7 @@ mod tests {
             &warnings[0].fault,
             crate::resources::SetupFault::Missing { kind, name, .. } if kind == "ConfigMap" && name == "web-config"
         ));
-        let theirs = with_kubelet_words(pod_problems(&pods, now), &[mount_warning("u0")], true);
+        let theirs = with_kubelet_words(pod_problems(&pods, now), &[mount_warning("u0")], &[]);
         assert_eq!(
             warned(&theirs),
             vec![crate::resources::Warned::Read { warnings: vec![] }]
@@ -4462,13 +4687,39 @@ mod tests {
     }
 
     /// An events list that failed or was cut is not a kubelet that warned
-    /// nothing. Fails if the unread case reads as an empty answer.
+    /// nothing. Fails if the unread case reads as an empty answer, or if a
+    /// list cut short in one namespace unsays the answer read in another.
     #[test]
     fn a_pod_with_no_warning_in_an_unfinished_events_read_is_not_said_to_have_none() {
         let now = Utc::now();
-        let pods = [creating_pod("web", "u1", now)];
-        let rows = with_kubelet_words(pod_problems(&pods, now), &[], false);
-        assert_eq!(warned(&rows), vec![crate::resources::Warned::NotRead]);
+        let in_namespace = |name: &str, uid: &str, namespace: &str| {
+            let mut pod = creating_pod(name, uid, now);
+            pod.metadata.namespace = Some(namespace.to_string());
+            pod
+        };
+        let pods = [
+            in_namespace("web", "u1", "shop"),
+            in_namespace("api", "u2", "bank"),
+        ];
+        let capped = |namespace: Option<&str>| EventsShort::Capped {
+            namespace: namespace.map(str::to_string),
+        };
+        let said = |short: &[EventsShort]| {
+            let rows = with_kubelet_words(pod_problems(&pods, now), &[], short);
+            let of = |name: &str| {
+                let row: Vec<_> = rows
+                    .iter()
+                    .filter(|row| row.name == name)
+                    .cloned()
+                    .collect();
+                warned(&row).remove(0)
+            };
+            (of("web"), of("api"))
+        };
+        let none = crate::resources::Warned::Read { warnings: vec![] };
+        let unread = crate::resources::Warned::NotRead;
+        assert_eq!(said(&[capped(Some("shop"))]), (unread.clone(), none));
+        assert_eq!(said(&[capped(None)]), (unread.clone(), unread));
     }
 
     /// A fresh cluster pulls its images for minutes: eleven pods placed and
@@ -5940,7 +6191,7 @@ mod tests {
             ],
             jobs: &[],
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts {
                 services: Some(6),
@@ -5987,7 +6238,7 @@ mod tests {
             unread: &[],
             jobs: &arcs(jobs),
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: Some(&["app".to_string()]),
@@ -6340,7 +6591,7 @@ mod tests {
             unread: &[],
             jobs: &arcs(jobs.to_vec()),
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -6548,7 +6799,7 @@ mod tests {
                 unread: &[],
                 jobs: &[],
                 events: &[],
-                events_known: true,
+                events_short: &[],
                 usage_by_node: None,
                 counts: ResourceCounts::default(),
                 scope: None,
@@ -6659,7 +6910,7 @@ mod tests {
             unread: &[],
             jobs: &arcs(vec![job("reports-1", true), job("reports-2", false)]),
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -6763,7 +7014,7 @@ mod tests {
             unread: &[],
             jobs: &[],
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -6897,7 +7148,7 @@ mod tests {
             unread: &[],
             jobs: &arcs(vec![job]),
             events: &[],
-            events_known: true,
+            events_short: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -7077,6 +7328,7 @@ mod tests {
                 events: &[],
                 now: Utc::now(),
             },
+            &[],
         );
 
         let count = |code: &str| {
@@ -7400,20 +7652,74 @@ mod across_namespaces {
     }
 
     /// Would draw the warnings of the namespaces that answered as the
-    /// scope's, and a refused events list as a scope with none.
+    /// scope's, and a refused events list as a scope with none. Fails too if
+    /// the refusal crosses without its namespace or as anything but a refusal:
+    /// every reader then says "not read in full" for a token denied the list.
     #[tokio::test]
-    async fn a_refused_events_list_leaves_the_warnings_unknown() {
-        assert!(Cluster::new().listed().await.warnings_known);
+    async fn a_refused_events_list_leaves_the_warnings_unknown_and_says_it_was_refused() {
+        assert_eq!(Cluster::new().listed().await.warnings_short, []);
         let refused = Cluster::new()
             .refuse("/api/v1/namespaces/staging/events")
             .listed()
             .await;
-        assert!(!refused.warnings_known);
+        let [EventsShort::Failed {
+            namespace,
+            code,
+            message,
+        }] = refused.warnings_short.as_slice()
+        else {
+            panic!("one refusal: {:?}", refused.warnings_short);
+        };
+        assert_eq!(namespace.as_deref(), Some(STAGING));
+        assert_eq!(code, "PERMISSION_DENIED");
+        assert!(message.contains("is forbidden"), "{message}");
+    }
+
+    /// The Jobs card counted a Job waiting for pods as Pending where the
+    /// events that would say its pods are refused could not be read. Fails if
+    /// such a Job is counted with those whose events were read, if a Job in a
+    /// namespace that was read is doubted, or if any other word is.
+    #[tokio::test]
+    async fn a_pending_job_whose_events_were_not_read_is_counted_apart() {
+        let overview = Cluster::new()
+            .items(
+                "/apis/batch/v1/namespaces/prod/jobs",
+                vec![
+                    job("waiting", PROD, None),
+                    job("done", PROD, Some("Complete")),
+                ],
+            )
+            .items(
+                "/apis/batch/v1/namespaces/staging/jobs",
+                vec![
+                    job("blind", STAGING, None),
+                    job("finished", STAGING, Some("Complete")),
+                ],
+            )
+            .refuse("/api/v1/namespaces/staging/events")
+            .listed()
+            .await;
+
+        let mut read = overview.jobs.expect("both Job lists answered").read;
+        read.sort_by(|a, b| (&a.reason, a.events_unread).cmp(&(&b.reason, b.events_unread)));
+        let count = |reason: &str, count, events_unread| JobCount {
+            reason: reason.to_string(),
+            count,
+            events_unread,
+        };
+        assert_eq!(
+            read,
+            [
+                count("Complete", 2, false),
+                count("Pending", 1, false),
+                count("Pending", 1, true),
+            ]
+        );
     }
 
     /// Prod's warning events in `pages` pages, a `continue` on all but the
     /// last; what the overview read of them, and how many pages it asked for.
-    async fn events_in_pages(pages: usize) -> ((Vec<Event>, bool), usize) {
+    async fn events_in_pages(pages: usize) -> ((Vec<Event>, Option<Stopped>), usize) {
         const EVENTS: &str = "/api/v1/namespaces/prod/events";
         let (client, hits) = answering(move |path, nth| {
             if path != EVENTS {
@@ -7439,23 +7745,29 @@ mod across_namespaces {
     /// that held no warnings as a namespace with none.
     #[tokio::test]
     async fn events_left_past_the_page_cap_leave_the_warnings_unknown() {
-        let ((events, known), asked) = events_in_pages(MAX_EVENT_PAGES + 1).await;
+        let ((events, stopped), asked) = events_in_pages(MAX_EVENT_PAGES + 1).await;
         assert_eq!(
             asked, MAX_EVENT_PAGES,
             "the cap ended the walk, not a failure"
         );
         assert_eq!(events.len(), MAX_EVENT_PAGES);
-        assert!(!known);
+        let stopped = stopped.expect("a walk the cap ended");
+        assert_eq!(
+            EventsShort::of(Some(PROD), &stopped),
+            EventsShort::Capped {
+                namespace: Some(PROD.to_string())
+            }
+        );
     }
 
     /// Would call a list unknown for using every page the cap allows, when
     /// the last of them said there was nothing after it.
     #[tokio::test]
     async fn a_list_that_ends_on_the_last_page_allowed_is_the_whole() {
-        let ((events, known), asked) = events_in_pages(MAX_EVENT_PAGES).await;
+        let ((events, stopped), asked) = events_in_pages(MAX_EVENT_PAGES).await;
         assert_eq!(asked, MAX_EVENT_PAGES);
         assert_eq!(events.len(), MAX_EVENT_PAGES);
-        assert!(known);
+        assert!(stopped.is_none());
     }
 
     /// Would draw one `NotReady` node once per namespace in scope, under as
@@ -8108,9 +8420,10 @@ mod across_namespaces {
         assert_eq!(row("run").reason, "FailedCreate");
         assert_eq!(
             overview.jobs.expect("jobs read").read,
-            [ReasonCount {
+            [JobCount {
                 reason: "FailedCreate".to_string(),
-                count: 1
+                count: 1,
+                events_unread: false,
             }]
         );
     }

@@ -506,6 +506,7 @@ fn main() {
             // Stats commands
             commands::overview::get_cluster_overview,
             commands::overview::follow_cluster_overview,
+            commands::overview::name_holder,
             // Metrics API
             commands::metrics::get_pods_metrics,
             commands::metrics::get_pods_metrics_in,

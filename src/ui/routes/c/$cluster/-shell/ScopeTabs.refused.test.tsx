@@ -63,6 +63,7 @@ setTransport(
         problemsTruncated: 0,
         unconfirmed: [],
         unread: [],
+        warningsShort: [],
         counts: { pods: cluster.breakdown ? null : 4 },
       };
     },

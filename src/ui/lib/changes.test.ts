@@ -13,7 +13,7 @@ import {
   gapsOf,
   gapWords,
   helmReleaseOf,
-  quietStretches,
+  watchedStretches,
   spansCovering,
   unwatchedWords,
   otherDifferences,
@@ -1139,17 +1139,18 @@ describe("a stretch watched with nothing recorded", () => {
       { from: T0, seenAt: T0 + 9 * MINUTE, to: T0 + 9 * MINUTE },
       { from: T0 + 10 * MINUTE, seenAt: now, to: null },
     ];
-    const rows = quietStretches(spans, [], T0 - HOUR, now);
+    const rows = watchedStretches(spans, [], T0 - HOUR, now);
     expect(rows).toEqual([
       {
         kind: "watched",
         at: T0 + 9 * MINUTE,
         gap: { from: T0, to: T0 + 9 * MINUTE },
+        quiet: true,
       },
     ]);
     const [row] = rows;
     if (row.kind !== "watched") throw new Error("not a watched row");
-    expect(gapWords(row.gap, t, clock, true)).toBe(
+    expect(gapWords(row.gap, t, clock, "quiet")).toBe(
       "Watched 00:00 to 00:09: nothing here changed"
     );
   });
@@ -1173,7 +1174,7 @@ describe("a stretch watched with nothing recorded", () => {
       },
       { from: T0 + 10 * MINUTE, seenAt: T0 + 30 * MINUTE, to: null },
     ];
-    const [row] = quietStretches(spans, [], T0 - HOUR, T0 + 30 * MINUTE);
+    const [row] = watchedStretches(spans, [], T0 - HOUR, T0 + 30 * MINUTE);
     if (row.kind !== "watched" || !row.refused)
       throw new Error("a quiet row with nothing refused");
     expect(unwatchedWords(row.refused, t, true)).toBe(
@@ -1200,7 +1201,7 @@ describe("a stretch watched with nothing recorded", () => {
           unwatchedIn: ["DaemonSet/ops"],
         },
       ];
-      const [row] = quietStretches(spans, [], T0 - HOUR, T0 + HOUR, scope);
+      const [row] = watchedStretches(spans, [], T0 - HOUR, T0 + HOUR, scope);
       return row.kind === "watched" ? (row.refused ?? null) : undefined;
     };
     expect(refusedIn(["shop"])).toBeNull();
@@ -1225,7 +1226,7 @@ describe("a stretch watched with nothing recorded", () => {
       },
       { from: T0 + 5 * MINUTE, seenAt: T0 + 9 * MINUTE, to: T0 + 9 * MINUTE },
     ];
-    const rows = quietStretches(spans, [], T0 - HOUR, T0 + HOUR);
+    const rows = watchedStretches(spans, [], T0 - HOUR, T0 + HOUR);
     expect(
       rows.map((row) =>
         row.kind === "watched" ? [row.gap.to, Boolean(row.refused)] : null
@@ -1236,11 +1237,51 @@ describe("a stretch watched with nothing recorded", () => {
     ]);
   });
 
+  /**
+   * The hour Marco was refused DaemonSets recorded a Deployment's scaling,
+   * and with a row to its name the stretch said nothing of the refusal.
+   * Fails if a stretch with rows loses the row saying what its watch was
+   * refused, if that row calls the stretch quiet, or is worded as one.
+   */
+  it("gives a stretch that recorded a change a row for what its watch was refused", () => {
+    const r: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const span = (minutes: number, unwatched?: string[]) => ({
+      from: T0,
+      seenAt: T0 + minutes * MINUTE,
+      to: T0 + minutes * MINUTE,
+      unwatched,
+    });
+    const rows = (spans: ObservedSpan[], at: number) =>
+      watchedStretches(spans, [recorded(at)], T0 - HOUR, T0 + HOUR);
+    const [row] = rows([span(9, ["DaemonSet"])], T0 + 4 * MINUTE);
+    if (row?.kind !== "watched" || !row.refused)
+      throw new Error("no row for the refusal");
+    expect(row.quiet).toBe(false);
+    expect(row.gap).toEqual({ from: T0, to: T0 + 9 * MINUTE });
+    expect(gapWords(row.gap, t, clock, "changed")).toBe(
+      "Watched 00:00 to 00:09"
+    );
+    expect(gapWords(row.gap, r, clock, "changed")).toBe(
+      "С 00:00 по 00:09 наблюдали"
+    );
+    const brief = { from: T0, to: T0 + 4_000 };
+    expect(gapWords(brief, t, clock, "changed")).toBe(
+      "Watched for 4 seconds at 00:00"
+    );
+    expect(gapWords(brief, r, clock, "changed")).toBe(
+      "Наблюдали 4 секунды в 00:00"
+    );
+    // The same stretch with no row in it is still the quiet one.
+    const [quiet] = rows([span(9, ["DaemonSet"])], T0 + 20 * MINUTE);
+    expect(quiet).toMatchObject({ kind: "watched", quiet: true });
+  });
+
   /** A stretch that recorded a change already has rows; fails if it is also called quiet. */
   it("calls no stretch quiet that recorded a change", () => {
     const spans = [{ from: T0, seenAt: T0 + 9 * MINUTE, to: T0 + 9 * MINUTE }];
     expect(
-      quietStretches(spans, [recorded(T0 + 4 * MINUTE)], T0 - HOUR, T0 + HOUR)
+      watchedStretches(spans, [recorded(T0 + 4 * MINUTE)], T0 - HOUR, T0 + HOUR)
     ).toEqual([]);
   });
 });

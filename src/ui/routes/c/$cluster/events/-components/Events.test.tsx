@@ -56,6 +56,7 @@ vi.mock("@/lib/commands", () => ({
       labels: {},
       annotations: {},
     })),
+    nameHolder: vi.fn(async (): Promise<Holder> => ({ held: "notRead" })),
     subscribeEventWatch: vi.fn(async () => "events-1"),
     resourceWatchSubscribed: vi.fn(async () => undefined),
     unsubscribeResourceWatch: vi.fn(async () => undefined),
@@ -74,7 +75,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { useLocaleStore } from "@/stores/localeStore";
-import type { EventFilters, EventInfo } from "@/generated/types";
+import type { EventFilters, EventInfo, Holder } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
 import { Events } from "./Events";
 
@@ -619,6 +620,59 @@ describe("a feed a watch keeps", () => {
         labels: {},
         annotations: {},
       });
+    }
+  });
+
+  /**
+   * The Overview called a deleted Knative Service deleted, read through
+   * discovery, while its rows and its story here linked to it as an object
+   * still there. Fails if a custom kind's rows are not marked where the
+   * cluster says nobody holds the name or another object does, or are marked
+   * where the object is the one there or the read could not say.
+   */
+  it("marks a custom kind's rows as the cluster says who holds its name", async () => {
+    layOutRows();
+    const held: Record<string, Holder> = {
+      gone: { held: "nobody" },
+      remade: { held: "by", uid: "another" },
+      live: { held: "by", uid: "uid-live" },
+      blind: { held: "notRead" },
+    };
+    vi.mocked(commands.nameHolder).mockImplementation(
+      async (_group, _kind, name) => held[name]
+    );
+    try {
+      await watched("list");
+      const names = Object.keys(held);
+      burst(
+        names.map((name, index): EventInfo => ({
+          ...event("shop", index),
+          name: `${name}.17f3`,
+          type: "Warning",
+          reason: "RevisionFailed",
+          involvedObject: {
+            apiVersion: "serving.knative.dev/v1",
+            kind: "Service",
+            name,
+            namespace: "shop",
+            uid: `uid-${name}`,
+          },
+        }))
+      );
+      const markOf = (name: string) =>
+        rowAt(names.indexOf(name))
+          ?.querySelector("[data-past]")
+          ?.getAttribute("data-past") ?? null;
+      await waitFor(() => expect(markOf("gone")).toBe("gone"));
+      expect(names.map(markOf)).toEqual(["gone", "earlier", null, null]);
+      expect(vi.mocked(commands.nameHolder)).toHaveBeenCalledWith(
+        "serving.knative.dev",
+        "Service",
+        "gone",
+        "shop"
+      );
+    } finally {
+      vi.mocked(commands.nameHolder).mockResolvedValue({ held: "notRead" });
     }
   });
 

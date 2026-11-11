@@ -1,6 +1,6 @@
 import { Eye, History } from "lucide-react";
 
-import type { ChangeItem, ObservedSpan } from "@/lib/changes";
+import type { ChangeItem, ObservedSpan, SpanCover } from "@/lib/changes";
 import {
   earlierRowsWords,
   gapWords,
@@ -67,7 +67,15 @@ export function changesScreenSection(
           at: new Date(item.at).toISOString(),
           ref: null,
           parts: [
-            { text: gapWords(item.gap, t, utcMoment, true), quiet: true },
+            {
+              text: gapWords(
+                item.gap,
+                t,
+                utcMoment,
+                item.quiet ? "quiet" : "changed"
+              ),
+              quiet: true,
+            },
             ...(refused ? [{ text: refused, quiet: false }] : []),
           ],
         },
@@ -105,9 +113,18 @@ export function changesScreenSection(
  * gap sits inside the changes list as a row, and this says the same fact
  * again as a fact nobody can scroll past.
  */
-/** The kinds the journal follows, named: a quiet stretch speaks for these and for nothing else. */
-export const journalKindsWords = (t: T): string =>
-  listWords(JOURNAL_KINDS.map(getDisplayPlural), t);
+/**
+ * The kinds the journal follows, named: a quiet stretch speaks for these and
+ * for nothing else. Without the ones `watch` was refused everywhere, which
+ * it watches nowhere and cannot call quiet.
+ */
+export const journalKindsWords = (t: T, watch?: SpanCover): string =>
+  listWords(
+    JOURNAL_KINDS.filter((kind) => !watch?.unwatched?.includes(kind)).map(
+      getDisplayPlural
+    ),
+    t
+  );
 
 export function watchedSection(
   watching: ObservedSpan | undefined,
@@ -127,7 +144,7 @@ export function watchedSection(
     quiet !== null &&
     t("changes", "nothingRecordedSince", {
       since: clock(quiet),
-      kinds: journalKindsWords(t),
+      kinds: journalKindsWords(t, watching),
     });
   const base = [since, refused, earlier, nothing].filter(Boolean).join(" · ");
   const warn = !watching || gaps > 0 || Boolean(refused);

@@ -126,6 +126,69 @@ describe("the stretches this app watched", () => {
   });
 
   /**
+   * After a restart, the hour Marco was refused DaemonSets drew a Deployment's
+   * rows and no word of the refusal: only a stretch with no rows said it.
+   * Fails if a past stretch that recorded rows stops saying what its watch
+   * was refused, on the page or in Share; if such a stretch is called quiet;
+   * or if a stretch with rows and nothing refused gets a row of its own.
+   */
+  it("says what a past stretch with rows was refused, without calling it quiet", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    const past = (ago: number, unwatched?: string[]) => ({
+      from: NOW - (ago + 9) * 60_000,
+      seenAt: NOW - ago * 60_000,
+      to: NOW - ago * 60_000,
+      unwatched,
+    });
+    const scaled = (ago: number) => ({
+      id: `scaled-${ago}`,
+      context: "prod",
+      kind: "Deployment",
+      namespace: "shop",
+      name: "web",
+      at: NOW - ago * 60_000,
+      field: "replicas" as const,
+      key: null,
+      from: "2",
+      to: "3",
+    });
+    useChangeJournalStore.setState({
+      entries: [scaled(44), scaled(24)],
+      spans: {
+        prod: [
+          past(40, ["DaemonSet"]),
+          past(20),
+          { from: NOW - 60_000, seenAt: NOW, to: null },
+        ],
+      },
+    });
+
+    const collect = await mount();
+    const refused =
+      "DaemonSet not watched across the cluster: the cluster refused";
+    const stretch = `Watched ${formatWhen(NOW - 49 * 60_000, "moment")} to ${formatWhen(NOW - 40 * 60_000, "moment")}`;
+    expect(screen.getAllByText(refused)).toHaveLength(1);
+    expect(screen.getByText(refused).parentElement).toHaveTextContent(stretch);
+    expect(screen.queryByText(/nothing here changed/)).toBeNull();
+    expect(screen.getAllByText(/^Watched /)).toHaveLength(1);
+
+    const changes = collect().find((section) => section.id === "changes");
+    const rows = changes?.body.type === "changes" ? changes.body.changes : [];
+    expect(
+      rows.filter((row) => row.parts.some((part) => part.text === refused))
+    ).toHaveLength(1);
+    expect(
+      rows.some((row) =>
+        row.parts.some((part) => part.text.includes("nothing here changed"))
+      )
+    ).toBe(false);
+  });
+
+  /**
    * Marco switched back from team-blind alone at 14:44:00 and read "since
    * 02:42 PM" on the ended stretch for 30 s beside "Watching since 14:44:00":
    * the page's clock is read to the half minute. Fails if the stretch's end
@@ -562,6 +625,49 @@ describe("a watch that has recorded nothing", () => {
       )
     );
     useLocaleStore.setState({ choice: null });
+  });
+
+  /**
+   * Refused DaemonSets, Marco read "of the Deployments, StatefulSets, and
+   * DaemonSets this app watches here, none was created" beside a lock saying
+   * DaemonSets were not watched. Fails if the quiet line, on the page or in
+   * Share, speaks for a kind its watch was refused everywhere, or drops one
+   * refused in some namespaces only, which it does watch in the rest.
+   */
+  it("does not speak for a kind the running watch was refused", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["shop", "ops"],
+    });
+    const scope = ["shop", "ops"];
+    useChangeJournalStore.setState({
+      entries: [],
+      spans: {
+        prod: [
+          {
+            ...running,
+            scope,
+            unwatched: ["DaemonSet"],
+            unwatchedIn: ["StatefulSet/ops"],
+          },
+        ],
+      },
+    });
+
+    const collect = await mount();
+    const said = screen.getByTestId("changes-quiet").textContent ?? "";
+    expect(said).toContain(
+      "of the Deployments and StatefulSets this app watches here"
+    );
+    expect(said).not.toContain("DaemonSets");
+    const watched = collect().find(
+      (section) => section.id === "changes-watched"
+    );
+    const text = watched?.body.type === "text" ? watched.body.text : "";
+    expect(text).toContain(
+      "of the Deployments and StatefulSets this app watches here"
+    );
   });
 
   /** Fails if a change the running watch recorded is denied, or one recorded before it counts as its own. */

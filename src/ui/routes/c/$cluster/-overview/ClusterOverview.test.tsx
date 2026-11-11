@@ -204,7 +204,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
   ],
   nodesKnown: true,
   warnings: [],
-  warningsKnown: true,
+  warningsShort: [],
   namespaces: [],
   counts: {
     pods: 1,

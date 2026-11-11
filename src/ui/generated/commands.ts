@@ -69,6 +69,7 @@ import type {
   HelmReleaseDetail,
   HelmRepository,
   HelmRevision,
+  Holder,
   IngressClassBinding,
   IngressHealthInput,
   IngressInfo,
@@ -369,6 +370,15 @@ export async function followClusterOverview(
   scope: string[] | null
 ): Promise<ClusterOverview | null> {
   return invoke<ClusterOverview | null>("follow_cluster_overview", { scope });
+}
+
+export async function nameHolder(
+  group: string,
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<Holder> {
+  return invoke<Holder>("name_holder", { group, kind, name, namespace });
 }
 
 export async function getControllerRevisions(

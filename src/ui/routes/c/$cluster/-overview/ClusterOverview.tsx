@@ -249,7 +249,7 @@ export function ClusterOverview() {
       )}
       <WarningsPanel
         warnings={overview.warnings}
-        known={overview.warningsKnown}
+        short={overview.warningsShort}
       />
     </div>
   );
