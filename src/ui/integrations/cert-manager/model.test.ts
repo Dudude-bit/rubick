@@ -193,6 +193,38 @@ describe("ordering by trouble", () => {
     expect(renewing.state).toEqual({ text: "renewal failing", tone: "err" });
   });
 
+  /**
+   * cert-manager writes a Certificate's Ready as True or False, so one it
+   * has not written is cert-manager not having looked: restored from a
+   * backup, every Certificate read "never issued" over a Secret that was
+   * serving. Fails if its silence reads as a refusal again.
+   */
+  it("does not call a Certificate cert-manager has not answered about never issued", () => {
+    const silent = certificate({ notAfter: null });
+    const [unwritten] = certificateRows([silent], [], [], [], t);
+    expect(unwritten.ready).toBeNull();
+    expect(unwritten.neverIssued).toBe(false);
+    expect(unwritten.state).toEqual({ text: "no status yet", tone: "warn" });
+    expect(unwritten.steps).toEqual([]);
+    expect(worstCertificateTone([silent])).toBe("warn");
+
+    const [unknown] = certificateRows(
+      [
+        resource({
+          status: {
+            conditions: [{ type: "Ready", status: "Unknown" }],
+            notAfter: inDays(60),
+          },
+        }),
+      ],
+      [],
+      [],
+      [],
+      t
+    );
+    expect(unknown.state).toEqual({ text: "no status yet", tone: "warn" });
+  });
+
   it("says nothing loud about a certificate that is simply serving", () => {
     const [row] = certificateRows(
       [certificate({ ready: true, notAfter: inDays(60) })],

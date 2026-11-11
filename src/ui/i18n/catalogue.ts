@@ -3731,6 +3731,10 @@ export const en = {
       one: "{n} certificate never issued",
       other: "{n} certificates never issued",
     },
+    factCertificatesNoStatus: {
+      one: "{n} certificate with no status yet",
+      other: "{n} certificates with no status yet",
+    },
     certOverdueBy: "{span} overdue",
     certNeverIssuedShort: "never issued",
     certRenewalFailing: "renewal failing",

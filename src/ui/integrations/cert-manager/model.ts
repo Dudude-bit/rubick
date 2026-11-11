@@ -60,7 +60,8 @@ export interface CertRow {
   expiry: Expiry | null;
   renewalTime: string | null;
   failedAttempts: number | null;
-  ready: boolean;
+  /** `null` where cert-manager has written no `Ready`, or `Unknown`. */
+  ready: boolean | null;
   /** cert-manager is trying to issue or renew right now. */
   inFlight: boolean;
   /** No certificate has ever been written to the Secret. */
@@ -313,7 +314,7 @@ function walk(
 function stateOfCertificate(
   row: {
     neverIssued: boolean;
-    ready: boolean;
+    ready: boolean | null;
     inFlight: boolean;
     expiry: Expiry | null;
     failure: string | null;
@@ -337,7 +338,7 @@ function stateOfCertificate(
   // Still serving, and cert-manager cannot replace it. The old certificate
   // has until `notAfter` to be fixed, which is why this is not an outage and
   // is still the loudest thing on a healthy-looking row.
-  if (!row.ready || (row.inFlight && row.failure)) {
+  if (row.ready === false || (row.inFlight && row.failure)) {
     return {
       text: t("readings", "certRenewalFailing"),
       tone: "err",
@@ -360,6 +361,9 @@ function stateOfCertificate(
   }
   if (row.inFlight)
     return { text: t("readings", "certRenewing"), tone: "warn", rank: 5 };
+  // cert-manager has said neither yes nor no, so neither does the row.
+  if (row.ready === null)
+    return { text: t("empty", "noStatusYet"), tone: "warn", rank: 5 };
   return {
     text: row.expiry ? expiryText(row.expiry, t) : t("readings", "certIssued"),
     tone: "ok",
@@ -387,15 +391,17 @@ export function certificateRows(
       const notAfter = text(certificate, "status.notAfter");
       const notBefore = text(certificate, "status.notBefore");
       const renewalTime = text(certificate, "status.renewalTime");
-      const isReady = ready?.status === "True";
-      const inFlight = issuing?.status === "True" || !isReady;
+      // cert-manager writes this Ready as True or False. Absent, it has
+      // not looked: nothing was refused and there is no walk to draw.
+      const isReady = conditionSays(ready);
+      const inFlight = issuing?.status === "True" || isReady === false;
 
       const { steps, failure } = inFlight
         ? walk(certificate, requests, orders, challenges)
         : { steps: [], failure: null };
 
       const row = {
-        neverIssued: !isReady && notAfter === null,
+        neverIssued: isReady === false && notAfter === null,
         ready: isReady,
         inFlight,
         expiry:

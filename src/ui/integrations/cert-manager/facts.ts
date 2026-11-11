@@ -46,9 +46,16 @@ export async function facts(): Promise<VendorFact[]> {
   const failingRenewal: CustomResourceInfo[] = [];
   const neverIssued: CustomResourceInfo[] = [];
 
+  // cert-manager writes Ready as True or False; anything else is its
+  // silence, and counts as neither failure.
+  let unanswered = 0;
+
   for (const certificate of certificates) {
-    if (readyStatus(certificate) === "True") {
+    const says = readyStatus(certificate);
+    if (says === "True") {
       ready.push(certificate);
+    } else if (says !== "False") {
+      unanswered += 1;
     } else if (textAt(certificate, "status.notAfter")) {
       failingRenewal.push(certificate);
     } else {
@@ -119,6 +126,13 @@ export async function facts(): Promise<VendorFact[]> {
     lines.push({
       say: { key: "factNeverIssued", values: { n: neverIssued.length } },
       tone: "err",
+    });
+  }
+
+  if (unanswered > 0) {
+    lines.push({
+      say: { key: "factCertificatesNoStatus", values: { n: unanswered } },
+      tone: "warn",
     });
   }
 
