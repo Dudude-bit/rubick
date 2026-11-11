@@ -27,13 +27,13 @@ vi.mock("@tanstack/react-query", () => ({
   },
 }));
 
-const { useOperator } = await import("./data");
+const { allowedOn, useOperator } = await import("./data");
 
 /** The queryFn as `useQuery` would call it, without React. */
 function useOperatorRead(
-  namespaces: readonly string[] = []
+  clusters: readonly { namespace: string; name: string }[] = []
 ): () => Promise<unknown> {
-  useOperator(namespaces);
+  useOperator(clusters);
   const fn = lastQueryFn.current;
   if (!fn) throw new Error("useOperator did not register a queryFn");
   return fn;
@@ -102,42 +102,68 @@ describe("useOperator", () => {
   });
 
   /**
-   * A `SelfSubjectAccessReview` with no namespace asks "in EVERY namespace",
-   * and a reader granted `patch clusters` in their own namespace answers no.
-   * Asked only that way, every action on their own cluster came up disabled
-   * saying the cluster refuses it. The verbs are asked where the Clusters are.
+   * A Role may grant `patch` on one named Cluster, and RBAC answers no to
+   * the nameless question for it: asked per namespace, every action on the
+   * one Cluster the reader may act on came up refused. Patch is asked of
+   * each Cluster by name; a create has no name to match and is asked per
+   * namespace. Fails if the name leaves the question.
    */
-  it("asks the verbs in each namespace a cluster was found in", async () => {
+  it("asks patch of each Cluster by name, and create in each namespace", async () => {
     listDeployments.mockResolvedValue([deployment()]);
-    // cluster-wide: no. shop: yes. billing: no.
     checkAccess.mockResolvedValue([
+      // Cluster-wide: no to both.
       { allowed: false },
+      { allowed: false },
+      // billing/ledger: no. shop/orders: yes.
       { allowed: false },
       { allowed: true },
+      // Backups in billing: yes. In shop: the review would not say.
       { allowed: true },
-      { allowed: false },
-      { allowed: false },
+      { allowed: null },
     ]);
-    const info = (await useOperatorRead(["shop", "billing"])()) as {
-      canPatchClusters: boolean | null;
-      patchIn: Map<string | null, boolean | null>;
-      createIn: Map<string | null, boolean | null>;
-    };
-    const asked = checkAccess.mock.lastCall?.[0] as {
-      namespace: string | null;
-    }[];
-    expect(asked.map((q) => q.namespace)).toEqual([
-      null,
-      null,
-      "billing",
-      "billing",
-      "shop",
-      "shop",
-    ]);
-    expect(info.canPatchClusters).toBe(false);
-    expect(info.patchIn.get("billing")).toBe(true);
-    expect(info.patchIn.get("shop")).toBe(false);
-    expect(info.createIn.get("billing")).toBe(true);
+    const orders = { namespace: "shop", name: "orders" };
+    const ledger = { namespace: "billing", name: "ledger" };
+    const info = (await useOperatorRead([orders, ledger])()) as Parameters<
+      typeof allowedOn
+    >[0];
+    const asked = checkAccess.mock.lastCall?.[0] as Record<string, unknown>[];
+    expect(asked.map((q) => [q.verb, q.resource, q.namespace, q.name])).toEqual(
+      [
+        ["patch", "clusters", null, undefined],
+        ["create", "backups", null, undefined],
+        ["patch", "clusters", "billing", "ledger"],
+        ["patch", "clusters", "shop", "orders"],
+        ["create", "backups", "billing", undefined],
+        ["create", "backups", "shop", undefined],
+      ]
+    );
+    expect(info?.canPatchClusters).toBe(false);
+    expect(allowedOn(info, orders)).toEqual({
+      patchClusters: true,
+      createBackups: null,
+    });
+    expect(allowedOn(info, ledger)).toEqual({
+      patchClusters: false,
+      createBackups: true,
+    });
+  });
+
+  /**
+   * The cluster-wide "no" says nothing of one Cluster: read as its answer,
+   * it refused a Cluster nobody had asked about. Fails if a Cluster with no
+   * answer of its own borrows the cluster-wide one.
+   */
+  it("does not answer for a Cluster it did not ask about", async () => {
+    listDeployments.mockResolvedValue([deployment()]);
+    checkAccess.mockResolvedValue([{ allowed: false }, { allowed: false }]);
+    const info = (await useOperatorRead()()) as Parameters<typeof allowedOn>[0];
+    expect(allowedOn(info, { namespace: "shop", name: "orders" })).toEqual({
+      patchClusters: null,
+      createBackups: null,
+    });
+    expect(allowedOn(undefined, { namespace: "shop", name: "orders" })).toEqual(
+      { patchClusters: null, createBackups: null }
+    );
   });
 
   /**

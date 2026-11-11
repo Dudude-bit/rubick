@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
+import { askAccess, type Asked } from "@/lib/access";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -78,10 +79,10 @@ export interface OperatorInfo {
   managerKnown: boolean;
   managerReason: string | null;
   version: string | null;
-  /** Cluster-wide; a `false` here is not "you may not act" — see `patchIn`. */
+  /** Cluster-wide; a `false` here is not "you may not act" — see `patchOn`. */
   canPatchClusters: boolean | null;
-  /** The same verb, per namespace a ScyllaCluster was found in. */
-  patchIn: AllowedIn;
+  /** The same verb, of each ScyllaCluster by name. */
+  patchOn: Map<string, boolean | null>;
   checkedAt: number;
 }
 
@@ -121,42 +122,55 @@ const byLabel = (labelSelector: string) =>
   );
 
 /**
- * Whether the reader may patch, per namespace they have a ScyllaCluster in.
+ * Whether the reader may patch, asked of each ScyllaCluster they have.
  *
  * A `SelfSubjectAccessReview` with no namespace asks "in every namespace",
- * which an ordinary namespace-scoped grant answers no to — and every knob on
- * their own cluster then came up disabled saying the cluster refuses it.
+ * and one with no name asks "whatever it is called": a grant in one
+ * namespace, or on one named cluster, answers no to those — and every knob
+ * on their own cluster then came up disabled saying the cluster refuses it.
  */
-export type AllowedIn = Map<string | null, boolean | null>;
-
-function allowedIn(
-  answers: { allowed: boolean | null }[] | null,
-  namespaces: (string | null)[]
-): AllowedIn {
-  const out: AllowedIn = new Map();
-  namespaces.forEach((ns, i) => out.set(ns, answers?.[i]?.allowed ?? null));
-  return out;
+interface Named {
+  namespace: string;
+  name: string;
 }
 
-export function useOperator(namespaces: readonly string[] = []) {
+const keyOf = (cluster: Named) => `${cluster.namespace}/${cluster.name}`;
+
+/**
+ * Whether the reader may patch one ScyllaCluster. `null` where the review
+ * would not say or was not asked about it: the cluster-wide answer is not
+ * this one's.
+ */
+export function patchAllowedOn(
+  operator: OperatorInfo | undefined,
+  cluster: Named
+): boolean | null {
+  return operator?.patchOn.get(keyOf(cluster)) ?? null;
+}
+
+export function useOperator(clusters: readonly Named[] = []) {
   const context = useClusterStore((state) => state.currentContext);
-  const scopes: (string | null)[] = [null, ...[...new Set(namespaces)].sort()];
+  const keys = [...new Set(clusters.map(keyOf))].sort();
   return useQuery({
-    queryKey: [context, "scylla", "operator", scopes.join(",")],
+    queryKey: [context, "scylla", "operator", keys.join(",")],
     queryFn: async (): Promise<OperatorInfo> => {
+      const patch = {
+        group: GROUP,
+        resource: "scyllaclusters",
+        verb: "patch",
+      } as const;
+      const asked: Asked[] = [
+        // Cluster-wide first, for the Operator tab: every one, so no name.
+        { ...patch, namespace: null, name: null },
+        ...keys.map((key) => {
+          const [namespace, name] = key.split("/");
+          return { ...patch, namespace, name };
+        }),
+      ];
       const [operators, managers, access] = await Promise.all([
         byLabel(OPERATOR_SELECTOR),
         byLabel(MANAGER_SELECTOR),
-        commands
-          .checkAccess(
-            scopes.map((namespace) => ({
-              group: GROUP,
-              resource: "scyllaclusters",
-              verb: "patch",
-              namespace,
-            }))
-          )
-          .catch(() => null),
+        askAccess(asked).catch(() => null),
       ]);
       const operator = operators.ok ? controllerOf(operators.items[0]) : null;
       return {
@@ -171,8 +185,10 @@ export function useOperator(namespaces: readonly string[] = []) {
         managerKnown: managers.ok,
         managerReason: managers.ok ? null : managers.reason,
         version: versionOf(operator?.image ?? null),
-        canPatchClusters: access?.[0]?.allowed ?? null,
-        patchIn: allowedIn(access, scopes),
+        canPatchClusters: access?.[0] ?? null,
+        patchOn: new Map(
+          keys.map((key, at) => [key, access?.[1 + at] ?? null])
+        ),
         checkedAt: Date.now(),
       };
     },

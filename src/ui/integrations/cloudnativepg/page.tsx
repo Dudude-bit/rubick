@@ -30,6 +30,7 @@ import {
   BACKUPS_CRD,
   CLUSTERS_CRD,
   POOLERS_CRD,
+  allowedOn,
   useClusters,
   useCompanions,
   useOperator,
@@ -78,14 +79,10 @@ export default function CloudNativePgPage() {
     () => byTrouble((clustersQuery.data ?? []).map(readCluster)),
     [clustersQuery.data]
   );
-  // The verbs are asked where the Clusters actually are: a reader granted
-  // `patch clusters` in one namespace answers "no" to the cluster-wide
-  // question, and every button on their own cluster went dead.
-  const namespaces = useMemo(
-    () => [...new Set(clusters.map((c) => c.namespace))].sort(),
-    [clusters]
-  );
-  const operator = useOperator(namespaces);
+  // The verbs are asked of the Clusters themselves: a reader granted
+  // `patch clusters` in one namespace, or on one named Cluster, answers
+  // "no" to the wider question, and every button on their own went dead.
+  const operator = useOperator(clusters);
 
   if (clustersQuery.error) {
     return (
@@ -382,18 +379,7 @@ function ClusterRow({
   const schedules = companions
     ? schedulesOf(cluster, companions.scheduled)
     : null;
-  const actions = actionsFor(cluster, {
-    // The answer for this cluster's own namespace, falling back to the
-    // cluster-wide one only when there is no per-namespace answer.
-    patchClusters:
-      operator?.patchIn.get(cluster.namespace) ??
-      operator?.canPatchClusters ??
-      null,
-    createBackups:
-      operator?.createIn.get(cluster.namespace) ??
-      operator?.canCreateBackups ??
-      null,
-  });
+  const actions = actionsFor(cluster, allowedOn(operator, cluster));
 
   const run = async (action: PgAction) => {
     setBusy(true);
