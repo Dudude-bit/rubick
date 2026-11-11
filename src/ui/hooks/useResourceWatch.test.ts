@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
+import {
+  afterEach,
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+} from "vite-plus/test";
 import { renderHook, waitFor } from "@testing-library/react";
 import {
   QueryClient,
@@ -728,6 +735,80 @@ describe("useResourceWatch", () => {
     expect(onError).toHaveBeenCalledWith(
       expect.stringContaining("dropped 37 updates")
     );
+  });
+
+  describe("a stream the bridge dropped events of", () => {
+    afterEach(() => {
+      subscribeMock.mockImplementation(async () => "stream-cm-1");
+    });
+
+    async function lagged(client: QueryClient) {
+      const onError = vi.fn();
+      const onRecovered = vi.fn();
+      let streams = 0;
+      subscribeMock.mockImplementation(async () => `stream-cm-${++streams}`);
+      renderHook(
+        () =>
+          useResourceWatch<Item>({
+            enabled: true,
+            subscribe: subscribeMock,
+            queryKey: KEY,
+            onError,
+            onRecovered,
+          }),
+        { wrapper: makeWrapper(client) }
+      );
+      await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+      listeners["event-bridge-lagged"]?.({
+        payload: { channel: "event-bridge-lagged", missed: 1200 },
+      });
+      expect(onError).toHaveBeenCalledTimes(1);
+      return { onRecovered };
+    }
+
+    /**
+     * The stream's remaining events arrived milliseconds after the lag and
+     * the first of them ended the failure: the list was "live" again before
+     * its first poll, short of every change the bridge had dropped. Fails if
+     * an event of that stream is taken for the watch recovering, or applied.
+     */
+    it("does not take that stream's next event for a recovery", async () => {
+      const client = new QueryClient();
+      seed(client, [{ name: "a" }, { name: "b" }]);
+      const { onRecovered } = await lagged(client);
+
+      emit("stream-cm-1", "deleted", { name: "a" });
+      expect(onRecovered).not.toHaveBeenCalled();
+      expect(rowsIn(client)).toEqual([{ name: "a" }, { name: "b" }]);
+    });
+
+    /**
+     * Nothing sends a dropped change again, so a row whose delete was
+     * dropped stayed for good. Fails if the collection is not listed again
+     * by a new stream, if the old one is left running, or if the list is
+     * not live again once the new one answers.
+     */
+    it("lists the collection again on a new stream, which is what ends the failure", async () => {
+      const client = new QueryClient();
+      seed(client, [{ name: "a" }, { name: "b" }]);
+      const { onRecovered } = await lagged(client);
+
+      await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+      expect(subscribedCalls[1].streamId).toBe("stream-cm-2");
+      expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith(
+        "stream-cm-1"
+      );
+      expect(onRecovered).not.toHaveBeenCalled();
+
+      emitBatch("stream-cm-2", [
+        { op: "restarted", resource: null },
+        { op: "applied", resource: { name: "b" } },
+        { op: "applied", resource: { name: "c" } },
+        { op: "synced", resource: null },
+      ]);
+      expect(onRecovered).toHaveBeenCalledTimes(1);
+      expect(rowsIn(client)).toEqual([{ name: "b" }, { name: "c" }]);
+    });
   });
 
   it("calls onRecovered exactly once when a non-failed event follows a failed one", async () => {

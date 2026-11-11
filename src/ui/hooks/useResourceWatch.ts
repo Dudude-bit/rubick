@@ -128,6 +128,8 @@ export function useResourceWatch<
   const queryClient = useQueryClient();
   const renewals = useRenewals();
   const [resyncing, setResyncing] = useState(false);
+  // Counts the streams the bridge dropped events of: each is subscribed again.
+  const [dropped, setDropped] = useState(0);
   // Outlives the stream: a renewal or re-enable subscribes again under the
   // same key, and only an answer may end the failure the consumer was told of.
   const failedFor = useRef<QueryKey | null>(null);
@@ -173,6 +175,8 @@ export function useResourceWatch<
     let active = true;
     let streamId: string | null = null;
     let unlisten: (() => void) | null = null;
+    // The bridge dropped events of this stream: nothing more of it is taken.
+    let over = false;
     // Tracks whether the last stream state was a failure, so `onRecovered`
     // fires once per failure→recovery transition and not on every event.
     let inFailedState = failedFor.current === queryKey;
@@ -291,7 +295,7 @@ export function useResourceWatch<
 
         const off = await listenResourceEvents<T>((event) => {
           const payload = event.payload;
-          if (payload.stream_id !== id) return;
+          if (payload.stream_id !== id || over) return;
           if (payload.changes.some((change) => change.op === "failed")) {
             fail();
             abandonResync();
@@ -411,15 +415,24 @@ export function useResourceWatch<
         // is live. Same treatment as a failed stream: say so, drop the badge,
         // start polling again.
         const offLagged = await listenEvent("event-bridge-lagged", (event) => {
+          if (over) return;
           fail();
           // A resync missing an unknown number of its own rows is not a
           // state to swap in — committing it would delete rows that exist.
           abandonResync();
+          // A read out now is truer than rows short of what was dropped.
+          missed = null;
           onErrorRef.current?.(
             tRef.current("action", "eventBridgeLagged", {
               n: event.payload.missed,
             })
           );
+          // Nothing sends again what the bridge dropped, and this stream's
+          // next event would end the failure over a list still short of it.
+          // So the stream is over, and another lists the collection whole:
+          // the first thing that one says is what ends the failure.
+          over = true;
+          setDropped((n) => n + 1);
         });
 
         if (!active) {
@@ -463,7 +476,7 @@ export function useResourceWatch<
     // is correct — the watch belongs to that key.
     // `renewals`: a watch is handed a `kube::Client` once and holds it, so a
     // background renewal leaves this one on credentials about to be refused.
-  }, [enabled, subscribe, queryClient, queryKey, renewals]);
+  }, [enabled, subscribe, queryClient, queryKey, renewals, dropped]);
 
   return { resyncing };
 }
