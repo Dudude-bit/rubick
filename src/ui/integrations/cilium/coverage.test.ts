@@ -397,6 +397,38 @@ describe("what covers an endpoint", () => {
   });
 });
 
+describe("what the join costs", () => {
+  /**
+   * Every policy was parsed again for every endpoint, so the join grew as
+   * endpoints × policies. Fails if a policy's spec is read once more for
+   * each endpoint it is asked about.
+   */
+  it("reads a policy once, however many endpoints it is asked about", () => {
+    const readsFor = (endpoints: number) => {
+      let reads = 0;
+      const counted = {
+        ...policy("shop", null),
+        get spec() {
+          reads += 1;
+          return {
+            endpointSelector: { matchLabels: { app: "api" } },
+            ...RULES,
+          };
+        },
+      } as CustomResourceInfo;
+      const rows = coverageOf(
+        Array.from({ length: endpoints }, () => API),
+        [counted],
+        [counted],
+        NONE
+      );
+      expect(rows.every((row) => row.verdict === "covered")).toBe(true);
+      return reads;
+    };
+    expect(readsFor(40)).toBe(readsFor(1));
+  });
+});
+
 describe("the standard NetworkPolicies Cilium also enforces", () => {
   /**
    * Cilium enforces `networking.k8s.io` NetworkPolicy. Read only through its

@@ -12,7 +12,7 @@ import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ROUTING_STALE } from "../ingress";
-import { coverageOf, type KubernetesPolicies } from "./coverage";
+import { coverageOf, type Coverage, type KubernetesPolicies } from "./coverage";
 import type { CustomResourceInfo } from "@/generated/types";
 
 export const GROUP = "cilium.io";
@@ -70,13 +70,24 @@ export async function fetchPicture(): Promise<Picture> {
   return { policies, clusterwide, endpoints, kubernetes };
 }
 
-export function pictureCoverage(picture: Picture) {
-  return coverageOf(
-    picture.endpoints,
-    picture.policies,
-    picture.clusterwide,
-    picture.kubernetes
-  );
+const JOINED = new WeakMap<Picture, Coverage[]>();
+
+/**
+ * The join, made once per picture: the sidebar's number, its dot and the
+ * page all read it, and each used to run it again for itself.
+ */
+export function pictureCoverage(picture: Picture): Coverage[] {
+  let coverage = JOINED.get(picture);
+  if (!coverage) {
+    coverage = coverageOf(
+      picture.endpoints,
+      picture.policies,
+      picture.clusterwide,
+      picture.kubernetes
+    );
+    JOINED.set(picture, coverage);
+  }
+  return coverage;
 }
 
 export const PICTURE_KEY = ["cilium", "picture"] as const;

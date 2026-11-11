@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { CustomResourceInfo } from "@/generated/types";
-import { GROUP, KINDS, countUnrestricted, coverageTone } from "./data";
+import {
+  GROUP,
+  KINDS,
+  countUnrestricted,
+  coverageTone,
+  pictureCoverage,
+} from "./data";
 
 describe("the kinds this vendor asks the cluster for", () => {
   /**
@@ -86,6 +92,32 @@ describe("the sidebar's number for Cilium", () => {
     expect(coverageTone(picture)).toBeNull();
     // And it is the selector that covers it, not an empty picture.
     expect(countUnrestricted({ ...picture, policies: [] })).toBe(1);
+  });
+
+  /**
+   * The page, the number and the dot read one join: at 5000 pods it is too
+   * slow to run three times. Fails if a picture is joined again per reader,
+   * or if a new picture is answered with the old one's rows.
+   */
+  it("joins a picture once, and a new picture again", () => {
+    const picture = {
+      endpoints: [
+        {
+          name: "api",
+          namespace: "shop",
+          kind: "CiliumEndpoint",
+          spec: null,
+          status: { identity: { id: 1, labels: ["k8s:app=api"] } },
+        } as CustomResourceInfo,
+      ],
+      policies: [],
+      clusterwide: [],
+      kubernetes: { read: true as const, policies: [], unread: [] },
+    };
+    expect(pictureCoverage(picture)).toBe(pictureCoverage(picture));
+    const refetched = { ...picture, endpoints: [] };
+    expect(pictureCoverage(refetched)).toEqual([]);
+    expect(pictureCoverage(picture)).toHaveLength(1);
   });
 
   /**

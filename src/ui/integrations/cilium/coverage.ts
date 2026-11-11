@@ -86,12 +86,20 @@ export function selects(
   selector: unknown,
   sourced: Map<string, string>
 ): boolean | null {
+  return matcherOf(selector)?.(sourced) ?? null;
+}
+
+type Matcher = (sourced: Map<string, string>) => boolean;
+
+/** A selector read once, to be asked of every endpoint; `null` as above. */
+function matcherOf(selector: unknown): Matcher | null {
   if (selector === undefined || selector === null) return null;
-  const requirements = requirementsOf(selector as LabelSelector);
-  if (requirements === null) return null;
-  return requirements.every((requirement) =>
-    holds({ ...requirement, key: sourcedKey(requirement.key) }, sourced)
+  const requirements = requirementsOf(selector as LabelSelector)?.map(
+    (requirement) => ({ ...requirement, key: sourcedKey(requirement.key) })
   );
+  if (!requirements) return null;
+  return (sourced) =>
+    requirements.every((requirement) => holds(requirement, sourced));
 }
 
 export type Direction = "ingress" | "egress";
@@ -188,77 +196,115 @@ function stateOf(
   return "unrestricted";
 }
 
+/** A Cilium policy read once; `picks` is `null` where its rules are unread. */
+interface Prepared {
+  picks: Matcher | null;
+  selecting: Selecting;
+}
+
+/** `null` for a host policy: nodes, never an endpoint, a known "no". */
+function prepare(
+  policy: CustomResourceInfo,
+  isClusterwide: boolean
+): Prepared | null {
+  if (selectsNodes(policy)) return null;
+  const spec = policy.spec;
+  return {
+    picks:
+      typeof spec === "object" && spec !== null
+        ? matcherOf((spec as Record<string, unknown>).endpointSelector)
+        : null,
+    selecting: {
+      kind: policy.kind,
+      name: policy.name,
+      namespace: policy.namespace,
+      clusterwide: isClusterwide,
+      enforcement: enforcementOf(policy).state,
+      restricts: ciliumRestricts(policy),
+    },
+  };
+}
+
+function byNamespace<T, V>(
+  items: T[],
+  namespaceOf: (item: T) => string | null,
+  read: (item: T) => V | null
+): Map<string | null, V[]> {
+  const groups = new Map<string | null, V[]>();
+  for (const item of items) {
+    const value = read(item);
+    if (value === null) continue;
+    const namespace = namespaceOf(item);
+    const group = groups.get(namespace);
+    if (group) group.push(value);
+    else groups.set(namespace, [value]);
+  }
+  return groups;
+}
+
 export function coverageOf(
   endpoints: CustomResourceInfo[],
   policies: CustomResourceInfo[],
   clusterwide: CustomResourceInfo[],
   kubernetes: KubernetesPolicies
 ): Coverage[] {
+  // Each policy is read once and asked only of its own namespace. Read per
+  // endpoint, this was endpoints × every policy in the cluster.
+  // ponytail: still one synchronous pass, ~70 ms at 5000 endpoints; a worker
+  // if the rig says the picture's arrival stalls.
+  const namespaced = byNamespace(
+    policies,
+    (policy) => policy.namespace,
+    (policy) => prepare(policy, false)
+  );
+  const everywhere = clusterwide.flatMap(
+    (policy) => prepare(policy, true) ?? []
+  );
+  const kubernetesIn = byNamespace(
+    kubernetes.read ? kubernetes.policies : [],
+    (policy) => policy.namespace,
+    (policy) => policy
+  );
+
   return endpoints.map((endpoint) => {
     const labels = labelsOf(endpoint);
     const sourced = sourcedLabelsOf(endpoint);
     const selecting: Selecting[] = [];
     let unreadable = 0;
 
-    const consider = (policy: CustomResourceInfo, isClusterwide: boolean) => {
-      if (!isClusterwide && policy.namespace !== endpoint.namespace) return;
-      // Nodes, never an endpoint: a known "no", not an unread rule.
-      if (selectsNodes(policy)) return;
-      const spec = policy.spec;
-      if (typeof spec !== "object" || spec === null) {
-        unreadable += 1;
-        return;
-      }
-      const answer = selects(
-        (spec as Record<string, unknown>).endpointSelector,
-        sourced
-      );
-      if (answer === null) {
-        unreadable += 1;
-        return;
-      }
-      if (!answer) return;
-      selecting.push({
-        kind: policy.kind,
-        name: policy.name,
-        namespace: policy.namespace,
-        clusterwide: isClusterwide,
-        enforcement: enforcementOf(policy).state,
-        restricts: ciliumRestricts(policy),
-      });
+    const consider = (one: Prepared) => {
+      if (one.picks === null) unreadable += 1;
+      else if (one.picks(sourced)) selecting.push(one.selecting);
     };
-
-    for (const policy of policies) consider(policy, false);
-    for (const policy of clusterwide) consider(policy, true);
+    namespaced.get(endpoint.namespace)?.forEach(consider);
+    everywhere.forEach(consider);
 
     const kubernetesUnread = kubernetesUnreadFor(
       kubernetes,
       endpoint.namespace
     );
-    if (kubernetes.read) {
-      for (const policy of kubernetes.policies) {
-        const answer = selectsPod(policy, {
-          namespace: endpoint.namespace,
-          labels,
-        });
-        if (answer === null) {
-          unreadable += 1;
-          continue;
-        }
-        if (!answer) continue;
-        selecting.push({
-          kind: "NetworkPolicy",
-          name: policy.name,
-          namespace: policy.namespace,
-          clusterwide: false,
-          // Nothing reports a NetworkPolicy as rejected: Cilium enforces it.
-          enforcement: "accepted",
-          restricts: {
-            ingress: policy.ingress.governed,
-            egress: policy.egress.governed,
-          },
-        });
+    for (const policy of kubernetesIn.get(endpoint.namespace) ?? []) {
+      const answer = selectsPod(policy, {
+        namespace: endpoint.namespace,
+        labels,
+      });
+      if (answer === null) {
+        unreadable += 1;
+        continue;
       }
+      if (!answer) continue;
+      selecting.push({
+        kind: "NetworkPolicy",
+        name: policy.name,
+        namespace: policy.namespace,
+        clusterwide: false,
+        // Nothing reports a NetworkPolicy as rejected: Cilium enforces it.
+        enforcement: "accepted",
+        restricts: {
+          ingress: policy.ingress.governed,
+          egress: policy.egress.governed,
+        },
+      });
     }
 
     const undecided = unreadable > 0 || kubernetesUnread !== null;
