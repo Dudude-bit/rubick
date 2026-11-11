@@ -5159,6 +5159,7 @@ export const en = {
     retry: "Try again",
     groupUnread: "discovery did not answer",
     syncing: "still listing",
+    queued: "waiting its turn: too many kinds to watch at once",
     range: "{from}–{to} of {total}",
     previousPage: "Previous page",
     nextPage: "Next page",

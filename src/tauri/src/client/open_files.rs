@@ -31,6 +31,17 @@ pub fn raise() {
     }
 }
 
+/// How many files this process may hold open; `None` where nothing says.
+#[must_use]
+pub fn allowed() -> Option<u64> {
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: getrlimit(2) writes the struct it is handed and nothing else.
+    (unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut limit) } == 0).then_some(limit.rlim_cur)
+}
+
 /// The soft limit to ask for; `None` where the one held is already as high.
 fn raised(soft: libc::rlim_t, hard: libc::rlim_t) -> Option<libc::rlim_t> {
     let wanted = WANTED.min(hard);

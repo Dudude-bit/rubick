@@ -125,6 +125,7 @@ export const readWhereTheyLive = (
 /** Which readings mean the index never watches the kind. A new one fails the compiler. */
 const LEFT_OUT: Record<Reading["says"], boolean> = {
   syncing: false,
+  queued: false,
   stale: false,
   refused: false,
   partial: false,

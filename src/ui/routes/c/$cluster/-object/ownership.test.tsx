@@ -355,6 +355,35 @@ describe("what an object owns", () => {
   });
 
   /**
+   * A kind past the app's ceiling on watches was never asked, which is not
+   * "read, and nothing there". Fails if it is left out of the kinds that
+   * could hide a dependent, or is not named with why.
+   */
+  it("counts a kind still waiting for a watch among those not read", async () => {
+    answers.dependents = () =>
+      Promise.resolve({
+        dependents: [],
+        notRead: {
+          kinds: [
+            {
+              kind: "Widget",
+              group: "demo.example.com",
+              plural: "widgets",
+              reading: { says: "queued" },
+            },
+          ],
+          groups: [],
+          watched: 301,
+        },
+      });
+    await renderWithRouter(<OwnsPanel uid="d" namespace="shop" />);
+    expect(
+      await screen.findByText("1 kind not read in full")
+    ).toBeInTheDocument();
+    expect(chipOf("Widget")).toHaveTextContent("waiting its turn");
+  });
+
+  /**
    * An Argo Workflow's 5000 step pods came in one answer and were all drawn
    * as rows. Fails if more than the page answered is drawn, if the rest are
    * not counted, or if the next page cannot be reached.

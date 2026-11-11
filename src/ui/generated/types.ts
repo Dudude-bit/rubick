@@ -2784,6 +2784,7 @@ export type Holds =
 
 export type Reading =
   | { says: "syncing" }
+  | { says: "queued" }
   | { says: "stale"; since: string }
   | { says: "refused"; message: string }
   | { says: "partial"; namespaces: string[] }

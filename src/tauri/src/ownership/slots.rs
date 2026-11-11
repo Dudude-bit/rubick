@@ -9,6 +9,7 @@ use kube::api::{Api, DynamicObject};
 use kube::core::PartialObjectMeta;
 use kube::discovery::ApiResource;
 use kube::runtime::watcher::{self, Event};
+use tokio_util::sync::CancellationToken;
 use tracing::Level;
 
 use super::graph::{Node, OwnerLink, SlotKey};
@@ -25,12 +26,39 @@ type Meta = PartialObjectMeta<DynamicObject>;
 pub(super) fn spawn(index: &Arc<ClusterIndex>, slot: SlotKey, resource: ApiResource) {
     let known = index.refusals.lock().get(&slot).cloned();
     if let Some(message) = known {
-        index.refused(&slot, message);
+        index.refused(&slot, message, None);
         return;
     }
-    index.slots.lock().insert(slot.clone(), SlotState::Syncing);
+    let stop = index.stop.child_token();
+    let free = index.watches.clone().try_acquire_owned().ok();
+    {
+        let mut slots = index.slots.lock();
+        let mut stops = index.stops.lock();
+        if stops.contains_key(&slot) {
+            return;
+        }
+        stops.insert(slot.clone(), stop.clone());
+        let state = if free.is_some() {
+            SlotState::Syncing
+        } else {
+            SlotState::Queued
+        };
+        slots.insert(slot.clone(), state);
+    }
     let index = index.clone();
     tokio::spawn(async move {
+        let _watching = if let Some(permit) = free {
+            permit
+        } else {
+            let freed = tokio::select! {
+                biased;
+                () = stop.cancelled() => return,
+                freed = index.watches.clone().acquire_owned() => freed,
+            };
+            let Ok(permit) = freed else { return };
+            index.started(&slot, &stop);
+            permit
+        };
         let api: Api<Meta> = match &slot.namespace {
             Some(namespace) => Api::namespaced_with(index.client.clone(), namespace, &resource),
             None => Api::all_with(index.client.clone(), &resource),
@@ -38,7 +66,7 @@ pub(super) fn spawn(index: &Arc<ClusterIndex>, slot: SlotKey, resource: ApiResou
         let config = watcher::Config::default()
             .page_size(PAGE_SIZE)
             .timeout(WATCH_TIMEOUT_SECS);
-        let mut streak = Streak::default();
+        let mut failures = Streak::default();
         // After a failure the kind is listed afresh: kube's resumed watch says
         // nothing when it succeeds, so the slot stayed stale for good.
         'list: loop {
@@ -47,28 +75,28 @@ pub(super) fn spawn(index: &Arc<ClusterIndex>, slot: SlotKey, resource: ApiResou
             loop {
                 let next = tokio::select! {
                     biased;
-                    () = index.stop.cancelled() => break 'list,
+                    () = stop.cancelled() => break 'list,
                     next = stream.next() => next,
                 };
                 match next {
                     Some(Ok(event)) => {
                         if matches!(event, Event::InitDone) {
-                            streak.live(Instant::now());
+                            failures.live(Instant::now());
                         }
-                        index.saw(&slot, &resource, event);
+                        index.saw(&slot, &resource, event, &stop);
                     }
                     Some(Err(error)) => {
                         let message = watch_failure(&error);
                         if refused(&error) {
                             told_refused(&slot);
-                            index.refused(&slot, message);
+                            index.refused(&slot, message, Some(&stop));
                             break 'list;
                         }
-                        index.failed(&slot, message);
+                        index.failed(&slot, message, &stop);
                         tokio::select! {
                             biased;
-                            () = index.stop.cancelled() => break 'list,
-                            () = tokio::time::sleep(streak.failed(Instant::now())) => {}
+                            () = stop.cancelled() => break 'list,
+                            () = tokio::time::sleep(failures.failed(Instant::now())) => {}
                         }
                         continue 'list;
                     }
@@ -175,33 +203,57 @@ fn node_of(meta: &Meta, resource: &ApiResource) -> Option<(String, Node)> {
 }
 
 impl ClusterIndex {
-    fn saw(&self, slot: &SlotKey, resource: &ApiResource, event: Event<Meta>) {
+    /// Every write a watch makes checks its stop under the slots' lock, which
+    /// is the lock a namespace leaving the scope drops the slot under.
+    fn saw(
+        &self,
+        slot: &SlotKey,
+        resource: &ApiResource,
+        event: Event<Meta>,
+        stop: &CancellationToken,
+    ) {
+        let mut slots = self.slots.lock();
+        if stop.is_cancelled() {
+            return;
+        }
+        let mut graph = self.graph.write();
         match event {
             Event::Init => {
-                self.graph.write().relist(slot);
-                self.slots.lock().insert(slot.clone(), SlotState::Syncing);
+                graph.relist(slot);
+                slots.insert(slot.clone(), SlotState::Syncing);
             }
             Event::InitApply(meta) | Event::Apply(meta) => {
                 if let Some((uid, node)) = node_of(&meta, resource) {
-                    self.graph.write().apply(slot, uid, node);
+                    graph.apply(slot, uid, node);
                 }
             }
             Event::InitDone => {
-                self.graph.write().listed(slot);
-                self.slots.lock().insert(slot.clone(), SlotState::Live);
+                graph.listed(slot);
+                slots.insert(slot.clone(), SlotState::Live);
             }
             Event::Delete(meta) => {
                 if let Some(uid) = meta.metadata.uid.as_deref() {
-                    self.graph.write().delete(slot, uid);
+                    graph.delete(slot, uid);
                 }
             }
         }
     }
 
+    /// A watch that waited for a free one has it and starts listing.
+    fn started(&self, slot: &SlotKey, stop: &CancellationToken) {
+        let mut slots = self.slots.lock();
+        if !stop.is_cancelled() {
+            slots.insert(slot.clone(), SlotState::Syncing);
+        }
+    }
+
     /// A live watch that breaks keeps what it held, marked as of now; one
     /// that never listed has nothing to keep.
-    fn failed(&self, slot: &SlotKey, message: String) {
+    fn failed(&self, slot: &SlotKey, message: String, stop: &CancellationToken) {
         let mut slots = self.slots.lock();
+        if stop.is_cancelled() {
+            return;
+        }
         let next = match slots.get(slot) {
             Some(SlotState::Live) => SlotState::Stale {
                 since: chrono::Utc::now().to_rfc3339(),
@@ -214,12 +266,22 @@ impl ClusterIndex {
 
     /// Nothing more will be read here. Across the cluster, the window's
     /// namespaces are tried instead.
-    fn refused(self: &Arc<Self>, slot: &SlotKey, message: String) {
+    fn refused(
+        self: &Arc<Self>,
+        slot: &SlotKey,
+        message: String,
+        stop: Option<&CancellationToken>,
+    ) {
         self.refusals.lock().insert(slot.clone(), message.clone());
-        self.graph.write().drop_slot(slot);
-        self.slots
-            .lock()
-            .insert(slot.clone(), SlotState::Refused { message });
+        {
+            let mut slots = self.slots.lock();
+            if stop.is_some_and(CancellationToken::is_cancelled) {
+                return;
+            }
+            self.stops.lock().remove(slot);
+            self.graph.write().drop_slot(slot);
+            slots.insert(slot.clone(), SlotState::Refused { message });
+        }
         if slot.namespace.is_none() {
             if let Some(namespaces) = self.scope.lock().clone() {
                 self.fall_back(&slot.kind, &namespaces);
@@ -261,6 +323,106 @@ mod tests {
         }
         streak.live(start);
         assert_eq!(streak.failed(start + STEADY), Duration::from_secs(1));
+    }
+
+    /// A watch's last event can land while its namespace leaves the scope;
+    /// written after, it put back a slot nothing would stop again. Fails if
+    /// a watch whose stop was taken writes anything.
+    #[tokio::test]
+    async fn a_watch_stopped_by_the_scope_writes_nothing_more() {
+        let (client, _) = answering(|_, _| (404, "{}".to_string())).await;
+        let index = ClusterIndex::holding(client, &[]);
+        let slot = SlotKey {
+            kind: KindKey {
+                group: String::new(),
+                plural: "pods".to_string(),
+            },
+            namespace: Some("web".to_string()),
+        };
+        let resource = ApiResource::erase::<k8s_openapi::api::core::v1::Pod>(&());
+        let stop = CancellationToken::new();
+        stop.cancel();
+
+        let written = || std::mem::take(&mut *index.slots.lock()).len();
+        index.saw(&slot, &resource, Event::InitDone, &stop);
+        let listed = written();
+        index.failed(&slot, "reset".to_string(), &stop);
+        let failed = written();
+        index.refused(&slot, "forbidden".to_string(), Some(&stop));
+        let refused = written();
+
+        assert_eq!((listed, failed, refused), (0, 0, 0));
+    }
+
+    fn pods() -> (SlotKey, ApiResource) {
+        (
+            SlotKey {
+                kind: KindKey {
+                    group: String::new(),
+                    plural: "pods".to_string(),
+                },
+                namespace: None,
+            },
+            ApiResource::erase::<k8s_openapi::api::core::v1::Pod>(&()),
+        )
+    }
+
+    fn configmaps() -> (SlotKey, ApiResource) {
+        (
+            SlotKey {
+                kind: KindKey {
+                    group: String::new(),
+                    plural: "configmaps".to_string(),
+                },
+                namespace: None,
+            },
+            ApiResource::erase::<k8s_openapi::api::core::v1::ConfigMap>(&()),
+        )
+    }
+
+    /// A watch per kind, and per namespace for each refused kind, each on a
+    /// connection of its own, had no ceiling: a few hundred took every file
+    /// the process may open. Fails if a watch starts with none free, or if
+    /// one that waits is read as anything but waiting, or never starts.
+    #[tokio::test]
+    async fn a_watch_past_the_ceiling_waits_for_a_free_one_and_says_so() {
+        let (client, hits) = answering(|path, nth| match (path, nth) {
+            ("/api/v1/pods", _) => failure(403, "Forbidden"),
+            ("/api/v1/configmaps", 1) => list("5"),
+            _ => (200, String::new()),
+        })
+        .await;
+        let ((first, pods), (second, maps)) = (pods(), configmaps());
+        let index = ClusterIndex::holding(
+            client,
+            &[
+                ("Pod", first.kind.clone()),
+                ("ConfigMap", second.kind.clone()),
+            ],
+        );
+        index
+            .watches
+            .forget_permits(index.watches.available_permits() - 1);
+        let reading = || crate::ownership::reading_of(&second.kind, &index.slots.lock().clone());
+
+        // Held by the test, so the second watch waits for as long as it looks.
+        let held = index.watches.clone().try_acquire_owned().expect("free");
+        spawn(&index, second.clone(), maps);
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(reading(), Some(crate::ownership::Reading::Queued));
+        assert_eq!(hits.lock().unwrap().get("/api/v1/configmaps"), None);
+
+        // A refused watch gives its place up.
+        drop(held);
+        spawn(&index, first, pods);
+        for _ in 0..300 {
+            if reading().is_none() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(reading(), None);
+        index.stop.cancel();
     }
 
     fn list(resource_version: &str) -> (u16, String) {

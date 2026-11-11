@@ -5747,6 +5747,7 @@ export const ru: Catalogue = {
     retry: "Повторить",
     groupUnread: "discovery не ответил",
     syncing: "ещё читается",
+    queued: "ждёт очереди: слишком много видов для слежения сразу",
     range: "{from}–{to} из {total}",
     previousPage: "Предыдущая страница",
     nextPage: "Следующая страница",
