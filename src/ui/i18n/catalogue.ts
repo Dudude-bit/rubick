@@ -1404,7 +1404,7 @@ export const en = {
     viewRawHint: "The whole line, with the colour codes taken out",
     repeats: "Repeats",
     collapseRepeatsHint:
-      "Collapse consecutive repeats into one row with a count and a time span",
+      "Collapse consecutive lines that differ only in numbers, times and ids into one row with a count and a time span",
     previousRun: "Previous run",
     previousRunOnHint:
       "Reading the run before the current one. Click for the current run",
@@ -6918,7 +6918,7 @@ export const en = {
     linesDroppedAroundKeptSummary:
       "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
-      "Repeats is on, so a line that says what the one above it said is folded into it.",
+      "Repeats is on, so a line that differs from the one above it only in numbers, times and ids is folded into it.",
     matchedIn: "matched in {fields}",
     matchedOutsideMessage: "matched outside the message: Raw shows it",
     nothingMatchedFor: "Nothing has matched {terms} for {span}.",
@@ -6984,6 +6984,8 @@ export const en = {
     noEventsInNamespace: "No events in this namespace",
     eventsReadShort:
       "The read stopped before the end of this namespace's events, so these are the newest of those read and not known to be the latest: a newer one may be missing.",
+    eventsFeedReadShort:
+      "The read stopped before the end of the events here, so these are the newest of those read and not known to be the latest: a newer one may be missing.",
     eventsOfEveryObjectIn:
       "The events of every object in {namespace}, not only those about the Namespace itself.",
     noEventsUnprovisioned:
@@ -8414,6 +8416,10 @@ export const en = {
     },
     andMore: "and {n} more",
     hiddenShowAll: "{n} hidden · show all",
+    legendLinesHeld: {
+      one: "{count} line from {name} is held here",
+      other: "{count} lines from {name} are held here",
+    },
     heldFor: "for {age}",
     historyMoreNotHeld: {
       one: "{count} more came back and is not held: the live stream already fills Keep {keep}. Raise it, or clear the pane, and ask again.",

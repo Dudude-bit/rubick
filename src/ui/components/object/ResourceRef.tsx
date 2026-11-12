@@ -33,6 +33,8 @@ export interface ResourceRefProps {
    * `null` draws a namesake of a built-in kind as text until its CRD is known.
    */
   crd?: string | null;
+  /** The API group, where the caller knows it: a namesake of a built-in is then named with it. */
+  group?: string | null;
   /** Off where the surrounding column already says the kind. */
   showKind?: boolean;
   /**
@@ -84,7 +86,7 @@ export function ObjectLink({
   linkOptions,
   opens = "peek",
   children,
-}: Omit<ResourceRefProps, "showKind" | "size"> & {
+}: Omit<ResourceRefProps, "showKind" | "size" | "group"> & {
   children: ReactNode;
   /** For a caller that positions the link itself — the routing map's nodes. */
   style?: CSSProperties;
@@ -158,6 +160,7 @@ export function ResourceRef({
   name,
   namespace,
   crd,
+  group,
   showKind = true,
   showNamespace = false,
   onClick,
@@ -171,6 +174,7 @@ export function ResourceRef({
       kind={kind}
       name={name}
       crd={crd}
+      group={group}
       namespace={showNamespace ? namespace : undefined}
       showKind={showKind}
       size={size}

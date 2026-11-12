@@ -3,6 +3,7 @@ export {
   hostTlsOf,
   ingressOpenUrl,
   ingressTlsVerdict,
+  tlsCellWords,
   TLS_NOT_CHECKED_TONE,
   vendorTlsAnswer,
   type IngressTlsVerdict,

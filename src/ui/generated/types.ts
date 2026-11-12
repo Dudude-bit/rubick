@@ -2602,7 +2602,7 @@ export type PolicyDoor =
       unsettled: string[];
       ports: DoorPort[];
     }
-  | { state: "unread"; reason: string }
+  | { state: "unread"; reason: string; code: string }
   | { state: "overlaid"; alone: DoorAlone; kinds: string[]; shut: boolean };
 
 export type PolicySelects =

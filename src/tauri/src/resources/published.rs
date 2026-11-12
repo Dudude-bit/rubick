@@ -191,6 +191,8 @@ pub enum PolicyDoor {
     Unread {
         /// What the cluster answered instead.
         reason: String,
+        /// One of `src/contracts/error-codes.json`: a refusal is not a failure.
+        code: String,
     },
     /// `NetworkPolicy` objects select them and are not the whole of it:
     /// another engine's policies are in force over the same pods, and what
@@ -206,6 +208,22 @@ pub enum PolicyDoor {
         /// port: [`policy_stop`]'s answer, which is not said as a stop here.
         shut: bool,
     },
+}
+
+/// A list that was not read: the failure's code beside the cluster's words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListUnread {
+    pub code: &'static str,
+    pub said: String,
+}
+
+impl From<crate::error::Error> for ListUnread {
+    fn from(error: crate::error::Error) -> Self {
+        Self {
+            code: error.code(),
+            said: error.said(),
+        }
+    }
 }
 
 /// A [`PolicyDoor::Guarded`]'s reading, under a name of its own so that no
@@ -315,14 +333,15 @@ impl ServicePublished {
     pub fn with_policies(
         mut self,
         service: &Service,
-        policies: std::result::Result<&[NetworkPolicy], &str>,
+        policies: std::result::Result<&[NetworkPolicy], &ListUnread>,
         others: &OtherPolicies,
     ) -> Self {
         let policies = match policies {
             Ok(policies) => policies,
-            Err(reason) => {
+            Err(unread) => {
                 self.door = pod_selector(service).map(|_| PolicyDoor::Unread {
-                    reason: reason.to_string(),
+                    reason: unread.said.clone(),
+                    code: unread.code.to_string(),
                 });
                 return self;
             }
@@ -3427,7 +3446,7 @@ mod tests {
     fn unread_policies_and_an_earlier_stop_are_left_as_they_were() {
         let (svc, published) = serving_web();
         assert!(published
-            .with_policies(&svc, Err("forbidden"), &OtherPolicies::none())
+            .with_policies(&svc, Err(&refused("forbidden")), &OtherPolicies::none())
             .stop
             .is_none());
         let svc = selecting("web");
@@ -3439,7 +3458,14 @@ mod tests {
         assert_eq!(format!("{after:?}"), before);
     }
 
-    fn door_of(policies: std::result::Result<&[NetworkPolicy], &str>) -> Option<PolicyDoor> {
+    fn refused(said: &str) -> ListUnread {
+        ListUnread {
+            code: "PERMISSION_DENIED",
+            said: said.to_string(),
+        }
+    }
+
+    fn door_of(policies: std::result::Result<&[NetworkPolicy], &ListUnread>) -> Option<PolicyDoor> {
         let (svc, published) = serving_web();
         published
             .with_policies(&svc, policies, &OtherPolicies::none())
@@ -3498,16 +3524,29 @@ mod tests {
     fn a_door_is_open_unsettled_or_unread_as_the_policies_read() {
         assert_eq!(door_of(Ok(&[])), Some(PolicyDoor::Open));
         assert_eq!(
-            door_of(Err("networkpolicies is forbidden")),
+            door_of(Err(&refused("networkpolicies is forbidden"))),
             Some(PolicyDoor::Unread {
-                reason: "networkpolicies is forbidden".to_string()
+                reason: "networkpolicies is forbidden".to_string(),
+                code: "PERMISSION_DENIED".to_string(),
             })
         );
+        let failed = ListUnread {
+            code: "TIMEOUT_ERROR",
+            said: "timed out".to_string(),
+        };
+        assert!(matches!(
+            door_of(Err(&failed)),
+            Some(PolicyDoor::Unread { code, .. }) if code == "TIMEOUT_ERROR"
+        ));
         let selectorless = service("web", vec![]);
         let published = from_slices(&selectorless, svc_ref("web"), &[], &[]);
         assert_eq!(
             published
-                .with_policies(&selectorless, Err("forbidden"), &OtherPolicies::none())
+                .with_policies(
+                    &selectorless,
+                    Err(&refused("forbidden")),
+                    &OtherPolicies::none()
+                )
                 .door,
             None
         );

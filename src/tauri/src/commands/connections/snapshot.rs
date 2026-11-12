@@ -38,7 +38,7 @@ pub(super) struct Snapshot {
     pub(super) refusals: Read<k8s_openapi::api::core::v1::Event>,
     /// Read for one question: whether the policies on a Service's pods shut
     /// them to every client. A refusal leaves that unsaid and nothing else.
-    pub(super) policies: Read<k8s_openapi::api::networking::v1::NetworkPolicy>,
+    pub(super) policies: CodedRead<k8s_openapi::api::networking::v1::NetworkPolicy>,
     /// The other engines' policies in force beside them, without which
     /// `policies` is not the whole of what decides.
     pub(super) others: crate::resources::OtherPolicies,
@@ -276,11 +276,22 @@ pub(super) fn read<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> R
 pub(super) fn read_live<K: Clone>(
     list: kube::Result<kube::core::ObjectList<K>>,
 ) -> Result<Read<K>> {
+    Ok(coded_live(list)?.map_err(|unread| unread.said))
+}
+
+/// A [`Read`] whose failure keeps its code, where a reader tells a refusal
+/// from a fault.
+pub(super) type CodedRead<K> = std::result::Result<Vec<K>, crate::resources::ListUnread>;
+
+/// [`read_live`], with the failure's code kept beside its words.
+pub(super) fn coded_live<K: Clone>(
+    list: kube::Result<kube::core::ObjectList<K>>,
+) -> Result<CodedRead<K>> {
     match list {
         Ok(list) => Ok(Ok(list.items)),
         Err(err) => match Error::from(err) {
             expired @ Error::CredentialsExpired(_) => Err(expired),
-            other => Ok(Err(other.said())),
+            other => Ok(Err(other.into())),
         },
     }
 }
@@ -421,7 +432,7 @@ impl Snapshot {
             stateful_sets: read_live(stateful_sets)?,
             replica_sets: read_live(replica_sets)?,
             refusals: read_live(refusals)?,
-            policies: read_live(policies)?,
+            policies: coded_live(policies)?,
             others,
             slices,
             legacy,
@@ -1162,6 +1173,21 @@ mod read_live_tests {
     fn a_refused_kind_is_part_of_the_answer() {
         let answer = read_live(refused(403, "Forbidden")).expect("an answer");
         assert!(answer.expect_err("unread").contains("Forbidden"));
+    }
+
+    /// The Overview draws a refused policy list under a lock and a failed
+    /// one under a triangle. Fails if the code is dropped on the way to the
+    /// door, or a server error is filed as a refusal.
+    #[test]
+    fn a_refused_kind_keeps_its_code_apart_from_a_failed_one() {
+        let code = |list| {
+            coded_live(list)
+                .expect("an answer")
+                .expect_err("unread")
+                .code
+        };
+        assert_eq!(code(refused(403, "Forbidden")), "PERMISSION_DENIED");
+        assert_eq!(code(refused(500, "InternalError")), "KUBE_API_ERROR");
     }
 }
 

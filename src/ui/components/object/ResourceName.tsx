@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { TITLE_SET } from "@/components/ui/title-tooltips";
 import { KindIcon } from "./KindIcon";
+import { kindWords } from "@/lib/links";
 import { splitName, identHue, kindHue } from "@/lib/resource-identity";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
@@ -56,6 +57,8 @@ export type ResourceNameProps = (
   | { kind: string; crd: string | null | undefined }
 ) & {
   name: string;
+  /** The API group, where the caller knows it and no CRD is at hand to say it: see {@link kindWords}. */
+  group?: string | null;
   /**
    * Drawn as a dim `namespace/` prefix inside the name's own box, never cut,
    * so it highlights with the name instead of wrapping beside it as a loose
@@ -172,12 +175,14 @@ export function ResourceName({
   kind,
   name,
   crd,
+  group,
   namespace,
   showKind = true,
   iconClassName,
   size = "row",
 }: ResourceNameProps) {
   const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
+  const kindLabel = kindWords({ kind, crd, group });
   const { stem, tail } = splitName(name);
 
   // Full spends the hue on identity, so the kind falls back to its icon;
@@ -221,7 +226,7 @@ export function ResourceName({
     stem,
     generated: tail !== "",
     before: namespace ? namespace.length + 1 : 0,
-    label: showKind ? kind.length + 1 : 0,
+    label: showKind ? kindLabel.length + 1 : 0,
   });
 
   return (
@@ -246,7 +251,7 @@ export function ResourceName({
               !part.hasAttribute("aria-hidden") &&
               part.scrollWidth > part.clientWidth
           )
-            ? `${namespace ? `${namespace}/` : ""}${showKind ? `${kind}/` : ""}${name}`
+            ? `${namespace ? `${namespace}/` : ""}${showKind ? `${kindLabel}/` : ""}${name}`
             : "";
           if (box.title)
             box.dispatchEvent(new Event(TITLE_SET, { bubbles: true }));
@@ -271,7 +276,7 @@ export function ResourceName({
               style={colouring === "full" ? kindStyle : undefined}
               data-testid="resource-ref-kind"
             >
-              {kind}
+              {kindLabel}
             </span>
             <span className="text-fg-fnt">/</span>
           </span>

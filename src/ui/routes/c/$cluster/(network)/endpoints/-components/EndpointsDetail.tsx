@@ -20,7 +20,7 @@ import { NotReadyMark, ServiceVerdict } from "../../../-object/health-views";
 import { useResourceDetail } from "@/hooks";
 import { useEndpointsShare } from "./useEndpointsShare";
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useConnections } from "@/hooks/useConnections";
 import { useServiceAnswer } from "@/hooks/useServiceAnswer";
 import { podsUnreadOf } from "@/lib/service-health";
@@ -71,12 +71,15 @@ export function EndpointsDetail() {
 
   // What the Service really publishes. This object is the compatibility copy
   // — it truncates at 1000 and cannot say `serving` — so the page reads the
-  // slices for the count and says where the number came from.
-  const slices = useQuery({
+  // slices for the count and says where the number came from. Read again
+  // at the rate the Service's verdict beside it is: read once, the Published
+  // line stood still over an address table that moved.
+  const slices = useLiveQuery({
     queryKey: ["service-endpoints", endpoints?.namespace ?? namespace],
     queryFn: () =>
       commands.listServiceEndpoints(endpoints?.namespace ?? namespace ?? null),
     enabled: Boolean(endpoints),
+    refresh: "slow",
   });
   const published = slices.data?.find(
     (entry) => entry.service.name === (endpoints?.name ?? name)

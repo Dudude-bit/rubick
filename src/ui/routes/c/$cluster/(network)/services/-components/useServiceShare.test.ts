@@ -93,7 +93,13 @@ describe("what the Service report leads with", () => {
   it("shares whole counts without colour where the NetworkPolicies went unread", () => {
     const stats = serviceStats(
       service,
-      published({ door: { state: "unread", reason: "forbidden" } }),
+      published({
+        door: {
+          state: "unread",
+          reason: "forbidden",
+          code: "PERMISSION_DENIED",
+        },
+      }),
       t
     );
     const last = stats.at(-1);
@@ -106,7 +112,11 @@ describe("what the Service report leads with", () => {
    * amber with no word of the refusal. Fails if the file drops why.
    */
   it("shares a short count with why the NetworkPolicies went unread", () => {
-    const door = { state: "unread" as const, reason: "forbidden" };
+    const door = {
+      state: "unread" as const,
+      reason: "forbidden",
+      code: "PERMISSION_DENIED",
+    };
     const short = serviceStats(
       service,
       published({ ready: 1, notReady: 1, door }),

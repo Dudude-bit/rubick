@@ -18,7 +18,12 @@ import type { PeekTarget } from "@/hooks/usePeek";
 import type { CrdLookup } from "@/hooks/useCrdIndex";
 import { eventLanding } from "../../-object/attachment";
 import { PastObjectRef } from "../../-object/PastObjectRef";
-import { namedOf, refOfNamed, type Past } from "@/lib/event-incarnation";
+import {
+  involvedNamespace,
+  namedOf,
+  refOfNamed,
+  type Past,
+} from "@/lib/event-incarnation";
 import { tallyOf } from "@/lib/event-stories";
 import { sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
@@ -31,7 +36,7 @@ import { AgeHeader } from "@/components/ui/sortable-header";
 const subjectOf = (event: EventInfo) => ({
   kind: event.involvedObject.kind,
   name: event.involvedObject.name,
-  namespace: event.involvedObject.namespace ?? event.namespace,
+  namespace: involvedNamespace(event),
 });
 
 function ReasonCell({ row }: { row: { original: EventInfo } }) {

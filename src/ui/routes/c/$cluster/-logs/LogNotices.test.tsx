@@ -3,7 +3,12 @@ import { render, screen } from "@testing-library/react";
 
 import { useLocaleStore } from "@/stores/localeStore";
 import type { ContainerInfo } from "@/generated/types";
-import { IntakeQuietNotice, StreamFailureNotice } from "./LogNotices";
+import {
+  GroupedNotice,
+  IntakeQuietNotice,
+  StreamFailureNotice,
+} from "./LogNotices";
+import { normalizeMessage } from "./normalize";
 import { parseQueryTerm, termLabel, type QueryTerm } from "./types";
 
 describe("the notice that nothing has matched yet", () => {
@@ -26,6 +31,26 @@ describe("the notice that nothing has matched yet", () => {
     );
     expect(notice).not.toHaveTextContent(" and ");
     useLocaleStore.setState({ choice: null });
+  });
+});
+
+describe("the notice over a folded log", () => {
+  /**
+   * Seen live: "line 1 from db-0" to "line 303 from db-0" folded into one
+   * row under a notice saying a line repeating the one above it is folded.
+   * The fold blanks numbers, times and ids on purpose. Fails if the notice
+   * stops saying so, or the fold stops doing it.
+   */
+  it("says the fold takes lines that differ only in numbers, as it does", () => {
+    expect(normalizeMessage("line 1 from db-0")).toBe(
+      normalizeMessage("line 303 from db-0")
+    );
+    render(
+      <GroupedNotice rows={1} collapsed={302} onShowEveryLine={() => {}} />
+    );
+    expect(screen.getByTestId("log-grouped-notice")).toHaveTextContent(
+      "differs from the one above it only in numbers, times and ids"
+    );
   });
 });
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   cautioningCondition,
-  conditionRole,
+  conditionRole as roleAmong,
   failingCondition,
 } from "./condition-health";
 import { autoscalerVerdict, type AutoscalerFacts } from "./governance";
@@ -22,6 +22,8 @@ function condition(
     ...extra,
   };
 }
+
+const conditionRole = (one: ConditionInfo) => roleAmong(one, [one]);
 
 describe("conditionRole", () => {
   it("reads a satisfied condition as ok, whichever value satisfies it", () => {
@@ -145,6 +147,58 @@ describe("a condition its reason settles", () => {
         condition("PodScheduled", "True"),
       ])
     ).toBeNull();
+  });
+
+  /**
+   * The Conditions tab of a completed Job's pod drew a blue clock on
+   * PodReadyToStartContainers=False: the kubelet gives that row no reason,
+   * and only the rows beside it say the pod ended. Fails if a step of a pod
+   * that completed or failed reads as on its way, or if one of a pod still
+   * starting stops reading so.
+   */
+  it("does not call a step of a pod that has ended on its way", () => {
+    const sandbox = condition("PodReadyToStartContainers", "False");
+    const waiting = condition("Initialized", "False", {
+      reason: "ContainersNotInitialized",
+    });
+    const ended = (reason: string) => [
+      sandbox,
+      waiting,
+      condition("Ready", "False", { reason }),
+    ];
+    expect(roleAmong(sandbox, ended("PodCompleted"))).toBe("neutral");
+    expect(roleAmong(sandbox, ended("PodFailed"))).toBe("neutral");
+    expect(roleAmong(waiting, ended("PodFailed"))).toBe("neutral");
+    expect(roleAmong(sandbox, ended("ContainersNotReady"))).toBe("pending");
+    expect(roleAmong(waiting, ended("ContainersNotReady"))).toBe("pending");
+  });
+
+  /**
+   * Flux's Stalled=True and Reconciling=True, a CRD's NonStructuralSchema=True
+   * and an evicted pod's DisruptionTarget=True drew a green tick, and so did
+   * what a stuck namespace's deletion failed at. Fails if a condition that
+   * names trouble reads as satisfied when True, or as trouble when False.
+   */
+  it("reads a condition that names trouble as healthy when False", () => {
+    expect(said("Stalled", "True", "DependencyNotReady")).toBe("err");
+    expect(said("Stalled", "False")).toBe("ok");
+    expect(said("Reconciling", "True", "ProgressingWithRetry")).toBe("pending");
+    expect(said("Reconciling", "False")).toBe("ok");
+    expect(said("NonStructuralSchema", "True", "Violations")).toBe("warn");
+    expect(said("NonStructuralSchema", "False")).toBe("ok");
+    expect(said("DisruptionTarget", "True", "PreemptionByScheduler")).toBe(
+      "warn"
+    );
+    expect(said("NamespaceDeletionContentFailure", "True")).toBe("err");
+    expect(said("NamespaceDeletionDiscoveryFailure", "True")).toBe("err");
+    expect(said("NamespaceDeletionGroupVersionParsingFailure", "True")).toBe(
+      "err"
+    );
+    expect(said("NamespaceFinalizersRemaining", "True")).toBe("pending");
+    expect(said("NamespaceContentRemaining", "True")).toBe("pending");
+    expect(said("NamespaceContentRemaining", "False", "ContentRemoved")).toBe(
+      "ok"
+    );
   });
 
   /**

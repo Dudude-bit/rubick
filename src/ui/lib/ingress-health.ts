@@ -162,10 +162,22 @@ export function claimNote(binding: ClaimedBinding, t: T): string {
     : `${classlessWords(binding.classless ?? "unread", t)}.`;
 }
 
+/** An input the cluster did not answer for, in its words, with the code that says whether it refused. */
+export interface Unanswered {
+  said: string;
+  code: string;
+}
+
+const unanswered = (read: {
+  why: string | null;
+  code?: string;
+}): Unanswered | null =>
+  read.why === null ? null : { said: read.why, code: read.code ?? "" };
+
 export interface IngressHealth {
   problems: IngressProblem[];
   /** Why an input was not read; empty when every one was. */
-  unread: Array<string | null | IngressDoubt>;
+  unread: Array<Unanswered | null | IngressDoubt>;
   backends: number;
   addressed: boolean;
 }
@@ -231,7 +243,7 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
   const problems: IngressProblem[] = [];
   const unread: IngressHealth["unread"] = [];
 
-  if (!binding.known) unread.push(binding.why);
+  if (!binding.known) unread.push(unanswered(binding));
   else {
     const takers = inputs.classless ?? "unread";
     const claim = ingressClaimOf(ingress, binding.value, takers);
@@ -250,7 +262,7 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
   const controller = binding.known ? binding.value.controller : null;
   const read = controller ? inputs.door?.(controller) : undefined;
   const names = backendNames(ingress);
-  if (names.length > 0 && !backing.known) unread.push(backing.why);
+  if (names.length > 0 && !backing.known) unread.push(unanswered(backing));
   if (backing.known) {
     for (const name of names) {
       const service = backing.value.get(name);
@@ -317,7 +329,7 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
       else
         problems.push({ kind: "tlsSecretMissing", secret: config.secretName });
     } else if (problem?.says === "secretUnreadable") {
-      unread.push(problem.said);
+      unread.push({ said: problem.said, code: "" });
     }
   }
 
@@ -540,7 +552,7 @@ export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
   }
   if (health.unread.length > 0) {
     const said = health.unread.flatMap((why) =>
-      why === null ? [] : [typeof why === "string" ? why : doubtWords(why, t)]
+      why === null ? [] : ["said" in why ? why.said : doubtWords(why, t)]
     );
     return said.length > 0
       ? {
@@ -570,6 +582,20 @@ export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
     role: "ok",
     reason: null,
   };
+}
+
+/**
+ * The one code every input of an unknown verdict went unread with: a
+ * refusal only where each of them was refused, and none where they differ or
+ * one is a doubt of this app's own.
+ */
+export function unreadCode(health: IngressHealth): string {
+  const codes = new Set(
+    health.unread.flatMap((why) =>
+      why === null ? [] : ["said" in why ? why.code : ""]
+    )
+  );
+  return codes.size === 1 ? [...codes][0] : "";
 }
 
 export const secretNamesOf = (ingress: Pick<IngressInfo, "tlsConfigs">) =>

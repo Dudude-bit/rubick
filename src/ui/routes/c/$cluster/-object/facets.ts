@@ -143,19 +143,19 @@ function walk(value: unknown, path: string, out: Walked): void {
     // A conditions array is verdicts, not data: one row per condition, in
     // the reason-first wording every condition row in the app carries.
     if (isConditionList(path, value)) {
-      for (const entry of value) {
-        const condition: ConditionInfo = {
-          type: String(entry.type),
-          status: String(entry.status),
-          reason: typeof entry.reason === "string" ? entry.reason : null,
-          message: typeof entry.message === "string" ? entry.message : null,
-          lastTransitionTime: null,
-        };
+      const conditions = value.map((entry): ConditionInfo => ({
+        type: String(entry.type),
+        status: String(entry.status),
+        reason: typeof entry.reason === "string" ? entry.reason : null,
+        message: typeof entry.message === "string" ? entry.message : null,
+        lastTransitionTime: null,
+      }));
+      conditions.forEach((condition, at) => {
         keep(out, {
-          ...conditionItem(condition),
+          ...conditionItem(condition, at, conditions),
           label: `${path}.${condition.type}`,
         });
-      }
+      });
       return;
     }
     // An array of objects is where a custom resource keeps the part anybody

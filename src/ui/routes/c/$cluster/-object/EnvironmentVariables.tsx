@@ -527,7 +527,8 @@ export function EnvironmentVariables({
 
       if (ef.secretRef) {
         const secretData = secretCache[ef.secretRef];
-        if (secretData && showSecrets) {
+        // A read that failed is cached as no values: its row stays, to say so.
+        if (secretData && showSecrets && Object.keys(secretData).length > 0) {
           for (const [key, value] of Object.entries(secretData)) {
             result.push({
               name: `${prefix}${key}`,
@@ -651,10 +652,20 @@ export function EnvironmentVariables({
       if (isSecret && !showSecrets) {
         return t("empty", "enableShowSecrets");
       }
-      if (loadingConfigMaps || loadingSecrets) {
-        return t("settings", "loading");
+      // No variable came of it: still reading, refused, failed, or it holds none.
+      const names = isSecret ? allSecretNames : allConfigMapNames;
+      const queries = isSecret ? secretQueries : configMapQueries;
+      const held = heldOf(queries[names.indexOf(ev.sourceName ?? "")], "");
+      switch (held.is) {
+        case "reading":
+          return t("settings", "loading");
+        case "refused":
+          return t("empty", "notReadableWithAccess");
+        case "unread":
+          return held.error;
+        default:
+          return t("empty", "noDataFound");
       }
-      return t("empty", "noDataFound");
     }
 
     if (ev.sourceType === "envFromSecret") {

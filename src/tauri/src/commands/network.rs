@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use crate::error::{Error, Result};
 use crate::resources::{
     published, ChainStop, EndpointsInfo, Existence, IngressDefaultBackend, IngressInfo,
-    IngressRule, IngressTlsConfig, NetworkPolicyInfo, NotServing, ObjectRef, PolicyDoor, Selector,
-    ServiceInfo, ServicePublished,
+    IngressRule, IngressTlsConfig, ListUnread, NetworkPolicyInfo, NotServing, ObjectRef,
+    PolicyDoor, Selector, ServiceInfo, ServicePublished,
 };
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet, StatefulSet};
@@ -541,7 +541,7 @@ async fn published_in(
     let services = services?.items;
     let policies = policies
         .map(|list| list.items)
-        .map_err(|error| Error::from(error).said());
+        .map_err(|error| ListUnread::from(Error::from(error)));
 
     // A cluster below 1.21 serves no `discovery.k8s.io/v1` at all, so the
     // legacy object answers and the reader is told which one did.
@@ -562,7 +562,7 @@ async fn published_in(
                     }),
                 )
                 .with_stop(svc, None)
-                .with_policies(svc, policies.as_deref().map_err(String::as_str), &others)
+                .with_policies(svc, policies.as_deref(), &others)
                 .summary()
             })
             .collect();
@@ -573,9 +573,7 @@ async fn published_in(
     let published = published_from_slices(&services, &slices.items)
         .into_iter()
         .zip(&services)
-        .map(|(published, svc)| {
-            published.with_policies(svc, policies.as_deref().map_err(String::as_str), &others)
-        })
+        .map(|(published, svc)| published.with_policies(svc, policies.as_deref(), &others))
         .collect();
     let published = with_unready_cause(&ctx.client, &services, published).await;
     Ok((services, published, networks_of(&slices.items)))
@@ -1094,6 +1092,7 @@ mod tests {
         assert!(open[0].door.is_none());
         let unread = team(PolicyDoor::Unread {
             reason: "networkpolicies is forbidden".into(),
+            code: "PERMISSION_DENIED".into(),
         });
         assert_eq!(unread.len(), 2);
         assert!(unread

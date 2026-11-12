@@ -171,3 +171,18 @@ it("draws the Overview's not-ready count with the not-read mark while the pods a
   expect(mark.parentElement).toHaveTextContent("1");
   expect(mark.parentElement).not.toHaveClass("text-warn");
 });
+
+/**
+ * The Published line and the note that this object is the legacy copy were
+ * read once, beside an address table read again every two seconds: a
+ * Service that gained endpoints went on saying it published none. Fails if
+ * what the Service publishes is not read again while the page is open.
+ */
+it("reads what the Service publishes again, as it does the addresses", async () => {
+  const { client } = await open();
+  await headerCounts();
+  const slices = client
+    .getQueryCache()
+    .find({ queryKey: ["service-endpoints", "team-blind"] });
+  expect(slices?.observers[0]?.options.refetchInterval).toBeTruthy();
+});

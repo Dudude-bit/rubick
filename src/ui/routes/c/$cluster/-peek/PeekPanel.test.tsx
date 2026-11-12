@@ -405,6 +405,13 @@ const location = () => screen.getByTestId("location").textContent;
 const POD_PEEK =
   "/c/prod/events?peek=pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v";
 
+/** The window has its cluster: an object's events and its neighbourhood are not read before it does. */
+const connected = () => useClusterStore.setState({ isConnected: true });
+
+afterEach(() => {
+  useClusterStore.setState({ isConnected: false });
+});
+
 function mockCluster() {
   vi.mocked(commands.getPod).mockReset().mockResolvedValue(buildPod());
   vi.mocked(commands.getReplicaset)
@@ -641,6 +648,7 @@ describe("PeekPanel", () => {
   });
 
   it("shows the summary and this object's events once they arrive", async () => {
+    connected();
     await wrap(POD_PEEK);
     expect(await screen.findByText("CrashLoopBackOff")).toBeInTheDocument();
     expect(screen.getByText("10.42.0.46")).toBeInTheDocument();
@@ -666,6 +674,7 @@ describe("PeekPanel", () => {
    * the peek matches them against the mirror's uid and says there are none.
    */
   it("lists a static pod's events, which carry its mirror hash", async () => {
+    connected();
     vi.mocked(commands.getPod).mockResolvedValue(
       buildPod({
         uid: "mirror-uid",
@@ -684,6 +693,7 @@ describe("PeekPanel", () => {
    * for only what it shows again, or prints the shown count as the total.
    */
   it("says how many events the latest twenty are out of", async () => {
+    connected();
     const all = Array.from({ length: 32 }, (_, at) => ({
       ...buildEvent(),
       name: `crash-demo.${at}`,
@@ -704,6 +714,7 @@ describe("PeekPanel", () => {
    * none, if the two look alike, or if none forgets to say a read answered.
    */
   it("says the events were refused, failed or read and none, each apart", async () => {
+    connected();
     const refusal = Object.assign(
       new Error('events is forbidden: User "marco" cannot list events'),
       { code: "PERMISSION_DENIED" }
@@ -1081,6 +1092,7 @@ describe("PeekPanel", () => {
    * Fails if the two read different events or the peek does not say whose.
    */
   it("lists a namespace's events of every object, as its page does, and names each object", async () => {
+    connected();
     await wrap("/c/prod/events?peek=namespaces/kube-system");
 
     expect(
@@ -1836,6 +1848,7 @@ describe("PeekPanel on a custom resource", () => {
    * and alerts under the custom resource, as if they were its own.
    */
   it("draws nothing of the built-in a custom resource shares its kind name with", async () => {
+    connected();
     vi.mocked(commands.getCustomResource).mockResolvedValue(knativeService());
     vi.mocked(commands.detectGatewayApi).mockResolvedValue({
       installed: true,
@@ -2867,6 +2880,7 @@ describe("PeekPanel traffic chain", () => {
     ).toBeTruthy();
 
   it("hangs a Service between its way in and its addresses", async () => {
+    connected();
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
       buildConnections([
         {
@@ -2903,6 +2917,7 @@ describe("PeekPanel traffic chain", () => {
   });
 
   it("walks the whole Gateway API way in: Gateway, route, Service, addresses", async () => {
+    connected();
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
       buildConnections([
         {
@@ -3030,6 +3045,7 @@ describe("PeekPanel traffic chain", () => {
   });
 
   it("puts the Service in front above a Pod, and nothing below it", async () => {
+    connected();
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
       buildConnections(
         [
@@ -3059,6 +3075,7 @@ describe("PeekPanel traffic chain", () => {
    * because the vendors were only ever asked about a peeked Service itself.
    */
   it("asks the vendors about the Services in front of a Pod", async () => {
+    connected();
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
       buildConnections(
         [
@@ -3116,6 +3133,7 @@ describe("PeekPanel traffic chain", () => {
    * example.com. One dot per level; the arrows run between levels only.
    */
   it("stacks parallel ways in at one level rather than chaining them", async () => {
+    connected();
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
       buildConnections(
         [
@@ -3184,6 +3202,7 @@ describe("PeekPanel traffic chain", () => {
    * dropped from the count or drawn amber, a fault nobody could confirm.
    */
   it("draws an Endpoints peek whose pods were not read without a fault, and lists its address not ready", async () => {
+    connected();
     const service = objRef("Service", "frontend", "storefront");
     vi.mocked(commands.getEndpoints).mockResolvedValue({
       ...buildEndpointsInfo(),
@@ -3352,6 +3371,7 @@ describe("a peek block whose read was refused", () => {
 
   /** A refused neighbourhood read was the same silence as a pod nothing routes. */
   it("says so where nothing routes a pod only because nobody could look", async () => {
+    connected();
     vi.mocked(commands.getResourceConnections).mockRejectedValue(
       new Error(FORBIDDEN)
     );

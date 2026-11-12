@@ -367,7 +367,8 @@ describe("placing events", () => {
    * the node controller writes `v1` and the real uid. Keyed by the group as
    * written, one node had two cards with half its history each, and the
    * kubelet's was never read as deleted. Fails if the two are not one story
-   * under the key its object is asked by, or it does not end with the node.
+   * under the key its object is asked by, or it does not end with the node,
+   * or the node is filed in `default`, where its events are and it is not.
    */
   it("tells one Node's story from its kubelet's events and the node controller's", () => {
     const kubelet = event({
@@ -388,15 +389,20 @@ describe("placing events", () => {
       reason: "NodeNotReady",
     });
     controller.involvedObject.uid = "5e1f";
+    controller.involvedObject.namespace = null;
     const stories = storiesOf([kubelet, controller], {
       now: NOW,
       windowMs: HOUR,
       narrowed: false,
     });
     expect(stories.map((story) => story.events.length)).toEqual([2]);
-    expect(stories[0].subject).toMatchObject({ kind: "Node", group: "" });
-    expect(subjectKey(stories[0].subject)).toBe("shop/Node/n1");
-    expect(withGone(stories, new Set(["shop/Node/n1"]))[0].state).toBe("gone");
+    expect(stories[0].subject).toMatchObject({
+      kind: "Node",
+      group: "",
+      namespace: null,
+    });
+    expect(subjectKey(stories[0].subject)).toBe("/Node/n1");
+    expect(withGone(stories, new Set(["/Node/n1"]))[0].state).toBe("gone");
   });
 
   /**

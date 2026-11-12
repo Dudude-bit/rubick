@@ -28,6 +28,7 @@ export function PastObjectRef({
   kind,
   name,
   crd,
+  group,
   namespace,
   past,
   showKind = true,
@@ -38,6 +39,7 @@ export function PastObjectRef({
   name: string;
   /** The segment the event's object is served at (`refOfNamed`): its glyph is its own kind's. */
   crd: string | null | undefined;
+  group?: string | null;
   namespace?: string | null;
   past: Past;
   showKind?: boolean;
@@ -61,6 +63,7 @@ export function PastObjectRef({
           kind={kind}
           name={name}
           crd={crd}
+          group={group}
           namespace={showNamespace ? namespace : undefined}
           showKind={showKind}
         />

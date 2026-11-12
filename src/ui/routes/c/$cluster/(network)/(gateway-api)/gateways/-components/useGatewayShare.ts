@@ -2,7 +2,11 @@ import { useCallback } from "react";
 import { BadgeCheck, RadioTower } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
-import { conditionRole, failingCondition } from "@/lib/condition-health";
+import {
+  cautioningCondition,
+  conditionRole,
+  failingCondition,
+} from "@/lib/condition-health";
 import { iconSvg } from "@/lib/icon-svg";
 import { programmedWord } from "@/lib/route-trace";
 import type { ReportStat } from "@/lib/report";
@@ -46,7 +50,7 @@ function listenerRole(
     return { role: "neutral", text: t("share", "notWrittenYet") };
   const broken = failingCondition(listener.conditions);
   if (broken) return { role: "err", text: broken.reason ?? broken.type };
-  const caution = listener.conditions.find((c) => conditionRole(c) === "warn");
+  const caution = cautioningCondition(listener.conditions);
   if (caution) return { role: "warn", text: caution.reason ?? caution.type };
   return { role: "ok", text: "" };
 }
@@ -103,7 +107,10 @@ export function gatewayListenerConditionsSection(
       cells: [
         { text: listener.name },
         { text: condition.type, mono: true },
-        { text: condition.status, role: conditionRole(condition) },
+        {
+          text: condition.status,
+          role: conditionRole(condition, listener.conditions),
+        },
         { text: condition.reason ?? t("empty", "noneLower") },
       ],
     }))

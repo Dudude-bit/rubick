@@ -38,7 +38,7 @@ import {
 } from "./report";
 import type { ResourceKind } from "./resource-registry";
 import { identHue, kindHue, kindMark, splitName } from "./resource-identity";
-import { namedOf } from "./event-incarnation";
+import { involvedNamespace, namedOf } from "./event-incarnation";
 import { drawnCrd } from "./links";
 import { ROLE_ICON, statusRole } from "./status-role";
 
@@ -221,7 +221,7 @@ export function conditionsSection(
       rows: conditions.map((condition) => ({
         type: condition.type,
         status: condition.status,
-        role: conditionRole(condition),
+        role: conditionRole(condition, conditions),
         reason: condition.reason,
         message: condition.message,
         since: condition.lastTransitionTime,
@@ -267,7 +267,7 @@ export function eventsSection(
           ? refOf({
               kind: event.involvedObject.kind,
               name: event.involvedObject.name,
-              namespace: event.namespace || null,
+              namespace: involvedNamespace(event),
               crd: drawnCrd(namedOf(event)),
             })
           : undefined,

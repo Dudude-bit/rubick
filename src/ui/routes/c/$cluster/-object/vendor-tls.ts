@@ -148,3 +148,41 @@ export function ingressOpenUrl(
   if (usesTls === null) return null;
   return `${usesTls ? "https" : "http"}://${host}`;
 }
+
+/** Which "no" a TLS cell with no host to count says: none asked for, not checked, or named and served plain. */
+export type BareTls = "none" | "notChecked" | "plain";
+
+/**
+ * The one line an Ingress's TLS cell says, and which "no" it is where it
+ * counts no host. The list's cell and its shared file both read it here: the
+ * file printed `spec.tls`'s names beside a cell saying TLS was not checked.
+ */
+export function tlsCellWords(
+  ingress: Pick<IngressInfo, "tlsHosts" | "hasCatchAllTls">,
+  vendor: VendorTlsAnswer | null | undefined,
+  tls: IngressTlsVerdict,
+  t: T
+): { words: string; bare: BareTls | null } {
+  const served = vendor?.hosts.length ?? 0;
+  const plain = vendor?.plain.length ?? 0;
+  const named = namedTlsHosts(ingress.tlsHosts, vendor).length;
+  const catchAll = ingress.hasCatchAllTls && plain === 0;
+  if (tls === "unknown" || (named === 0 && !catchAll && served === 0)) {
+    const bare =
+      tls === "unknown" || (vendor?.unchecked.length ?? 0) > 0
+        ? "notChecked"
+        : plain > 0
+          ? "plain"
+          : "none";
+    return {
+      words: t("empty", bare === "notChecked" ? "tlsNotChecked" : "noTls"),
+      bare,
+    };
+  }
+  return {
+    words: catchAll
+      ? t("empty", "tlsEveryHost")
+      : t("count", "hosts", { n: named + served }),
+    bare: null,
+  };
+}

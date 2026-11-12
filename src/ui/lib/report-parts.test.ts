@@ -819,6 +819,28 @@ describe("the rest of the parts", () => {
   });
 
   /**
+   * An event about a ClusterIssuer is filed in `default`, where the issuer
+   * is not. Fails if the shared row places a cluster-scoped object in the
+   * namespace of its event, or drops the namespace of one that has it.
+   */
+  it("places an event's object where it lives, not where the event is filed", () => {
+    const about = (namespace: string | null) =>
+      ({
+        type: "Warning",
+        reason: "ErrInitIssuer",
+        message: "",
+        lastTimestamp: "2026-09-21T17:00:00Z",
+        involvedObject: { kind: "ClusterIssuer", name: "ca", namespace },
+        namespace: "default",
+      }) as never;
+    const section = eventsSection([about(null), about("default")], null, true);
+    expect(
+      section.body.type === "events" &&
+        section.body.rows.map((row) => row.ref?.namespace)
+    ).toEqual([null, "default"]);
+  });
+
+  /**
    * A shared file of the 1 h stories listed "×696" at 03:46 as if the hour
    * held them. Fails if a repeated event stops carrying when its repeats began.
    */
@@ -872,6 +894,32 @@ describe("the rest of the parts", () => {
     expect(section.body).toMatchObject({
       type: "conditions",
       rows: [{ role: "ok" }],
+    });
+  });
+
+  /**
+   * A finished pod's PodReadyToStartContainers=False has no reason; the rows
+   * beside it say the pod ended. Fails if the shared file reads each
+   * condition alone and calls the sandbox of a completed pod on its way.
+   */
+  it("reads a condition among the ones it stands with", () => {
+    const row = (type: string, status: string, reason: string | null) => ({
+      type,
+      status,
+      reason,
+      message: null,
+      lastTransitionTime: null,
+    });
+    const section = conditionsSection(
+      [
+        row("PodReadyToStartContainers", "False", null),
+        row("Ready", "False", "PodCompleted"),
+      ],
+      t
+    );
+    expect(section.body).toMatchObject({
+      type: "conditions",
+      rows: [{ role: "neutral" }, { role: "neutral" }],
     });
   });
 

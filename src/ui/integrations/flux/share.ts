@@ -6,6 +6,18 @@ import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { FluxControllers } from "./data";
 
+/**
+ * The Share section of one reconciler's findings. Joined by a slash, which
+ * no name holds: with hyphens `team-a`'s `web` and `team`'s `a-web` were
+ * one section, and the second replaced the first in the file.
+ */
+export const reconcilerSectionId = (reconciler: {
+  kind: string;
+  namespace: string;
+  name: string;
+}): string =>
+  `flux-reconciler/${reconciler.kind}/${reconciler.namespace}/${reconciler.name}`;
+
 /** Controllers short of replicas; a Deployment list refused or not yet read is unread, not ready. */
 export function controllersSection(
   read: FluxControllers | undefined,

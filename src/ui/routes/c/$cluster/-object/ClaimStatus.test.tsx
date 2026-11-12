@@ -15,6 +15,7 @@ import type {
   StorageClassInfo,
 } from "@/generated/types";
 import { useWindowActivity } from "@/lib/window-activity";
+import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithProviders, renderWithRouter } from "@/test/render";
 import {
   ClaimClassCell,
@@ -54,6 +55,7 @@ const localPath: StorageClassInfo = {
 
 beforeEach(() => {
   useWindowActivity.setState({ visible: true });
+  useClusterStore.setState({ isConnected: true });
   answer.events = [];
 });
 

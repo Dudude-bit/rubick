@@ -58,7 +58,7 @@ import {
   type FluxReconciler,
   type FluxSource,
 } from "./model";
-import { controllersSection } from "./share";
+import { controllersSection, reconcilerSectionId } from "./share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { sayWords } from "@/i18n/say";
@@ -500,7 +500,7 @@ function Findings({
         brief
           ? undefined
           : {
-              id: `flux-reconciler-${reconciler.kind}-${reconciler.namespace}-${reconciler.name}`,
+              id: reconcilerSectionId(reconciler),
               title: reconciler.name,
               toFinding: (finding) => {
                 const said = describe(reconciler, finding, t);

@@ -39,6 +39,7 @@ import {
   TlsBadge,
   ingressTlsVerdict,
   ingressOpenUrl,
+  tlsCellWords,
   vendorTlsAnswer,
   type IngressTlsVerdict,
   type VendorTlsAnswer,
@@ -124,6 +125,31 @@ function withHealthOf(
                 role: verdict.role,
                 unread: UNCONFIRMED.has(verdict.code),
               };
+            },
+          },
+        }
+      : column
+  );
+}
+
+/** The TLS column saying in a shared file what its cell says, not checked marked as not read. */
+function withTlsOf(
+  columns: ColumnDef<IngressInfo>[],
+  tlsOf: (ingress: IngressInfo) => {
+    vendor: VendorTlsAnswer | null;
+    tls: IngressTlsVerdict;
+  }
+): ColumnDef<IngressInfo>[] {
+  return columns.map((column) =>
+    "accessorKey" in column && column.accessorKey === "tlsHosts"
+      ? {
+          ...column,
+          meta: {
+            ...column.meta,
+            share: (row: IngressInfo, t: Translate) => {
+              const { vendor, tls } = tlsOf(row);
+              const { words, bare } = tlsCellWords(row, vendor, tls, t);
+              return { text: words, unread: bare === "notChecked" };
             },
           },
         }
@@ -384,7 +410,7 @@ export function IngressList() {
   });
   const healthOf = (ingress: IngressInfo): Verdict =>
     ingressHealthWords(healthOfRow(ingress), t);
-  const columns = useMemo(
+  const healthColumns = useMemo(
     () =>
       withHealthOf(baseColumns, (ingress, words) =>
         ingressHealthWords(healthOfRow(ingress), words)
@@ -412,6 +438,10 @@ export function IngressList() {
       return { vendor, tls: ingressTlsVerdict(ingress, vendor, unread) };
     },
     [vendorFor, unread]
+  );
+  const columns = useMemo(
+    () => withTlsOf(healthColumns, tlsFor),
+    [healthColumns, tlsFor]
   );
 
   const quickActions = useMemo<

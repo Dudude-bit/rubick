@@ -5,9 +5,11 @@ import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import {
+  MAY,
   currentConnection,
   noteRefusal,
   readOf,
+  settleRefusal,
   useRefusedAmong,
   useRefusedReads,
   useRightsAsked,
@@ -61,7 +63,7 @@ export function guardedOf(
 
 /** The refusal memory's key for one verb on one resource. */
 export function deniedRead(verb: GuardedVerb, on: Guarded): string {
-  return readOf("may", [
+  return readOf(MAY, [
     verb,
     on.group,
     on.resource,
@@ -125,8 +127,8 @@ export async function askAccess(
 /**
  * Asks the cluster's access review, once per connection, each of `asked`.
  * A "no" goes to the refusal memory; a review that would not answer, or
- * could not be asked, notes nothing, so the action stays offered with no
- * claim about it.
+ * could not be asked, leaves none there, so the action stays offered with
+ * no claim about it. A "no" from before a renewal stands until then.
  */
 export function useAccessReview(asked: readonly Asked[]): void {
   const connection = useClusterStore((s) => s.connectionAttemptId);
@@ -141,17 +143,20 @@ export function useAccessReview(asked: readonly Asked[]): void {
     retry: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const answers = await commands.checkAccess(asked.map(questionOf));
-      answers.forEach((answer, at) => {
-        if (answer.allowed !== false) return;
-        const query = asked[at];
-        noteRefusal(
-          deniedRead(query.verb, query),
-          `SelfSubjectAccessReview: may not ${query.verb} ${checkOf(query)}`,
-          connection
-        );
-      });
-      return answers.map((answer) => answer.allowed);
+      let answers: Awaited<ReturnType<typeof commands.checkAccess>> = [];
+      try {
+        answers = await commands.checkAccess(asked.map(questionOf));
+        return answers.map((answer) => answer.allowed);
+      } finally {
+        asked.forEach((query, at) => {
+          settleRefusal(
+            deniedRead(query.verb, query),
+            answers[at]?.allowed === false,
+            `SelfSubjectAccessReview: may not ${query.verb} ${checkOf(query)}`,
+            connection
+          );
+        });
+      }
     },
   });
 }

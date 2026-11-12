@@ -15,6 +15,7 @@ import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useHeldRead } from "@/hooks/useHeldRead";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useClusterStore } from "@/stores/clusterStore";
 import type {
   GatewayApiDetection,
   ResourceConnections,
@@ -57,6 +58,8 @@ export function useConnections(
   const gateway = useGatewayApi().data ?? null;
   const queryKey = keyOf(kind, name, namespace, gateway);
   const client = useQueryClient();
+  // A tab restored at launch is drawn before the window has its cluster.
+  const isConnected = useClusterStore((state) => state.isConnected);
   return useLiveQuery<ResourceConnections>({
     queryKey,
     queryFn: () =>
@@ -70,7 +73,7 @@ export function useConnections(
           client.getQueryData<ResourceConnections>(queryKey)?.published
         )
       ),
-    enabled: enabled && !!name,
+    enabled: enabled && !!name && isConnected,
     // The scan landing changes the key, not the object. A list's row menu
     // keeps one observer across rows, and drew one row's autoscaler in the
     // next row's Scale dialog.

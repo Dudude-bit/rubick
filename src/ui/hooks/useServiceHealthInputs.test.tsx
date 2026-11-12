@@ -76,6 +76,7 @@ describe("the Services of a scope as their verdict reads them", () => {
     expect(result.current.in("secret-ns")).toEqual({
       known: false,
       why: "services is forbidden",
+      code: "PERMISSION_DENIED",
     });
     const empty = result.current.in("empty");
     expect(empty.known && empty.value.size).toBe(0);
@@ -107,6 +108,30 @@ describe("the Services of a scope as their verdict reads them", () => {
 
     await waitFor(() => expect(result.current.in("net").known).toBe(true));
     expect(result.current.in("shop")).toEqual({ known: false, why: null });
+  });
+
+  /**
+   * An Ingress whose backends' Services were refused whole is filed under a
+   * lock, not a triangle. Fails if the read's own code is dropped.
+   */
+  it("keeps the code of a read that failed whole", async () => {
+    listServiceHealthInputs.mockRejectedValue(
+      Object.assign(new Error("services is forbidden"), {
+        code: "PERMISSION_DENIED",
+      })
+    );
+
+    const { result } = renderHook(() => useServiceHealthInputs(["net"]), {
+      wrapper: wrapper(),
+    });
+
+    await waitFor(() =>
+      expect(result.current.in("net")).toEqual({
+        known: false,
+        why: "services is forbidden",
+        code: "PERMISSION_DENIED",
+      })
+    );
   });
 
   /**

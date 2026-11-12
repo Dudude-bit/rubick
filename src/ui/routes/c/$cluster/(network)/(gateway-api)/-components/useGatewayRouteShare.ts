@@ -39,7 +39,7 @@ export function gatewayRouteConditionsSection(
       detail: [condition.status, condition.reason, condition.message]
         .filter(Boolean)
         .join(" · "),
-      role: conditionRole(condition),
+      role: conditionRole(condition, parent.conditions),
       ref: refOf({
         kind: parent.parent.kind,
         name: parent.parent.name,

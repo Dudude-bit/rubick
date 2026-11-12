@@ -20,6 +20,7 @@ import {
   ingressClassWords,
   ingressHealthOf,
   ingressHealthWords,
+  unreadCode,
   type ClasslessTakers,
   type IngressInputs,
   type NamespaceBacking,
@@ -588,7 +589,13 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       backing: {
         known: true,
         value: new Map([
-          ["web", { ...serving(2), door: { state: "unread", reason } }],
+          [
+            "web",
+            {
+              ...serving(2),
+              door: { state: "unread", reason, code: "PERMISSION_DENIED" },
+            },
+          ],
         ]),
       },
       certificates: undefined,
@@ -685,6 +692,57 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       certificates: undefined,
     });
     expect(backingRefused.code).toBe("unknown");
+  });
+
+  /**
+   * Not checked files a verdict under a lock only where every input it
+   * lacks was refused. Fails if one refusal among a failed read or a doubt
+   * of the app's own makes the whole verdict a refusal, or if a refusal
+   * loses its code on the way.
+   */
+  it("calls an unknown verdict refused only where every unread input was", () => {
+    const refused = {
+      known: false as const,
+      why: "ingressclasses is forbidden",
+      code: "PERMISSION_DENIED",
+    };
+    const codeOf = (inputs: Partial<IngressInputs>) =>
+      unreadCode(
+        ingressHealthOf({
+          ingress: ingress(["api"]),
+          binding: refused,
+          backing: { known: true, value: BACKING },
+          certificates: undefined,
+          ...inputs,
+        })
+      );
+    expect(codeOf({})).toBe("PERMISSION_DENIED");
+    expect(
+      codeOf({ backing: { known: false, why: "services is forbidden" } })
+    ).toBe("");
+    expect(
+      codeOf({
+        backing: { known: false, why: "timed out", code: "TIMEOUT_ERROR" },
+      })
+    ).toBe("");
+    const unreadable: TlsCertificate = {
+      secretName: "shop-tls",
+      certificate: null,
+      problem: { says: "secretUnreadable", said: "secrets is forbidden" },
+    };
+    expect(
+      codeOf({
+        ingress: ingress(["api"], "shop-tls"),
+        certificates: new Map([["shop-tls", unreadable]]),
+      })
+    ).toBe("");
+    expect(
+      codeOf({
+        ingress: { ...ingress(["api"]), className: null, classAnnotated: true },
+        binding: { known: true, value: { ...UNSERVED, requested: "nginx" } },
+        backing: { ...refused, why: "services is forbidden" },
+      })
+    ).toBe("");
   });
 
   it("calls an addressed Ingress with live backends served", () => {

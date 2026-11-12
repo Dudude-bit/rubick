@@ -51,6 +51,41 @@ describe("a refused action asked again", () => {
   });
 });
 
+describe("a refused action through a credential renewal", () => {
+  /**
+   * A renewal emptied the refusal memory, and Delete read as allowed for
+   * the second its review took to answer again. Fails if the mark goes out
+   * while the review is asked again, stays after the review allows it, or
+   * outlives a review the cluster does not answer.
+   */
+  it("keeps its mark until the review answers again, and no longer", async () => {
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    checkAccess.mockReset();
+    checkAccess.mockResolvedValue([{ allowed: false }, { allowed: false }]);
+    renderWithProviders(<Delete />);
+    expect(await screen.findByText(/delete pods -n shop/)).toBeVisible();
+
+    let answer: (allowed: { allowed: boolean }[]) => void = () => {};
+    checkAccess.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    act(() => credentialsRenewed());
+    await waitFor(() => expect(checkAccess).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(/delete pods -n shop/)).toBeVisible();
+    await act(async () => answer([{ allowed: true }, { allowed: true }]));
+    expect(await screen.findByText("allowed")).toBeVisible();
+
+    checkAccess.mockResolvedValue([{ allowed: false }, { allowed: false }]);
+    act(() => credentialsRenewed());
+    expect(await screen.findByText(/delete pods -n shop/)).toBeVisible();
+    checkAccess.mockRejectedValue(new Error("the cluster did not answer"));
+    act(() => credentialsRenewed());
+    expect(await screen.findByText("allowed")).toBeVisible();
+  });
+});
+
 describe("how often the access review is asked", () => {
   /** Long enough for a retry or a refetch that was going to happen to have asked. */
   const settled = () =>

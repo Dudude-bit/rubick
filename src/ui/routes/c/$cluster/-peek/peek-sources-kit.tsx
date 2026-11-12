@@ -108,9 +108,13 @@ export function source<T>(
   };
 }
 
-/** A condition, in the reason-first wording every condition row speaks. */
-export function conditionItem(condition: ConditionInfo): KeyValue {
-  const role = conditionRole(condition);
+/** A condition among its siblings, in the reason-first wording every condition row speaks; shaped to `map` over a list. */
+export function conditionItem(
+  condition: ConditionInfo,
+  _at: number,
+  among: readonly ConditionInfo[]
+): KeyValue {
+  const role = conditionRole(condition, among);
   const spoken =
     condition.reason && condition.reason !== condition.type
       ? `${condition.status} (${condition.reason})`

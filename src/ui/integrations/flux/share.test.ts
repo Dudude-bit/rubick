@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { controllersSection } from "./share";
+import { controllersSection, reconcilerSectionId } from "./share";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -44,5 +44,21 @@ describe("what the Flux screen tells Share about its controllers", () => {
         t
       )
     ).toBeNull();
+  });
+});
+
+describe("the Share section of one reconciler", () => {
+  /**
+   * Two reconcilers whose namespace and name hyphenate alike shared one
+   * section id, and the file held the findings of one of them. Fails if two
+   * different reconcilers can be given one id.
+   */
+  it("is told from another's whose namespace and name hyphenate alike", () => {
+    const id = (namespace: string, name: string) =>
+      reconcilerSectionId({ kind: "Kustomization", namespace, name });
+    expect(id("team-a", "web")).not.toBe(id("team", "a-web"));
+    expect(id("team-a", "web")).toBe(
+      "flux-reconciler/Kustomization/team-a/web"
+    );
   });
 });
