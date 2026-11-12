@@ -1131,8 +1131,11 @@ export interface CrdView {
   // No `status` here on purpose: there was one, and no surface read it. A
   // verdict belongs in a column, which without a `cell` is drawn as a badge.
   /**
-   * The columns for one of its kinds. Every vendor has a default for a kind
-   * it does not recognise, because a CRD group grows faster than this file.
+   * The columns for one of its kinds, and none for a kind it does not
+   * describe: the list then draws the printer columns the CRD declares.
+   * Another kind's columns as the default drew a PeerAuthentication with an
+   * AuthorizationPolicy's action. `crd-columns.test.ts` holds every vendor
+   * to it.
    */
   columnsFor: (kind: string) => CrdColumn[];
 }

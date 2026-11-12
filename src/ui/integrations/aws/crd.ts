@@ -76,8 +76,10 @@ export const crd: CrdView = {
     switch (kind.toLowerCase()) {
       case "ingressclassparams":
         return ingressClassParamsColumns;
-      default:
+      case "targetgroupbinding":
         return targetGroupBindingColumns;
+      default:
+        return [];
     }
   },
 };

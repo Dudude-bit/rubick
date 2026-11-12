@@ -104,8 +104,10 @@ export const crd: CrdView = {
         return frontendConfigColumns;
       case "managedcertificate":
         return managedCertificateColumns;
-      default:
+      case "backendconfig":
         return backendConfigColumns;
+      default:
+        return [];
     }
   },
 };

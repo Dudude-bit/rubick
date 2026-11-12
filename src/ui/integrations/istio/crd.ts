@@ -351,11 +351,12 @@ export const crd: CrdView = {
       case "serviceentry":
         return serviceEntryColumns;
       case "authorizationpolicy":
-      case "peerauthentication":
-      case "requestauthentication":
         return authorizationPolicyColumns;
+      // PeerAuthentication, RequestAuthentication, Sidecar, EnvoyFilter and
+      // the rest keep the printer columns their own CRDs declare: a policy's
+      // columns gave an mTLS mode the action ALLOW.
       default:
-        return virtualServiceColumns;
+        return [];
     }
   },
 };

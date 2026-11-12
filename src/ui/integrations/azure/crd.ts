@@ -115,8 +115,10 @@ export const crd: CrdView = {
         return assignedColumns;
       case "azureingressprohibitedtarget":
         return prohibitedColumns;
-      default:
+      case "azureidentity":
         return identityColumns;
+      default:
+        return [];
     }
   },
   // Only one of these four kinds reports anything at all, and it reports it
