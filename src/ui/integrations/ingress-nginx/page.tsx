@@ -689,12 +689,12 @@ function HostChain({
         <Column label={t("columns", "listener")}>
           <Cell
             under={
-              route.tlsSecret
+              route.tls
                 ? t("empty", "tlsTerminatedHere")
                 : t("empty", "noTlsHere")
             }
           >
-            {route.tlsSecret ? ":443" : ":80"}
+            {route.tls ? ":443" : ":80"}
           </Cell>
         </Column>
         <Column label={t("columns", "rule")}>
@@ -787,7 +787,7 @@ function HostChain({
           )}
         </Column>
       </Chain>
-      {route.tlsSecret && (
+      {route.tlsSecret ? (
         <ServedUnder
           secret={route.tlsSecret}
           namespace={route.source.namespace}
@@ -796,6 +796,12 @@ function HostChain({
             sources.certificates
           )}
         />
+      ) : (
+        route.tls && (
+          <span className="text-[11px] text-fg-fnt">
+            {t("empty", "servedUnderDefaultNoSecret")}
+          </span>
+        )
       )}
       <Annotations readings={route.annotations} />
     </div>

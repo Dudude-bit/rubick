@@ -7413,6 +7413,8 @@ export const ru: Catalogue = {
     servedUnder: "сертификат из",
     servedUnderDefault:
       "сертификат контроллера по умолчанию: {secret} не существует",
+    servedUnderDefaultNoSecret:
+      "сертификат контроллера по умолчанию: блок tls не называет Secret",
     rawNginxConfig: "Сырая конфигурация nginx, вставляется как есть",
     shownAsWritten: "Показано как написано",
     andMoreOpenRow: "и ещё {n}: откройте строку",

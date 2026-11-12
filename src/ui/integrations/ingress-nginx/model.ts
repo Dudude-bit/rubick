@@ -33,6 +33,7 @@ import {
   claimsIngress,
   classesOf,
   SEVERITY_RANK as RANK,
+  tlsBlockCovers,
   tlsSecretFor,
   worstOf,
   type Backing,
@@ -92,6 +93,12 @@ export interface NginxRoute {
   /** `Kind/name` where this path routes to an API object rather than a Service. */
   resourceBackend: string | null;
   tlsSecret: string | null;
+  /**
+   * A `spec.tls` block covers this host, so nginx serves it on :443: under
+   * {@link tlsSecret}, or under its default certificate where the block
+   * names none.
+   */
+  tls: boolean;
   annotations: AnnotationReading[];
   /** Set only on an Ingress that declares itself one. */
   canary: Canary | null;
@@ -274,6 +281,7 @@ function routesFrom(ingress: IngressInfo, index: number, t: T): NginxRoute[] {
           : null,
         resourceBackend: path.resourceBackend,
         tlsSecret: tlsSecretFor(ingress, host),
+        tls: tlsBlockCovers(ingress, host),
         annotations,
         canary,
         createdAt: ingress.createdAt,
@@ -302,6 +310,7 @@ function routesFrom(ingress: IngressInfo, index: number, t: T): NginxRoute[] {
       },
       resourceBackend: fallback.resourceBackend,
       tlsSecret: tlsSecretFor(ingress, null),
+      tls: tlsBlockCovers(ingress, null),
       annotations,
       canary,
       createdAt: ingress.createdAt,
@@ -388,7 +397,7 @@ function clearFinding(
   sources: NginxSources,
   host: string | null
 ): Finding | "tlsUnknown" | null {
-  if (routes.some((route) => route.tlsSecret)) return null;
+  if (routes.some((route) => route.tls)) return null;
   // Something in front holds the certificate, and the hop into the cluster is
   // plaintext by design; or what is in front could not be read.
   const edge = edgeTls(host, sources).at;
@@ -554,7 +563,7 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
           route.service !== null &&
           !backingReadIn(sources, route.service.namespace)
       ),
-      tls: tlsSecrets[0]
+      tls: own.some((route) => route.tls)
         ? ownTls(tlsSecrets, sources.certificates)
         : clear === "tlsUnknown"
           ? { at: "unknown" as const }
