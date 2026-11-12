@@ -44,7 +44,11 @@ import type { ServicePublished } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
-import { podsUnreadOf } from "@/lib/service-health";
+import {
+  emptyByDesign,
+  podsUnreadOf,
+  type ServiceShape,
+} from "@/lib/service-health";
 import { EyeOff } from "lucide-react";
 import { NodeRef } from "../../../-object/NodeRef";
 
@@ -59,7 +63,14 @@ const TONE: Record<"ok" | "warn" | "err" | "neutral", string> = {
   neutral: "text-fg-mut",
 };
 
-export function PublishedEndpoints({ query }: { query: ConnectionsRead }) {
+export function PublishedEndpoints({
+  query,
+  service,
+}: {
+  query: ConnectionsRead;
+  /** What the Service is, where the page has read it: an alias publishes nothing by design. */
+  service?: ServiceShape;
+}) {
   const t = useT();
   const { data, isPending, error } = query;
 
@@ -91,10 +102,16 @@ export function PublishedEndpoints({ query }: { query: ConnectionsRead }) {
       </p>
     );
   }
-  return <Lists published={published} />;
+  return <Lists published={published} service={service} />;
 }
 
-function Lists({ published }: { published: ServicePublished }) {
+function Lists({
+  published,
+  service,
+}: {
+  published: ServicePublished;
+  service?: ServiceShape;
+}) {
   const t = useT();
   const [all, setAll] = useState(false);
   const rows = all ? published.endpoints : published.endpoints.slice(0, SHOWN);
@@ -128,7 +145,9 @@ function Lists({ published }: { published: ServicePublished }) {
         />
         {published.endpoints.length === 0 ? (
           <p className="text-xs text-fg-fnt">
-            <T section="empty" k="servicePublishesNothing" />
+            {(service && emptyByDesign(service, published, t)?.reason) ?? (
+              <T section="empty" k="servicePublishesNothing" />
+            )}
           </p>
         ) : (
           <Table>

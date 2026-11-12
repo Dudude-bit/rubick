@@ -16,6 +16,7 @@ import {
 } from "@/lib/published";
 import type { ReportStat } from "@/lib/report";
 import {
+  emptyByDesign,
   podsUnreadOf,
   serviceHealthOf,
   serviceHealthWords,
@@ -45,23 +46,21 @@ export function serviceStats(
   if (published) {
     const total = endpointCount(published);
     const idle = published.stop?.reason === "scaledToZero";
-    const health = serviceHealthOf(
-      {
-        type: service.type,
-        selectorless: Object.keys(service.selector).length === 0,
-      },
-      published,
-      null
-    );
+    const shape = {
+      type: service.type,
+      selectorless: Object.keys(service.selector).length === 0,
+    };
+    const health = serviceHealthOf(shape, published, null);
     // Waiting on its workload's pods is the page's verdict, not a fault, and
     // a shut door, or one nobody could check, is the page's verdict over
-    // counts that look whole.
+    // counts that look whole. So is nothing published by a DNS alias, or by
+    // a Service whose endpoints are written by hand: neither publishes pods.
     const unread =
       health.state === "podsUnread" || health.state === "policiesUnread";
     const told =
       health.state === "comingUp" || unread || health.state === "shut"
         ? serviceHealthWords(health, t)
-        : null;
+        : emptyByDesign(shape, published, t);
     // A short count keeps its own colour; the door nobody checked is said beside it.
     const unchecked = shutUnchecked(published);
     stats.push({

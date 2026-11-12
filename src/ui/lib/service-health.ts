@@ -182,6 +182,22 @@ export function serviceHealthOf(
 }
 
 /**
+ * The page's verdict on a Service that publishes nothing and was never going
+ * to publish pods: a DNS alias, or endpoints written by hand that nobody has
+ * written. `null` where publishing nothing is the fault it looks like.
+ */
+export function emptyByDesign(
+  service: ServiceShape,
+  published: PublishedCounts,
+  t: T
+): Verdict | null {
+  const health = serviceHealthOf(service, published, null);
+  return health.state === "externalName" || health.state === "selectorless"
+    ? serviceHealthWords(health, t)
+    : null;
+}
+
+/**
  * Whether nothing a Service publishes serves and the pods every workload
  * behind it waits on were not read: an address of it not ready is then not
  * known to be a fault, and every reader of its Endpoints object draws it so.

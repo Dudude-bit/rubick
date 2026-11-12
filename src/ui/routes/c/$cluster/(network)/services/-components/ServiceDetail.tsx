@@ -247,7 +247,17 @@ export function ServiceDetail() {
       label: "Endpoints",
       glyph: viewGlyph(Waypoints),
       mark: endpointsMark(read, t),
-      content: <PublishedEndpoints query={read} />,
+      content: (
+        <PublishedEndpoints
+          query={read}
+          service={
+            service && {
+              type: service.type,
+              selectorless: Object.keys(service.selector).length === 0,
+            }
+          }
+        />
+      ),
     },
     {
       id: "labels",
