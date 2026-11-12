@@ -112,3 +112,35 @@ describe("what an object of another vendor's kind gets", () => {
     expect(sections).toBeNull();
   });
 });
+
+describe("what an OCI HelmRepository tells a reader with no cluster access", () => {
+  /**
+   * Flux writes no status on one, and the file said "not fetched yet" in
+   * amber of an object that is never fetched. Fails if the file calls it
+   * pending, or prints the interval Flux ignores.
+   */
+  it("says it is an address with nothing to fetch", () => {
+    const sections = reportOf(
+      {
+        group: "source.toolkit.fluxcd.io",
+        kind: "HelmRepository",
+        namespace: "flux-system",
+        name: "bitnami",
+        spec: {
+          type: "oci",
+          url: "oci://registry-1.docker.io/bitnamicharts",
+          interval: "5m",
+        },
+        status: undefined,
+      },
+      t
+    );
+    const rows =
+      sections?.[0]?.body.type === "facts" ? sections[0].body.rows : [];
+    expect(rows[0]).toEqual({
+      label: "Status",
+      values: [{ text: "OCI address · nothing to fetch", role: "neutral" }],
+    });
+    expect(rows.find((row) => row.label === "Interval")).toBeUndefined();
+  });
+});

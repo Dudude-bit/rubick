@@ -82,3 +82,35 @@ describe("the chart column of the HelmRelease list", () => {
     expect(column.accessor(referring, en)).toBe("podinfo");
   });
 });
+
+describe("the status columns of an OCI HelmRepository", () => {
+  const cell = (id: string, resource: unknown) => {
+    const column = crd
+      .columnsFor("HelmRepository")
+      .find((one) => one.id === id)!;
+    const node = column.cell!(
+      column.accessor(resource as CustomResourceInfo, en),
+      en
+    );
+    return render(createElement(Fragment, null, node as ReactNode)).container
+      .textContent;
+  };
+  const oci = { spec: { type: "oci", url: "oci://ghcr.io/acme/charts" } };
+
+  /**
+   * Flux writes no status on one, ever. "not written yet" under Ready and
+   * Last fetched promised a value that does not come. Fails if either
+   * column says "yet" of an OCI repository.
+   */
+  it("says OCI address, not that a status is still to be written", () => {
+    expect(cell("ready", oci)).toBe("OCI address");
+    expect(cell("artifact", oci)).toBe("OCI address");
+  });
+
+  /** The control: an ordinary repository with no status is still pending. */
+  it("still says not written yet for an HTTP repository with no status", () => {
+    const http = { spec: { url: "https://charts.example.com" } };
+    expect(cell("ready", http)).toBe("not written yet");
+    expect(cell("artifact", http)).toBe("not written yet");
+  });
+});

@@ -19,7 +19,12 @@ vi.mock("@/lib/commands", () => ({
 
 const { relatedTo } = await import("./related");
 
-function application(resources: unknown[]): CustomResourceInfo {
+function application(
+  resources: unknown[],
+  destination: Record<string, unknown> = {
+    server: "https://kubernetes.default.svc",
+  }
+): CustomResourceInfo {
   return {
     name: "shop",
     namespace: "argocd",
@@ -33,6 +38,7 @@ function application(resources: unknown[]): CustomResourceInfo {
     spec: {
       project: "prod",
       source: { repoURL: "https://github.com/acme/infra", path: "manifests" },
+      destination,
     },
     status: {
       sync: { status: "Synced" },
@@ -98,6 +104,65 @@ describe("what an Argo Application is connected to", () => {
   });
 
   /**
+   * AppProjects live in Argo's own namespace, and an Application may live
+   * in any other. The row put the project beside the Application, so the
+   * link opened an AppProject that is not there. Fails if the project's
+   * namespace is taken from the Application without asking.
+   */
+  it("finds the project in Argo's namespace for an Application outside it", async () => {
+    const app = { ...application([]), namespace: "team-a" };
+    listCustomResources.mockImplementation((crd: string) =>
+      Promise.resolve(
+        crd === "appprojects.argoproj.io"
+          ? [
+              { name: "other", namespace: "team-a" },
+              { name: "prod", namespace: "argocd" },
+            ]
+          : [app]
+      )
+    );
+
+    const related = await relatedTo({ ...subject, namespace: "team-a" });
+    expect(related?.[0]).toMatchObject({
+      kind: "AppProject",
+      name: "prod",
+      namespace: "argocd",
+    });
+  });
+
+  /** Fails if a project of the same name elsewhere is preferred to the one beside the Application. */
+  it("keeps the project beside the Application where there is one", async () => {
+    listCustomResources.mockImplementation((crd: string) =>
+      Promise.resolve(
+        crd === "appprojects.argoproj.io"
+          ? [
+              { name: "prod", namespace: "another-argo" },
+              { name: "prod", namespace: "argocd" },
+            ]
+          : [application([])]
+      )
+    );
+    expect((await relatedTo(subject))?.[0]).toMatchObject({
+      namespace: "argocd",
+    });
+  });
+
+  /**
+   * Fails if a refused AppProject list is answered with "none", which puts
+   * the project back beside the Application with nothing said.
+   */
+  it("does not guess where the project is when the projects could not be listed", async () => {
+    listCustomResources.mockImplementation((crd: string) =>
+      crd === "appprojects.argoproj.io"
+        ? Promise.reject(new Error("appprojects is forbidden"))
+        : Promise.resolve([application([])])
+    );
+    await expect(relatedTo(subject)).rejects.toThrow(
+      "appprojects is forbidden"
+    );
+  });
+
+  /**
    * The group travels with the row so the consumer can turn it into a CRD
    * name. Without it a managed `Certificate` is unopenable text — which is
    * exactly what half of a real Application's inventory used to be.
@@ -142,6 +207,30 @@ describe("what an Argo Application is connected to", () => {
 
     const related = await relatedTo(subject);
     expect(related?.[1]).toMatchObject({ tone: "err", note: "Missing" });
+  });
+
+  /**
+   * A hub's Application for a spoke lists the spoke's objects, and the tab
+   * linked each to the hub's namesake. Fails if a row of an Application that
+   * deploys elsewhere stops saying which cluster it is in.
+   */
+  it("says which cluster a managed object is in where that is not this one", async () => {
+    const prometheus = {
+      group: "apps",
+      kind: "Deployment",
+      namespace: "monitoring",
+      name: "prometheus-operator",
+    };
+    listCustomResources.mockResolvedValue([
+      application([prometheus], { name: "spoke1" }),
+    ]);
+    expect((await relatedTo(subject))?.[1]).toMatchObject({
+      name: "prometheus-operator",
+      cluster: "spoke1",
+    });
+
+    listCustomResources.mockResolvedValue([application([prometheus])]);
+    expect((await relatedTo(subject))?.[1]).not.toHaveProperty("cluster");
   });
 
   it("leaves a healthy resource with nothing to say", async () => {

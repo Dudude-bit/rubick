@@ -404,6 +404,12 @@ export interface RelatedObject {
   note?: string | null;
   /** Only where the controller reported a problem with the link itself. */
   tone?: "warn" | "err";
+  /**
+   * Set where the far end is not known to be in the cluster on screen: the
+   * cluster as the controller names it, `null` where it names none. Such a
+   * row is text, never a link or a peek.
+   */
+  cluster?: string | null;
 }
 
 /** One way in to a Service, as the object that routes it states it. */

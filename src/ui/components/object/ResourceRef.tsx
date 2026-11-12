@@ -55,6 +55,12 @@ export interface ResourceRefProps {
   linkOptions?: ObjectLinkOptions;
   /** What a plain click opens: the peek beside the page, or the page itself. */
   opens?: "peek" | "page";
+  /**
+   * The object is in a cluster this window is not showing, and no context is
+   * known for it: drawn as text, since a link would open this cluster's
+   * namesake.
+   */
+  elsewhere?: boolean;
 }
 
 /**
@@ -168,6 +174,7 @@ export function ResourceRef({
   size,
   linkOptions,
   opens,
+  elsewhere = false,
 }: ResourceRefProps) {
   const body = (
     <ResourceName
@@ -188,7 +195,7 @@ export function ResourceRef({
 
   // Asked before anything is built: an element is truthy whatever it renders,
   // so `ObjectLink` returning null cannot choose the fallback.
-  if (objectLink({ kind, name, namespace, crd }) === null) {
+  if (elsewhere || objectLink({ kind, name, namespace, crd }) === null) {
     // Named for the same reason the link is: the name is drawn as two boxes
     // so the tail can keep its hue and its place, and the accessible-name
     // algorithm joins those with a space — "k3d-agent -0" for a pod called

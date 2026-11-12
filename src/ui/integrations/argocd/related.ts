@@ -15,9 +15,10 @@
  * states it on its own row.
  */
 
+import { commands } from "@/lib/commands";
 import type { RelatedObject } from "../registry";
-import { fetchApplications, GROUP } from "./data";
-import type { ArgoApp, ArgoResource } from "./model";
+import { fetchApplications, GROUP, PROJECTS_CRD } from "./data";
+import { destinationCluster, type ArgoApp, type ArgoResource } from "./model";
 
 /**
  * How this app relates a managed object, and what Argo said about it.
@@ -25,7 +26,10 @@ import type { ArgoApp, ArgoResource } from "./model";
  * The tone is Argo's verdict, never a reading of silence: an object with no
  * `sync` at all is one Argo has not compared, which is not a fault.
  */
-function managed(resource: ArgoResource): RelatedObject {
+function managed(
+  resource: ArgoResource,
+  where: ReturnType<typeof destinationCluster>
+): RelatedObject {
   const failed =
     resource.outcome === "SyncFailed" || resource.sync === "Missing";
   const drifted = resource.sync !== null && resource.sync !== "Synced";
@@ -46,6 +50,7 @@ function managed(resource: ArgoResource): RelatedObject {
     // the panel was the one row with nothing coloured on it.
     note: resource.message ?? said(resource, failed, drifted, unhealthy),
     tone: failed || unhealthy ? "err" : drifted ? "warn" : undefined,
+    ...(where.here ? {} : { cluster: where.name }),
   };
 }
 
@@ -75,13 +80,20 @@ function said(
  * so "why did this refuse to sync to that namespace" is answered there and
  * nowhere else.
  */
-function project(app: ArgoApp): RelatedObject {
+async function project(app: ArgoApp): Promise<RelatedObject> {
+  // An AppProject lives in Argo's own namespace. An Application may live in
+  // any other and does not say which that is, so the projects are asked.
+  const named = (
+    await commands.listCustomResources(PROJECTS_CRD, null, null, null)
+  ).filter((candidate) => candidate.name === app.project);
+  const found =
+    named.find((candidate) => candidate.namespace === app.namespace) ??
+    named[0];
   return {
     relation: "relGovernedBy",
     kind: "AppProject",
     name: app.project,
-    // An AppProject lives beside the Application, in Argo's own namespace.
-    namespace: app.namespace,
+    namespace: found?.namespace ?? app.namespace,
     group: GROUP,
   };
 }
@@ -106,5 +118,9 @@ export async function relatedTo(subject: {
   // this kind — an empty one.
   if (!app) return [];
 
-  return [project(app), ...app.resources.map(managed)];
+  const where = destinationCluster(app);
+  return [
+    await project(app),
+    ...app.resources.map((resource) => managed(resource, where)),
+  ];
 }

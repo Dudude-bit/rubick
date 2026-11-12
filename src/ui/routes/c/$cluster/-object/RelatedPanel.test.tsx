@@ -127,6 +127,52 @@ describe("a custom resource's connections", () => {
   });
 
   /**
+   * An object of another cluster is not this cluster's object of that name:
+   * linked, it opened the namesake here with its actions. Fails if a row
+   * that names a cluster is an anchor, or does not say where it is.
+   */
+  it("names a far end in another cluster and does not link it", async () => {
+    await draw({
+      claimed: true,
+      related: [
+        {
+          relation: "relManages",
+          kind: "Deployment",
+          name: "prometheus-operator",
+          namespace: "monitoring",
+          group: "apps",
+          cluster: "spoke1",
+        },
+      ],
+    });
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(
+      screen.getByText("Deployment prometheus-operator")
+    ).toBeInTheDocument();
+    expect(screen.getByText("monitoring on spoke1")).toBeInTheDocument();
+  });
+
+  /** The control: the same row with no cluster named is a link. */
+  it("links a far end in this cluster", async () => {
+    await draw({
+      claimed: true,
+      related: [
+        {
+          relation: "relManages",
+          kind: "Deployment",
+          name: "prometheus-operator",
+          namespace: "monitoring",
+          group: "apps",
+        },
+      ],
+    });
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "/c/prod/deployments/monitoring/prometheus-operator"
+    );
+  });
+
+  /**
    * The controller's own sentence, drawn as written. A paraphrase of somebody
    * else's failure is a second guess at it, and this string is what the reader
    * pastes into a search.

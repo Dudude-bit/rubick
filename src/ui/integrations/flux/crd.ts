@@ -5,6 +5,8 @@
  * pages read, so these are where its chart, version and source actually are.
  */
 
+import { createElement } from "react";
+
 import { withoutCredentials } from "@/lib/hints";
 import type { CrdColumn } from "../kit";
 import {
@@ -17,6 +19,28 @@ import {
 } from "../kit";
 import type { CrdView } from "../registry";
 import { formatDate } from "@/lib/utils";
+import { isStaticSource } from "./model";
+
+/**
+ * A HelmRepository column about its status. On an OCI one Flux writes none,
+ * so "not written yet" promised a value that never comes.
+ */
+const STATIC = Symbol("static");
+const unlessStatic = (column: CrdColumn): CrdColumn => ({
+  ...column,
+  accessor: (resource, t) =>
+    isStaticSource("HelmRepository", resource)
+      ? STATIC
+      : column.accessor(resource, t),
+  cell: (value, t) =>
+    value === STATIC
+      ? createElement(
+          "span",
+          { className: "text-fg-fnt" },
+          t("empty", "fluxOciAddress")
+        )
+      : column.cell!(value, t),
+});
 
 /**
  * Status configuration for Flux resources (uses standard conditions)
@@ -110,7 +134,7 @@ const helmReleaseColumns: CrdColumn[] = [
  * Columns for HelmRepository list
  */
 const helmRepositoryColumns: CrdColumn[] = [
-  readyColumn,
+  unlessStatic(readyColumn),
   {
     id: "url",
     header: "url",
@@ -142,13 +166,13 @@ const helmRepositoryColumns: CrdColumn[] = [
     accessor: (resource) => getValueByPath(resource, "spec.interval"),
     cell: orNone,
   },
-  {
+  unlessStatic({
     id: "artifact",
     header: "lastFetched",
     accessor: (resource) =>
       getValueByPath(resource, "status.artifact.lastUpdateTime"),
     cell: (value, t) => formatDate(value) ?? orNotWritten(null, t),
-  },
+  }),
 ];
 
 /**

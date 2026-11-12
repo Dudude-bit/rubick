@@ -152,7 +152,12 @@ function sourceSection(
   const rows: { label: string; values: ReportValue[] }[] = [
     {
       label: t("columns", "status"),
-      values: [{ text: state.text, role: state.tone }],
+      values: [
+        {
+          text: state.text,
+          role: state.tone === "unknown" ? "neutral" : state.tone,
+        },
+      ],
     },
   ];
   if (source.url)

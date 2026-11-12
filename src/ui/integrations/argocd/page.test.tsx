@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => new Map<string, () => Promise<unknown[]>>());
+const tls = vi.hoisted(() => ({
+  unread: false as false | "adds" | "replaces",
+}));
+const routed = vi.hoisted(() => ({ routes: [] as unknown[] }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -14,11 +18,33 @@ vi.mock("@/lib/commands", () => ({
       (answers.get("deployments") ?? (() => Promise.resolve([])))(),
     listStatefulsets: () =>
       (answers.get("statefulsets") ?? (() => Promise.resolve([])))(),
-    listIngresses: () => Promise.resolve([]),
+    listIngresses: () =>
+      (answers.get("ingresses") ?? (() => Promise.resolve([])))(),
   },
 }));
 
-const { APPLICATIONSETS_CRD, PROJECTS_CRD } = await import("./data");
+vi.mock("@/hooks/useServiceRoutes", () => ({
+  useServiceRoutes: () => ({
+    available: routed.routes.length > 0,
+    routes: routed.routes,
+    isPending: false,
+    error: null,
+  }),
+}));
+
+// No TLS supplier is installed in a test; what one has not said yet is set here.
+vi.mock("@/hooks/useIngressTls", () => ({
+  useIngressTls: () => ({
+    available: tls.unread !== false,
+    of: () => null,
+    isPending: false,
+    error: null,
+    unread: tls.unread,
+  }),
+}));
+
+const { APPLICATIONS_CRD, APPLICATIONSETS_CRD, PROJECTS_CRD } =
+  await import("./data");
 const { default: ArgoCdPage } = await import("./page");
 
 const refused = (crd: string) => () =>
@@ -38,7 +64,11 @@ function renderOn(tab: string) {
   });
 }
 
-beforeEach(() => answers.clear());
+beforeEach(() => {
+  answers.clear();
+  tls.unread = false;
+  routed.routes = [];
+});
 
 describe("tabs whose own list was refused", () => {
   /**
@@ -77,6 +107,340 @@ describe("tabs whose own list was refused", () => {
     expect(
       screen.queryByText(/has no AppProject objects/)
     ).not.toBeInTheDocument();
+  });
+});
+
+const application = (
+  name: string,
+  spec: Record<string, unknown>,
+  status: Record<string, unknown>
+) => ({
+  name,
+  namespace: "argocd",
+  uid: name,
+  apiVersion: "argoproj.io/v1alpha1",
+  kind: "Application",
+  spec: {
+    project: "default",
+    source: { repoURL: "https://github.com/acme/infra", path: "manifests" },
+    destination: {
+      server: "https://kubernetes.default.svc",
+      namespace: "shop",
+    },
+    ...spec,
+  },
+  status,
+  labels: {},
+  annotations: {},
+  createdAt: null,
+  ownerReferences: [],
+  generation: null,
+});
+
+/** Opens a row: a warning shows its title on the closed row and no more. */
+async function openRow(name: string) {
+  fireEvent.click(
+    await screen.findByRole("button", { name: `Expand ${name}` })
+  );
+}
+
+describe("Applications that are not in sync", () => {
+  const healthy = application(
+    "aaa",
+    {},
+    { sync: { status: "Synced" }, health: { status: "Healthy" } }
+  );
+
+  /**
+   * With auto-sync on and the last operation succeeded there was no finding,
+   * so the line above the list read "2 Applications, all in sync" over a row
+   * that said "out of sync". Fails if that line is printed again, or the row
+   * says nothing of why.
+   */
+  it("does not say all in sync over one auto-sync has left out of sync", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([
+        healthy,
+        application(
+          "shop",
+          { syncPolicy: { automated: {} } },
+          {
+            sync: { status: "OutOfSync" },
+            health: { status: "Healthy" },
+            operationState: {
+              phase: "Succeeded",
+              finishedAt: "2026-07-20T10:00:00Z",
+            },
+          }
+        ),
+      ])
+    );
+
+    await renderOn("applications");
+
+    expect(
+      await screen.findByText(
+        /^Out of sync though auto-sync is on: last synced/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/all in sync/)).toBeNull();
+    expect(screen.getByText("out of sync · healthy")).toHaveClass("text-warn");
+  });
+
+  /** The same for an Application Argo has written no status for. */
+  it("does not say all in sync over one Argo has not compared", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([healthy, application("shop", {}, {})])
+    );
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(
+      screen.getByText("Argo has not compared this Application")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not watch the namespace argocd/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/all in sync/)).toBeNull();
+    expect(screen.getByText("not compared · unknown")).toHaveClass("text-warn");
+  });
+
+  /** The control: with nothing but synced Applications the line is true. */
+  it("says all in sync where every Application is", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([healthy]));
+    await renderOn("applications");
+    expect(await screen.findByText(/all in sync/)).toBeInTheDocument();
+  });
+});
+
+describe("what an Application manages, by where it deploys", () => {
+  const prometheus = (destination: Record<string, unknown>) =>
+    application(
+      "monitoring",
+      { destination },
+      {
+        sync: { status: "Synced" },
+        health: { status: "Healthy" },
+        resources: [
+          {
+            group: "apps",
+            kind: "Deployment",
+            namespace: "monitoring",
+            name: "prometheus-operator",
+            status: "Synced",
+          },
+        ],
+      }
+    );
+  const linkToIt = () =>
+    screen.queryByRole("link", { name: "Deployment prometheus-operator" });
+
+  /**
+   * A hub's Application for a spoke lists the spoke's Deployment, and the
+   * row linked it: the click opened the hub's namesake, with Restart, Scale
+   * and Delete. Fails if an object of a destination other than Argo's own
+   * cluster is an anchor, or the row stops saying where it deploys.
+   */
+  it("names the objects of another cluster and does not link them", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([prometheus({ name: "spoke1", namespace: "monitoring" })])
+    );
+
+    await renderOn("applications");
+    await openRow("monitoring");
+
+    expect(linkToIt()).toBeNull();
+    expect(
+      screen.getByText("Deployment prometheus-operator")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Argo deploys this Application to/)
+    ).toHaveTextContent(
+      "Argo deploys this Application to spoke1. Nothing here says that is the cluster on screen"
+    );
+    expect(
+      screen.getByText("project default → monitoring on spoke1")
+    ).toBeInTheDocument();
+  });
+
+  /** The control: the same Application deploying to Argo's own cluster links. */
+  it("links the objects of an Application that deploys here", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([
+        prometheus({
+          server: "https://kubernetes.default.svc",
+          namespace: "monitoring",
+        }),
+      ])
+    );
+
+    await renderOn("applications");
+    await openRow("monitoring");
+
+    expect(linkToIt()).toHaveAttribute(
+      "href",
+      "/c/test/deployments/monitoring/prometheus-operator"
+    );
+    expect(screen.queryByText(/^Argo deploys this Application to/)).toBeNull();
+  });
+});
+
+describe("where a finding sends the reader for the line-by-line diff", () => {
+  const drifted = application(
+    "shop",
+    {},
+    { sync: { status: "OutOfSync" }, health: { status: "Healthy" } }
+  );
+  const ingress = {
+    name: "argocd",
+    namespace: "argocd",
+    rules: [
+      {
+        host: "argocd.example.com",
+        paths: [{ path: "/", backendService: "argocd-server" }],
+      },
+    ],
+    tlsHosts: ["argocd.example.com"],
+    tlsConfigs: [],
+    hasCatchAllTls: false,
+  };
+  const page = () => document.body;
+
+  /**
+   * Traefik in front, its entry points unread: the Ingress names the host
+   * and nothing settles the scheme. The finding ended "no Ingress in this
+   * cluster serves argocd-server, so there is no address to send you to",
+   * while the Controller tab named that Ingress and its host. Fails if a
+   * known host is reported as no Ingress.
+   */
+  it("names the host of an Ingress whose TLS is not settled, and does not say there is none", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+    answers.set("ingresses", () => Promise.resolve([ingress]));
+    tls.unread = "replaces";
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    await waitFor(() =>
+      expect(page()).toHaveTextContent(
+        "argocd-server is served at argocd.example.com, but whether over TLS is not settled here"
+      )
+    );
+    expect(page()).not.toHaveTextContent("there is no address to send you to");
+  });
+
+  /**
+   * That Ingress stood in front of a route whose address was settled, and
+   * no link was offered at all. Fails if the page stops asking the route
+   * when the Ingress cannot be linked.
+   */
+  it("links through a route where the Ingress's scheme is not settled", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+    answers.set("ingresses", () => Promise.resolve([ingress]));
+    tls.unread = "replaces";
+    routed.routes = [
+      {
+        host: "argo.routes.example.com",
+        path: "/",
+        tls: true,
+        source: { kind: "IngressRoute", name: "argocd", namespace: "argocd" },
+      },
+    ];
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(
+      await screen.findByRole("link", { name: /Open shop in Argo CD/ })
+    ).toHaveAttribute(
+      "href",
+      "https://argo.routes.example.com/applications/argocd/shop"
+    );
+  });
+
+  /** The control: the same Ingress with its TLS settled is a link. */
+  it("links into Argo where the Ingress's scheme is settled", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+    answers.set("ingresses", () => Promise.resolve([ingress]));
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(
+      await screen.findByRole("link", { name: /Open shop in Argo CD/ })
+    ).toHaveAttribute(
+      "href",
+      "https://argocd.example.com/applications/argocd/shop"
+    );
+  });
+
+  /**
+   * Fails if "nothing routes it" is printed while the Ingresses are still
+   * being read, which is before anyone can know.
+   */
+  it("says it is still reading while the Ingresses have not answered", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+    answers.set("ingresses", () => new Promise(() => {}));
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(page()).toHaveTextContent("Reading what routes argocd-server…");
+    expect(page()).not.toHaveTextContent("there is no address to send you to");
+  });
+
+  /** Everything read and no host named: said of what was read, not of the cluster. */
+  it("says nothing it could read routes the Service, once everything answered", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    await waitFor(() =>
+      expect(page()).toHaveTextContent(
+        "nothing this app could read routes argocd-server to a hostname, so there is no address to send you to"
+      )
+    );
+  });
+});
+
+describe("an Application whose sync is running", () => {
+  /**
+   * The row said "(never synced)" twice and "Nothing is going to fix this on
+   * its own" for as long as a hook ran. Fails if any of the three comes back.
+   */
+  it("says a sync is running and what it waits for, not that it never synced", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([
+        application(
+          "shop",
+          {},
+          {
+            sync: { status: "OutOfSync" },
+            health: { status: "Healthy" },
+            operationState: {
+              phase: "Running",
+              message: "waiting for completion of hook batch/Job/migrate",
+              startedAt: new Date(Date.now() - 3_600_000).toISOString(),
+            },
+          }
+        ),
+      ])
+    );
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(
+      screen.getByText(/^A sync has been running for \d+[mh]$/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("waiting for completion of hook batch/Job/migrate")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/sync running/)).toHaveLength(2);
+    expect(screen.queryByText(/never synced/)).toBeNull();
+    expect(screen.queryByText(/Nothing is going to fix this/)).toBeNull();
   });
 });
 

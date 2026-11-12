@@ -54,6 +54,7 @@ import {
   reconcilerState,
   revisionText,
   sourceState,
+  sourceWords,
   type FluxFinding,
   type FluxReconciler,
   type FluxSource,
@@ -366,9 +367,7 @@ function ReconcilerRow({
                   ? reconciler.sourceKnown
                     ? t("empty", "notInThisCluster")
                     : t("empty", "notReadLower")
-                  : source.ready === false
-                    ? t("empty", "fetchFailingLower")
-                    : (source.ref ?? t("empty", "fetchedLower"))
+                  : sourceWords(source, t)
               }
             >
               {reconciler.sourceRef.kind} {reconciler.sourceRef.name}
@@ -802,7 +801,9 @@ function SourceRow({
         <span className="min-w-0 truncate">
           {source.artifact
             ? `${revisionText(source.artifact.revision, t)}${source.artifact.at ? ` · ${t("action", "agoSuffix", { age: formatAge(source.artifact.at, t) })}` : ""}`
-            : t("action", "never")}
+            : source.staticAddress
+              ? t("empty", "fluxStaticNotFetched")
+              : t("action", "never")}
         </span>
         <span className="font-mono text-fg-mid">
           {t("columns", "appliedBy")}

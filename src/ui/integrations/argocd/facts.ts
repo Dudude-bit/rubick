@@ -55,6 +55,16 @@ export async function facts(): Promise<VendorFact[]> {
     });
   }
 
+  const notCompared = apps.filter((app) =>
+    app.findings.some((finding) => finding.kind === "notCompared")
+  ).length;
+  if (notCompared > 0) {
+    lines.push({
+      say: { key: "factNotCompared", values: { n: notCompared } },
+      tone: "warn",
+    });
+  }
+
   if (apps.length > 0) {
     lines.push({
       say: { key: "factShowThem" },
