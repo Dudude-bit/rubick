@@ -6038,7 +6038,9 @@ export const en = {
     middlewaresDescription:
       "Every one, and who uses it. A middleware nothing references is doing nothing, and nowhere else in this app could tell you.",
     middlewareUnreferenced:
-      "nothing references it, so it is configuration that does nothing",
+      "no route, chain, entry point or HTTPRoute names it, so it is configuration that does nothing",
+    middlewareNamersUnread:
+      "no route or chain names it; whether an entry point or an HTTPRoute does was not read",
     readingTheProxy: "Reading the proxy…",
     cannotSayWhatTraefikListensOn:
       "This cluster cannot say what Traefik listens on.",

@@ -18,6 +18,7 @@
 
 import type { Saying } from "@/i18n/say";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 import { commands } from "@/lib/commands";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
@@ -42,11 +43,14 @@ import {
 import {
   allRoutes,
   CONTROLLER as TRAEFIK_CONTROLLER,
+  flagsAreWhole,
   GATEWAY_CONTROLLER,
   readEmptyServices,
   readEntryPoints,
+  readsHttpRoutes,
   type EmptyServices,
   type EntryPoint,
+  type OtherNamers,
   type TraefikSources,
 } from "./model";
 
@@ -294,6 +298,40 @@ export function useController() {
     queryFn: fetchController,
     staleTime: ROUTE_STALE,
   });
+}
+
+/**
+ * What names a Middleware besides a route, for the one tab that says
+ * "unused". HTTPRoutes are listed only where the proxy's flags turn its
+ * Gateway API provider on; a cluster that does not serve the kind has none.
+ */
+export function useOtherNamers(
+  controller: ControllerInfo | undefined
+): OtherNamers {
+  const context = useClusterStore((state) => state.currentContext);
+  const args =
+    controller && flagsAreWhole(controller.args) ? controller.args : null;
+  const asked = args !== null && readsHttpRoutes(args);
+  const httpRoutes = useQuery({
+    queryKey: [context, "traefik", "http-routes"],
+    queryFn: () =>
+      commands
+        .listGatewayRoutes("HTTPRoute", null)
+        .catch((error: unknown) =>
+          errorCode(error) === ERROR_CODES.NOT_FOUND
+            ? []
+            : Promise.reject(error)
+        ),
+    enabled: asked,
+    staleTime: ROUTE_STALE,
+  });
+  return useMemo(
+    () => ({
+      args,
+      httpRoutes: asked ? (httpRoutes.data ?? null) : args && [],
+    }),
+    [args, asked, httpRoutes.data]
+  );
 }
 
 /** Everything the page needs, once all three queries have answered. */

@@ -9,6 +9,8 @@ const answers = vi.hoisted(() => ({
   backing: (): Promise<unknown> => Promise.resolve({}),
   deployments: (): Promise<unknown> => Promise.resolve([]),
   custom: (_crd: string): Promise<unknown> => Promise.resolve([]),
+  args: ["--entrypoints.web.address=:8000"],
+  httpRoutes: vi.fn((): Promise<unknown> => Promise.resolve([])),
 }));
 
 vi.mock("@/lib/commands", () => ({
@@ -39,10 +41,11 @@ vi.mock("@/lib/commands", () => ({
             name: "traefik",
             image: "traefik:v3",
             command: [],
-            args: ["--entrypoints.web.address=:8000"],
+            args: answers.args,
           },
         ],
       }),
+    listGatewayRoutes: () => answers.httpRoutes(),
     listDaemonsets: () => Promise.resolve([]),
   },
 }));
@@ -103,6 +106,8 @@ beforeEach(() => {
   answers.ingresses = () => Promise.resolve([shop]);
   answers.deployments = () => Promise.resolve([]);
   answers.custom = () => Promise.resolve([]);
+  answers.args = ["--entrypoints.web.address=:8000"];
+  answers.httpRoutes.mockReset().mockResolvedValue([]);
   answers.backing = () =>
     Promise.reject(
       new Error("Tauri command 'listServiceBacking' failed: forbidden", {
@@ -192,6 +197,118 @@ describe("what the Traefik tabs hand to Share", () => {
 });
 
 describe("the Middlewares tab", () => {
+  const orphan = {
+    name: "orphan",
+    namespace: "web",
+    uid: "mw-1",
+    apiVersion: "traefik.io/v1alpha1",
+    kind: "Middleware",
+    spec: { compress: {} },
+    status: null,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+    ownerReferences: [],
+    generation: null,
+  };
+  const withOrphan = (crd: string) =>
+    Promise.resolve(crd === "middlewares.traefik.io" ? [orphan] : []);
+
+  /**
+   * An entry point's flag can put a middleware on every router. With the
+   * proxy not found its flags are unread: the row said "does nothing" and
+   * the tab wore "1 middleware unused". Fails if either is said unread.
+   */
+  it("does not call a middleware unused while the proxy's flags are unread", async () => {
+    answers.custom = withOrphan;
+    const sections = await openOn("middlewares");
+
+    expect(
+      await screen.findByText(
+        /whether an entry point or an HTTPRoute does was not read/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/does nothing/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /Middlewares/ })
+    ).not.toHaveAccessibleName(/unused/);
+    // The shared file lists no finding and says what it did not read.
+    const shared = sections().find(
+      (section) => section.id === "traefik-middlewares"
+    );
+    expect(shared?.count).toBe(0);
+    expect(shared?.unread).toMatch(/was not read/);
+  });
+
+  const proxyFound = () =>
+    Promise.resolve([
+      {
+        name: "traefik",
+        namespace: "traefik",
+        containers: [{ image: "traefik:v3" }],
+        replicas: { ready: 1, desired: 1 },
+      },
+    ]);
+  const failed = (code: string, message: string) =>
+    new Error(`Tauri command 'listGatewayRoutes' failed: ${message}`, {
+      cause: { code, message },
+    });
+
+  /**
+   * The other half: flags read, no Gateway API provider among them, nothing
+   * naming it. Fails if it is not called unused, or if HTTPRoutes are listed
+   * for a proxy that never reads them.
+   */
+  it("calls it unused once the flags were read and nothing names it", async () => {
+    answers.custom = withOrphan;
+    answers.deployments = proxyFound;
+    await openOn("middlewares");
+
+    expect(
+      await screen.findByText(/so it is configuration that does nothing/)
+    ).toBeInTheDocument();
+    expect(answers.httpRoutes).not.toHaveBeenCalled();
+  });
+
+  /**
+   * With the Gateway API provider on, an HTTPRoute's filter can name it.
+   * Fails if a refused HTTPRoute list is read as "no HTTPRoute names it".
+   */
+  it("does not call it unused where HTTPRoutes could not be listed", async () => {
+    answers.custom = withOrphan;
+    answers.deployments = proxyFound;
+    answers.args = ["--providers.kubernetesgateway"];
+    answers.httpRoutes.mockRejectedValue(
+      failed("PERMISSION_DENIED", "httproutes is forbidden")
+    );
+    await openOn("middlewares");
+
+    await waitFor(() => expect(answers.httpRoutes).toHaveBeenCalled());
+    // The row reads "not read" while the list is on its way too, so the
+    // wrong answer is waited for rather than looked for once.
+    await expect(
+      screen.findByText(/does nothing/, {}, { timeout: 300 })
+    ).rejects.toThrow();
+    expect(
+      screen.getByText(
+        /whether an entry point or an HTTPRoute does was not read/
+      )
+    ).toBeInTheDocument();
+  });
+
+  /** A cluster that does not serve the kind has no HTTPRoute to name anything. Fails if that is left "not read" for good. */
+  it("takes a cluster without Gateway API as having no HTTPRoute", async () => {
+    answers.custom = withOrphan;
+    answers.deployments = proxyFound;
+    answers.args = ["--providers.kubernetesgateway"];
+    answers.httpRoutes.mockRejectedValue(failed("NOT_FOUND", "not found"));
+    await openOn("middlewares");
+
+    expect(
+      await screen.findByText(/so it is configuration that does nothing/)
+    ).toBeInTheDocument();
+  });
+
   /** It wore "0" while the routes naming them were still being read. Fails if a read on its way is counted. */
   it("wears no number while the routes are still being read", async () => {
     answers.ingresses = () => new Promise(() => {});

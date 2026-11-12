@@ -18,16 +18,20 @@ import { describeFinding } from "./finding-words";
 import {
   allRoutes,
   duplicatedServiceNames,
+  flagsAreWhole,
   hostGroups,
   hostState,
   middlewareUses,
   pathCount,
   readEmptyServices,
   readEntryPoints,
+  readsHttpRoutes,
   type TraefikSources,
 } from "./model";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
+
+const EVERYTHING_READ = { args: ["--api"], httpRoutes: [] };
 
 const TRAEFIK_CLASS: IngressClassSummary = {
   name: "traefik",
@@ -1302,12 +1306,138 @@ describe("ordering and middlewares", () => {
         middleware("used", { stripPrefix: { prefixes: ["/api"] } }),
         middleware("orphan", { rateLimit: { average: 100 } }),
       ],
-      routes
+      routes,
+      EVERYTHING_READ
     );
 
     expect(uses[0].middleware.name).toBe("orphan");
     expect(uses[0].usedBy).toEqual([]);
+    expect(uses[0].idle).toBe(true);
     expect(uses[1].usedBy).toHaveLength(1);
+    expect(uses[1].idle).toBe(false);
+  });
+
+  /**
+   * A `chain` runs its members and an entry point's flag puts a middleware
+   * on every router; both read "configuration that does nothing". Traefik
+   * drops a router whose middleware is gone, so deleting one on that advice
+   * is an outage. Fails if either way of being used is not counted.
+   */
+  it("counts a middleware a chain or an entry point flag names as used", () => {
+    const uses = middlewareUses(
+      [
+        middleware("default-chain", {
+          chain: { middlewares: [{ name: "headers" }, { name: "compress" }] },
+        }),
+        middleware("headers", { headers: {} }),
+        middleware("compress", { compress: {} }),
+        middleware("auth", { basicAuth: {} }),
+        middleware("orphan", { rateLimit: {} }),
+      ],
+      [],
+      {
+        args: [
+          "--entrypoints.websecure.address=:8443",
+          "--entryPoints.websecure.http.middlewares=shop-auth@kubernetescrd,gzip@file",
+        ],
+        httpRoutes: [],
+      }
+    );
+
+    const said = Object.fromEntries(
+      uses.map((use) => [use.middleware.name, [use.idle, use.alsoBy]])
+    );
+    expect(said.headers).toEqual([false, ["Middleware default-chain"]]);
+    expect(said.compress).toEqual([false, ["Middleware default-chain"]]);
+    expect(said.auth).toEqual([false, ["entryPoints.websecure"]]);
+    expect(said.orphan).toEqual([true, []]);
+    expect(said["default-chain"]).toEqual([true, []]);
+  });
+
+  /**
+   * Traefik's Gateway API provider takes a Middleware from an HTTPRoute's
+   * ExtensionRef filter, in the route's own namespace. Fails if that use is
+   * missed, or if another namespace's or another vendor's filter counts.
+   */
+  it("counts a middleware an HTTPRoute names in a filter as used", () => {
+    const httpRoute = (
+      namespace: string,
+      group: string
+    ): Parameters<typeof middlewareUses>[2]["httpRoutes"] => [
+      {
+        kind: "HTTPRoute",
+        name: "storefront",
+        namespace,
+        rules: [
+          { extensionRefs: [{ group, kind: "Middleware", name: "auth" }] },
+        ],
+      } as never,
+    ];
+    const idle = (routes: ReturnType<typeof httpRoute>) =>
+      middlewareUses([middleware("auth", {})], [], {
+        args: ["--providers.kubernetesgateway"],
+        httpRoutes: routes,
+      })[0];
+
+    expect(idle(httpRoute("shop", "traefik.io")).alsoBy).toEqual([
+      "HTTPRoute storefront",
+    ]);
+    expect(idle(httpRoute("shop", "traefik.io")).idle).toBe(false);
+    expect(idle(httpRoute("other", "traefik.io")).idle).toBe(true);
+    expect(idle(httpRoute("shop", "gateway.envoyproxy.io")).idle).toBe(true);
+  });
+
+  /**
+   * With the proxy's flags or the HTTPRoutes unread, something that can name
+   * a middleware was not looked at. Fails if "unused" is said anyway, or if
+   * a use that was seen is doubted.
+   */
+  it("does not call a middleware unused while a way to name it is unread", () => {
+    const of = (others: Parameters<typeof middlewareUses>[2]) =>
+      middlewareUses(
+        [
+          middleware("default-chain", {
+            chain: { middlewares: [{ name: "headers" }] },
+          }),
+          middleware("headers", {}),
+        ],
+        [],
+        others
+      ).map((use) => [use.middleware.name, use.idle]);
+
+    expect(of({ args: null, httpRoutes: null })).toEqual([
+      ["default-chain", null],
+      ["headers", false],
+    ]);
+    expect(of({ args: ["--api"], httpRoutes: null })).toEqual([
+      ["default-chain", null],
+      ["headers", false],
+    ]);
+  });
+
+  /**
+   * Flags beside a configuration file are not the whole configuration, and
+   * only the Gateway API provider reads HTTPRoutes. Fails if a file's entry
+   * points are taken as none, or HTTPRoutes are listed for a proxy that
+   * never reads them.
+   */
+  it("knows when the flags are the whole configuration and when HTTPRoutes are read", () => {
+    expect(flagsAreWhole([])).toBe(false);
+    expect(flagsAreWhole(["--api", "--configFile=/etc/traefik.yml"])).toBe(
+      false
+    );
+    expect(flagsAreWhole(["--api"])).toBe(true);
+
+    expect(readsHttpRoutes(["--providers.kubernetescrd"])).toBe(false);
+    expect(readsHttpRoutes(["--providers.kubernetesGateway=false"])).toBe(
+      false
+    );
+    expect(readsHttpRoutes(["--providers.kubernetesGateway"])).toBe(true);
+    expect(
+      readsHttpRoutes([
+        "--providers.kubernetesgateway.experimentalchannel=true",
+      ])
+    ).toBe(true);
   });
 
   /**

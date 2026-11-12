@@ -25,6 +25,7 @@ import type {
   IngressClassSummary,
   IngressInfo,
   ChainStop,
+  RouteInfo,
   ServiceInfo,
   TlsCertificate,
 } from "@/generated/types";
@@ -708,33 +709,118 @@ export function middlewareType(middleware: CustomResourceInfo): string | null {
 export interface MiddlewareUse {
   middleware: CustomResourceInfo;
   type: string | null;
-  /** Every route that names it. Empty is the finding. */
+  /** Every route that names it. */
   usedBy: TraefikRoute[];
+  /** What else names it: `Kind name`, or the entry point whose flag does. */
+  alsoBy: string[];
+  /** Nothing read names it; `null` where something that can was not read. */
+  idle: boolean | null;
 }
 
+const flagOf = (arg: string): [string, string] => {
+  const [key, value = "true"] = arg.replace(/^-+/, "").split("=", 2);
+  return [key.toLowerCase(), value];
+};
+
+/** Whether the flags are the proxy's whole static configuration: some, and no file beside them. */
+export const flagsAreWhole = (args: string[]): boolean =>
+  args.length > 0 && !args.some((arg) => flagOf(arg)[0] === "configfile");
+
+/** Whether the Gateway API provider runs, which is what reads an HTTPRoute's filters. */
+export const readsHttpRoutes = (args: string[]): boolean =>
+  args
+    .map(flagOf)
+    .some(([key, value]) =>
+      key === "providers.kubernetesgateway"
+        ? value.toLowerCase() !== "false"
+        : key.startsWith("providers.kubernetesgateway.")
+    );
+
+/** What can name a Middleware besides a route, each `null` where it was not read. */
+export interface OtherNamers {
+  /** The proxy's flags, where they are its whole configuration. */
+  args: string[] | null;
+  /** Every HTTPRoute; empty where no Gateway API provider reads them. */
+  httpRoutes: RouteInfo[] | null;
+}
+
+const NAMED_FROM_FLAG = /^entrypoints\.([^.]+)\.http\.middlewares(\[\d+\])?$/;
+
+/**
+ * Who uses each Middleware. A route is one way to: a `chain` runs its
+ * members, an entry point's flag puts one on every router, and an HTTPRoute
+ * names one in an ExtensionRef filter. Traefik drops a router whose
+ * middleware is gone, so "unused" is only said with all four read.
+ */
 export function middlewareUses(
   middlewares: CustomResourceInfo[],
-  routes: TraefikRoute[]
+  routes: TraefikRoute[],
+  others: OtherNamers
 ): MiddlewareUse[] {
-  const uses = middlewares.map((middleware) => ({
-    middleware,
-    type: middlewareType(middleware),
-    usedBy: routes.filter((route) =>
-      route.middlewares.some(
-        (named) =>
-          named.name === middleware.name &&
-          named.namespace === (middleware.namespace ?? "")
-      )
-    ),
-  }));
+  const fromFlags = (others.args ?? []).flatMap((arg) => {
+    const [key, value] = flagOf(arg);
+    const entryPoint = NAMED_FROM_FLAG.exec(key)?.[1];
+    return entryPoint
+      ? value.split(",").map((named) => ({
+          bare: named.trim().split("@")[0],
+          by: `entryPoints.${entryPoint}`,
+        }))
+      : [];
+  });
+  const uses = middlewares.map((middleware) => {
+    const namespace = middleware.namespace ?? "";
+    const names = (ref: { name?: string; namespace?: string }, home: string) =>
+      ref.name === middleware.name && (ref.namespace ?? home) === namespace;
+    const usedBy = routes.filter((route) =>
+      route.middlewares.some((named) => names(named, ""))
+    );
+    const alsoBy = [
+      ...middlewares
+        .filter((chain) =>
+          (
+            (chain.spec as { chain?: { middlewares?: MiddlewareRef[] } } | null)
+              ?.chain?.middlewares ?? []
+          ).some((member) => names(member, chain.namespace ?? ""))
+        )
+        .map((chain) => `Middleware ${chain.name}`),
+      ...fromFlags
+        .filter((flag) => flag.bare === `${namespace}-${middleware.name}`)
+        .map((flag) => flag.by),
+      ...(others.httpRoutes ?? [])
+        .filter(
+          (route) =>
+            route.namespace === namespace &&
+            route.rules.some((rule) =>
+              rule.extensionRefs.some(
+                (ref) =>
+                  ref.kind === "Middleware" &&
+                  ref.group.startsWith("traefik.") &&
+                  ref.name === middleware.name
+              )
+            )
+        )
+        .map((route) => `${route.kind} ${route.name}`),
+    ];
+    const used = usedBy.length + alsoBy.length > 0;
+    return {
+      middleware,
+      type: middlewareType(middleware),
+      usedBy,
+      alsoBy,
+      idle:
+        used || (others.args !== null && others.httpRoutes !== null)
+          ? !used
+          : null,
+    };
+  });
   // Unused first: it is the only row on the tab that is a finding rather
   // than inventory.
-  return uses.sort((a, b) => {
-    if (a.usedBy.length !== b.usedBy.length) {
-      return a.usedBy.length - b.usedBy.length;
-    }
-    return a.middleware.name.localeCompare(b.middleware.name);
-  });
+  const rank = (use: MiddlewareUse) =>
+    use.idle ? 0 : use.idle === null ? 1 : 2;
+  return uses.sort(
+    (a, b) =>
+      rank(a) - rank(b) || a.middleware.name.localeCompare(b.middleware.name)
+  );
 }
 
 // --- the hosts ----------------------------------------------------------

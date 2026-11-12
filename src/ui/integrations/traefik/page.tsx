@@ -81,6 +81,7 @@ import {
   GROUPS,
   useBacking,
   useController,
+  useOtherNamers,
   useRouteSources,
   sourcesFrom,
   type ControllerInfo,
@@ -185,6 +186,7 @@ export default function TraefikPage() {
   );
 
   const groups = useMemo(() => (sources ? hostGroups(sources) : []), [sources]);
+  const namers = useOtherNamers(controller.data);
 
   if (routeSources.error) {
     return (
@@ -198,9 +200,10 @@ export default function TraefikPage() {
   }
 
   const uses = sources
-    ? middlewareUses(sources.middlewares, allRoutesOf(groups))
+    ? middlewareUses(sources.middlewares, allRoutesOf(groups), namers)
     : [];
-  const unused = uses.filter((use) => use.usedBy.length === 0).length;
+  const unused = uses.filter((use) => use.idle).length;
+  const unchecked = uses.filter((use) => use.idle === null).length;
 
   const tabs: DetailTab[] = [
     {
@@ -249,7 +252,15 @@ export default function TraefikPage() {
       mark:
         unused > 0
           ? severityMark("warn", t("count", "middlewaresUnused", { n: unused }))
-          : readCountMark(sources ? uses.length : null, null),
+          : unchecked > 0
+            ? {
+                shows: "unchecked",
+                says: t("count", "notCheckedOfTotal", {
+                  n: unchecked,
+                  total: uses.length,
+                }),
+              }
+            : readCountMark(sources ? uses.length : null, null),
       content: <MiddlewaresTab uses={uses} />,
     },
     {
@@ -1044,7 +1055,7 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
   const t = useT();
   useShareSection("traefik-middlewares", () => {
     const found = uses.flatMap((use) =>
-      use.usedBy.length === 0
+      use.idle
         ? [
             {
               title: use.middleware.name,
@@ -1059,13 +1070,15 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
           ]
         : []
     );
-    if (found.length === 0) return null;
+    const unchecked = uses.some((use) => use.idle === null);
+    if (found.length === 0 && !unchecked) return null;
     return {
       id: "traefik-middlewares",
       order: ORDER.own,
       title: "Middlewares",
       icon: iconSvg(Filter),
       count: found.length,
+      ...(unchecked && { unread: t("empty", "middlewareNamersUnread") }),
       body: { type: "findings" as const, items: found },
     };
   });
@@ -1104,18 +1117,23 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
             <span className="truncate font-mono text-fg-mid">
               {use.type ?? <None />}
             </span>
-            {use.usedBy.length === 0 ? (
+            {use.idle ? (
               <span className="text-warn">
                 {t("empty", "middlewareUnreferenced")}
+              </span>
+            ) : use.idle === null ? (
+              <span className="text-fg-mut">
+                {t("empty", "middlewareNamersUnread")}
               </span>
             ) : (
               <span className="truncate text-fg-mut">
                 {[
-                  ...new Set(
-                    use.usedBy.map(
+                  ...new Set([
+                    ...use.usedBy.map(
                       (route) => `${route.source.kind} ${route.source.name}`
-                    )
-                  ),
+                    ),
+                    ...use.alsoBy,
+                  ]),
                 ].join(", ")}
               </span>
             )}
