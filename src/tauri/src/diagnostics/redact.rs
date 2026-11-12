@@ -173,6 +173,7 @@ fn redacted_as(mut d: Diagnostics, identity: &PathIdentity) -> Diagnostics {
     }
     for ctx in &mut d.contexts {
         ctx.context = scrub(&ctx.context);
+        ctx.command = ctx.command.as_deref().map(&scrub);
         ctx.command_path = ctx.command_path.as_deref().map(&scrub);
     }
     for plugin in &mut d.plugins {
@@ -434,6 +435,27 @@ mod tests {
             out.app.config_path.as_deref(),
             Some("~/.config/k8s-gui/config.toml")
         );
+    }
+
+    /// A kubeconfig may name its exec plugin by an absolute path, as yc, tsh
+    /// and gcloud's installer write it, and that was the one path the report
+    /// printed as written, on screen and in the copy. Fails if the command a
+    /// context runs keeps the home directory or the login.
+    #[test]
+    fn an_exec_command_written_as_a_path_hides_the_home_like_every_other_path() {
+        let mut d = with_paths(
+            "/home/marco",
+            "/home/marco/.config/k8s-gui/config.toml",
+            "/home/marco/.local/share/com.k8s-gui.app/logs/rubick.log",
+        );
+        d.contexts[0].command = Some("/home/marco/yandex-cloud/bin/yc".into());
+        let out = redacted_as(d, &marco());
+        assert_eq!(
+            out.contexts[0].command.as_deref(),
+            Some("~/yandex-cloud/bin/yc")
+        );
+        let all = serde_json::to_string(&out).expect("serialises");
+        assert!(!all.contains("marco"), "the login survived: {all}");
     }
 
     /// Fails if a sandboxed `$HOME` lets the real home, or an XDG base
