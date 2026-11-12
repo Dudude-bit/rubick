@@ -24,6 +24,9 @@ const WATCHED_BY_NAME: ReadonlySet<string> = new Set([
   "Node",
 ]);
 
+/** Whether a page of `kind` hears from a watch that its object is back. */
+export const watchedByName = (kind: string) => WATCHED_BY_NAME.has(kind);
+
 /**
  * A page's object watched by its name for as long as the page is on screen,
  * there or gone: each change the watch sees, a deletion included, reads the

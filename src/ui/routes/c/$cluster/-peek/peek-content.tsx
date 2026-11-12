@@ -128,6 +128,9 @@ export function PeekContent({
     refresh: "resourceDetail",
     refetchOnWindowFocus: false,
     retry: false,
+    // No watch follows a peeked object by name, so only this read can say
+    // that one made again under its name is back.
+    rereadsGone: true,
   });
 
   const { dataUpdatedAt } = read;

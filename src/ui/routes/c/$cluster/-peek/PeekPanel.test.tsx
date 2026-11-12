@@ -147,7 +147,7 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOf } from "@/lib/delivery";
 import { ROLE_TEXT } from "@/lib/status-role";
-import { REFRESH_INTERVALS } from "@/lib/refresh";
+import { BACKOFF, REFRESH_INTERVALS } from "@/lib/refresh";
 import { useWindowActivity } from "@/lib/window-activity";
 import { renderWithRouter } from "@/test/render";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
@@ -2202,9 +2202,11 @@ describe("PeekPanel on a pod deleted underneath it", () => {
    * The last check read `refetchInterval` off the observer and passed while
    * the deleted pod was read every two seconds with the peek open, then on
    * every focus, every click, the reconnect and the cluster switch after it
-   * closed. This counts the reads, in the order Dana caused them.
+   * closed. This counts the reads, in the order Dana caused them. An open
+   * peek still asks at the slowest rate, which is what finds a pod made
+   * again under its name.
    */
-  it("stops reading a pod at NotFound and reads nothing of it once closed", async () => {
+  it("reads a pod it found gone only at the slowest rate, and nothing of it once closed", async () => {
     await wrap(POD_PEEK);
     await advance(0);
     expect(screen.getByText("CrashLoopBackOff")).toBeInTheDocument();
@@ -2212,12 +2214,13 @@ describe("PeekPanel on a pod deleted underneath it", () => {
     vi.mocked(commands.getPod).mockRejectedValue(notFound());
     await advance(REFRESH_INTERVALS.resourceDetail);
     expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
-    const gone = reads();
+    const found = reads();
 
     await advance(60_000);
     act(() => useWindowActivity.setState({ interactionAt: Date.now() }));
     await advance(10_000);
-    expect(reads()).toBe(gone);
+    const gone = reads();
+    expect(gone - found).toBe(Math.floor(70_000 / BACKOFF.cap));
 
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     await advance(1_000);
@@ -2237,6 +2240,26 @@ describe("PeekPanel on a pod deleted underneath it", () => {
     await advance(60_000);
     expect(reads()).toBe(gone);
     expect(asked()).toBe(closed);
+  });
+
+  /**
+   * A StatefulSet puts its pod back under the name, and the peek that had
+   * found it gone never asked again: "no longer exists" beside a running
+   * pod until the peek was closed and opened. Fails if an open peek does
+   * not find the object made again.
+   */
+  it("finds a pod made again under its name while it is open", async () => {
+    await wrap(POD_PEEK);
+    await advance(0);
+    vi.mocked(commands.getPod).mockRejectedValue(notFound());
+    await advance(REFRESH_INTERVALS.resourceDetail);
+    expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
+
+    vi.mocked(commands.getPod).mockResolvedValue(buildPod());
+    await advance(BACKOFF.cap + REFRESH_INTERVALS.resourceDetail);
+
+    expect(screen.queryByText("This Pod no longer exists.")).toBeNull();
+    expect(screen.getByText("CrashLoopBackOff")).toBeInTheDocument();
   });
 });
 

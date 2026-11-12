@@ -286,6 +286,83 @@ describe("a surface off screen, whatever else happens", () => {
   });
 });
 
+describe("an object its read found gone", () => {
+  /** A read that answers NotFound until the object is made again. */
+  const cluster = { there: false };
+  function Gone({ rereadsGone }: { rereadsGone?: boolean }) {
+    const { data, error } = useLiveQuery<string>({
+      queryKey: ["gone"],
+      queryFn: async () => {
+        reads++;
+        if (cluster.there) return "back";
+        throw Object.assign(new Error('configmaps "app" not found'), {
+          code: "NOT_FOUND",
+        });
+      },
+      refresh: "resourceDetail",
+      staleTime: 0,
+      rereadsGone,
+    });
+    return <span data-testid="data">{data ?? (error ? "gone" : "")}</span>;
+  }
+  const DETAIL = REFRESH_INTERVALS.resourceDetail;
+
+  beforeEach(() => {
+    cluster.there = false;
+  });
+
+  /**
+   * A deleted pod's peek asked for it every two seconds for as long as it
+   * stayed open. Fails if a NotFound is asked again by the timer, by the
+   * window coming back or by a touch, where nobody said to.
+   */
+  it("is not asked for again unless its reader says to", async () => {
+    wrap(<Gone />);
+    await settle();
+    expect(screen.getByTestId("data")).toHaveTextContent("gone");
+
+    await advance(DETAIL * 5 + BACKOFF.cap * 2);
+    act(() => useWindowActivity.setState({ focused: false }));
+    act(() => useWindowActivity.setState({ focused: true }));
+    await settle();
+    expect(reads).toBe(1);
+  });
+
+  /**
+   * A ConfigMap, a Secret, an Ingress: no watch follows them by name, so a
+   * page that stopped at NotFound said "no longer exists" over an object
+   * made again a second later for as long as it stayed open. Fails if a
+   * reader that says so is not asked again, or is asked at the page's rate.
+   */
+  it("is asked for again at the slowest rate where nothing else would say it is back", async () => {
+    wrap(<Gone rereadsGone />);
+    await settle();
+    expect(reads).toBe(1);
+
+    await advance(DETAIL * 5);
+    expect(reads).toBe(1);
+
+    cluster.there = true;
+    await advance(BACKOFF.cap);
+    expect(reads).toBe(2);
+    expect(screen.getByTestId("data")).toHaveTextContent("back");
+  });
+
+  /** The reader made it again in a terminal and came back. Fails if the page waits for its timer. */
+  it("is asked for again the moment the reader comes back to the window", async () => {
+    wrap(<Gone rereadsGone />);
+    await settle();
+
+    cluster.there = true;
+    act(() => useWindowActivity.setState({ focused: false }));
+    act(() => useWindowActivity.setState({ focused: true }));
+    await settle();
+
+    expect(reads).toBe(2);
+    expect(screen.getByTestId("data")).toHaveTextContent("back");
+  });
+});
+
 describe("coming back to a tab", () => {
   it("re-reads the cluster the moment the tab is shown again", async () => {
     const panel = (content: React.ReactNode): DetailTab[] => [
