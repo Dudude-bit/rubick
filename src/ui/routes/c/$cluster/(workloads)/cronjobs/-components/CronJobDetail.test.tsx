@@ -122,6 +122,7 @@ function run(name: string, status: string): JobInfo {
     status,
     failure: null,
     createdAt: new Date().toISOString(),
+    cronJob: "nightly-backup",
   };
 }
 
@@ -428,6 +429,27 @@ describe("CronJobDetail", () => {
   });
 
   /**
+   * CronJob `nightly-backup` took the Jobs of `nightly-backup-weekly` for its
+   * own, since their names begin with its own: it counted them in its
+   * history and said their failure as its last run. Fails if a Job another
+   * CronJob controls is listed, or a run named by hand is not.
+   */
+  it("lists the runs it controls and none of a CronJob named after it", async () => {
+    mockDetail(buildCronJob(), "jobs");
+    vi.mocked(commands.listJobs).mockResolvedValueOnce([
+      run("before-migration", "Complete"),
+      {
+        ...run("nightly-backup-weekly-29000000", "Failed"),
+        cronJob: "nightly-backup-weekly",
+      },
+    ]);
+    await renderPage();
+    expect(await screen.findByText(/1 kept · history limits/)).toBeVisible();
+    expect(screen.getByText("before-migration")).toBeInTheDocument();
+    expect(screen.queryByText("nightly-backup-weekly-29000000")).toBeNull();
+  });
+
+  /**
    * Dana's cron-demo Usage read "still reading" for more than ten seconds
    * between runs: the pods are asked for only while a run is in flight, and
    * the read nobody started counted as one under way. Fails if a CronJob
@@ -484,6 +506,9 @@ describe("CronJobDetail", () => {
         workload: { kind: "Job", name: ownedByRun.name },
       } as never,
     ]);
+    vi.mocked(commands.listJobs).mockResolvedValue([
+      run(ownedByRun.name, "Running"),
+    ]);
     const { router } = await renderPage();
     await waitFor(async () =>
       expect(await usageSection()).toHaveTextContent("summed over 1 pod")
@@ -498,6 +523,7 @@ describe("CronJobDetail", () => {
     expect(usage).not.toHaveTextContent("summed over");
     expect(usage).toHaveTextContent("No run of this CronJob is in flight.");
     vi.mocked(commands.listPods).mockResolvedValue([]);
+    vi.mocked(commands.listJobs).mockResolvedValue([]);
   });
 
   /** A Job still running is a run in flight, whatever the controller's count says; fails if its pods go unasked. */

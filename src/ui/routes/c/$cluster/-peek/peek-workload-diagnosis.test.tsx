@@ -251,6 +251,7 @@ describe("the peek's Last run row", () => {
         uid: "run",
         status: "Pending",
         createdAt: "2026-10-15T05:00:00Z",
+        cronJob: "nightly",
       } as JobInfo,
     ]);
     vi.mocked(commands.listEvents).mockResolvedValue([

@@ -1412,6 +1412,7 @@ describe("PeekPanel reads what the detail pages read", () => {
       status,
       failure: null,
       createdAt,
+      cronJob: "reports",
     });
     const failed = (name: string): PodInfo =>
       buildPod({

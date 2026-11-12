@@ -316,7 +316,7 @@ it("says its ReplicaSets' warnings could not be read rather than that there are 
 /** A CronJob's refused run is a FailedCreate on the Job; fails if its Events leave out its runs' warnings or take another CronJob's. */
 it("carries the warnings of a CronJob's own runs", async () => {
   answer.events = [];
-  answer.jobs = [{ uid: "run", name: "nightly-29000000" }];
+  answer.jobs = [{ uid: "run", name: "nightly-29000000", cronJob: "nightly" }];
   answer.jobEvents = [
     onObject("Job", "nightly-29000000", "run", "FailedCreate", 4),
     onObject("Job", "hourly-29000000", "hourly", "FailedCreate", 6),
@@ -616,7 +616,7 @@ it("leaves a namesake kind's warning out of the warnings of the objects a CronJo
     },
   });
   answer.events = [];
-  answer.jobs = [{ uid: "run", name: "nightly-29000000" }];
+  answer.jobs = [{ uid: "run", name: "nightly-29000000", cronJob: "nightly" }];
   answer.jobEvents = [
     run("batch/v1", "FailedCreate"),
     run("batch.volcano.sh/v1alpha1", "PodGroupPending"),
