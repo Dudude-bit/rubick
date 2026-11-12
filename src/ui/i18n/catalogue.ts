@@ -6933,6 +6933,8 @@ export const en = {
     noConditions: "No conditions reported",
     noEventsForObject: "No events for this object",
     noEventsInNamespace: "No events in this namespace",
+    eventsReadShort:
+      "The read stopped before the end of this namespace's events, so these are the newest of those read and not known to be the latest: a newer one may be missing.",
     eventsOfEveryObjectIn:
       "The events of every object in {namespace}, not only those about the Namespace itself.",
     noEventsUnprovisioned:

@@ -401,6 +401,8 @@ const event = (
 });
 
 let listed: Array<Record<string, unknown>> = [];
+/** Whether a namespace's events are answered as read short of their end. */
+let short = false;
 
 /**
  * A cluster where `target` exists and `events` answers its events, opened
@@ -449,6 +451,10 @@ async function openEventAbout(
       listed.push((asked?.filters ?? {}) as Record<string, unknown>);
       return events();
     }
+    if (command === "list_latest_events") {
+      listed.push((asked?.filters ?? {}) as Record<string, unknown>);
+      return { events: await events(), short };
+    }
     if (command === "check_access")
       return (asked as { queries: AccessQuery[] }).queries.map((query) => ({
         ...query,
@@ -486,6 +492,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   listed = [];
+  short = false;
   useClusterStore.setState({ currentContext: "prod", isConnected: true });
 });
 
@@ -622,6 +629,28 @@ describe("an Event about a Namespace, opened", () => {
       involved_object_kind: null,
       involved_object_name: null,
     });
+    expect(screen.queryByTestId("events-read-short")).toBeNull();
+  });
+
+  /**
+   * The same tab over a namespace with more events than one read walks said
+   * "the latest 200" of the first two thousand in name order. Fails if a
+   * read cut short is drawn without saying its rows may not be the latest.
+   */
+  it("says the namespace's events may not be the latest where their read was cut short", async () => {
+    short = true;
+    const pod = { kind: "Pod", name: "web-1", namespace: NS };
+    await openEventAbout(NAMESPACE, async () =>
+      Array.from({ length: 200 }, (_, index) =>
+        event(pod, `Pulled${index}`, "Normal", 1, NS)
+      )
+    );
+
+    expect(await screen.findByTestId("events-read-short")).toHaveTextContent(
+      "The read stopped before the end of this namespace's events"
+    );
+    expect(screen.getByText("200 events")).toBeInTheDocument();
+    expect(screen.queryByText(/the latest 200 events/)).toBeNull();
   });
 });
 

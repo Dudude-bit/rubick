@@ -1048,6 +1048,11 @@ export interface InvolvedObjectInfo {
   uid: string | null;
 }
 
+export interface LatestEvents {
+  events: EventInfo[];
+  short: boolean;
+}
+
 export interface EventFilters {
   namespace: string | null;
   involved_object_name: string | null;

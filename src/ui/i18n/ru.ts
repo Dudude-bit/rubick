@@ -7633,6 +7633,8 @@ export const ru: Catalogue = {
     noConditions: "Условий нет",
     noEventsForObject: "Событий для этого объекта нет",
     noEventsInNamespace: "В этом пространстве имён событий нет",
+    eventsReadShort:
+      "Чтение остановилось раньше конца событий этого пространства имён, поэтому это самые новые из прочитанных, но не обязательно последние: более нового события здесь может не быть.",
     eventsOfEveryObjectIn:
       "События всех объектов в пространстве имён {namespace}, а не только о самом Namespace.",
     noEventsUnprovisioned:

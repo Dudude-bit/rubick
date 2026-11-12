@@ -88,6 +88,7 @@ vi.mock("@/lib/commands", () => ({
     getManifest: vi.fn(),
     getServedObject: vi.fn(),
     listEvents: vi.fn(),
+    listLatestEvents: vi.fn(),
     getConfigmap: vi.fn(),
     getConfigmapData: vi.fn(),
     getDeployment: vi.fn(),
@@ -428,6 +429,9 @@ function mockCluster() {
       createdAt: null,
     });
   vi.mocked(commands.listEvents).mockReset().mockResolvedValue([buildEvent()]);
+  vi.mocked(commands.listLatestEvents)
+    .mockReset()
+    .mockResolvedValue({ events: [buildEvent()], short: false });
   vi.mocked(commands.getConfigmap)
     .mockReset()
     .mockResolvedValue(buildConfigMap());
@@ -1082,7 +1086,7 @@ describe("PeekPanel", () => {
     expect(
       await screen.findByText("Recent events in this namespace")
     ).toBeInTheDocument();
-    expect(commands.listEvents).toHaveBeenCalledWith(
+    expect(commands.listLatestEvents).toHaveBeenCalledWith(
       expect.objectContaining({
         namespace: "kube-system",
         involved_object_kind: null,

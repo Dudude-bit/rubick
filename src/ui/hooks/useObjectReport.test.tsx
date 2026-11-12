@@ -7,6 +7,9 @@ import { RouterContextProvider } from "@tanstack/react-router";
 const listEvents = vi.fn<(...args: unknown[]) => Promise<unknown[]>>(
   async () => []
 );
+const listLatestEvents = vi.fn<(...args: unknown[]) => Promise<unknown>>(
+  async () => ({ events: [], short: false })
+);
 const getResourceConnections = vi.fn<(...args: unknown[]) => Promise<unknown>>(
   async () => null
 );
@@ -20,6 +23,7 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     getAppInfo: vi.fn(async () => ({ version: "4.20.1" })),
     listEvents: (...args: unknown[]) => listEvents(...args),
+    listLatestEvents: (...args: unknown[]) => listLatestEvents(...args),
     getResourceConnections: (...args: unknown[]) =>
       getResourceConnections(...args),
     listNodes: (...args: unknown[]) => listNodes(...args),
@@ -201,6 +205,48 @@ describe("the report of any object", () => {
         "The warnings on its ReplicaSets could not be read, so a refusal written there is not shown: replicasets.apps is forbidden"
       )
     );
+  });
+
+  /**
+   * A namespace's shared file listed "the latest" events of a read that had
+   * stopped two thousand events in. Fails if the report of a read cut short
+   * does not say its events may not be the latest.
+   */
+  it("says a namespace's events were read short of their end", async () => {
+    listLatestEvents.mockResolvedValue({
+      short: true,
+      events: [
+        {
+          name: "web.1",
+          namespace: "busy",
+          uid: "event-1",
+          type: "Normal",
+          reason: "Started",
+          message: null,
+          source: null,
+          involvedObject: {
+            kind: "Pod",
+            name: "web",
+            namespace: "busy",
+            uid: "pod",
+          },
+          count: 1,
+          firstTimestamp: null,
+          lastTimestamp: "2026-11-12T10:00:00Z",
+        },
+      ],
+    });
+    const namespace = { kind: "Namespace", name: "busy", namespace: "" };
+    const { result } = renderHook(
+      () => useObjectReport(namespace, {}, undefined, true),
+      { wrapper }
+    );
+    await waitFor(() =>
+      expect(result.current.report?.notRead.join(" ")).toContain(
+        "The read stopped before the end of this namespace's events"
+      )
+    );
+    listLatestEvents.mockResolvedValue({ events: [], short: false });
   });
 
   /** A refused events read is a line in "Not read", never an empty list of events. */

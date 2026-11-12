@@ -112,6 +112,11 @@ export function ObjectEventsBody({
           </>
         }
       />
+      {query.short && rows.length > 0 && (
+        <p className="mt-1.5 text-xs text-warn" data-testid="events-read-short">
+          {t("empty", "eventsReadShort")}
+        </p>
+      )}
       {query.ownedUnread && (
         <p
           className={cn(

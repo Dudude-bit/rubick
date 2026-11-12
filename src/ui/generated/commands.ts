@@ -78,6 +78,7 @@ import type {
   JobDetailInfo,
   JobInfo,
   KubeconfigSource,
+  LatestEvents,
   Lineage,
   ListAccess,
   ListQuery,
@@ -1218,6 +1219,12 @@ export async function listEvents(
   filters: EventFilters | null
 ): Promise<EventInfo[]> {
   return invoke<EventInfo[]>("list_events", { filters });
+}
+
+export async function listLatestEvents(
+  filters: EventFilters | null
+): Promise<LatestEvents> {
+  return invoke<LatestEvents>("list_latest_events", { filters });
 }
 
 export async function getPodSetupWarnings(
