@@ -12,6 +12,7 @@ import { withoutCredentials } from "@/lib/hints";
 import type { CrdColumn } from "../kit";
 import { getValueByPath, matchMultiple, orNone, orNotWritten } from "../kit";
 import type { CrdView } from "../registry";
+import { autoSyncOn } from "./model";
 
 const applicationColumns: CrdColumn[] = [
   {
@@ -54,7 +55,7 @@ const applicationColumns: CrdColumn[] = [
     id: "autoSync",
     header: "autoSync",
     accessor: (resource) =>
-      getValueByPath(resource, "spec.syncPolicy.automated") != null,
+      autoSyncOn(getValueByPath(resource, "spec.syncPolicy.automated")),
     cell: (value) => (value ? "on" : "off"),
   },
 ];

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { CustomResourceInfo } from "@/generated/types";
 import {
   appState,
+  autoSyncOn,
   byKind,
   byTrouble,
   differing,
@@ -180,6 +181,145 @@ describe("the two ways an Application is OutOfSync", () => {
       )
     );
     expect(app.findings[0].kind).toBe("syncFailedOnce");
+  });
+});
+
+describe("an Application that is not in sync and has no failure to show", () => {
+  const leftOutOfSync = {
+    sync: { status: "OutOfSync", revision: SHA },
+    health: { status: "Healthy" },
+    operationState: {
+      phase: "Succeeded",
+      message: "successfully synced (all tasks run)",
+      finishedAt: "2026-07-20T10:00:00Z",
+    },
+  };
+
+  /**
+   * Auto-sync without prune after a manifest left git, a closed sync window,
+   * an edit in the cluster with self-heal off: Argo leaves the Application
+   * OutOfSync with a succeeded operation and no condition. It had no
+   * finding, so it was green, sorted with the healthy ones and counted under
+   * "all in sync". Fails if auto-sync being on hides drift again.
+   */
+  it("is drift whether or not auto-sync is on", () => {
+    const app = readApplication(
+      application("shop", { syncPolicy: { automated: {} } }, leftOutOfSync)
+    );
+    expect(app.findings).toEqual([
+      {
+        kind: "drifted",
+        severity: "warn",
+        since: "2026-07-20T10:00:00Z",
+        autoSync: true,
+      },
+    ]);
+    expect(appState(app, t)).toEqual({
+      text: "out of sync · healthy",
+      tone: "warn",
+    });
+    const healthy = readApplication(
+      application(
+        "aaa",
+        {},
+        { sync: { status: "Synced" }, health: { status: "Healthy" } }
+      )
+    );
+    expect(byTrouble([healthy, app]).map((one) => one.name)).toEqual([
+      "shop",
+      "aaa",
+    ]);
+  });
+
+  /**
+   * A new Application, or one in a namespace the controller does not watch,
+   * has no status. `Unknown` by default and no finding made it "not compared
+   * · unknown" in green. Fails if silence from Argo reads as in sync.
+   */
+  it("is not compared, and not ok, where Argo wrote no status", () => {
+    const app = readApplication(application("shop", {}, {}));
+    expect(app.findings).toEqual([{ kind: "notCompared", severity: "warn" }]);
+    expect(appState(app, t)).toEqual({
+      text: "not compared · unknown",
+      tone: "warn",
+    });
+  });
+
+  /**
+   * Where Argo says why it could not compare, its sentence is the answer.
+   * Fails if "has not reached it yet" is printed beside a ComparisonError.
+   */
+  it("leaves the reason to Argo's own error where it reports one", () => {
+    const app = readApplication(
+      application(
+        "shop",
+        {},
+        {
+          sync: { status: "Unknown" },
+          conditions: [{ type: "ComparisonError", message: "repo not found" }],
+        }
+      )
+    );
+    expect(app.findings.map((finding) => finding.kind)).toEqual(["condition"]);
+    expect(app.worst).toBe("err");
+  });
+
+  /**
+   * Fails if a state with no finding is green by default: suspended,
+   * progressing and a health Argo could not assess are not "ok".
+   */
+  it.each([
+    ["Healthy", "ok"],
+    ["Progressing", "warn"],
+    ["Suspended", "warn"],
+    ["Unknown", "warn"],
+  ])("draws synced and %s as %s", (health, tone) => {
+    const app = readApplication(
+      application(
+        "shop",
+        {},
+        { sync: { status: "Synced" }, health: { status: health } }
+      )
+    );
+    expect(app.findings).toEqual([]);
+    expect(appState(app, t).tone).toBe(tone);
+  });
+});
+
+describe("whether auto-sync is on", () => {
+  /**
+   * Argo CD 3.1 reads `automated.enabled: false` as no automated sync at
+   * all, whatever stands beside it. Read as on, the Application had no
+   * drift finding and every object it manages warned that an edit would be
+   * undone. Fails if the presence of `automated` alone is taken for on.
+   */
+  it("is off where automated is there and disabled", () => {
+    const app = readApplication(
+      application(
+        "shop",
+        {
+          syncPolicy: {
+            automated: { enabled: false, prune: true, selfHeal: true },
+          },
+        },
+        { sync: { status: "OutOfSync" }, health: { status: "Healthy" } }
+      )
+    );
+    expect(app.autoSync).toBe(false);
+    expect(app.selfHeal).toBe(false);
+    expect(app.findings).toMatchObject([{ kind: "drifted", autoSync: false }]);
+  });
+
+  /** Versions before 3.1 have no such field, and 3.1 defaults it to on. */
+  it.each([[{}], [{ enabled: true }], [{ selfHeal: true }]])(
+    "is on for %o",
+    (automated) => {
+      expect(autoSyncOn(automated)).toBe(true);
+    }
+  );
+
+  it.each([[null], [undefined]])("is off for %o", (automated) => {
+    expect(autoSyncOn(automated)).toBe(false);
   });
 });
 

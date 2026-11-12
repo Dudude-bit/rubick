@@ -31,3 +31,32 @@ describe("the repository column of the Application list", () => {
     );
   });
 });
+
+/**
+ * One more reader of whether auto-sync is on. Fails if the column says "on"
+ * for an Application whose automated sync Argo CD 3.1 was told to skip.
+ */
+describe("the autoSync column of the Application list", () => {
+  const column = crd
+    .columnsFor("Application")
+    .find((one) => one.id === "autoSync")!;
+  const says = (automated: unknown) =>
+    column.cell!(
+      column.accessor(
+        {
+          spec: { syncPolicy: { automated } },
+        } as unknown as CustomResourceInfo,
+        en
+      ),
+      en
+    );
+
+  it("says off where automated sync is disabled", () => {
+    expect(says({ enabled: false, selfHeal: true })).toBe("off");
+    expect(says(undefined)).toBe("off");
+  });
+
+  it("says on where it is declared and not disabled", () => {
+    expect(says({})).toBe("on");
+  });
+});

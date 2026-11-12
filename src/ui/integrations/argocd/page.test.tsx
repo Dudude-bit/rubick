@@ -115,6 +115,76 @@ async function openRow(name: string) {
   );
 }
 
+describe("Applications that are not in sync", () => {
+  const healthy = application(
+    "aaa",
+    {},
+    { sync: { status: "Synced" }, health: { status: "Healthy" } }
+  );
+
+  /**
+   * With auto-sync on and the last operation succeeded there was no finding,
+   * so the line above the list read "2 Applications, all in sync" over a row
+   * that said "out of sync". Fails if that line is printed again, or the row
+   * says nothing of why.
+   */
+  it("does not say all in sync over one auto-sync has left out of sync", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([
+        healthy,
+        application(
+          "shop",
+          { syncPolicy: { automated: {} } },
+          {
+            sync: { status: "OutOfSync" },
+            health: { status: "Healthy" },
+            operationState: {
+              phase: "Succeeded",
+              finishedAt: "2026-07-20T10:00:00Z",
+            },
+          }
+        ),
+      ])
+    );
+
+    await renderOn("applications");
+
+    expect(
+      await screen.findByText(
+        /^Out of sync though auto-sync is on: last synced/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/all in sync/)).toBeNull();
+    expect(screen.getByText("out of sync · healthy")).toHaveClass("text-warn");
+  });
+
+  /** The same for an Application Argo has written no status for. */
+  it("does not say all in sync over one Argo has not compared", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([healthy, application("shop", {}, {})])
+    );
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(
+      screen.getByText("Argo has not compared this Application")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not watch the namespace argocd/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/all in sync/)).toBeNull();
+    expect(screen.getByText("not compared · unknown")).toHaveClass("text-warn");
+  });
+
+  /** The control: with nothing but synced Applications the line is true. */
+  it("says all in sync where every Application is", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([healthy]));
+    await renderOn("applications");
+    expect(await screen.findByText(/all in sync/)).toBeInTheDocument();
+  });
+});
+
 describe("an Application whose sync is running", () => {
   /**
    * The row said "(never synced)" twice and "Nothing is going to fix this on

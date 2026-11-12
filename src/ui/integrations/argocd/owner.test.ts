@@ -146,6 +146,30 @@ describe("what a five-hundred-row page costs", () => {
   });
 });
 
+describe("an Application whose automated sync is disabled", () => {
+  /**
+   * `enabled: false` beside `selfHeal: true` syncs nothing, and every object
+   * of such an Application warned that an edit would be put back. Fails if
+   * self-heal is read without asking whether auto-sync runs at all.
+   */
+  it("does not warn that an edit will be undone", async () => {
+    const app = application();
+    listCustomResources.mockResolvedValue([
+      {
+        ...app,
+        spec: {
+          ...(app.spec as object),
+          syncPolicy: { automated: { enabled: false, selfHeal: true } },
+        },
+      },
+    ]);
+    const [answer] = await ownerOf([api()]);
+    if (answer?.state !== "delivered") throw new Error("unreachable");
+    expect(answer.source.drift).toBe("kept");
+    expect(answer.source.note?.key).toBe("argoNoAutoSync");
+  });
+});
+
 describe("while the Application is syncing", () => {
   /**
    * Argo clears `finishedAt` while an operation runs, and the delivery line

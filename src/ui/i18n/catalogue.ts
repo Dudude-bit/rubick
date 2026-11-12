@@ -3866,6 +3866,10 @@ export const en = {
       one: "{n} out of sync with nothing fixing it",
       other: "{n} out of sync with nothing fixing them",
     },
+    factNotCompared: {
+      one: "{n} Argo has not compared",
+      other: "{n} Argo has not compared",
+    },
     factHostsNoGateway: {
       one: "{n} host no Gateway serves",
       other: "{n} hosts no Gateway serves",
@@ -6199,6 +6203,14 @@ export const en = {
     outOfSyncNeverSynced: "Out of sync and never synced, and auto-sync is off",
     driftedNote:
       "Nothing is going to fix this on its own. Somebody either changed the cluster by hand and meant to, or changed git and nobody pressed sync.",
+    outOfSyncAutoLastSynced:
+      "Out of sync though auto-sync is on: last synced {age} ago",
+    outOfSyncAuto: "Out of sync though auto-sync is on",
+    driftedAutoNote:
+      "Auto-sync has not brought it back. What still differs is usually something it leaves alone: an object to prune while prune is off, an edit made in the cluster while self-heal is off, a closed sync window, or a field something rewrites after every sync.",
+    argoNotComparedTitle: "Argo has not compared this Application",
+    argoNotComparedNote:
+      "It has no sync status and Argo reports no error. Either the controller has not reached it yet, or it does not watch the namespace {namespace} and never will.",
     nameIsDegraded: "{name} is degraded",
     degradedNote:
       "It is applied and it is not working, which the sync status says nothing about.",

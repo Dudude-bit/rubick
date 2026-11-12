@@ -137,8 +137,18 @@ export type ArgoFinding =
       message: string | null;
       since: string | null;
     }
-  /** Out of sync with nothing on its way to fix it. */
-  | { kind: "drifted"; severity: "warn"; since: string | null }
+  /**
+   * Out of sync with nothing on its way to fix it: auto-sync is off, or it is
+   * on and has left the Application this way.
+   */
+  | {
+      kind: "drifted";
+      severity: "warn";
+      since: string | null;
+      autoSync: boolean;
+    }
+  /** No sync status and no error: Argo has not looked at it. */
+  | { kind: "notCompared"; severity: "warn" }
   /** Running and not working, which sync status says nothing about. */
   | {
       kind: "degraded";
@@ -154,7 +164,26 @@ interface ApplicationSpec {
   source?: RawSource;
   sources?: RawSource[];
   destination?: { server?: string; name?: string; namespace?: string };
-  syncPolicy?: { automated?: { prune?: boolean; selfHeal?: boolean } | null };
+  syncPolicy?: { automated?: Automated | null };
+}
+
+interface Automated {
+  prune?: boolean;
+  selfHeal?: boolean;
+  enabled?: boolean;
+}
+
+/**
+ * Whether Argo syncs this Application on its own. Argo CD 3.1 added
+ * `automated.enabled`, and with `false` the controller syncs nothing
+ * whatever `prune` and `selfHeal` say beside it.
+ */
+export function autoSyncOn(automated: unknown): boolean {
+  return (
+    typeof automated === "object" &&
+    automated !== null &&
+    (automated as Automated).enabled !== false
+  );
 }
 
 interface RawSource {
@@ -217,8 +246,8 @@ export function readApplication(object: CustomResourceInfo): ArgoApp {
         chart: source.chart ?? null,
         targetRevision: source.targetRevision ?? null,
       })),
-    autoSync: Boolean(automated),
-    selfHeal: Boolean(automated?.selfHeal),
+    autoSync: autoSyncOn(automated),
+    selfHeal: autoSyncOn(automated) && Boolean(automated?.selfHeal),
     sync: (getValueByPath(object, "status.sync.status") as string) ?? "Unknown",
     revision:
       (getValueByPath(object, "status.sync.revision") as string) ?? null,
@@ -406,10 +435,20 @@ function findingsFor(
       message: app.operationMessage,
       since: operation.startedAt,
     });
-  } else if (app.sync === "OutOfSync" && !app.autoSync) {
+  } else if (app.sync === "OutOfSync") {
     // The quiet one. Nothing is failing, nothing is retrying, and nothing
-    // will change until a person acts.
-    findings.push({ kind: "drifted", severity: "warn", since: app.lastSyncAt });
+    // will change until a person acts. Auto-sync being on does not make it
+    // otherwise: it leaves alone what needs a prune it was not allowed, an
+    // edit it was not told to heal, or a sync window that is closed.
+    findings.push({
+      kind: "drifted",
+      severity: "warn",
+      since: app.lastSyncAt,
+      autoSync: app.autoSync,
+    });
+  } else if (app.sync !== "Synced" && !app.conditions.some(isError)) {
+    // No status at all, or `Unknown` with no error beside it to say why.
+    findings.push({ kind: "notCompared", severity: "warn" });
   }
 
   if (app.health === "Degraded") {
@@ -430,15 +469,16 @@ function findingsFor(
     if (failed && condition.type === "SyncError") continue;
     findings.push({
       kind: "condition",
-      severity: CONDITION_ERRORS.some((word) => condition.type.includes(word))
-        ? "err"
-        : "warn",
+      severity: isError(condition) ? "err" : "warn",
       condition,
     });
   }
 
   return findings;
 }
+
+const isError = (condition: ArgoCondition) =>
+  CONDITION_ERRORS.some((word) => condition.type.includes(word));
 
 function worstOf(findings: ArgoFinding[]): "err" | "warn" | null {
   if (findings.some((finding) => finding.severity === "err")) return "err";
@@ -531,7 +571,12 @@ export function appState(app: ArgoApp, t: T): VendorVerdict {
   ];
   return {
     text: words.join(" · "),
-    tone: app.worst ?? (app.health === "Progressing" ? "warn" : "ok"),
+    // Green is for the one state that earns it. Anything else with no
+    // finding (suspended, progressing, a health Argo could not assess) is
+    // not a fault and is not "ok" either.
+    tone:
+      app.worst ??
+      (app.sync === "Synced" && app.health === "Healthy" ? "ok" : "warn"),
   };
 }
 

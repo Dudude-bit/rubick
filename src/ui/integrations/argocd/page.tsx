@@ -827,6 +827,17 @@ function describeFinding(
         verbatim: finding.message,
       };
     case "drifted":
+      if (finding.autoSync) {
+        return {
+          title: finding.since
+            ? t("empty", "outOfSyncAutoLastSynced", {
+                age: formatAge(finding.since, t),
+              })
+            : t("empty", "outOfSyncAuto"),
+          note: t("empty", "driftedAutoNote"),
+          offerDiff: true,
+        };
+      }
       return {
         title: finding.since
           ? t("empty", "outOfSyncLastSynced", {
@@ -835,6 +846,11 @@ function describeFinding(
           : t("empty", "outOfSyncNeverSynced"),
         note: t("empty", "driftedNote"),
         offerDiff: true,
+      };
+    case "notCompared":
+      return {
+        title: t("empty", "argoNotComparedTitle"),
+        note: t("empty", "argoNotComparedNote", { namespace: app.namespace }),
       };
     case "degraded":
       return {
