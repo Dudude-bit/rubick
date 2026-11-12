@@ -1803,7 +1803,8 @@ export const en = {
     refused: "{address} does not answer from here",
     noTool: "The image has nothing to ask with (tried {tried})",
     ranInContainer: "in the pod's own container",
-    ranInCopy: "in a copy of the pod running {image}, {deleted} ({pod})",
+    ranInCopy:
+      "in a copy of the pod running {image}, {deleted} ({pod}). The copy has none of the pod's labels, so a NetworkPolicy that selects the pod by label did not apply to it",
     copyDeleted: "deleted afterwards",
     copyNotDeleted: "not confirmed deleted",
     unanswered: "The check ended without saying how it went",
@@ -1816,10 +1817,10 @@ export const en = {
     runFromCopy: "Run from a copy",
     copyImage: "Image for the copy",
     copyNote:
-      "A copy shares the namespace, labels, DNS policy and service account. It is not the pod, and it is deleted when the answer is in.",
+      "A copy shares the namespace, DNS policy and service account, not the labels: a NetworkPolicy that selects the pod by label does not apply to it. It is deleted when the answer is in.",
     whatItSaid: "What it printed",
     containerCannotAnswer:
-      "{container} cannot take an exec: {why}. Run creates a copy of the pod, asks from it and deletes it when the answer is in.",
+      "{container} cannot take an exec: {why}. Run creates a copy of the pod without its labels, asks from it and deletes it when the answer is in.",
     runsAsExec:
       "Run is an exec into {container}, as kubectl exec is: it creates nothing in the cluster.",
   },

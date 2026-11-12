@@ -264,6 +264,18 @@ describe("testing a hypothesis from the pod", () => {
         /in a copy of the pod running busybox:1.36, deleted afterwards/
       )
     ).toBeVisible();
+    // The copy is no member of the workload, so it has none of its labels:
+    // an answer from it is not the pod's under a policy that selects by them.
+    expect(
+      screen.getByText(
+        /a NetworkPolicy that selects the pod by label did not apply to it/
+      )
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        /shares the namespace, DNS policy and service account, not the labels/
+      )
+    ).toBeVisible();
   });
 
   it("will not run a connection check on an address with no port", async () => {
@@ -377,7 +389,7 @@ describe("Checks for Marco, who may exec into team-checkout's pods and not creat
     expect(
       screen.getByText((text) =>
         text.endsWith(
-          "Run creates a copy of the pod, asks from it and deletes it when the answer is in."
+          "Run creates a copy of the pod without its labels, asks from it and deletes it when the answer is in."
         )
       )
     ).toBeVisible();

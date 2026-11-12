@@ -4,8 +4,8 @@
 //! until something asks the network the pod is on. These checks ask, without
 //! kubectl: an exec into the pod's own container where the image has a tool
 //! for it, and where it has none, the same exec into a throwaway copy of the
-//! pod that shares its namespace, labels, DNS policy and service account, and
-//! is deleted the moment the answer is in, whichever way the call ends.
+//! pod that shares its namespace, DNS policy and service account, and is
+//! deleted the moment the answer is in, whichever way the call ends.
 //!
 //! Everything is argv, never a shell string: the name and the host a person
 //! typed reach the container as arguments and nothing else.
@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use k8s_openapi::api::core::v1::{Container, Pod, PodReadinessGate, PodSpec};
+use k8s_openapi::api::core::v1::{Container, Pod, PodSpec};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::api::{Api, DeleteParams, PostParams};
 use serde::{Deserialize, Serialize};
@@ -348,8 +348,8 @@ fn outcome(
 /// away — quit the app mid-check and nothing here deletes anything. Two
 /// things outside this process cover that: `activeDeadlineSeconds` stops
 /// the container after five minutes, and the owner reference to the pod it
-/// copies (with `controller: true`) has Kubernetes collect the object when
-/// that pod goes. What is left in between is a Failed pod in the reader's
+/// copies has Kubernetes collect the object when that pod goes. What is
+/// left in between is a Failed pod in the reader's
 /// namespace, which carries `k8s-gui/check-pod` so the app's own delete
 /// offers to remove it.
 struct CopyGuard {
@@ -401,29 +401,21 @@ fn copy_name(pod: &str) -> String {
     format!("{}{suffix}", base.trim_end_matches(['-', '.']))
 }
 
-/// A readiness condition nothing ever sets, so the copy is never Ready.
-const NEVER_READY: &str = "k8s-gui/check-copy";
-
-/// The pod as the network sees it: same namespace, labels, DNS policy and
-/// service account, none of its containers, none of its volumes, and one
-/// container that does nothing but wait to be asked.
+/// A pod beside the original and no member of its workload: same namespace,
+/// DNS policy, service account and host network, none of its containers,
+/// volumes or labels, and one container that waits to be asked.
 ///
-/// The labels are what make a `NetworkPolicy` apply to the copy the way it
-/// applies to the pod, and they are also what a `ReplicaSet`'s selector
-/// matches. A live run showed what that means: the original's `ReplicaSet`
-/// adopted the label-alike orphan and deleted it as surplus within a second,
-/// before the first `get`. So the copy is owned, with `controller: true`, by
-/// the pod it copies: a pod with a controller is never adopted, and if the
-/// original goes the garbage collector takes the copy with it.
-///
-/// The same labels are what a `Service` selects, and a pod with no readiness
-/// probe is Ready the moment it runs, which would put a container that
-/// listens on nothing behind real traffic. A readiness gate nothing ever
-/// satisfies keeps it out of every `EndpointSlice` for as long as it lives.
+/// Labels are membership: a `Service` selects by them, a `ReplicaSet` adopts
+/// by them, a `PodDisruptionBudget` counts by them. Carried under a
+/// `controller: true` owner to stop the adoption, they failed the budget's
+/// sync instead (a `Pod` has no scale), and it allowed no disruption while
+/// the copy existed. The price is said on screen: a `NetworkPolicy` that
+/// selects the pod by label does not apply to the copy. The plain owner
+/// reference is for the garbage collector.
 fn copy_of(original: &Pod, name: &str, image: &str) -> Pod {
     let spec = original.spec.clone().unwrap_or_default();
-    let mut labels = original.metadata.labels.clone().unwrap_or_default();
-    labels.insert("k8s-gui/check-pod".to_string(), "true".to_string());
+    let labels =
+        std::collections::BTreeMap::from([("k8s-gui/check-pod".to_string(), "true".to_string())]);
     // An annotation, not a label: a pod's name runs to 253 characters and a
     // label value stops at 63, so a long one refused the whole copy.
     let annotations = std::collections::BTreeMap::from([(
@@ -435,7 +427,7 @@ fn copy_of(original: &Pod, name: &str, image: &str) -> Pod {
         kind: "Pod".to_string(),
         name: original.metadata.name.clone().unwrap_or_default(),
         uid,
-        controller: Some(true),
+        controller: None,
         block_owner_deletion: Some(false),
     });
     Pod {
@@ -448,9 +440,6 @@ fn copy_of(original: &Pod, name: &str, image: &str) -> Pod {
             ..Default::default()
         },
         spec: Some(PodSpec {
-            readiness_gates: Some(vec![PodReadinessGate {
-                condition_type: NEVER_READY.to_string(),
-            }]),
             containers: vec![Container {
                 name: COPY_CONTAINER.to_string(),
                 image: Some(image.to_string()),
@@ -657,26 +646,29 @@ mod tests {
         .is_err());
     }
 
-    /// The copy is the pod as the network sees it and nothing more: no
-    /// volumes, none of the original containers, and a lifetime so that a
-    /// copy nothing ever came back for still leaves.
+    /// The copy stands where the pod stands and is no member of its
+    /// workload: no volumes, none of the original containers, none of its
+    /// labels, and a lifetime so that a copy nothing ever came back for
+    /// still leaves.
     ///
-    /// Two things a live run added. The copy is owned by the pod it copies,
-    /// because a label-alike orphan was adopted by the original's `ReplicaSet`
-    /// and deleted as surplus within a second. And it carries a readiness
-    /// gate nothing satisfies, because the same labels are what a `Service`
-    /// selects, and a Ready copy that listens on nothing would be an
-    /// endpoint. Deleting either line brings one of those back.
+    /// With the labels and a `controller: true` owner, a `PodDisruptionBudget`
+    /// written with `maxUnavailable` selected the copy, could not resolve its
+    /// controller to a scale and allowed no disruption while it existed; a
+    /// `Service` publishing not-ready addresses listed it. Giving back any
+    /// label, or the controller bit, brings one of those back.
     #[test]
-    fn the_copy_keeps_the_network_identity_and_drops_everything_else() {
+    fn the_copy_stands_beside_the_pod_and_is_no_member_of_its_workload() {
         let mut original = Pod::default();
         original.metadata.name = Some("payments-7b6d9c5f4-x8k2p".into());
         original.metadata.namespace = Some("shop".into());
         original.metadata.uid = Some("uid-1".into());
         original.metadata.labels = Some(
-            [("app".to_string(), "payments".to_string())]
-                .into_iter()
-                .collect(),
+            [
+                ("app".to_string(), "payments".to_string()),
+                ("pod-template-hash".to_string(), "7b6d9c5f4".to_string()),
+            ]
+            .into_iter()
+            .collect(),
         );
         original.spec = Some(PodSpec {
             containers: vec![Container {
@@ -709,7 +701,12 @@ mod tests {
         let copy = copy_of(&original, "payments-check-1", "busybox:1.36");
         let spec = copy.spec.unwrap();
         let labels = copy.metadata.labels.unwrap();
-        assert_eq!(labels.get("app").map(String::as_str), Some("payments"));
+        for key in original.metadata.labels.as_ref().unwrap().keys() {
+            assert!(
+                !labels.contains_key(key),
+                "{key} is what a Service, a budget or a ReplicaSet selects by"
+            );
+        }
         assert_eq!(
             labels.get("k8s-gui/check-pod").map(String::as_str),
             Some("true")
@@ -724,17 +721,10 @@ mod tests {
             .owner_references
             .expect("owned by the pod it copies")[0];
         assert_eq!((owner.kind.as_str(), owner.uid.as_str()), ("Pod", "uid-1"));
-        assert_eq!(
+        assert_ne!(
             owner.controller,
             Some(true),
-            "a controller, so nothing adopts it"
-        );
-        assert_eq!(
-            spec.readiness_gates
-                .as_ref()
-                .map(|g| g[0].condition_type.as_str()),
-            Some(NEVER_READY),
-            "never Ready, so never an endpoint"
+            "a Pod as controller has no scale, and fails every budget that selects the copy"
         );
         assert_eq!(spec.restart_policy.as_deref(), Some("Never"));
         assert_eq!(spec.active_deadline_seconds, Some(COPY_LIFETIME_SECS));
