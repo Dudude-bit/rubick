@@ -1278,6 +1278,52 @@ describe("a pod page runs nothing in the container until the reader asks on it",
   });
 
   /**
+   * Until the next pod's first read answered, the page went on drawing the
+   * pod before in full: a Delete opened there was titled with it, previewed
+   * what it owned and asked for its name, and confirming deleted the pod the
+   * address named. Fails if anything of the pod before, its open dialog
+   * included, is still on a page that has moved, or if Delete reaches a pod
+   * other than the one its dialog names.
+   */
+  it("drops the Delete it had open and names only the pod it deletes when the page moves to the next pod", async () => {
+    const answer = vi.mocked(invoke).getMockImplementation()!;
+    let arrived: (pod: PodInfo) => void = () => {};
+    vi.mocked(invoke).mockImplementation(async (command, args) =>
+      command === "get_pod" && (args as { name: string }).name === "cart-b"
+        ? new Promise<PodInfo>((resolve) => (arrived = resolve))
+        : answer(command, args)
+    );
+    const { router } = await arrive("/c/prod/pods/shop/cart-a");
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("cart-a");
+
+    await act(() => router.navigate({ href: "/c/prod/pods/shop/cart-b" }));
+    await advance(0);
+    await advance(0);
+
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+
+    await act(async () => arrived(running("cart-b")));
+    await advance(0);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("cart-b");
+    expect(dialog).not.toHaveTextContent("cart-a");
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "cart-b" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await advance(0);
+
+    const deleted = vi
+      .mocked(invoke)
+      .mock.calls.filter(([command]) => command === "delete_pod")
+      .map(([, args]) => (args as { name: string }).name);
+    expect(deleted).toEqual(["cart-b"]);
+  });
+
+  /**
    * The same move with Shell still the open tab: what was asked on one pod
    * is not asked on the next. Fails if the ask follows the page.
    */

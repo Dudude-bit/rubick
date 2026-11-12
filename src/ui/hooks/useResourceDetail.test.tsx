@@ -203,6 +203,37 @@ describe("a detail page whose object is deleted", () => {
   });
 });
 
+describe("a detail page moved to another object of its kind", () => {
+  /**
+   * The hook handed back the object before until the next one answered, and
+   * deleted by the address: every page drew one object in full over a Delete
+   * that reached another. A page is mounted anew for each object, which is
+   * the only thing that ends it. Fails if the page is told of any object
+   * while the one its address names is still being read.
+   */
+  it("holds nothing of the object before while the next one is read", async () => {
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockImplementation((name) =>
+        name === "api-7bcd"
+          ? Promise.resolve({ name })
+          : new Promise<Pod>(() => {})
+      );
+
+    const { result, router } = await detail(fetch);
+    await waitFor(() => expect(result.current.resource).toBeDefined());
+
+    await act(() =>
+      router.navigate({ to: "/c/prod/pods/default/web-0" as string })
+    );
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("web-0"));
+
+    expect(result.current.name).toBe("web-0");
+    expect(result.current.resource).toBeUndefined();
+    expect(result.current.isLoading).toBe(true);
+  });
+});
+
 describe("a detail page whose object is made again under its name", () => {
   const KEY = queryKeys.detail("Pod", "default", "api-7bcd");
 
