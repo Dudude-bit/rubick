@@ -341,13 +341,24 @@ function readKustomization(object: CustomResourceInfo): FluxReconciler {
   });
 }
 
-/** The chart version a HelmRelease has installed, or null where it has installed none. */
+/**
+ * The chart version a HelmRelease has installed, or null where it has
+ * installed none. `status.history` is newest first and keeps the attempts
+ * that failed, so the newest is not the one standing: that is the newest
+ * Helm calls `deployed`. An API too old to keep a history says the revision
+ * it last applied.
+ */
 export function installedChart(object: CustomResourceInfo): string | null {
-  return (
-    (getValueByPath(object, "status.history[0].chartVersion") as string) ??
-    (getValueByPath(object, "status.lastAppliedRevision") as string) ??
-    null
-  );
+  const history = getValueByPath(object, "status.history");
+  if (!Array.isArray(history)) {
+    return (
+      (getValueByPath(object, "status.lastAppliedRevision") as string) ?? null
+    );
+  }
+  const standing = (
+    history as { status?: string; chartVersion?: string }[]
+  ).find((snapshot) => snapshot?.status === "deployed");
+  return standing?.chartVersion ?? null;
 }
 
 function readHelmRelease(object: CustomResourceInfo): FluxReconciler {

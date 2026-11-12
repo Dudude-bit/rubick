@@ -474,7 +474,7 @@ describe("a HelmRelease is a reconciler with a chart for a unit", () => {
       },
       {
         conditions: [ready("Helm install succeeded")],
-        history: [{ chartVersion: "6.5.4" }],
+        history: [{ chartVersion: "6.5.4", status: "deployed" }],
       }
     );
     const { reconcilers } = fluxPicture(
@@ -558,11 +558,40 @@ describe("a HelmRelease whose source is failing", () => {
     ).toBeNull();
   });
 
+  /**
+   * The history keeps the attempts that failed, newest first. Its first
+   * entry read as installed, so a release whose only install failed was
+   * "frozen at 6.5.4 ... installed and healthy", and one whose upgrade
+   * failed was said to run the chart that never came up. Fails if an entry
+   * Helm does not call deployed counts as installed.
+   */
+  it("has installed only what Helm calls deployed, not its newest attempt", () => {
+    const failing = [notReady("InstallFailed", "Helm install failed")];
+    const never = read({
+      conditions: failing,
+      history: [{ chartVersion: "6.5.4", status: "failed" }],
+    });
+    expect(never.applied).toBeNull();
+    expect(never.findings.map((finding) => finding.kind)).toEqual([
+      "noSource",
+      "notReady",
+    ]);
+
+    const upgradeFailed = read({
+      conditions: failing,
+      history: [
+        { chartVersion: "7.0.0", status: "failed" },
+        { chartVersion: "6.5.4", status: "deployed" },
+      ],
+    });
+    expect(upgradeFailed.applied?.raw).toBe("6.5.4");
+  });
+
   /** The case the frozen finding is for: installed, and its source stopped fetching since. */
   it("is frozen at the version its history says it installed", () => {
     const installed = read({
       conditions: [ready("Helm install succeeded")],
-      history: [{ chartVersion: "6.5.4" }],
+      history: [{ chartVersion: "6.5.4", status: "deployed" }],
     });
     expect(installed.findings.map((finding) => finding.kind)).toEqual([
       "frozen",
@@ -578,7 +607,7 @@ describe("a HelmRelease that names its chart through chartRef", () => {
     { chartRef: { kind: "OCIRepository", name: "podinfo" } },
     {
       conditions: [ready("Helm install succeeded")],
-      history: [{ chartVersion: "6.5.4" }],
+      history: [{ chartVersion: "6.5.4", status: "deployed" }],
     }
   );
   const repository = (conditions: Condition[]) =>
