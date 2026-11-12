@@ -25,6 +25,7 @@ import type { ConditionInfo, GatewayInfo } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { GatewayDetail } from "./GatewayDetail";
+import { translate } from "@/i18n";
 
 const said = (type: string, status: string, reason: string): ConditionInfo => ({
   type,
@@ -121,6 +122,84 @@ describe("a Gateway's listener rows", () => {
   it("still names the condition that broke it", async () => {
     await open(edge([said("ResolvedRefs", "False", "InvalidCertificateRef")]));
     expect(screen.getByText(/InvalidCertificateRef/)).toBeTruthy();
+  });
+});
+
+describe("a listener's certificate", () => {
+  const listener = (
+    over: Partial<GatewayInfo["listeners"][number]>
+  ): GatewayInfo["listeners"][number] => ({
+    ...edge([]).listeners[0],
+    tlsMode: "Terminate",
+    ...over,
+  });
+  /** Only team-a holds a Secret of that name; anywhere else it does not exist. */
+  const onlyInTeamA = vi.fn(async (namespace: unknown, names: unknown) =>
+    (names as string[]).map((secretName) => ({
+      secretName,
+      certificate: null,
+      problem: { says: namespace === "team-a" ? "noTlsCrt" : "noSecret" },
+    }))
+  );
+
+  afterEach(() => {
+    onlyInTeamA.mockClear();
+    for (const name of Object.keys(answers)) delete answers[name];
+  });
+
+  /**
+   * A ListenerSet's listener names its Secret with no namespace, which means
+   * the set's own. Fails if the Gateway page reads it in the Gateway's
+   * namespace: a served certificate then reads, in red, "does not exist".
+   */
+  it("is read in the ListenerSet's namespace for a listener the set wrote", async () => {
+    answers.getTlsCertificates = onlyInTeamA;
+    await open({
+      ...edge([]),
+      listeners: [
+        listener({
+          name: "app",
+          certificateRefs: [
+            { group: "", kind: "Secret", name: "app-tls", namespace: null },
+          ],
+          fromListenerSet: { name: "app", namespace: "team-a" },
+        }),
+      ],
+    });
+
+    expect(
+      await screen.findByText(translate("en", "readings", "certNoTlsCrt"))
+    ).toBeInTheDocument();
+    expect(onlyInTeamA.mock.calls).toEqual([["team-a", ["app-tls"]]]);
+  });
+
+  /** Fails if the Gateway's own listener stops being read in the Gateway's namespace. */
+  it("is read in the Gateway's namespace for the Gateway's own listener", async () => {
+    answers.getTlsCertificates = onlyInTeamA;
+    await open({
+      ...edge([]),
+      listeners: [
+        listener({
+          certificateRefs: [
+            { group: "", kind: "Secret", name: "edge-tls", namespace: null },
+            { group: "", kind: "Secret", name: "also", namespace: "infra" },
+            { group: "", kind: "Secret", name: "far", namespace: "certs" },
+          ],
+        }),
+      ],
+    });
+
+    await screen.findAllByText(translate("en", "readings", "certNoSecret"));
+    expect(onlyInTeamA.mock.calls).toHaveLength(2);
+    expect(onlyInTeamA.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["infra", ["also"]],
+        ["infra", ["edge-tls"]],
+      ])
+    );
+    expect(
+      screen.getByText(/cross-namespace, needs a ReferenceGrant/)
+    ).toBeInTheDocument();
   });
 });
 
