@@ -7,14 +7,11 @@
 use crate::commands::helpers::{across, api_in, ResourceContext, Scoped};
 use crate::error::{Error, PluginError, Result};
 use crate::state::AppState;
-use base64::{engine::general_purpose::STANDARD, Engine};
-use flate2::read::GzDecoder;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::Secret;
 use kube::api::ListParams;
 use kube::Api;
 use std::collections::HashMap;
-use std::io::Read;
 use tauri::State;
 
 use super::types::{HelmRelease, HelmReleaseDetail, HelmRevision, HelmSecretRelease};
@@ -27,24 +24,8 @@ use super::types::{HelmRelease, HelmReleaseDetail, HelmRevision, HelmSecretRelea
 /// formatted error, and the reader got `Plugin error: Plugin execution
 /// failed:` twice in one sentence.
 fn decode_helm_release(data: &[u8]) -> std::result::Result<HelmSecretRelease, String> {
-    // Base64 decode
-    let compressed = STANDARD.decode(data).map_err(|e| format!("base64: {e}"))?;
-
-    // Check for gzip magic bytes and decompress
-    let json_bytes = if compressed.len() >= 2 && compressed[0] == 0x1f && compressed[1] == 0x8b {
-        let mut decoder = GzDecoder::new(&compressed[..]);
-        let mut decompressed = Vec::new();
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|e| format!("gzip: {e}"))?;
-        decompressed
-    } else {
-        // Old format: not compressed
-        compressed
-    };
-
-    // Parse JSON
-    serde_json::from_slice(&json_bytes).map_err(|e| e.to_string())
+    let json = crate::resources::stored_release_json(data)?;
+    serde_json::from_slice(&json).map_err(|e| e.to_string())
 }
 
 /// The release a secret holds, or why it could not be read out of it. The one
@@ -227,6 +208,7 @@ mod tests {
     type LabelledRelease<'a> = (&'a str, &'a str, Option<&'a BTreeMap<String, String>>);
 
     use super::*;
+    use base64::{engine::general_purpose::STANDARD, Engine};
     use std::collections::BTreeMap;
 
     fn labels(name: &str, version: &str) -> BTreeMap<String, String> {
@@ -390,6 +372,100 @@ mod tests {
         assert!(!shadows_the_answer(Some(5), 4, 3));
     }
 
+    /// The reported release: one Secret template, the key given with
+    /// `--set`, notes that print it. Its Values and Manifest tabs drew the
+    /// key in full. Fails if anything a Helm read hands out carries it, as
+    /// text or base64, or if the page is not told what was left out where.
+    #[test]
+    fn a_release_is_handed_out_with_its_private_key_withheld_and_named() {
+        use crate::resources::{ReleaseWithheld, WithheldDocument, WithheldPart, WITHHELD_MARKER};
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let manifest = format!(
+            "---\n# Source: keys/templates/secret.yaml\napiVersion: v1\nkind: Secret\n\
+             metadata: {{name: web-key}}\nstringData:\n  tls.key: {}\n  password: \"hunter2\"\n\
+             ---\n# Source: keys/templates/encoded.yaml\napiVersion: v1\nkind: Secret\n\
+             metadata:\n  name: web-encoded\ndata:\n  blob: {}\n",
+            serde_json::to_string(KEY).expect("a string"),
+            STANDARD.encode(KEY),
+        );
+        let mut secret = stored("web", 1);
+        let payload = serde_json::json!({
+            "name": "web", "namespace": "shop", "version": 1,
+            "info": {
+                "status": "deployed", "description": "Install complete",
+                "notes": format!("The key in use:\n{KEY}"),
+            },
+            "chart": { "metadata": { "name": "keys", "version": "0.1.0" } },
+            "config": { "password": "hunter2", "privateKey": KEY },
+            "manifest": manifest,
+        });
+        secret["data"]["release"] = STANDARD.encode(STANDARD.encode(payload.to_string())).into();
+        let secret: Secret = serde_json::from_value(secret).expect("a secret");
+        let winner = Winner {
+            namespace: "shop".to_string(),
+            secret: secret_name("web", 1),
+            release: "web".to_string(),
+            revision: 1,
+        };
+
+        let detail = detail_of(release_in(&secret).expect("decodes"));
+        let row = row_of(winner, release_in(&secret));
+        let history = revisions_of([secret]);
+
+        let handed = serde_json::json!([detail, row, history]).to_string();
+        assert!(handed.contains("Install complete") && handed.contains("hunter2"));
+        assert!(!handed.contains("PRIVATE KEY"), "{handed}");
+        assert!(!handed.contains(&STANDARD.encode(KEY)[..64]), "{handed}");
+        assert_eq!(detail.values["privateKey"], WITHHELD_MARKER);
+        assert_eq!(detail.notes.as_deref(), Some(WITHHELD_MARKER));
+        let document = |position, template: &str, name: &str, key: &str| WithheldDocument {
+            position,
+            source: Some(format!("keys/templates/{template}")),
+            kind: Some("Secret".to_string()),
+            name: Some(name.to_string()),
+            what: WithheldPart::Keys {
+                keys: vec![key.to_string()],
+            },
+        };
+        assert_eq!(
+            detail.withheld,
+            ReleaseWithheld {
+                values: vec!["privateKey".to_string()],
+                manifest: vec![
+                    document(1, "secret.yaml", "web-key", "tls.key"),
+                    document(2, "encoded.yaml", "web-encoded", "blob"),
+                ],
+                notes: true,
+            }
+        );
+    }
+
+    /// A release with no key in it is told nothing was withheld, and its
+    /// notes, values and manifest are the ones Helm stored.
+    #[test]
+    fn a_release_with_no_private_key_is_handed_out_as_helm_stored_it() {
+        let manifest = "---\n# Source: web/templates/cm.yaml\napiVersion: v1\nkind: ConfigMap\n\
+                        metadata:\n  name: web\ndata:\n  level: debug # for now\n";
+        let payload = serde_json::json!({
+            "name": "web", "namespace": "shop", "version": 1,
+            "info": { "status": "deployed", "notes": "1. Get the URL" },
+            "chart": { "metadata": { "name": "web", "version": "1.0.0" } },
+            "config": { "level": "debug" },
+            "manifest": manifest,
+        });
+        let encoded = STANDARD.encode(payload.to_string());
+
+        let detail = detail_of(decode_helm_release(encoded.as_bytes()).expect("decodes"));
+
+        assert_eq!(
+            detail.withheld,
+            crate::resources::ReleaseWithheld::default()
+        );
+        assert_eq!(detail.manifest, manifest);
+        assert_eq!(detail.values, serde_json::json!({ "level": "debug" }));
+        assert_eq!(detail.notes.as_deref(), Some("1. Get the URL"));
+    }
+
     /// A chart installed on its defaults, which is what Helm writes when
     /// nobody passed `--set` or `-f`: no `config` key at all. Requiring it
     /// made every such release fail to decode, and the list — which drops
@@ -407,7 +483,7 @@ mod tests {
         let encoded = STANDARD.encode(json);
         let release = decode_helm_release(encoded.as_bytes()).expect("decodes");
         assert_eq!(release.name, "shop-api");
-        assert_eq!(release.config, serde_json::Value::Null);
+        assert_eq!(release.shown().values, serde_json::Value::Null);
     }
 
     /// A history of superseded revisions must cost one fetch, not ten —
@@ -598,7 +674,12 @@ async fn release_detail(
         }
     };
 
-    Ok(HelmReleaseDetail {
+    Ok(detail_of(release))
+}
+
+fn detail_of(release: HelmSecretRelease) -> HelmReleaseDetail {
+    let shown = release.shown();
+    HelmReleaseDetail {
         name: release.name,
         namespace: release.namespace,
         revision: release.version,
@@ -609,10 +690,11 @@ async fn release_detail(
         first_deployed: release.info.first_deployed,
         last_deployed: release.info.last_deployed,
         description: release.info.description,
-        values: release.config,
-        manifest: release.manifest,
-        notes: release.info.notes,
-    })
+        values: shown.values,
+        manifest: shown.manifest,
+        notes: shown.notes,
+        withheld: shown.withheld,
+    }
 }
 
 /// Get Helm release history

@@ -1083,6 +1083,19 @@ export const en = {
     manifestOf: "Manifest of {name}",
     valuesNote: "what this release overrides in the chart",
     manifestNote: "what the chart actually applied",
+    helmDocumentNth: "document {n}",
+    helmWithheldKeys:
+      "Withheld in {document}: {keys}. The release is untouched: the app never shows a private key, and the placeholder there is the app's, for the screen.",
+    helmWithheldRewritten:
+      "Withheld in {document}: {keys}. The release is untouched: the app never shows a private key, and the placeholder there is the app's, for the screen. To put it there the app wrote this document out again, so its layout is not the chart's.",
+    helmWithheldUnread:
+      "Withheld whole: {document}. The release is untouched: this document does not read as YAML here, so the app cannot tell whether it holds a private key, and it never shows one.",
+    helmValuesWithheld:
+      "Withheld: {keys}. The release is untouched: the app never shows a private key, and the placeholder there is the app's, for the screen.",
+    helmNotesWithheld:
+      "Withheld: these notes hold a private key, and the app never shows one. The release is untouched.",
+    helmResourcesUnread:
+      "Not listed: {document}. It does not read as YAML here, so the app cannot say what it installs.",
     releaseValuesCopied: "Release values copied.",
     renderedManifestCopied: "Rendered manifest copied.",
     thisKindHere: "this {kind}",
@@ -1330,6 +1343,10 @@ export const en = {
     releaseName: "Release Name",
     versionOptional: "Version (optional)",
     valuesYamlOptional: "Values (YAML, optional)",
+    helmUpgradeCarriesWithheld:
+      "These values hold the placeholder the app shows in place of a private key, and an upgrade would store the placeholder as the key. Write the key itself there, or clear the values: with none given, helm keeps the ones the release has.",
+    helmInstallCarriesWithheld:
+      "These values hold the placeholder the app shows in place of a private key, and an install would store the placeholder as the key. Write the key itself there.",
     createNamespace: "Create namespace",
     waitForReady: "Wait for ready",
     configureInSettings: "Configure in Settings",
@@ -3683,6 +3700,8 @@ export const en = {
     withheldDeclared:
       "{type} declares this to be the private key, which the app never shows",
     withheldKeyName: "named like a private key, which the app never shows",
+    withheldHelmRelease:
+      "a Helm release the app withholds part of: the release's page under Helm shows the rest, and says which part",
     withheldInRecord: "withheld by the app: {keys}",
     unreadUnanswered:
       "the app asked for {version} and the cluster did not answer ({said}), so it cannot say whether one applies here",

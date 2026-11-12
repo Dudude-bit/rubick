@@ -101,19 +101,32 @@ export function helmHistorySection(
 
 const MAX_RESOURCES = 200;
 
-/** Never the release's values: they routinely carry passwords and API keys. */
+/**
+ * Never the release's values: they routinely carry passwords and API keys.
+ *
+ * `notListed` is one line for each document of the manifest that could not
+ * be read into an object. With any, the rows are not the whole release, and
+ * the section says so instead of counting them.
+ */
 export function helmResourcesSection(
   installed: InstalledObject[],
+  notListed: string[],
   t: T
 ): PlacedSection | null {
-  if (installed.length === 0) return null;
+  if (installed.length === 0 && notListed.length === 0) return null;
   const kept = installed.slice(0, MAX_RESOURCES);
+  const more = [
+    installed.length > kept.length
+      ? t("share", "rowsMore", { n: installed.length - kept.length })
+      : null,
+    ...notListed,
+  ].filter((line) => line !== null);
   return {
     id: "helm-resources",
     order: ORDER.own,
     title: t("action", "installedByRelease"),
     icon: iconSvg(Boxes),
-    count: installed.length,
+    count: notListed.length > 0 ? undefined : installed.length,
     body: {
       type: "table",
       columns: [
@@ -135,10 +148,7 @@ export function helmResourcesSection(
           { text: object.namespace ?? t("empty", "noneLower") },
         ],
       })),
-      more:
-        installed.length > kept.length
-          ? t("share", "rowsMore", { n: installed.length - kept.length })
-          : null,
+      more: more.length > 0 ? more.join(" ") : null,
     },
   };
 }

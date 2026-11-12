@@ -59,6 +59,21 @@ describe("the YAML tab", () => {
   });
 
   /**
+   * A Helm release's manifest is not an object's YAML: the backend says what
+   * it withheld in which document. Fails if the tab does not draw what it is
+   * told, or reads the text for blanked annotations beside it.
+   */
+  it("draws what it is told was withheld, in place of its own reading", async () => {
+    const told = "Withheld in Secret web-key: tls.key.";
+    renderWithProviders(
+      <YamlTabContent yaml={APPLIED} withheld={[told]} onCopy={() => {}} />
+    );
+
+    await screen.findByTestId("yaml-editor");
+    expect(screen.getByRole("note")).toHaveTextContent(told);
+  });
+
+  /**
    * Sam read "the object as the API server has it" above a Deployment with no
    * status, uid or finalizers. Fails if the note claims the object as served.
    */

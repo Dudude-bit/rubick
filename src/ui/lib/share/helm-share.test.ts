@@ -70,9 +70,11 @@ describe("installed resources", () => {
   it("links each installed object without carrying anything beyond its identity", () => {
     const section = helmResourcesSection(
       [{ kind: "Deployment", name: "app", namespace: "shop" }],
+      [],
       t
     );
     expect(section).not.toBeNull();
+    expect(section?.count).toBe(1);
     if (!section || section.body.type !== "table")
       throw new Error("expected a table");
     expect(Object.keys(section.body.rows[0].cells[1])).not.toContain("values");
@@ -81,5 +83,27 @@ describe("installed resources", () => {
       namespace: "shop",
       stem: "app",
     });
+  });
+
+  /**
+   * A document the app withheld whole is an object the list cannot name.
+   * Fails if the shared file counts the rows as the whole release, or leaves
+   * out the line that says one is missing, with rows or with none.
+   */
+  it("says which documents are not listed, and counts nothing it could not read", () => {
+    const line = "Not listed: document 2 (web/templates/broken.yaml).";
+    const some = helmResourcesSection(
+      [{ kind: "Deployment", name: "app", namespace: "shop" }],
+      [line],
+      t
+    );
+    const none = helmResourcesSection([], [line], t);
+    for (const section of [some, none]) {
+      if (!section || section.body.type !== "table")
+        throw new Error("expected a table");
+      expect(section.count).toBeUndefined();
+      expect(section.body.more).toBe(line);
+    }
+    expect(helmResourcesSection([], [], t)).toBeNull();
   });
 });

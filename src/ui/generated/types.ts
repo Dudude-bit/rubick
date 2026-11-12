@@ -2020,6 +2020,21 @@ export interface HelmReleaseDetail {
   values: unknown;
   manifest: string;
   notes: string | null;
+  withheld: ReleaseWithheld;
+}
+
+export interface ReleaseWithheld {
+  values: string[];
+  manifest: WithheldDocument[];
+  notes: boolean;
+}
+
+export interface WithheldDocument {
+  position: number;
+  source: string | null;
+  kind: string | null;
+  name: string | null;
+  what: WithheldPart;
 }
 
 export interface Scoped<T> {
@@ -3322,7 +3337,13 @@ export type Check =
 export type Withheld =
   | { says: "privateKey" }
   | { says: "declared"; by: string }
-  | { says: "keyName" };
+  | { says: "keyName" }
+  | { says: "helmRelease" };
+
+export type WithheldPart =
+  | { says: "keys"; keys: string[] }
+  | { says: "rewritten"; keys: string[] }
+  | { says: "unread" };
 
 export type FileRead =
   | { state: "preview"; preview: FilePreview }

@@ -1,6 +1,8 @@
 //! Helm DTOs — both the frontend-facing shapes and the internal
 //! Helm-secret structures used by `secret::decode_helm_release`.
 
+use crate::commands::helpers::shown_manifest;
+use crate::resources::{withhold_strings, withhold_text, ReleaseWithheld};
 use serde::{Deserialize, Serialize};
 
 /// Helm release info (unified format for frontend)
@@ -43,6 +45,8 @@ pub struct HelmReleaseDetail {
     pub values: serde_json::Value,
     pub manifest: String,
     pub notes: Option<String>,
+    /// What the app left out of the three above, and where.
+    pub withheld: ReleaseWithheld,
 }
 
 /// Helm revision history entry
@@ -107,10 +111,39 @@ pub(super) struct HelmSecretRelease {
     /// its defaults looks like — and every release like that failed to
     /// decode, was warned about where nobody reads, and left the Helm page
     /// saying the cluster has none.
-    #[serde(default)]
-    pub config: serde_json::Value,
-    #[serde(default)]
+    #[serde(default, rename = "config")]
+    stored_values: serde_json::Value,
+    #[serde(default, rename = "manifest")]
+    stored_manifest: String,
+}
+
+/// A release's values, manifest and notes as they may leave this process.
+pub(super) struct ShownRelease {
+    pub values: serde_json::Value,
     pub manifest: String,
+    pub notes: Option<String>,
+    pub withheld: ReleaseWithheld,
+}
+
+impl HelmSecretRelease {
+    /// The one reading of what a release stores that can hold a private
+    /// key. A guard in `main.rs` holds every other reader out.
+    pub fn shown(&self) -> ShownRelease {
+        let mut values = self.stored_values.clone();
+        let mut notes = self.info.stored_notes.clone();
+        let (manifest, documents) = shown_manifest(&self.stored_manifest);
+        let withheld = ReleaseWithheld {
+            values: withhold_strings(&mut values),
+            manifest: documents,
+            notes: notes.as_mut().is_some_and(withhold_text),
+        };
+        ShownRelease {
+            values,
+            manifest,
+            notes,
+            withheld,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -123,8 +156,8 @@ pub(super) struct HelmSecretInfo {
     pub last_deployed: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(default)]
-    pub notes: Option<String>,
+    #[serde(default, rename = "notes")]
+    stored_notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

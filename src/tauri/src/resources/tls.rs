@@ -236,6 +236,8 @@ pub enum Withheld {
     Declared { by: String },
     /// A key name that exists to hold a private key.
     KeyName,
+    /// The Helm release this Secret stores has something withheld in it.
+    HelmRelease,
 }
 
 /// Why a Secret value is withheld, or `None` where it is safe to hand over.
@@ -259,8 +261,13 @@ pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<Wit
     // The PEM label says which flavour it is — RSA, EC, encrypted — and
     // none of that changes what the reader can do, so the row does not
     // carry it.
-    if has_pem_private_key_label(value) || decodes_as_private_key(value) {
+    if says_private_key(value) {
         return Some(Withheld::PrivateKey);
+    }
+    // Helm keeps a release whole in a Secret of this type: the key its page
+    // withholds would be one `base64 -d | gunzip` away on this one.
+    if secret_type == HELM_RELEASE_TYPE && super::helm::stored_release_withholds(value) {
+        return Some(Withheld::HelmRelease);
     }
     if key_declared_private(secret_type, key) {
         return Some(Withheld::Declared {
@@ -271,6 +278,27 @@ pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<Wit
         return Some(Withheld::KeyName);
     }
     None
+}
+
+/// The type of the Secret Helm stores one revision of a release in.
+const HELM_RELEASE_TYPE: &str = "helm.sh/release.v1";
+
+/// The first net on its own: what the bytes say they are.
+fn says_private_key(value: &[u8]) -> bool {
+    has_pem_private_key_label(value) || decodes_as_private_key(value)
+}
+
+/// The first net for a string no map names: a private key as text, or as
+/// the base64 of one, wrapped the way `base64` prints it or not.
+pub(super) fn is_private_key_text(text: &str) -> bool {
+    use base64::Engine;
+    if says_private_key(text.as_bytes()) {
+        return true;
+    }
+    let packed: String = text.split_whitespace().collect();
+    base64::engine::general_purpose::STANDARD
+        .decode(packed)
+        .is_ok_and(|bytes| says_private_key(&bytes))
 }
 
 /// Whether the value carries a PEM block whose own label says private key.
@@ -310,7 +338,8 @@ fn decodes_as_private_key(value: &[u8]) -> bool {
 pub const WITHHELD_MARKER: &str = "<withheld: the app never shows a private key>";
 
 /// The maps a private key can sit in, and whether each is base64.
-const KEY_MAPS: [(&str, bool); 3] = [("data", true), ("binaryData", true), ("stringData", false)];
+pub(super) const KEY_MAPS: [(&str, bool); 3] =
+    [("data", true), ("binaryData", true), ("stringData", false)];
 
 /// The keys of a manifest that still hold [`WITHHELD_MARKER`]: applied as it
 /// is, the placeholder would be written over each of them.
@@ -559,6 +588,73 @@ mod tests {
             withhold_reason("Opaque", "ca.crt", LEAF_PEM.as_bytes()),
             None
         );
+    }
+
+    /// Helm keeps a release whole in a Secret, as base64 over gzip: the key
+    /// its page withholds was one `base64 -d | gunzip` away on the Secret's.
+    /// Fails if the stored release is handed over while its values, its
+    /// manifest or a file of its chart holds a key, or withheld while none
+    /// does.
+    #[test]
+    fn the_secret_a_helm_release_is_stored_in_does_not_hand_over_the_releases_key() {
+        use base64::Engine;
+        use std::io::Write as _;
+        const TYPE: &str = "helm.sh/release.v1";
+        let base64 = base64::engine::general_purpose::STANDARD;
+        let stored = |release: &serde_json::Value| {
+            let mut gzip =
+                flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+            gzip.write_all(release.to_string().as_bytes()).unwrap();
+            base64.encode(gzip.finish().unwrap()).into_bytes()
+        };
+        let secret = |key: &str, value: &str| {
+            format!(
+                "apiVersion: v1\nkind: Secret\nmetadata:\n  name: web\ndata:\n  {key}: {value}\n"
+            )
+        };
+        let release = |values: serde_json::Value, manifest: &str, file: &str| {
+            serde_json::json!({
+                "name": "web", "version": 1, "config": values, "manifest": manifest,
+                "info": { "status": "deployed", "notes": "1. Get the URL" },
+                "chart": { "files": [{ "name": "files/id", "data": base64.encode(file) }] },
+            })
+        };
+        let clean = release(
+            serde_json::json!({ "password": "hunter2" }),
+            &secret("ca.crt", &base64.encode(LEAF_PEM)),
+            "README",
+        );
+        let holding = [
+            release(serde_json::json!({ "tls": { "key": KEY_PEM } }), "", ""),
+            release(
+                serde_json::json!({}),
+                &secret("blob", &base64.encode(KEY_PEM)),
+                "",
+            ),
+            release(serde_json::json!({}), "", KEY_PEM),
+        ];
+
+        for release in &holding {
+            assert_eq!(
+                withhold_reason(TYPE, "release", &stored(release)),
+                Some(Withheld::HelmRelease),
+                "{release}"
+            );
+        }
+        assert_eq!(withhold_reason(TYPE, "release", &stored(&clean)), None);
+        // Before Helm 3 gzipped it, and bytes that are no release at all.
+        let plain = base64.encode(holding[0].to_string()).into_bytes();
+        assert!(withhold_reason(TYPE, "release", &plain).is_some());
+        assert_eq!(withhold_reason(TYPE, "release", b"not a release"), None);
+
+        // The YAML tab of the same Secret, where `data` is base64 once more.
+        let mut object = serde_json::json!({
+            "kind": "Secret",
+            "type": TYPE,
+            "data": { "release": base64.encode(stored(&holding[1])) },
+        });
+        assert_eq!(redact_private_keys(&mut object), vec!["release"]);
+        assert_eq!(object["data"]["release"], WITHHELD_MARKER);
     }
 
     /// Would break if the YAML tab started rendering `tls.key` again — the

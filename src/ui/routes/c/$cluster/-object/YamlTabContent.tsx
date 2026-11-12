@@ -21,6 +21,12 @@ export interface YamlTabContentProps {
   /** What the document is. One line, in the reader's terms, not the API's. */
   note?: string;
   /**
+   * What the backend withheld from this text, already worded, where it said:
+   * a Helm release's manifest and values. Given, it stands in for the reading
+   * of blanked annotations, which is for an object's own YAML.
+   */
+  withheld?: string[];
+  /**
    * The live object behind the text. Without one there is nothing to edit —
    * a rendered Helm manifest is not something the API server will take back —
    * and the edit action is left off rather than shown dead.
@@ -37,6 +43,7 @@ export function YamlTabContent({
   resourceName,
   namespace,
   note,
+  withheld,
   onCopy,
 }: YamlTabContentProps) {
   const t = useT();
@@ -78,7 +85,19 @@ export function YamlTabContent({
           />
         </div>
       </div>
-      <WithheldCopies yaml={yaml} />
+      {withheld ? (
+        withheld.map((line, at) => (
+          <p
+            key={`${at}:${line}`}
+            role="note"
+            className="flex-none pb-2 text-[11px] text-fg-mut"
+          >
+            {line}
+          </p>
+        ))
+      ) : (
+        <WithheldCopies yaml={yaml} />
+      )}
       {isYamlLoading ? (
         <div className="min-h-0 flex-1 overflow-hidden border-t border-hair p-4">
           <TextSkeleton lines={18} />

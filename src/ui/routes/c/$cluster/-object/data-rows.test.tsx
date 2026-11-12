@@ -235,6 +235,31 @@ describe("the per-key controls, in the reader's language", () => {
     expect(screen.queryByText(/private key/)).toBeNull();
   });
 
+  /**
+   * The Secret Helm stores a release in held the key the release's page
+   * withholds, one `base64 -d | gunzip` away. Fails if its row draws the
+   * stored release, or does not say where the rest of it is shown.
+   */
+  it("says a stored Helm release is withheld in part, and where the rest is", () => {
+    render(
+      <DataSection
+        data={{}}
+        withheld={{ release: { says: "helmRelease" } }}
+        keys={["release"]}
+        sensitive
+      />
+    );
+    expect(
+      screen.getByText(
+        /^a Helm release the app withholds part of: the release's page under Helm shows the rest/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reveal" })).toBeNull();
+    expect(translate("ru", "readings", "withheldHelmRelease")).toMatch(
+      /^релиз Helm, часть которого приложение скрывает/
+    );
+  });
+
   /** Lena read "такие приложение никогда не показывает"; fails if the reason loses the noun the "такие" points at. */
   it("names what the app never shows, in agreement, for a private key", () => {
     expect(translate("ru", "readings", "withheldPrivateKey")).toBe(
