@@ -181,10 +181,11 @@ fn apply_oidc_result(
     result: crate::auth::AuthResult,
 ) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
     let named = result.expires_at;
-    // What the provider said, and failing that what the token itself says.
+    // What the token itself says, and failing that what the provider said:
+    // `expires_in` dates the access token, and the bearer is the id_token.
     let carried = apply_bearer_token(auth_info, result.token, "oidc auth provider")?;
     auth_info.auth_provider = None;
-    Ok(named.or(carried))
+    Ok(carried.or(named))
 }
 
 /// The one place a credential becomes the one the client will send — both the
@@ -394,6 +395,29 @@ mod tests {
         let left =
             (deadline.expect("the deadline the token names") - chrono::Utc::now()).num_seconds();
         assert!((3500..=3600).contains(&left), "{left}s left");
+    }
+
+    /// Okta's `id_token` lives an hour beside an access token good for eight,
+    /// and `expires_in` is the access token's. Dated by it, the renewal was
+    /// planned hours after the cluster had begun refusing the bearer.
+    #[test]
+    fn an_oidc_sign_in_is_dated_by_the_token_it_sends_not_by_expires_in() {
+        let result = |token: &str| crate::auth::AuthResult {
+            token: token.to_string(),
+            expires_at: Some(chrono::Utc::now() + chrono::Duration::hours(8)),
+            refresh_token: None,
+            token_type: "Bearer".to_string(),
+        };
+        let left = |token: &str| {
+            let deadline = apply_oidc_result(&mut AuthInfo::default(), result(token))
+                .expect("applied")
+                .expect("dated");
+            (deadline - chrono::Utc::now()).num_seconds()
+        };
+
+        assert!((3500..=3600).contains(&left(&live_jwt())), "the id_token's");
+        let opaque = left("ya29.opaque-access-token");
+        assert!((28_700..=28_800).contains(&opaque), "{opaque}s left");
     }
 
     fn token_status(token: &str) -> ExecCredentialStatus {
