@@ -15,12 +15,16 @@ pub struct DebugConfig {
     pub command: Option<Vec<String>>,
     /// Share process namespace with target container (for copy mode)
     pub share_processes: bool,
+    /// Add `SYS_PTRACE` to the debug container: strace, gdb, and the files
+    /// of a container running as another user. Pod Security baseline
+    /// refuses the capability, so it is asked for only when the reader did.
+    pub trace_processes: bool,
     /// Timeout waiting for container readiness (seconds), default 120
     pub timeout_seconds: Option<u32>,
 }
 
 /// Result of debug operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DebugResult {
     /// Name of the pod to connect to
@@ -66,7 +70,7 @@ pub enum DebugOperationType {
 }
 
 /// Status of debug operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum DebugStatus {
@@ -75,9 +79,32 @@ pub enum DebugStatus {
     /// Container is ready
     Ready { result: DebugResult },
     /// Container failed to start
-    Failed { error: String },
+    Failed {
+        error: String,
+        /// The pod this operation made, which has no debugger to enter now:
+        /// removed, or named so the reader can remove it.
+        pod: Option<MadePod>,
+    },
     /// Timeout waiting for container
     Timeout,
+}
+
+/// A pod a debug operation created in the reader's cluster.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MadePod {
+    pub name: String,
+    /// Confirmed gone, not merely asked to go.
+    pub deleted: bool,
+}
+
+impl DebugStatus {
+    pub(super) fn failed(error: impl Into<String>) -> Self {
+        Self::Failed {
+            error: error.into(),
+            pod: None,
+        }
+    }
 }
 
 /// Generate a unique debugger container name

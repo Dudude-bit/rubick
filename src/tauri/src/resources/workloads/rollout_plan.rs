@@ -20,6 +20,9 @@ pub enum RolloutPlan {
     },
     /// Every old pod stops before any new one starts.
     Recreate { replicas: i32 },
+    /// `spec.paused`: the change is recorded and no pod is replaced until
+    /// the Deployment is resumed. `kubectl rollout restart` refuses here.
+    Paused,
     /// A `StatefulSet`'s `RollingUpdate`: from the highest ordinal down to
     /// `partition`, `unavailable` at a time.
     Ordered {
@@ -63,6 +66,9 @@ fn scaled(value: Option<&IntOrString>, total: i32, round_up: bool, default: i32)
 #[must_use]
 pub fn deployment_plan(deployment: &Deployment) -> RolloutPlan {
     let spec = deployment.spec.as_ref();
+    if spec.and_then(|s| s.paused) == Some(true) {
+        return RolloutPlan::Paused;
+    }
     let replicas = spec.and_then(|s| s.replicas).unwrap_or(1);
     let strategy = spec.and_then(|s| s.strategy.as_ref());
     if strategy.and_then(|s| s.type_.as_deref()) == Some(RECREATE) {
@@ -223,6 +229,20 @@ mod tests {
                 surge: 1,
                 unavailable: 0
             }
+        );
+    }
+
+    /// A paused Deployment's controller makes no `ReplicaSet`, so a restart
+    /// there replaces nothing until it is resumed: a plan in numbers said
+    /// three pods were being replaced while none was.
+    #[test]
+    fn a_paused_deployment_has_no_rolling_plan() {
+        let mut paused = deployment(3, Some(pct("25%")), Some(pct("25%")));
+        paused.spec.as_mut().unwrap().paused = Some(true);
+        assert_eq!(deployment_plan(&paused), RolloutPlan::Paused);
+        assert_eq!(
+            serde_json::to_value(deployment_plan(&paused)).unwrap(),
+            serde_json::json!({ "strategy": "paused" })
         );
     }
 

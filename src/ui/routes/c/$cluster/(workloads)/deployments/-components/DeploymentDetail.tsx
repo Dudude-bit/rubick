@@ -74,7 +74,7 @@ import {
 } from "../../-components/workload-overview";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { RestartAction } from "../../../-object/RestartDialog";
-import { readinessOf } from "@/lib/restart-plan";
+import { readinessOf, restartedWords } from "@/lib/restart-plan";
 import { guardedOf, useDenied } from "@/lib/access";
 import { cn } from "@/lib/utils";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
@@ -300,6 +300,12 @@ export function DeploymentDetail() {
     }
   );
 
+  const restarted = restartedWords(
+    deployment?.rolloutPlan,
+    ResourceType.Deployment,
+    name ?? "",
+    t
+  );
   const restartMutation = useResourceMutation(
     async () => {
       if (!name || !namespace) return;
@@ -307,13 +313,8 @@ export function DeploymentDetail() {
     },
     {
       toast: {
-        successTitle: t("action", "kindRestarted", {
-          kind: ResourceType.Deployment,
-        }),
-        successDescription: t("action", "kindRestartingDetail", {
-          kind: ResourceType.Deployment,
-          name: name ?? "",
-        }),
+        successTitle: restarted.title,
+        successDescription: restarted.description,
         errorPrefix: t("action", "restartKindFailed", {
           kind: ResourceType.Deployment,
         }),

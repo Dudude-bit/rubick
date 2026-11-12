@@ -12,46 +12,6 @@ use crate::error::{AuthError, Error, Result};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-/// The files `$KUBECONFIG` names, in the order it names them.
-///
-/// A merged kubeconfig has no single home, which is the whole reason this
-/// exists: the parsed document does not say which file any one user came from.
-#[must_use]
-pub fn kubeconfig_files(override_path: Option<PathBuf>) -> Vec<PathBuf> {
-    let named: Vec<PathBuf> = if let Some(path) = override_path {
-        vec![path]
-    } else {
-        let separator = if cfg!(windows) { ';' } else { ':' };
-        match std::env::var("KUBECONFIG") {
-            Ok(value) if !value.is_empty() => value
-                .split(separator)
-                .filter(|entry| !entry.is_empty())
-                .map(PathBuf::from)
-                .collect(),
-            _ => dirs::home_dir()
-                .map(|home| vec![home.join(".kube").join("config")])
-                .unwrap_or_default(),
-        }
-    };
-
-    // Through the loader's own resolution, for three separate reasons. A `~`
-    // in a stored override is a path no `read_to_string` accepts. A symlinked
-    // `~/.kube/config` has to become the file it points at, or the rename that
-    // installs the replacement would put a regular file where the link was and
-    // leave the real one holding the token just spent. And one file named
-    // twice in `$KUBECONFIG` would otherwise read as two files claiming the
-    // same user, which is the one shape that cancels the refresh.
-    let mut resolved: Vec<PathBuf> = Vec::with_capacity(named.len());
-    for path in named {
-        if let Ok(real) = crate::client::canonicalize_kubeconfig_path(&path) {
-            if !resolved.contains(&real) {
-                resolved.push(real);
-            }
-        }
-    }
-    resolved
-}
-
 /// The single file that defines `user`, or `None` when that is not a single
 /// answer.
 ///
@@ -172,14 +132,29 @@ fn user_block(lines: &[&str], user: &str) -> Option<(usize, usize)> {
             .get(position + 1)
             .copied()
             .unwrap_or_else(|| block_end(lines, start, dash_indent));
-        let named = lines[start..end].iter().any(|line| {
-            value_of(line, "- name") == Some(user) || value_of(line, "name") == Some(user)
-        });
-        if named {
+        if entry_name(&lines[start..end]) == Some(user) {
             return Some((start, end));
         }
     }
     None
+}
+
+/// The `name` of one `users` entry: the key of the entry's own mapping. An
+/// `auth-provider` deeper in it has a `name` too, and `oidc` is what the
+/// guides call both the provider and the user.
+fn entry_name<'a>(entry: &[&'a str]) -> Option<&'a str> {
+    let (first, rest) = entry.split_first()?;
+    let after_dash = first.trim_start().strip_prefix('-')?;
+    let column = if after_dash.trim().is_empty() {
+        indent_of(rest.iter().find(|line| !line.trim().is_empty())?)
+    } else {
+        first.len() - after_dash.trim_start().len()
+    };
+    value_of(after_dash, "name").or_else(|| {
+        rest.iter()
+            .filter(|line| indent_of(line) == column)
+            .find_map(|line| value_of(line, "name"))
+    })
 }
 
 /// Where the block opened at `start` stops: the first later line indented no
@@ -633,36 +608,6 @@ users:
         assert!(!answer);
     }
 
-    #[test]
-    fn an_override_is_the_only_file_considered() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = write(dir.path(), "config", CONFIG);
-
-        assert_eq!(
-            kubeconfig_files(Some(path.clone())),
-            vec![path.canonicalize().expect("canonicalize")],
-            "an explicit choice is not merged with anything"
-        );
-    }
-
-    /// A `~/.kube/config` that is a symlink into a dotfiles repo is an
-    /// ordinary setup. The replacement arrives by rename, which would put a
-    /// regular file where the link was and leave the real file holding the
-    /// refresh token just spent — so the link has to be resolved first.
-    #[cfg(unix)]
-    #[test]
-    fn a_symlinked_kubeconfig_resolves_to_what_it_points_at() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let real = write(dir.path(), "real-config", CONFIG);
-        let link = dir.path().join("config");
-        std::os::unix::fs::symlink(&real, &link).expect("symlink");
-
-        assert_eq!(
-            kubeconfig_files(Some(link)),
-            vec![real.canonicalize().expect("canonicalize")]
-        );
-    }
-
     /// And the write must survive being handed the link directly.
     #[cfg(unix)]
     #[test]
@@ -687,6 +632,83 @@ users:
                 .contains("new-id"),
             "the file the link points at did not get the new token"
         );
+    }
+
+    /// `kubectl config set-credentials oidc --auth-provider=oidc` is the name
+    /// the guides use, and kubectl sorts users by name: read by any `name:`
+    /// line in the entry, alice's provider answered for the user `oidc`, and
+    /// her tokens were replaced with somebody else's.
+    #[test]
+    fn a_user_named_like_the_provider_gets_its_own_tokens_and_nobody_elses() {
+        const TWO: &str = r"apiVersion: v1
+users:
+- name: alice
+  user:
+    auth-provider:
+      config:
+        client-id: kubernetes
+        id-token: alice-id
+        refresh-token: alice-refresh
+      name: oidc
+- user:
+    auth-provider:
+      config:
+        client-id: kubernetes
+        id-token: oidc-id
+        refresh-token: oidc-refresh
+      name: oidc
+  name: oidc
+";
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", TWO);
+
+        assert!(can_write_tokens(&path, "oidc"));
+        write_tokens(&path, "oidc", "new-id", Some("new-refresh")).expect("write");
+
+        let after: serde_yaml::Value =
+            serde_yaml::from_str(&std::fs::read_to_string(&path).expect("read")).expect("yaml");
+        let tokens = |user: &str| {
+            let config =
+                &user_entry(&after, user).expect("the user")["user"]["auth-provider"]["config"];
+            (
+                config["id-token"].as_str().map(str::to_string),
+                config["refresh-token"].as_str().map(str::to_string),
+            )
+        };
+        assert_eq!(
+            tokens("alice"),
+            (Some("alice-id".into()), Some("alice-refresh".into())),
+            "another user's entry was rewritten"
+        );
+        assert_eq!(
+            tokens("oidc"),
+            (Some("new-id".into()), Some("new-refresh".into()))
+        );
+    }
+
+    /// A `name` deeper in an entry names something else: an exec plugin's
+    /// environment variable here, which is no user of this file.
+    #[test]
+    fn a_name_deeper_in_an_entry_is_not_the_users_name() {
+        const NESTED: &str = r"apiVersion: v1
+users:
+- name: alice
+  user:
+    auth-provider:
+      name: oidc
+      config:
+        id-token: alice-id
+    exec:
+      env:
+      - name: carol
+        value: x
+";
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", NESTED);
+
+        assert!(can_write_tokens(&path, "alice"));
+        assert!(!can_write_tokens(&path, "carol"));
+        assert!(!can_write_tokens(&path, "oidc"));
     }
 
     /// `$KUBECONFIG` naming one file twice is one file, not two claimants.

@@ -1011,6 +1011,9 @@ export const ru: Catalogue = {
     shareProcessNamespace: "Общее пространство процессов",
     shareProcessNamespaceHint:
       "Разрешить контейнеру для отладки видеть процессы других контейнеров",
+    traceProcesses: "Трассировка процессов",
+    traceProcessesHint:
+      "Добавляет capability SYS_PTRACE: работают strace и gdb, читаются файлы контейнера, запущенного от другого пользователя. Пространство имён с Pod Security уровня baseline или restricted откажет контейнеру с ней.",
     ephemeralUnsupported:
       "Эфемерные контейнеры требуют Kubernetes 1.25+. Этот кластер сообщает {version}, поэтому используйте «Копию пода».",
     unknownVersion: "неизвестную версию",
@@ -1251,6 +1254,9 @@ export const ru: Catalogue = {
     debugContainerReady: "Контейнер для отладки готов",
     debugContainerReadyDetail: "Контейнер «{container}» готов в поде «{pod}»",
     debugFailed: "Отладка не удалась",
+    debugPodRemoved: "Созданный для неё Pod {pod} удалён.",
+    debugPodLeft:
+      "Созданный для неё Pod {pod} удалить не удалось, он остался в кластере: удалите его с его страницы.",
     invalidImage: "Некорректный образ",
     invalidImageDetail: "Выберите или введите корректный образ для отладки",
     debugPodDeleted: "Под для отладки удалён",
@@ -1324,6 +1330,7 @@ export const ru: Catalogue = {
     scaleKindFailed: "Не удалось масштабировать {kind}",
     kindRestarted: "{kind}: перезапуск запущен",
     kindRestartingDetail: "{kind} {name} перезапускается.",
+    kindRestartRecorded: "{kind}: перезапуск записан",
     restartKindFailed: "Не удалось перезапустить {kind}",
     imageUpdated: "Образ обновлён",
     imageUpdatedDetail: "Образ контейнера {container} обновлён до {image}.",
@@ -1382,6 +1389,8 @@ export const ru: Catalogue = {
       "Ваши права этого не позволяют: на kubectl auth can-i {check} кластер отвечает no.",
     notPermittedEither:
       "Ваши права этого не позволяют: на kubectl auth can-i {check} и на kubectl auth can-i {other} кластер отвечает no.",
+    notThroughKubectlProxy:
+      "Недоступно в этой сессии: она идёт в кластер через kubectl proxy, а он отклоняет любой запрос exec и attach, что бы ни разрешали ваши права.",
     validationPassed: "Проверка пройдена",
     applySucceeded: "Применение выполнено",
     applyFailed: "Не удалось применить",
@@ -1529,6 +1538,8 @@ export const ru: Catalogue = {
       "Поды с порядковым номером ниже {partition} останутся на текущем шаблоне (partition {partition}).",
     restartPartitionHoldsAll:
       "Ничего не перезапустится: partition {partition} держит все поды на текущем шаблоне.",
+    restartPlanPaused:
+      "Пока ничего не перезапустится: выкатка на паузе, поды заменятся только после её возобновления.",
     restartPlanOnDelete:
       "Пока ничего не перезапустится: при OnDelete под получает изменение, только когда его удаляют. Удалите поды сами, чтобы перезапустить их.",
     restartNoNodes:
@@ -1840,7 +1851,8 @@ export const ru: Catalogue = {
     refused: "{address} отсюда не отвечает",
     noTool: "В образе нечем спросить (пробовали {tried})",
     ranInContainer: "в собственном контейнере пода",
-    ranInCopy: "в копии пода на {image}, {deleted} ({pod})",
+    ranInCopy:
+      "в копии пода на {image}, {deleted} ({pod}). У копии нет меток пода, поэтому NetworkPolicy, выбирающая под по меткам, на неё не действовала",
     copyDeleted: "после удалена",
     copyNotDeleted: "удаление не подтверждено",
     unanswered: "Проверка завершилась, не сообщив результат",
@@ -1852,10 +1864,10 @@ export const ru: Catalogue = {
     runFromCopy: "Запустить из копии",
     copyImage: "Образ для копии",
     copyNote:
-      "Копия получает то же пространство имён, метки, DNS-политику и ServiceAccount. Это не сам под, и она удаляется, как только ответ получен.",
+      "Копия получает то же пространство имён, DNS-политику и ServiceAccount, но не метки: NetworkPolicy, выбирающая под по меткам, на копию не действует. Копия удаляется, как только ответ получен.",
     whatItSaid: "Что напечатало",
     containerCannotAnswer:
-      "{container} не может принять exec: {why}. «Запустить» создаст копию пода, спросит из неё и удалит её, когда ответ получен.",
+      "{container} не может принять exec: {why}. «Запустить» создаст копию пода без его меток, спросит из неё и удалит её, когда ответ получен.",
     runsAsExec:
       "«Запустить» выполняет exec в контейнер {container}, как kubectl exec, и ничего не создаёт в кластере.",
   },

@@ -236,6 +236,20 @@ function podAsks(
   ];
 }
 
+/**
+ * Why nothing that enters a container can start in this session, whatever
+ * the authorizer says: it reaches the cluster through `kubectl proxy`, whose
+ * default `--reject-paths` answers every exec and attach with a bare 403.
+ * Port forwards and logs pass.
+ */
+function useProxyRefusal(): string | undefined {
+  const t = useT();
+  const through = useClusterStore((s) => s.connectedThrough);
+  return through === "kubectl_proxy"
+    ? t("action", "notThroughKubectlProxy")
+    : undefined;
+}
+
 export interface PodDenied {
   /** An ephemeral debug container, `kubectl debug` without `--copy-to`. */
   ephemeral?: string;
@@ -260,6 +274,9 @@ export function usePodDenied(
   const [ephemeral, copy, shell, portForward] = useDeniedOf(
     asks ?? [null, null, null, null]
   );
+  // A debug container or a copy is entered by an exec, so the proxy shuts
+  // those ways too: started there, they are pods nobody can get into.
+  const proxy = useProxyRefusal();
   const debug =
     asks?.[0] && asks[1] && ephemeral && copy
       ? t("action", "notPermittedEither", {
@@ -267,7 +284,13 @@ export function usePodDenied(
           other: checkOf(asks[1]),
         })
       : undefined;
-  return { ephemeral, copy, debug, shell, portForward };
+  return {
+    ephemeral: proxy ?? ephemeral,
+    copy: proxy ?? copy,
+    debug: proxy ?? debug,
+    shell: proxy ?? shell,
+    portForward,
+  };
 }
 
 /**
@@ -302,7 +325,8 @@ export function useNodeDebugDenied(
         ]
       : [null, null]
   );
-  return create ?? exec;
+  const proxy = useProxyRefusal();
+  return proxy ?? create ?? exec;
 }
 
 /** Why the cluster will not take an edited manifest of this object from this user. */

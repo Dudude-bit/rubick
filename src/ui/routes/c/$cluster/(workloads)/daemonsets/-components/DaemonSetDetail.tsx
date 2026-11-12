@@ -44,7 +44,7 @@ import {
 } from "../../-components/workload-overview";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { RestartAction } from "../../../-object/RestartDialog";
-import { readinessOf } from "@/lib/restart-plan";
+import { readinessOf, restartedWords } from "@/lib/restart-plan";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { Composition, ConditionRows } from "@/components/object/detail-blocks";
 import { serviceAccountRow } from "../../-components/identity-rows";
@@ -91,6 +91,12 @@ export function DaemonSetDetail() {
 
   const asking = useAsk();
 
+  const restarted = restartedWords(
+    read?.rolloutPlan,
+    ResourceType.DaemonSet,
+    name ?? "",
+    t
+  );
   const restartMutation = useResourceMutation(
     async () => {
       if (!name) return;
@@ -98,13 +104,8 @@ export function DaemonSetDetail() {
     },
     {
       toast: {
-        successTitle: t("action", "kindRestarted", {
-          kind: ResourceType.DaemonSet,
-        }),
-        successDescription: t("action", "kindRestartingDetail", {
-          kind: ResourceType.DaemonSet,
-          name: name ?? "",
-        }),
+        successTitle: restarted.title,
+        successDescription: restarted.description,
         errorPrefix: t("action", "restartKindFailed", {
           kind: ResourceType.DaemonSet,
         }),

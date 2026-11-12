@@ -128,10 +128,7 @@ impl KubectlProxy {
     /// `/version` through the proxy, which proves both that the proxy is up
     /// and that kubectl's credentials are accepted behind it.
     async fn wait_ready(&mut self) -> std::result::Result<(), String> {
-        let http = crate::tls::builder()
-            .timeout(Duration::from_secs(3))
-            .build()
-            .map_err(|e| e.to_string())?;
+        let http = probe(crate::tls::builder())?;
         let url = format!("{}/version", self.url());
         let started = tokio::time::Instant::now();
         let mut last = String::from("no answer yet");
@@ -155,6 +152,17 @@ impl KubectlProxy {
             READY_WITHIN.as_secs()
         ))
     }
+}
+
+/// The client that asks the proxy whether it is up, with no HTTP proxy of
+/// the machine's in between: the address is this machine's loopback, which
+/// a corporate proxy cannot reach.
+fn probe(builder: reqwest::ClientBuilder) -> std::result::Result<reqwest::Client, String> {
+    builder
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())
 }
 
 impl Drop for KubectlProxy {
@@ -189,6 +197,35 @@ mod tests {
     fn a_free_port_is_on_the_loopback_ephemeral_range() {
         let port = free_port().expect("a port");
         assert!(port >= 1024);
+    }
+
+    /// A machine with `HTTP_PROXY` set is one the fallback exists for, and the
+    /// readiness question went to that proxy, which cannot see 127.0.0.1:
+    /// twenty seconds later the context could not be opened. The proxy
+    /// here is given outright, standing in for the one the system names.
+    #[tokio::test]
+    async fn the_readiness_question_goes_straight_to_the_loopback() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let url = format!("http://{}/version", listener.local_addr().expect("addr"));
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let _ = socket.read(&mut [0u8; 1024]).await;
+                let answer = "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}";
+                let _ = socket.write_all(answer.as_bytes()).await;
+            }
+        });
+        let nowhere = format!("http://127.0.0.1:{}", free_port().expect("a port"));
+        let through = crate::tls::builder().proxy(reqwest::Proxy::all(nowhere).expect("proxy"));
+
+        let answered = probe(through).expect("client").get(&url).send().await;
+
+        assert!(
+            answered.is_ok_and(|response| response.status().is_success()),
+            "asked through a proxy that is not there"
+        );
     }
 
     /// A binary that is not there is the commonest failure, and the report

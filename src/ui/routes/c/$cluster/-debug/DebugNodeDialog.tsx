@@ -23,12 +23,14 @@ import type {
   DebugConfig,
   DebugOperation,
   DebugResult,
+  MadePod,
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { formatTimeUnit } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
+import { debugFailureWords } from "@/hooks/useDebugOperation";
 import { Progress } from "@/components/ui/progress";
 import { useT } from "@/i18n/useT";
 import { toastError, toastWriteError } from "@/lib/toast-error";
@@ -91,8 +93,8 @@ export function DebugNodeDialog({
   );
 
   const handleError = useCallback(
-    (error: string) => {
-      toastError(t("action", "debugFailed"), error);
+    (error: string, pod?: MadePod | null) => {
+      toastError(t("action", "debugFailed"), debugFailureWords(error, pod, t));
     },
     [t]
   );
@@ -138,6 +140,7 @@ export function DebugNodeDialog({
       targetContainer: null,
       command: null,
       shareProcesses: false,
+      traceProcesses: false,
       timeoutSeconds: 120,
     };
 

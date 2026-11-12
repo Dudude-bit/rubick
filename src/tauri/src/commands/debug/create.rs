@@ -22,6 +22,71 @@ use super::types::{
     DebugOperationType,
 };
 
+const TRACE: &str = "SYS_PTRACE";
+
+/// The ephemeral container as the API takes it. It states no security
+/// context unless the reader asked to trace processes: the capability is
+/// outside Pod Security baseline, and added always it had every Debug in a
+/// namespace enforcing that level refused.
+fn ephemeral_container(name: &str, config: &DebugConfig) -> serde_json::Value {
+    let mut container = serde_json::json!({
+        "name": name,
+        "image": config.image,
+        "stdin": true,
+        "tty": true,
+    });
+    if config.trace_processes {
+        container["securityContext"] = serde_json::json!({ "capabilities": { "add": [TRACE] } });
+    }
+    // Add target container if specified (for process namespace sharing)
+    if let Some(ref target) = config.target_container {
+        container["targetContainerName"] = serde_json::json!(target);
+    }
+    // Add custom command if specified
+    if let Some(ref cmd) = config.command {
+        if !cmd.is_empty() {
+            container["command"] = serde_json::json!(cmd);
+        }
+    }
+    container
+}
+
+/// The debugger container of a pod copy, under the same rule.
+fn debugger_container(name: &str, config: &DebugConfig) -> Container {
+    Container {
+        name: name.to_string(),
+        image: Some(config.image.clone()),
+        stdin: Some(true),
+        tty: Some(true),
+        command: config.command.clone(),
+        security_context: config.trace_processes.then(|| SecurityContext {
+            capabilities: Some(Capabilities {
+                add: Some(vec![TRACE.to_string()]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+/// Create a pod this app makes for a debug session. A create nobody
+/// answered may have been stored all the same, and the operation that would
+/// remember its name is never recorded: it is asked to go at once.
+async fn create_made(api: &Api<Pod>, pod: &Pod) -> Result<()> {
+    let Err(err) = api.create(&PostParams::default(), pod).await else {
+        return Ok(());
+    };
+    let err = Error::from(err);
+    if err.is_unanswered() {
+        let (api, name) = (api.clone(), pod.metadata.name.clone().unwrap_or_default());
+        tokio::spawn(async move {
+            let _ = api.delete(&name, &kube::api::DeleteParams::default()).await;
+        });
+    }
+    Err(err)
+}
+
 /// Add an ephemeral debug container to an existing pod
 #[tauri::command]
 pub async fn debug_pod_ephemeral(
@@ -41,34 +106,10 @@ pub async fn debug_pod_ephemeral(
 
     let container_name = generate_debugger_name();
 
-    let mut ephemeral_container = serde_json::json!({
-        "name": container_name,
-        "image": config.image,
-        "stdin": true,
-        "tty": true,
-        "securityContext": {
-            "capabilities": {
-                "add": ["SYS_PTRACE"]
-            }
-        }
-    });
-
-    // Add target container if specified (for process namespace sharing)
-    if let Some(ref target) = config.target_container {
-        ephemeral_container["targetContainerName"] = serde_json::json!(target);
-    }
-
-    // Add custom command if specified
-    if let Some(ref cmd) = config.command {
-        if !cmd.is_empty() {
-            ephemeral_container["command"] = serde_json::json!(cmd);
-        }
-    }
-
     // Create the patch
     let patch = serde_json::json!({
         "spec": {
-            "ephemeralContainers": [ephemeral_container]
+            "ephemeralContainers": [ephemeral_container(&container_name, &config)]
         }
     });
 
@@ -141,21 +182,7 @@ pub async fn debug_pod_copy(
     let debug_pod_name = generate_debug_pod_name(&pod_name);
     let container_name = generate_debugger_name();
 
-    let debug_container = Container {
-        name: container_name.clone(),
-        image: Some(config.image.clone()),
-        stdin: Some(true),
-        tty: Some(true),
-        command: config.command.clone(),
-        security_context: Some(SecurityContext {
-            capabilities: Some(Capabilities {
-                add: Some(vec!["SYS_PTRACE".to_string()]),
-                ..Default::default()
-            }),
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
+    let debug_container = debugger_container(&container_name, &config);
 
     // Clone and modify the pod spec
     let mut new_spec = original_pod.spec.clone().unwrap_or_default();
@@ -206,7 +233,7 @@ pub async fn debug_pod_copy(
         ..Default::default()
     };
 
-    api.create(&PostParams::default(), &debug_pod).await?;
+    create_made(&api, &debug_pod).await?;
 
     // Create and store the debug operation
     let operation_id = crate::utils::generate_id("debug");
@@ -317,7 +344,7 @@ pub async fn debug_node(
         ..Default::default()
     };
 
-    api.create(&PostParams::default(), &debug_pod).await?;
+    create_made(&api, &debug_pod).await?;
 
     // Create and store the debug operation
     let operation_id = crate::utils::generate_id("debug");
@@ -338,4 +365,100 @@ pub async fn debug_node(
         .insert(operation_id, operation.clone());
 
     Ok(operation)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config(trace_processes: bool) -> DebugConfig {
+        DebugConfig {
+            image: "busybox".into(),
+            target_container: Some("app".into()),
+            command: None,
+            share_processes: true,
+            trace_processes,
+            timeout_seconds: None,
+        }
+    }
+
+    /// A namespace enforcing Pod Security baseline refuses a container that
+    /// adds `SYS_PTRACE`, and both modes added it always: Debug could not
+    /// be used there at all, where `kubectl debug` works.
+    #[test]
+    fn a_debug_container_asks_for_no_capability_the_reader_did_not() {
+        let ephemeral = ephemeral_container("debugger-1", &config(false));
+        assert_eq!(ephemeral.get("securityContext"), None, "{ephemeral}");
+        assert_eq!(ephemeral["targetContainerName"], "app");
+        assert_eq!(
+            debugger_container("debugger-1", &config(false)).security_context,
+            None
+        );
+    }
+
+    /// The answer to a create can be lost after the pod was stored, and the
+    /// operation that would remember the pod is recorded only after it: a
+    /// copy of the workload then ran its hour with nothing knowing its name.
+    #[tokio::test]
+    async fn a_pod_whose_create_nobody_answered_is_asked_to_go() {
+        use crate::client::served::test_server::answering;
+        const MADE: &str = "/api/v1/namespaces/shop/pods/orders-debug-1";
+        let (client, hits) = answering(|path, _| match path {
+            "/api/v1/namespaces/shop/pods" => (500, "{}".into()),
+            _ => (200, "{}".into()),
+        })
+        .await;
+        let api: Api<Pod> = Api::namespaced(client, "shop");
+        let mut pod = Pod::default();
+        pod.metadata.name = Some("orders-debug-1".into());
+
+        let err = create_made(&api, &pod).await.expect_err("nobody answered");
+
+        assert!(err.is_unanswered(), "{err}");
+        let asked = || hits.lock().unwrap().get(MADE).copied().unwrap_or(0);
+        for _ in 0..40 {
+            if asked() > 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert_eq!(asked(), 1, "the delete was never sent");
+    }
+
+    /// A refusal is the cluster's own no: nothing was stored, nothing to remove.
+    #[tokio::test]
+    async fn a_refused_create_leaves_nothing_to_remove() {
+        use crate::client::served::test_server::{answering, failure};
+        let (client, hits) = answering(|path, _| match path {
+            "/api/v1/namespaces/shop/pods" => failure(403, "Forbidden"),
+            _ => (200, "{}".into()),
+        })
+        .await;
+        let api: Api<Pod> = Api::namespaced(client, "shop");
+        let mut pod = Pod::default();
+        pod.metadata.name = Some("orders-debug-1".into());
+
+        let err = create_made(&api, &pod).await.expect_err("refused");
+
+        assert!(err.is_refusal(), "{err}");
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert_eq!(hits.lock().unwrap().len(), 1, "only the create was sent");
+    }
+
+    /// Asked for, it is the one capability and nothing beside it.
+    #[test]
+    fn process_tracing_adds_sys_ptrace_when_the_reader_asks_for_it() {
+        let ephemeral = ephemeral_container("debugger-1", &config(true));
+        assert_eq!(
+            ephemeral["securityContext"],
+            serde_json::json!({ "capabilities": { "add": ["SYS_PTRACE"] } })
+        );
+        let copied = debugger_container("debugger-1", &config(true));
+        let context = copied.security_context.expect("a security context");
+        assert_eq!(
+            context.capabilities.and_then(|c| c.add),
+            Some(vec!["SYS_PTRACE".to_string()])
+        );
+        assert_eq!(context.privileged, None);
+    }
 }

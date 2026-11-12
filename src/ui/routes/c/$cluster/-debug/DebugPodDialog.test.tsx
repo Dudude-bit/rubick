@@ -93,6 +93,42 @@ describe("DebugPodDialog", () => {
     ).toHaveTextContent("sidecar");
   });
 
+  /**
+   * SYS_PTRACE was added to every debug container, and a namespace enforcing
+   * Pod Security baseline refused them all. Fails if a start asks for the
+   * capability before the reader switched it on, or not after.
+   */
+  it("asks for process tracing only once the reader switches it on", async () => {
+    open({ containers: ["app"] });
+    fireEvent.click(start());
+    await waitFor(() => expect(startEphemeral).toHaveBeenCalledTimes(1));
+    expect(startEphemeral.mock.calls[0][2]).toMatchObject({
+      traceProcesses: false,
+    });
+
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Process tracing" })
+    );
+    fireEvent.click(start());
+    await waitFor(() => expect(startEphemeral).toHaveBeenCalledTimes(2));
+    expect(startEphemeral.mock.calls[1][2]).toMatchObject({
+      traceProcesses: true,
+    });
+  });
+
+  /** Reading another container's files is what the capability is for, so the Files tab's opening starts with it on, in sight and switchable. */
+  it("starts with process tracing on when the caller is after a container's files", async () => {
+    open({ containers: ["app"], traceByDefault: true });
+    expect(
+      screen.getByRole("switch", { name: "Process tracing" })
+    ).toBeChecked();
+    fireEvent.click(start());
+    await waitFor(() => expect(startEphemeral).toHaveBeenCalled());
+    expect(startEphemeral.mock.calls[0][2]).toMatchObject({
+      traceProcesses: true,
+    });
+  });
+
   /** A name the pod does not have is not a container; the real list wins. */
   it("ignores a preferred container the pod does not have", () => {
     open({ containers: ["app"], preferredTarget: "gone" });

@@ -961,7 +961,13 @@ export interface DebugConfig {
   targetContainer: string | null;
   command: string[] | null;
   shareProcesses: boolean;
+  traceProcesses: boolean;
   timeoutSeconds: number | null;
+}
+
+export interface MadePod {
+  name: string;
+  deleted: boolean;
 }
 
 export interface DebugResult {
@@ -2818,7 +2824,7 @@ export type DebugOperationType = "ephemeral" | "copyPod" | "nodeDebug";
 export type DebugStatus =
   | { type: "pending"; reason: string }
   | { type: "ready"; result: DebugResult }
-  | { type: "failed"; error: string }
+  | { type: "failed"; error: string; pod: MadePod | null }
   | { type: "timeout" };
 
 export type SetupFault =
@@ -2891,6 +2897,7 @@ export type RolloutPlan =
       unavailable: number;
     }
   | { strategy: "recreate"; replicas: number }
+  | { strategy: "paused" }
   | {
       strategy: "ordered";
       replicas: number;

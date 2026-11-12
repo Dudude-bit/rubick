@@ -1015,6 +1015,9 @@ export const en = {
     shareProcessNamespace: "Share Process Namespace",
     shareProcessNamespaceHint:
       "Allow debug container to see processes from other containers",
+    traceProcesses: "Process tracing",
+    traceProcessesHint:
+      "Adds the SYS_PTRACE capability: strace and gdb work, and so does reading the files of a container that runs as another user. A namespace that enforces Pod Security baseline or restricted refuses a container with it.",
     ephemeralUnsupported:
       'Ephemeral containers require Kubernetes 1.25+. This cluster reports {version}, so use "Copy Pod" instead.',
     unknownVersion: "an unknown version",
@@ -1246,6 +1249,9 @@ export const en = {
     debugContainerReadyDetail:
       'Container "{container}" is ready in pod "{pod}"',
     debugFailed: "Debug failed",
+    debugPodRemoved: "Its pod {pod} was deleted.",
+    debugPodLeft:
+      "Its pod {pod} could not be deleted and is still in the cluster: delete it from its page.",
     invalidImage: "Invalid image",
     invalidImageDetail: "Please select or enter a valid debug image",
     debugPodDeleted: "Debug pod deleted",
@@ -1317,6 +1323,7 @@ export const en = {
     scaleKindFailed: "Failed to scale {kind}",
     kindRestarted: "{kind} restarted",
     kindRestartingDetail: "{kind} {name} is being restarted.",
+    kindRestartRecorded: "{kind} restart recorded",
     restartKindFailed: "Failed to restart {kind}",
     imageUpdated: "Image updated",
     imageUpdatedDetail: "Container {container} image updated to {image}.",
@@ -1374,6 +1381,8 @@ export const en = {
       "Your access does not allow this: the cluster answers no to kubectl auth can-i {check}.",
     notPermittedEither:
       "Your access does not allow this: the cluster answers no to kubectl auth can-i {check} and to kubectl auth can-i {other}.",
+    notThroughKubectlProxy:
+      "Not available in this session: it reaches the cluster through kubectl proxy, which refuses every exec and attach request whatever your access allows.",
     validationPassed: "Validation passed",
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
@@ -1511,6 +1520,8 @@ export const en = {
       "Pods below ordinal {partition} keep their current template (partition {partition}).",
     restartPartitionHoldsAll:
       "Nothing restarts: partition {partition} holds every pod at its current template.",
+    restartPlanPaused:
+      "Nothing restarts yet: the rollout is paused, so the pods are replaced only once it is resumed.",
     restartPlanOnDelete:
       "Nothing restarts yet: with OnDelete, a pod picks up the change only when it is deleted. Delete the pods yourself to restart them.",
     restartNoNodes:
@@ -1794,7 +1805,8 @@ export const en = {
     refused: "{address} does not answer from here",
     noTool: "The image has nothing to ask with (tried {tried})",
     ranInContainer: "in the pod's own container",
-    ranInCopy: "in a copy of the pod running {image}, {deleted} ({pod})",
+    ranInCopy:
+      "in a copy of the pod running {image}, {deleted} ({pod}). The copy has none of the pod's labels, so a NetworkPolicy that selects the pod by label did not apply to it",
     copyDeleted: "deleted afterwards",
     copyNotDeleted: "not confirmed deleted",
     unanswered: "The check ended without saying how it went",
@@ -1807,10 +1819,10 @@ export const en = {
     runFromCopy: "Run from a copy",
     copyImage: "Image for the copy",
     copyNote:
-      "A copy shares the namespace, labels, DNS policy and service account. It is not the pod, and it is deleted when the answer is in.",
+      "A copy shares the namespace, DNS policy and service account, not the labels: a NetworkPolicy that selects the pod by label does not apply to it. It is deleted when the answer is in.",
     whatItSaid: "What it printed",
     containerCannotAnswer:
-      "{container} cannot take an exec: {why}. Run creates a copy of the pod, asks from it and deletes it when the answer is in.",
+      "{container} cannot take an exec: {why}. Run creates a copy of the pod without its labels, asks from it and deletes it when the answer is in.",
     runsAsExec:
       "Run is an exec into {container}, as kubectl exec is: it creates nothing in the cluster.",
   },

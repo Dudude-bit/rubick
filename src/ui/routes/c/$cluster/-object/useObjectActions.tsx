@@ -38,7 +38,7 @@ import { lifetimeContainers } from "@/lib/container-sequence";
 import { podForwardPorts } from "@/lib/port-forward";
 import { deliveryOfKind } from "@/lib/delivery";
 import { scaleWarnings } from "@/lib/governance";
-import { readinessOf } from "@/lib/restart-plan";
+import { readinessOf, restartedWords } from "@/lib/restart-plan";
 import { objectLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useShellAskStore } from "@/stores/shellAskStore";
@@ -233,10 +233,14 @@ export function useObjectActions({
     onSuccess: () => {
       invalidate();
       setConfirming(null);
-      toast({
-        title: t("action", "kindRestarted", { kind }),
-        description: t("action", "kindRestartingDetail", { kind, name }),
-      });
+      toast(
+        restartedWords(
+          (detail as { rolloutPlan?: RolloutPlan } | undefined)?.rolloutPlan,
+          kind,
+          name,
+          t
+        )
+      );
       // Every rolled workload is followed to its answer, not just the one
       // kind that could be rolled when this was written — the detail pages
       // follow all three, and a peek that did not would answer differently
