@@ -273,19 +273,26 @@ interface GatewaySpec {
 }
 
 /**
- * Whether a Gateway server's host pattern covers this hostname.
+ * Whether a Gateway server's host pattern and a VirtualService's host bind.
  *
- * Istio's own three shapes: an exact name, `*`, and `*.suffix`. A server
- * host may also be namespace-qualified as `ns/host`, which is about *which
- * VirtualServices may bind*, not about the hostname — so the namespace half
- * is dropped before comparing.
+ * Istio binds the two where they overlap in either direction, and serves the
+ * narrower name: a VirtualService for `*.example.com` on a server listing
+ * `shop.example.com` is served under that one name. Each side is an exact
+ * name, `*`, or `*.suffix`. A server host may also be namespace-qualified as
+ * `ns/host`, which is about *which VirtualServices may bind*, not about the
+ * hostname — so the namespace half is dropped before comparing.
  */
 export function gatewayCovers(pattern: string, host: string): boolean {
   const bare = pattern.includes("/") ? pattern.split("/", 2)[1] : pattern;
-  if (bare === "*") return true;
-  if (bare === host) return true;
-  if (bare.startsWith("*.")) return host.endsWith(bare.slice(1));
-  return false;
+  const [server, wanted] = [bare, host].map((name) =>
+    name.startsWith("*") ? name.slice(1) : null
+  );
+  if (server !== null && wanted !== null) {
+    return server.endsWith(wanted) || wanted.endsWith(server);
+  }
+  if (server !== null) return host.endsWith(server);
+  if (wanted !== null) return bare.endsWith(wanted);
+  return bare === host;
 }
 
 /** The Gateways a VirtualService names, and whether each serves this host. */
