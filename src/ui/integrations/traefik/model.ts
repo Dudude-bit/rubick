@@ -529,9 +529,13 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
   });
 }
 
-/** A host's routers: one balanced across Services is a row per Service and still one path. */
+/** The router a row belongs to: one balanced across Services is a row per Service. */
+const routerOf = (route: TraefikRoute): string =>
+  route.key.replace(/#\d+$/, "");
+
+/** A host's routers, where a balanced one is still one path. */
 export const pathCount = (group: Pick<HostGroup, "routes">): number =>
-  new Set(group.routes.map((route) => route.key.replace(/#\d+$/, ""))).size;
+  new Set(group.routes.map(routerOf)).size;
 
 // --- entry points, read off the controller's own arguments --------------
 //
@@ -1095,14 +1099,21 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
     const stopOf = new Map(
       own.map((route) => [route.key, backings.get(route.key)!.stop])
     );
-    const dropped = new Set(
+    // By router: one Service that fails to build takes the Services it is
+    // balanced with along, because Traefik skips the whole router.
+    const droppedRouters = new Set(
       own.flatMap((route) => {
         const stop = stopOf.get(route.key);
         return route.resourceBackend ||
           (stop && stopAnswer(stop, route, sources.emptyServices) === "dropped")
-          ? [route.key]
+          ? [routerOf(route)]
           : [];
       })
+    );
+    const dropped = new Set(
+      own
+        .filter((route) => droppedRouters.has(routerOf(route)))
+        .map((route) => route.key)
     );
     const stops = own.flatMap((route): Finding[] => {
       const stop = stopOf.get(route.key);

@@ -1826,6 +1826,35 @@ describe("a path whose backend is an API object", () => {
     expect(group.findings.map((finding) => finding.kind)).toEqual(["stop"]);
   });
 
+  /**
+   * Traefik builds a route's Services as one weighted balancer and skips
+   * the router when any of them fails to build. Fails if the Service that
+   * does exist keeps the host "served in the clear" beside a router gone.
+   */
+  it("drops a balanced route whole when one of its Services is missing", () => {
+    const [group] = hostGroups(
+      sources({
+        ingressRoutes: [
+          ingressRoute("canary", {
+            routes: [
+              {
+                match: "Host(`app.example.com`)",
+                services: [{ name: "app-v1" }, { name: "gone" }],
+              },
+            ],
+          }),
+        ],
+        services: [service("app-v1", { app: "v1" })],
+        published: [published("app-v1", 2)],
+        entryPoints: [
+          { name: "web", address: ":8000", tls: false, redirectTo: null },
+        ],
+      })
+    );
+
+    expect(group.findings.map((finding) => finding.kind)).toEqual(["stop"]);
+  });
+
   it("does not call a host served in the clear when Traefik drops its only path", () => {
     const [group] = hostGroups(
       sources({
