@@ -1324,6 +1324,7 @@ export const ru: Catalogue = {
     scaleKindFailed: "Не удалось масштабировать {kind}",
     kindRestarted: "{kind}: перезапуск запущен",
     kindRestartingDetail: "{kind} {name} перезапускается.",
+    kindRestartRecorded: "{kind}: перезапуск записан",
     restartKindFailed: "Не удалось перезапустить {kind}",
     imageUpdated: "Образ обновлён",
     imageUpdatedDetail: "Образ контейнера {container} обновлён до {image}.",
@@ -1529,6 +1530,8 @@ export const ru: Catalogue = {
       "Поды с порядковым номером ниже {partition} останутся на текущем шаблоне (partition {partition}).",
     restartPartitionHoldsAll:
       "Ничего не перезапустится: partition {partition} держит все поды на текущем шаблоне.",
+    restartPlanPaused:
+      "Пока ничего не перезапустится: выкатка на паузе, поды заменятся только после её возобновления.",
     restartPlanOnDelete:
       "Пока ничего не перезапустится: при OnDelete под получает изменение, только когда его удаляют. Удалите поды сами, чтобы перезапустить их.",
     restartNoNodes:

@@ -5,6 +5,8 @@ export interface RestartWords {
   text: string;
   /** `warn` where the restart is not the gentle rolling one a reader expects. */
   tone: "info" | "warn";
+  /** The restart is only recorded: no pod is replaced until something else happens. */
+  holds?: true;
 }
 
 /**
@@ -44,6 +46,12 @@ export function restartWords(
         text: t("count", "restartPlanRecreate", { n: plan.replicas }),
         tone: "warn",
       };
+    case "paused":
+      return {
+        text: t("action", "restartPlanPaused"),
+        tone: "warn",
+        holds: true,
+      };
     case "ordered": {
       const end = plan.start + plan.replicas;
       const from = Math.max(plan.partition, plan.start);
@@ -55,6 +63,7 @@ export function restartWords(
             partition: plan.partition,
           }),
           tone: "warn",
+          holds: true,
         };
       const replaces = t("count", "restartPods", { n: end - from });
       const last = `${name}-${end - 1}`;
@@ -77,7 +86,11 @@ export function restartWords(
       };
     }
     case "onDelete":
-      return { text: t("action", "restartPlanOnDelete"), tone: "warn" };
+      return {
+        text: t("action", "restartPlanOnDelete"),
+        tone: "warn",
+        holds: true,
+      };
     case "nodes":
       if (plan.nodes <= 0)
         return { text: t("action", "restartNoNodes"), tone: "info" };
@@ -95,6 +108,28 @@ export function restartWords(
         tone: "info",
       };
   }
+}
+
+/**
+ * What to say once the restart is written. A plan that holds is not "being
+ * restarted": the same sentence the confirmation gave says what it waits for.
+ */
+export function restartedWords(
+  plan: RolloutPlan | undefined,
+  kind: string,
+  name: string,
+  t: T
+): { title: string; description: string } {
+  const words = restartWords(plan, name, t);
+  return words.holds
+    ? {
+        title: t("action", "kindRestartRecorded", { kind }),
+        description: words.text,
+      }
+    : {
+        title: t("action", "kindRestarted", { kind }),
+        description: t("action", "kindRestartingDetail", { kind, name }),
+      };
 }
 
 export interface Readiness {

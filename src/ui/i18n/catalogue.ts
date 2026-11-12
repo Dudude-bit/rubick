@@ -1317,6 +1317,7 @@ export const en = {
     scaleKindFailed: "Failed to scale {kind}",
     kindRestarted: "{kind} restarted",
     kindRestartingDetail: "{kind} {name} is being restarted.",
+    kindRestartRecorded: "{kind} restart recorded",
     restartKindFailed: "Failed to restart {kind}",
     imageUpdated: "Image updated",
     imageUpdatedDetail: "Container {container} image updated to {image}.",
@@ -1511,6 +1512,8 @@ export const en = {
       "Pods below ordinal {partition} keep their current template (partition {partition}).",
     restartPartitionHoldsAll:
       "Nothing restarts: partition {partition} holds every pod at its current template.",
+    restartPlanPaused:
+      "Nothing restarts yet: the rollout is paused, so the pods are replaced only once it is resumed.",
     restartPlanOnDelete:
       "Nothing restarts yet: with OnDelete, a pod picks up the change only when it is deleted. Delete the pods yourself to restart them.",
     restartNoNodes:

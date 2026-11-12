@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { restartWords } from "./restart-plan";
+import { restartedWords, restartWords } from "./restart-plan";
 
 const t = ((_section: string, key: string, values?: Record<string, unknown>) =>
   values
@@ -91,7 +91,46 @@ describe("what a restart says it will do", () => {
   it("says nothing restarts under OnDelete", () => {
     expect(
       restartWords({ strategy: "onDelete", replicas: 3 }, "orders-db", t)
-    ).toEqual({ text: "restartPlanOnDelete", tone: "warn" });
+    ).toEqual({ text: "restartPlanOnDelete", tone: "warn", holds: true });
+  });
+
+  /** A paused Deployment makes no ReplicaSet: three pods "replaced, 1 extra at a time" was a plan for a rollout that does not happen. */
+  it("says nothing restarts while the rollout is paused", () => {
+    expect(restartWords({ strategy: "paused" }, "web", t)).toEqual({
+      text: "restartPlanPaused",
+      tone: "warn",
+      holds: true,
+    });
+  });
+
+  /** The toast after confirming said "is being restarted" over a restart that waits for a resume, a delete or a partition. */
+  it("does not call a held restart under way once it is written", () => {
+    for (const plan of [
+      { strategy: "paused" },
+      { strategy: "onDelete", replicas: 3 },
+      {
+        strategy: "ordered",
+        replicas: 3,
+        start: 0,
+        partition: 3,
+        unavailable: 1,
+      },
+    ] as const) {
+      const said = restartedWords(plan, "Deployment", "web", t);
+      expect(said.title).toBe("kindRestartRecorded(kind=Deployment)");
+      expect(said.description).toBe(restartWords(plan, "web", t).text);
+    }
+    expect(
+      restartedWords(
+        { strategy: "rolling", replicas: 3, surge: 1, unavailable: 0 },
+        "Deployment",
+        "web",
+        t
+      )
+    ).toEqual({
+      title: "kindRestarted(kind=Deployment)",
+      description: "kindRestartingDetail(kind=Deployment,name=web)",
+    });
   });
 
   it("goes node by node on a DaemonSet, and says surge where it surges", () => {

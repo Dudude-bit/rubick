@@ -2891,6 +2891,7 @@ export type RolloutPlan =
       unavailable: number;
     }
   | { strategy: "recreate"; replicas: number }
+  | { strategy: "paused" }
   | {
       strategy: "ordered";
       replicas: number;

@@ -37,7 +37,7 @@ import { ContainerRows } from "../../../-object/container-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
 import { RestartAction } from "../../../-object/RestartDialog";
-import { readinessOf } from "@/lib/restart-plan";
+import { readinessOf, restartedWords } from "@/lib/restart-plan";
 import { guardedOf, useDenied } from "@/lib/access";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
@@ -195,6 +195,12 @@ export function StatefulSetDetail() {
   const [scaleOpen, setScaleOpen] = useState(false);
   const asking = useAsk();
 
+  const restarted = restartedWords(
+    statefulSet?.rolloutPlan,
+    ResourceType.StatefulSet,
+    name ?? "",
+    t
+  );
   const restartMutation = useResourceMutation(
     async () => {
       if (!name) return;
@@ -202,13 +208,8 @@ export function StatefulSetDetail() {
     },
     {
       toast: {
-        successTitle: t("action", "kindRestarted", {
-          kind: ResourceType.StatefulSet,
-        }),
-        successDescription: t("action", "kindRestartingDetail", {
-          kind: ResourceType.StatefulSet,
-          name: name ?? "",
-        }),
+        successTitle: restarted.title,
+        successDescription: restarted.description,
         errorPrefix: t("action", "restartKindFailed", {
           kind: ResourceType.StatefulSet,
         }),
