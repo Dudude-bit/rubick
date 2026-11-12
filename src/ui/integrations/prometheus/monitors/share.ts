@@ -49,7 +49,9 @@ export function ladderUnread(
 export function ladderSection(
   rows: MonitorRow[] | null,
   read: { unread: string | null; partial: string | null },
-  t: T
+  t: T,
+  /** How the screen narrowed `rows`, where they are not every monitor. */
+  narrowed: string | null = null
 ): PlacedSection {
   const shell = {
     id: "prometheus-monitors-ladder",
@@ -78,6 +80,7 @@ export function ladderSection(
     ...shell,
     count: read.partial ? null : items.length,
     partial: read.partial,
+    caption: narrowed,
     body: { type: "findings", items },
   };
 }

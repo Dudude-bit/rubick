@@ -111,3 +111,19 @@ describe("rules the ladder does not draw green register with Share", () => {
     expect(alertsSection(null, null, t)).toBeNull();
   });
 });
+
+/**
+ * A ladder narrowed to rows that are all quiet, or to none, gave Share no
+ * section at all, and the file could not say the screen had been narrowed.
+ * Fails if a narrowed ladder with nothing to list stops saying so.
+ */
+describe("a narrowed Alerts ladder in what it hands Share", () => {
+  it("says how it was narrowed even where nothing is left to list", () => {
+    const section = alertsSection([row()], null, t, "Only the group «quiet».");
+    expect(section).toMatchObject({
+      caption: "Only the group «quiet».",
+      body: { type: "findings", items: [] },
+    });
+    expect(alertsSection([row()], null, t)).toBeNull();
+  });
+});

@@ -2130,6 +2130,7 @@ export const en = {
     stillReading: "Still being read when the report was made.",
     rowsNotWhole: "Not everything that was asked for is in these rows.",
     listDelivery: "Only the rows whose delivery is: {filter}.",
+    onlyGroup: "Only the group «{group}».",
     changesWindow: "What changed in the last {window}.",
     staleRead:
       "Could not read {label} when this was made: what the file shows of it is from {time}, the last read that answered.",

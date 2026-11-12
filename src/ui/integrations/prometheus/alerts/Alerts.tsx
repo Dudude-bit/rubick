@@ -12,6 +12,7 @@ import { cn, formatSince } from "@/lib/utils";
 import { hourMinute } from "../../kit";
 import { FilterBox, Finding, OutLink, VendorReadFailure } from "../../page-kit";
 import { useShareSection } from "@/components/share/screen-share";
+import { narrowedWords } from "@/lib/report-parts";
 import { usePicture, type Picture } from "../monitors/data";
 import { useSavedConnection } from "../saved-connection";
 import {
@@ -93,9 +94,6 @@ export default function Alerts() {
       picture.data.alertRules
     );
   }, [picture.data]);
-  useShareSection("prometheus-alerts", () =>
-    alertsSection(rows, rulesUnread(picture.data, picture.error, t), t)
-  );
   const prefix = useMemo(
     () => (rows ? sharedPrefix(rows.map((row) => row.object.name)) : null),
     [rows]
@@ -112,6 +110,20 @@ export default function Alerts() {
           row.object.rules.some((r) => r.alert.toLowerCase().includes(needle)))
     );
   }, [rows, filter, only]);
+  // The rows the reader narrowed the ladder to, and the words for how: the
+  // file carries what the screen lists, not every rule in the cluster.
+  useShareSection("prometheus-alerts", () =>
+    alertsSection(
+      rows && shown,
+      rulesUnread(picture.data, picture.error, t),
+      t,
+      narrowedWords(
+        t,
+        filter,
+        only ? t("alerts", GROUP_KEY[only]).toLowerCase() : null
+      )
+    )
+  );
 
   const asked = search.rule;
   const selected =

@@ -37,7 +37,9 @@ export function rulesUnread(
 export function alertsSection(
   rows: RuleRow[] | null,
   unread: string | null,
-  t: T
+  t: T,
+  /** How the screen narrowed `rows`, where they are not every rule. */
+  narrowed: string | null = null
 ): PlacedSection | null {
   const shell = {
     id: "prometheus-alerts",
@@ -70,10 +72,12 @@ export function alertsSection(
           },
         ];
   });
-  if (found.length === 0) return null;
+  // Narrowed to nothing is still an answer about the narrowing.
+  if (found.length === 0 && narrowed === null) return null;
   return {
     ...shell,
     count: found.length,
+    caption: narrowed,
     body: { type: "findings", items: found },
   };
 }

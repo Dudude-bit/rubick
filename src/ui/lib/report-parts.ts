@@ -113,6 +113,26 @@ export function unreadLines(sections: readonly PlacedSection[]): string[] {
   ];
 }
 
+/**
+ * How a ladder's filter box and group chip narrowed its rows, for the
+ * caption of the section that carries only those rows; `null` for every row.
+ */
+export function narrowedWords(
+  t: T,
+  filter: string,
+  group: string | null
+): string | null {
+  const query = filter.trim();
+  return (
+    [
+      group ? t("share", "onlyGroup", { group }) : null,
+      query ? t("share", "tableSearched", { query }) : null,
+    ]
+      .filter(Boolean)
+      .join(" ") || null
+  );
+}
+
 /** As many journal entries as a reader scrolls; older ones are in the app. */
 const MAX_CHANGES = 20;
 /** How far back the Changes tab looks, and so how far back a gap is worth naming. */
