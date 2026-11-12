@@ -128,6 +128,13 @@ function application(listsTheDeployment: boolean) {
   };
 }
 
+/** The confirmation's own button, once it has heard what it confirms. */
+async function confirming(name: RegExp = /^Apply$/) {
+  const button = screen.getAllByRole("button", { name }).at(-1) as HTMLElement;
+  await waitFor(() => expect(button).toBeEnabled());
+  return button;
+}
+
 async function openWith(yamlText: string) {
   await renderWithRouter(<YamlEditorDialog />, {
     at: "/c/test",
@@ -192,10 +199,7 @@ describe("applying an edited manifest", () => {
       screen.queryByRole("button", { name: /Apply anyway/ })
     ).not.toBeInTheDocument();
 
-    const confirm = screen
-      .getAllByRole("button", { name: /^Apply$/ })
-      .at(-1) as HTMLElement;
-    await user.click(confirm);
+    await user.click(await confirming());
     await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
   });
 
@@ -214,7 +218,7 @@ describe("applying an edited manifest", () => {
     expect(screen.getByText(/envs\/prod/)).toBeInTheDocument();
 
     // It tells; it does not block.
-    await user.click(screen.getByRole("button", { name: /Apply anyway/ }));
+    await user.click(await confirming(/Apply anyway/));
     await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
   });
 
@@ -300,7 +304,7 @@ describe("applying on critical infrastructure", () => {
     expect(confirm).toBeDisabled();
 
     await user.type(screen.getByPlaceholderText("test"), "test");
-    expect(confirm).toBeEnabled();
+    await waitFor(() => expect(confirm).toBeEnabled());
 
     await user.click(confirm);
     await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
@@ -326,9 +330,7 @@ describe("what an apply says when it ends", () => {
     applyManifest.mockImplementation(answer);
     const user = await openWith(PLAIN);
     await user.click(screen.getByRole("button", { name: /^Apply$/ }));
-    await user.click(
-      screen.getAllByRole("button", { name: /^Apply$/ }).at(-1) as HTMLElement
-    );
+    await user.click(await confirming());
     await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
     return screen.findByTestId("yaml-result");
   }
@@ -478,10 +480,7 @@ describe("an answer that comes back after its editor is gone", () => {
     await user.click(
       screen.getByRole("button", { name: confirm ? /^Apply$/ : /Validate/ })
     );
-    if (confirm)
-      await user.click(
-        screen.getAllByRole("button", { name: /^Apply$/ }).at(-1) as HTMLElement
-      );
+    if (confirm) await user.click(await confirming());
     await waitFor(() => expect(command).toHaveBeenCalledTimes(1));
     return { user, answer: (value: unknown) => act(async () => answer(value)) };
   }
@@ -521,9 +520,7 @@ describe("an answer that comes back after its editor is gone", () => {
     );
     applyManifest.mockReturnValueOnce(new Promise(() => {}));
     await user.click(screen.getByRole("button", { name: /^Apply$/ }));
-    await user.click(
-      screen.getAllByRole("button", { name: /^Apply$/ }).at(-1) as HTMLElement
-    );
+    await user.click(await confirming());
     await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(2));
 
     await answer(APPLIED);
@@ -820,6 +817,93 @@ describe("a replica count that moved on the cluster under the editor", () => {
       "(connection reset), so what applying would change is unknown."
     );
     expect(screen.queryByTestId("diff")).toBeNull();
+  });
+});
+
+describe("a confirmation that has not yet heard from the cluster", () => {
+  const at = (replicas: number) =>
+    PLAIN.replace("replicas: 2", `replicas: ${replicas}`);
+  /** A promise the test settles, and the call that settles it. */
+  function held<T>() {
+    let settle: (value: T) => void = () => {};
+    const promise = new Promise<T>((resolve) => (settle = resolve));
+    return { promise, settle: (value: T) => act(async () => settle(value)) };
+  }
+
+  /**
+   * A fast click on Confirm beat the preview, and with it every warning the
+   * preview is what brings: the apply went out under a plain "Apply" that
+   * had said nothing yet. Fails if Confirm can be pressed before the dry
+   * run answers, or stays held once it has.
+   */
+  it("holds Confirm until the dry run has answered", async () => {
+    const dryRun = held<unknown>();
+    dryRunManifest.mockReturnValue(dryRun.promise);
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByTestId("dry-run-standing")).toHaveTextContent(
+      "Asking the cluster what would change"
+    );
+    const confirm = screen
+      .getAllByRole("button", { name: /^Apply/ })
+      .at(-1) as HTMLElement;
+    expect(confirm).toBeDisabled();
+    await user.click(confirm);
+    expect(applyManifest).not.toHaveBeenCalled();
+
+    await dryRun.settle({
+      documents: [
+        {
+          id: "deployment/shop api",
+          outcome: { says: "configured" },
+          live: at(2),
+          would: at(4),
+        },
+      ],
+    });
+    await user.click(await confirming());
+    await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
+  });
+
+  /**
+   * The dry run is what shows a count that moved under the editor, and only
+   * then is the autoscaler asked about. Fails if Confirm is offered between
+   * the two, as a plain "Apply", while the autoscaler's note is on its way.
+   */
+  it("holds Confirm until the autoscaler the dry run pointed at has been read", async () => {
+    const read = held<ReturnType<typeof connections>>();
+    connections = () => read.promise as never;
+    dryRunManifest.mockResolvedValue({
+      documents: [
+        {
+          id: "deployment/shop api",
+          outcome: { says: "configured" },
+          live: at(12),
+          would: at(2),
+        },
+      ],
+    });
+    await renderWithRouter(<YamlEditorDialog />, {
+      at: "/c/test",
+      route: "/c/$cluster",
+    });
+    await useYamlEditorStore.getState().openEditor({
+      title: "Edit Deployment: api",
+      resourceKey: { kind: "Deployment", name: "api", namespace: "shop" },
+      fetchYaml: async () => PLAIN,
+    });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByTestId("replicas-moved")).toBeInTheDocument();
+    const confirm = screen
+      .getAllByRole("button", { name: /^Apply/ })
+      .at(-1) as HTMLElement;
+    expect(confirm).toBeDisabled();
+
+    await read.settle({ object: null, edges: [], notLookedAt: [] });
+    await waitFor(() => expect(confirm).toBeEnabled());
   });
 });
 

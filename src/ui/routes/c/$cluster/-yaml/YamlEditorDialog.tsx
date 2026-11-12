@@ -256,6 +256,11 @@ export function YamlEditorDialog() {
   const refused =
     dryRun.data?.documents.find((doc) => doc.outcome.says === "refused") ??
     null;
+  // The warnings above are built from the dry run's answer, and the
+  // autoscaler's from a read that answer can start: confirmed before both,
+  // the apply is of a confirmation that had not yet said what it confirms.
+  const stillAsking =
+    dryRun.isPending || (replicasMoved !== false && governance.isPending);
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(editedContent);
@@ -654,7 +659,7 @@ export function YamlEditorDialog() {
             </Button>
             <Button
               onClick={handleApply}
-              disabled={gate.blocked || refused !== null}
+              disabled={gate.blocked || refused !== null || stillAsking}
             >
               <Play className="mr-2 h-4 w-4" />
               {/* The intercept decides its own word where it has one — a
