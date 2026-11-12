@@ -165,7 +165,9 @@ export function exitMeaning(run: EndedRun, t: T): string | null {
       ? t("cause", "meansOomLimit", { limit: run.limit })
       : t("cause", "meansOomNoLimit");
   if (run.reason === "StartError") return t("cause", "meansStartError");
-  const signal = run.signal ?? (run.code > 128 ? run.code - 128 : null);
+  // 128 + n is a shell's word for signal n, and signals end at 64: 255 is the app's own exit(-1).
+  const signal =
+    run.signal ?? (run.code > 128 && run.code <= 192 ? run.code - 128 : null);
   if (run.code === 0 && signal === null) return t("cause", "meansClean");
   if (run.code === 126) return t("cause", "meansNotExecutable");
   if (run.code === 127) return t("cause", "meansNotFound");

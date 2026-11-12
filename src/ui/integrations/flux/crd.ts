@@ -49,7 +49,8 @@ const helmReleaseColumns: CrdColumn[] = [
           }
         | undefined;
 
-      return chartSpec?.chart ?? null;
+      const referred = getValueByPath(resource, "spec.chartRef.name");
+      return chartSpec?.chart ?? (referred as string | undefined) ?? null;
     },
     cell: orNone,
   },

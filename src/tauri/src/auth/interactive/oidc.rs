@@ -287,19 +287,21 @@ pub(super) async fn run_oidc_auth(
         )));
     }
 
-    let auth_result = auth
+    let exchanged = auth
         .exchange_code(&callback.code, &redirect_uri, &auth_url.code_verifier)
-        .await?;
+        .await;
 
     state.remove_auth_session(&session_id);
     state.emit(AppEvent::AuthFlowCompleted {
         session_id,
         context: context.to_string(),
-        success: true,
-        why: None,
+        success: exchanged.is_ok(),
+        why: exchanged.as_ref().err().map(|err| AuthOutcome::Said {
+            text: err.to_string(),
+        }),
     });
 
-    Ok(auth_result)
+    exchanged
 }
 
 fn parse_scopes(config: &HashMap<String, String>) -> Vec<String> {
@@ -455,6 +457,100 @@ mod tests {
             matches!(err, Error::Auth(AuthError::NeedsPerson(_))),
             "the reason has to be the missing person, not the unreachable issuer: {err}"
         );
+    }
+
+    /// A provider that answers discovery and refuses every code.
+    async fn refusing_provider() -> String {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind");
+        let issuer = format!("http://{}", listener.local_addr().expect("addr"));
+        let base = issuer.clone();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let (status, body) = if buf[..n].starts_with(b"GET") {
+                    let endpoints = format!(
+                        r#"{{"authorization_endpoint":"{base}/auth","token_endpoint":"{base}/token"}}"#
+                    );
+                    ("200 OK", endpoints)
+                } else {
+                    (
+                        "400 Bad Request",
+                        r#"{"error":"invalid_grant"}"#.to_string(),
+                    )
+                };
+                let answer = format!(
+                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\n\
+                     content-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(answer.as_bytes()).await;
+            }
+        });
+        issuer
+    }
+
+    /// The callback arrived and the token endpoint refused its code: a wrong
+    /// client secret, a skewed clock. With no terminal event the "sign-in
+    /// started" toast stayed up ten minutes over a connect that had already
+    /// failed, and the session was left for the next connect to call cancelled.
+    #[tokio::test]
+    async fn a_code_the_provider_refuses_ends_the_sign_in_out_loud() {
+        let provider = AuthProviderConfig {
+            name: "oidc".to_string(),
+            config: HashMap::from([
+                ("idp-issuer-url".to_string(), refusing_provider().await),
+                ("client-id".to_string(), "kubernetes".to_string()),
+                ("id-token".to_string(), token_expiring_in(-60)),
+            ]),
+            other: std::collections::BTreeMap::default(),
+        };
+        let state = AppState::new().expect("state");
+        let mut events = state.subscribe();
+        let browser = async {
+            let AppEvent::AuthUrlRequested {
+                url, redirect_uri, ..
+            } = events.recv().await.expect("the sign-in begins")
+            else {
+                panic!("the first event is the sign-in's url");
+            };
+            let query = |url: &str, key: &str| {
+                let url = Url::parse(url).expect("url");
+                let found = url.query_pairs().find(|(name, _)| name == key);
+                found.map(|(_, value)| value.to_string())
+            };
+            let sent = query(&url, "state").expect("state");
+            let port = Url::parse(&redirect_uri.expect("redirect"))
+                .expect("redirect url")
+                .port()
+                .expect("port");
+            let mut socket = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .expect("the redirect listens");
+            let callback = format!("GET /?code=abc&state={sent} HTTP/1.1\r\n\r\n");
+            socket.write_all(callback.as_bytes()).await.expect("sent");
+            let _ = socket.read(&mut [0u8; 512]).await;
+        };
+
+        let (result, ()) = tokio::join!(
+            run_oidc_auth(&state, "ctx", "alice", &provider, AuthMode::Interactive),
+            browser
+        );
+
+        assert!(result.is_err(), "the code was refused");
+        let ended = events.try_recv();
+        assert!(
+            matches!(
+                ended,
+                Ok(AppEvent::AuthFlowCompleted {
+                    success: false,
+                    why: Some(AuthOutcome::Said { .. }),
+                    ..
+                })
+            ),
+            "{ended:?}"
+        );
+        assert!(state.auth_sessions.is_empty(), "no session is left behind");
     }
 
     /// The whole loop against a real provider, because the part that matters

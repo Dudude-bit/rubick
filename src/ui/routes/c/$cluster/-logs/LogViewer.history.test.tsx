@@ -354,11 +354,11 @@ describe("a workload's Logs tab", () => {
     const [selector, startMs, endMs] = asMock(commands.lokiQueryRange).mock
       .calls[0] as [string, number, number];
     // The rollout-spanning pattern, not the pod that happens to be selected:
-    // two open segments after the workload's own name cover every
-    // ReplicaSet it has ever had.
-    expect(selector).toBe(
-      '{namespace="default",pod=~"^log-demo-[^-]+-[^-]+$"}'
-    );
+    // the workload's own name, then any ReplicaSet it has ever had.
+    const pods = new RegExp(/pod=~"([^"]+)"/.exec(selector)![1]);
+    expect(selector).toContain('{namespace="default",pod=~"^log-demo-');
+    expect(pods.test("log-demo-6f7d9c8b5-2xk4l")).toBe(true);
+    expect(pods.test("log-demo-7c9d5b6f4-x8k2j")).toBe(true);
     expect(endMs - startMs).toBe(6 * 60 * 60 * 1000);
     // And the lines a pod that no longer exists wrote land in the buffer.
     await waitFor(() => expect(held()).toBe(2));

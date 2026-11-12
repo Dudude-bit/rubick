@@ -49,7 +49,7 @@ import {
   type DirectionState,
   type Selecting,
 } from "./coverage";
-import { KINDS, pictureCoverage, usePicture } from "./data";
+import { countUnrestricted, KINDS, pictureCoverage, usePicture } from "./data";
 import { enforcementOf } from "./model";
 
 const VERDICT_TONE: Record<Coverage["verdict"], RowTone> = {
@@ -105,19 +105,24 @@ export default function CiliumPage() {
   const scope = useNamespaceScope();
 
   // Read across the cluster, drawn for the namespaces the picker names.
+  const everywhere = useMemo(
+    () => (picture.data ? pictureCoverage(picture.data) : []),
+    [picture.data]
+  );
   const coverage = useMemo(
-    () =>
-      picture.data
-        ? pictureCoverage(picture.data).filter((one) =>
-            scope.matches(one.endpoint.namespace)
-          )
-        : [],
-    [picture.data, scope]
+    () => everywhere.filter((one) => scope.matches(one.endpoint.namespace)),
+    [everywhere, scope]
   );
   const kubernetes = picture.data?.kubernetes;
 
   const onlyRejected = coverage.filter((one) => one.verdict === "onlyRejected");
   const unrestricted = coverage.filter((one) => one.verdict === "unrestricted");
+  // What the sidebar's number counts and a narrowed page does not draw.
+  const openElsewhere = picture.data
+    ? countUnrestricted(picture.data) -
+      onlyRejected.length -
+      unrestricted.length
+    : 0;
   const rejected = [
     ...(picture.data?.policies ?? []),
     ...(picture.data?.clusterwide ?? []),
@@ -211,6 +216,11 @@ export default function CiliumPage() {
               })}
             />
           )}
+          {openElsewhere > 0 && (
+            <p className="max-w-[64ch] text-xs text-fg-mut">
+              {t("readings", "ciliumOpenElsewhere", { n: openElsewhere })}
+            </p>
+          )}
         </div>
       </Section>
 
@@ -219,7 +229,11 @@ export default function CiliumPage() {
           <p className="text-xs text-fg-fnt">{t("empty", "readingCilium")}</p>
         ) : coverage.length === 0 ? (
           <p className="max-w-[64ch] text-xs text-fg-mut">
-            {t("empty", "ciliumNoEndpoints")}
+            {everywhere.length === 0
+              ? t("empty", "ciliumNoEndpoints")
+              : t("empty", "ciliumNoEndpointsInScope", {
+                  n: everywhere.length,
+                })}
           </p>
         ) : (
           <TroubleList

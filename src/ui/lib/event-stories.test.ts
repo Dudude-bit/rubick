@@ -17,6 +17,7 @@ import {
   sortStories,
   storiesOf,
   subjectKey,
+  readFromOf,
   timelineOf,
   WINDOW_MS,
   withGone,
@@ -578,6 +579,50 @@ describe("state", () => {
     expect(one(stories, "live").state).toBe("stillHappening");
     expect(one(stories, "quiet").state).toBe("settled");
     expect(one(stories, "calm").state).toBe("done");
+  });
+
+  /**
+   * Latest 500 on a busy cluster reaches back ten minutes of the hour. A
+   * workload whose crash loop is older than that has one Normal event in
+   * the pool, and its card was green "done" beside a strip hatching most of
+   * the hour as not read. Fails if a read cut inside the window is taken
+   * for the whole of it.
+   */
+  it("cannot say a story is done where the read stopped short of the window", () => {
+    const calm = [event({ kind: "Pod", name: "calm" })];
+    const state = (readFrom: number | null) =>
+      one(
+        storiesOf(calm, {
+          now: NOW,
+          windowMs: HOUR,
+          narrowed: false,
+          readFrom,
+        }),
+        "calm"
+      ).state;
+
+    expect(state(NOW - 10 * 60_000)).toBe("unknown");
+    expect(state(NOW - 2 * HOUR)).toBe("done");
+    expect(state(null)).toBe("done");
+  });
+
+  /**
+   * Several namespaces polled at once are each cut on their own. Dated by
+   * the oldest row of the join, a quiet namespace's old event marked the
+   * whole hour read for a noisy one whose rows reach back ten minutes.
+   */
+  it("reads a scope from the latest cut among its parts, and from nowhere where none was cut", () => {
+    const noisy = [
+      event({ kind: "Pod", name: "a", lastTimestamp: ago(60_000) }),
+      event({ kind: "Pod", name: "b", lastTimestamp: ago(10 * 60_000) }),
+    ];
+    const quiet = [
+      event({ kind: "Pod", name: "c", lastTimestamp: ago(50 * 60_000) }),
+    ];
+
+    expect(readFromOf([noisy, quiet], 2)).toBe(NOW - 10 * 60_000);
+    expect(readFromOf([noisy, quiet], 3)).toBeNull();
+    expect(readFromOf([noisy])).toBe(NOW - 10 * 60_000);
   });
 
   it("orders warnings first by state, then by how many, then newest", () => {

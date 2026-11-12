@@ -419,6 +419,44 @@ describe("dependsOn is an ordering, and its consequence is named", () => {
   });
 });
 
+describe("a dependency is one of the dependant's own kind", () => {
+  const helmRelease = (
+    name: string,
+    spec: Record<string, unknown>,
+    conditions: Condition[]
+  ) => object("HelmRelease", name, spec, { conditions });
+
+  /**
+   * A Kustomization `redis` that applies the HelmRelease `redis`, and a
+   * release `app` depending on `redis`, which Flux resolves to the release.
+   * Looked up by name alone the Kustomization came first: `app`, failing for
+   * its own reason, was drawn waiting on it, and it was blamed for blocking.
+   */
+  it("does not wait on, or blame, a namesake of another kind", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization("redis", {}, [
+          notReady("BuildFailed", "kustomize build failed"),
+        ]),
+      ],
+      [gitRepository("podinfo", [ready("stored artifact")], REVISION)],
+      [
+        helmRelease("redis", {}, [ready("Helm install succeeded")]),
+        helmRelease("app", { dependsOn: [{ name: "redis" }] }, [
+          notReady("InstallFailed", "install retries exhausted"),
+        ]),
+      ]
+    );
+    const kinds = (kind: string, name: string) =>
+      reconcilers
+        .find((entry) => entry.kind === kind && entry.name === name)!
+        .findings.map((finding) => finding.kind);
+
+    expect(kinds("HelmRelease", "app")).toEqual(["notReady"]);
+    expect(kinds("Kustomization", "redis")).not.toContain("blocking");
+  });
+});
+
 describe("a HelmRelease is a reconciler with a chart for a unit", () => {
   it("reads its chart, its version and its Helm source", () => {
     const release = object(
@@ -467,6 +505,145 @@ describe("a HelmRelease is a reconciler with a chart for a unit", () => {
     // number here would be invented.
     expect(reconcilers[0].objects).toBeNull();
     expect(reconcilerState(reconcilers[0], t).tone).toBe("ok");
+  });
+});
+
+describe("a HelmRelease whose source is failing", () => {
+  const release = (status: Record<string, unknown>) =>
+    object(
+      "HelmRelease",
+      "podinfo",
+      {
+        chart: {
+          spec: {
+            chart: "podinfo",
+            version: "*",
+            sourceRef: { kind: "HelmRepository", name: "podinfo" },
+          },
+        },
+      },
+      status
+    );
+  const failing = object(
+    "HelmRepository",
+    "podinfo",
+    { url: "https://charts.example" },
+    { conditions: [notReady("Failed", "failed to fetch index")] }
+  );
+  const read = (status: Record<string, unknown>) =>
+    fluxPicture(
+      [],
+      [release(status)],
+      [{ kind: "HelmRepository", objects: [failing] }],
+      []
+    ).reconcilers[0];
+
+  /**
+   * A new release whose HelmRepository cannot fetch has no history, and the
+   * CRD defaults the version it asks for to `*`. Read as applied, the page
+   * said "frozen at *" and "The release is installed and healthy" of a
+   * release that never installed. Fails if a version asked for or attempted
+   * counts as one installed.
+   */
+  it("has applied nothing until it installs, whatever version it asks for", () => {
+    const waiting = [notReady("HelmChartNotReady", "HelmChart is not ready")];
+    const never = read({ conditions: waiting });
+    expect(never.applied).toBeNull();
+    expect(never.findings.map((finding) => finding.kind)).toEqual([
+      "noSource",
+      "notReady",
+    ]);
+    expect(
+      read({ conditions: waiting, lastAttemptedRevision: "6.5.4" }).applied
+    ).toBeNull();
+  });
+
+  /** The case the frozen finding is for: installed, and its source stopped fetching since. */
+  it("is frozen at the version its history says it installed", () => {
+    const installed = read({
+      conditions: [ready("Helm install succeeded")],
+      history: [{ chartVersion: "6.5.4" }],
+    });
+    expect(installed.findings.map((finding) => finding.kind)).toEqual([
+      "frozen",
+    ]);
+    expect(installed.applied?.raw).toBe("6.5.4");
+  });
+});
+
+describe("a HelmRelease that names its chart through chartRef", () => {
+  const release = object(
+    "HelmRelease",
+    "podinfo",
+    { chartRef: { kind: "OCIRepository", name: "podinfo" } },
+    {
+      conditions: [ready("Helm install succeeded")],
+      history: [{ chartVersion: "6.5.4" }],
+    }
+  );
+  const repository = (conditions: Condition[]) =>
+    object(
+      "OCIRepository",
+      "podinfo",
+      { url: "oci://ghcr.io/stefanprodan/charts/podinfo" },
+      { conditions, artifact: { revision: "6.5.4@sha256:abc" } }
+    );
+  const read = (conditions: Condition[]) =>
+    fluxPicture(
+      [],
+      [release],
+      [{ kind: "OCIRepository", objects: [repository(conditions)] }],
+      []
+    );
+
+  /**
+   * Only `spec.chart` was read for a source, so a healthy release drew a red
+   * "none / nothing to apply from" and its OCIRepository "fetched · unused".
+   */
+  it("reads from the source chartRef names, which is then in use", () => {
+    const { reconcilers, sources } = read([ready("stored artifact")]);
+    expect(reconcilers[0].sourceRef).toMatchObject({
+      kind: "OCIRepository",
+      name: "podinfo",
+    });
+    expect(reconcilers[0].source).toBe(sources[0]);
+    expect(sources[0].findings).toEqual([]);
+    expect(sourceState(sources[0], t).text).toBe(t("empty", "fluxFetched"));
+  });
+
+  /** The stale-source case this page exists for, which a failing OCIRepository reported as freezing nobody. */
+  it("is frozen when that source stops fetching, and the source names it", () => {
+    const { reconcilers, sources } = read([notReady("Failed", "unauthorized")]);
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toEqual([
+      "frozen",
+    ]);
+    const failing = sources[0].findings[0];
+    expect(failing.kind === "fetchFailing" && failing.frozen).toEqual([
+      "podinfo",
+    ]);
+  });
+});
+
+describe("a source of a kind this page does not list", () => {
+  /**
+   * A Kustomization on an ExternalArtifact, a release on a HelmChart: the
+   * kind was never asked for, and a kind not among the refused ones read as
+   * listed and empty, a red "the source it names is not in this cluster".
+   */
+  it("is not read, rather than found missing", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization(
+          "apps",
+          { sourceRef: { kind: "ExternalArtifact", name: "bundle" } },
+          [ready("Applied")],
+          REVISION
+        ),
+      ],
+      []
+    );
+    expect(reconcilers[0].sourceKnown).toBe(false);
+    expect(reconcilers[0].findings).toEqual([]);
   });
 });
 

@@ -69,6 +69,7 @@ import { filterEvents } from "@/lib/event-filter";
 import { byNewest, newerEvent } from "@/lib/event-order";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import {
+  readFromOf,
   sortStories,
   storiesOf,
   subjectCrd,
@@ -506,10 +507,13 @@ export function Events() {
   // and an empty slice of the strip there means nobody looked.
   const readFrom = useMemo(() => {
     if (!windowFull) return null;
-    const oldest = pool.at(-1)?.lastTimestamp;
-    const parsed = oldest ? Date.parse(oldest) : Number.NaN;
-    return Number.isNaN(parsed) ? null : parsed;
-  }, [windowFull, pool]);
+    return !fromWatch && several && limit !== null
+      ? readFromOf(
+          answers.map((part) => part ?? NO_EVENTS),
+          limit
+        )
+      : readFromOf([pool]);
+  }, [windowFull, pool, fromWatch, several, limit, answers]);
   // Over the whole pool, before the search narrows it: whether an object was
   // replaced is told by its other events, which a search may not match.
   const opened = useCallback<Holder>(

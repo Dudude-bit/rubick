@@ -61,6 +61,15 @@ describe("exitMeaning", () => {
     expect(exitMeaning(run(over), t)).toContain(meaning);
   });
 
+  /** No signal 127 or 72 exists: 255 is what containerd writes after a node reboot and what exit(-1) gives. Fails if a code past 128 + 64 is worded as a kill. */
+  it.each([193, 200, 255])(
+    "reads exit %i as the app's own, not as a signal",
+    (code) => {
+      expect(exitMeaning(run({ code, reason: "Unknown" }), t)).toBeNull();
+      expect(exitMeaning(run({ code: 192 }), t)).toContain("signal 64");
+    }
+  );
+
   /** An OOM kill is measured against the container's limit. Fails if the limit is dropped, or invented where none is declared. */
   it("measures an OOM kill against the limit, and says when there is none", () => {
     const oom = { code: 137, reason: "OOMKilled" };

@@ -221,6 +221,7 @@ export function fluxPicture(
   unread: KindUnread[]
 ): FluxPicture {
   const unreadKinds = new Set(unread.map((read) => read.kind));
+  const listedKinds = new Set(sourceObjects.map(({ kind }) => kind));
   const usersKnown = !unreadKinds.has(HELM_RELEASE);
   const sources = sourceObjects.flatMap(({ kind, objects }) =>
     objects.map((object) => readSource(kind, object))
@@ -247,8 +248,11 @@ export function fluxPicture(
         `${reconciler.sourceRef.kind}/${reconciler.sourceRef.namespace}/${reconciler.sourceRef.name}`
       ) ?? null;
     reconciler.source = source;
+    // A kind nobody listed (a HelmChart, an ExternalArtifact) is not a
+    // source found missing.
+    const kind = reconciler.sourceRef.kind;
     reconciler.sourceKnown =
-      source !== null || !unreadKinds.has(reconciler.sourceRef.kind);
+      source !== null || (listedKinds.has(kind) && !unreadKinds.has(kind));
     if (source) source.usedBy.push(reconciler.key);
   }
 
@@ -337,6 +341,15 @@ function readKustomization(object: CustomResourceInfo): FluxReconciler {
   });
 }
 
+/** The chart version a HelmRelease has installed, or null where it has installed none. */
+export function installedChart(object: CustomResourceInfo): string | null {
+  return (
+    (getValueByPath(object, "status.history[0].chartVersion") as string) ??
+    (getValueByPath(object, "status.lastAppliedRevision") as string) ??
+    null
+  );
+}
+
 function readHelmRelease(object: CustomResourceInfo): FluxReconciler {
   const chart =
     (getValueByPath(object, "spec.chart.spec.chart") as string) ??
@@ -345,19 +358,21 @@ function readHelmRelease(object: CustomResourceInfo): FluxReconciler {
   // What is installed, then what was asked for. A release pinned to `>=6.0.0`
   // has a range in its spec and a version in its history, and the version is
   // the answer to "what is running".
+  const installed = installedChart(object);
   const version =
-    (getValueByPath(object, "status.history[0].chartVersion") as string) ??
+    installed ??
     (getValueByPath(object, "status.lastAttemptedRevision") as string) ??
     (getValueByPath(object, "spec.chart.spec.version") as string) ??
     null;
   return base(object, HELM_RELEASE, {
     unit: version ? `${chart} ${version}` : chart,
-    sourceRef: sourceRefOf(
-      object,
-      "spec.chart.spec.sourceRef",
-      "HelmRepository"
-    ),
-    applied: readRevision(version),
+    // Flux 2.3 names a chart either way; `chartRef` has no chart template.
+    sourceRef:
+      sourceRefOf(object, "spec.chart.spec.sourceRef", "HelmRepository") ??
+      sourceRefOf(object, "spec.chartRef", "OCIRepository"),
+    // Only what was installed: the CRD defaults the asked version to `*`, and
+    // a release that never installed read as frozen at it, "installed and healthy".
+    applied: readRevision(installed),
     // A HelmRelease keeps no inventory: what it owns is Helm's, in the
     // release's own storage, and claiming a number here would be a guess.
     objects: null,
@@ -427,6 +442,12 @@ function sourceRefOf(
  * What is wrong with one reconciler, and — the part no list gives you — what
  * that means for the rest.
  */
+/** Flux resolves `dependsOn` among its own kind: a HelmRelease's are HelmReleases. */
+const names = (dependency: SourceRef, candidate: FluxReconciler) =>
+  candidate.kind === dependency.kind &&
+  candidate.name === dependency.name &&
+  candidate.namespace === dependency.namespace;
+
 function findingsFor(
   reconciler: FluxReconciler,
   all: FluxReconciler[]
@@ -455,11 +476,7 @@ function findingsFor(
     !reconciler.suspended && reconciler.ready === false
       ? reconciler.dependsOn
           .map((dependency) =>
-            all.find(
-              (candidate) =>
-                candidate.name === dependency.name &&
-                candidate.namespace === dependency.namespace
-            )
+            all.find((candidate) => names(dependency, candidate))
           )
           .find(
             (candidate) => candidate !== undefined && candidate.ready !== true
@@ -525,11 +542,7 @@ function findingsFor(
 
   const blocked = all
     .filter((candidate) =>
-      candidate.dependsOn.some(
-        (dependency) =>
-          dependency.name === reconciler.name &&
-          dependency.namespace === reconciler.namespace
-      )
+      candidate.dependsOn.some((dependency) => names(dependency, reconciler))
     )
     .map((candidate) => candidate.name);
   // Only worth saying when this one is actually stuck: everything declaring a

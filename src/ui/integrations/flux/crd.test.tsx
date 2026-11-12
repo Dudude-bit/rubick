@@ -69,3 +69,16 @@ describe("the URL column of Flux's HelmRepository list", () => {
     );
   });
 });
+
+describe("the chart column of the HelmRelease list", () => {
+  /** A release that names its chart through `chartRef` has no chart template, and its row said "none". */
+  it("names the chart a release refers to where it has no chart template", () => {
+    const column = crd
+      .columnsFor("HelmRelease")
+      .find((one) => one.id === "chart")!;
+    const referring = {
+      spec: { chartRef: { kind: "OCIRepository", name: "podinfo" } },
+    } as unknown as CustomResourceInfo;
+    expect(column.accessor(referring, en)).toBe("podinfo");
+  });
+});
