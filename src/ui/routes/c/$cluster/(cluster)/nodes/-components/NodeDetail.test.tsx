@@ -57,6 +57,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
+import { drainKey, useDrainStore } from "@/stores/drainStore";
 import { renderWithRouter } from "@/test/render";
 import { NodeDetail } from "./NodeDetail";
 import type { AccessQuery } from "@/generated/types";
@@ -195,6 +196,7 @@ function renderPage() {
 
 describe("NodeDetail", () => {
   beforeEach(() => {
+    useDrainStore.setState({ drains: {} });
     vi.mocked(useResourceDetail).mockReturnValue(
       defaultUseResourceDetailReturn(buildNode()) as unknown as ReturnType<
         typeof useResourceDetail
@@ -209,6 +211,28 @@ describe("NodeDetail", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
       "test-node-1"
     );
+  });
+
+  /**
+   * A drain started from the list, or from this page before it was left,
+   * goes on in the backend. Fails if the page offers a first Drain over a
+   * node this window is already draining.
+   */
+  it("says a drain is running on its node instead of offering to start one", async () => {
+    useClusterStore.setState({ currentContext: "prod" });
+    useDrainStore.setState({
+      drains: {
+        [drainKey("prod", "test-node-1")]: {
+          phase: "starting",
+          node: "test-node-1",
+        },
+      },
+    });
+    await renderPage();
+    expect(
+      screen.getByRole("button", { name: "Drain running" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Drain" })).toBeNull();
   });
 
   it("shows the role badge when the node has a role", async () => {

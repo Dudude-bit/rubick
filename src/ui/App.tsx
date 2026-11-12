@@ -9,6 +9,7 @@ import { useAuthFlowEvents } from "@/hooks/useAuthFlowEvents";
 import { useWatchForRenewals } from "@/hooks/useCredentialRenewal";
 import { AuthTerminal } from "@/components/terminal/AuthTerminal";
 import { usePortForwardEvents } from "@/hooks/usePortForwardEvents";
+import { useDrainEndings } from "@/hooks/useDrainEndings";
 import { useTellMeWhen } from "@/hooks/useTellMeWhen";
 import { useChangeJournal } from "@/hooks/useChangeJournal";
 import { usePortForwardAutoStart } from "@/hooks/usePortForwardAutoStart";
@@ -49,6 +50,7 @@ export default function App() {
 
   const { authTerminalSession, closeAuthTerminal } = useAuthFlowEvents();
   usePortForwardEvents();
+  useDrainEndings();
   useWatchForRenewals();
   useTellMeWhen();
   useChangeJournal();

@@ -36,7 +36,7 @@ import type {
   DrainRefusal,
   DrainState,
   RefusedPod,
-} from "./useNodeDrain";
+} from "@/stores/drainStore";
 import { useConnections } from "@/hooks/useConnections";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { budgetRule, cannotAllow, drainBlockers } from "@/lib/governance";
@@ -348,7 +348,9 @@ function DrainLive({
           </>
         ) : (
           <p className="text-xs font-medium text-fg-mid">
-            {t("action", OUTCOME_LABEL[state.outcome])}
+            {state.outcome
+              ? t("action", OUTCOME_LABEL[state.outcome])
+              : t("empty", "drainEndingMissed")}
           </p>
         )}
 

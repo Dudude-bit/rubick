@@ -549,7 +549,11 @@ export function NodeDetail() {
               />
             )}
             <ReasonedAction
-              label={t("action", "drain")}
+              label={
+                actions.draining(name ?? "")
+                  ? t("action", "drainRunning")
+                  : t("action", "drain")
+              }
               icon={AlertTriangle}
               onClick={() => node && actions.drain(node.name)}
               disabled={!node}

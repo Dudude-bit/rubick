@@ -359,7 +359,17 @@ export function NodeList() {
         // one action here that can be refused by something the reader cannot
         // see from this row.
         onClick: (item) => actions.drain(item.name),
+        hidden: (item) => actions.draining(item.name),
         reason: (item) => actions.denied(item.name),
+        variant: "destructive",
+      },
+      {
+        // The same dialog, named for what it now holds: a drain this window
+        // started on the node and its Stop.
+        icon: AlertTriangle,
+        label: t("action", "drainRunning"),
+        onClick: (item) => actions.drain(item.name),
+        hidden: (item) => !actions.draining(item.name),
         variant: "destructive",
       },
     ],
