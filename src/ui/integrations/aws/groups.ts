@@ -28,7 +28,6 @@ import { INGRESS_CLASS_PARAMS_CRD } from "./model";
 const PREFIX = "alb.ingress.kubernetes.io/";
 export const GROUP_NAME_ANNOTATION = `${PREFIX}group.name`;
 export const GROUP_ORDER_ANNOTATION = `${PREFIX}group.order`;
-export const CERTIFICATE_ARN_ANNOTATION = `${PREFIX}certificate-arn`;
 export const SCHEME_ANNOTATION = `${PREFIX}scheme`;
 const INGRESS_CLASS_ANNOTATION = "kubernetes.io/ingress.class";
 
@@ -274,8 +273,10 @@ export function albGroups(sources: GroupSources): AlbGroup[] {
     }
 
     // A load balancer has one scheme. Two members asking for different ones
-    // is a group where somebody's intent is silently discarded.
-    for (const field of [SCHEME_ANNOTATION, CERTIFICATE_ARN_ANNOTATION]) {
+    // is a group where somebody's intent is silently discarded. Not so
+    // `certificate-arn`: the controller merges every member's onto the
+    // listener, so two teams' certificates are both served.
+    for (const field of [SCHEME_ANNOTATION]) {
       const values = new Map<string, string>();
       for (const member of members) {
         const value = member.ingress.annotations[field];
