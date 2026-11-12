@@ -996,6 +996,7 @@ describe("a host whose pods an ipBlock may or may not admit Traefik to", () => {
   const read: DoorRead = {
     name: "Traefik",
     egress: { known: true, value: { rows: [], unread: [] } },
+    others: { known: true, value: [] },
     clients: {
       known: true,
       value: [

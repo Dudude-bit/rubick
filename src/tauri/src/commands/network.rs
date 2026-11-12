@@ -24,6 +24,7 @@ use crate::commands::filters::ResourceFilters;
 use crate::commands::helpers::{
     across, api_in, get_resource_info, list_in_scope, list_resource_infos, ResourceContext, Scoped,
 };
+use crate::commands::other_policies::Discovery;
 
 /// List Ingresses
 #[tauri::command]
@@ -178,8 +179,9 @@ pub async fn list_service_endpoints(
     state: State<'_, AppState>,
 ) -> Result<Vec<ServicePublished>> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
+    let context = state.get_current_context().unwrap_or_default();
     crate::client::clock::timed(&state.perf, "listServiceEndpoints", async {
-        Ok(published_in(&ctx).await?.1)
+        Ok(published_in(&ctx, state.discovery(&context)).await?.1)
     })
     .await
 }
@@ -202,9 +204,10 @@ pub async fn list_service_backing(
     state: State<'_, AppState>,
 ) -> Result<ServiceBacking> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
+    let context = state.get_current_context().unwrap_or_default();
     crate::client::clock::timed(&state.perf, "listServiceBacking", async {
         let read_at = chrono::Utc::now();
-        let (services, published) = published_in(&ctx).await?;
+        let (services, published) = published_in(&ctx, state.discovery(&context)).await?;
         Ok(ServiceBacking {
             services: services.iter().map(ServiceInfo::from).collect(),
             published,
@@ -254,7 +257,10 @@ impl ServiceHealthGroup {
         self.stop.is_none()
             && other.stop.is_none()
             && self.door == other.door
-            && !matches!(self.door, Some(PolicyDoor::Guarded { .. }))
+            && !matches!(
+                self.door,
+                Some(PolicyDoor::Guarded { .. } | PolicyDoor::Overlaid { .. })
+            )
             && self.targets == other.targets
             && self.type_ == other.type_
             && self.selectorless == other.selectorless
@@ -272,10 +278,14 @@ pub async fn list_service_health_inputs(
     state: State<'_, AppState>,
 ) -> Result<Scoped<ServiceHealthInputs>> {
     let client = (*state.current_client()?).clone();
+    let context = state.get_current_context().unwrap_or_default();
+    let discovery = state.discovery(&context);
     crate::client::clock::timed(
         &state.perf,
         "listServiceHealthInputs",
-        across(scope, |reach| health_inputs_in(client.clone(), reach)),
+        across(scope, |reach| {
+            health_inputs_in(client.clone(), reach, discovery)
+        }),
     )
     .await
 }
@@ -283,12 +293,13 @@ pub async fn list_service_health_inputs(
 async fn health_inputs_in(
     client: kube::Client,
     reach: Option<String>,
+    discovery: Discovery<'_>,
 ) -> Result<Vec<ServiceHealthInputs>> {
     let ctx = ResourceContext {
         client,
         namespace: reach,
     };
-    let (services, published) = published_in(&ctx).await?;
+    let (services, published) = published_in(&ctx, discovery).await?;
     Ok(health_inputs_of(&services, published))
 }
 
@@ -511,16 +522,20 @@ fn network_of(address: std::net::IpAddr) -> String {
     }
 }
 
-async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<ServicePublished>)> {
+async fn published_in(
+    ctx: &ResourceContext,
+    discovery: Discovery<'_>,
+) -> Result<(Vec<Service>, Vec<ServicePublished>)> {
     let params = ListParams::default();
     let services_api = ctx.namespaced_or_cluster_api::<Service>();
     let slices_api = ctx.namespaced_or_cluster_api::<EndpointSlice>();
     let policies_api = ctx.namespaced_or_cluster_api::<NetworkPolicy>();
-    let (services, slices, policies) = Box::pin(async {
+    let (services, slices, policies, others) = Box::pin(async {
         tokio::join!(
             services_api.list(&params),
             slices_api.list(&params),
-            policies_api.list(&params)
+            policies_api.list(&params),
+            discovery.other_policies(&ctx.client, ctx.namespace.as_deref())
         )
     })
     .await;
@@ -548,7 +563,7 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
                     }),
                 )
                 .with_stop(svc, None)
-                .with_policies(svc, policies.as_deref().map_err(String::as_str))
+                .with_policies(svc, policies.as_deref().map_err(String::as_str), &others)
                 .summary()
             })
             .collect();
@@ -560,7 +575,7 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
         .into_iter()
         .zip(&services)
         .map(|(published, svc)| {
-            published.with_policies(svc, policies.as_deref().map_err(String::as_str))
+            published.with_policies(svc, policies.as_deref().map_err(String::as_str), &others)
         })
         .collect();
     let published = with_unready_cause(&ctx.client, &services, published).await;
@@ -773,6 +788,15 @@ pub async fn delete_endpoints(
 
 #[cfg(test)]
 mod tests {
+    use crate::client::served::ServedIndex;
+
+    /// Discovery nobody has read yet, for a fake cluster that serves none.
+    fn undiscovered() -> Discovery<'static> {
+        Discovery {
+            served: Box::leak(Box::default()),
+            context: "fake",
+        }
+    }
     use super::*;
     use crate::state::perf::{wire_len, IPC_LIMIT_BYTES, IPC_TARGET_BYTES};
     use k8s_openapi::api::core::v1::{ObjectReference, ServicePort, ServiceSpec};
@@ -1276,7 +1300,7 @@ mod tests {
     async fn a_service_with_only_unready_addresses_says_why_from_its_pods() {
         use crate::client::served::test_server::answering;
         let (client, _) = answering(unready_demo((200, failing_readiness()))).await;
-        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()))
+        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()), undiscovered())
             .await
             .expect("inputs");
         let stop = inputs[0].groups[0].stop.as_ref().expect("a stop");
@@ -1298,7 +1322,7 @@ mod tests {
     async fn a_refused_pod_list_leaves_the_cause_to_the_service_page() {
         use crate::client::served::test_server::{answering, failure};
         let (client, _) = answering(unready_demo(failure(403, "Forbidden"))).await;
-        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()))
+        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()), undiscovered())
             .await
             .expect("inputs");
         let stop = inputs[0].groups[0].stop.as_ref().expect("a stop");
@@ -1364,7 +1388,7 @@ mod tests {
                     _ => base(path, n),
                 })
                 .await;
-                health_inputs_in(client, Some("k8s-gui-test".to_string()))
+                health_inputs_in(client, Some("k8s-gui-test".to_string()), undiscovered())
                     .await
                     .expect("inputs")[0]
                     .groups[0]
@@ -1505,7 +1529,7 @@ mod tests {
                     _ => (404, "{}".to_string()),
                 })
                 .await;
-                health_inputs_in(client, Some("refused-demo".to_string()))
+                health_inputs_in(client, Some("refused-demo".to_string()), undiscovered())
                     .await
                     .expect("inputs")[0]
                     .groups[0]
@@ -1551,7 +1575,7 @@ mod tests {
         });
         let stop_with = |answer: (u16, String)| async move {
             let (client, _) = answering(hello_web_at_zero(answer)).await;
-            health_inputs_in(client, Some("lena-sandbox".to_string()))
+            health_inputs_in(client, Some("lena-sandbox".to_string()), undiscovered())
                 .await
                 .expect("inputs")[0]
                 .groups[0]
@@ -1640,7 +1664,7 @@ mod tests {
             _ => (404, "{}".to_string()),
         })
         .await;
-        let inputs = health_inputs_in(client, Some("team-checkout".to_string()))
+        let inputs = health_inputs_in(client, Some("team-checkout".to_string()), undiscovered())
             .await
             .expect("inputs");
         let stop = inputs[0].groups[0].stop.clone();
@@ -1713,10 +1737,17 @@ mod tests {
             _ => (404, "{}".to_string()),
         })
         .await;
-        let (services, published) = published_in(&ResourceContext {
-            client,
-            namespace: Some("team-checkout".to_string()),
-        })
+        let served = ServedIndex::default();
+        let (services, published) = published_in(
+            &ResourceContext {
+                client,
+                namespace: Some("team-checkout".to_string()),
+            },
+            Discovery {
+                served: &served,
+                context: "fake",
+            },
+        )
         .await
         .expect("published");
         let stops: BTreeMap<String, Option<ChainStop>> = services
@@ -1746,19 +1777,39 @@ mod tests {
         }
     }
 
-    /// The routing pages, the Overview and the Services list read stops from
-    /// here, and the chain from the neighbourhood: both say the same shut
-    /// door. A policy list the reader is refused stops nothing and leaves the
-    /// door unread, rather than open. Fails if this reader skips the
-    /// policies, turns a 403 into a finding, or into no door at all.
-    #[tokio::test]
-    async fn a_service_behind_a_policy_that_admits_nothing_stops_at_the_pods_door() {
+    const CILIUM_GROUP: &str = r#"{"kind":"APIGroupList","apiVersion":"v1","groups":[{
+        "name":"cilium.io",
+        "versions":[{"groupVersion":"cilium.io/v2","version":"v2"}],
+        "preferredVersion":{"groupVersion":"cilium.io/v2","version":"v2"}}]}"#;
+    const CILIUM_KINDS: &str = r#"{"kind":"APIResourceList","apiVersion":"v1",
+        "groupVersion":"cilium.io/v2","resources":[{
+        "name":"ciliumnetworkpolicies","singularName":"","namespaced":true,
+        "kind":"CiliumNetworkPolicy","verbs":["get","list","watch"]}]}"#;
+    const FORBIDDEN: &str = r#"{"kind":"Status","code":403}"#;
+
+    fn list_of(kind: &str, items: serde_json::Value) -> (u16, String) {
+        let list = serde_json::json!({
+            "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items,
+        });
+        (200, list.to_string())
+    }
+
+    fn deny_all() -> (u16, String) {
+        list_of(
+            "NetworkPolicyList",
+            serde_json::json!([{
+                "metadata": { "name": "deny-all-ingress", "namespace": "team-checkout" },
+                "spec": { "podSelector": {}, "policyTypes": ["Ingress"] }
+            }]),
+        )
+    }
+
+    /// What Service `log-demo` publishes, one ready pod behind it, on a
+    /// cluster that serves Cilium's policy kind: `policies` is what the
+    /// namespace's `NetworkPolicy` list answers, `cilium` what Cilium's does.
+    async fn behind_policies(policies: (u16, String), cilium: (u16, String)) -> ServicePublished {
         use crate::client::served::test_server::answering;
-        let list = |kind: &str, items: serde_json::Value| {
-            serde_json::json!({ "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items })
-                .to_string()
-        };
-        let services = list(
+        let services = list_of(
             "ServiceList",
             serde_json::json!([{
                 "metadata": { "name": "log-demo", "namespace": "team-checkout" },
@@ -1768,7 +1819,7 @@ mod tests {
                 }
             }]),
         );
-        let slices = list(
+        let slices = list_of(
             "EndpointSliceList",
             serde_json::json!([{
                 "metadata": {
@@ -1781,38 +1832,46 @@ mod tests {
                 "endpoints": [{ "addresses": ["10.0.0.1"], "conditions": { "ready": true } }]
             }]),
         );
-        let policies = list(
-            "NetworkPolicyList",
-            serde_json::json!([{
-                "metadata": { "name": "deny-all-ingress", "namespace": "team-checkout" },
-                "spec": { "podSelector": {}, "policyTypes": ["Ingress"] }
-            }]),
-        );
-        let published_with = |policies: (u16, String)| {
-            let (services, slices) = (services.clone(), slices.clone());
-            async move {
-                let (client, _) = answering(move |path, _| match path {
-                    "/api/v1/namespaces/team-checkout/services" => (200, services.clone()),
-                    "/apis/discovery.k8s.io/v1/namespaces/team-checkout/endpointslices" => {
-                        (200, slices.clone())
-                    }
-                    "/apis/networking.k8s.io/v1/namespaces/team-checkout/networkpolicies" => {
-                        policies.clone()
-                    }
-                    _ => (404, "{}".to_string()),
-                })
-                .await;
-                published_in(&ResourceContext {
-                    client,
-                    namespace: Some("team-checkout".to_string()),
-                })
-                .await
-                .expect("published")
-                .1
-                .remove(0)
+        let (client, _) = answering(move |path, _| match path {
+            "/api/v1/namespaces/team-checkout/services" => services.clone(),
+            "/apis/discovery.k8s.io/v1/namespaces/team-checkout/endpointslices" => slices.clone(),
+            "/apis/networking.k8s.io/v1/namespaces/team-checkout/networkpolicies" => {
+                policies.clone()
             }
-        };
-        let shut = published_with((200, policies)).await.stop;
+            "/apis" => (200, CILIUM_GROUP.to_string()),
+            "/apis/cilium.io/v2" => (200, CILIUM_KINDS.to_string()),
+            "/apis/cilium.io/v2/namespaces/team-checkout/ciliumnetworkpolicies" => cilium.clone(),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let served = ServedIndex::default();
+        published_in(
+            &ResourceContext {
+                client,
+                namespace: Some("team-checkout".to_string()),
+            },
+            Discovery {
+                served: &served,
+                context: "fake",
+            },
+        )
+        .await
+        .expect("published")
+        .1
+        .remove(0)
+    }
+
+    /// The routing pages, the Overview and the Services list read stops from
+    /// here, and the chain from the neighbourhood: both say the same shut
+    /// door. A policy list the reader is refused stops nothing and leaves the
+    /// door unread, rather than open. Fails if this reader skips the
+    /// policies, turns a 403 into a finding, or into no door at all; or if
+    /// another engine's kind that is served and holds no policy in the
+    /// namespace takes the stop away, as it would on every Cilium cluster.
+    #[tokio::test]
+    async fn a_service_behind_a_policy_that_admits_nothing_stops_at_the_pods_door() {
+        let none = list_of("CiliumNetworkPolicyList", serde_json::json!([]));
+        let shut = behind_policies(deny_all(), none.clone()).await.stop;
         assert!(
             matches!(
                 &shut,
@@ -1821,12 +1880,46 @@ mod tests {
             ),
             "{shut:?}"
         );
-        let refused = published_with((403, r#"{"kind":"Status","code":403}"#.to_string())).await;
+        let refused = behind_policies((403, FORBIDDEN.to_string()), none).await;
         assert!(refused.stop.is_none(), "{:?}", refused.stop);
         assert!(
             matches!(refused.door, Some(PolicyDoor::Unread { .. })),
             "{:?}",
             refused.door
         );
+    }
+
+    fn overlaid_by_cilium(published: &ServicePublished) -> bool {
+        published.stop.is_none()
+            && matches!(
+                &published.door,
+                Some(PolicyDoor::Overlaid { alone, kinds, shut: true })
+                    if alone.isolating == ["deny-all-ingress"]
+                        && kinds == &["CiliumNetworkPolicy"]
+            )
+    }
+
+    /// Cilium unites its own allows with a `NetworkPolicy`'s, so a
+    /// default-deny beside a `CiliumNetworkPolicy` passes traffic, and every
+    /// Service of the namespace read red "shut by `NetworkPolicy`". Fails if
+    /// this reader does not ask for the other engines' policies, or still
+    /// says the stop beside one.
+    #[tokio::test]
+    async fn a_policy_of_another_engine_in_the_namespace_leaves_the_shut_door_unsaid() {
+        let one = list_of(
+            "CiliumNetworkPolicyList",
+            serde_json::json!([{ "metadata": { "name": "allow-web", "namespace": "team-checkout" } }]),
+        );
+        let published = behind_policies(deny_all(), one).await;
+        assert!(overlaid_by_cilium(&published), "{published:?}");
+    }
+
+    /// A reader refused the other engine's policies has not been told there
+    /// are none. Fails if a 403 on their list reads as an empty one, which
+    /// brings the red verdict back for exactly the reader who cannot check.
+    #[tokio::test]
+    async fn another_engines_policies_nobody_may_list_are_not_taken_for_none() {
+        let published = behind_policies(deny_all(), (403, FORBIDDEN.to_string())).await;
+        assert!(overlaid_by_cilium(&published), "{published:?}");
     }
 }

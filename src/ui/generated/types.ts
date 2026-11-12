@@ -387,6 +387,12 @@ export interface ServiceHealthGroup {
   door?: PolicyDoor;
 }
 
+export interface DoorAlone {
+  isolating: string[];
+  unsettled: string[];
+  ports: DoorPort[];
+}
+
 export interface DoorPort {
   name: string | null;
   servicePort: number | null;
@@ -487,6 +493,11 @@ export interface PublishedPort {
   port: number | null;
   protocol: string;
   exposed: boolean;
+}
+
+export interface OtherPolicyKinds {
+  namespace: string;
+  kinds: string[];
 }
 
 export interface NetworkPolicyInfo {
@@ -2570,7 +2581,8 @@ export type PolicyDoor =
       unsettled: string[];
       ports: DoorPort[];
     }
-  | { state: "unread"; reason: string };
+  | { state: "unread"; reason: string }
+  | { state: "overlaid"; alone: DoorAlone; kinds: string[]; shut: boolean };
 
 export type PolicySelects =
   | { kind: "everything" }

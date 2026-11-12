@@ -324,6 +324,19 @@ impl AppState {
             .await
     }
 
+    /// Discovery as read for `context`, for a reader that asks it of a
+    /// client it already holds.
+    #[must_use]
+    pub fn discovery<'a>(
+        &'a self,
+        context: &'a str,
+    ) -> crate::commands::other_policies::Discovery<'a> {
+        crate::commands::other_policies::Discovery {
+            served: self.client_manager.served(),
+            context,
+        }
+    }
+
     /// A request's answer from where discovery put a kind of `group` on the
     /// current cluster, a 404 sending discovery back: see
     /// [`crate::client::served::ServedIndex::answered`].

@@ -192,6 +192,74 @@ pub enum PolicyDoor {
         /// What the cluster answered instead.
         reason: String,
     },
+    /// `NetworkPolicy` objects select them and are not the whole of it:
+    /// another engine's policies are in force over the same pods, and what
+    /// those admit a `NetworkPolicy` does not take back. Who gets in is not
+    /// settled from the `NetworkPolicy` objects alone.
+    Overlaid {
+        /// What the `NetworkPolicy` objects say on their own. Who they admit
+        /// is admitted; who they refuse may be admitted all the same.
+        alone: DoorAlone,
+        /// The other kinds in force, by [`OtherPolicies::over`].
+        kinds: Vec<String>,
+        /// Alone, the `NetworkPolicy` objects admit no connection to any
+        /// port: [`policy_stop`]'s answer, which is not said as a stop here.
+        shut: bool,
+    },
+}
+
+/// A [`PolicyDoor::Guarded`]'s reading, under a name of its own so that no
+/// reader takes an overlaid door for a guarded one by its fields.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DoorAlone {
+    pub isolating: Vec<String>,
+    pub unsettled: Vec<String>,
+    pub ports: Vec<DoorPort>,
+}
+
+/// Policies of engines other than Kubernetes' own that are in force, by
+/// where. Cilium, Calico, Antrea and `AdminNetworkPolicy` all admit a
+/// connection a `NetworkPolicy` with no rule for it would refuse, so a
+/// verdict from `NetworkPolicy` objects is the cluster's only where none of
+/// these holds an object over the same pods.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OtherPolicies {
+    everywhere: BTreeSet<String>,
+    within: BTreeMap<String, BTreeSet<String>>,
+}
+
+impl OtherPolicies {
+    /// A cluster where none was found. There is no `Default`: a caller
+    /// says it, having looked.
+    #[must_use]
+    pub fn none() -> Self {
+        Self {
+            everywhere: BTreeSet::new(),
+            within: BTreeMap::new(),
+        }
+    }
+
+    /// `kind` binds pods in every namespace, or could not be read to say.
+    pub fn everywhere(&mut self, kind: &str) {
+        self.everywhere.insert(kind.to_string());
+    }
+
+    /// `kind` holds an object in `namespace`.
+    pub fn within(&mut self, namespace: &str, kind: &str) {
+        self.within
+            .entry(namespace.to_string())
+            .or_default()
+            .insert(kind.to_string());
+    }
+
+    /// The kinds that may hold a policy over a pod in `namespace`.
+    #[must_use]
+    pub fn over(&self, namespace: &str) -> Vec<String> {
+        let here = self.within.get(namespace).into_iter().flatten();
+        let kinds: BTreeSet<&String> = self.everywhere.iter().chain(here).collect();
+        kinds.into_iter().cloned().collect()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -240,12 +308,15 @@ impl ServicePublished {
 
     /// [`policy_door`], and [`policy_stop`] where nothing earlier stopped the
     /// path. A list that was not read stops nothing and leaves the door
-    /// unread, in the cluster's words.
+    /// unread, in the cluster's words. Where another engine's policies are
+    /// in force over the same pods a guarded door is [`PolicyDoor::Overlaid`]
+    /// and stops nothing either: the `NetworkPolicy` objects do not decide.
     #[must_use]
     pub fn with_policies(
         mut self,
         service: &Service,
         policies: std::result::Result<&[NetworkPolicy], &str>,
+        others: &OtherPolicies,
     ) -> Self {
         let policies = match policies {
             Ok(policies) => policies,
@@ -257,8 +328,30 @@ impl ServicePublished {
             }
         };
         self.door = policy_door(service, &self, policies);
-        if self.stop.is_none() && self.serving() > 0 {
-            self.stop = policy_stop(service, &self, policies);
+        let shut = (self.stop.is_none() && self.serving() > 0)
+            .then(|| policy_stop(service, &self, policies))
+            .flatten();
+        let kinds = others.over(&service.namespace().unwrap_or_default());
+        match self.door.take() {
+            Some(PolicyDoor::Guarded {
+                isolating,
+                unsettled,
+                ports,
+            }) if !kinds.is_empty() => {
+                self.door = Some(PolicyDoor::Overlaid {
+                    alone: DoorAlone {
+                        isolating,
+                        unsettled,
+                        ports,
+                    },
+                    kinds,
+                    shut: shut.is_some(),
+                });
+            }
+            door => {
+                self.door = door;
+                self.stop = self.stop.take().or(shut);
+            }
         }
         self
     }
@@ -3171,7 +3264,9 @@ mod tests {
 
     fn policy_stop_of(policies: &[NetworkPolicy]) -> Option<ChainStop> {
         let (svc, published) = serving_web();
-        published.with_policies(&svc, Ok(policies)).stop
+        published
+            .with_policies(&svc, Ok(policies), &OtherPolicies::none())
+            .stop
     }
 
     /// The live specimen: ready pods, published, and a policy selecting every
@@ -3192,6 +3287,58 @@ mod tests {
         assert_eq!(policies, ["deny-all-ingress"]);
         assert_eq!(ports, [80]);
         assert!(no_rules);
+    }
+
+    /// A default-deny `NetworkPolicy` beside allows written as
+    /// `CiliumNetworkPolicy` passes traffic, and every Service of the
+    /// namespace read red "shut by `NetworkPolicy`". Fails if a guarded door
+    /// another engine's policies also hold is said as a stop, or keeps the
+    /// rules a reader would refuse a client by; and if a kind in force
+    /// somewhere else takes a true stop away.
+    #[test]
+    fn a_door_another_engines_policies_also_hold_is_not_called_shut() {
+        let (svc, published) = serving_web();
+        let policies = [deny_all()];
+        let mut cilium = OtherPolicies::none();
+        cilium.within("k8s-gui-test", "CiliumNetworkPolicy");
+        let overlaid = published
+            .clone()
+            .with_policies(&svc, Ok(&policies), &cilium);
+        assert!(overlaid.stop.is_none(), "{:?}", overlaid.stop);
+        let Some(PolicyDoor::Overlaid { alone, kinds, shut }) = overlaid.door else {
+            panic!("an overlaid door, not {:?}", overlaid.door);
+        };
+        assert_eq!(alone.isolating, ["deny-all-ingress"]);
+        assert_eq!(alone.ports.len(), 1);
+        assert_eq!(kinds, ["CiliumNetworkPolicy"]);
+        assert!(shut);
+
+        let mut cluster_wide = OtherPolicies::none();
+        cluster_wide.everywhere("AdminNetworkPolicy");
+        let admin = published
+            .clone()
+            .with_policies(&svc, Ok(&policies), &cluster_wide);
+        assert!(matches!(admin.door, Some(PolicyDoor::Overlaid { .. })));
+        assert!(admin.stop.is_none(), "{:?}", admin.stop);
+
+        let mut elsewhere = OtherPolicies::none();
+        elsewhere.within("another", "CiliumNetworkPolicy");
+        let alone = published.with_policies(&svc, Ok(&policies), &elsewhere);
+        assert!(matches!(alone.stop, Some(ChainStop::PolicyRefuses { .. })));
+        assert!(matches!(alone.door, Some(PolicyDoor::Guarded { .. })));
+    }
+
+    /// No `NetworkPolicy` selects the pods, so none isolates them: another
+    /// engine's policy adds no doubt about a refusal nobody claimed. Fails
+    /// if every Service on a Cilium cluster loses its open door.
+    #[test]
+    fn an_open_door_stays_open_beside_another_engines_policies() {
+        let (svc, published) = serving_web();
+        let mut cilium = OtherPolicies::none();
+        cilium.everywhere("CiliumClusterwideNetworkPolicy");
+        let open = published.with_policies(&svc, Ok(&[]), &cilium);
+        assert_eq!(open.door, Some(PolicyDoor::Open));
+        assert!(open.stop.is_none(), "{:?}", open.stop);
     }
 
     /// A rule beside the deny admits somebody, and who depends on the client,
@@ -3280,19 +3427,23 @@ mod tests {
     fn unread_policies_and_an_earlier_stop_are_left_as_they_were() {
         let (svc, published) = serving_web();
         assert!(published
-            .with_policies(&svc, Err("forbidden"))
+            .with_policies(&svc, Err("forbidden"), &OtherPolicies::none())
             .stop
             .is_none());
         let svc = selecting("web");
         let empty = from_slices(&svc, svc_ref("web"), &[], &[]).with_stop(&svc, Some(&[]));
         let before = format!("{:?}", empty.stop);
-        let after = empty.with_policies(&svc, Ok(&[deny_all()])).stop;
+        let after = empty
+            .with_policies(&svc, Ok(&[deny_all()]), &OtherPolicies::none())
+            .stop;
         assert_eq!(format!("{after:?}"), before);
     }
 
     fn door_of(policies: std::result::Result<&[NetworkPolicy], &str>) -> Option<PolicyDoor> {
         let (svc, published) = serving_web();
-        published.with_policies(&svc, policies).door
+        published
+            .with_policies(&svc, policies, &OtherPolicies::none())
+            .door
     }
 
     /// The door is what a verdict about the controller is read from: each
@@ -3356,7 +3507,7 @@ mod tests {
         let published = from_slices(&selectorless, svc_ref("web"), &[], &[]);
         assert_eq!(
             published
-                .with_policies(&selectorless, Err("forbidden"))
+                .with_policies(&selectorless, Err("forbidden"), &OtherPolicies::none())
                 .door,
             None
         );

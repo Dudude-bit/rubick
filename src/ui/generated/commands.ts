@@ -94,6 +94,7 @@ import type {
   NodeInfo,
   NodeMetricsResponse,
   ObjectMetadata,
+  OtherPolicyKinds,
   OwnRules,
   PathIdentity,
   PerfSnapshot,
@@ -1615,6 +1616,12 @@ export async function listIngresses(
   filters: ResourceFilters | null
 ): Promise<IngressInfo[]> {
   return invoke<IngressInfo[]>("list_ingresses", { filters });
+}
+
+export async function listOtherPolicyKinds(
+  namespaces: string[]
+): Promise<OtherPolicyKinds[]> {
+  return invoke<OtherPolicyKinds[]>("list_other_policy_kinds", { namespaces });
 }
 
 export async function listNetworkPoliciesIn(

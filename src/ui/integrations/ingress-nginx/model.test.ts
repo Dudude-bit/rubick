@@ -492,6 +492,7 @@ describe("the findings", () => {
           read: {
             name: "ingress-nginx",
             egress: { known: true, value: { rows: [], unread: [] } },
+            others: { known: true, value: [] },
             clients: {
               known: true,
               value: [

@@ -358,7 +358,11 @@ pub(super) fn note_reach(
     let published = snapshot
         .published_of(svc, svc_ref.clone(), &selected)
         .with_stop(svc, pods)
-        .with_policies(svc, snapshot.policies.as_deref().map_err(String::as_str))
+        .with_policies(
+            svc,
+            snapshot.policies.as_deref().map_err(String::as_str),
+            &snapshot.others,
+        )
         .with_makers(svc, &makers, snapshot.makers_read())
         .with_workloads(svc, &makers, pods, chrono::Utc::now())
         .with_near_miss(svc, snapshot.pods());
@@ -1115,6 +1119,7 @@ mod tests {
             replica_sets: Ok(Vec::new()),
             refusals: Ok(Vec::new()),
             policies: Ok(Vec::new()),
+            others: crate::resources::OtherPolicies::none(),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),
@@ -1230,11 +1235,16 @@ mod tests {
                 "spec": { "podSelector": {}, "policyTypes": ["Ingress"] }
             }))
             .expect("a NetworkPolicy");
-        let stops = |policies: Read<k8s_openapi::api::networking::v1::NetworkPolicy>| {
+        let alone = crate::resources::OtherPolicies::none();
+        let mut cilium = crate::resources::OtherPolicies::none();
+        cilium.within("team-checkout", "CiliumNetworkPolicy");
+        let stops = |policies: Read<k8s_openapi::api::networking::v1::NetworkPolicy>,
+                     others: &crate::resources::OtherPolicies| {
             let snapshot = Snapshot {
                 pods: Ok(vec![pod.clone()]),
                 slices: Ok(vec![slice.clone()]),
                 policies,
+                others: others.clone(),
                 ..snapshot(vec![svc.clone()])
             };
             let mut out = Neighbourhood::new();
@@ -1243,11 +1253,14 @@ mod tests {
         };
         assert!(
             matches!(
-                stops(Ok(vec![deny])).as_slice(),
+                stops(Ok(vec![deny.clone()]), &alone).as_slice(),
                 [ChainStop::PolicyRefuses { no_rules: true, .. }]
             ),
             "the pods are shut to every client"
         );
-        assert!(stops(Err("forbidden".to_string())).is_empty());
+        assert!(stops(Err("forbidden".to_string()), &alone).is_empty());
+        // The graph and the lists read one door: beside another engine's
+        // policy the chain must not end in a shut one either.
+        assert!(stops(Ok(vec![deny]), &cilium).is_empty());
     }
 }

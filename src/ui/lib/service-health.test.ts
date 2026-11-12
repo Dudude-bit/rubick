@@ -436,7 +436,7 @@ describe("one verdict for a Service on every surface", () => {
     expect(unread).toEqual({
       state: "policiesUnread",
       ready: 2,
-      why: "networkpolicies is forbidden",
+      why: { why: "unread", said: "networkpolicies is forbidden" },
     });
     const words = serviceHealthWords(unread, t);
     expect(words).toMatchObject({ label: "2 ready", role: "neutral" });
@@ -450,6 +450,48 @@ describe("one verdict for a Service on every surface", () => {
       expect(
         serviceHealthOf(SELECTING, published({ ready: 2, door }), null).state
       ).toBe("ready");
+  });
+
+  /**
+   * A default-deny NetworkPolicy beside allows written as CiliumNetworkPolicy
+   * passes traffic, and the Service read red "shut by NetworkPolicy" on every
+   * surface. Fails if a door another engine's policies also hold reads as
+   * shut or as a plain green count, if the reason stops naming the kinds
+   * nobody read, or if such a door the NetworkPolicies leave open to someone
+   * loses its ready verdict.
+   */
+  it("does not call ready pods shut where another engine's policies may admit", () => {
+    const alone = { isolating: ["deny-all"], unsettled: [], ports: [] };
+    const kinds = ["CiliumNetworkPolicy"];
+    const overlaid = serviceHealthOf(
+      SELECTING,
+      published({
+        ready: 2,
+        door: { state: "overlaid", alone, kinds, shut: true },
+      }),
+      null
+    );
+    expect(overlaid).toEqual({
+      state: "policiesUnread",
+      ready: 2,
+      why: { why: "others", policies: ["deny-all"], kinds },
+    });
+    const words = serviceHealthWords(overlaid, t);
+    expect(words).toMatchObject({ label: "2 ready", role: "neutral" });
+    expect(words.reason).toContain("CiliumNetworkPolicy objects are in force");
+    expect(words.reason).toContain("deny-all");
+    expect(words.glyph).toBeDefined();
+
+    expect(
+      serviceHealthOf(
+        SELECTING,
+        published({
+          ready: 2,
+          door: { state: "overlaid", alone, kinds, shut: false },
+        }),
+        null
+      ).state
+    ).toBe("ready");
   });
 
   /**
@@ -468,7 +510,10 @@ describe("one verdict for a Service on every surface", () => {
       published({ ready: 1, notReady: 1, door }),
       null
     );
-    expect(partly).toMatchObject({ state: "partly", unchecked: door.reason });
+    expect(partly).toMatchObject({
+      state: "partly",
+      unchecked: { why: "unread", said: door.reason },
+    });
     const words = serviceHealthWords(partly, t);
     expect(words).toMatchObject({ label: "1 of 2 ready", role: "warn" });
     expect(words.reason).toBe(
@@ -482,7 +527,7 @@ describe("one verdict for a Service on every surface", () => {
     );
     expect(draining).toMatchObject({
       state: "draining",
-      unchecked: door.reason,
+      unchecked: { why: "unread", said: door.reason },
     });
     expect(serviceHealthWords(draining, t).reason).toContain(
       "is not checked: networkpolicies is forbidden"

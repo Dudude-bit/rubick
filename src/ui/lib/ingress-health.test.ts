@@ -377,6 +377,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     const nginx: DoorRead = {
       name: "ingress-nginx",
       egress: { known: true, value: { rows: [], unread: [] } },
+      others: { known: true, value: [] },
       clients: {
         known: true,
         value: [
@@ -440,6 +441,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     const onNode: DoorRead = {
       name: "ingress-nginx",
       egress: { known: true, value: { rows: [], unread: [] } },
+      others: { known: true, value: [] },
       clients: {
         known: true,
         value: [
@@ -479,6 +481,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     ): DoorRead => ({
       name: "ingress-nginx",
       egress: { known: true, value },
+      others: { known: true, value: [] },
       clients: {
         known: true,
         value: [

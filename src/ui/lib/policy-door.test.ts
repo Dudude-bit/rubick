@@ -95,6 +95,7 @@ const readOf = (
 ): DoorRead => ({
   name: "Traefik",
   egress: { known: true, value: { rows: [], unread: [] } },
+  others: { known: true, value: [] },
   clients: { known: true, value: clients },
   namespaces: read,
 });
@@ -124,6 +125,39 @@ describe("whether a controller gets through the policies over a Service's pods",
 
   it("admits a controller a rule's peer names", () => {
     expect(verdict(guarded([rule([fromNamespace("traefik")])]))).toEqual({
+      state: "admitted",
+    });
+  });
+
+  /**
+   * Cilium unites its own allows with a NetworkPolicy's: a controller no
+   * NetworkPolicy rule names may be admitted by a CiliumNetworkPolicy, and
+   * its Ingress read red "backend down". Fails if a door another engine's
+   * policies also hold still refuses a client, or stops admitting the one
+   * the NetworkPolicies already let in.
+   */
+  it("refuses nobody where another engine's policies also hold the door", () => {
+    const overlaid = (rules: DoorRule[]): PolicyDoor => {
+      const door = guarded(rules);
+      if (door.state !== "guarded") throw new Error("a guarded door");
+      const { isolating, unsettled, ports } = door;
+      return {
+        state: "overlaid",
+        alone: { isolating, unsettled, ports },
+        kinds: ["CiliumNetworkPolicy"],
+        shut: false,
+      };
+    };
+    expect(verdict(overlaid([rule([fromNamespace("ingress-nginx")])]))).toEqual(
+      {
+        state: "unsure",
+        policies: ["allow-nginx"],
+        why: "otherPolicies",
+        side: "pods",
+        said: null,
+      }
+    );
+    expect(verdict(overlaid([rule([fromNamespace("traefik")])]))).toEqual({
       state: "admitted",
     });
   });
@@ -446,6 +480,45 @@ describe("whether a controller's own egress policies let it reach a Service's po
       state: "refused",
       stop: { reason: "policyHoldsBack" },
     });
+  });
+
+  /**
+   * The same doubt at the controller's end: a default-deny egress
+   * NetworkPolicy beside a CiliumNetworkPolicy that lets it out read red
+   * "held back". Fails if the egress NetworkPolicies decide alone where
+   * another engine's policies are in force in the controller's namespace or
+   * were not read, or stop deciding where they hold only somewhere else.
+   */
+  it("holds nobody back where another engine's policies are in force beside its egress rules", () => {
+    const beside = (others: DoorRead["others"]) =>
+      doorVerdict(reached(), "80", { ...leaving([holding([])]), others });
+    const kinds = ["CiliumNetworkPolicy"];
+    expect(
+      beside({ known: true, value: [{ namespace: "traefik", kinds }] })
+    ).toEqual({
+      state: "unsure",
+      policies: ["traefik-out"],
+      why: "otherPolicies",
+      side: "client",
+      said: null,
+    });
+    expect(beside({ known: false, why: "boom" })).toMatchObject({
+      state: "unsure",
+      why: "otherPolicies",
+    });
+    expect(beside({ known: false, why: null })).toMatchObject({
+      state: "unsure",
+      why: "clientsReading",
+    });
+    expect(
+      beside({
+        known: true,
+        value: [
+          { namespace: "traefik", kinds: [] },
+          { namespace: "shop", kinds },
+        ],
+      })
+    ).toMatchObject({ state: "refused", stop: { reason: "policyHoldsBack" } });
   });
 
   it("lets a controller out where a rule names the pods' namespace on their port, or a range holding it", () => {

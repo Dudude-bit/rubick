@@ -131,6 +131,7 @@ describe("what a route's backend is doing", () => {
     const traefik: DoorRead = {
       name: "Traefik",
       egress: { known: true, value: { rows: [], unread: [] } },
+      others: { known: true, value: [] },
       clients: {
         known: true,
         value: [
@@ -199,6 +200,7 @@ describe("what a route's backend is doing", () => {
     const traefik: DoorRead = {
       name: "Traefik",
       egress: { known: true, value: { rows: [], unread: [] } },
+      others: { known: true, value: [] },
       clients: {
         known: true,
         value: [

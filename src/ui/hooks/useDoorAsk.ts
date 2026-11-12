@@ -71,6 +71,17 @@ export function useDoorAsk(enabled = true): DoorAsk {
       staleTime: STALE_TIMES.slow,
     })),
   });
+  const overlays = useQueries({
+    queries: claims.map(({ controller }, at) => ({
+      queryKey: [
+        ...queryKeys.ingressClientPolicies(controller, homes[at]),
+        "others",
+      ],
+      queryFn: () => commands.listOtherPolicyKinds(homes[at]),
+      enabled: homes[at].length > 0,
+      staleTime: STALE_TIMES.slow,
+    })),
+  });
   const namespaces = useQuery({
     queryKey: queryKeys.namespaces(),
     queryFn: () => commands.listNamespaces(),
@@ -79,7 +90,8 @@ export function useDoorAsk(enabled = true): DoorAsk {
   });
   const answers = reads.map(knownOf);
   const policies = egress.map(knownOf);
-  const digest = JSON.stringify([answers, policies]);
+  const others = overlays.map(knownOf);
+  const digest = JSON.stringify([answers, policies, others]);
   const listed = knownOf(namespaces);
   const listedDigest = JSON.stringify(listed);
   const classesError = classes.error ?? gatewayClasses.error;
@@ -108,6 +120,7 @@ export function useDoorAsk(enabled = true): DoorAsk {
           clients: answers[at],
           namespaces: listed,
           egress: policies[at],
+          others: others[at],
         },
       ])
     );
@@ -125,6 +138,7 @@ export function useDoorAsk(enabled = true): DoorAsk {
         clients: { known: false, why },
         namespaces: listed,
         egress: { known: false, why },
+        others: { known: false, why },
       };
     };
     const named = gatewayData

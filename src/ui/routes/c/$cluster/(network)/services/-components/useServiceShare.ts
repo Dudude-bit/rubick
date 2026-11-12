@@ -19,6 +19,7 @@ import {
   serviceHealthOf,
   serviceHealthWords,
   shutUnchecked,
+  shutUncheckedText,
 } from "@/lib/service-health";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
@@ -88,8 +89,7 @@ export function serviceStats(
             : total === 0
               ? t("empty", "servicePublishesNothing")
               : [
-                  unchecked !== null &&
-                    t("readings", "healthPoliciesUnread", { why: unchecked }),
+                  unchecked !== null && shutUncheckedText(unchecked, t),
                   sourceNote(published, t),
                 ]
                   .filter(Boolean)

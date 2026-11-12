@@ -49,6 +49,7 @@ import {
   type ServiceHealth,
   type StopCause,
   shutUnchecked,
+  shutUncheckedText,
 } from "@/lib/service-health";
 
 export type AttentionTone = "err" | "warn";
@@ -366,10 +367,12 @@ const serviceItems = remember(
  * The namespaces where a Service serves and its NetworkPolicies went unread:
  * one of them may be shut, which is an item this check then never raised.
  */
-function shutUncheckedIn(answered: ServiceHealthInputs[]): Unread[] {
+function shutUncheckedIn(answered: ServiceHealthInputs[], t: T): Unread[] {
   return answered.flatMap(({ namespace, groups }) => {
     const why = groups.map(shutUnchecked).find((reason) => reason !== null);
-    return why === undefined ? [] : [{ namespace, code: "", message: why }];
+    if (!why) return [];
+    const message = why.why === "unread" ? why.said : shutUncheckedText(why, t);
+    return [{ namespace, code: "", message }];
   });
 }
 
@@ -907,7 +910,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
   const servicesUnread =
     services.unread === "reading"
       ? []
-      : [...services.unread, ...shutUncheckedIn(services.answered)];
+      : [...services.unread, ...shutUncheckedIn(services.answered, t)];
   const checks: AttentionCheck[] = [
     ...BACKEND_KINDS.map((kind): AttentionCheck => {
       const unread = overview.unread.filter((entry) => entry.kind === kind);
