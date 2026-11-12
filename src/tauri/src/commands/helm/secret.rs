@@ -440,6 +440,39 @@ mod tests {
         );
     }
 
+    /// A failed upgrade's one line is Helm's error, and Helm's error quotes
+    /// the template it could not apply. Fails if the line leaves the detail
+    /// or a history row with a key in it, or an ordinary line does not.
+    #[test]
+    fn a_releases_description_is_handed_out_without_a_key_it_quotes() {
+        use crate::resources::WITHHELD_MARKER;
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let with = |description: &str| {
+            let mut secret = stored("web", 1);
+            let payload = serde_json::json!({
+                "name": "web", "namespace": "shop", "version": 1,
+                "info": { "status": "failed", "description": description },
+                "chart": { "metadata": { "name": "keys", "version": "0.1.0" } },
+            });
+            secret["data"]["release"] =
+                STANDARD.encode(STANDARD.encode(payload.to_string())).into();
+            serde_json::from_value::<Secret>(secret).expect("a secret")
+        };
+        let said = |secret: Secret| {
+            let detail = detail_of(release_in(&secret).expect("decodes"));
+            let history = revisions_of([secret]);
+            (detail.description, history[0].description.clone())
+        };
+
+        let quoted = with(&format!(
+            "Upgrade \"web\" failed: cannot patch \"web-key\": {KEY}"
+        ));
+        let marker = Some(WITHHELD_MARKER.to_string());
+        assert_eq!(said(quoted), (marker.clone(), marker));
+        let plain = Some("Install complete".to_string());
+        assert_eq!(said(with("Install complete")), (plain.clone(), plain));
+    }
+
     /// A release with no key in it is told nothing was withheld, and its
     /// notes, values and manifest are the ones Helm stored.
     #[test]
@@ -683,13 +716,13 @@ fn detail_of(release: HelmSecretRelease) -> HelmReleaseDetail {
         name: release.name,
         namespace: release.namespace,
         revision: release.version,
+        description: release.info.description(),
         status: release.info.status,
         chart: release.chart.metadata.name.clone(),
         chart_version: release.chart.metadata.version,
         app_version: release.chart.metadata.app_version,
         first_deployed: release.info.first_deployed,
         last_deployed: release.info.last_deployed,
-        description: release.info.description,
         values: shown.values,
         manifest: shown.manifest,
         notes: shown.notes,
@@ -735,6 +768,7 @@ fn revisions_of(secrets: impl IntoIterator<Item = Secret>) -> Vec<HelmRevision> 
         .map(|secret| match release_in(&secret) {
             Ok(release) => HelmRevision {
                 revision: release.version,
+                description: release.info.description(),
                 updated: release.info.last_deployed.unwrap_or_default(),
                 status: release.info.status,
                 chart: format!(
@@ -742,7 +776,6 @@ fn revisions_of(secrets: impl IntoIterator<Item = Secret>) -> Vec<HelmRevision> 
                     release.chart.metadata.name, release.chart.metadata.version
                 ),
                 app_version: release.chart.metadata.app_version,
-                description: release.info.description,
                 unreadable: None,
             },
             Err(why) => HelmRevision {

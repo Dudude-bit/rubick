@@ -154,10 +154,20 @@ pub(super) struct HelmSecretInfo {
     pub first_deployed: Option<String>,
     #[serde(default)]
     pub last_deployed: Option<String>,
-    #[serde(default)]
-    pub description: Option<String>,
+    #[serde(default, rename = "description")]
+    stored_description: Option<String>,
     #[serde(default, rename = "notes")]
     stored_notes: Option<String>,
+}
+
+impl HelmSecretInfo {
+    /// The release's one line about itself, as it may leave this process:
+    /// Helm writes a failed upgrade's error there, and an error quotes what
+    /// it failed on.
+    pub fn description(&self) -> Option<String> {
+        let stored = self.stored_description.as_deref();
+        stored.map(crate::resources::shown_text)
+    }
 }
 
 #[derive(Debug, Deserialize)]

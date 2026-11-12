@@ -1188,6 +1188,7 @@ mod tests {
             concat!("stored_", "values"),
             concat!("stored_", "manifest"),
             concat!("stored_", "notes"),
+            concat!("stored_", "description"),
         ];
         let (_, sources) = command_sources();
         for field in stored {
@@ -1198,8 +1199,8 @@ mod tests {
                 .count();
             assert_eq!(
                 named, 2,
-                "{field} is read outside commands::helm::HelmSecretRelease::shown, \
-                 or the scan lost it"
+                "{field} is read outside the one place in commands::helm that puts it \
+                 through the rule, or the scan lost it"
             );
         }
     }

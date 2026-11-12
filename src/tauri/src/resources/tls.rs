@@ -265,9 +265,10 @@ pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<Wit
     if says_private_key(value) || std::str::from_utf8(value).is_ok_and(packs_a_private_key) {
         return Some(Withheld::PrivateKey);
     }
-    // Helm keeps a release whole in a Secret of this type: the key its page
-    // withholds would be one `base64 -d | gunzip` away on this one.
-    if secret_type == HELM_RELEASE_TYPE && super::helm::stored_release_withholds(value) {
+    // Helm keeps a release whole in a Secret of this type, or in a
+    // `ConfigMap`: the key its page withholds would be one `base64 -d |
+    // gunzip` away on this one.
+    if super::helm::stored_release_withholds(value, secret_type == HELM_RELEASE_TYPE) {
         return Some(Withheld::HelmRelease);
     }
     if key_declared_private(secret_type, key) {
@@ -656,6 +657,58 @@ mod tests {
         );
     }
 
+    fn gzipped(value: &serde_json::Value) -> Vec<u8> {
+        use std::io::Write as _;
+        let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        gzip.write_all(value.to_string().as_bytes()).unwrap();
+        gzip.finish().unwrap()
+    }
+
+    /// Helm's `ConfigMap` driver keeps the same release in a `ConfigMap`,
+    /// which has no type to say so: the net was gated on the Secret's, and
+    /// the release was handed over whole. Fails if a release holding a key
+    /// leaves the Data tab or the YAML tab, or if a release with none, or
+    /// gzip that is no release, is withheld as one.
+    #[test]
+    fn a_release_kept_in_a_configmap_does_not_hand_over_its_key_either() {
+        let release = |values: serde_json::Value| {
+            serde_json::json!({
+                "name": "web", "version": 1, "config": values,
+                "info": { "status": "deployed" }, "chart": { "metadata": { "name": "web" } },
+            })
+        };
+        let holding = gzipped(&release(serde_json::json!({ "tls": { "key": KEY_PEM } })));
+        let clean = gzipped(&release(serde_json::json!({ "replicas": 2 })));
+        let dashboard = gzipped(&serde_json::json!({ "panels": [], "note": KEY_PEM }));
+
+        // The Data tab reads the text Helm wrote; the YAML tab's rule has
+        // already taken a `ConfigMap`'s `data` for base64, and holds gzip.
+        for value in [encoded_bytes(&holding).into_bytes(), holding.clone()] {
+            assert_eq!(
+                withhold_reason("", "release", &value),
+                Some(Withheld::HelmRelease)
+            );
+        }
+        assert_eq!(
+            withhold_reason("", "release", encoded_bytes(&clean).as_bytes()),
+            None
+        );
+        assert_eq!(withhold_reason("", "release", &dashboard), None);
+
+        let mut object = serde_json::json!({
+            "kind": "ConfigMap",
+            "data": { "release": encoded_bytes(&holding), "note": "H4sI is how gzip starts" },
+        });
+        assert_eq!(redact_private_keys(&mut object), vec!["release"]);
+        assert_eq!(object["data"]["release"], WITHHELD_MARKER);
+        assert_eq!(object["data"]["note"], "H4sI is how gzip starts");
+    }
+
+    fn encoded_bytes(bytes: &[u8]) -> String {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    }
+
     /// Helm keeps a release whole in a Secret, as base64 over gzip: the key
     /// its page withholds was one `base64 -d | gunzip` away on the Secret's.
     /// Fails if the stored release is handed over while its values, its
@@ -664,15 +717,9 @@ mod tests {
     #[test]
     fn the_secret_a_helm_release_is_stored_in_does_not_hand_over_the_releases_key() {
         use base64::Engine;
-        use std::io::Write as _;
         const TYPE: &str = "helm.sh/release.v1";
         let base64 = base64::engine::general_purpose::STANDARD;
-        let stored = |release: &serde_json::Value| {
-            let mut gzip =
-                flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-            gzip.write_all(release.to_string().as_bytes()).unwrap();
-            base64.encode(gzip.finish().unwrap()).into_bytes()
-        };
+        let stored = |release: &serde_json::Value| base64.encode(gzipped(release)).into_bytes();
         let secret = |key: &str, value: &str| {
             format!(
                 "apiVersion: v1\nkind: Secret\nmetadata:\n  name: web\ndata:\n  {key}: {value}\n"
