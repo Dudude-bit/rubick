@@ -57,6 +57,7 @@ import type {
   TerminationInfo,
 } from "@/generated/types";
 import type { StreamFailureKind } from "@/lib/stream-failure";
+import { SurfaceVisibility } from "@/lib/surface-visibility";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { renderWithProviders, renderWithRouter } from "@/test/render";
@@ -1114,6 +1115,43 @@ describe("what the pane shows on open", () => {
       screen.getByRole("button", { name: "Show every line" })
     );
     expect(screen.queryByTestId("log-grouped-notice")).not.toBeInTheDocument();
+  });
+});
+
+describe("the digits that solo a container", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+  const pressed = () =>
+    within(screen.getByTestId("log-legend"))
+      .getAllByRole("button")
+      .map((chip) => chip.getAttribute("aria-pressed"))
+      .filter((state) => state !== null);
+  const pane = (onScreen: boolean) => (
+    <SurfaceVisibility.Provider value={onScreen}>
+      <LogViewer {...props} containers={[container("app"), container("db")]} />
+    </SurfaceVisibility.Provider>
+  );
+
+  /**
+   * A Logs tab once opened stays mounted behind the others, hidden by a
+   * class. Its guard looked for a `hidden` attribute that such a panel does
+   * not get, so a digit pressed on the Overview soloed a container in a pane
+   * nobody was looking at. Fails if a parked pane answers the shortcut, or
+   * the one on screen stops answering it.
+   */
+  it("are answered by the pane on screen and not by one parked behind a tab", async () => {
+    const { rerender } = await mount(pane(false));
+    await waitFor(() => {
+      expect(screen.getByTestId("log-legend")).toBeInTheDocument();
+    });
+    fireEvent.keyDown(window, { key: "1" });
+    expect(pressed()).toEqual(["true", "true"]);
+
+    rerender(pane(true));
+    fireEvent.keyDown(window, { key: "1" });
+    await waitFor(() => expect(pressed()).toEqual(["true", "false"]));
   });
 });
 
