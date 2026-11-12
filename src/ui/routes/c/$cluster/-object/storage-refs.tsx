@@ -1,5 +1,6 @@
 import { ResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { None } from "@/components/ui/none";
 
 /**
  * The objects a volume and a claim name each other and their class by.
@@ -20,7 +21,9 @@ function splitClaim(claim: string): {
 }
 
 export function ClaimRef({ claim }: { claim?: string | null }) {
-  if (!claim) return <span className="text-fg-fnt">\u2014</span>;
+  // An unbound volume has no claim: the word for none, where an escape
+  // written as JSX text drew its six characters.
+  if (!claim) return <None />;
   const { namespace, name } = splitClaim(claim);
   return (
     <ResourceRef
@@ -34,13 +37,18 @@ export function ClaimRef({ claim }: { claim?: string | null }) {
 
 export function StorageClassRef({
   name,
-  fallback = "\u2014",
+  fallback,
 }: {
   name?: string | null;
   /** A claim with no class gets the cluster default, which is not "none". */
   fallback?: string;
 }) {
-  if (!name) return <span className="text-fg-fnt">{fallback}</span>;
+  if (!name)
+    return fallback ? (
+      <span className="text-fg-fnt">{fallback}</span>
+    ) : (
+      <None />
+    );
   return (
     <ResourceRef
       kind={ResourceType.StorageClass}
