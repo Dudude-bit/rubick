@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { JournalEntry, ObservedSpan, SpanCover } from "@/lib/changes";
+import { nameIsAnotherCluster } from "@/lib/kept-by-name";
 
 /** Entries kept per cluster; the oldest go first. */
 export const MAX_JOURNAL_ENTRIES = 5000;
@@ -172,6 +173,10 @@ export const useChangeJournalStore = create<ChangeJournalState>()(
                 identities: { ...state.identities, [context]: identity },
               }
         );
+        // This store is where a name is seen to have changed hands, so it
+        // is the one to tell everything else persisted under the name.
+        if (known !== undefined && known !== identity)
+          nameIsAnotherCluster(context);
       },
       record: (entries) => {
         if (entries.length === 0) return;

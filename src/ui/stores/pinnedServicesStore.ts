@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { persistedByName } from "@/lib/kept-by-name";
 import {
   MAX_PINNED_PER_CONTEXT,
   pinKey,
@@ -39,4 +40,12 @@ export const usePinnedServicesStore = create<PinnedServicesState>()(
     }),
     { name: "pinned-services" }
   )
+);
+
+// A pin is a Service by namespace and name: under another cluster it is that
+// cluster's namesake, or a row saying the pinned Service is gone.
+persistedByName((context) =>
+  usePinnedServicesStore.setState((state) => ({
+    pins: state.pins.filter((pin) => pin.context !== context),
+  }))
 );

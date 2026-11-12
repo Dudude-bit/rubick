@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { persistedByName } from "@/lib/kept-by-name";
 import {
   isOpen,
   outOfTimeVerdict,
@@ -132,6 +133,14 @@ export const useTellMeWhenStore = create<TellMeWhenState>()(
       },
     }
   )
+);
+
+// A watch is an object by namespace and name: on another cluster it would
+// answer about that cluster's namesake, and say so as a finished rollout.
+persistedByName((context) =>
+  useTellMeWhenStore.setState((state) => ({
+    watches: state.watches.filter((watch) => watch.context !== context),
+  }))
 );
 
 const EMPTY: Watch[] = [];
