@@ -70,7 +70,9 @@ const failingStatus = {
     syncResult: {
       resources: [
         {
+          group: "apps",
           kind: "Deployment",
+          namespace: "nowhere",
           name: "shop-api",
           status: "SyncFailed",
           message: 'namespaces "nowhere" not found',
@@ -189,6 +191,151 @@ describe("which resources differ, and why in Argo's words", () => {
     expect(changed).toHaveLength(1);
     expect(changed[0].outcome).toBe("SyncFailed");
     expect(changed[0].message).toBe('namespaces "nowhere" not found');
+  });
+
+  const REFUSAL =
+    'networkpolicies.networking.k8s.io "default-deny" is forbidden';
+  const policy = (namespace: string, status: string) => ({
+    group: "networking.k8s.io",
+    kind: "NetworkPolicy",
+    namespace,
+    name: "default-deny",
+    status,
+  });
+  const twoNamespaces = (results: unknown[]) =>
+    readApplication(
+      application(
+        "tenants",
+        { syncPolicy: { automated: {} } },
+        {
+          sync: { status: "OutOfSync" },
+          health: { status: "Healthy" },
+          operationState: {
+            phase: "Running",
+            syncResult: { resources: results },
+          },
+          resources: [
+            policy("team-a", "Synced"),
+            policy("team-b", "OutOfSync"),
+          ],
+        }
+      )
+    );
+  const applied = { ...policy("team-a", "Synced"), message: "configured" };
+  const refused = { ...policy("team-b", "SyncFailed"), message: REFUSAL };
+
+  /**
+   * One Application holds a `default-deny` in every tenant's namespace. By
+   * kind and name the first result answered for both rows: the refused
+   * object lost its refusal, or the applied one was drawn refused. Fails if
+   * the namespace stops being part of which result is about which row.
+   */
+  it.each([
+    ["the applied one first", [applied, refused]],
+    ["the refused one first", [refused, applied]],
+  ])(
+    "gives a refusal to the namesake it was about, with %s",
+    (_order, results) => {
+      const app = twoNamespaces(results);
+      const row = (namespace: string) =>
+        app.resources.find((resource) => resource.namespace === namespace);
+
+      expect(row("team-b")).toMatchObject({
+        outcome: "SyncFailed",
+        message: REFUSAL,
+      });
+      expect(row("team-a")).toMatchObject({ outcome: "Synced", message: null });
+      expect(app.findings.map((finding) => finding.kind)).toEqual([
+        "syncFailing",
+      ]);
+    }
+  );
+
+  /**
+   * Knative's Service and the core one share a kind and a name. Fails if a
+   * result is matched without its group.
+   */
+  it("does not give a refusal to the same kind name in another group", () => {
+    const service = (group: string | undefined, status: string) => ({
+      ...(group === undefined ? {} : { group }),
+      kind: "Service",
+      namespace: "shop",
+      name: "api",
+      status,
+    });
+    const app = readApplication(
+      application(
+        "shop",
+        {},
+        {
+          operationState: {
+            phase: "Failed",
+            syncResult: {
+              resources: [
+                {
+                  ...service("serving.knative.dev", "SyncFailed"),
+                  message: REFUSAL,
+                },
+                // The core group, as the results spell it.
+                service("", "Synced"),
+              ],
+            },
+          },
+          resources: [
+            // And as the rows do: left out.
+            service(undefined, "Synced"),
+            service("serving.knative.dev", "OutOfSync"),
+          ],
+        }
+      )
+    );
+    expect(app.resources.map((resource) => resource.outcome)).toEqual([
+      "Synced",
+      "SyncFailed",
+    ]);
+  });
+
+  /**
+   * A sync stamps the destination namespace on a cluster-scoped object, so
+   * its result has one and its row has none. Fails if a strict namespace
+   * match drops the refusal of a Namespace or a ClusterRole.
+   */
+  it("keeps the refusal of a cluster-scoped object, whose result carries the destination namespace", () => {
+    const app = readApplication(
+      application(
+        "shop",
+        {},
+        {
+          operationState: {
+            phase: "Failed",
+            syncResult: {
+              resources: [
+                {
+                  group: "rbac.authorization.k8s.io",
+                  kind: "ClusterRole",
+                  namespace: "shop",
+                  name: "reader",
+                  status: "SyncFailed",
+                  message: REFUSAL,
+                },
+              ],
+            },
+          },
+          resources: [
+            {
+              group: "rbac.authorization.k8s.io",
+              kind: "ClusterRole",
+              name: "reader",
+              status: "OutOfSync",
+            },
+          ],
+        }
+      )
+    );
+    expect(app.resources[0]).toMatchObject({
+      outcome: "SyncFailed",
+      message: REFUSAL,
+    });
   });
 
   /**

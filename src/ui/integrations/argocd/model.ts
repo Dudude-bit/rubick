@@ -156,6 +156,16 @@ interface RawSource {
 
 const CONDITION_ERRORS = ["Error", "SyncError", "ComparisonError", "Unknown"];
 
+/** One entry of `status.operationState.syncResult.resources`. */
+interface SyncResult {
+  group?: string;
+  kind?: string;
+  namespace?: string;
+  name?: string;
+  status?: string;
+  message?: string;
+}
+
 export function readApplication(object: CustomResourceInfo): ArgoApp {
   const spec = (object.spec ?? {}) as ApplicationSpec;
   const automated = spec.syncPolicy?.automated;
@@ -168,14 +178,7 @@ export function readApplication(object: CustomResourceInfo): ArgoApp {
   const syncResults = (getValueByPath(
     object,
     "status.operationState.syncResult.resources"
-  ) ?? []) as Array<{
-    group?: string;
-    kind?: string;
-    namespace?: string;
-    name?: string;
-    status?: string;
-    message?: string;
-  }>;
+  ) ?? []) as SyncResult[];
 
   const app: ArgoApp = {
     name: object.name,
@@ -227,16 +230,39 @@ export function readApplication(object: CustomResourceInfo): ArgoApp {
   return app;
 }
 
-function readResources(
-  object: CustomResourceInfo,
-  syncResults: Array<{
+/**
+ * The sync result that is about this row, by group, kind, namespace and name:
+ * one Application holds a `default-deny` per namespace, and by kind and name
+ * a refusal landed on the first of them.
+ *
+ * Argo writes a core group as `""` in the results and leaves it out of the
+ * row. A row with no namespace is cluster-scoped, and its result carries the
+ * destination namespace the sync stamped on it, so there the namespace is
+ * not compared.
+ */
+function resultFor(
+  resource: {
     group?: string;
     kind?: string;
     namespace?: string;
     name?: string;
-    status?: string;
-    message?: string;
-  }>
+  },
+  syncResults: SyncResult[]
+): SyncResult | undefined {
+  const named = syncResults.filter(
+    (candidate) =>
+      candidate.kind === resource.kind &&
+      candidate.name === resource.name &&
+      (candidate.group ?? "") === (resource.group ?? "")
+  );
+  return resource.namespace
+    ? named.find((candidate) => candidate.namespace === resource.namespace)
+    : named[0];
+}
+
+function readResources(
+  object: CustomResourceInfo,
+  syncResults: SyncResult[]
 ): ArgoResource[] {
   const reported = (getValueByPath(object, "status.resources") ?? []) as Array<{
     group?: string;
@@ -248,10 +274,7 @@ function readResources(
   }>;
 
   return reported.map((resource) => {
-    const result = syncResults.find(
-      (candidate) =>
-        candidate.kind === resource.kind && candidate.name === resource.name
-    );
+    const result = resultFor(resource, syncResults);
     return {
       group: resource.group ?? null,
       kind: resource.kind ?? "",
