@@ -119,3 +119,49 @@ it("says what the Service publishes could not be read, in the cluster's words", 
   ).toBeVisible();
   expect(screen.queryByText(/publishes no address at all/)).toBeNull();
 });
+
+const nothing: ConnectionsRead = {
+  ...ledger("podsUnread"),
+  data: {
+    ...ledger("podsUnread").data!,
+    published: [
+      {
+        ...ledger("podsUnread").data!.published[0],
+        notReady: 0,
+        stop: null,
+        endpoints: [],
+      },
+    ],
+  },
+} as ConnectionsRead;
+
+/**
+ * An ExternalName Service has no endpoints and is reached all the same: its
+ * tab said "publishes no address at all, so nothing reaches it". Fails if
+ * the tab stops saying what the page's verdict says of an alias.
+ */
+it("says a DNS alias has no endpoints, not that nothing reaches it", async () => {
+  await renderWithRouter(
+    <PublishedEndpoints
+      query={nothing}
+      service={{ type: "ExternalName", selectorless: true }}
+    />
+  );
+  expect(
+    screen.getByText(
+      "An ExternalName Service answers with another DNS name and has no endpoints."
+    )
+  ).toBeVisible();
+  expect(screen.queryByText(/so nothing reaches it/)).toBeNull();
+});
+
+/** Fails if a Service meant to publish pods loses the sentence that it publishes none. */
+it("still says a Service with a selector and no address publishes nothing", async () => {
+  await renderWithRouter(
+    <PublishedEndpoints
+      query={nothing}
+      service={{ type: "ClusterIP", selectorless: false }}
+    />
+  );
+  expect(screen.getByText(/so nothing reaches it/)).toBeVisible();
+});

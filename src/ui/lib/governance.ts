@@ -172,7 +172,13 @@ export function metricReadings(facts: AutoscalerFacts): MetricReading[] {
 
 /** Which of an autoscaler's own conditions is the finding, and how loud. */
 export interface AutoscalerVerdict {
-  says: "cannotReach" | "standingBy" | "noMetrics" | "atFloor" | "atCeiling";
+  says:
+    | "cannotReach"
+    | "standingBy"
+    | "noMetrics"
+    | "atFloor"
+    | "atCeiling"
+    | "atRate";
   tone: Finding["tone"];
   /** The condition that decided it, for its reason and its words. */
   condition: ConditionInfo | undefined;
@@ -207,13 +213,18 @@ export function autoscalerVerdict(
       : { says: "noMetrics", tone: "warn", condition: active };
   }
   if (isTrue(limited)) {
-    // `ScalingLimited` covers the floor, the ceiling and the stabilisation
-    // window with one condition, and they are three different findings.
-    // Reading the status word alone would call all three "limited".
-    if (limited?.reason === "TooFewReplicas")
-      return { says: "atFloor", tone: "neutral", condition: limited };
-    if (limited?.reason === "ScaleDownStabilized") return null;
-    return { says: "atCeiling", tone: "warn", condition: limited };
+    // `ScalingLimited` covers the floor, the ceiling and the scale rate with
+    // one condition, and they are three different findings. Each is named by
+    // its reason: a reason not known here is not taken for the ceiling.
+    switch (limited?.reason) {
+      case "TooFewReplicas":
+        return { says: "atFloor", tone: "neutral", condition: limited };
+      case "TooManyReplicas":
+        return { says: "atCeiling", tone: "warn", condition: limited };
+      case "ScaleUpLimit":
+      case "ScaleDownLimit":
+        return { says: "atRate", tone: "neutral", condition: limited };
+    }
   }
   return null;
 }
@@ -278,6 +289,14 @@ export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
             decided?.message ?? t("readings", "hpaAtCeilingDefault")
           ),
         }),
+      };
+    case "atRate":
+      return {
+        tone,
+        title: t("readings", "hpaAtRate", { name }),
+        detail: decided?.message
+          ? sentence(decided.message)
+          : t("readings", "hpaAtRateDefault"),
       };
   }
 }

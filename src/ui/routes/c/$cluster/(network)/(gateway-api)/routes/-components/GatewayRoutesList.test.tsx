@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const store = vi.hoisted(() => ({
@@ -21,7 +21,30 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     listGateways: vi.fn(async () => []),
     listGatewayClasses: vi.fn(async () => []),
+    listPods: vi.fn(async () => []),
+    listDeploymentsIn: vi.fn(async () => ({ rows: [], unread: [] })),
   },
+}));
+const podRows = vi.hoisted(() => ({
+  list: vi.fn(async (_scope: string[] | null, _signal?: AbortSignal) => ({
+    rows: [],
+    unread: [],
+  })),
+  watched: vi.fn((_: { enabled: boolean; queryKey: unknown }) => ({
+    live: true,
+    refresh: false as const,
+    resyncing: false,
+    watchFailed: false,
+  })),
+}));
+vi.mock("@/lib/pod-rows", () => ({ listPodRows: podRows.list }));
+vi.mock("@/hooks/useLiveQuery", async (original) => {
+  const real = await original<typeof import("@/hooks/useLiveQuery")>();
+  return { ...real, useLiveQuery: vi.fn(real.useLiveQuery) };
+});
+vi.mock("@/hooks/useWatchedList", async (original) => ({
+  ...(await original<typeof import("@/hooks/useWatchedList")>()),
+  useWatchedList: podRows.watched,
 }));
 vi.mock("@/integrations", async (original) => ({
   ...(await original<typeof import("@/integrations")>()),
@@ -52,6 +75,8 @@ vi.mock("../../../../-object/useGatewayRoutes", () => ({
 
 import { renderWithRouter } from "@/test/render";
 import { GatewayRoutesList } from "./GatewayRoutesList";
+import { queryKeys } from "@/lib/query-keys";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 const web = {
   kind: "HTTPRoute",
@@ -200,6 +225,27 @@ describe("the routes page opened from a link to one kind's rows", () => {
   });
 });
 
+describe("the routes page a link narrowed to named routes, with a kind unread", () => {
+  /**
+   * A named route may be of the kind that was refused. Fails if it is said
+   * to be "not in this list now", which reads as fixed or deleted.
+   */
+  it("does not call a named route gone while a kind could not be read", async () => {
+    page.refused = true;
+    page.backingError = null;
+    page.routes = [web];
+    await renderRoutes("?names=shop/web,shop/stream");
+
+    expect(
+      await screen.findByText(
+        "1 of them is not among the rows that could be read."
+      )
+    ).toBeVisible();
+    expect(screen.queryByText(/not in this list now/)).toBeNull();
+    page.refused = false;
+  });
+});
+
 describe("the kind filter on a page a link narrowed to one kind", () => {
   /**
    * `listOf` stands in for `kind` until the reader picks one. Fails if
@@ -224,6 +270,47 @@ describe("the kind filter on a page a link narrowed to one kind", () => {
 
     expect(await screen.findAllByText("stream")).not.toHaveLength(0);
     expect(router.state.location.searchStr).toBe("");
+  });
+});
+
+describe("the routes map", () => {
+  /**
+   * The map counts the pods behind each backend. It read every pod of the
+   * cluster whole, in one answer, every ten seconds: 78 MiB a read on 10 000
+   * pods. Fails if it asks for whole pods again, polls a list its watch
+   * keeps, or reads anything before the map is opened.
+   */
+  it("reads the cluster's pods as rows kept by a watch, and only once opened", async () => {
+    const { commands } = await import("@/lib/commands");
+    const EVERY_POD = queryKeys.podRows(null);
+    page.refused = false;
+    page.backingError = null;
+    page.routes = [web];
+    await renderRoutes();
+    await screen.findAllByText("web");
+
+    expect(podRows.list).not.toHaveBeenCalled();
+    expect(podRows.watched).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Map" }));
+
+    await waitFor(() => expect(podRows.list).toHaveBeenCalledTimes(1));
+    expect(podRows.list.mock.calls[0][0]).toBeNull();
+    expect(podRows.watched).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        queryKey: EVERY_POD,
+      })
+    );
+    const asked = vi
+      .mocked(useLiveQuery)
+      .mock.calls.map(([query]) => query)
+      .filter((query) => String(query.queryKey) === String(EVERY_POD));
+    expect(asked.at(-1)).toMatchObject({ enabled: true, refresh: false });
+    expect(commands.listPods).not.toHaveBeenCalled();
+    expect(commands.listDeploymentsIn).not.toHaveBeenCalled();
   });
 });
 

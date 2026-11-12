@@ -180,6 +180,11 @@ interface UseLogStreamResult {
    */
   failures: ContainerFailure[];
   isPaused: boolean;
+  /**
+   * Clear took the lines away since the streams were last attached afresh:
+   * an empty buffer is then not a container that wrote nothing.
+   */
+  cleared: boolean;
   clearLogs: () => void;
   togglePause: () => void;
   retry: () => void;
@@ -421,8 +426,10 @@ export function useLogStream({
   // oxlint-disable-next-line react-hooks/refs
   wiped.current = onWiped;
 
+  const [cleared, setCleared] = useState(false);
   const clearLogs = useCallback(() => {
     writeBuffer(emptyBuffer);
+    setCleared(true);
     wiped.current?.();
   }, [writeBuffer]);
 
@@ -758,6 +765,7 @@ export function useLogStream({
       setReads(NO_READS);
       if (!resuming) {
         writeBuffer(emptyBuffer);
+        setCleared(false);
         wiped.current?.();
       }
       // The next line to arrive is the first one under whatever this
@@ -1014,6 +1022,7 @@ export function useLogStream({
     isConnecting,
     failures,
     isPaused,
+    cleared,
     clearLogs,
     togglePause,
     retry,

@@ -152,6 +152,29 @@ describe("what the Service report leads with", () => {
   });
 
   /**
+   * An ExternalName Service is a DNS alias and one with no selector has its
+   * endpoints written by hand: the page draws both neutral. Fails if the
+   * file reports either as the amber fault "this Service publishes nothing".
+   */
+  it.each([
+    [
+      "a DNS alias",
+      { ...service, type: "ExternalName", externalName: "db.example.com" },
+      translate("en", "readings", "healthDnsAliasWhy"),
+    ],
+    [
+      "a Service with no selector and nothing written",
+      { ...service, selector: {} },
+      translate("en", "nav", "endpointsByHandNoneWritten"),
+    ],
+  ])("shares %s without colour, in the page's words", (_, shaped, why) => {
+    const last = serviceStats(shaped, published({ ready: 0, slices: 0 }), t).at(
+      -1
+    );
+    expect(last).toMatchObject({ value: "0/0", role: "neutral", note: why });
+  });
+
+  /**
    * hello-web at zero: the page says no pods by intent, and the file must
    * not lead with the amber "publishes nothing". Fails if the idle stop is
    * read as an empty Service.

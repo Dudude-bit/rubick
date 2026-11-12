@@ -36,7 +36,7 @@ import type {
   GatewayClassInfo,
   GatewayInfo,
   ParentRefInfo,
-  PodInfo,
+  PodRow,
   RouteInfo,
 } from "@/generated/types";
 import { doorDoubtWords, type DoorAsk } from "@/lib/policy-door";
@@ -47,32 +47,21 @@ import {
   routeBackingOf,
 } from "@/lib/route-trace";
 
-/** What the last column is built from — handed over only once both lists
+/**
+ * What the last column reads of a pod, all of which a row of the Pods list
+ * carries: the whole pod is several kilobytes, and a cluster of them in one
+ * answer is the message the IPC budget exists to stop. `workload` is the
+ * controller with the ReplicaSet hop already collapsed into its Deployment.
+ */
+export type MapPod = Pick<PodRow, "namespace" | "labels" | "workload"> & {
+  status: Pick<PodRow["status"], "phase" | "ready">;
+};
+
+/** What the last column is built from — handed over only once the pods
  *  have answered, because a workload column guessed from half the pods
  *  would draw missing workloads that are merely unread. */
 export interface WorkloadSources {
-  pods: PodInfo[];
-  deployments: Array<{ name: string; namespace: string }>;
-}
-
-/** The controller that owns a pod, with the ReplicaSet hop collapsed into
- *  its Deployment — but only when that Deployment actually exists, never
- *  by trusting the name's shape alone. */
-function ownerOf(
-  pod: PodInfo,
-  deployments: Map<string, Set<string>>
-): { kind: string; name: string } | null {
-  const owner =
-    pod.ownerReferences.find((ref) => ref.controller) ?? pod.ownerReferences[0];
-  if (!owner) return null;
-  if (owner.kind === "ReplicaSet") {
-    const cut = owner.name.lastIndexOf("-");
-    const candidate = cut > 0 ? owner.name.slice(0, cut) : null;
-    if (candidate && deployments.get(pod.namespace)?.has(candidate)) {
-      return { kind: "Deployment", name: candidate };
-    }
-  }
-  return { kind: owner.kind, name: owner.name };
+  pods: readonly MapPod[];
 }
 
 function gatewayTone(gateway: GatewayInfo): { tone: MapTone; sub?: string } {
@@ -322,17 +311,11 @@ export function gatewayTopology(
   // five replicas drew as "1 of 1 ready".
   const workloadNodes = new Map<string, MapNode>();
   if (workloads && backing) {
-    const podsIn = new Map<string, PodInfo[]>();
+    const podsIn = new Map<string, MapPod[]>();
     for (const pod of workloads.pods) {
       const at = podsIn.get(pod.namespace) ?? [];
       at.push(pod);
       podsIn.set(pod.namespace, at);
-    }
-    const deploymentNames = new Map<string, Set<string>>();
-    for (const deployment of workloads.deployments) {
-      const at = deploymentNames.get(deployment.namespace) ?? new Set();
-      at.add(deployment.name);
-      deploymentNames.set(deployment.namespace, at);
     }
 
     for (const node of backendNodes.values()) {
@@ -366,7 +349,7 @@ export function gatewayTopology(
           labelSelectorMatches({ matchLabels: selector }, pod.labels) !== true
         )
           continue;
-        const owner = ownerOf(pod, deploymentNames);
+        const owner = pod.workload;
         // Pods with no controller group into one quiet node instead of
         // vanishing.
         const key = owner

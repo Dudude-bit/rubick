@@ -115,18 +115,28 @@ const TONE_CLASS = {
   mute: "text-fg-fnt",
 } as const;
 
+/**
+ * A certificate a listener names in its own namespace, read there. A ref
+ * with no namespace means the namespace of the object the listener was
+ * written in: a ListenerSet's for its listeners, not the Gateway's.
+ */
+function ListenerCertificate({
+  home,
+  name,
+  hosts,
+}: {
+  home: string;
+  name: string;
+  hosts: string[];
+}) {
+  const read = useTlsCertificates(home, [name])?.get(name);
+  return <CertificateLine read={read} hosts={hosts} />;
+}
+
 function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
   const t = useT();
-  // Certificates a listener names in the Gateway's own namespace are read;
-  // a cross-namespace ref is named and left to the listener's ResolvedRefs
-  // condition — whether a ReferenceGrant allows it is the controller's
-  // verdict, not this page's guess.
-  const ownSecrets = gateway.listeners.flatMap((listener) =>
-    listener.certificateRefs
-      .filter((ref) => ref.namespace === null)
-      .map((ref) => ref.name)
-  );
-  const certificates = useTlsCertificates(gateway.namespace, ownSecrets);
+  const homeOf = (listener: ListenerInfo) =>
+    listener.fromListenerSet?.namespace ?? gateway.namespace;
 
   const broken = (listener: ListenerInfo) =>
     failingCondition(listener.conditions);
@@ -211,11 +221,16 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                   ) : (
                     <span className="text-fg-mut">
                       {listener.tlsMode}
+                      {/* A cross-namespace ref is named and left to the
+                          listener's ResolvedRefs: whether a ReferenceGrant
+                          allows it is the controller's verdict. */}
                       {listener.certificateRefs.map((ref) =>
-                        ref.namespace === null ? (
-                          <CertificateLine
+                        (ref.namespace ?? homeOf(listener)) ===
+                        homeOf(listener) ? (
+                          <ListenerCertificate
                             key={ref.name}
-                            read={certificates?.get(ref.name)}
+                            home={homeOf(listener)}
+                            name={ref.name}
                             hosts={listener.hostname ? [listener.hostname] : []}
                           />
                         ) : (

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ResourceName } from "@/components/object/ResourceName";
-import { usePortForwardStore } from "@/stores/portForwardStore";
+import { forwardsTo, usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
@@ -143,11 +143,7 @@ function ForwardForm({
   };
 
   const active = sessions.filter((session) =>
-    target.kind === "Pod"
-      ? session.pod === target.name && session.namespace === target.namespace
-      : session.via.kind === "service" &&
-        session.via.name === target.name &&
-        session.namespace === target.namespace
+    forwardsTo(session, currentContext, target)
   );
 
   const submit = async () => {

@@ -3309,6 +3309,10 @@ export const en = {
       one: "{n} of them is not in this list now.",
       other: "{n} of them are not in this list now.",
     },
+    namedRowsUnread: {
+      one: "{n} of them is not among the rows that could be read.",
+      other: "{n} of them are not among the rows that could be read.",
+    },
     namedRowsShowAll: "Show all",
     earlierObject: "earlier object",
     earlierObjectHint:
@@ -4099,6 +4103,9 @@ export const en = {
       "The metrics say fewer replicas would do; minReplicas is what is keeping them running.",
     hpaAtCeiling: "{name} wants more replicas than {max}, which is its ceiling",
     hpaAtCeilingDefault: "The desired replica count is above maxReplicas.",
+    hpaAtRate: "{name} is scaling this as fast as its scale rate allows",
+    hpaAtRateDefault:
+      "The replica count it wants is further away than one step of its scale rate.",
     hpaRunning: "{n} running",
     hpaWanted: "{n} wanted",
     hpaWantedNotComputing:
@@ -6995,6 +7002,12 @@ export const en = {
     previousRunWroteNothing: "The previous run wrote nothing.",
     streamAttachedNothingWritten:
       "The stream is attached; nothing has been written since these containers started.",
+    intakeKeptNone: "No line kept yet.",
+    streamAttachedIntake:
+      "The stream is attached; intake discards the lines that do not match as they arrive.",
+    bufferCleared: "The buffer was cleared.",
+    streamAttachedNothingSince:
+      "The stream is attached; nothing has been written since.",
     notStreaming: "Not streaming.",
     useStreamControl: "Use the stream control in the toolbar to attach.",
     noPodsForJob: "No pods for this job",

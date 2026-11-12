@@ -623,6 +623,34 @@ function fireBatch(
 
 const START = Date.parse("2026-08-06T12:00:00.000Z");
 
+describe("LogViewer after Clear", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Fails if the emptied pane goes back to "nothing has been written since
+   * these containers started" over lines that were on screen a moment ago.
+   */
+  it("says the buffer was cleared, not that the containers never wrote", async () => {
+    const user = userEvent.setup();
+    await renderStreaming();
+    fireBatch([{ at: START, level: null, message: "listening on :8080" }]);
+    await waitFor(() => expect(screen.queryByText(/No output yet/)).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "More log actions" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Clear what is buffered" })
+    );
+
+    expect(
+      await screen.findByText("The buffer was cleared.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/since these containers started/)).toBeNull();
+  });
+});
+
 describe("a pod's own pane when the pod is made again under its name", () => {
   beforeEach(() => {
     for (const k of Object.keys(listeners)) delete listeners[k];
@@ -1643,6 +1671,43 @@ describe("a workload pane", () => {
         .getAllByRole("button")
         .some((button) => /^a1/.test(button.textContent ?? ""))
     ).toBe(true);
+  });
+
+  /**
+   * A DaemonSet's lanes are its nodes, and two EKS nodes end in the same
+   * octet. Fails if their chips read alike under Short prefix: hiding one
+   * then takes away lines with nothing saying which node's.
+   */
+  it("gives no two lanes the same short label", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => `stream-${config.podName}`
+    );
+    const on = (name: string, node: string) => ({ ...pod(name), node });
+    renderWithProviders(
+      <LogViewer
+        namespace="default"
+        pods={[
+          on("agent-a", "ip-10-0-12-34.eu-west-1.compute.internal"),
+          on("agent-b", "ip-10-0-13-34.eu-west-1.compute.internal"),
+          on("agent-c", "ip-10-0-12-77.eu-west-1.compute.internal"),
+        ]}
+        laneRule="node"
+        workload={{ owner: "agent", ownerKind: "DaemonSet" }}
+      />
+    );
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(3)
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Short prefix" }));
+
+    const legend = screen.getByTestId("log-legend");
+    expect(
+      within(legend).getByText("ip-10-0-12-34.eu-west-1.compute.internal")
+    ).toBeInTheDocument();
+    expect(
+      within(legend).getByText("ip-10-0-13-34.eu-west-1.compute.internal")
+    ).toBeInTheDocument();
+    expect(within(legend).getByText("77")).toBeInTheDocument();
   });
 
   /**

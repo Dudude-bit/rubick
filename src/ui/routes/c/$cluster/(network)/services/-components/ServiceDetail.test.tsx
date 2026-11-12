@@ -393,3 +393,35 @@ it("greys Port forward on a Service with nothing ready behind it, as its peek do
     ).not.toHaveAttribute("aria-disabled")
   );
 });
+
+/**
+ * The page's verdict calls an ExternalName Service a DNS alias, and its
+ * Endpoints tab said nothing reaches it. Fails if the tab is not told what
+ * the Service is.
+ */
+it("says on its Endpoints tab that a DNS alias has no endpoints, as its verdict does", async () => {
+  vi.mocked(invoke).mockImplementation(async (command: string) => {
+    if (command === "get_service")
+      return {
+        ...SERVICE,
+        type: "ExternalName",
+        externalName: "db.example.com",
+        selector: {},
+      };
+    if (command === "get_resource_connections") {
+      const read = neighbourhood(0);
+      return { ...read, published: [{ ...read.published[0], notReady: 0 }] };
+    }
+    return undefined;
+  });
+  await renderWithRouter(<ServiceDetail />, {
+    at: "/c/k3d-rubick/services/shop/big-pull?tab=endpoints",
+    route: "/c/$cluster/services/$namespace/$name",
+  });
+  expect(
+    await screen.findByText(
+      "An ExternalName Service answers with another DNS name and has no endpoints."
+    )
+  ).toBeVisible();
+  expect(screen.queryByText(/so nothing reaches it/)).toBeNull();
+});

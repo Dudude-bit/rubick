@@ -376,6 +376,28 @@ describe("PortForwardsTab", () => {
       expect(screen.queryByRole("link", { name: /billing-4c1/ })).toBeNull();
     });
 
+    /**
+     * A forward that ended on another cluster is listed with this one's.
+     * Fails if its row stops naming the cluster: it then reads as this
+     * cluster's pod of that name.
+     */
+    it("names its cluster on the row left when it ends", async () => {
+      usePortForwardStore.setState({
+        sessions: [],
+        failed: [
+          { session: ELSEWHERE, note: null },
+          { session: { ...SESSION, id: "sess-3" }, note: null },
+        ],
+      });
+      await mount();
+
+      const rows = screen.getAllByText(/default · :8080 → :80/);
+      expect(rows.map((row) => row.textContent)).toEqual([
+        "staging · default · :8080 → :80",
+        "default · :8080 → :80",
+      ]);
+    });
+
     it("shows no Running group at all when every forward is elsewhere", async () => {
       usePortForwardStore.setState({ sessions: [ELSEWHERE] });
       await mount();

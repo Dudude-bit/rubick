@@ -32,7 +32,12 @@ const pod = (name: string, namespace: string, display: string): PodRow => ({
   name,
   namespace,
   uid: `${namespace}/${name}`,
-  status: { phase: "Running", display, exitUnreported: false },
+  status: {
+    phase: "Running",
+    display,
+    ready: display === "Running",
+    exitUnreported: false,
+  },
   nodeName: "n1",
   podIp: null,
   containers: [container(display === "Running")],

@@ -3,6 +3,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { useActivityPanelStore } from "@/stores/activityPanelStore";
 import { usePortForwardStore } from "@/stores/portForwardStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 import { listenEvent } from "@/lib/events";
 import { forwardNoteWords } from "@/lib/port-forward";
@@ -65,7 +66,12 @@ export function usePortForwardEvents() {
       }
       lastToastRef.current[payload.id] = { status: payload.status, time: now };
 
-      const base = `localhost:${payload.local_port} → ${payload.pod}:${payload.remote_port}`;
+      // The event names no cluster, and a forward outlives the move to
+      // another one, where a pod of the same name may be on screen.
+      const of = store.sessions.find((each) => each.id === payload.id)?.context;
+      const elsewhere =
+        of !== undefined && of !== useClusterStore.getState().currentContext;
+      const base = `${elsewhere ? `${of} · ` : ""}localhost:${payload.local_port} → ${payload.pod}:${payload.remote_port}`;
       const note = forwardNoteWords(payload.note, t);
       const message = note ? `${base} · ${note}` : base;
 

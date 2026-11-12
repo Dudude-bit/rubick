@@ -81,7 +81,8 @@
                 ]
               },
               "display": "Pending",
-              "phase": "Pending"
+              "phase": "Pending",
+              "ready": false
             }
           },
           "is": "unplaced"
@@ -195,6 +196,7 @@
               "display": "Running",
               "loopingUntil": "2026-10-15T09:45:05Z",
               "phase": "Running",
+              "ready": true,
               "restartingUntil": "2026-10-15T10:40:00Z"
             }
           },
@@ -309,6 +311,7 @@
               "display": "Running",
               "loopingUntil": "2026-10-15T09:45:05Z",
               "phase": "Running",
+              "ready": true,
               "restartingUntil": "2026-10-15T10:40:00Z"
             }
           },
@@ -444,6 +447,7 @@
               "display": "Running",
               "loopingUntil": "2026-10-15T10:04:30Z",
               "phase": "Running",
+              "ready": false,
               "restartingUntil": "2026-10-15T10:59:00Z"
             }
           },
@@ -558,6 +562,7 @@
               "display": "Running",
               "loopingUntil": "2026-10-15T10:03:10Z",
               "phase": "Running",
+              "ready": true,
               "restartingUntil": "2026-10-15T10:58:00Z"
             }
           },
@@ -655,7 +660,8 @@
                 "since": "2026-10-15T09:59:30Z"
               },
               "display": "Running",
-              "phase": "Running"
+              "phase": "Running",
+              "ready": false
             }
           },
           "is": null
@@ -790,6 +796,7 @@
               "display": "Running",
               "loopingUntil": "2026-10-08T08:05:10Z",
               "phase": "Running",
+              "ready": false,
               "restartingUntil": "2026-10-08T09:00:05Z"
             }
           },
@@ -871,7 +878,8 @@
                 ]
               },
               "display": "Pending",
-              "phase": "Pending"
+              "phase": "Pending",
+              "ready": false
             }
           },
           "is": null
@@ -977,7 +985,8 @@
                 "uid": "uid-web-a"
               },
               "display": "ContainerCreating",
-              "phase": "Pending"
+              "phase": "Pending",
+              "ready": false
             }
           },
           "is": "creating",
@@ -1074,7 +1083,8 @@
                 "uid": "uid-web-b"
               },
               "display": "ContainerCreating",
-              "phase": "Pending"
+              "phase": "Pending",
+              "ready": false
             }
           },
           "is": null
@@ -1177,7 +1187,8 @@
               },
               "display": "Running",
               "exitUnreported": true,
-              "phase": "Running"
+              "phase": "Running",
+              "ready": true
             }
           },
           "is": "exits"
@@ -1293,7 +1304,8 @@
               },
               "display": "Error",
               "gone": "replaced",
-              "phase": "Failed"
+              "phase": "Failed",
+              "ready": false
             }
           },
           "is": "exits"
@@ -1407,7 +1419,8 @@
                 "secrets": []
               },
               "display": "ImagePullBackOff",
-              "phase": "Pending"
+              "phase": "Pending",
+              "ready": false
             }
           },
           "is": "blocked"
@@ -1534,6 +1547,7 @@
               "display": "CrashLoopBackOff",
               "loopingUntil": "2026-10-15T10:12:00Z",
               "phase": "Running",
+              "ready": false,
               "restartingUntil": "2026-10-15T10:57:00Z"
             }
           },
@@ -1648,6 +1662,7 @@
               "display": "Running",
               "loopingUntil": "2026-10-15T08:35:05Z",
               "phase": "Running",
+              "ready": true,
               "restartingUntil": "2026-10-15T09:30:00Z"
             }
           },

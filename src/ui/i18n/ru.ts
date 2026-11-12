@@ -3555,6 +3555,12 @@ export const ru: Catalogue = {
       many: "{n} из них сейчас нет в этом списке.",
       other: "{n} из них сейчас нет в этом списке.",
     },
+    namedRowsUnread: {
+      one: "{n} из них нет среди строк, которые удалось прочитать.",
+      few: "{n} из них нет среди строк, которые удалось прочитать.",
+      many: "{n} из них нет среди строк, которые удалось прочитать.",
+      other: "{n} из них нет среди строк, которые удалось прочитать.",
+    },
     namedRowsShowAll: "Показать все",
     earlierObject: "прежний объект",
     earlierObjectHint:
@@ -4602,6 +4608,10 @@ export const ru: Catalogue = {
       "Метрики говорят, что хватило бы меньшего числа реплик; их держит minReplicas.",
     hpaAtCeiling: "{name} хочет больше реплик, чем {max}, а это его потолок",
     hpaAtCeilingDefault: "Желаемое число реплик выше maxReplicas.",
+    hpaAtRate:
+      "{name} меняет число реплик так быстро, как позволяет его скорость масштабирования",
+    hpaAtRateDefault:
+      "Нужное число реплик дальше, чем один шаг его скорости масштабирования.",
     hpaRunning: "работает {n}",
     hpaWanted: "хочет {n}",
     hpaWantedNotComputing:
@@ -7701,6 +7711,12 @@ export const ru: Catalogue = {
     previousRunWroteNothing: "Предыдущий запуск ничего не записал.",
     streamAttachedNothingWritten:
       "Поток подключён; с момента старта этих контейнеров ничего не записано.",
+    intakeKeptNone: "Ни одной строки пока не оставлено.",
+    streamAttachedIntake:
+      "Поток подключён; фильтр приёма отбрасывает неподходящие строки по мере поступления.",
+    bufferCleared: "Буфер очищен.",
+    streamAttachedNothingSince:
+      "Поток подключён; с тех пор ничего не записано.",
     notStreaming: "Чтение не идёт.",
     useStreamControl: "Подключитесь кнопкой потока на панели инструментов.",
     noPodsForJob: "У этой задачи нет подов",

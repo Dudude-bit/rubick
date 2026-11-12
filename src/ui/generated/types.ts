@@ -2315,6 +2315,7 @@ export interface RowContainer {
 export interface PodRowStatus {
   phase: string;
   display: string;
+  ready: boolean;
   kubectlStatus?: string;
   loopingUntil?: string;
   exitUnreported: boolean;

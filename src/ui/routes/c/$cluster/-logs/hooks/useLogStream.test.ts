@@ -649,6 +649,36 @@ describe("useLogStream surfaces a stream that dies after it started", () => {
   });
 });
 
+describe("useLogStream after Clear", () => {
+  beforeEach(reset);
+
+  /**
+   * The empty pane words a cleared buffer apart from a container that wrote
+   * nothing. Fails if Clear leaves no mark, or if the mark outlives the
+   * streams being attached afresh, which reads the tail back.
+   */
+  it("says the buffer was cleared until the streams are attached afresh", async () => {
+    const { result } = renderHook(() => useLogStream(baseProps));
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+    expect(result.current.cleared).toBe(false);
+
+    act(() => {
+      result.current.clearLogs();
+    });
+    expect(result.current.cleared).toBe(true);
+
+    act(() => {
+      result.current.retry();
+    });
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(2);
+    });
+    expect(result.current.cleared).toBe(false);
+  });
+});
+
 describe("useLogStream stable line ids", () => {
   beforeEach(reset);
 

@@ -413,6 +413,12 @@ export function ResourceList<
       named ? delivered.filter((row) => named.has(rowName(row))) : delivered,
     [named, delivered]
   );
+  // Counted before the Delivery filter: a named row it hides is in the list.
+  const namedFound = useMemo(
+    () =>
+      named ? resources.filter((row) => named.has(rowName(row))).length : 0,
+    [named, resources]
+  );
 
   const deleteMutation = useMutation({
     mutationFn: async (item: Row) => {
@@ -611,7 +617,11 @@ export function ResourceList<
       )}
       {!embedded && <ListedHere kind={listKind} />}
       {!embedded && named && !loading && (
-        <NamedRowsBanner named={named} found={rows.length} />
+        <NamedRowsBanner
+          named={named}
+          found={namedFound}
+          whole={failed === null && !partial}
+        />
       )}
       {headerContent}
       {stale && (

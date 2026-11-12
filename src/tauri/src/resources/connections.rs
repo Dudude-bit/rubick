@@ -186,9 +186,10 @@ pub enum ObjectFacts {
     ///
     /// The whole status travels, conditions included, because the finding
     /// worth the read is a condition rather than a number:
-    /// `ScalingLimited=True` says the autoscaler wants more replicas than
-    /// `maxReplicas` allows, and both replica counts read as the healthy
-    /// steady state while it does.
+    /// `ScalingLimited=True` with `TooManyReplicas` says the autoscaler wants
+    /// more replicas than `maxReplicas` allows, and both replica counts read
+    /// as the healthy steady state while it does. Under another reason the
+    /// same condition is the floor or the scale rate.
     Autoscaler {
         /// `spec.minReplicas` defaults to 1 when it is left out.
         #[serde(rename = "minReplicas")]

@@ -23,7 +23,12 @@ const api: PodRow = {
   name: "api-0",
   namespace: "prod",
   uid: "u-1",
-  status: { phase: "Running", display: "Running", exitUnreported: false },
+  status: {
+    phase: "Running",
+    display: "Running",
+    ready: true,
+    exitUnreported: false,
+  },
   nodeName: "n1",
   podIp: null,
   containers: [
