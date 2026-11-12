@@ -305,14 +305,19 @@ pub(super) fn is_private_key_text(text: &str) -> bool {
 ///
 /// Read off the raw text rather than through a decoder: an encrypted or
 /// unfamiliar key type is one no parser here handles and exactly the one
-/// worth withholding.
+/// worth withholding. The label is looked for anywhere, not at the start of
+/// a line: a service-account file keeps its key in one JSON string, with the
+/// line breaks written as `\n`.
 fn has_pem_private_key_label(value: &[u8]) -> bool {
     let text = String::from_utf8_lossy(value);
-    text.lines().any(|line| {
-        line.trim()
-            .strip_prefix("-----BEGIN ")
-            .and_then(|rest| rest.strip_suffix("-----"))
-            .is_some_and(|label| label.to_ascii_uppercase().contains("PRIVATE KEY"))
+    text.match_indices("-----BEGIN ").any(|(at, begin)| {
+        let rest = &text[at + begin.len()..];
+        rest.find("-----").is_some_and(|end| {
+            let label = &rest[..end];
+            label.len() <= 40
+                && !label.contains('\n')
+                && label.to_ascii_uppercase().contains("PRIVATE KEY")
+        })
     })
 }
 
@@ -728,6 +733,27 @@ mod tests {
     /// key withheld under `data` was on screen in full three lines lower.
     /// Fails if the record is not judged, stops being JSON, or the one key
     /// is named twice.
+    /// A cloud service-account file is JSON with the key in one string, its
+    /// line breaks written as `\n`, so no line of it starts with the label.
+    /// Fails if such a file is handed over because the label was mid-line.
+    #[test]
+    fn a_key_kept_inside_a_json_file_is_withheld_like_any_other() {
+        let file = concat!(
+            r#"{"type":"service_account","project_id":"demo","#,
+            r#""private_key":"-----BEGIN PRIVATE KEY-----\nTUFERS1VUC1LRVk=\n-----END PRIVATE KEY-----\n","#,
+            r#""client_email":"demo@demo.iam.example"}"#
+        );
+        assert_eq!(
+            withhold_reason("Opaque", "key.json", file.as_bytes()),
+            Some(Withheld::PrivateKey)
+        );
+        let mentioned = "see RFC 7468 for the -----BEGIN CERTIFICATE----- label";
+        assert_eq!(
+            withhold_reason("Opaque", "notes", mentioned.as_bytes()),
+            None
+        );
+    }
+
     #[test]
     fn the_record_kubectl_keeps_of_a_configmap_does_not_carry_the_key() {
         let manifest = serde_json::json!({
