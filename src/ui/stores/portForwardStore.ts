@@ -73,6 +73,11 @@ export interface PortForwardSession {
   createdAt: string;
   /** What the forward follows when its pod goes. */
   via: ForwardVia;
+  /**
+   * The pod and port it was started on, once the backend has moved it to a
+   * replacement: what a saved forward goes on knowing it by.
+   */
+  asked?: { pod: string; remotePort: number };
 }
 
 /** A forward that ended on its own, kept on screen with the reason until dismissed. */
@@ -200,14 +205,35 @@ function toPayload(
   };
 }
 
-function sessionKey(item: {
+/**
+ * What a saved forward and its running session have in common. A session
+ * that followed its pod to a replacement is keyed by where it was started:
+ * by the pod it is on now, the saved forward that started it read "not
+ * running" beside it, and its Start answered "port in use".
+ */
+export function forwardKey(item: {
   context: string;
   pod: string;
   namespace: string;
   localPort: number;
   remotePort: number;
+  asked?: { pod: string; remotePort: number };
 }) {
-  return `${item.context}:${item.pod}:${item.namespace}:${item.localPort}:${item.remotePort}`;
+  const { pod, remotePort } = item.asked ?? item;
+  return `${item.context}:${pod}:${item.namespace}:${item.localPort}:${remotePort}`;
+}
+
+/** A session as it is now, still known by where the one before it was started. */
+function followed(
+  before: PortForwardSession | undefined,
+  now: PortForwardSession
+): PortForwardSession {
+  const stayed =
+    !before || (before.pod === now.pod && before.remotePort === now.remotePort);
+  const asked =
+    before?.asked ??
+    (stayed ? undefined : { pod: before.pod, remotePort: before.remotePort });
+  return asked ? { ...now, asked } : now;
 }
 
 /**
@@ -223,7 +249,7 @@ async function startConfigsWithFilter(
   filter: (config: PortForwardConfig) => boolean,
   startConfig: (configId: string) => Promise<PortForwardSession>
 ) {
-  const activeKey = new Set(sessions.map(sessionKey));
+  const activeKey = new Set(sessions.map(forwardKey));
 
   let started = 0;
   let skipped = 0;
@@ -233,7 +259,7 @@ async function startConfigsWithFilter(
     (each) => each.context === context && filter(each)
   )) {
     if (useClusterStore.getState().currentContext !== context) break;
-    const key = sessionKey(config);
+    const key = forwardKey(config);
     if (activeKey.has(key)) {
       skipped += 1;
       continue;
@@ -297,8 +323,15 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
   },
 
   refreshSessions: async () => {
-    const sessions = await commands.listPortForwards();
-    set({ sessions: sessions.map(mapSession) });
+    const listed = await commands.listPortForwards();
+    set((state) => {
+      const held = new Map(state.sessions.map((each) => [each.id, each]));
+      return {
+        sessions: listed
+          .map(mapSession)
+          .map((session) => followed(held.get(session.id), session)),
+      };
+    });
   },
 
   startPod: async (pod, namespace, request) =>
@@ -362,7 +395,9 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
   moved: (id, pod, remotePort) => {
     set((state) => ({
       sessions: state.sessions.map((session) =>
-        session.id === id ? { ...session, pod, remotePort } : session
+        session.id === id
+          ? followed(session, { ...session, pod, remotePort })
+          : session
       ),
     }));
   },

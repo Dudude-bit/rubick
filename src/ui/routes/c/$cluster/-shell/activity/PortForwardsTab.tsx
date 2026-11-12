@@ -27,6 +27,7 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
+  forwardKey,
   usePortForwardStore,
   type FailedForward,
   type PortForwardConfig,
@@ -45,16 +46,6 @@ import {
 import { useAsk } from "../../-object/useAsk";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
-
-/** Same shape the store keys sessions by; do not reorder the parts. */
-const forwardKey = (item: {
-  context: string;
-  pod: string;
-  namespace: string;
-  localPort: number;
-  remotePort: number;
-}) =>
-  `${item.context}:${item.pod}:${item.namespace}:${item.localPort}:${item.remotePort}`;
 
 /** `undefined` is closed, `null` is the new-config form. */
 type Editing = PortForwardConfig | null | undefined;

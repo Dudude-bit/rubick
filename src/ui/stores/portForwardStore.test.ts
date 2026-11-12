@@ -52,6 +52,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { useClusterStore } from "./clusterStore";
 import {
+  forwardKey,
   usePortForwardStore,
   type PortForwardConfig,
 } from "./portForwardStore";
@@ -205,6 +206,83 @@ describe("a forward the backend moved or ended", () => {
     ]);
     usePortForwardStore.getState().dismiss("pf-1");
     expect(usePortForwardStore.getState().failed).toEqual([]);
+  });
+});
+
+/**
+ * A forward to a Deployment's pod follows it to the replacement, and the
+ * list then names the new pod. The saved forward that started it was matched
+ * to its session by the pod, so it read "not running" beside its own tunnel,
+ * its Start answered "port in use", and every landing tried it again.
+ */
+describe("a saved forward whose tunnel followed its pod to a replacement", () => {
+  const config: PortForwardConfig = {
+    id: "cfg-web",
+    context: "prod",
+    name: "web",
+    pod: "web-old",
+    namespace: "default",
+    localPort: 18080,
+    remotePort: 80,
+    autoReconnect: true,
+    autoStart: true,
+    createdAt: "now",
+  };
+  const started = {
+    id: "pf-1",
+    context: "prod",
+    pod: "web-old",
+    namespace: "default",
+    localPort: 18080,
+    remotePort: 80,
+    autoReconnect: true,
+    createdAt: "now",
+    via: { kind: "owner" as const, ownerKind: "Deployment", name: "web" },
+  };
+  const running = () => usePortForwardStore.getState().sessions[0];
+
+  beforeEach(() => {
+    useClusterStore.setState({ currentContext: "prod" });
+    usePortForwardStore.setState({ configs: [config], sessions: [started] });
+  });
+
+  /** Fails if a session the backend moved stops being its saved forward's, or is started a second time. */
+  it("is still that saved forward's, and is not started again", async () => {
+    usePortForwardStore.getState().moved("pf-1", "web-new", 8080);
+
+    expect(running()).toMatchObject({ pod: "web-new", remotePort: 8080 });
+    expect(forwardKey(running())).toBe(forwardKey(config));
+    const result = await usePortForwardStore
+      .getState()
+      .startAutoForContext("prod");
+    expect(result).toEqual({ started: 0, skipped: 1, failed: 0 });
+    expect(portForwardPod).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A lagging event bridge can drop the `moved`, and the list read after it
+   * names the new pod. Fails if the list replacing the sessions forgets
+   * where each was started, before or after the move was heard.
+   */
+  it("is still that saved forward's when the list is what says it moved", async () => {
+    listPortForwards.mockResolvedValue([
+      { ...started, pod: "web-new", remotePort: 8080 },
+    ] as never);
+
+    await usePortForwardStore.getState().refreshSessions();
+    expect(forwardKey(running())).toBe(forwardKey(config));
+
+    await usePortForwardStore.getState().refreshSessions();
+    expect(running().pod).toBe("web-new");
+    expect(forwardKey(running())).toBe(forwardKey(config));
+  });
+
+  /** Fails if a forward that never moved is keyed by anything but itself. */
+  it("is not confused with another forward on the same pod's other port", () => {
+    expect(forwardKey(started)).not.toBe(
+      forwardKey({ ...config, remotePort: 8080 })
+    );
+    expect(running().asked).toBeUndefined();
   });
 });
 
