@@ -1499,7 +1499,8 @@ describe("withoutCredentials", () => {
   it("cuts what stands before the host of an address and keeps the rest", () => {
     expect(
       withoutCredentials(
-        "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git"
+        "https://oauth2:glpat-" +
+          "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git"
       )
     ).toBe("https://…@gitlab.example.com/org/repo.git");
     expect(

@@ -21,7 +21,8 @@ describe("the repository column of the Application list", () => {
       spec: {
         source: {
           repoURL:
-            "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git",
+            "https://oauth2:glpat-" +
+            "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git",
         },
       },
     } as unknown as CustomResourceInfo;

@@ -400,7 +400,8 @@ describe("what a project allows, in words", () => {
  */
 describe("a repository address with a token in it", () => {
   const remote =
-    "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git";
+    "https://oauth2:glpat-" +
+    "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git";
 
   it("is read without what stands before the host", () => {
     const app = readApplication(

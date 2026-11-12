@@ -547,7 +547,8 @@ describe("renderReport", () => {
    */
   it("prints an address without the credentials in it, wherever a section draws one", () => {
     const remote =
-      "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git";
+      "https://oauth2:glpat-" +
+      "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git";
     const said = `failed to clone '${remote}': authentication required`;
     const html = renderReport(
       report({

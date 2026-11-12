@@ -13,7 +13,8 @@ vi.mock("@/lib/commands", () => ({
             deployedAt: "2026-09-09T18:00:00Z",
             source: {
               repoURL:
-                "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git",
+                "https://oauth2:glpat-" +
+                "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git",
             },
           },
         ],

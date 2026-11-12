@@ -732,7 +732,9 @@ describe("a source address with a token in it", () => {
       [],
       [
         object("GitRepository", "infra", {
-          url: "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git",
+          url:
+            "https://oauth2:glpat-" +
+            "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git",
         }),
       ]
     );
