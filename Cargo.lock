@@ -2830,7 +2830,7 @@ dependencies = [
 
 [[package]]
 name = "k8s-gui"
-version = "4.21.2"
+version = "5.0.0"
 dependencies = [
  "async-trait",
  "azure_core",

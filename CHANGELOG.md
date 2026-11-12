@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - 2026-11-12
+
+Rubick 5 is a rewrite of how the app reads a cluster and how it says what it
+found. Links and bookmarks saved by 4.x open the "not found" page: every
+address now names its cluster.
+
+### Changed
+
+- **Every problem leads with its cause.** A pod that cannot be placed, a
+  container that keeps exiting, a Service with no ready address, an Ingress
+  or a route that stops short of its pods: the page, the row, the peek and
+  the Overview say why, in the cluster's own evidence.
+
+- **"Could not look" is said out loud.** A refused, failed, late or cut read
+  is never drawn as zero, none or healthy. It says which of those it was,
+  where, and what was not checked because of it.
+
+- **The cluster is part of the address.** Tabs can stay on different
+  clusters, a link opens the cluster it names, and a cluster the kubeconfig
+  no longer holds says so and offers the ones it does.
+
+- **Any kind the cluster serves can be opened.** A catalogue lists every
+  served kind; one without a page of its own is listed the way kubectl
+  prints it. A custom kind named like a built-in one is never taken for it.
+
+- **Owners and what a delete takes with it.** Every page shows the chain of
+  owners above it, has an Owns tab, and Delete previews the cascade before
+  asking for the name.
+
+- **Actions ask first and say what they will do.** Restart, rollback, scale
+  and drain confirm in the workload's own numbers. An action the cluster
+  would refuse is greyed with the reason. A write nobody answered is said to
+  be unanswered, not failed.
+
+- **Access.** ServiceAccounts, Roles and bindings have their own section,
+  and "Your access" answers what this user may do here.
+
+- **Search, logs, shell and files.** Ctrl+K finds every kind and offers an
+  object's actions. A shell survives a tab switch. Logs carry on in a pod
+  made again under its name. A drain keeps running, and can be stopped, from
+  any page.
+
+### Fixed
+
+These were in 4.21 too.
+
+- **A private key is never shown.** It was readable in the annotation
+  `kubectl apply` leaves on an object, in a Helm release's values and
+  manifest, in a service-account JSON file, and in a key written into any
+  other field. The YAML editor could also write its placeholder over the
+  key; it now refuses to.
+
+- **An action stays on the cluster it was started on.** The rest of a
+  multi-document manifest could be applied to the cluster of another tab,
+  saved port-forwards could start there, and Helm could act as another
+  user where two kubeconfig files name one context.
+
+- **Prometheus alerts:** a firing alert could be listed as quiet where a
+  group holds two rules of one name, as the stock kube-prometheus-stack does.
+
+- **Traefik 2.10 and 2.11:** routes kept under the older API group were
+  invisible. **Argo CD:** an Application that is out of sync, or was never
+  compared, is no longer green. **Flux:** an OCI HelmRepository is no longer
+  "not fetched yet" for good.
+
+- **Going back to 4.21.2** keeps the settings file readable.
+
 ## [4.21.2] - 2026-09-30
 
 ### Fixed
