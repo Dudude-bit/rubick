@@ -2,7 +2,7 @@
 //! one the Deployment is on.
 
 use k8s_openapi::api::apps::v1::{ReplicaSet, ReplicaSetCondition};
-use k8s_openapi::api::core::v1::PodTemplateSpec;
+use kube::api::DynamicObject;
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -23,11 +23,15 @@ pub const POD_TEMPLATE_HASH: &str = "pod-template-hash";
 
 /// A `ReplicaSet`'s template as its Deployment would have written it, which
 /// is what `kubectl rollout undo` patches back and what two revisions are
-/// compared on.
+/// compared on. Taken as the cluster's own JSON: a typed copy loses every
+/// field newer than the bindings.
 #[must_use]
-pub fn deployment_template_of(template: &PodTemplateSpec) -> PodTemplateSpec {
+pub fn deployment_template_of(template: &serde_json::Value) -> serde_json::Value {
     let mut template = template.clone();
-    if let Some(labels) = template.metadata.as_mut().and_then(|m| m.labels.as_mut()) {
+    if let Some(labels) = template
+        .pointer_mut("/metadata/labels")
+        .and_then(serde_json::Value::as_object_mut)
+    {
         labels.remove(POD_TEMPLATE_HASH);
     }
     template
@@ -90,8 +94,12 @@ impl ReplicaSetInfo {
     /// Not `From<&ReplicaSet>`: the owner's revision comes from a second
     /// object, and a conversion that silently could not see it would report
     /// every revision as not current.
-    #[must_use]
-    pub fn of(rs: &ReplicaSet, current_revision: Option<String>) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// If the object is not a `ReplicaSet` the bindings can read.
+    pub fn of(raw: &DynamicObject, current_revision: Option<String>) -> serde_json::Result<Self> {
+        let rs: &ReplicaSet = &serde_json::from_value(serde_json::to_value(raw)?)?;
         let spec = rs.spec.as_ref();
         let status = rs.status.as_ref();
 
@@ -103,7 +111,7 @@ impl ReplicaSetInfo {
             .map(|conds| conds.iter().map(ConditionInfo::from).collect())
             .unwrap_or_default();
 
-        Self {
+        Ok(Self {
             name: rs.name_any(),
             namespace: rs.namespace().unwrap_or_default(),
             uid: rs.uid().unwrap_or_default(),
@@ -127,16 +135,18 @@ impl ReplicaSetInfo {
                 .and_then(|t| t.metadata.as_ref())
                 .and_then(|m| m.annotations.clone())
                 .unwrap_or_default(),
-            template: spec
-                .and_then(|s| s.template.as_ref())
-                .and_then(|t| serde_json::to_value(deployment_template_of(t)).ok()),
+            template: raw
+                .data
+                .pointer("/spec/template")
+                .filter(|template| template.is_object())
+                .map(deployment_template_of),
             conditions,
             pods_refused: status
                 .and_then(|s| s.conditions.as_deref())
                 .and_then(crate::resources::replica_failure),
             owner_references: extract_owner_references(rs.metadata.owner_references.as_ref()),
             created_at: rs.creation_timestamp().to_rfc3339_opt(),
-        }
+        })
     }
 }
 
@@ -157,7 +167,7 @@ impl From<&ReplicaSetCondition> for ConditionInfo {
 mod tests {
     use super::*;
     use k8s_openapi::api::apps::v1::{ReplicaSetSpec, ReplicaSetStatus};
-    use k8s_openapi::api::core::v1::{Container, PodSpec};
+    use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec};
     use kube::core::ObjectMeta;
 
     /// Every `ReplicaSet` carries its own hash label, so leaving it on made
@@ -165,25 +175,53 @@ mod tests {
     /// rollback patch would pin the Deployment's pods to one hash.
     #[test]
     fn the_hash_label_is_not_part_of_the_deployments_template() {
-        let template = PodTemplateSpec {
-            metadata: Some(ObjectMeta {
-                labels: Some(
-                    [
-                        ("app".to_string(), "search".to_string()),
-                        (POD_TEMPLATE_HASH.to_string(), "6df9f694b5".to_string()),
-                    ]
-                    .into(),
-                ),
-                ..Default::default()
-            }),
-            spec: None,
-        };
-        let labels = deployment_template_of(&template)
-            .metadata
-            .and_then(|m| m.labels)
-            .unwrap_or_default();
-        assert_eq!(labels.len(), 1);
-        assert_eq!(labels.get("app").map(String::as_str), Some("search"));
+        let template = serde_json::json!({
+            "metadata": {"labels": {"app": "search", POD_TEMPLATE_HASH: "6df9f694b5"}},
+        });
+        assert_eq!(
+            deployment_template_of(&template),
+            serde_json::json!({"metadata": {"labels": {"app": "search"}}})
+        );
+    }
+
+    fn raw(rs: &ReplicaSet) -> DynamicObject {
+        serde_json::from_value(serde_json::to_value(rs).expect("serialises")).expect("an object")
+    }
+
+    /// The bindings are Kubernetes 1.32's. A revision's template read through
+    /// them lost `hostnameOverride`, `stopSignal` and `restartPolicyRules`,
+    /// so "What changes" could not show a rollback dropping them. Fails if
+    /// the template the page compares is a typed copy.
+    #[test]
+    fn a_revisions_template_keeps_the_fields_the_bindings_do_not_know() {
+        let raw: DynamicObject = serde_json::from_value(serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "ReplicaSet",
+            "metadata": {"name": "api-7d4", "namespace": "shop"},
+            "spec": {
+                "selector": {"matchLabels": {"app": "api"}},
+                "template": {
+                    "metadata": {"labels": {"app": "api", POD_TEMPLATE_HASH: "7d4"}},
+                    "spec": {
+                        "hostnameOverride": "api-main",
+                        "containers": [{
+                            "name": "app", "image": "api:4",
+                            "lifecycle": {"stopSignal": "SIGUSR1"},
+                            "restartPolicyRules": [{"action": "Restart", "exitCodes": {"operator": "In", "values": [42]}}],
+                        }],
+                    },
+                },
+            },
+        }))
+        .expect("an object");
+        let template = ReplicaSetInfo::of(&raw, None)
+            .expect("a ReplicaSet")
+            .template
+            .expect("a template");
+        assert_eq!(template["spec"]["hostnameOverride"], "api-main");
+        let app = &template["spec"]["containers"][0];
+        assert_eq!(app["lifecycle"]["stopSignal"], "SIGUSR1");
+        assert_eq!(app["restartPolicyRules"][0]["action"], "Restart");
+        assert_eq!(template["metadata"]["labels"].get(POD_TEMPLATE_HASH), None);
     }
 
     fn replica_set(revision: Option<&str>, desired: i32) -> ReplicaSet {
@@ -230,7 +268,8 @@ mod tests {
     /// against the owner rather than anything readable off the object.
     #[test]
     fn a_revision_is_current_when_it_matches_the_owners() {
-        let info = ReplicaSetInfo::of(&replica_set(Some("3"), 1), Some("3".to_string()));
+        let info = ReplicaSetInfo::of(&raw(&replica_set(Some("3"), 1)), Some("3".to_string()))
+            .expect("a ReplicaSet");
         assert_eq!(info.revision.as_deref(), Some("3"));
         assert_eq!(info.current_revision.as_deref(), Some("3"));
     }
@@ -239,7 +278,8 @@ mod tests {
     /// ones around, scaled to zero.
     #[test]
     fn a_superseded_revision_keeps_its_own_number() {
-        let info = ReplicaSetInfo::of(&replica_set(Some("2"), 0), Some("3".to_string()));
+        let info = ReplicaSetInfo::of(&raw(&replica_set(Some("2"), 0)), Some("3".to_string()))
+            .expect("a ReplicaSet");
         assert_eq!(info.revision.as_deref(), Some("2"));
         assert_eq!(info.replicas.desired, 0);
     }
@@ -249,7 +289,8 @@ mod tests {
     /// off it would hide every sidecar the template declares.
     #[test]
     fn the_templates_init_containers_are_carried() {
-        let info = ReplicaSetInfo::of(&replica_set(Some("3"), 1), None);
+        let info =
+            ReplicaSetInfo::of(&raw(&replica_set(Some("3"), 1)), None).expect("a ReplicaSet");
         assert_eq!(info.init_containers.len(), 1);
         assert_eq!(info.containers.len(), 1);
     }

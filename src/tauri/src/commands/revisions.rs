@@ -10,9 +10,10 @@ use k8s_openapi::api::apps::v1::{
 };
 use k8s_openapi::api::core::v1::PodTemplateSpec;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
-use kube::api::{ListParams, Patch, PatchParams};
+use kube::api::{DynamicObject, ListParams, Patch, PatchParams};
 use kube::{Api, ResourceExt};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::BTreeMap;
 use tauri::State;
 
@@ -44,8 +45,9 @@ pub struct ControllerRevisionInfo {
     pub containers: Vec<DeploymentContainerInfo>,
     pub init_containers: Vec<DeploymentContainerInfo>,
     pub template_annotations: BTreeMap<String, String>,
-    /// The whole template, for comparing revisions on every field.
-    pub template: Option<serde_json::Value>,
+    /// The whole template as the controller recorded it, for comparing
+    /// revisions on every field.
+    pub template: Option<Value>,
     pub created_at: Option<String>,
 }
 
@@ -113,7 +115,7 @@ async fn controller_revisions(
                 containers: containers.containers,
                 init_containers: containers.init_containers,
                 template_annotations: annotations,
-                template: template.as_ref().and_then(|t| serde_json::to_value(t).ok()),
+                template: recorded_template(cr).map(bare),
                 created_at: cr.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
             }
         })
@@ -125,40 +127,33 @@ async fn controller_revisions(
 /// What a `StatefulSet` or `DaemonSet` is running now and every revision it
 /// owns, by controller reference.
 struct History {
+    workload: Api<DynamicObject>,
     update_revision: Option<String>,
-    template: Option<PodTemplateSpec>,
+    template: Option<Value>,
     owned: Vec<ControllerRevision>,
 }
 
 async fn controller_history(ctx: &ResourceContext, kind: &str, name: &str) -> Result<History> {
-    let (uid, update_revision, selector, template) = match kind {
-        "StatefulSet" => {
-            let sts: StatefulSet = ctx.namespaced_api().get(name).await?;
-            let update = sts.status.as_ref().and_then(|s| s.update_revision.clone());
-            let spec = sts.spec.as_ref();
-            (
-                sts.uid().unwrap_or_default(),
-                update,
-                label_selector(spec.map(|s| &s.selector)),
-                spec.map(|s| s.template.clone()),
-            )
-        }
-        "DaemonSet" => {
-            let ds: DaemonSet = ctx.namespaced_api().get(name).await?;
-            let spec = ds.spec.as_ref();
-            (
-                ds.uid().unwrap_or_default(),
-                None,
-                label_selector(spec.map(|s| &s.selector)),
-                spec.map(|s| s.template.clone()),
-            )
-        }
+    let workload = match kind {
+        "StatefulSet" => ctx.raw_api::<StatefulSet>(),
+        "DaemonSet" => ctx.raw_api::<DaemonSet>(),
         other => {
             return Err(Error::InvalidInput(format!(
                 "{other} keeps no ControllerRevisions"
             )))
         }
     };
+    let read = workload.get(name).await?;
+    let uid = read.uid().unwrap_or_default();
+    // Only a `StatefulSet`'s status names the revision it is rolling out.
+    let update_revision = read
+        .data
+        .pointer("/status/updateRevision")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let selector = selector_in(&read);
+    let selector = label_selector(selector.as_ref());
+    let template = read.data.pointer("/spec/template").cloned();
 
     let api: Api<ControllerRevision> = ctx.namespaced_api();
     // The owner reference is still the claim; the selector only keeps the
@@ -179,6 +174,7 @@ async fn controller_history(ctx: &ResourceContext, kind: &str, name: &str) -> Re
         })
         .collect();
     Ok(History {
+        workload,
         update_revision,
         template,
         owned,
@@ -240,7 +236,7 @@ fn rollback_annotations(
 }
 
 fn rollback_patch(
-    template: &PodTemplateSpec,
+    template: &Value,
     annotations: &BTreeMap<String, String>,
 ) -> Result<json_patch::Patch> {
     serde_json::from_value(serde_json::json!([
@@ -250,8 +246,35 @@ fn rollback_patch(
     .map_err(|e| Error::Internal(format!("rollback patch: {e}")))
 }
 
-fn same_template(a: &PodTemplateSpec, b: &PodTemplateSpec) -> bool {
-    serde_json::to_value(a).ok() == serde_json::to_value(b).ok()
+/// A template without what is no field of it: a `null`, and the `$patch`
+/// directive both controllers write into the revision they record.
+fn bare(template: &Value) -> Value {
+    fn without_nulls(value: &Value) -> Value {
+        match value {
+            Value::Object(fields) => fields
+                .iter()
+                .filter(|(_, field)| !field.is_null())
+                .map(|(key, field)| (key.clone(), without_nulls(field)))
+                .collect(),
+            Value::Array(items) => items.iter().map(without_nulls).collect(),
+            other => other.clone(),
+        }
+    }
+    let mut bare = without_nulls(template);
+    if let Some(fields) = bare.as_object_mut() {
+        fields.remove("$patch");
+    }
+    bare
+}
+
+/// Compared as the cluster wrote them, so two templates that differ only in
+/// a field newer than the bindings are not the same.
+fn same_template(a: &Value, b: &Value) -> bool {
+    bare(a) == bare(b)
+}
+
+fn selector_in(workload: &DynamicObject) -> Option<LabelSelector> {
+    serde_json::from_value(workload.data.pointer("/spec/selector")?.clone()).ok()
 }
 
 async fn rollback_deployment(
@@ -259,21 +282,36 @@ async fn rollback_deployment(
     name: &str,
     revision: i64,
 ) -> Result<RollbackOutcome> {
-    let api: Api<Deployment> = ctx.namespaced_api();
-    let deployment = api.get(name).await?;
-    let spec = deployment.spec.as_ref();
-    if spec.and_then(|s| s.paused).unwrap_or(false) {
+    let Some(patch) = deployment_rollback(ctx, name, revision).await? else {
+        return Ok(RollbackOutcome::AlreadyThere);
+    };
+    ctx.raw_api::<Deployment>()
+        .patch(name, &PatchParams::default(), &Patch::Json::<()>(patch))
+        .await?;
+    Ok(RollbackOutcome::RolledBack)
+}
+
+/// What rolling a Deployment back to a revision sends, or `None` where it
+/// already runs that revision's template.
+async fn deployment_rollback(
+    ctx: &ResourceContext,
+    name: &str,
+    revision: i64,
+) -> Result<Option<json_patch::Patch>> {
+    let deployment = ctx.raw_api::<Deployment>().get(name).await?;
+    let paused = deployment.data.pointer("/spec/paused");
+    if paused.and_then(Value::as_bool).unwrap_or(false) {
         return Err(Error::InvalidInput(format!(
             "Deployment {name} is paused; resume it before rolling back"
         )));
     }
     let uid = deployment.uid().unwrap_or_default();
-    let selector = Selector::Query(spec.map(|s| &s.selector))
+    let selector = Selector::Query(selector_in(&deployment).as_ref())
         .query_text()
         .ok_or_else(|| Error::InvalidInput("Deployment has no selector".to_string()))?;
     let wanted = revision.to_string();
     let target = ctx
-        .namespaced_api::<ReplicaSet>()
+        .raw_api::<ReplicaSet>()
         .list(&ListParams::default().labels(&selector))
         .await?
         .items
@@ -289,22 +327,22 @@ async fn rollback_deployment(
             name: format!("{name} revision {revision}"),
             namespace: ctx.namespace.clone().unwrap_or_default(),
         })?;
-    let Some(template) = target.spec.as_ref().and_then(|s| s.template.as_ref()) else {
+    let recorded = target.data.pointer("/spec/template");
+    let Some(template) = recorded.filter(|template| template.is_object()) else {
         return Err(Error::InvalidInput(format!(
             "revision {revision} of {name} records no template"
         )));
     };
     let template = deployment_template_of(template);
-    if spec.is_some_and(|s| same_template(&deployment_template_of(&s.template), &template)) {
-        return Ok(RollbackOutcome::AlreadyThere);
+    let current = deployment.data.pointer("/spec/template");
+    if current.is_some_and(|current| same_template(&deployment_template_of(current), &template)) {
+        return Ok(None);
     }
-    let patch = rollback_patch(
+    rollback_patch(
         &template,
         &rollback_annotations(deployment.annotations(), target.annotations()),
-    )?;
-    api.patch(name, &PatchParams::default(), &Patch::Json::<()>(patch))
-        .await?;
-    Ok(RollbackOutcome::RolledBack)
+    )
+    .map(Some)
 }
 
 /// A `ControllerRevision`'s `data` is already a strategic merge patch of the
@@ -316,6 +354,7 @@ async fn rollback_controller(
     revision: i64,
 ) -> Result<RollbackOutcome> {
     let History {
+        workload,
         template: current,
         owned,
         ..
@@ -328,28 +367,17 @@ async fn rollback_controller(
             name: format!("{name} revision {revision}"),
             namespace: ctx.namespace.clone().unwrap_or_default(),
         })?;
-    let (Some(data), Some(recorded)) = (target.data.as_ref(), template_of(&target)) else {
+    let (Some(data), Some(recorded)) = (target.data.as_ref(), recorded_template(&target)) else {
         return Err(Error::InvalidInput(format!(
             "revision {revision} of {name} records no template"
         )));
     };
-    if current.is_some_and(|c| same_template(&c, &recorded)) {
+    if current.is_some_and(|current| same_template(&current, recorded)) {
         return Ok(RollbackOutcome::AlreadyThere);
     }
-    let params = PatchParams::default();
-    let patch = Patch::Strategic(&data.0);
-    match kind {
-        "StatefulSet" => {
-            ctx.namespaced_api::<StatefulSet>()
-                .patch(name, &params, &patch)
-                .await?;
-        }
-        _ => {
-            ctx.namespaced_api::<DaemonSet>()
-                .patch(name, &params, &patch)
-                .await?;
-        }
-    }
+    workload
+        .patch(name, &PatchParams::default(), &Patch::Strategic(&data.0))
+        .await?;
     Ok(RollbackOutcome::RolledBack)
 }
 
@@ -370,12 +398,17 @@ fn label_selector(selector: Option<&LabelSelector>) -> Option<String> {
     )
 }
 
-/// The template a revision snapshotted: `data` is a patch of the owner with
-/// only `spec.template` in it, for both kinds.
+/// The template a revision snapshotted, as the controller wrote it: `data`
+/// is a patch of the owner with only `spec.template` in it, for both kinds.
+fn recorded_template(cr: &ControllerRevision) -> Option<&Value> {
+    let template = cr.data.as_ref()?.0.pointer("/spec/template")?;
+    template.is_object().then_some(template)
+}
+
+/// The same template through the bindings, for the rows that name its
+/// containers. Whole-template questions read [`recorded_template`].
 fn template_of(cr: &ControllerRevision) -> Option<PodTemplateSpec> {
-    let data = cr.data.as_ref()?;
-    let template = data.0.get("spec")?.get("template")?;
-    serde_json::from_value(template.clone()).ok()
+    serde_json::from_value(recorded_template(cr)?.clone()).ok()
 }
 
 #[cfg(test)]
@@ -472,23 +505,214 @@ mod tests {
     /// did not have is removed rather than kept by a merge.
     #[test]
     fn a_rollback_patch_replaces_the_template_and_sets_the_annotations() {
-        let template: PodTemplateSpec = serde_json::from_value(serde_json::json!({
+        let template = serde_json::json!({
             "metadata": {"labels": {"app": "search"}},
             "spec": {"containers": [{"name": "app", "image": "nginx:1.27-alpine"}]}
-        }))
-        .expect("template");
+        });
         let patch = serde_json::to_value(
             rollback_patch(&template, &BTreeMap::new()).expect("patch builds"),
         )
         .expect("serialises");
         assert_eq!(patch[0]["op"], "replace");
         assert_eq!(patch[0]["path"], "/spec/template");
-        assert_eq!(
-            patch[0]["value"]["spec"]["containers"][0]["image"],
-            "nginx:1.27-alpine"
-        );
+        assert_eq!(patch[0]["value"], template);
         assert_eq!(patch[1]["op"], "add");
         assert_eq!(patch[1]["path"], "/metadata/annotations");
+    }
+
+    /// A pod template with fields Kubernetes 1.34 added, which the bindings
+    /// (1.32) do not have.
+    fn template(image: &str, hostname: &str, hash: Option<&str>) -> Value {
+        let mut labels = serde_json::json!({"app": "api"});
+        if let Some(hash) = hash {
+            labels["pod-template-hash"] = hash.into();
+        }
+        serde_json::json!({
+            "metadata": {"labels": labels, "creationTimestamp": null},
+            "spec": {
+                "hostnameOverride": hostname,
+                "containers": [{
+                    "name": "app", "image": image,
+                    "lifecycle": {"stopSignal": "SIGUSR1"},
+                    "restartPolicyRules": [{"action": "Restart"}],
+                    "env": [{"name": "TOKEN", "valueFrom": {"fileKeyRef": {"path": "t", "key": "k", "volumeName": "v"}}}],
+                }],
+            },
+        })
+    }
+
+    fn replica_set(revision: &str, template: &Value) -> Value {
+        serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "ReplicaSet",
+            "metadata": {
+                "name": format!("api-{revision}"), "namespace": "shop",
+                "annotations": {REVISION_ANNOTATION: revision},
+                "ownerReferences": [{"apiVersion": "apps/v1", "kind": "Deployment",
+                    "name": "api", "uid": "api-uid", "controller": true}],
+            },
+            "spec": {"selector": {"matchLabels": {"app": "api"}}, "template": template},
+        })
+    }
+
+    /// What a rollback of Deployment `api` to revision 4 sends, on a cluster
+    /// where it runs `current` and revision 4 recorded `fourth`.
+    async fn rolled_back(current: Value, fourth: Value) -> Option<Value> {
+        use crate::client::served::{test_server::connected, ServedIndex};
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/apis/apps/v1/namespaces/shop/deployments/api" => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "apps/v1", "kind": "Deployment",
+                    "metadata": {"name": "api", "namespace": "shop", "uid": "api-uid",
+                        "annotations": {REVISION_ANNOTATION: "5"}},
+                    "spec": {"selector": {"matchLabels": {"app": "api"}}, "template": current},
+                })
+                .to_string(),
+            ),
+            "/apis/apps/v1/namespaces/shop/replicasets" => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "apps/v1", "kind": "ReplicaSetList", "metadata": {},
+                    "items": [replica_set("4", &fourth)],
+                })
+                .to_string(),
+            ),
+            _ => (404, "{}".into()),
+        })
+        .await;
+        let ctx = ResourceContext::for_command(&state, Some("shop".into())).expect("context");
+        let patch = deployment_rollback(&ctx, "api", 4).await.expect("answers");
+        patch.map(|patch| serde_json::to_value(patch).expect("serialises")[0]["value"].clone())
+    }
+
+    /// The bindings drop what they do not know, and the patch replaces the
+    /// template whole, so a rollback through them took the stop signal, the
+    /// hostname and the restart rules off the Deployment and emptied a
+    /// `fileKeyRef` into a `valueFrom` the API server refuses. Fails if the
+    /// revision is read or written through typed structs.
+    #[tokio::test]
+    async fn rolling_a_deployment_back_sends_the_template_as_the_cluster_recorded_it() {
+        let sent = rolled_back(
+            template("api:5", "main", None),
+            template("api:4", "main", Some("7d4")),
+        )
+        .await
+        .expect("a patch");
+        assert_eq!(sent, template("api:4", "main", None));
+    }
+
+    /// Two revisions that differ only in a field newer than the bindings read
+    /// as one template through them, so the rollback answered "already
+    /// there" and sent nothing. Fails if the comparison is typed; the second
+    /// half fails if a revision the Deployment does run is patched anyway.
+    #[tokio::test]
+    async fn a_revision_differing_only_in_a_field_the_bindings_lack_is_still_rolled_back_to() {
+        let sent = rolled_back(
+            template("api:5", "main", None),
+            template("api:5", "canary", Some("7d4")),
+        )
+        .await
+        .expect("a patch");
+        assert_eq!(sent["spec"]["hostnameOverride"], "canary");
+
+        let same = rolled_back(
+            template("api:5", "main", None),
+            template("api:5", "main", Some("7d4")),
+        )
+        .await;
+        assert_eq!(same, None);
+    }
+
+    /// A cluster where `StatefulSet` `db` runs `current` and its revision 1
+    /// recorded `first`.
+    async fn a_set(current: Value, first: Value) -> AppState {
+        use crate::client::served::{test_server::connected, ServedIndex};
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/apis/apps/v1/namespaces/shop/statefulsets/db" => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "apps/v1", "kind": "StatefulSet",
+                    "metadata": {"name": "db", "namespace": "shop", "uid": "db-uid"},
+                    "spec": {"selector": {"matchLabels": {"app": "api"}}, "template": current},
+                })
+                .to_string(),
+            ),
+            "/apis/apps/v1/namespaces/shop/controllerrevisions" => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "apps/v1", "kind": "ControllerRevisionList", "metadata": {},
+                    "items": [{
+                        "metadata": {"name": "db-1", "namespace": "shop",
+                            "ownerReferences": [{"apiVersion": "apps/v1", "kind": "StatefulSet",
+                                "name": "db", "uid": "db-uid", "controller": true}]},
+                        "revision": 1,
+                        "data": {"spec": {"template": first}},
+                    }],
+                })
+                .to_string(),
+            ),
+            _ => (404, "{}".into()),
+        })
+        .await;
+        state
+    }
+
+    async fn set_rolled_back(current: Value, first: Value) -> RollbackOutcome {
+        let state = a_set(current, first).await;
+        let ctx = ResourceContext::for_command(&state, Some("shop".into())).expect("context");
+        rollback_controller(&ctx, "StatefulSet", "db", 1)
+            .await
+            .expect("answers")
+    }
+
+    /// The same blindness in the other two kinds' "already there": the
+    /// revision's patch was sent raw, but whether to send it was decided on
+    /// typed copies. The controller's own `$patch` and an empty
+    /// `creationTimestamp` are not a difference. Fails if either is.
+    #[tokio::test]
+    async fn a_set_is_rolled_back_when_only_a_field_the_bindings_lack_differs() {
+        let mut recorded = template("db:5", "main", None);
+        recorded["$patch"] = "replace".into();
+        let mut running = template("db:5", "main", None);
+        running["metadata"]
+            .as_object_mut()
+            .expect("metadata")
+            .remove("creationTimestamp");
+        assert_eq!(
+            set_rolled_back(running.clone(), recorded.clone()).await,
+            RollbackOutcome::AlreadyThere
+        );
+        recorded["spec"]["hostnameOverride"] = "canary".into();
+        assert_eq!(
+            set_rolled_back(running, recorded).await,
+            RollbackOutcome::RolledBack
+        );
+    }
+
+    /// "What changes" for a `StatefulSet` or `DaemonSet` compares these
+    /// templates; a typed copy hid every field newer than the bindings.
+    /// Fails if the wire's template goes through them, or keeps `$patch`.
+    #[tokio::test]
+    async fn a_recorded_template_reaches_the_page_as_the_controller_wrote_it() {
+        let mut recorded = template("db:5", "main", None);
+        recorded["$patch"] = "replace".into();
+        let state = a_set(template("db:6", "main", None), recorded).await;
+        let revisions = controller_revisions(
+            &state,
+            "StatefulSet".into(),
+            "db".into(),
+            Some("shop".into()),
+        )
+        .await
+        .expect("revisions");
+        assert!(revisions[0].template_read);
+        let shown = revisions[0].template.as_ref().expect("a template");
+        assert_eq!(shown["spec"]["hostnameOverride"], "main");
+        assert_eq!(
+            shown["spec"]["containers"][0]["env"][0]["valueFrom"]["fileKeyRef"]["key"],
+            "k"
+        );
+        assert_eq!(shown.get("$patch"), None);
     }
 
     #[test]

@@ -10,7 +10,7 @@ use k8s_openapi::api::apps::v1::{DaemonSet, ReplicaSet, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{Event, Pod};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
-use kube::api::ListParams;
+use kube::api::{DynamicObject, ListParams};
 use tauri::State;
 
 use crate::commands::filters::ResourceFilters;
@@ -306,11 +306,10 @@ pub async fn trigger_cronjob(
     crate::validation::validate_name::<Job>(&job_name)?;
 
     let ctx = crate::commands::helpers::ResourceContext::for_command(&state, namespace)?;
-    let cronjobs: kube::Api<CronJob> = ctx.namespaced_api();
-    let cronjob = cronjobs.get(&name).await?;
+    let cronjob = ctx.raw_api::<CronJob>().get(&name).await?;
 
     let job = job_from_cronjob(&cronjob, &job_name)?;
-    let jobs: kube::Api<Job> = ctx.namespaced_api();
+    let jobs = ctx.raw_api::<Job>();
     let created = jobs.create(&PostParams::default(), &job).await?;
     Ok(created.name_any())
 }
@@ -320,26 +319,33 @@ pub async fn trigger_cronjob(
 /// Split from the command so the decision can be checked without a cluster:
 /// what the controller does with the object is Kubernetes' business, but
 /// what we hand it is ours.
-fn job_from_cronjob(cronjob: &CronJob, job_name: &str) -> Result<Job> {
-    use kube::api::ObjectMeta;
+///
+/// The spec is the cluster's own JSON, never a typed copy: the bindings drop
+/// every field newer than they are, and the run would differ from the
+/// scheduled ones in exactly those.
+fn job_from_cronjob(cronjob: &DynamicObject, job_name: &str) -> Result<DynamicObject> {
     use kube::ResourceExt;
 
     let name = cronjob.name_any();
+    let present = |value: &&serde_json::Value| !value.is_null();
     let template = cronjob
-        .spec
-        .as_ref()
-        .map(|spec| spec.job_template.clone())
+        .data
+        .pointer("/spec/jobTemplate")
+        .filter(present)
         .ok_or_else(|| {
             crate::error::Error::InvalidInput(format!("CronJob {name} has no jobTemplate"))
         })?;
 
-    let job_spec = template.spec.ok_or_else(|| {
+    let job_spec = template.get("spec").filter(present).ok_or_else(|| {
         crate::error::Error::InvalidInput(format!("CronJob {name}'s jobTemplate has no spec"))
     })?;
 
     // The template's own labels and annotations come along: a `Job` a team's
     // selectors cannot see is one nobody will find.
-    let mut meta = template.metadata.unwrap_or_default();
+    let mut meta: ObjectMeta = match template.get("metadata").filter(present) {
+        Some(meta) => serde_json::from_value(meta.clone())?,
+        None => ObjectMeta::default(),
+    };
     meta.name = Some(job_name.to_string());
     meta.namespace = cronjob.namespace();
     meta.owner_references = Some(vec![
@@ -353,10 +359,13 @@ fn job_from_cronjob(cronjob: &CronJob, job_name: &str) -> Result<Job> {
         },
     ]);
 
-    Ok(Job {
-        metadata: ObjectMeta { ..meta },
-        spec: Some(job_spec),
-        status: None,
+    Ok(DynamicObject {
+        types: Some(kube::api::TypeMeta {
+            api_version: "batch/v1".to_string(),
+            kind: "Job".to_string(),
+        }),
+        metadata: meta,
+        data: serde_json::json!({ "spec": job_spec }),
     })
 }
 
@@ -509,11 +518,10 @@ mod tests {
             Some(kube::api::PropagationPolicy::Background)
         );
     }
-    use kube::api::ObjectMeta;
     use std::collections::BTreeMap;
 
-    fn cronjob(template_meta: Option<ObjectMeta>) -> CronJob {
-        CronJob {
+    fn cronjob(template_meta: Option<ObjectMeta>) -> DynamicObject {
+        let typed = CronJob {
             metadata: ObjectMeta {
                 name: Some("nightly".to_string()),
                 namespace: Some("batch".to_string()),
@@ -529,7 +537,8 @@ mod tests {
                 ..Default::default()
             }),
             status: None,
-        }
+        };
+        serde_json::from_value(serde_json::to_value(typed).expect("serialises")).expect("an object")
     }
 
     /// A `Job` created by hand that a team's selectors cannot see is a `Job`
@@ -587,12 +596,43 @@ mod tests {
     #[test]
     fn a_cronjob_with_no_template_spec_says_so_before_the_api_does() {
         let mut empty = cronjob(None);
-        empty.spec.as_mut().expect("spec").job_template.spec = None;
+        empty.data["spec"]["jobTemplate"]
+            .as_object_mut()
+            .expect("a template")
+            .remove("spec");
 
         let err = job_from_cronjob(&empty, "nightly-1").expect_err("no spec");
         assert!(
             err.to_string().contains("jobTemplate"),
             "the message must name what is missing: {err}"
         );
+    }
+
+    /// The bindings are Kubernetes 1.32's and drop what they do not know, so
+    /// a run copied through them lacked the stop signal, hostname and
+    /// restart rules every scheduled run has. Fails if the Job is built
+    /// from a typed copy of the template, and if it is not a `batch/v1` Job.
+    #[test]
+    fn the_run_keeps_the_template_fields_the_bindings_do_not_know() {
+        let spec = serde_json::json!({
+            "backoffLimit": 2,
+            "template": {"spec": {
+                "hostnameOverride": "nightly",
+                "restartPolicy": "Never",
+                "containers": [{
+                    "name": "run", "image": "report:3",
+                    "lifecycle": {"stopSignal": "SIGUSR1"},
+                    "restartPolicyRules": [{"action": "Restart"}],
+                }],
+            }},
+        });
+        let mut nightly = cronjob(None);
+        nightly.data["spec"]["jobTemplate"]["spec"] = spec.clone();
+
+        let job = serde_json::to_value(job_from_cronjob(&nightly, "nightly-1").expect("builds"))
+            .expect("serialises");
+        assert_eq!(job["spec"], spec);
+        assert_eq!(job["apiVersion"], "batch/v1");
+        assert_eq!(job["kind"], "Job");
     }
 }
