@@ -22,7 +22,7 @@ import {
 } from "recharts";
 
 import { formatQuantity } from "@/lib/metric-format";
-import { clockOf } from "@/lib/usage-history";
+import { bucketizeTraffic, clockOf } from "@/lib/usage-history";
 import { formatSince } from "@/lib/utils";
 import type { TrafficWindow } from "@/integrations";
 import { useT } from "@/i18n/useT";
@@ -67,7 +67,7 @@ export interface TrafficChartProps {
 export function TrafficChart({ window: data, label }: TrafficChartProps) {
   const t = useT();
   const rows: Row[] = React.useMemo(
-    () => data.points.map((point, i) => ({ i, ...point })),
+    () => bucketizeTraffic(data.points).map((point, i) => ({ i, ...point })),
     [data.points]
   );
   const [band, width] = useBandWidth();
@@ -149,7 +149,7 @@ export function TrafficChart({ window: data, label }: TrafficChartProps) {
         </div>
         <span className="text-right text-[11px] text-fg-mut">
           <span className="font-mono tabular-nums">
-            {formatQuantity(newest?.rx ?? 0, "throughput")}
+            {throughput(newest?.rx ?? null, t)}
           </span>
         </span>
       </div>
@@ -247,6 +247,12 @@ function TrafficTooltip({
   );
 }
 
+/** A reading nothing answered for is unknown, not 0 B/s. */
+const throughput = (value: number | null, t: ReturnType<typeof useT>) =>
+  value === null
+    ? t("empty", "unknownLower")
+    : formatQuantity(value, "throughput");
+
 function describe(
   rows: readonly Row[],
   peak: number,
@@ -254,9 +260,9 @@ function describe(
 ): string {
   const newest = rows[rows.length - 1];
   return t("count", "trafficReadings", {
-    n: rows.length,
-    rx: formatQuantity(newest?.rx ?? 0, "throughput"),
-    tx: formatQuantity(newest?.tx ?? 0, "throughput"),
+    n: rows.filter((row) => row.rx !== null || row.tx !== null).length,
+    rx: throughput(newest?.rx ?? null, t),
+    tx: throughput(newest?.tx ?? null, t),
     peak: formatQuantity(peak, "throughput"),
   });
 }

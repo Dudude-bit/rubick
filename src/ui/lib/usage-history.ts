@@ -72,6 +72,10 @@ export function appendSample(
 
 type Channel = "cpuMillicores" | "memoryBytes";
 
+/** Which of `n` equal slices of time a moment falls in: every band's one rule. */
+const sliceAt = (t: number, first: number, span: number, n: number) =>
+  span <= 0 ? 0 : Math.min(n - 1, Math.floor(((t - first) / span) * n));
+
 /**
  * Collapses samples into fixed-width buckets, keeping the largest value in
  * each and the wall clock it was seen at.
@@ -101,11 +105,7 @@ export function bucketize(
 
   let previousRestarts: number | null = null;
   for (const sample of samples) {
-    const index =
-      span <= 0
-        ? 0
-        : Math.min(n - 1, Math.floor(((sample.t - first) / span) * n));
-    const slot = out[index];
+    const slot = out[sliceAt(sample.t, first, span, n)];
 
     const value = sample[channel];
     if (value !== null && (slot.v === null || value > slot.v)) {
@@ -122,6 +122,45 @@ export function bucketize(
       slot.restart = true;
     }
     if (sample.restarts !== null) previousRestarts = sample.restarts;
+  }
+  return out;
+}
+
+/** Bytes a second each way at one moment; `null` where nothing answered. */
+export interface TrafficPoint {
+  t: number;
+  rx: number | null;
+  tx: number | null;
+}
+
+/**
+ * A traffic window in the slices of time {@link bucketize} cuts usage into.
+ *
+ * A range query answers only the steps that had a series. Drawn one reading
+ * after another, the band joined 02:00 to 08:00 across six hours scaled to
+ * zero, under CPU and memory bands that showed the hole, and every reading
+ * after it sat left of its own moment on the two bands above.
+ */
+export function bucketizeTraffic(
+  points: readonly TrafficPoint[],
+  buckets: number = BUCKET_COUNT
+): TrafficPoint[] {
+  if (points.length === 0) return [];
+  const first = points[0].t;
+  const span = points[points.length - 1].t - first;
+  const n = span <= 0 ? 1 : Math.min(buckets, points.length);
+  const out: TrafficPoint[] = Array.from({ length: n }, (_, index) => ({
+    t: first + (span * (index + 0.5)) / n,
+    rx: null,
+    tx: null,
+  }));
+  const larger = (held: number | null, value: number | null) =>
+    value !== null && (held === null || value > held) ? value : held;
+  for (const point of points) {
+    const slot = out[sliceAt(point.t, first, span, n)];
+    slot.t = point.t;
+    slot.rx = larger(slot.rx, point.rx);
+    slot.tx = larger(slot.tx, point.tx);
   }
   return out;
 }

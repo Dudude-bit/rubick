@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   appendSample,
   bucketize,
+  bucketizeTraffic,
   chartMax,
   latestValue,
   limitInView,
@@ -176,5 +177,45 @@ describe("watchedFor", () => {
   it("measures the readings held, not the time since the page opened", () => {
     // If the metrics query stops answering the caption must stop growing.
     expect(watchedFor([sample(0, 1), sample(30000, 2)])).toBe("30s");
+  });
+});
+
+describe("bucketizeTraffic", () => {
+  const STEP = 12 * 60_000;
+  // A day at twelve-minute steps, with nothing answering from 02:00 to 08:00.
+  const answered = Array.from({ length: 120 }, (_, step) => step * STEP).filter(
+    (t) => t < 2 * 3_600_000 || t >= 8 * 3_600_000
+  );
+  const traffic = bucketizeTraffic(
+    answered.map((t) => ({ t, rx: 100, tx: 50 }))
+  );
+
+  /**
+   * Drawn one reading after another, the band joined 02:00 to 08:00 with a
+   * line across six hours scaled to zero. Fails if the hole is closed up.
+   */
+  it("leaves the stretch nothing answered for as a hole", () => {
+    const empty = traffic.filter((point) => point.rx === null);
+    expect(empty.length).toBeGreaterThan(traffic.length / 5);
+    const hole = traffic.findIndex((point) => point.rx === null);
+    expect(traffic[hole - 1].t).toBeLessThan(2 * 3_600_000);
+    expect(traffic.at(-1)?.rx).toBe(100);
+  });
+
+  /** The Network band sits under CPU and memory: a reading must be at the same place across on all three. */
+  it("places each reading where the usage bands place the same moment", () => {
+    const usage = bucketize(
+      answered.map((t) => sample(t, 10)),
+      "cpuMillicores"
+    );
+    expect(traffic.map((point) => point.rx !== null)).toEqual(
+      usage.map((point) => point.v !== null)
+    );
+  });
+
+  /** One direction answering does not make the other zero. */
+  it("keeps a direction nothing answered for unknown beside one that did", () => {
+    const [only] = bucketizeTraffic([{ t: 0, rx: null, tx: 5 }]);
+    expect(only).toMatchObject({ rx: null, tx: 5 });
   });
 });
