@@ -106,3 +106,22 @@ it("ends a stretch the moment the next watch begins, not at the next tick of the
     vi.useRealTimers();
   }
 });
+
+/**
+ * A rollout made revision 8 while the tab was open: the header said 8 and
+ * this tab went on marking 7 current for up to 30 s, so 7 had no Roll back
+ * and a rollback to 6 was previewed against 7. Fails if the tab reads the
+ * revisions slower than the page around it reads the same fact.
+ */
+it("reads the revisions again within seconds, as the page's header does", async () => {
+  let asked = 0;
+  vi.mocked(invoke).mockImplementation(async (command: string) => {
+    if (command === "get_deployment_replicasets") asked += 1;
+    return command.startsWith("list_") || command.startsWith("get_")
+      ? []
+      : undefined;
+  });
+  await renderWithRouter(<ChangesTab subject={LEDGER} />, { at: "/c/prod" });
+  await waitFor(() => expect(asked).toBe(1));
+  await waitFor(() => expect(asked).toBeGreaterThan(1), { timeout: 6000 });
+}, 10_000);

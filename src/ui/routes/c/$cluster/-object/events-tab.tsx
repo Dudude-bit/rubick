@@ -14,9 +14,9 @@ import {
 } from "@/hooks/useObjectEvents";
 import { ResourceType } from "@/lib/resource-registry";
 
-/** What the tab's count is a count of, said: a bare "4" under the tab reads as nothing. */
-const eventCount = (n: number, t: T) =>
-  n >= OBJECT_EVENTS_READ
+/** What the tab's count is a count of, said: a bare "4" under the tab reads as nothing. A read cut short found no "latest". */
+const eventCount = (n: number, short: boolean, t: T) =>
+  n >= OBJECT_EVENTS_READ && !short
     ? t("count", "eventObjectsLatest", { n: OBJECT_EVENTS_READ })
     : t("count", "eventObjects", { n });
 
@@ -45,7 +45,9 @@ export function eventsTab(
         <SectionHeader
           title={t("columns", "events")}
           count={
-            data && data.length > 0 ? eventCount(data.length, t) : undefined
+            data && data.length > 0
+              ? eventCount(data.length, query.short, t)
+              : undefined
           }
           description={
             everyObject &&

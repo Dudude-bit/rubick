@@ -24,6 +24,7 @@ use crate::commands::filters::ResourceFilters;
 use crate::commands::helpers::{
     across, api_in, get_resource_info, list_in_scope, list_resource_infos, ResourceContext, Scoped,
 };
+use crate::commands::other_policies::Discovery;
 
 /// List Ingresses
 #[tauri::command]
@@ -178,8 +179,9 @@ pub async fn list_service_endpoints(
     state: State<'_, AppState>,
 ) -> Result<Vec<ServicePublished>> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
+    let context = state.get_current_context().unwrap_or_default();
     crate::client::clock::timed(&state.perf, "listServiceEndpoints", async {
-        Ok(published_in(&ctx).await?.1)
+        Ok(published_in(&ctx, state.discovery(&context)).await?.1)
     })
     .await
 }
@@ -202,9 +204,10 @@ pub async fn list_service_backing(
     state: State<'_, AppState>,
 ) -> Result<ServiceBacking> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
+    let context = state.get_current_context().unwrap_or_default();
     crate::client::clock::timed(&state.perf, "listServiceBacking", async {
         let read_at = chrono::Utc::now();
-        let (services, published) = published_in(&ctx).await?;
+        let (services, published, _) = published_in(&ctx, state.discovery(&context)).await?;
         Ok(ServiceBacking {
             services: services.iter().map(ServiceInfo::from).collect(),
             published,
@@ -222,7 +225,8 @@ pub struct ServiceHealthInputs {
     pub groups: Vec<ServiceHealthGroup>,
     /// The /24 (IPv4) or /64 (IPv6) of every endpoint address here: a
     /// superset of any one Service's, so an egress ipBlock that misses them
-    /// all misses its pods.
+    /// all misses its pods. Empty past [`NETWORKS_KEPT`], as where there is
+    /// no address: no block is then judged against it.
     pub networks: Vec<String>,
 }
 
@@ -254,7 +258,10 @@ impl ServiceHealthGroup {
         self.stop.is_none()
             && other.stop.is_none()
             && self.door == other.door
-            && !matches!(self.door, Some(PolicyDoor::Guarded { .. }))
+            && !matches!(
+                self.door,
+                Some(PolicyDoor::Guarded { .. } | PolicyDoor::Overlaid { .. })
+            )
             && self.targets == other.targets
             && self.type_ == other.type_
             && self.selectorless == other.selectorless
@@ -272,10 +279,14 @@ pub async fn list_service_health_inputs(
     state: State<'_, AppState>,
 ) -> Result<Scoped<ServiceHealthInputs>> {
     let client = (*state.current_client()?).clone();
+    let context = state.get_current_context().unwrap_or_default();
+    let discovery = state.discovery(&context);
     crate::client::clock::timed(
         &state.perf,
         "listServiceHealthInputs",
-        across(scope, |reach| health_inputs_in(client.clone(), reach)),
+        across(scope, |reach| {
+            health_inputs_in(client.clone(), reach, discovery)
+        }),
     )
     .await
 }
@@ -283,13 +294,14 @@ pub async fn list_service_health_inputs(
 async fn health_inputs_in(
     client: kube::Client,
     reach: Option<String>,
+    discovery: Discovery<'_>,
 ) -> Result<Vec<ServiceHealthInputs>> {
     let ctx = ResourceContext {
         client,
         namespace: reach,
     };
-    let (services, published) = published_in(&ctx).await?;
-    Ok(health_inputs_of(&services, published))
+    let (services, published, networks) = published_in(&ctx, discovery).await?;
+    Ok(health_inputs_of(&services, published, &networks))
 }
 
 /// The slices say that no address of a Service is ready, or that it has
@@ -444,15 +456,10 @@ fn explained(
 fn health_inputs_of(
     services: &[Service],
     published: Vec<ServicePublished>,
+    networks: &Networks,
 ) -> Vec<ServiceHealthInputs> {
-    let mut by_namespace: BTreeMap<String, (Vec<ServiceHealthGroup>, BTreeSet<String>)> =
-        BTreeMap::new();
+    let mut by_namespace: BTreeMap<String, Vec<ServiceHealthGroup>> = BTreeMap::new();
     for (service, published) in services.iter().zip(published) {
-        let networks = published
-            .endpoints
-            .iter()
-            .filter_map(|endpoint| endpoint.address.as_deref()?.parse().ok().map(network_of))
-            .collect::<Vec<_>>();
         let spec = service.spec.as_ref();
         let read = ServiceHealthGroup {
             names: vec![service.name_any()],
@@ -479,10 +486,9 @@ fn health_inputs_of(
                 .door
                 .filter(|door| !matches!(door, PolicyDoor::Open)),
         };
-        let (groups, seen) = by_namespace
+        let groups = by_namespace
             .entry(service.namespace().unwrap_or_default())
             .or_default();
-        seen.extend(networks);
         match groups.iter_mut().find(|group| group.reads_like(&read)) {
             Some(group) => group.names.extend(read.names),
             None => groups.push(read),
@@ -490,10 +496,14 @@ fn health_inputs_of(
     }
     by_namespace
         .into_iter()
-        .map(|(namespace, (groups, networks))| ServiceHealthInputs {
+        .map(|(namespace, groups)| ServiceHealthInputs {
+            networks: networks
+                .get(&namespace)
+                .filter(|here| here.len() <= NETWORKS_KEPT)
+                .map(|here| here.iter().cloned().collect())
+                .unwrap_or_default(),
             namespace,
             groups,
-            networks: networks.into_iter().collect(),
         })
         .collect()
 }
@@ -511,16 +521,20 @@ fn network_of(address: std::net::IpAddr) -> String {
     }
 }
 
-async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<ServicePublished>)> {
+async fn published_in(
+    ctx: &ResourceContext,
+    discovery: Discovery<'_>,
+) -> Result<(Vec<Service>, Vec<ServicePublished>, Networks)> {
     let params = ListParams::default();
     let services_api = ctx.namespaced_or_cluster_api::<Service>();
     let slices_api = ctx.namespaced_or_cluster_api::<EndpointSlice>();
     let policies_api = ctx.namespaced_or_cluster_api::<NetworkPolicy>();
-    let (services, slices, policies) = Box::pin(async {
+    let (services, slices, policies, others) = Box::pin(async {
         tokio::join!(
             services_api.list(&params),
             slices_api.list(&params),
-            policies_api.list(&params)
+            policies_api.list(&params),
+            discovery.other_policies(&ctx.client, ctx.namespace.as_deref())
         )
     })
     .await;
@@ -548,23 +562,70 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
                     }),
                 )
                 .with_stop(svc, None)
-                .with_policies(svc, policies.as_deref().map_err(String::as_str))
+                .with_policies(svc, policies.as_deref().map_err(String::as_str), &others)
                 .summary()
             })
             .collect();
         let published = with_unready_cause(&ctx.client, &services, published).await;
-        return Ok((services, published));
+        return Ok((services, published, legacy_networks(&legacy)));
     };
 
     let published = published_from_slices(&services, &slices.items)
         .into_iter()
         .zip(&services)
         .map(|(published, svc)| {
-            published.with_policies(svc, policies.as_deref().map_err(String::as_str))
+            published.with_policies(svc, policies.as_deref().map_err(String::as_str), &others)
         })
         .collect();
     let published = with_unready_cause(&ctx.client, &services, published).await;
-    Ok((services, published))
+    Ok((services, published, networks_of(&slices.items)))
+}
+
+/// The /24 (IPv4) or /64 (IPv6) of every address listed, by namespace.
+type Networks = BTreeMap<String, BTreeSet<String>>;
+
+/// The most networks one namespace's answer names. Pods on four hundred
+/// nodes sit in four hundred of them, and a hundred such namespaces would
+/// put 700 KiB of addresses into one answer; past this none are sent.
+const NETWORKS_KEPT: usize = 64;
+
+/// Every address the slices list, ready or not. Read off the slices and not
+/// off what each Service publishes: that is cut to one address apiece before
+/// it gets here, and one address is not where a Service's pods sit.
+fn networks_of(slices: &[EndpointSlice]) -> Networks {
+    let mut networks = Networks::new();
+    for slice in slices {
+        let addresses = slice
+            .endpoints
+            .iter()
+            .flat_map(|endpoint| &endpoint.addresses)
+            .filter_map(|address| address.parse().ok());
+        networks
+            .entry(slice.namespace().unwrap_or_default())
+            .or_default()
+            .extend(addresses.map(network_of));
+    }
+    networks
+}
+
+fn legacy_networks(endpoints: &[Endpoints]) -> Networks {
+    let mut networks = Networks::new();
+    for object in endpoints {
+        let addresses = object
+            .subsets
+            .iter()
+            .flatten()
+            .flat_map(|subset| {
+                let ready = subset.addresses.iter().flatten();
+                ready.chain(subset.not_ready_addresses.iter().flatten())
+            })
+            .filter_map(|address| address.ip.parse().ok());
+        networks
+            .entry(object.namespace().unwrap_or_default())
+            .or_default()
+            .extend(addresses.map(network_of));
+    }
+    networks
 }
 
 fn published_from_slices(services: &[Service], slices: &[EndpointSlice]) -> Vec<ServicePublished> {
@@ -773,6 +834,15 @@ pub async fn delete_endpoints(
 
 #[cfg(test)]
 mod tests {
+    use crate::client::served::ServedIndex;
+
+    /// Discovery nobody has read yet, for a fake cluster that serves none.
+    fn undiscovered() -> Discovery<'static> {
+        Discovery {
+            served: Box::leak(Box::default()),
+            context: "fake",
+        }
+    }
     use super::*;
     use crate::state::perf::{wire_len, IPC_LIMIT_BYTES, IPC_TARGET_BYTES};
     use k8s_openapi::api::core::v1::{ObjectReference, ServicePort, ServiceSpec};
@@ -894,7 +964,11 @@ mod tests {
             published: published.clone(),
             read_at: chrono::Utc::now(),
         });
-        let compact = wire_len(&Scoped::whole(health_inputs_of(&services, published)));
+        let compact = wire_len(&Scoped::whole(health_inputs_of(
+            &services,
+            published,
+            &networks_of(&slices),
+        )));
         eprintln!(
             "2000 Services: {} B per Service whole, {} B compact, {compact} B in one message",
             whole / 2000,
@@ -912,7 +986,11 @@ mod tests {
     fn two_thousand_services_with_nothing_ready_stay_under_the_ipc_limit() {
         let (services, slices) = synthetic(2000, |_| true);
         let published = published_from_slices(&services, &slices);
-        let compact = wire_len(&Scoped::whole(health_inputs_of(&services, published)));
+        let compact = wire_len(&Scoped::whole(health_inputs_of(
+            &services,
+            published,
+            &networks_of(&slices),
+        )));
         eprintln!("2000 Services, none ready: {compact} B in one message");
         assert!(compact < IPC_LIMIT_BYTES, "{compact} bytes");
     }
@@ -928,7 +1006,7 @@ mod tests {
         services[1].spec.as_mut().expect("a spec").selector = None;
         services[2].spec.as_mut().expect("a spec").type_ = None;
         let published = published_from_slices(&services, &slices);
-        let inputs = health_inputs_of(&services, published.clone());
+        let inputs = health_inputs_of(&services, published.clone(), &networks_of(&slices));
 
         assert_eq!(inputs.len(), 50);
         let named: usize = inputs
@@ -974,7 +1052,7 @@ mod tests {
         let (services, mut slices) = synthetic(1, |_| false);
         slices[0].ports = None;
         let published = published_from_slices(&services, &slices);
-        let inputs = health_inputs_of(&services, published);
+        let inputs = health_inputs_of(&services, published, &networks_of(&slices));
 
         let stop = serde_json::to_value(&inputs[0].groups[0].stop).expect("json");
         assert_eq!(stop["reason"], "publishesNothing");
@@ -996,7 +1074,7 @@ mod tests {
         let team = |door: PolicyDoor| {
             let mut published = published.clone();
             published[0].door = Some(door);
-            health_inputs_of(&services, published)
+            health_inputs_of(&services, published, &networks_of(&slices))
                 .into_iter()
                 .find(|ns| ns.namespace == "team-00")
                 .expect("team-00")
@@ -1052,7 +1130,7 @@ mod tests {
             ],
             ..published[0].clone()
         };
-        let groups = health_inputs_of(&services, published)
+        let groups = health_inputs_of(&services, published, &networks_of(&slices))
             .into_iter()
             .find(|ns| ns.namespace == "team-00")
             .expect("team-00")
@@ -1063,26 +1141,44 @@ mod tests {
     }
 
     /// An egress ipBlock is judged against the networks a namespace's pods
-    /// sit in. Fails if an address is dropped, kept whole, or counted under
-    /// another namespace.
+    /// sit in, and they were read off what each Service publishes after it
+    /// was cut to its first address: a block letting the controller reach
+    /// the pods in a second subnet read as holding it back, in red. Fails if
+    /// an address past a Service's first is dropped, one is kept whole, or
+    /// counted under another namespace.
     #[test]
     fn the_compact_answer_keeps_the_networks_each_namespace_s_endpoints_sit_in() {
-        let (services, slices) = synthetic(51, |_| false);
-        let mut published = published_from_slices(&services, &slices);
-        let at = |address: &str| crate::resources::PublishedEndpoint {
-            address: Some(address.to_string()),
-            target: None,
-            ready: true,
-            serving: true,
-            terminating: false,
-            node_name: None,
-            zone: None,
-            hint_zones: vec![],
-            ports: vec![8080],
+        let slice = |namespace: &str, addresses: &[&str]| -> EndpointSlice {
+            serde_json::from_value(serde_json::json!({
+                "metadata": {
+                    "name": "web-x", "namespace": namespace,
+                    "labels": { "kubernetes.io/service-name": "web" },
+                },
+                "addressType": "IPv4",
+                "ports": [{ "port": 8080, "protocol": "TCP" }],
+                "endpoints": addresses
+                    .iter()
+                    .map(|address| serde_json::json!({
+                        "addresses": [address], "conditions": { "ready": true },
+                    }))
+                    .collect::<Vec<_>>(),
+            }))
+            .expect("a slice")
         };
-        published[0].endpoints = vec![at("10.42.1.7"), at("10.42.1.9")];
-        published[50].endpoints = vec![at("10.42.3.4"), at("fd00:10:42:3::5")];
-        let networks = health_inputs_of(&services, published)
+        let service: Service = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web", "namespace": "team-00" },
+            "spec": { "selector": { "app": "web" }, "ports": [{ "port": 8080 }] },
+        }))
+        .expect("a Service");
+        let services = vec![service];
+        let slices = vec![
+            slice("team-00", &["10.42.1.7", "10.42.1.9", "10.42.3.4"]),
+            slice("team-00", &["fd00:10:42:3::5"]),
+            slice("team-01", &["10.42.9.1"]),
+        ];
+        let published = published_from_slices(&services, &slices);
+        assert_eq!(published[0].endpoints.len(), 1, "cut to one address");
+        let networks = health_inputs_of(&services, published, &networks_of(&slices))
             .into_iter()
             .find(|ns| ns.namespace == "team-00")
             .expect("team-00")
@@ -1090,6 +1186,53 @@ mod tests {
         assert_eq!(
             networks,
             vec!["10.42.1.0/24", "10.42.3.0/24", "fd00:10:42:3::/64"]
+        );
+    }
+
+    /// One answer carries every namespace, and a namespace on every node
+    /// names a network per node. Fails if a namespace past the cap still
+    /// sends them, or sends some of them: a block is judged against all of a
+    /// namespace's networks or none.
+    #[test]
+    fn a_namespace_in_more_networks_than_one_answer_holds_sends_none() {
+        let service: Service = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web", "namespace": "team-00" },
+            "spec": { "selector": { "app": "web" } },
+        }))
+        .expect("a Service");
+        let spread = |count: usize| -> Networks {
+            let here = (0..count).map(|node| format!("10.{}.{}.0/24", node / 256, node % 256));
+            [("team-00".to_string(), here.collect())].into()
+        };
+        let sent = |networks: &Networks| {
+            let published = published_from_slices(std::slice::from_ref(&service), &[]);
+            health_inputs_of(std::slice::from_ref(&service), published, networks)
+                .remove(0)
+                .networks
+                .len()
+        };
+        assert_eq!(sent(&spread(NETWORKS_KEPT)), NETWORKS_KEPT);
+        assert_eq!(sent(&spread(NETWORKS_KEPT + 1)), 0);
+    }
+
+    /// A cluster below 1.21 answers from the legacy object, where the same
+    /// cut happens. Fails if its not-ready addresses or a second subset's
+    /// are left out of the networks.
+    #[test]
+    fn the_legacy_objects_addresses_are_all_counted_among_the_networks() {
+        let endpoints: Endpoints = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web", "namespace": "team-00" },
+            "subsets": [
+                { "addresses": [{ "ip": "10.42.1.7" }],
+                  "notReadyAddresses": [{ "ip": "10.42.2.7" }] },
+                { "addresses": [{ "ip": "10.42.3.7" }] },
+            ],
+        }))
+        .expect("an Endpoints");
+        let networks = legacy_networks(&[endpoints]);
+        assert_eq!(
+            networks["team-00"].iter().collect::<Vec<_>>(),
+            ["10.42.1.0/24", "10.42.2.0/24", "10.42.3.0/24"]
         );
     }
 
@@ -1276,7 +1419,7 @@ mod tests {
     async fn a_service_with_only_unready_addresses_says_why_from_its_pods() {
         use crate::client::served::test_server::answering;
         let (client, _) = answering(unready_demo((200, failing_readiness()))).await;
-        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()))
+        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()), undiscovered())
             .await
             .expect("inputs");
         let stop = inputs[0].groups[0].stop.as_ref().expect("a stop");
@@ -1298,7 +1441,7 @@ mod tests {
     async fn a_refused_pod_list_leaves_the_cause_to_the_service_page() {
         use crate::client::served::test_server::{answering, failure};
         let (client, _) = answering(unready_demo(failure(403, "Forbidden"))).await;
-        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()))
+        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()), undiscovered())
             .await
             .expect("inputs");
         let stop = inputs[0].groups[0].stop.as_ref().expect("a stop");
@@ -1364,7 +1507,7 @@ mod tests {
                     _ => base(path, n),
                 })
                 .await;
-                health_inputs_in(client, Some("k8s-gui-test".to_string()))
+                health_inputs_in(client, Some("k8s-gui-test".to_string()), undiscovered())
                     .await
                     .expect("inputs")[0]
                     .groups[0]
@@ -1505,7 +1648,7 @@ mod tests {
                     _ => (404, "{}".to_string()),
                 })
                 .await;
-                health_inputs_in(client, Some("refused-demo".to_string()))
+                health_inputs_in(client, Some("refused-demo".to_string()), undiscovered())
                     .await
                     .expect("inputs")[0]
                     .groups[0]
@@ -1551,7 +1694,7 @@ mod tests {
         });
         let stop_with = |answer: (u16, String)| async move {
             let (client, _) = answering(hello_web_at_zero(answer)).await;
-            health_inputs_in(client, Some("lena-sandbox".to_string()))
+            health_inputs_in(client, Some("lena-sandbox".to_string()), undiscovered())
                 .await
                 .expect("inputs")[0]
                 .groups[0]
@@ -1640,7 +1783,7 @@ mod tests {
             _ => (404, "{}".to_string()),
         })
         .await;
-        let inputs = health_inputs_in(client, Some("team-checkout".to_string()))
+        let inputs = health_inputs_in(client, Some("team-checkout".to_string()), undiscovered())
             .await
             .expect("inputs");
         let stop = inputs[0].groups[0].stop.clone();
@@ -1713,10 +1856,17 @@ mod tests {
             _ => (404, "{}".to_string()),
         })
         .await;
-        let (services, published) = published_in(&ResourceContext {
-            client,
-            namespace: Some("team-checkout".to_string()),
-        })
+        let served = ServedIndex::default();
+        let (services, published, _) = published_in(
+            &ResourceContext {
+                client,
+                namespace: Some("team-checkout".to_string()),
+            },
+            Discovery {
+                served: &served,
+                context: "fake",
+            },
+        )
         .await
         .expect("published");
         let stops: BTreeMap<String, Option<ChainStop>> = services
@@ -1746,19 +1896,39 @@ mod tests {
         }
     }
 
-    /// The routing pages, the Overview and the Services list read stops from
-    /// here, and the chain from the neighbourhood: both say the same shut
-    /// door. A policy list the reader is refused stops nothing and leaves the
-    /// door unread, rather than open. Fails if this reader skips the
-    /// policies, turns a 403 into a finding, or into no door at all.
-    #[tokio::test]
-    async fn a_service_behind_a_policy_that_admits_nothing_stops_at_the_pods_door() {
+    const CILIUM_GROUP: &str = r#"{"kind":"APIGroupList","apiVersion":"v1","groups":[{
+        "name":"cilium.io",
+        "versions":[{"groupVersion":"cilium.io/v2","version":"v2"}],
+        "preferredVersion":{"groupVersion":"cilium.io/v2","version":"v2"}}]}"#;
+    const CILIUM_KINDS: &str = r#"{"kind":"APIResourceList","apiVersion":"v1",
+        "groupVersion":"cilium.io/v2","resources":[{
+        "name":"ciliumnetworkpolicies","singularName":"","namespaced":true,
+        "kind":"CiliumNetworkPolicy","verbs":["get","list","watch"]}]}"#;
+    const FORBIDDEN: &str = r#"{"kind":"Status","code":403}"#;
+
+    fn list_of(kind: &str, items: serde_json::Value) -> (u16, String) {
+        let list = serde_json::json!({
+            "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items,
+        });
+        (200, list.to_string())
+    }
+
+    fn deny_all() -> (u16, String) {
+        list_of(
+            "NetworkPolicyList",
+            serde_json::json!([{
+                "metadata": { "name": "deny-all-ingress", "namespace": "team-checkout" },
+                "spec": { "podSelector": {}, "policyTypes": ["Ingress"] }
+            }]),
+        )
+    }
+
+    /// What Service `log-demo` publishes, one ready pod behind it, on a
+    /// cluster that serves Cilium's policy kind: `policies` is what the
+    /// namespace's `NetworkPolicy` list answers, `cilium` what Cilium's does.
+    async fn behind_policies(policies: (u16, String), cilium: (u16, String)) -> ServicePublished {
         use crate::client::served::test_server::answering;
-        let list = |kind: &str, items: serde_json::Value| {
-            serde_json::json!({ "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items })
-                .to_string()
-        };
-        let services = list(
+        let services = list_of(
             "ServiceList",
             serde_json::json!([{
                 "metadata": { "name": "log-demo", "namespace": "team-checkout" },
@@ -1768,7 +1938,7 @@ mod tests {
                 }
             }]),
         );
-        let slices = list(
+        let slices = list_of(
             "EndpointSliceList",
             serde_json::json!([{
                 "metadata": {
@@ -1781,38 +1951,46 @@ mod tests {
                 "endpoints": [{ "addresses": ["10.0.0.1"], "conditions": { "ready": true } }]
             }]),
         );
-        let policies = list(
-            "NetworkPolicyList",
-            serde_json::json!([{
-                "metadata": { "name": "deny-all-ingress", "namespace": "team-checkout" },
-                "spec": { "podSelector": {}, "policyTypes": ["Ingress"] }
-            }]),
-        );
-        let published_with = |policies: (u16, String)| {
-            let (services, slices) = (services.clone(), slices.clone());
-            async move {
-                let (client, _) = answering(move |path, _| match path {
-                    "/api/v1/namespaces/team-checkout/services" => (200, services.clone()),
-                    "/apis/discovery.k8s.io/v1/namespaces/team-checkout/endpointslices" => {
-                        (200, slices.clone())
-                    }
-                    "/apis/networking.k8s.io/v1/namespaces/team-checkout/networkpolicies" => {
-                        policies.clone()
-                    }
-                    _ => (404, "{}".to_string()),
-                })
-                .await;
-                published_in(&ResourceContext {
-                    client,
-                    namespace: Some("team-checkout".to_string()),
-                })
-                .await
-                .expect("published")
-                .1
-                .remove(0)
+        let (client, _) = answering(move |path, _| match path {
+            "/api/v1/namespaces/team-checkout/services" => services.clone(),
+            "/apis/discovery.k8s.io/v1/namespaces/team-checkout/endpointslices" => slices.clone(),
+            "/apis/networking.k8s.io/v1/namespaces/team-checkout/networkpolicies" => {
+                policies.clone()
             }
-        };
-        let shut = published_with((200, policies)).await.stop;
+            "/apis" => (200, CILIUM_GROUP.to_string()),
+            "/apis/cilium.io/v2" => (200, CILIUM_KINDS.to_string()),
+            "/apis/cilium.io/v2/namespaces/team-checkout/ciliumnetworkpolicies" => cilium.clone(),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let served = ServedIndex::default();
+        published_in(
+            &ResourceContext {
+                client,
+                namespace: Some("team-checkout".to_string()),
+            },
+            Discovery {
+                served: &served,
+                context: "fake",
+            },
+        )
+        .await
+        .expect("published")
+        .1
+        .remove(0)
+    }
+
+    /// The routing pages, the Overview and the Services list read stops from
+    /// here, and the chain from the neighbourhood: both say the same shut
+    /// door. A policy list the reader is refused stops nothing and leaves the
+    /// door unread, rather than open. Fails if this reader skips the
+    /// policies, turns a 403 into a finding, or into no door at all; or if
+    /// another engine's kind that is served and holds no policy in the
+    /// namespace takes the stop away, as it would on every Cilium cluster.
+    #[tokio::test]
+    async fn a_service_behind_a_policy_that_admits_nothing_stops_at_the_pods_door() {
+        let none = list_of("CiliumNetworkPolicyList", serde_json::json!([]));
+        let shut = behind_policies(deny_all(), none.clone()).await.stop;
         assert!(
             matches!(
                 &shut,
@@ -1821,12 +1999,46 @@ mod tests {
             ),
             "{shut:?}"
         );
-        let refused = published_with((403, r#"{"kind":"Status","code":403}"#.to_string())).await;
+        let refused = behind_policies((403, FORBIDDEN.to_string()), none).await;
         assert!(refused.stop.is_none(), "{:?}", refused.stop);
         assert!(
             matches!(refused.door, Some(PolicyDoor::Unread { .. })),
             "{:?}",
             refused.door
         );
+    }
+
+    fn overlaid_by_cilium(published: &ServicePublished) -> bool {
+        published.stop.is_none()
+            && matches!(
+                &published.door,
+                Some(PolicyDoor::Overlaid { alone, kinds, shut: true })
+                    if alone.isolating == ["deny-all-ingress"]
+                        && kinds == &["CiliumNetworkPolicy"]
+            )
+    }
+
+    /// Cilium unites its own allows with a `NetworkPolicy`'s, so a
+    /// default-deny beside a `CiliumNetworkPolicy` passes traffic, and every
+    /// Service of the namespace read red "shut by `NetworkPolicy`". Fails if
+    /// this reader does not ask for the other engines' policies, or still
+    /// says the stop beside one.
+    #[tokio::test]
+    async fn a_policy_of_another_engine_in_the_namespace_leaves_the_shut_door_unsaid() {
+        let one = list_of(
+            "CiliumNetworkPolicyList",
+            serde_json::json!([{ "metadata": { "name": "allow-web", "namespace": "team-checkout" } }]),
+        );
+        let published = behind_policies(deny_all(), one).await;
+        assert!(overlaid_by_cilium(&published), "{published:?}");
+    }
+
+    /// A reader refused the other engine's policies has not been told there
+    /// are none. Fails if a 403 on their list reads as an empty one, which
+    /// brings the red verdict back for exactly the reader who cannot check.
+    #[tokio::test]
+    async fn another_engines_policies_nobody_may_list_are_not_taken_for_none() {
+        let published = behind_policies(deny_all(), (403, FORBIDDEN.to_string())).await;
+        assert!(overlaid_by_cilium(&published), "{published:?}");
     }
 }

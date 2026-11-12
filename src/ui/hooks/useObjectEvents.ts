@@ -3,7 +3,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { useReadEventsUid } from "@/hooks/useReadUid";
-import type { EventInfo } from "@/generated/types";
+import type { EventInfo, LatestEvents } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import {
@@ -153,20 +153,29 @@ export function useObjectEvents(
   );
   const uid = everyObject ? undefined : (known ?? read);
   const select = useCallback(
-    (events: EventInfo[]) => ofObject(events, group, uid),
+    (read: LatestEvents): LatestEvents => ({
+      events: ofObject(read.events, group, uid),
+      short: read.short,
+    }),
     [uid, group]
   );
   const own = useLiveQuery({
     queryKey: [...queryKeys.events(scope ?? null), "object", kind, name ?? ""],
-    queryFn: () =>
-      commands.listEvents({
+    queryFn: async (): Promise<LatestEvents> => {
+      const filters = {
         namespace: scope || null,
         involved_object_name: everyObject ? null : (name ?? null),
         involved_object_kind: everyObject ? null : kind,
         event_type: null,
         field_selector: null,
         limit: OBJECT_EVENTS_READ,
-      }),
+      };
+      // Every object's events are the one read long enough to be cut short;
+      // one object's are few, and their read says nothing of it.
+      return everyObject
+        ? commands.listLatestEvents(filters)
+        : { events: await commands.listEvents(filters), short: false };
+    },
     enabled: enabled && !!name,
     select,
     refresh,
@@ -208,16 +217,17 @@ export function useObjectEvents(
     refresh,
     retry: false,
   });
+  const ownEvents = own.data?.events;
   const data = useMemo(() => {
-    if (!readsOwned || !own.data) return own.data;
-    if (owned.error) return own.data;
+    if (!readsOwned || !ownEvents) return ownEvents;
+    if (owned.error) return ownEvents;
     if (!owned.data) return undefined;
     return owned.data.length === 0
-      ? own.data
-      : [...own.data, ...owned.data]
+      ? ownEvents
+      : [...ownEvents, ...owned.data]
           .sort(newestFirst)
           .slice(0, OBJECT_EVENTS_READ);
-  }, [readsOwned, own.data, owned.data, owned.error]);
+  }, [readsOwned, ownEvents, owned.data, owned.error]);
   const refetchOwn = own.refetch;
   const refetchOwned = owned.refetch;
   const refetch = useCallback(
@@ -235,6 +245,8 @@ export function useObjectEvents(
     subject: { kind, name: name ?? "", namespace: namespace ?? "" },
     /** The rows are every object's in the namespace, not one object's. */
     everyObject,
+    /** The read stopped before the collection's end: the rows are the newest of those read, and newer ones may be missing. */
+    short: own.data?.short ?? false,
     data,
     error: own.error,
     isPending: own.isPending || (readsOwned && owned.isPending),

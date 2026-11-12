@@ -86,6 +86,18 @@ impl ResourceContext {
         Api::namespaced(self.client.clone(), namespace)
     }
 
+    /// A namespaced built-in kind as the cluster wrote it. The compiled
+    /// bindings know the fields of one Kubernetes release and drop every
+    /// other on the way in, so what is read to be written back, or compared
+    /// whole, is read through here.
+    #[must_use]
+    pub fn raw_api<K>(&self) -> Api<DynamicObject>
+    where
+        K: Resource<DynamicType = (), Scope = k8s_openapi::NamespaceResourceScope>,
+    {
+        self.dynamic_api_for_resource(&ApiResource::erase::<K>(&()), false)
+    }
+
     #[must_use]
     pub fn namespaced_or_cluster_api<K>(&self) -> Api<K>
     where

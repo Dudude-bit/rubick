@@ -89,4 +89,27 @@ describe("the Endpoints tab's mark", () => {
     });
     expect(endpointsMark(read([]), t)).toBeUndefined();
   });
+
+  /**
+   * Slices, Endpoints and pods all refused: the read answered and holds
+   * nothing this Service publishes. Fails if the tab then wears no mark, as
+   * a read still out does, or a count.
+   */
+  it("wears the not-read ring where the answer says the slices were refused", () => {
+    const refused = read([]);
+    refused.data!.notLookedAt = [
+      {
+        kind: "EndpointSlice",
+        why: {
+          says: "unanswered",
+          version: "discovery.k8s.io/v1",
+          said: "endpointslices.discovery.k8s.io is forbidden",
+        },
+      },
+    ];
+    expect(endpointsMark(refused, t)).toEqual({
+      shows: "unchecked",
+      says: "Could not read what this Service publishes.",
+    });
+  });
 });

@@ -29,6 +29,7 @@ vi.mock("@/stores/clusterStore", () => ({
 const podRead = vi.hoisted(() => ({
   data: [] as unknown[],
   read: false,
+  error: null as Error | null,
   unread: [] as unknown[],
 }));
 vi.mock("@/hooks/usePodsWithMetrics", () => ({
@@ -49,7 +50,13 @@ vi.mock("@/hooks/useWatchedList", () => ({
   }),
 }));
 
+vi.mock("@/lib/commands", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/commands")>();
+  return { commands: { ...real.commands, listEvents: vi.fn() } };
+});
+
 import { renderWithRouter } from "@/test/render";
+import { commands } from "@/lib/commands";
 import { matchDeploymentPods } from "@/lib/metrics";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
@@ -92,6 +99,7 @@ beforeEach(() => {
   watch.live = true;
   podRead.data = [];
   podRead.read = false;
+  podRead.error = null;
   podRead.unread = [];
   store.state.namespaceScope = ["prod", "staging"];
 });
@@ -239,5 +247,121 @@ describe("the cause a workload list's row tells", () => {
     expect(
       screen.getByText("pods not read, so why is not known")
     ).toBeVisible();
+  });
+});
+
+describe("a workload list whose pod read failed", () => {
+  /**
+   * A token that may list Deployments and not pods: the read of one
+   * namespace fails whole, and every troubled row said "reading its pods"
+   * for as long as the page stayed open. Fails if a pod read that failed
+   * reads as one still on its way, or one still on its way as failed.
+   */
+  it("says the pods were not read, and reading only while they are", async () => {
+    watch.live = false;
+    const List = createWorkloadListPage<Item>({
+      resourceType: ResourceType.Deployment,
+      title: "Deployments",
+      fetchList: async () => ({
+        rows: [{ name: "api", namespace: "prod" }],
+        unread: [],
+      }),
+      matchPods: matchDeploymentPods,
+      deleter: async () => undefined,
+      columns: () => [
+        { accessorKey: "name", header: "Name" },
+        {
+          id: "cause",
+          header: "Cause",
+          cell: ({ row }) => (
+            <RowCauseText cause={row.original.podsCause} verdict="trouble" />
+          ),
+        },
+      ],
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const rerender = await mount(client, List);
+    expect(await screen.findByText("reading its pods")).toBeVisible();
+
+    podRead.error = new Error("pods is forbidden");
+    await rerender();
+    expect(
+      await screen.findByText("pods not read, so why is not known")
+    ).toBeVisible();
+    expect(screen.queryByText("reading its pods")).toBeNull();
+  });
+});
+
+describe("the refusals a workload list reads", () => {
+  /**
+   * A reader bound to two namespaces is refused the cluster-wide events
+   * read, and the list asked for exactly that whenever more than one was
+   * selected: a Job whose pods the API server refuses read "Pending" where
+   * its page and peek, asking the namespace, said FailedCreate. Fails if the
+   * list asks the whole cluster for a selection of several.
+   */
+  it("asks each selected namespace for its own, never the whole cluster", async () => {
+    watch.live = false;
+    podRead.read = true;
+    vi.mocked(commands.listEvents).mockImplementation(async (filters) => {
+      const namespace = filters?.namespace ?? null;
+      if (namespace === null)
+        throw { code: "FORBIDDEN", message: "events is forbidden" };
+      if (namespace !== "prod") return [];
+      return [
+        {
+          name: "migrate.1",
+          namespace: "prod",
+          uid: "e1",
+          type: "Warning",
+          reason: "FailedCreate",
+          message:
+            'Error creating: pods "migrate-x" is forbidden: exceeded quota: compute, requested: pods=1, used: pods=10, limited: pods=10',
+          source: "job-controller",
+          involvedObject: {
+            kind: "Job",
+            name: "migrate",
+            namespace: "prod",
+            uid: "job-1",
+          },
+          count: 3,
+          firstTimestamp: null,
+          lastTimestamp: "2026-11-12T10:00:00Z",
+        },
+      ];
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const List = createWorkloadListPage<Item & { uid: string }>({
+      resourceType: ResourceType.Job,
+      title: "Jobs",
+      fetchList: async () => ({
+        rows: [
+          { name: "migrate", namespace: "prod", uid: "job-1" },
+          { name: "report", namespace: "staging", uid: "job-2" },
+        ],
+        unread: [],
+      }),
+      matchPods: matchDeploymentPods,
+      deleter: async () => undefined,
+      columns: () => [
+        { accessorKey: "name", header: "Name" },
+        {
+          id: "cause",
+          header: "Cause",
+          cell: ({ row }) => <span>{row.original.podsCause.says}</span>,
+        },
+      ],
+    });
+    await mount(client, List);
+    expect(await screen.findByText("refused")).toBeVisible();
+    expect(screen.getAllByText("read")).toHaveLength(1);
+    const asked = vi
+      .mocked(commands.listEvents)
+      .mock.calls.map(([filters]) => filters?.namespace);
+    expect(new Set(asked)).toEqual(new Set(["prod", "staging"]));
   });
 });

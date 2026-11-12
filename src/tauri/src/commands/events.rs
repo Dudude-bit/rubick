@@ -57,10 +57,35 @@ pub async fn list_events(
     filters: Option<EventFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<EventInfo>> {
-    crate::client::clock::timed(&state.perf, "listEvents", events_in(&state, filters)).await
+    crate::client::clock::timed(&state.perf, "listEvents", async {
+        Ok(events_in(&state, filters).await?.events)
+    })
+    .await
 }
 
-async fn events_in(state: &AppState, filters: Option<EventFilters>) -> Result<Vec<EventInfo>> {
+/// The newest events a walk found, and whether it reached the collection's
+/// end.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LatestEvents {
+    pub events: Vec<EventInfo>,
+    /// The walk stopped first: at its page budget, or on a page that failed.
+    /// The events are then the newest of those read, in the order etcd keeps
+    /// them, and a newer one further on is not among them.
+    pub short: bool,
+}
+
+/// [`list_events`] for a reader that calls its rows the latest, which a walk
+/// cut short cannot promise: a whole namespace's events, most of all.
+#[tauri::command]
+pub async fn list_latest_events(
+    filters: Option<EventFilters>,
+    state: State<'_, AppState>,
+) -> Result<LatestEvents> {
+    crate::client::clock::timed(&state.perf, "listLatestEvents", events_in(&state, filters)).await
+}
+
+async fn events_in(state: &AppState, filters: Option<EventFilters>) -> Result<LatestEvents> {
     let filters = filters.unwrap_or_default();
     let ctx = ResourceContext::for_list(state, filters.namespace)?;
 
@@ -128,7 +153,12 @@ async fn events_in(state: &AppState, filters: Option<EventFilters>) -> Result<Ve
         }
     }
 
-    Ok(events)
+    // A token still in hand is a page not read: the budget ran out, or the
+    // page it was for failed.
+    Ok(LatestEvents {
+        events,
+        short: token.is_some(),
+    })
 }
 
 /// The most warnings one pod's read asks for: the kubelet repeats one by its count.
@@ -322,6 +352,59 @@ mod tests {
         }))
         .expect("a pod this test wrote itself");
         assert_eq!(uids_of(&mirror), Some(("9f0c2a11", "5f3c0d7e")));
+    }
+
+    /// What a walk over namespace `shop` answers where its event list hands
+    /// out a continue token for its first `more` pages, the page after
+    /// answering as `then` says.
+    async fn walked(more: usize, then: u16) -> LatestEvents {
+        use crate::client::served::{test_server::connected, ServedIndex};
+        let (state, _) = connected(ServedIndex::default(), move |path, nth| {
+            if path != "/api/v1/namespaces/shop/events" {
+                return (404, "{}".into());
+            }
+            if nth > more && then != 200 {
+                return crate::client::served::test_server::failure(then, "Expired");
+            }
+            let token = if nth <= more { "next" } else { "" };
+            let page = serde_json::json!({
+                "apiVersion": "v1", "kind": "EventList",
+                "metadata": { "continue": token },
+                "items": [{
+                    "metadata": { "name": format!("web.{nth}"), "namespace": "shop" },
+                    "involvedObject": { "kind": "Pod", "name": "web", "namespace": "shop" },
+                    "lastTimestamp": format!("2026-11-12T10:00:0{nth}Z"),
+                }],
+            });
+            (200, page.to_string())
+        })
+        .await;
+        let filters = EventFilters {
+            namespace: Some("shop".into()),
+            limit: Some(200),
+            ..Default::default()
+        };
+        events_in(&state, Some(filters)).await.expect("a walk")
+    }
+
+    /// A namespace holding more events than a limited walk reads gave its
+    /// page "the latest 200" out of the first two thousand in name order,
+    /// with nothing saying the walk had stopped. Fails if a walk cut at its
+    /// budget, or by a page that failed, does not say it is short, or one
+    /// that reached the end says it is.
+    #[tokio::test]
+    async fn a_walk_that_stops_before_the_end_says_its_events_may_not_be_the_latest() {
+        let cut = walked(MAX_EVENT_PAGES, 200).await;
+        assert_eq!(cut.events.len(), MAX_EVENT_PAGES);
+        assert!(cut.short);
+
+        let whole = walked(MAX_EVENT_PAGES - 1, 200).await;
+        assert_eq!(whole.events.len(), MAX_EVENT_PAGES);
+        assert!(!whole.short);
+
+        let broken = walked(1, 410).await;
+        assert_eq!(broken.events.len(), 1);
+        assert!(broken.short);
     }
 
     fn none_ready(cause: PodCause, why: NotServing) -> ChainStop {

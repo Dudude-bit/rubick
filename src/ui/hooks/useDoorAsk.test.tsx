@@ -6,6 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 const answer = vi.hoisted(() => ({
   classes: null as Error | null,
   asked: [] as Array<string[] | null>,
+  askedOthers: [] as string[][],
   gatewayApi: false,
 }));
 
@@ -69,6 +70,15 @@ vi.mock("@/lib/commands", () => ({
             ],
           }),
     listNamespaces: () => Promise.resolve([{ name: "traefik", labels: {} }]),
+    listOtherPolicyKinds: (namespaces: string[]) => {
+      answer.askedOthers.push(namespaces);
+      return Promise.resolve(
+        namespaces.map((namespace) => ({
+          namespace,
+          kinds: ["CiliumNetworkPolicy"],
+        }))
+      );
+    },
     listNetworkPoliciesIn: (scope: string[] | null) => {
       answer.asked.push(scope);
       return Promise.resolve({
@@ -131,6 +141,26 @@ describe("who each IngressClass and GatewayClass controller connects from", () =
   });
 
   /**
+   * Its egress NetworkPolicies decide alone only where no other engine's
+   * policies hold its pods. Fails if nobody asks which do, or asks about a
+   * namespace its pods do not run in.
+   */
+  it("reads the other engines' policy kinds in force where a claimed controller's pods run", async () => {
+    answer.classes = null;
+    answer.askedOthers = [];
+    const { result } = render();
+    await waitFor(() =>
+      expect(result.current("traefik.io/ingress-controller")).toMatchObject({
+        others: {
+          known: true,
+          value: [{ namespace: "traefik", kinds: ["CiliumNetworkPolicy"] }],
+        },
+      })
+    );
+    expect(answer.askedOthers).toEqual([["traefik"]]);
+  });
+
+  /**
    * Traefik's Gateway provider runs in the same pods under a controllerName
    * of its own. Fails if a GatewayClass's controller is never asked about,
    * or a Gateway's class does not lead to the controller to ask.
@@ -164,6 +194,7 @@ describe("who each IngressClass and GatewayClass controller connects from", () =
         name: "Traefik",
         clients: { known: false, why: expect.stringContaining("forbidden") },
         egress: { known: false, why: expect.stringContaining("forbidden") },
+        others: { known: false, why: expect.stringContaining("forbidden") },
       })
     );
   });

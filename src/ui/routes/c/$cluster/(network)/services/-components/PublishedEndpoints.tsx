@@ -32,6 +32,7 @@ import {
   endpointAddress,
   endpointState,
   publishedFor,
+  publishedUnread,
   publishedSummary,
   sourceNote,
   topologyNote,
@@ -79,9 +80,14 @@ export function PublishedEndpoints({ query }: { query: ConnectionsRead }) {
   }
   const published = publishedFor(data, data.subject);
   if (!published) {
+    const unread = publishedUnread(data);
     return (
       <p className="text-xs text-fg-fnt">
-        <T section="empty" k="nothingReadForService" />
+        {unread === null ? (
+          <T section="empty" k="nothingReadForService" />
+        ) : (
+          `${t("empty", "couldNotReadWhatServicePublishes")} ${unread}`
+        )}
       </p>
     );
   }

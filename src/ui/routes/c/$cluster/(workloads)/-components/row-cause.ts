@@ -47,8 +47,15 @@ type ListedPod = PodRow & { kubeletWarned?: boolean };
 export interface RowPods {
   byOwner: ReadonlyMap<string, ListedPod[]>;
   deadlines: readonly number[];
-  unread: ReadonlySet<string>;
+  unread: Pick<ReadonlySet<string>, "has">;
 }
+
+/** A pod read that failed whole: no namespace's pods were read, which is not the same as still reading them. */
+export const PODS_UNREAD: RowPods = {
+  byOwner: new Map(),
+  deadlines: [],
+  unread: { has: () => true },
+};
 
 const ownerKey = (kind: string, namespace: string, name: string) =>
   `${kind}\0${namespace}\0${name}`;

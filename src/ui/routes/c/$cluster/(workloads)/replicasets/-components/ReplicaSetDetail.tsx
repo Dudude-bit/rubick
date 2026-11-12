@@ -86,6 +86,7 @@ export function ReplicaSetDetail() {
     pods,
     error: podsError,
     isPending: podsPending,
+    refetch: refetchPods,
     split: splitPods,
   } = useWorkloadPods(
     ResourceType.ReplicaSet,
@@ -282,6 +283,8 @@ export function ReplicaSetDetail() {
         <PodListCard
           pods={pods}
           pending={podsPending}
+          error={podsError}
+          onRetry={() => void refetchPods()}
           // "No pods" on a superseded revision reads as a fault. It is the
           // ordinary end of a rollout, and the page has to say so.
           emptyMessage={emptyPods ? noPods : t("empty", "revisionHasNoPods")}

@@ -95,6 +95,7 @@ const readOf = (
 ): DoorRead => ({
   name: "Traefik",
   egress: { known: true, value: { rows: [], unread: [] } },
+  others: { known: true, value: [] },
   clients: { known: true, value: clients },
   namespaces: read,
 });
@@ -124,6 +125,39 @@ describe("whether a controller gets through the policies over a Service's pods",
 
   it("admits a controller a rule's peer names", () => {
     expect(verdict(guarded([rule([fromNamespace("traefik")])]))).toEqual({
+      state: "admitted",
+    });
+  });
+
+  /**
+   * Cilium unites its own allows with a NetworkPolicy's: a controller no
+   * NetworkPolicy rule names may be admitted by a CiliumNetworkPolicy, and
+   * its Ingress read red "backend down". Fails if a door another engine's
+   * policies also hold still refuses a client, or stops admitting the one
+   * the NetworkPolicies already let in.
+   */
+  it("refuses nobody where another engine's policies also hold the door", () => {
+    const overlaid = (rules: DoorRule[]): PolicyDoor => {
+      const door = guarded(rules);
+      if (door.state !== "guarded") throw new Error("a guarded door");
+      const { isolating, unsettled, ports } = door;
+      return {
+        state: "overlaid",
+        alone: { isolating, unsettled, ports },
+        kinds: ["CiliumNetworkPolicy"],
+        shut: false,
+      };
+    };
+    expect(verdict(overlaid([rule([fromNamespace("ingress-nginx")])]))).toEqual(
+      {
+        state: "unsure",
+        policies: ["allow-nginx"],
+        why: "otherPolicies",
+        side: "pods",
+        said: null,
+      }
+    );
+    expect(verdict(overlaid([rule([fromNamespace("traefik")])]))).toEqual({
       state: "admitted",
     });
   });
@@ -448,6 +482,45 @@ describe("whether a controller's own egress policies let it reach a Service's po
     });
   });
 
+  /**
+   * The same doubt at the controller's end: a default-deny egress
+   * NetworkPolicy beside a CiliumNetworkPolicy that lets it out read red
+   * "held back". Fails if the egress NetworkPolicies decide alone where
+   * another engine's policies are in force in the controller's namespace or
+   * were not read, or stop deciding where they hold only somewhere else.
+   */
+  it("holds nobody back where another engine's policies are in force beside its egress rules", () => {
+    const beside = (others: DoorRead["others"]) =>
+      doorVerdict(reached(), "80", { ...leaving([holding([])]), others });
+    const kinds = ["CiliumNetworkPolicy"];
+    expect(
+      beside({ known: true, value: [{ namespace: "traefik", kinds }] })
+    ).toEqual({
+      state: "unsure",
+      policies: ["traefik-out"],
+      why: "otherPolicies",
+      side: "client",
+      said: null,
+    });
+    expect(beside({ known: false, why: "boom" })).toMatchObject({
+      state: "unsure",
+      why: "otherPolicies",
+    });
+    expect(beside({ known: false, why: null })).toMatchObject({
+      state: "unsure",
+      why: "clientsReading",
+    });
+    expect(
+      beside({
+        known: true,
+        value: [
+          { namespace: "traefik", kinds: [] },
+          { namespace: "shop", kinds },
+        ],
+      })
+    ).toMatchObject({ state: "refused", stop: { reason: "policyHoldsBack" } });
+  });
+
   it("lets a controller out where a rule names the pods' namespace on their port, or a range holding it", () => {
     expect(judged([out([fromNamespace("shop")])])).toEqual({
       state: "admitted",
@@ -549,6 +622,25 @@ describe("whether a controller's own egress policies let it reach a Service's po
     expect(
       judged([out([block("10.42.0.0/16")])], netted(["10.43.0.0/24"]))
     ).toMatchObject({ state: "refused" });
+  });
+
+  /**
+   * Every answer but the Service's own page carries one address of it, and
+   * a block was judged against that one: pods in two subnets and a block
+   * that lets the controller reach the second read red "holds back". Fails
+   * if a block that misses the one address an answer kept reads as missing
+   * every pod, or if an answer that kept them all stops being judged.
+   */
+  it("does not judge an ipBlock against the one address a cut answer kept", () => {
+    const elsewhere = [out([block("10.42.9.0/24")])];
+    expect(judged(elsewhere, { ...reached(), whole: false })).toMatchObject({
+      state: "unsure",
+      why: "egressIpBlock",
+    });
+    expect(judged(elsewhere, { ...reached(), whole: true })).toMatchObject({
+      state: "refused",
+      stop: { reason: "policyHoldsBack" },
+    });
   });
 
   it("cannot say for a controller on the node's network, nor for a port the backend does not pick", () => {

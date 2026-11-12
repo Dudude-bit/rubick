@@ -7,6 +7,7 @@ import type {
   ChainStop,
   NotServing,
   ObjectRef,
+  ResourceConnections,
   ServicePublished,
   SharedCause,
 } from "@/generated/types";
@@ -436,7 +437,7 @@ describe("one verdict for a Service on every surface", () => {
     expect(unread).toEqual({
       state: "policiesUnread",
       ready: 2,
-      why: "networkpolicies is forbidden",
+      why: { why: "unread", said: "networkpolicies is forbidden" },
     });
     const words = serviceHealthWords(unread, t);
     expect(words).toMatchObject({ label: "2 ready", role: "neutral" });
@@ -450,6 +451,48 @@ describe("one verdict for a Service on every surface", () => {
       expect(
         serviceHealthOf(SELECTING, published({ ready: 2, door }), null).state
       ).toBe("ready");
+  });
+
+  /**
+   * A default-deny NetworkPolicy beside allows written as CiliumNetworkPolicy
+   * passes traffic, and the Service read red "shut by NetworkPolicy" on every
+   * surface. Fails if a door another engine's policies also hold reads as
+   * shut or as a plain green count, if the reason stops naming the kinds
+   * nobody read, or if such a door the NetworkPolicies leave open to someone
+   * loses its ready verdict.
+   */
+  it("does not call ready pods shut where another engine's policies may admit", () => {
+    const alone = { isolating: ["deny-all"], unsettled: [], ports: [] };
+    const kinds = ["CiliumNetworkPolicy"];
+    const overlaid = serviceHealthOf(
+      SELECTING,
+      published({
+        ready: 2,
+        door: { state: "overlaid", alone, kinds, shut: true },
+      }),
+      null
+    );
+    expect(overlaid).toEqual({
+      state: "policiesUnread",
+      ready: 2,
+      why: { why: "others", policies: ["deny-all"], kinds },
+    });
+    const words = serviceHealthWords(overlaid, t);
+    expect(words).toMatchObject({ label: "2 ready", role: "neutral" });
+    expect(words.reason).toContain("CiliumNetworkPolicy objects are in force");
+    expect(words.reason).toContain("deny-all");
+    expect(words.glyph).toBeDefined();
+
+    expect(
+      serviceHealthOf(
+        SELECTING,
+        published({
+          ready: 2,
+          door: { state: "overlaid", alone, kinds, shut: false },
+        }),
+        null
+      ).state
+    ).toBe("ready");
   });
 
   /**
@@ -468,7 +511,10 @@ describe("one verdict for a Service on every surface", () => {
       published({ ready: 1, notReady: 1, door }),
       null
     );
-    expect(partly).toMatchObject({ state: "partly", unchecked: door.reason });
+    expect(partly).toMatchObject({
+      state: "partly",
+      unchecked: { why: "unread", said: door.reason },
+    });
     const words = serviceHealthWords(partly, t);
     expect(words).toMatchObject({ label: "1 of 2 ready", role: "warn" });
     expect(words.reason).toBe(
@@ -482,7 +528,7 @@ describe("one verdict for a Service on every surface", () => {
     );
     expect(draining).toMatchObject({
       state: "draining",
-      unchecked: door.reason,
+      unchecked: { why: "unread", said: door.reason },
     });
     expect(serviceHealthWords(draining, t).reason).toContain(
       "is not checked: networkpolicies is forbidden"
@@ -621,6 +667,54 @@ describe("one verdict for a Service on every surface", () => {
     expect(healthFromConnections(undefined, null)).toEqual({
       state: "unknown",
       why: null,
+    });
+  });
+
+  /**
+   * A reader who may list Services and not pods, endpoints or
+   * endpointslices opened a healthy Service and saw red "No endpoints": the
+   * neighbourhood answered, and what the Service publishes was read from
+   * nothing. Fails if such an answer reads as no endpoints or as still
+   * reading, or loses the cluster's words.
+   */
+  it("says not checked, with the refusal, where nothing the Service publishes was read", () => {
+    const service: ObjectRef = {
+      ...SERVICE,
+      facts: {
+        kind: "service",
+        type: "ClusterIP",
+        selector: "app=ledger",
+      } as ObjectRef["facts"],
+    };
+    const answered = (notLookedAt: ResourceConnections["notLookedAt"]) =>
+      healthFromConnections(
+        {
+          subject: service,
+          edges: [],
+          stops: [],
+          published: [],
+          notLookedAt,
+        } as unknown as ResourceConnections,
+        null
+      );
+    const refused = answered([
+      {
+        kind: "EndpointSlice",
+        why: {
+          says: "unanswered",
+          version: "discovery.k8s.io/v1",
+          said: "endpointslices.discovery.k8s.io is forbidden",
+        },
+      },
+    ]);
+    expect(refused).toEqual({
+      state: "unknown",
+      why: "endpointslices.discovery.k8s.io is forbidden",
+    });
+    expect(serviceHealthWords(refused, t)).toMatchObject({
+      label: "not checked",
+      role: "neutral",
+      reason: "endpointslices.discovery.k8s.io is forbidden",
     });
   });
 });

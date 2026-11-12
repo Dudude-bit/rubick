@@ -348,6 +348,7 @@ fn main() {
             commands::nodes::cancel_node_drain,
             // Event commands
             commands::events::list_events,
+            commands::events::list_latest_events,
             commands::events::get_pod_setup_warnings,
             // Log commands
             commands::logs::get_pod_logs,
@@ -476,6 +477,7 @@ fn main() {
             commands::network::list_ingresses_in,
             commands::network::list_ingress_health_inputs,
             commands::network::list_network_policies_in,
+            commands::other_policies::list_other_policy_kinds,
             commands::network::get_network_policy,
             commands::network::delete_network_policy,
             commands::network::get_ingress,

@@ -91,7 +91,9 @@ pub async fn get_resource_connections(
         ResourceContext::for_command(&state, namespace)?
     };
     let context = state.get_current_context().unwrap_or_default();
-    let source = Source::shared(&state.neighbourhoods, &context).not_before(not_before);
+    let source = Source::shared(&state.neighbourhoods, &context)
+        .discovering(state.client_manager.served())
+        .not_before(not_before);
     crate::client::clock::timed(
         &state.perf,
         "getResourceConnections",

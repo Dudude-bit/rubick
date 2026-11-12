@@ -1061,6 +1061,37 @@ describe("what Needs attention could not look at", () => {
   });
 
   /**
+   * NetworkPolicies that alone admit nobody, beside another engine's
+   * policies that may, are no item: the count then read as complete and
+   * said nothing of a door nobody settled. Fails if such a Service is
+   * raised as shut, or leaves the Service check read.
+   */
+  it("is not complete where another engine's policies may admit what the NetworkPolicies shut", () => {
+    const read = services([["web"], 2]);
+    const group = read.answered[0].groups[0];
+    const door = {
+      state: "overlaid" as const,
+      alone: { isolating: ["deny-all"], unsettled: [], ports: [] },
+      kinds: ["CiliumNetworkPolicy"],
+      shut: true,
+    };
+    const overlaid = attention({
+      services: {
+        unread: [],
+        answered: [{ ...read.answered[0], groups: [{ ...group, door }] }],
+      },
+    });
+    expect(overlaid.items).toEqual([]);
+    expect(overlaid.complete).toBe(false);
+    const check = overlaid.checks.find((check) => check.kind === "Service");
+    expect(check).toMatchObject({
+      state: "unread",
+      unread: [{ namespace: "net", code: "" }],
+    });
+    expect(check?.unread[0].message).toContain("CiliumNetworkPolicy");
+  });
+
+  /**
    * Lena's Job, its pods refused by a quota, is told from one still waiting
    * only by a Warning event. With the events read short of their end the
    * overview counted it Pending and Needs attention said all was checked.

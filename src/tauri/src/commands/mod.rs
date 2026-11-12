@@ -42,6 +42,7 @@ pub mod metrics;
 pub mod namespace;
 pub mod network;
 pub mod nodes;
+pub mod other_policies;
 pub mod overview;
 pub mod ownership;
 pub mod perf;

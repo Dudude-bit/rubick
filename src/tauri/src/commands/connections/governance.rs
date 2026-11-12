@@ -310,6 +310,10 @@ pub(super) fn budgets_over(
     }
 }
 
+/// The kind named where nothing says what a Service publishes. The frontend
+/// reads the reason off this entry, so the name is the contract.
+pub(super) const PUBLISHED_UNREAD: &str = "EndpointSlice";
+
 /// What the reads that failed leave the answer unable to say.
 pub(super) fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
     let mut unread = UnexploredKind::governance(
@@ -350,6 +354,13 @@ pub(super) fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
         if let Some(why) = why {
             unread.push(UnexploredKind::unanswered(kind, version, why));
         }
+    }
+    if let Some(why) = snapshot.published_unread() {
+        unread.push(UnexploredKind::unanswered(
+            PUBLISHED_UNREAD,
+            "discovery.k8s.io/v1",
+            why,
+        ));
     }
     unread.extend(snapshot.gateway_unread.iter().cloned());
     unread
@@ -413,6 +424,7 @@ mod refused_claim_tests {
             replica_sets: Ok(Vec::new()),
             refusals: Ok(Vec::new()),
             policies: Ok(Vec::new()),
+            others: crate::resources::OtherPolicies::none(),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),
@@ -472,6 +484,7 @@ mod refused_claim_tests {
             replica_sets: Ok(Vec::new()),
             refusals: Ok(Vec::new()),
             policies: Ok(Vec::new()),
+            others: crate::resources::OtherPolicies::none(),
             slices: Ok(Vec::new()),
             legacy: Ok(Vec::new()),
             taken_at: chrono::Utc::now(),

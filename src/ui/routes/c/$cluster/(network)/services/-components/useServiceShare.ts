@@ -11,6 +11,7 @@ import {
   endpointCount,
   endpointState,
   publishedFor,
+  publishedUnread,
   sourceNote,
 } from "@/lib/published";
 import type { ReportStat } from "@/lib/report";
@@ -19,6 +20,7 @@ import {
   serviceHealthOf,
   serviceHealthWords,
   shutUnchecked,
+  shutUncheckedText,
 } from "@/lib/service-health";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
@@ -88,8 +90,7 @@ export function serviceStats(
             : total === 0
               ? t("empty", "servicePublishesNothing")
               : [
-                  unchecked !== null &&
-                    t("readings", "healthPoliciesUnread", { why: unchecked }),
+                  unchecked !== null && shutUncheckedText(unchecked, t),
                   sourceNote(published, t),
                 ]
                   .filter(Boolean)
@@ -159,14 +160,18 @@ export function servicePublishedSection(
   connections: ConnectionsRead,
   t: T
 ): PlacedSection {
+  const published = connections.data
+    ? publishedFor(connections.data, connections.data.subject)
+    : undefined;
+  const refused =
+    connections.data && !published ? publishedUnread(connections.data) : null;
   const unread = connections.error
     ? t("empty", "couldNotReadWhatServicePublishes")
     : connections.isPending || connections.data === undefined
       ? t("share", "stillReading")
-      : null;
-  const published = connections.data
-    ? publishedFor(connections.data, connections.data.subject)
-    : undefined;
+      : refused === null
+        ? null
+        : `${t("empty", "couldNotReadWhatServicePublishes")} ${refused}`;
   const all = published?.endpoints ?? [];
   const rows = all.slice(0, MAX_ROWS);
   const podsUnread = podsUnreadOf(published);

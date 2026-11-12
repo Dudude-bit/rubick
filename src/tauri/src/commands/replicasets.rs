@@ -24,9 +24,9 @@ pub async fn get_replicaset(
     crate::validation::validate_name::<ReplicaSet>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
     crate::client::clock::timed(&state.perf, "getReplicaset", async {
-        let rs: ReplicaSet = ctx.namespaced_api().get(&name).await?;
+        let rs = ctx.raw_api::<ReplicaSet>().get(&name).await?;
         let current = owner_revision(&ctx, &rs).await;
-        Ok(ReplicaSetInfo::of(&rs, current))
+        Ok(ReplicaSetInfo::of(&rs, current)?)
     })
     .await
 }
@@ -95,9 +95,9 @@ async fn deployment_revisions(
         .ok_or_else(|| Error::InvalidInput("Deployment has no selector".to_string()))?;
 
     let params = kube::api::ListParams::default().labels(&selector);
-    let list = ctx.namespaced_api::<ReplicaSet>().list(&params).await?;
+    let list = ctx.raw_api::<ReplicaSet>().list(&params).await?;
 
-    let mut revisions: Vec<ReplicaSetInfo> = list
+    let mut revisions = list
         .items
         .iter()
         .filter(|rs| {
@@ -106,7 +106,7 @@ async fn deployment_revisions(
                 .any(|owner| owner.uid == uid && owner.controller.unwrap_or(false))
         })
         .map(|rs| ReplicaSetInfo::of(rs, current.clone()))
-        .collect();
+        .collect::<serde_json::Result<Vec<_>>>()?;
 
     // Revision is a decimal counter the controller writes as a string, so
     // "10" sorts before "9" as text. Anything unparseable sorts last rather
@@ -126,7 +126,7 @@ fn parse_revision(value: &str) -> Option<u64> {
 /// revision they are looking at, and losing the whole page because the
 /// owner is gone or unreadable answers a smaller question with a bigger
 /// failure.
-async fn owner_revision(ctx: &ResourceContext, rs: &ReplicaSet) -> Option<String> {
+async fn owner_revision(ctx: &ResourceContext, rs: &impl ResourceExt) -> Option<String> {
     let owner = rs
         .owner_references()
         .iter()

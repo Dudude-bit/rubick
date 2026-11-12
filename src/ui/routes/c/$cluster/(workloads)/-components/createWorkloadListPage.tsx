@@ -25,7 +25,7 @@ import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
 import type { Scoped } from "@/generated/types";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
-import { useRefusals } from "@/hooks/useRefusals";
+import { useScopeRefusals } from "@/hooks/useRefusals";
 import { attachAggregatedPodMetrics, type PodOwner } from "@/lib/metrics";
 import { MetricsStatusBanner } from "../../-metrics";
 import { queryKeys } from "@/lib/query-keys";
@@ -43,6 +43,7 @@ import { useT } from "@/i18n/useT";
 import type { Rollout } from "@/generated/types";
 import { rowsWithStarts, startsOf } from "@/lib/workload-status";
 import {
+  PODS_UNREAD,
   rowCause,
   rowPods,
   rowRefusal,
@@ -119,6 +120,7 @@ export function createWorkloadListPage<T extends Workload>(
     const {
       data: pods,
       read: podsRead,
+      error: podsError,
       unread: podsUnread,
       podStatus,
       podUnread,
@@ -176,13 +178,15 @@ export function createWorkloadListPage<T extends Workload>(
         : read;
     }, [listQuery.data, starts, ranOut]);
 
+    const podsFailed = !podsRead && !!podsError;
     const causePods = useMemo(
-      () => (podsRead ? rowPods(pods, podsUnread) : null),
-      [pods, podsRead, podsUnread]
+      () =>
+        podsRead ? rowPods(pods, podsUnread) : podsFailed ? PODS_UNREAD : null,
+      [pods, podsRead, podsUnread, podsFailed]
     );
     const causeAt = useLastPassed(causePods?.deadlines ?? []);
-    const refusals = useRefusals(
-      scope.wire?.length === 1 ? scope.wire[0] : null,
+    const refusalsIn = useScopeRefusals(
+      scope.wire,
       config.resourceType !== ResourceType.Deployment
     );
     const dataWithMetrics = useMemo(
@@ -190,7 +194,12 @@ export function createWorkloadListPage<T extends Workload>(
         attachAggregatedPodMetrics<T>(rows, pods, config.matchPods).map(
           (row): WorkloadRow<T> => {
             const owner = ownerOf(row);
-            const refused = rowRefusal(row, owner, causePods, refusals);
+            const refused = rowRefusal(
+              row,
+              owner,
+              causePods,
+              refusalsIn(row.namespace)
+            );
             return {
               ...row,
               ...(config.refused?.(row, refused) ?? {}),
@@ -204,7 +213,7 @@ export function createWorkloadListPage<T extends Workload>(
             };
           }
         ),
-      [rows, pods, causePods, causeAt, refusals]
+      [rows, pods, causePods, causeAt, refusalsIn]
     );
 
     const columns = useMemo(() => config.columns(), []);

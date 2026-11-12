@@ -225,6 +225,10 @@ pub struct ClusterIndex {
     watched: Mutex<BTreeMap<KindKey, Watched>>,
     /// Kinds never watched, and why.
     unwatched: Mutex<BTreeMap<KindKey, (String, Reading)>>,
+    /// Kinds a CRD here defines that discovery did not offer when last
+    /// asked, and what that makes of them. Asked again with every question:
+    /// a CRD not yet Established is served a moment later.
+    unserved: Mutex<BTreeMap<KindKey, Reading>>,
     unread_groups: Mutex<Vec<UnreadGroup>>,
     /// The window's namespaces, where a refused kind is read instead.
     scope: Mutex<Option<Vec<String>>>,
@@ -287,8 +291,15 @@ impl OwnershipIndexes {
             *index.last_used.lock() = Instant::now();
             index.rescope(scope);
             for kind in index.unread_definitions() {
-                if let Ok(Some(served)) = state.served(&kind.group, &kind.plural).await {
-                    index.watch(kind, served);
+                match state.served(&kind.group, &kind.plural).await {
+                    Ok(Some(served)) => index.watch(kind, served),
+                    Ok(None) => index.unserved(kind, Reading::Unlistable),
+                    Err(error) => index.unserved(
+                        kind,
+                        Reading::Failed {
+                            message: error.said(),
+                        },
+                    ),
                 }
             }
             self.regroup(state, &index).await;
@@ -303,6 +314,7 @@ impl OwnershipIndexes {
             stops: Mutex::new(BTreeMap::new()),
             watched: Mutex::new(BTreeMap::new()),
             unwatched: Mutex::new(BTreeMap::new()),
+            unserved: Mutex::new(BTreeMap::new()),
             unread_groups: Mutex::new(catalog.unread),
             scope: Mutex::new(scope),
             last_used: Mutex::new(Instant::now()),
@@ -596,6 +608,13 @@ impl ClusterIndex {
         );
     }
 
+    /// What discovery made of a kind a CRD here defines, where it serves
+    /// none: without it the kind stayed "still listing" for as long as the
+    /// CRD existed, and every answer with it.
+    fn unserved(&self, kind: KindKey, reading: Reading) {
+        self.unserved.lock().insert(kind, reading);
+    }
+
     /// Starts reading a kind served since the index began: a CRD installed
     /// after it.
     pub fn watch(self: &Arc<Self>, kind: KindKey, served: Served) {
@@ -668,12 +687,14 @@ impl ClusterIndex {
                 }),
         );
         // Metadata does not say the kind's own name; the plural stands in
-        // until discovery serves it.
+        // until discovery serves it. Still listing only until discovery has
+        // been asked about it.
+        let unserved = self.unserved.lock();
         kinds.extend(unread.into_iter().map(|key| KindReading {
             kind: key.plural.clone(),
+            reading: unserved.get(&key).cloned().unwrap_or(Reading::Syncing),
             group: key.group,
             plural: key.plural,
-            reading: Reading::Syncing,
         }));
         NotRead {
             kinds,
@@ -758,6 +779,7 @@ impl ClusterIndex {
             stops: Mutex::new(BTreeMap::new()),
             watched: Mutex::new(BTreeMap::new()),
             unwatched: Mutex::new(BTreeMap::new()),
+            unserved: Mutex::new(BTreeMap::new()),
             unread_groups: Mutex::new(Vec::new()),
             scope: Mutex::new(None),
             last_used: Mutex::new(Instant::now()),
@@ -1593,6 +1615,110 @@ mod tests {
             Ok(vec![("one".to_string(), None)])
         );
         assert!(!named(&index));
+        state.ownership.forget_all();
+    }
+
+    /// A CRD that is never Established, or has no served version, is in the
+    /// index and never in discovery: its kind read "still listing" on every
+    /// answer, so every delete preview and Owns tab said the app was still
+    /// reading the cluster for as long as the CRD existed. Fails if such a
+    /// kind is still listing once discovery was asked, or if it is then
+    /// never read when the cluster comes to serve it.
+    #[tokio::test]
+    async fn a_kind_discovery_does_not_serve_is_not_still_listing_and_is_read_once_served() {
+        use crate::client::served::test_server::connected;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let served = Arc::new(AtomicBool::new(false));
+        let now = served.clone();
+        let (state, _) = connected(
+            crate::client::served::ServedIndex::scaled(2000),
+            move |path, nth| {
+                let collection = path.ends_with("definitions") || path.ends_with("widgets");
+                if collection && nth > 1 {
+                    return (200, String::new());
+                }
+                crds_and_widgets(path, now.load(Ordering::SeqCst))
+            },
+        )
+        .await;
+        let widgets = KindKey {
+            group: WIDGETS.0.to_string(),
+            plural: WIDGETS.1.to_string(),
+        };
+        let index = state.ownership.ensure(&state, None).await.expect("index");
+        let reading = |index: &ClusterIndex| {
+            index
+                .not_read()
+                .kinds
+                .into_iter()
+                .find(|kind| kind.group == WIDGETS.0)
+                .map(|kind| kind.reading)
+        };
+        for _ in 0..300 {
+            if reading(&index).is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(reading(&index), Some(Reading::Syncing));
+
+        state.ownership.ensure(&state, None).await.expect("index");
+        assert_eq!(reading(&index), Some(Reading::Unlistable));
+
+        served.store(true, Ordering::SeqCst);
+        for _ in 0..300 {
+            state.ownership.ensure(&state, None).await.expect("index");
+            if index.names(&widgets, None).is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(
+            index.names(&widgets, None),
+            Ok(vec![("one".to_string(), None)])
+        );
+        assert_eq!(reading(&index), None);
+        state.ownership.forget_all();
+    }
+
+    /// The other answer discovery can give about such a kind: its group is
+    /// listed and would not say what it serves. Fails if that leaves the
+    /// kind still listing for good, or is filed as a kind with no list.
+    #[tokio::test]
+    async fn a_kind_whose_group_discovery_would_not_read_says_so_in_the_clusters_words() {
+        use crate::client::served::test_server::{connected, failure};
+
+        let (state, _) = connected(
+            crate::client::served::ServedIndex::scaled(2000),
+            |path, nth| match path {
+                "/apis/demo.example.com/v1" => failure(403, "Forbidden"),
+                _ if path.ends_with("definitions") && nth > 1 => (200, String::new()),
+                _ => crds_and_widgets(path, true),
+            },
+        )
+        .await;
+        let index = state.ownership.ensure(&state, None).await.expect("index");
+        let reading = |index: &ClusterIndex| {
+            index
+                .not_read()
+                .kinds
+                .into_iter()
+                .find(|kind| kind.group == WIDGETS.0)
+                .map(|kind| kind.reading)
+        };
+        for _ in 0..300 {
+            if reading(&index).is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        state.ownership.ensure(&state, None).await.expect("index");
+        assert!(
+            matches!(reading(&index), Some(Reading::Failed { .. })),
+            "{:?}",
+            reading(&index)
+        );
         state.ownership.forget_all();
     }
 

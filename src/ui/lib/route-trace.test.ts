@@ -1863,6 +1863,7 @@ describe("a route's Gateway controller at the door of the pods", () => {
   const traefik = (hostNetwork = false): DoorRead => ({
     name: "Traefik",
     egress: { known: true, value: { rows: [], unread: [] } },
+    others: { known: true, value: [] },
     clients: {
       known: true,
       value: [

@@ -15,6 +15,7 @@ import type {
   DoorRule,
   NetworkPolicyInfo,
   ObjectRef,
+  OtherPolicyKinds,
   PolicyIpBlock,
   PolicyPeer,
   PolicyPort,
@@ -56,6 +57,8 @@ export interface DoorRead {
   namespaces: Known<LabeledNamespace[]>;
   /** The NetworkPolicies in the namespaces its pods run in, whose egress rules say where they may connect. */
   egress: Known<Scoped<NetworkPolicyInfo>>;
+  /** The other engines' policy kinds in force where its pods run: beside them its egress NetworkPolicies do not decide alone. */
+  others: Known<OtherPolicyKinds[]>;
 }
 
 /** A controller's read: `null` where no integration speaks for it, `undefined` while asking. */
@@ -67,6 +70,7 @@ export interface DoorAsk {
 
 export type DoorUnsure =
   | "policiesUnread"
+  | "otherPolicies"
   | "noPort"
   | "noIntegration"
   | "clientsReading"
@@ -105,7 +109,7 @@ export const policyNamesOf = (stop: PolicyStop): string[] =>
 
 /** What the verdict reads of a Service: its door, the ports and addresses its pods take connections on, and the stop already said about it. */
 export type DoorSubject = Pick<ServicePublished, "service" | "door" | "ports"> &
-  Partial<Pick<ServicePublished, "endpoints">> & {
+  Partial<Pick<ServicePublished, "endpoints" | "whole">> & {
     stop?: ChainStop | null;
     /** The networks its pods sit in, where those came instead of the addresses. */
     networks?: string[];
@@ -246,8 +250,10 @@ function podsVerdict(
   ): DoorVerdict => ({ state: "unsure", policies, why, side: "pods", said });
   if (!door || door.state === "unread")
     return unsure("policiesUnread", [], door?.reason ?? null);
-  if (door.state === "open" || door.isolating.length === 0) return OPEN;
-  const policies = [...door.isolating, ...door.unsettled];
+  if (door.state === "open") return OPEN;
+  const guard = door.state === "overlaid" ? door.alone : door;
+  if (guard.isolating.length === 0) return OPEN;
+  const policies = [...guard.isolating, ...guard.unsettled];
   if (!port) return unsure("noPort", policies);
   if (read === null) return unsure("noIntegration", policies);
   if (read === undefined) return unsure("clientsReading", policies);
@@ -261,17 +267,19 @@ function podsVerdict(
   const home = published.service.namespace ?? "";
   const outcome = settle(
     clients.value.map((client) =>
-      clientAdmitted(port, door.unsettled, client, home, namespaces)
+      clientAdmitted(port, guard.unsettled, client, home, namespaces)
     )
   );
   if (outcome === "all") return { state: "admitted" };
   if (outcome !== "none") return unsure(outcome, policies);
+  // Whoever these refuse, another engine's policies may admit.
+  if (door.state === "overlaid") return unsure("otherPolicies", policies);
   return {
     state: "refused",
     stop: {
       reason: "policyRefuses",
       service: published.service,
-      policies: door.isolating,
+      policies: guard.isolating,
       ports: port.port === null ? [] : [port.port],
       noRules: false,
       client: clientOf(read.name, clients.value),
@@ -390,7 +398,7 @@ function clientVerdict(
     said: string | null = null
   ): DoorVerdict => ({ state: "unsure", policies, why, side: "client", said });
   if (read === undefined) return unsure("clientsReading");
-  const { clients, egress, namespaces } = read;
+  const { clients, egress, namespaces, others } = read;
   if (!clients.known)
     return unsure(clients.why === null ? "clientsReading" : "clientsUnread");
   if (clients.value.length === 0) return unsure("noClients");
@@ -403,11 +411,13 @@ function clientVerdict(
   );
   if (refused) return unsure("egressUnread", [], refused.message);
 
+  // An answer cut to one address does not say where the other pods sit.
+  const addresses = published.whole ? published.endpoints : undefined;
   const to: Landing = {
     namespace: published.service.namespace ?? "",
     networks:
       published.networks ??
-      published.endpoints?.flatMap(({ address }) =>
+      addresses?.flatMap(({ address }) =>
         address === null
           ? []
           : [`${address}/${address.includes(":") ? 128 : 32}`]
@@ -453,11 +463,20 @@ function clientVerdict(
   const policies = [...holding.values()];
   if (outcome === "all")
     return policies.length === 0 ? OPEN : { state: "admitted" };
-  if (outcome !== "none")
+  const names = policies.map((policy) => policy.name);
+  if (outcome !== "none") return unsure(outcome, names);
+  // What these hold back, another engine's policies may let out.
+  if (!others.known)
     return unsure(
-      outcome,
-      policies.map((policy) => policy.name)
+      others.why === null ? "clientsReading" : "otherPolicies",
+      names
     );
+  const overlaid = others.value.some(
+    (over) =>
+      over.kinds.length > 0 &&
+      clients.value.some((client) => client.namespace === over.namespace)
+  );
+  if (overlaid) return unsure("otherPolicies", names);
   return {
     state: "refused",
     stop: {
@@ -482,8 +501,13 @@ export function doorVerdict(
 ): DoorVerdict {
   if (isPolicyStop(published.stop)) return OPEN;
   const door = published.door;
-  const port =
-    door?.state === "guarded" ? doorPortOf(door.ports, backend) : null;
+  const ports =
+    door?.state === "overlaid"
+      ? door.alone.ports
+      : door?.state === "guarded"
+        ? door.ports
+        : null;
+  const port = ports ? doorPortOf(ports, backend) : null;
   const pods = podsVerdict(published, port, read);
   if (pods.state === "refused") return pods;
   const client = clientVerdict(
@@ -547,6 +571,7 @@ export function doorDoubt(
 
 const DOOR_WHY: Record<DoorUnsure, keyof typeof en.nav> = {
   policiesUnread: "doorWhyPoliciesUnread",
+  otherPolicies: "doorWhyOtherPolicies",
   noPort: "doorWhyNoPort",
   noIntegration: "doorWhyNoIntegration",
   clientsReading: "doorWhyClientsReading",

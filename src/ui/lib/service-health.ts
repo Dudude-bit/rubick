@@ -32,7 +32,12 @@ import { makersUnread } from "@/lib/stop-mood";
 import { isPolicyStop, type PolicyStop } from "@/lib/policy-door";
 import { sharedAfterCount } from "@/lib/pod-cause";
 import { errorToShow } from "@/lib/error-utils";
-import { endpointCount, publishedFor, servingCount } from "@/lib/published";
+import {
+  endpointCount,
+  publishedFor,
+  publishedUnread,
+  servingCount,
+} from "@/lib/published";
 import type { StatusRole } from "@/lib/status-role";
 
 export type ServiceHealth =
@@ -47,14 +52,14 @@ export type ServiceHealth =
       /** Of those, how many the slices call ready; `null` where the compact answer does not carry it. */
       unroutedReady: number | null;
       /** {@link shutUnchecked} of the ones that serve. */
-      unchecked: string | null;
+      unchecked: ShutUnchecked | null;
     }
   /** Nothing ready: what it serves goes to addresses still finishing their connections. */
   | {
       state: "draining";
       draining: number;
       total: number;
-      unchecked: string | null;
+      unchecked: ShutUnchecked | null;
     }
   | { state: "noneReady"; published: PublishedCounts }
   /** None ready or none listed, and every workload behind it is still starting its pods. */
@@ -64,8 +69,8 @@ export type ServiceHealth =
   | { state: "noEndpoints"; published: PublishedCounts }
   /** Its pods are ready and a NetworkPolicy lets no connection to them through. */
   | { state: "shut"; ready: number; stop: PolicyStop }
-  /** Its pods are ready, and whether a NetworkPolicy shuts them was not read. */
-  | { state: "policiesUnread"; ready: number; why: string }
+  /** Its pods are ready, and whether a policy shuts them was not settled. */
+  | { state: "policiesUnread"; ready: number; why: ShutUnchecked }
   /** No pods by intent: every workload behind it is scaled to zero. */
   | { state: "idle"; stop: Extract<ChainStop, { reason: "scaledToZero" }> }
   /** A DNS alias: no endpoints, by design. */
@@ -97,18 +102,42 @@ export type ServiceHealthInput = ServiceShape &
   Pick<ServiceHealthGroup, "targets"> &
   Partial<Pick<ServiceHealthInputs, "networks">>;
 
+/** Why nobody settled whether a policy shuts what a Service serves. */
+export type ShutUnchecked =
+  /** The cluster refused the NetworkPolicies, in its words. */
+  | { why: "unread"; said: string }
+  /** The NetworkPolicies alone admit nobody, and another engine's policies, which may, are in force over the same pods. */
+  | { why: "others"; policies: string[]; kinds: string[] };
+
 /**
- * Why nobody checked whether a NetworkPolicy shuts what a Service serves:
- * the cluster's words refusing the policies, or null where they were read.
- * A count of ready addresses is then no verdict that anything reaches them.
+ * Why nobody settled whether a policy shuts what a Service serves, or null
+ * where the NetworkPolicies were read and are the whole of it. A count of
+ * ready addresses is then no verdict that anything reaches them.
  */
-export function shutUnchecked(published: PublishedCounts): string | null {
-  return servingCount(published) > 0 &&
-    !isPolicyStop(published.stop) &&
-    published.door?.state === "unread"
-    ? published.door.reason
+export function shutUnchecked(
+  published: PublishedCounts
+): ShutUnchecked | null {
+  if (servingCount(published) === 0 || isPolicyStop(published.stop))
+    return null;
+  const door = published.door;
+  if (door?.state === "unread") return { why: "unread", said: door.reason };
+  return door?.state === "overlaid" && door.shut
+    ? {
+        why: "others",
+        policies: [...door.alone.isolating, ...door.alone.unsettled],
+        kinds: door.kinds,
+      }
     : null;
 }
+
+/** Why it went unchecked, as every reader says it. */
+export const shutUncheckedText = (unchecked: ShutUnchecked, t: T): string =>
+  unchecked.why === "unread"
+    ? t("readings", "healthPoliciesUnread", { why: unchecked.said })
+    : t("readings", "healthPoliciesOverlaid", {
+        policies: unchecked.policies.join(", "),
+        kinds: unchecked.kinds.join(", "),
+      });
 
 export function serviceHealthOf(
   service: ServiceShape,
@@ -248,10 +277,12 @@ function stopWords(
 }
 
 /** A count that is short for its own reason, and then why its door went unchecked. */
-const withUnchecked = (reason: string, unchecked: string | null, t: T) =>
-  unchecked === null
-    ? reason
-    : `${reason}. ${t("readings", "healthPoliciesUnread", { why: unchecked })}`;
+const withUnchecked = (
+  reason: string,
+  unchecked: ShutUnchecked | null,
+  t: T
+) =>
+  unchecked === null ? reason : `${reason}. ${shutUncheckedText(unchecked, t)}`;
 
 export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
   switch (health.state) {
@@ -357,7 +388,7 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         code: health.state,
         label: t("count", "nReady", { n: health.ready }),
         role: "neutral",
-        reason: t("readings", "healthPoliciesUnread", { why: health.why }),
+        reason: shutUncheckedText(health.why, t),
         glyph: EyeOff,
       };
     case "idle":
@@ -524,5 +555,10 @@ export function healthFromConnections(
     facts?.kind === "service"
       ? { type: facts.type, selectorless: facts.selector === null }
       : { type: "", selectorless: false };
-  return serviceHealthOf(shape, publishedFor(data, data.subject), null);
+  const published = publishedFor(data, data.subject);
+  return serviceHealthOf(
+    shape,
+    published,
+    published ? null : publishedUnread(data)
+  );
 }

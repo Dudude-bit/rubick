@@ -10,6 +10,7 @@ const answer = vi.hoisted(() => ({
   sets: [] as unknown[] | Error,
   jobEvents: [] as unknown[],
   jobs: [] as unknown[],
+  short: false,
 }));
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -22,6 +23,10 @@ vi.mock("@/lib/commands", () => ({
             ? answer.jobEvents
             : answer.events
       );
+    },
+    listLatestEvents: (filters: unknown) => {
+      answer.asked.push(filters);
+      return Promise.resolve({ events: answer.events, short: answer.short });
     },
     listJobs: () => Promise.resolve(answer.jobs),
     getDeploymentReplicasets: () =>
@@ -409,11 +414,35 @@ it("keeps the events of every group among those of a Namespace", async () => {
   );
   await waitFor(() => expect(result.current.data).toBeDefined());
   expect(result.current.everyObject).toBe(true);
+  expect(result.current.short).toBe(false);
   expect(result.current.data?.map((e) => e.reason)).toEqual([
     "ScalingReplicaSet",
     "Started",
     "Sync",
   ]);
+});
+
+/**
+ * A namespace holding more events than one read walks: the tab said "the
+ * latest 200" of the first two thousand in name order, and a warning from a
+ * minute ago was not among them. Fails if a namespace's events are read
+ * without asking whether the walk reached the end, or the answer is dropped.
+ */
+it("says where a namespace's events were read short of their end", async () => {
+  answer.events = [onObject("Pod", "web-7d9f-x2x", "pod", "Started", 2)];
+  answer.short = true;
+  const client = testQueryClient();
+  const { result } = renderHook(
+    () => useObjectEvents("Namespace", "busy", null, { refresh: "slow" }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  await waitFor(() => expect(result.current.data).toHaveLength(1));
+  expect(result.current.short).toBe(true);
+  answer.short = false;
 });
 
 /** The CRD a reference is served by decides, never the kind's name alone. */

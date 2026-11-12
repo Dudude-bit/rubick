@@ -78,6 +78,7 @@ import type {
   JobDetailInfo,
   JobInfo,
   KubeconfigSource,
+  LatestEvents,
   Lineage,
   ListAccess,
   ListQuery,
@@ -94,6 +95,7 @@ import type {
   NodeInfo,
   NodeMetricsResponse,
   ObjectMetadata,
+  OtherPolicyKinds,
   OwnRules,
   PathIdentity,
   PerfSnapshot,
@@ -1219,6 +1221,12 @@ export async function listEvents(
   return invoke<EventInfo[]>("list_events", { filters });
 }
 
+export async function listLatestEvents(
+  filters: EventFilters | null
+): Promise<LatestEvents> {
+  return invoke<LatestEvents>("list_latest_events", { filters });
+}
+
 export async function getPodSetupWarnings(
   namespace: string,
   uid: string
@@ -1615,6 +1623,12 @@ export async function listIngresses(
   filters: ResourceFilters | null
 ): Promise<IngressInfo[]> {
   return invoke<IngressInfo[]>("list_ingresses", { filters });
+}
+
+export async function listOtherPolicyKinds(
+  namespaces: string[]
+): Promise<OtherPolicyKinds[]> {
+  return invoke<OtherPolicyKinds[]>("list_other_policy_kinds", { namespaces });
 }
 
 export async function listNetworkPoliciesIn(

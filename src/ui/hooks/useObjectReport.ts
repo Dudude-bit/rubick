@@ -208,7 +208,9 @@ export function useObjectReport(
       ),
       partial: events.ownedUnread
         ? `${t("empty", events.ownedUnread.unread)} ${errorToShow(events.ownedUnread.error)}`
-        : null,
+        : events.short
+          ? t("empty", "eventsReadShort")
+          : null,
     });
     const changes = changesSection(
       { entries: journal, spans: spans[context] ?? [] },
@@ -307,6 +309,7 @@ export function useObjectReport(
     events.isPending,
     events.ownedUnread,
     events.everyObject,
+    events.short,
     t,
     resource,
     journal,

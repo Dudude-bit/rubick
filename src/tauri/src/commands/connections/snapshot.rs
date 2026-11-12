@@ -2,6 +2,8 @@
 //! ends.
 
 use super::*;
+use crate::client::served::ServedIndex;
+use crate::commands::other_policies::Discovery;
 
 /// One list per kind, taken once and read from both ends.
 pub(super) struct Snapshot {
@@ -37,6 +39,9 @@ pub(super) struct Snapshot {
     /// Read for one question: whether the policies on a Service's pods shut
     /// them to every client. A refusal leaves that unsaid and nothing else.
     pub(super) policies: Read<k8s_openapi::api::networking::v1::NetworkPolicy>,
+    /// The other engines' policies in force beside them, without which
+    /// `policies` is not the whole of what decides.
+    pub(super) others: crate::resources::OtherPolicies,
     /// What every Service in the namespace publishes, in one list keyed by
     /// the `kubernetes.io/service-name` label — the same shape the Services
     /// and the Ingresses are read under.
@@ -105,7 +110,7 @@ impl Snapshots {
         ctx: &ResourceContext,
         gateway: Option<&crate::resources::GatewayApiDetection>,
     ) -> Result<Arc<Snapshot>> {
-        Ok(self.take(context, ctx, gateway, None).await?.0)
+        Ok(self.take(context, ctx, gateway, None, None).await?.0)
     }
 
     /// The snapshot, and whether its read began before this call asked. A
@@ -117,6 +122,7 @@ impl Snapshots {
         ctx: &ResourceContext,
         gateway: Option<&crate::resources::GatewayApiDetection>,
         not_before: Option<chrono::DateTime<chrono::Utc>>,
+        served: Option<&ServedIndex>,
     ) -> Result<(Arc<Snapshot>, bool)> {
         let key = (
             context.to_string(),
@@ -149,7 +155,10 @@ impl Snapshots {
             }
         };
         let snapshot = cell
-            .get_or_try_init(|| async { Snapshot::of(ctx, gateway).await.map(Arc::new) })
+            .get_or_try_init(|| async {
+                let discovery = served.map(|served| Discovery { served, context });
+                Snapshot::of(ctx, gateway, discovery).await.map(Arc::new)
+            })
             .await?
             .clone();
         if snapshot.any_unread() {
@@ -165,6 +174,8 @@ impl Snapshots {
 #[derive(Clone, Copy, Default)]
 pub struct Source<'a> {
     pub(super) shared: Option<(&'a Snapshots, &'a str)>,
+    /// The context's discovery, where the caller holds it; read afresh where not.
+    pub(super) served: Option<&'a ServedIndex>,
     /// A shared read that began before this answers nobody here.
     pub(super) not_before: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -174,7 +185,18 @@ impl<'a> Source<'a> {
     pub fn shared(snapshots: &'a Snapshots, context: &'a str) -> Self {
         Self {
             shared: Some((snapshots, context)),
+            served: None,
             not_before: None,
+        }
+    }
+
+    /// Reads which kinds the cluster serves through `served`, which the
+    /// context's other readers share.
+    #[must_use]
+    pub fn discovering(self, served: &'a ServedIndex) -> Self {
+        Self {
+            served: Some(served),
+            ..self
         }
     }
 
@@ -195,10 +217,10 @@ impl<'a> Source<'a> {
     ) -> Result<Arc<Snapshot>> {
         match self.shared {
             Some((snapshots, context)) => Ok(snapshots
-                .take(context, ctx, gateway, self.not_before)
+                .take(context, ctx, gateway, self.not_before, self.served)
                 .await?
                 .0),
-            None => Snapshot::of(ctx, gateway).await.map(Arc::new),
+            None => Snapshot::of(ctx, gateway, None).await.map(Arc::new),
         }
     }
 
@@ -212,14 +234,17 @@ impl<'a> Source<'a> {
         lacks_subject: impl Fn(&Snapshot) -> bool,
     ) -> Result<Arc<Snapshot>> {
         let Some((snapshots, context)) = self.shared else {
-            return Snapshot::of(ctx, gateway).await.map(Arc::new);
+            return Snapshot::of(ctx, gateway, None).await.map(Arc::new);
         };
         let (snapshot, joined) = snapshots
-            .take(context, ctx, gateway, self.not_before)
+            .take(context, ctx, gateway, self.not_before, self.served)
             .await?;
         if joined && lacks_subject(&snapshot) {
             let now = Some(chrono::Utc::now());
-            return Ok(snapshots.take(context, ctx, gateway, now).await?.0);
+            return Ok(snapshots
+                .take(context, ctx, gateway, now, self.served)
+                .await?
+                .0);
         }
         Ok(snapshot)
     }
@@ -316,13 +341,20 @@ impl Snapshot {
     pub(super) async fn of(
         ctx: &ResourceContext,
         gateway: Option<&crate::resources::GatewayApiDetection>,
+        discovery: Option<Discovery<'_>>,
     ) -> Result<Self> {
-        Box::pin(Self::read(ctx, gateway)).await
+        let own = ServedIndex::default();
+        let discovery = discovery.unwrap_or(Discovery {
+            served: &own,
+            context: "",
+        });
+        Box::pin(Self::read(ctx, gateway, discovery)).await
     }
 
     async fn read(
         ctx: &ResourceContext,
         gateway: Option<&crate::resources::GatewayApiDetection>,
+        discovery: Discovery<'_>,
     ) -> Result<Self> {
         let taken_at = chrono::Utc::now();
         let params = ListParams::default();
@@ -352,6 +384,7 @@ impl Snapshot {
             replica_sets,
             refusals,
             policies,
+            others,
         ) = tokio::join!(
             pods_api.list(&params),
             services_api.list(&params),
@@ -365,6 +398,7 @@ impl Snapshot {
             replica_sets_api.list(&params),
             events_api.list(&refused),
             policies_api.list(&params),
+            discovery.other_policies(&ctx.client, ctx.namespace.as_deref()),
         );
         let slices = read_live(slices)?;
         // The one read that is not in the join, and deliberately: it is the
@@ -388,6 +422,7 @@ impl Snapshot {
             replica_sets: read_live(replica_sets)?,
             refusals: read_live(refusals)?,
             policies: read_live(policies)?,
+            others,
             slices,
             legacy,
             taken_at,
@@ -451,27 +486,40 @@ impl Snapshot {
     /// What one Service publishes, from whichever object answered.
     ///
     /// The three sources produce one shape, so nothing downstream branches on
-    /// which one spoke — it only says so.
+    /// which one spoke — it only says so. `None` where none of the three was
+    /// read: a count of zero there would be nobody's, and reads as "no
+    /// endpoints" all the same.
     pub(super) fn published_of(
         &self,
         svc: &Service,
         svc_ref: ObjectRef,
         selected: &[&Pod],
-    ) -> ServicePublished {
+    ) -> Option<ServicePublished> {
         match (&self.slices, &self.legacy) {
-            (Ok(slices), _) => published::from_slices(
+            (Ok(slices), _) => Some(published::from_slices(
                 svc,
                 svc_ref,
                 &published::slices_of(slices, &svc.name_any()),
                 selected,
-            ),
-            (Err(_), Ok(legacy)) => published::from_legacy(
+            )),
+            (Err(_), Ok(legacy)) => Some(published::from_legacy(
                 svc,
                 svc_ref,
                 legacy.iter().find(|ep| ep.name_any() == svc.name_any()),
-            ),
-            (Err(_), Err(_)) => published::from_pod_readiness(svc, svc_ref, selected),
+            )),
+            (Err(_), Err(_)) => self
+                .pods
+                .is_ok()
+                .then(|| published::from_pod_readiness(svc, svc_ref, selected)),
         }
+    }
+
+    /// Why nothing says what a Service publishes: the cluster's words
+    /// refusing the slices, where the legacy object and the pods went unread
+    /// with them.
+    pub(super) fn published_unread(&self) -> Option<&str> {
+        let slices = self.slices.as_ref().err()?;
+        (self.legacy.is_err() && self.pods.is_err()).then_some(slices.as_str())
     }
 }
 
@@ -759,6 +807,7 @@ mod refused_list_tests {
             replica_sets: Err(REFUSED.to_string()),
             refusals: Ok(Vec::new()),
             policies: Ok(Vec::new()),
+            others: crate::resources::OtherPolicies::none(),
             slices: Err(REFUSED.to_string()),
             legacy: Err(REFUSED.to_string()),
             taken_at: chrono::Utc::now(),
@@ -796,9 +845,14 @@ mod refused_list_tests {
         let svc = selecting("shop", &[("app", "shop")]);
         let svc_ref = service_ref(&svc, "shop");
         let mut out = Neighbourhood::new();
+        let pods_refused = Snapshot {
+            slices: Ok(Vec::new()),
+            ..all_refused()
+        };
 
-        note_reach(&svc, &svc_ref, &all_refused(), &mut out, Carry::Whole);
+        note_reach(&svc, &svc_ref, &pods_refused, &mut out, Carry::Whole);
 
+        assert_eq!(out.published.len(), 1);
         assert!(
             !out.stops
                 .iter()
@@ -806,6 +860,43 @@ mod refused_list_tests {
             "a list nobody read is not a selector that matched nothing: {:?}",
             out.stops
         );
+    }
+
+    /// A reader refused the slices, the legacy object and the pods got an
+    /// answer of zero addresses read from none of them, and the Service's
+    /// page drew it as red "No endpoints" over "publishes no address at
+    /// all". Fails if a Service nothing was read of is given counts, or if
+    /// the answer stops naming what went unread in the cluster's words; and
+    /// if the deduction from pods that were read is lost with it.
+    #[test]
+    fn a_service_nothing_was_read_of_is_given_no_counts_and_the_refusal_is_named() {
+        let svc = selecting("shop", &[("app", "shop")]);
+        let svc_ref = service_ref(&svc, "shop");
+        let mut out = Neighbourhood::new();
+
+        note_reach(&svc, &svc_ref, &all_refused(), &mut out, Carry::Whole);
+
+        assert!(out.published.is_empty(), "{:?}", out.published);
+        assert!(out.stops.is_empty(), "{:?}", out.stops);
+        let named = |snapshot: &Snapshot| {
+            unanswered(snapshot).into_iter().any(|entry| {
+                entry.kind == "EndpointSlice"
+                    && matches!(&entry.why, crate::resources::Unread::Unanswered { said, .. } if said == REFUSED)
+            })
+        };
+        assert!(named(&all_refused()));
+
+        let pods_read = Snapshot {
+            pods: Ok(Vec::new()),
+            ..all_refused()
+        };
+        note_reach(&svc, &svc_ref, &pods_read, &mut out, Carry::Whole);
+        assert_eq!(out.published.len(), 1);
+        assert_eq!(
+            out.published[0].source,
+            crate::resources::EndpointSource::PodReadiness
+        );
+        assert!(!named(&pods_read));
     }
 
     /// And the other half: a pod list that really answered and really holds
@@ -972,6 +1063,7 @@ mod refused_list_tests {
             replica_sets: Ok(Vec::new()),
             refusals: Ok(vec![refusal]),
             policies: Ok(Vec::new()),
+            others: crate::resources::OtherPolicies::none(),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),
@@ -1002,6 +1094,7 @@ mod refused_list_tests {
             replica_sets: Ok(Vec::new()),
             refusals: Ok(Vec::new()),
             policies: Ok(Vec::new()),
+            others: crate::resources::OtherPolicies::none(),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),
@@ -1263,11 +1356,49 @@ mod shared_tests {
         let (client, _) = server(with(SERVICES, failure(401, "Unauthorized"))).await;
         let ctx = ResourceContext::from_client(client, NS.to_string());
 
-        match Snapshot::of(&ctx, None).await {
+        match Snapshot::of(&ctx, None, None).await {
             Err(Error::CredentialsExpired(_)) => {}
             Err(other) => panic!("a 401 is the session over, not {other:?}"),
             Ok(_) => panic!("a 401 on the Services list read as a snapshot"),
         }
+    }
+
+    /// The chain read its door from `NetworkPolicy` objects alone, so beside
+    /// a `CiliumNetworkPolicy` that admits the traffic it ended in a shut
+    /// door. Fails if the snapshot does not read which other engines'
+    /// policies hold an object in its namespace.
+    #[tokio::test]
+    async fn the_other_engines_policies_in_the_namespace_are_read_with_the_snapshot() {
+        const CILIUM: &str = "/apis/cilium.io/v2/namespaces/shop/ciliumnetworkpolicies";
+        let groups = serde_json::json!({
+            "kind": "APIGroupList", "apiVersion": "v1",
+            "groups": [{
+                "name": "cilium.io",
+                "versions": [{ "groupVersion": "cilium.io/v2", "version": "v2" }],
+                "preferredVersion": { "groupVersion": "cilium.io/v2", "version": "v2" },
+            }],
+        });
+        let kinds = serde_json::json!({
+            "kind": "APIResourceList", "apiVersion": "v1", "groupVersion": "cilium.io/v2",
+            "resources": [{
+                "name": "ciliumnetworkpolicies", "singularName": "", "namespaced": true,
+                "kind": "CiliumNetworkPolicy", "verbs": ["get", "list", "watch"],
+            }],
+        });
+        let held = serde_json::json!({
+            "apiVersion": "v1", "kind": "List", "metadata": {},
+            "items": [{ "metadata": { "name": "allow-web", "namespace": NS } }],
+        });
+        let mut table = routes((200, empty()));
+        table.push(("/apis", 200, groups.to_string()));
+        table.push(("/apis/cilium.io/v2", 200, kinds.to_string()));
+        table.push((CILIUM, 200, held.to_string()));
+        let (client, _) = server(table).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+
+        let snapshot = Snapshot::of(&ctx, None, None).await.expect("a read");
+        assert_eq!(snapshot.others.over(NS), ["CiliumNetworkPolicy"]);
+        assert!(snapshot.others.over("elsewhere").is_empty());
     }
 
     /// Would draw a route chain with no routes and nothing unread for a token
@@ -1282,7 +1413,7 @@ mod shared_tests {
         .await;
         let ctx = ResourceContext::from_client(client, NS.to_string());
 
-        let snapshot = Snapshot::of(&ctx, Some(&detecting("HTTPRoute", "httproutes")))
+        let snapshot = Snapshot::of(&ctx, Some(&detecting("HTTPRoute", "httproutes")), None)
             .await
             .expect("a read");
         assert!(snapshot.any_unread());
@@ -1336,7 +1467,7 @@ mod shared_tests {
         let (client, _) = server(table).await;
         let ctx = ResourceContext::from_client(client, NS.to_string());
 
-        let snapshot = Snapshot::of(&ctx, Some(&detecting("HTTPRoute", "httproutes")))
+        let snapshot = Snapshot::of(&ctx, Some(&detecting("HTTPRoute", "httproutes")), None)
             .await
             .expect("a read");
         let names: Vec<_> = snapshot
@@ -1370,7 +1501,7 @@ mod shared_tests {
         let ctx = ResourceContext::from_client(client, NS.to_string());
 
         for (kind, plural) in [("HTTPRoute", "httproutes"), ("Gateway", "gateways")] {
-            let snapshot = Snapshot::of(&ctx, Some(&detecting(kind, plural)))
+            let snapshot = Snapshot::of(&ctx, Some(&detecting(kind, plural)), None)
                 .await
                 .expect("a read");
             assert!(matches!(
