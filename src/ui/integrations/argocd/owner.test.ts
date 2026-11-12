@@ -146,6 +146,33 @@ describe("what a five-hundred-row page costs", () => {
   });
 });
 
+describe("while the Application is syncing", () => {
+  /**
+   * Argo clears `finishedAt` while an operation runs, and the delivery line
+   * of every managed object lost its "since". Fails if the last recorded
+   * sync stops being when the owner last applied.
+   */
+  it("still says when the Application last applied", async () => {
+    const app = application();
+    listCustomResources.mockResolvedValue([
+      {
+        ...app,
+        status: {
+          ...(app.status as object),
+          operationState: {
+            phase: "Running",
+            startedAt: "2026-08-07T10:00:00Z",
+          },
+          history: [{ id: 0, deployedAt: "2026-08-01T09:00:00Z" }],
+        },
+      },
+    ]);
+    const [answer] = await ownerOf([api()]);
+    if (answer?.state !== "delivered") throw new Error("unreachable");
+    expect(answer.source.lastAppliedAt).toBe("2026-08-01T09:00:00Z");
+  });
+});
+
 describe("per-object sync, which Argo does publish", () => {
   it("carries Argo's own verdict for the object rather than the app's", async () => {
     listCustomResources.mockResolvedValue([

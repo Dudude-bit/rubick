@@ -79,7 +79,10 @@ export interface ArgoApp {
   revision: string | null;
   health: string;
   healthMessage: string | null;
-  /** When the last sync operation ended, which is the only age Argo states. */
+  /**
+   * When the last sync operation ended. Argo clears that for as long as the
+   * next one runs, so then it is when the last recorded sync deployed.
+   */
   lastSyncAt: string | null;
   operationPhase: string | null;
   operationMessage: string | null;
@@ -124,6 +127,13 @@ export type ArgoFinding =
   | {
       kind: "syncFailedOnce";
       severity: "err";
+      message: string | null;
+      since: string | null;
+    }
+  /** A sync Argo has started and not ended, with what it says it is waiting for. */
+  | {
+      kind: "syncing";
+      severity: "warn";
       message: string | null;
       since: string | null;
     }
@@ -180,6 +190,14 @@ export function readApplication(object: CustomResourceInfo): ArgoApp {
     "status.operationState.syncResult.resources"
   ) ?? []) as SyncResult[];
 
+  const finishedAt =
+    (getValueByPath(object, "status.operationState.finishedAt") as string) ??
+    null;
+  const history = getValueByPath(object, "status.history");
+  const lastDeployedAt = Array.isArray(history)
+    ? ((history.at(-1) as { deployedAt?: string })?.deployedAt ?? null)
+    : null;
+
   const app: ArgoApp = {
     name: object.name,
     namespace: object.namespace ?? "",
@@ -208,9 +226,7 @@ export function readApplication(object: CustomResourceInfo): ArgoApp {
       (getValueByPath(object, "status.health.status") as string) ?? "Unknown",
     healthMessage:
       (getValueByPath(object, "status.health.message") as string) ?? null,
-    lastSyncAt:
-      (getValueByPath(object, "status.operationState.finishedAt") as string) ??
-      null,
+    lastSyncAt: finishedAt ?? lastDeployedAt,
     operationPhase,
     operationMessage,
     retries:
@@ -225,7 +241,12 @@ export function readApplication(object: CustomResourceInfo): ArgoApp {
     worst: null,
   };
 
-  app.findings = findingsFor(app, syncResults.length > 0);
+  app.findings = findingsFor(app, syncResults.length > 0, {
+    finishedAt,
+    startedAt:
+      (getValueByPath(object, "status.operationState.startedAt") as string) ??
+      null,
+  });
   app.worst = worstOf(app.findings);
   return app;
 }
@@ -319,19 +340,39 @@ function generatorOf(
  * `phase` alone is not enough: a retrying automated sync sits at `Running`
  * with every object already reported `SyncFailed`, and calling that "in
  * progress" would draw a spinner over a manifest the API server has refused
- * five times.
+ * five times. Argo 3 clears those results when the next attempt starts, so
+ * a retry count is the same answer.
  */
 function syncFailed(app: ArgoApp, hadResults: boolean): boolean {
   if (app.operationPhase === "Failed" || app.operationPhase === "Error") {
     return true;
   }
   return (
-    hadResults &&
-    app.resources.some((resource) => resource.outcome === "SyncFailed")
+    (inProgress(app) && app.retries > 0) ||
+    (hadResults &&
+      app.resources.some((resource) => resource.outcome === "SyncFailed"))
   );
 }
 
-function findingsFor(app: ArgoApp, hadResults: boolean): ArgoFinding[] {
+/** An operation Argo has started and not ended. */
+const inProgress = (app: ArgoApp) =>
+  app.operationPhase === "Running" || app.operationPhase === "Terminating";
+
+/**
+ * What is known of the last sync. `never` only where Argo has recorded no
+ * operation at all: an Application synced fifty times read "never synced"
+ * for as long as its next sync ran.
+ */
+export function lastSyncOf(app: ArgoApp): { at: string } | "running" | "never" {
+  if (app.lastSyncAt) return { at: app.lastSyncAt };
+  return app.operationPhase === null ? "never" : "running";
+}
+
+function findingsFor(
+  app: ArgoApp,
+  hadResults: boolean,
+  operation: { finishedAt: string | null; startedAt: string | null }
+): ArgoFinding[] {
   const findings: ArgoFinding[] = [];
   const failed = syncFailed(app, hadResults);
   // Argo's own words, or nothing: our sentence in this slot would read as
@@ -346,7 +387,7 @@ function findingsFor(app: ArgoApp, hadResults: boolean): ArgoFinding[] {
       kind: "syncFailing",
       severity: "err",
       message,
-      since: app.lastSyncAt,
+      since: operation.finishedAt,
       retries: app.retries,
     });
   } else if (failed) {
@@ -354,7 +395,16 @@ function findingsFor(app: ArgoApp, hadResults: boolean): ArgoFinding[] {
       kind: "syncFailedOnce",
       severity: "err",
       message,
-      since: app.lastSyncAt,
+      since: operation.finishedAt,
+    });
+  } else if (inProgress(app)) {
+    // Before "drifted": a sync is on its way, so "nothing will fix this" is
+    // not true for as long as it runs.
+    findings.push({
+      kind: "syncing",
+      severity: "warn",
+      message: app.operationMessage,
+      since: operation.startedAt,
     });
   } else if (app.sync === "OutOfSync" && !app.autoSync) {
     // The quiet one. Nothing is failing, nothing is retrying, and nothing

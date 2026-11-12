@@ -78,6 +78,7 @@ import {
   byTrouble,
   destinationOf,
   differing,
+  lastSyncOf,
   projectDestinationsWords,
   projectReposWords,
   resourceTone,
@@ -433,13 +434,7 @@ function AppRow({
         <Column label={t("columns", "health")}>
           <Cell
             bad={app.health === "Degraded" || app.health === "Missing"}
-            under={
-              app.lastSyncAt
-                ? t("empty", "lastSyncedAgo", {
-                    age: formatAge(app.lastSyncAt, t),
-                  })
-                : t("empty", "neverSynced")
-            }
+            under={lastSyncWords(app, "lastSyncedAgo", t)}
           >
             {app.health.toLowerCase()}
           </Cell>
@@ -450,6 +445,18 @@ function AppRow({
       <Findings app={app} url={url} />
     </TroubleRow>
   );
+}
+
+/** The age of the last sync, that one is running, or that there was none. */
+function lastSyncWords(
+  app: ArgoApp,
+  ago: "lastSyncedAgo" | "syncedAgo",
+  t: ReturnType<typeof useT>
+): string {
+  const last = lastSyncOf(app);
+  if (last === "never") return t("empty", "neverSynced");
+  if (last === "running") return t("empty", "syncRunning");
+  return t("empty", ago, { age: formatAge(last.at, t) });
 }
 
 /** Where the manifests come from, and when they were last applied. */
@@ -479,11 +486,7 @@ function SourceLine({ app }: { app: ArgoApp }) {
             <span className="text-fg-fnt">·</span>
             <RevisionRef app={app} source={source} />
             <span className="text-fg-fnt">
-              (
-              {app.lastSyncAt
-                ? t("empty", "syncedAgo", { age: formatAge(app.lastSyncAt, t) })
-                : t("empty", "neverSynced")}
-              )
+              ({lastSyncWords(app, "syncedAgo", t)})
             </span>
           </span>
           <span className="text-[11px] text-fg-fnt">
@@ -815,6 +818,13 @@ function describeFinding(
         verbatim: finding.message,
         note: t("empty", "nothingRetryingSync"),
         offerDiff: true,
+      };
+    case "syncing":
+      return {
+        title: finding.since
+          ? t("empty", "syncRunningFor", { age: formatAge(finding.since, t) })
+          : t("empty", "syncRunningNow"),
+        verbatim: finding.message,
       };
     case "drifted":
       return {

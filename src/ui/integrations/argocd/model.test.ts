@@ -6,6 +6,7 @@ import {
   byKind,
   byTrouble,
   differing,
+  lastSyncOf,
   projectDestinationsWords,
   projectReposWords,
   readApplication,
@@ -179,6 +180,97 @@ describe("the two ways an Application is OutOfSync", () => {
       )
     );
     expect(app.findings[0].kind).toBe("syncFailedOnce");
+  });
+});
+
+describe("a sync that is running", () => {
+  const HOOK = "waiting for completion of hook batch/Job/migrate";
+  /** As Argo writes it from the start of an operation to its end: no `finishedAt`. */
+  const running = (over: Record<string, unknown> = {}) => ({
+    sync: { status: "OutOfSync", revision: SHA },
+    health: { status: "Healthy" },
+    operationState: {
+      phase: "Running",
+      message: HOOK,
+      startedAt: "2026-08-07T10:00:00Z",
+    },
+    history: [
+      { id: 0, revision: SHA, deployedAt: "2026-07-01T09:00:00Z" },
+      { id: 1, revision: SHA, deployedAt: "2026-08-01T09:00:00Z" },
+    ],
+    ...over,
+  });
+
+  /**
+   * Argo clears `finishedAt` for as long as an operation runs, so an
+   * Application synced fifty times read "never synced", and with auto-sync
+   * off "nothing is going to fix this on its own", behind a hook that had
+   * been running for an hour. Fails if a running operation is read as no
+   * operation.
+   */
+  it("is said to be running, with what Argo says it waits for, and not as drift nobody is fixing", () => {
+    const app = readApplication(application("shop", {}, running()));
+    expect(app.findings).toEqual([
+      {
+        kind: "syncing",
+        severity: "warn",
+        message: HOOK,
+        since: "2026-08-07T10:00:00Z",
+      },
+    ]);
+    expect(app.worst).toBe("warn");
+  });
+
+  /** Fails if the last recorded sync stops standing in while the next runs. */
+  it("keeps the age of the last recorded sync", () => {
+    const app = readApplication(application("shop", {}, running()));
+    expect(app.lastSyncAt).toBe("2026-08-01T09:00:00Z");
+    expect(lastSyncOf(app)).toEqual({ at: "2026-08-01T09:00:00Z" });
+  });
+
+  /**
+   * `revisionHistoryLimit: 0` keeps no history, and the first sync has none
+   * yet. Neither is "never synced". Fails if a missing time is read as never.
+   */
+  it("is not called never synced where Argo keeps no history", () => {
+    const app = readApplication(
+      application("shop", {}, running({ history: undefined }))
+    );
+    expect(app.lastSyncAt).toBeNull();
+    expect(lastSyncOf(app)).toBe("running");
+  });
+
+  /** The one case "never" is true of: Argo recorded no operation at all. */
+  it("is called never synced only where no operation was recorded", () => {
+    const app = readApplication(
+      application("shop", {}, { sync: { status: "OutOfSync" } })
+    );
+    expect(lastSyncOf(app)).toBe("never");
+  });
+
+  /**
+   * A retry in progress has no `finishedAt` either, and Argo 3 clears the
+   * failed results when it starts. Fails if that reads as a first attempt
+   * under way, or if "failing for" takes its age from the last good sync.
+   */
+  it("is still a failing sync while a retry of it runs", () => {
+    const app = readApplication(
+      application(
+        "shop",
+        { syncPolicy: { automated: {} } },
+        running({
+          operationState: {
+            phase: "Running",
+            message: `${SYNC_FAILURE}. Retrying attempt #2 at 10:05AM.`,
+            startedAt: "2026-08-07T10:00:00Z",
+            retryCount: 2,
+          },
+        })
+      )
+    );
+    expect(app.findings).toMatchObject([
+      { kind: "syncFailing", retries: 2, since: null },
+    ]);
   });
 });
 

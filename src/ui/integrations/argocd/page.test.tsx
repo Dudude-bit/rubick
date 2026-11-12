@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
@@ -18,7 +18,8 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-const { APPLICATIONSETS_CRD, PROJECTS_CRD } = await import("./data");
+const { APPLICATIONS_CRD, APPLICATIONSETS_CRD, PROJECTS_CRD } =
+  await import("./data");
 const { default: ArgoCdPage } = await import("./page");
 
 const refused = (crd: string) => () =>
@@ -77,6 +78,79 @@ describe("tabs whose own list was refused", () => {
     expect(
       screen.queryByText(/has no AppProject objects/)
     ).not.toBeInTheDocument();
+  });
+});
+
+const application = (
+  name: string,
+  spec: Record<string, unknown>,
+  status: Record<string, unknown>
+) => ({
+  name,
+  namespace: "argocd",
+  uid: name,
+  apiVersion: "argoproj.io/v1alpha1",
+  kind: "Application",
+  spec: {
+    project: "default",
+    source: { repoURL: "https://github.com/acme/infra", path: "manifests" },
+    destination: {
+      server: "https://kubernetes.default.svc",
+      namespace: "shop",
+    },
+    ...spec,
+  },
+  status,
+  labels: {},
+  annotations: {},
+  createdAt: null,
+  ownerReferences: [],
+  generation: null,
+});
+
+/** Opens a row: a warning shows its title on the closed row and no more. */
+async function openRow(name: string) {
+  fireEvent.click(
+    await screen.findByRole("button", { name: `Expand ${name}` })
+  );
+}
+
+describe("an Application whose sync is running", () => {
+  /**
+   * The row said "(never synced)" twice and "Nothing is going to fix this on
+   * its own" for as long as a hook ran. Fails if any of the three comes back.
+   */
+  it("says a sync is running and what it waits for, not that it never synced", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([
+        application(
+          "shop",
+          {},
+          {
+            sync: { status: "OutOfSync" },
+            health: { status: "Healthy" },
+            operationState: {
+              phase: "Running",
+              message: "waiting for completion of hook batch/Job/migrate",
+              startedAt: new Date(Date.now() - 3_600_000).toISOString(),
+            },
+          }
+        ),
+      ])
+    );
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(
+      screen.getByText(/^A sync has been running for \d+[mh]$/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("waiting for completion of hook batch/Job/migrate")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/sync running/)).toHaveLength(2);
+    expect(screen.queryByText(/never synced/)).toBeNull();
+    expect(screen.queryByText(/Nothing is going to fix this/)).toBeNull();
   });
 });
 
