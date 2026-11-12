@@ -25,7 +25,7 @@ import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
 import type { Scoped } from "@/generated/types";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
-import { useRefusals } from "@/hooks/useRefusals";
+import { useScopeRefusals } from "@/hooks/useRefusals";
 import { attachAggregatedPodMetrics, type PodMatcher } from "@/lib/metrics";
 import { MetricsStatusBanner } from "../../-metrics";
 import { queryKeys } from "@/lib/query-keys";
@@ -181,8 +181,8 @@ export function createWorkloadListPage<T extends Workload>(
       [pods, podsRead, podsUnread]
     );
     const causeAt = useLastPassed(causePods?.deadlines ?? []);
-    const refusals = useRefusals(
-      scope.wire?.length === 1 ? scope.wire[0] : null,
+    const refusalsIn = useScopeRefusals(
+      scope.wire,
       config.resourceType !== ResourceType.Deployment
     );
     const dataWithMetrics = useMemo(
@@ -190,7 +190,12 @@ export function createWorkloadListPage<T extends Workload>(
         attachAggregatedPodMetrics<T>(rows, pods, config.matchPods).map(
           (row): WorkloadRow<T> => {
             const owner = ownerOf(row);
-            const refused = rowRefusal(row, owner, causePods, refusals);
+            const refused = rowRefusal(
+              row,
+              owner,
+              causePods,
+              refusalsIn(row.namespace)
+            );
             return {
               ...row,
               ...(config.refused?.(row, refused) ?? {}),
@@ -204,7 +209,7 @@ export function createWorkloadListPage<T extends Workload>(
             };
           }
         ),
-      [rows, pods, causePods, causeAt, refusals]
+      [rows, pods, causePods, causeAt, refusalsIn]
     );
 
     const columns = useMemo(() => config.columns(), []);
