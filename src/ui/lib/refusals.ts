@@ -131,12 +131,36 @@ export function forgetIfAskedAgain(read: string): void {
   useRefusals.setState({ reads: kept });
 }
 
-/** The reader says their rights may have changed: every refused read is asked once more. */
+/** The command an action's refusal is kept under: the authorizer's "may not", which no read asks again. */
+export const MAY = "may";
+
+/**
+ * Rights may have changed, by the reader's word or a credential renewal:
+ * every refused read is asked once more. A refused action is kept until its
+ * access review, keyed on {@link useRightsAsked}, answers again and
+ * {@link settleRefusal} replaces it: let go here, its mark went out and came
+ * back a second later with every renewal.
+ */
 export function forgetRefusals(): void {
   useRefusals.setState((s) => ({
-    reads: new Map(),
+    reads: new Map([...s.reads].filter(([read]) => read.startsWith(`${MAY} `))),
     forgotten: s.forgotten + 1,
   }));
+}
+
+/** The authorizer answered about `read` again: its refusal is kept where it repeats it and dropped where it does not. */
+export function settleRefusal(
+  read: string,
+  refused: boolean,
+  error: unknown,
+  connection: number
+): void {
+  if (refused) return noteRefusal(read, error, connection);
+  const { reads } = useRefusals.getState();
+  if (!reads.has(read)) return;
+  const kept = new Map(reads);
+  kept.delete(read);
+  useRefusals.setState({ reads: kept });
 }
 
 /**
