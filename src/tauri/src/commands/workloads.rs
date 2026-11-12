@@ -354,7 +354,10 @@ fn job_from_cronjob(cronjob: &DynamicObject, job_name: &str) -> Result<DynamicOb
             kind: "CronJob".to_string(),
             name,
             uid: cronjob.uid().unwrap_or_default(),
-            block_owner_deletion: Some(true),
+            // Left out, as `kubectl create job --from` leaves it: asking for
+            // it takes `update` on `cronjobs/finalizers` where the cluster
+            // checks owner references, and the run was refused there.
+            block_owner_deletion: None,
             controller: Some(true),
         },
     ]);
@@ -573,7 +576,9 @@ mod tests {
     /// Without the ownerReference the `Job` outlives its `CronJob` and is never
     /// counted against `successfulJobsHistoryLimit`, so a cluster where
     /// somebody presses this weekly accumulates `Job`s nothing will collect.
-    /// `kubectl create job --from` sets it for the same reason.
+    /// `kubectl create job --from` sets it for the same reason. Fails too if
+    /// the reference asks to block its owner's deletion, which kubectl does
+    /// not and a user without `cronjobs/finalizers` is refused for.
     #[test]
     fn the_run_is_owned_by_the_cronjob_that_made_it() {
         let job = job_from_cronjob(&cronjob(None), "nightly-1").expect("builds");
@@ -588,7 +593,7 @@ mod tests {
         assert_eq!(owner.name, "nightly");
         assert_eq!(owner.uid, "cj-uid-1");
         assert_eq!(owner.controller, Some(true));
-        assert_eq!(owner.block_owner_deletion, Some(true));
+        assert_eq!(owner.block_owner_deletion, None);
     }
 
     /// A `CronJob` with no template is not a `CronJob` this can run, and saying
