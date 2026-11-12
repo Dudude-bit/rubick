@@ -243,13 +243,22 @@ impl AppState {
         let _ = self.event_tx.send(event);
     }
 
-    /// Create a new auth session
+    /// Create a new auth session. `None` for a sign-in somebody would be
+    /// shown when the window does not point at `context`: the connect it is
+    /// for was let go of before it got this far, when there was no session
+    /// yet to cancel, and its terminal or browser tab would open for nobody.
     pub fn create_auth_session(
         &self,
         context: &str,
         flow: &str,
         seen: bool,
-    ) -> (String, tokio::sync::oneshot::Receiver<()>) {
+    ) -> Option<(String, tokio::sync::oneshot::Receiver<()>)> {
+        // With a disconnect, which cancels what is here and then moves the
+        // window: one that began between the two would be missed by both.
+        let _lifecycle = self.cluster_lifecycle.lock();
+        if seen && self.get_current_context().as_deref() != Some(context) {
+            return None;
+        }
         let session_id = Uuid::new_v4().to_string();
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
         let session = AuthSessionControl {
@@ -259,7 +268,7 @@ impl AppState {
             cancel_tx,
         };
         self.auth_sessions.insert(session_id.clone(), session);
-        (session_id, cancel_rx)
+        Some((session_id, cancel_rx))
     }
 
     /// Remove an auth session

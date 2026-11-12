@@ -213,7 +213,13 @@ pub(super) async fn run_oidc_auth(
     let redirect_uri = redirect_uri_for(redirect_port);
 
     let auth_url = auth.generate_auth_url(&redirect_uri).await?;
-    let (session_id, mut cancel_rx) = state.create_auth_session(context, "oidc", mode.is_seen());
+    let Some((session_id, mut cancel_rx)) =
+        state.create_auth_session(context, "oidc", mode.is_seen())
+    else {
+        return Err(Error::Auth(AuthError::Oidc(
+            "Authentication cancelled".to_string(),
+        )));
+    };
 
     state.emit(AppEvent::AuthUrlRequested {
         context: context.to_string(),
@@ -506,6 +512,7 @@ mod tests {
             other: std::collections::BTreeMap::default(),
         };
         let state = AppState::new().expect("state");
+        state.set_current_context(Some("ctx".to_string()));
         let mut events = state.subscribe();
         let browser = async {
             let AppEvent::AuthUrlRequested {

@@ -1000,6 +1000,35 @@ mod lifecycle_tests {
         }
     }
 
+    /// A connect abandoned in the tick it began: its disconnect ran before
+    /// the attempt had a sign-in to cancel, and the sign-in's terminal or
+    /// browser tab opened later, over whichever cluster the window was on.
+    /// Fails if a sign-in somebody would be shown starts for a cluster the
+    /// window was taken off, or a background renewal is refused with it.
+    #[tokio::test]
+    async fn a_sign_in_does_not_start_for_a_cluster_the_window_was_taken_off() {
+        let state = AppState::new().expect("state");
+        begin(&state, "prod");
+        {
+            let _lifecycle = state.cluster_lifecycle.lock();
+            super::teardown(&state, "prod");
+        }
+        assert!(state.create_auth_session("prod", "exec", true).is_none());
+        assert!(state.auth_sessions.is_empty());
+
+        begin(&state, "prod");
+        begin(&state, "staging");
+        assert!(
+            state.create_auth_session("prod", "oidc", true).is_none(),
+            "another connect took the window"
+        );
+        assert!(state.create_auth_session("staging", "oidc", true).is_some());
+        assert!(
+            state.create_auth_session("prod", "exec", false).is_some(),
+            "a renewal is shown to nobody"
+        );
+    }
+
     /// A context the window holds no session for is not brought back: the
     /// caller connects. Fails if a bare client, or nothing, counts as held.
     #[tokio::test]
@@ -1059,7 +1088,9 @@ mod lifecycle_tests {
         state
             .metrics_unserved
             .record("staging", "nodes", &absent, at);
-        let (_session, mut cancelled) = state.create_auth_session("tab-two", "oidc", true);
+        let (_session, mut cancelled) = state
+            .create_auth_session("tab-two", "oidc", true)
+            .expect("the window points at it");
 
         super::teardown_all(&state);
 
