@@ -226,7 +226,8 @@ export function NodeDetail() {
           podsOnThisNode.error ? errorToShow(podsOnThisNode.error) : null,
           silentNodes([node]).get(node.name) ?? null,
           frame.capturedAt,
-          t
+          t,
+          activeTab === "pods" ? null : podsOnThisNode.dataUpdatedAt
         ),
       ];
       const taints = taintsSection(node.taints, t);
@@ -253,6 +254,8 @@ export function NodeDetail() {
       node,
       podsOnThisNode.data,
       podsOnThisNode.error,
+      podsOnThisNode.dataUpdatedAt,
+      activeTab,
       nodeWithMetrics,
       podCount,
       t,

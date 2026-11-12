@@ -2226,6 +2226,8 @@ export const ru: Catalogue = {
     created: "Создан",
     stillReading: "На момент отчёта ещё читалось.",
     rowsNotWhole: "В этих строках не всё, что запрашивалось.",
+    staleRead:
+      "На момент отчёта прочитать {label} не удалось: в файле показано то, что получено в {time}, при последнем успешном чтении.",
     shareScreen: "Поделиться этим экраном",
     rowsMore: {
       one: "Ещё {n} строка есть в приложении.",
@@ -2319,6 +2321,8 @@ export const ru: Catalogue = {
     clSectionPodsOnNode: "Поды на этом узле",
     clPodsNotOpened:
       "Вкладка «Поды» не была открыта на этой странице на момент создания отчёта.",
+    clPodsReadEarlier:
+      "Прочитано, пока была открыта вкладка «Поды», последний раз в {time}; с тех пор не обновлялось.",
     clSectionKeys: "Ключи",
     clKeyColumn: "Ключ",
     clSizeColumn: "Размер",

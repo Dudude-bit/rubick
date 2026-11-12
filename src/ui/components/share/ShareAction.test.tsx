@@ -20,7 +20,11 @@ vi.mock("./ShareDialog", () => ({
 }));
 
 import { renderWithRouter } from "@/test/render";
-import { ScreenShareProvider, useShareSection } from "./screen-share";
+import {
+  ScreenShareProvider,
+  useShareCaveat,
+  useShareSection,
+} from "./screen-share";
 import { ShareScreenAction } from "./ShareAction";
 
 const mount = (ui: ReactNode) =>
@@ -97,5 +101,38 @@ describe("a screen's Share while its dialog is open", () => {
     );
     expect(t).toBe(captured.replace(/\.\d{3}Z$/, "Z"));
     expect(screen.getByTestId("not-read").textContent).toBe("");
+  });
+
+  /**
+   * A notice on screen said the rows were old, and the file said everything
+   * it names was read. Fails if what a screen's notices say of its read is
+   * left out of the file's Not read.
+   */
+  it("writes what the screen's own notices say of its read into Not read", async () => {
+    function Notice() {
+      useShareCaveat("Could not read pods when this was made");
+      return null;
+    }
+    function Part() {
+      useShareSection("part", () => ({
+        id: "part",
+        order: 20,
+        title: "Part",
+        icon: "",
+        body: { type: "text", text: "x" },
+      }));
+      return null;
+    }
+    await mount(
+      <>
+        <Notice />
+        <Part />
+        <ShareScreenAction screen={{ title: "Pods" }} />
+      </>
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Share/ }));
+    expect(screen.getByTestId("not-read").textContent).toBe(
+      "Could not read pods when this was made"
+    );
   });
 });

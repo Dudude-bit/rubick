@@ -874,6 +874,7 @@ export function Events() {
           {stale && (
             <StaleRows
               label="events"
+              shared={false}
               since={freshness.dataUpdatedAt}
               error={failed}
               onRetry={() =>

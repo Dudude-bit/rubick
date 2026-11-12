@@ -26,7 +26,7 @@ import { useLocale } from "@/stores/localeStore";
 import { Server } from "lucide-react";
 
 import type { ShareContribution, ShareFrame } from "./contribution";
-import { useScreenSections } from "./screen-share";
+import { useScreenCaveats, useScreenSections } from "./screen-share";
 import { ShareDialog } from "./ShareDialog";
 
 /** Share on a detail page: the object, and everything the page adds about it. */
@@ -83,6 +83,7 @@ export function ShareScreenAction({
   const colouring = useDisplaySettingsStore((s) => s.resourceColouring);
   const version = useAppInfo();
   const collect = useScreenSections();
+  const caveats = useScreenCaveats();
   const [open, setOpen] = useState(false);
   // Per opening, not per render: the dialog keys the public-target tick and
   // the published link on it, and a screen object built inline changes
@@ -97,10 +98,12 @@ export function ShareScreenAction({
     const sections = collect();
     // A screen whose parts registered nothing still gets a file; it must not
     // be one that reads as "all of it, and all of it was read".
-    const notRead =
-      sections.length === 0
+    const notRead = [
+      ...(sections.length === 0
         ? [t("share", "screenGaveNothing")]
-        : unreadLines(sections);
+        : unreadLines(sections)),
+      ...(caveats?.() ?? []),
+    ];
     const icon = screen.icon ?? (screen.kind ? kindIcon(screen.kind) : Share2);
     return {
       subject: {
@@ -137,6 +140,7 @@ export function ShareScreenAction({
   }, [
     open,
     collect,
+    caveats,
     capturedAt,
     version.data,
     screen,

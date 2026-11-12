@@ -65,6 +65,7 @@ vi.mock("@/lib/commands", () => ({
 
 import {
   ScreenShareProvider,
+  useScreenCaveats,
   useScreenSections,
 } from "@/components/share/screen-share";
 import { commands } from "@/lib/commands";
@@ -130,6 +131,13 @@ function eventsAt(view: "list" | "stories") {
   };
 }
 
+/** What the page's notices tell Share of its read. */
+let caveats: (() => string[]) | null = null;
+function Caveats() {
+  caveats = useScreenCaveats();
+  return null;
+}
+
 async function mount(view: "list" | "stories" = "list") {
   let bump = () => {};
   // A fresh element every time: React bails out of re-rendering a component
@@ -138,7 +146,12 @@ async function mount(view: "list" | "stories" = "list") {
   function Host() {
     const [, setTick] = useState(0);
     bump = () => setTick((tick) => tick + 1);
-    return <Events />;
+    return (
+      <ScreenShareProvider>
+        <Events />
+        <Caveats />
+      </ScreenShareProvider>
+    );
   }
   const rendered = await renderWithRouter(<Host />, eventsAt(view));
   return {
@@ -1314,6 +1327,9 @@ describe("a feed a watch keeps", () => {
     expect(document.body.textContent).toContain("prod-pod-1");
     expect(screen.getByText("read failing")).toBeInTheDocument();
     expect(screen.queryByText("live")).not.toBeInTheDocument();
+    // The file's Events section says the read failed and holds no rows, so
+    // the notice has nothing in the file to call old.
+    expect(caveats!()).toEqual([]);
   });
 
   /**

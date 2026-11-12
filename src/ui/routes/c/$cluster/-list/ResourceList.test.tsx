@@ -34,6 +34,7 @@ vi.mock("@/stores/clusterStore", () => ({
 
 import {
   ScreenShareProvider,
+  useScreenCaveats,
   useScreenSections,
 } from "@/components/share/screen-share";
 import type { PlacedSection } from "@/lib/report-parts";
@@ -838,6 +839,39 @@ describe("what a list hands to Share", () => {
     });
     expect(section.partial ?? null).toBeNull();
     expect(section.count).toBe(1);
+  });
+
+  /**
+   * The API server stopped answering at 14:05; the list kept its rows and
+   * said so, and the file made at 14:25 listed them under "Captured 14:25"
+   * with everything read. Fails if a list holding rows from a failed
+   * re-read tells Share nothing of it.
+   */
+  it("says the rows are from the last read that answered when a re-read failed", async () => {
+    let said: (() => string[]) | null = null;
+    function Probe() {
+      said = useScreenCaveats();
+      return null;
+    }
+    await draw(
+      <ScreenShareProvider>
+        <ResourceList<Item>
+          title="Pods"
+          kind="Pod"
+          columns={columns}
+          emptyStateLabel="Pods"
+          data={[{ name: "web-1", namespace: "shop" }]}
+          error={new Error("502 Bad Gateway")}
+          dataUpdatedAt={Date.UTC(2026, 10, 12, 14, 5)}
+        />
+        <Probe />
+      </ScreenShareProvider>
+    );
+    expect(said!()).toEqual([
+      expect.stringMatching(
+        /^Could not read pods when this was made.*2026-11-12 14:05 UTC.*502 Bad Gateway/
+      ),
+    ]);
   });
 });
 

@@ -12,7 +12,12 @@ import {
 import { nodePlacement, statesPlacement } from "@/lib/node-pool";
 import { nodeReadyWord, type NodeSilence } from "@/lib/node-reporting";
 import type { ReportStat, ReportValue } from "@/lib/report";
-import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
+import {
+  ORDER,
+  refOf,
+  utcMoment,
+  type PlacedSection,
+} from "@/lib/report-parts";
 import { podStatusValue } from "@/lib/share/pod-status";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { formatSince } from "@/lib/utils";
@@ -150,7 +155,12 @@ export function podsOnNodeSection(
   /** This node's own silence: every pod on it is then its kubelet's last word. */
   silence: NodeSilence | null,
   capturedAt: string,
-  t: T
+  t: T,
+  /**
+   * When the rows were last read, where nothing follows them now: the tab
+   * was open earlier and is not, so they are that moment's and not this one's.
+   */
+  leftAt: number | null = null
 ): PlacedSection {
   const kept = (pods ?? []).slice(0, MAX_PODS);
   const unread =
@@ -162,6 +172,10 @@ export function podsOnNodeSection(
     icon: iconSvg(Boxes),
     count: pods?.length,
     unread,
+    partial:
+      pods !== undefined && leftAt !== null
+        ? t("share", "clPodsReadEarlier", { time: utcMoment(leftAt) })
+        : null,
     body: {
       type: "table",
       columns: [

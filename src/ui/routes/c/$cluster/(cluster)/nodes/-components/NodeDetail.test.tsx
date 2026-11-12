@@ -48,6 +48,24 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+vi.mock("@/hooks/useAppInfo", () => ({
+  useAppInfo: () => ({ data: { version: "5.0.0" }, isPending: false }),
+}));
+/** The file's pods section, as the dialog would be handed it. */
+vi.mock("@/components/share/ShareDialog", () => ({
+  ShareDialog: ({
+    report,
+  }: {
+    report: { sections: { id: string; partial?: string | null }[] } | null;
+  }) =>
+    report ? (
+      <p data-testid="shared-pods">
+        {report.sections.find((section) => section.id === "node-pods")
+          ?.partial ?? "followed"}
+      </p>
+    ) : null,
+}));
+
 vi.mock("../../../-debug", () => ({
   DebugNodeDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="debug-dialog" /> : null,
@@ -487,6 +505,35 @@ describe("the pods on the node", () => {
     expect(screen.getByRole("tab", { name: /Pods/ })).toHaveTextContent("39");
     expect(screen.getByRole("tab", { name: /Pods/ })).not.toHaveTextContent(
       "50"
+    );
+  });
+
+  /**
+   * The rows are read and followed only while the Pods tab is open; left
+   * for another tab they freeze, and a Share made after a drain from the
+   * same page listed the evicted pods as Running. Fails if the page hands
+   * Share those rows without saying they are from the earlier visit.
+   */
+  it("tells Share the rows are from the earlier visit once another tab is open", async () => {
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...defaultUseResourceDetailReturn(buildNode()),
+      activeTab: "pods",
+    } as never);
+    const page = await renderPage();
+    await screen.findByText("Finished here");
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByTestId("shared-pods")).toHaveTextContent(
+      "followed"
+    );
+
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(buildNode()) as never
+    );
+    await page.rerender(<NodeDetail />);
+    await waitFor(() =>
+      expect(screen.getByTestId("shared-pods")).toHaveTextContent(
+        /^Read while the Pods tab was open, last at 20\d\d-.* UTC/
+      )
     );
   });
 });
