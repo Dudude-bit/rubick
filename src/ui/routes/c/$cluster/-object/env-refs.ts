@@ -1,3 +1,4 @@
+import type { ConfigData, Withheld } from "@/generated/types";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 
 /** A ConfigMap or Secret a container's environment names, as the read of it answered. */
@@ -59,4 +60,35 @@ export function isBroken(verdict: RefVerdict): boolean {
   return (
     verdict.verdict === "keyMissing" || verdict.verdict === "objectMissing"
   );
+}
+
+/** What the values read of an object holds under one key. */
+export type Held =
+  | { is: "value"; value: string }
+  | { is: "reading" }
+  | { is: "withheld"; reason: Withheld }
+  | { is: "binary"; bytes: number }
+  | { is: "refused" }
+  | { is: "unread"; error: string }
+  | { is: "absent" };
+
+export function heldOf(
+  query: { data?: ConfigData; error: unknown } | undefined,
+  key: string
+): Held {
+  const data = query?.data;
+  if (data) {
+    if (key in data.values) return { is: "value", value: data.values[key] };
+    if (key in data.withheld) {
+      return { is: "withheld", reason: data.withheld[key] };
+    }
+    if (key in data.binary) {
+      return { is: "binary", bytes: data.binary[key].bytes };
+    }
+    return { is: "absent" };
+  }
+  if (!query?.error) return { is: "reading" };
+  return errorCode(query.error) === ERROR_CODES.PERMISSION
+    ? { is: "refused" }
+    : { is: "unread", error: errorToShow(query.error) };
 }
