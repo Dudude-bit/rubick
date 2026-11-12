@@ -11,25 +11,40 @@
  */
 
 import { commands } from "@/lib/commands";
+import type { IngressClassSummary, IngressInfo } from "@/generated/types";
 import type { IngressTls } from "../registry";
-import { tlsUnread } from "../ingress";
+import {
+  claimsIngress as classClaims,
+  readClasses,
+  tlsUnread,
+  type ClassesRead,
+} from "../ingress";
 
 const PREFIX = "appgw.ingress.kubernetes.io/";
 const SSL_CERTIFICATE = `${PREFIX}appgw-ssl-certificate`;
 const SSL_REDIRECT = `${PREFIX}ssl-redirect`;
 const INGRESS_CLASS_ANNOTATION = "kubernetes.io/ingress.class";
 
-/** What AGIC requires on an Ingress before it will look at it at all. */
+/**
+ * What AGIC answers to: the value of the legacy annotation, and the
+ * `spec.controller` of the IngressClass it installs. Never a class's name,
+ * which cannot hold a slash: that one is `azure-application-gateway`.
+ */
 const AGIC_CLASS = "azure/application-gateway";
 
-export function claimsIngress(ingress: {
-  className: string | null;
-  annotations: Record<string, string>;
-}): boolean {
-  return (
-    ingress.annotations[INGRESS_CLASS_ANNOTATION] === AGIC_CLASS ||
-    ingress.className === AGIC_CLASS
-  );
+/**
+ * Whether AGIC serves this Ingress. The annotation first, as AGIC reads it;
+ * then the class `spec.ingressClassName` names, by its controller, and no
+ * class at all where AGIC's is the default. `null` where only the
+ * IngressClass list could say and it was not read.
+ */
+export function claimsIngress(
+  ingress: Pick<IngressInfo, "className" | "annotations">,
+  classes: IngressClassSummary[] | null
+): boolean | null {
+  const annotated = ingress.annotations[INGRESS_CLASS_ANNOTATION];
+  if (annotated) return annotated === AGIC_CLASS;
+  return classes && classClaims(ingress, classes, AGIC_CLASS);
 }
 
 export async function ingressTls(
@@ -37,20 +52,22 @@ export async function ingressTls(
 ): Promise<IngressTls[][]> {
   // One `get` per Ingress the caller named, and never one per host. A list
   // page asks for every row at once; a detail page asks for one.
+  const read = await readClasses();
   return Promise.all(
     wanted.map((input) =>
-      answerFor(input).catch((error) => tlsUnread(input.hosts, error))
+      answerFor(input, read).catch((error) => tlsUnread(input.hosts, error))
     )
   );
 }
 
-async function answerFor(input: {
-  namespace: string;
-  name: string;
-  hosts: string[];
-}): Promise<IngressTls[]> {
+async function answerFor(
+  input: { namespace: string; name: string; hosts: string[] },
+  read: ClassesRead
+): Promise<IngressTls[]> {
   const ingress = await commands.getIngress(input.name, input.namespace);
-  if (!claimsIngress(ingress)) return [];
+  const mine = claimsIngress(ingress, read.classes);
+  if (mine === null) return tlsUnread(input.hosts, read.error);
+  if (!mine) return [];
 
   const certificate = ingress.annotations[SSL_CERTIFICATE];
   if (certificate !== undefined && certificate !== "") {
