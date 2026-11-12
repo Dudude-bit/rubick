@@ -220,6 +220,7 @@ export function fluxPicture(
   unread: KindUnread[]
 ): FluxPicture {
   const unreadKinds = new Set(unread.map((read) => read.kind));
+  const listedKinds = new Set(sourceObjects.map(({ kind }) => kind));
   const usersKnown = !unreadKinds.has(HELM_RELEASE);
   const sources = sourceObjects.flatMap(({ kind, objects }) =>
     objects.map((object) => readSource(kind, object))
@@ -246,8 +247,11 @@ export function fluxPicture(
         `${reconciler.sourceRef.kind}/${reconciler.sourceRef.namespace}/${reconciler.sourceRef.name}`
       ) ?? null;
     reconciler.source = source;
+    // A kind nobody listed (a HelmChart, an ExternalArtifact) is not a
+    // source found missing.
+    const kind = reconciler.sourceRef.kind;
     reconciler.sourceKnown =
-      source !== null || !unreadKinds.has(reconciler.sourceRef.kind);
+      source !== null || (listedKinds.has(kind) && !unreadKinds.has(kind));
     if (source) source.usedBy.push(reconciler.key);
   }
 
@@ -360,11 +364,10 @@ function readHelmRelease(object: CustomResourceInfo): FluxReconciler {
     null;
   return base(object, HELM_RELEASE, {
     unit: version ? `${chart} ${version}` : chart,
-    sourceRef: sourceRefOf(
-      object,
-      "spec.chart.spec.sourceRef",
-      "HelmRepository"
-    ),
+    // Flux 2.3 names a chart either way; `chartRef` has no chart template.
+    sourceRef:
+      sourceRefOf(object, "spec.chart.spec.sourceRef", "HelmRepository") ??
+      sourceRefOf(object, "spec.chartRef", "OCIRepository"),
     // Only what was installed: the CRD defaults the asked version to `*`, and
     // a release that never installed read as frozen at it, "installed and healthy".
     applied: readRevision(installed),

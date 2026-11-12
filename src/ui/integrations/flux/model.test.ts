@@ -533,6 +533,82 @@ describe("a HelmRelease whose source is failing", () => {
   });
 });
 
+describe("a HelmRelease that names its chart through chartRef", () => {
+  const release = object(
+    "HelmRelease",
+    "podinfo",
+    { chartRef: { kind: "OCIRepository", name: "podinfo" } },
+    {
+      conditions: [ready("Helm install succeeded")],
+      history: [{ chartVersion: "6.5.4" }],
+    }
+  );
+  const repository = (conditions: Condition[]) =>
+    object(
+      "OCIRepository",
+      "podinfo",
+      { url: "oci://ghcr.io/stefanprodan/charts/podinfo" },
+      { conditions, artifact: { revision: "6.5.4@sha256:abc" } }
+    );
+  const read = (conditions: Condition[]) =>
+    fluxPicture(
+      [],
+      [release],
+      [{ kind: "OCIRepository", objects: [repository(conditions)] }],
+      []
+    );
+
+  /**
+   * Only `spec.chart` was read for a source, so a healthy release drew a red
+   * "none / nothing to apply from" and its OCIRepository "fetched · unused".
+   */
+  it("reads from the source chartRef names, which is then in use", () => {
+    const { reconcilers, sources } = read([ready("stored artifact")]);
+    expect(reconcilers[0].sourceRef).toMatchObject({
+      kind: "OCIRepository",
+      name: "podinfo",
+    });
+    expect(reconcilers[0].source).toBe(sources[0]);
+    expect(sources[0].findings).toEqual([]);
+    expect(sourceState(sources[0], t).text).toBe(t("empty", "fluxFetched"));
+  });
+
+  /** The stale-source case this page exists for, which a failing OCIRepository reported as freezing nobody. */
+  it("is frozen when that source stops fetching, and the source names it", () => {
+    const { reconcilers, sources } = read([notReady("Failed", "unauthorized")]);
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toEqual([
+      "frozen",
+    ]);
+    const failing = sources[0].findings[0];
+    expect(failing.kind === "fetchFailing" && failing.frozen).toEqual([
+      "podinfo",
+    ]);
+  });
+});
+
+describe("a source of a kind this page does not list", () => {
+  /**
+   * A Kustomization on an ExternalArtifact, a release on a HelmChart: the
+   * kind was never asked for, and a kind not among the refused ones read as
+   * listed and empty, a red "the source it names is not in this cluster".
+   */
+  it("is not read, rather than found missing", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization(
+          "apps",
+          { sourceRef: { kind: "ExternalArtifact", name: "bundle" } },
+          [ready("Applied")],
+          REVISION
+        ),
+      ],
+      []
+    );
+    expect(reconcilers[0].sourceKnown).toBe(false);
+    expect(reconcilers[0].findings).toEqual([]);
+  });
+});
+
 describe("a source nobody applies", () => {
   it("is a finding, because nowhere else in the app could say so", () => {
     const { sources } = picture(
