@@ -61,16 +61,18 @@ import {
   APPLICATIONSETS_CRD,
   PROJECTS_CRD,
   SERVER_SERVICE,
-  applicationUrl,
+  shownUi,
   uiFromFront,
   uiFromRoutes,
   useApplicationSets,
   useApplications,
   useController,
   useProjects,
+  wayInto,
   type ControllerInfo,
   type RoutedUi,
   type UiFront,
+  type WayIn,
 } from "./data";
 import {
   appState,
@@ -123,8 +125,9 @@ export default function ArgoCdPage() {
   );
   const viaRoutes = useMemo(() => uiFromRoutes(routed.routes), [routed.routes]);
   const viaIngress = useFrontUi(controller.data?.ui ?? null);
-  const shown = viaIngress ?? viaRoutes;
+  const shown = shownUi(viaIngress, viaRoutes);
   const ui = shown.url;
+  const readingUi = controller.isPending || routed.isPending;
 
   if (applications.error) {
     return (
@@ -153,7 +156,12 @@ export default function ArgoCdPage() {
         (n, total) => applicationsNeedAttention(n, total, t)
       ),
       content: (
-        <ApplicationsTab apps={apps} loading={applications.isPending} ui={ui} />
+        <ApplicationsTab
+          apps={apps}
+          loading={applications.isPending}
+          front={shown}
+          readingUi={readingUi}
+        />
       ),
     },
     {
@@ -254,11 +262,15 @@ export default function ArgoCdPage() {
 function ApplicationsTab({
   apps,
   loading,
-  ui,
+  front,
+  readingUi,
 }: {
   apps: ArgoApp[];
   loading: boolean;
-  ui: string | null;
+  /** Where Argo's UI is, as far as the cluster says. */
+  front: RoutedUi;
+  /** Whether that is still being read. */
+  readingUi: boolean;
 }) {
   const t = useT();
   // The destination is a sentence, so what matches follows the language.
@@ -315,7 +327,12 @@ function ApplicationsTab({
       noMatch={() => t("empty", "noApplicationMatches")}
       keyOf={(app) => `${app.namespace}/${app.name}`}
       renderRow={(app, { openByDefault, last }) => (
-        <AppRow app={app} ui={ui} openByDefault={openByDefault} last={last} />
+        <AppRow
+          app={app}
+          way={wayInto(front, readingUi, app)}
+          openByDefault={openByDefault}
+          last={last}
+        />
       )}
       share={{
         title: "Applications",
@@ -341,19 +358,18 @@ const severityOfApp = (app: ArgoApp) => app.worst;
 
 function AppRow({
   app,
-  ui,
+  way,
   openByDefault,
   last,
 }: {
   app: ArgoApp;
-  ui: string | null;
+  way: WayIn;
   openByDefault: boolean;
   last: boolean;
 }) {
   const t = useT();
   const state = appState(app, t);
   const changed = differing(app);
-  const url = applicationUrl(ui, app);
 
   return (
     <TroubleRow
@@ -381,7 +397,7 @@ function AppRow({
       last={last}
       brief={
         app.findings.length > 0 ? (
-          <Findings app={app} url={url} brief />
+          <Findings app={app} way={way} brief />
         ) : undefined
       }
     >
@@ -443,7 +459,7 @@ function AppRow({
       </Chain>
       <Manages app={app} />
       {app.generatedBy && <GeneratedNote app={app} />}
-      <Findings app={app} url={url} />
+      <Findings app={app} way={way} />
     </TroubleRow>
   );
 }
@@ -703,11 +719,11 @@ function GeneratedNote({ app }: { app: ArgoApp }) {
 
 function Findings({
   app,
-  url,
+  way,
   brief,
 }: {
   app: ArgoApp;
-  url: string | null;
+  way: WayIn;
   brief?: boolean;
 }) {
   const t = useT();
@@ -716,7 +732,7 @@ function Findings({
       findings={app.findings}
       brief={brief}
       render={(finding) => (
-        <FindingLine app={app} finding={finding} url={url} brief={brief} />
+        <FindingLine app={app} finding={finding} way={way} brief={brief} />
       )}
       share={{
         title: app.name,
@@ -742,12 +758,12 @@ function Findings({
 function FindingLine({
   app,
   finding,
-  url,
+  way,
   brief,
 }: {
   app: ArgoApp;
   finding: ArgoFinding;
-  url: string | null;
+  way: WayIn;
   brief?: boolean;
 }) {
   const t = useT();
@@ -761,7 +777,7 @@ function FindingLine({
       {!brief && (
         <>
           {said.note}
-          {said.offerDiff && <DiffLink app={app} url={url} />}
+          {said.offerDiff && <DiffLink app={app} way={way} />}
         </>
       )}
     </Finding>
@@ -772,28 +788,34 @@ function FindingLine({
  * The tier boundary, stated where the reader meets it. Which resources differ
  * is here, from the CRD, free; which *lines* differ is in Argo's API behind a
  * token, so it is handed to Argo — but only when the cluster says where Argo
- * answers. With nothing routing `argocd-server` there is no address to guess,
- * and the sentence says that instead of offering a link into a connection
- * error.
+ * answers. Why there is no link is said as it is: a host whose scheme is not
+ * settled, an address still being read, or nothing read that gives one. One
+ * sentence for all three told a reader with an Ingress that there was none.
  */
-function DiffLink({ app, url }: { app: ArgoApp; url: string | null }) {
+function DiffLink({ app, way }: { app: ArgoApp; way: WayIn }) {
   const t = useT();
-  if (!url) {
+  const service = <span className="font-mono">{SERVER_SERVICE}</span>;
+  if (way === "reading") {
+    return <> {parts(t("empty", "readingWhatRoutes"), { service })}</>;
+  }
+  if (way === "none") {
+    return <> {parts(t("empty", "argoDiffNoAddress"), { service })}</>;
+  }
+  if ("host" in way) {
     return (
       <>
         {" "}
-        <>
-          {parts(t("empty", "argoDiffNoAddress"), {
-            service: <span className="font-mono">{SERVER_SERVICE}</span>,
-          })}
-        </>
+        {parts(t("empty", "argoDiffHostNoScheme"), {
+          service,
+          host: <span className="font-mono">{way.host}</span>,
+        })}
       </>
     );
   }
   return (
     <>
       {" "}
-      <OutLink href={url} site="Argo CD">
+      <OutLink href={way.url} site="Argo CD">
         {t("action", "openInArgoCd", { name: app.name })}
       </OutLink>{" "}
       <span className="text-fg-fnt">{t("empty", "forLineByLineDiff")}</span>

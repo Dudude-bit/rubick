@@ -6195,7 +6195,9 @@ export const en = {
     editingGeneratedAppUndone:
       ". Editing this Application is undone the next time the generator runs; the file to change is the ApplicationSet.",
     argoDiffNoAddress:
-      "The line-by-line diff lives in Argo’s own API, which needs a credential this app does not hold, and no Ingress in this cluster serves {service}, so there is no address to send you to.",
+      "The line-by-line diff lives in Argo’s own API, which needs a credential this app does not hold, and nothing this app could read routes {service} to a hostname, so there is no address to send you to.",
+    argoDiffHostNoScheme:
+      "The line-by-line diff lives in Argo’s own API, which needs a credential this app does not hold. {service} is served at {host}, but whether over TLS is not settled here, so no link is offered rather than one with a guessed scheme.",
     forLineByLineDiff:
       "for the line-by-line diff, which needs a credential this app does not hold.",
     syncFailingFor: "Sync has been failing for {age}, and auto-sync is on",

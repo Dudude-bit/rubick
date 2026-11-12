@@ -8,9 +8,12 @@ vi.mock("@/lib/commands", () => ({ commands: { listCustomResources } }));
 import type { ServiceRoute } from "../registry";
 import {
   fetchApplicationSets,
+  shownUi,
   uiFromFront,
   uiFromRoutes,
   uiFront,
+  wayInto,
+  type RoutedUi,
 } from "./data";
 import type { IngressInfo } from "@/generated/types";
 
@@ -112,6 +115,58 @@ describe("the address Argo's UI answers on", () => {
 
   it("has nothing to say about a Service nothing routes", () => {
     expect(uiFromRoutes([])).toEqual({ url: null, host: null, via: null });
+  });
+});
+
+describe("which way into Argo's UI the page offers", () => {
+  const ingress = (url: string | null): RoutedUi => ({
+    url,
+    host: "argocd.example.com",
+    via: { kind: "Ingress", name: "argocd", namespace: "argocd" },
+  });
+  const viaRoute = uiFromRoutes([route({ host: "argo.routes.example.com" })]);
+  const nothing = uiFromRoutes([]);
+  const app = { name: "shop", namespace: "argocd" };
+
+  /**
+   * An Ingress whose TLS could not be read stood in front of a route with a
+   * settled address, and no link was offered. Fails if an address that can
+   * be linked loses to a host that cannot.
+   */
+  it("takes a route it can link over an Ingress whose scheme is not settled", () => {
+    expect(shownUi(ingress(null), viaRoute).url).toBe(
+      "https://argo.routes.example.com"
+    );
+  });
+
+  it("keeps the Ingress where its scheme is settled", () => {
+    expect(shownUi(ingress("https://argocd.example.com"), viaRoute).url).toBe(
+      "https://argocd.example.com"
+    );
+  });
+
+  /**
+   * Every finding ended "no Ingress in this cluster serves argocd-server"
+   * whenever there was no link: with an Ingress whose TLS was unsettled, and
+   * while its controller was still answering. Fails if a host that is known
+   * is reported as no address at all.
+   */
+  it("names the host of an Ingress it will not guess a scheme for", () => {
+    expect(wayInto(shownUi(ingress(null), nothing), false, app)).toEqual({
+      host: "argocd.example.com",
+    });
+  });
+
+  /** Fails if "nothing routes it" is said before the reads that would say so have answered. */
+  it("says it is still reading before it says there is none", () => {
+    expect(wayInto(nothing, true, app)).toBe("reading");
+    expect(wayInto(nothing, false, app)).toBe("none");
+  });
+
+  it("links the Application where the address is settled", () => {
+    expect(wayInto(ingress("https://argocd.example.com"), true, app)).toEqual({
+      url: "https://argocd.example.com/applications/argocd/shop",
+    });
   });
 });
 

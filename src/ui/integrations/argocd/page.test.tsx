@@ -5,6 +5,10 @@ import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => new Map<string, () => Promise<unknown[]>>());
+const tls = vi.hoisted(() => ({
+  unread: false as false | "adds" | "replaces",
+}));
+const routed = vi.hoisted(() => ({ routes: [] as unknown[] }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -14,8 +18,29 @@ vi.mock("@/lib/commands", () => ({
       (answers.get("deployments") ?? (() => Promise.resolve([])))(),
     listStatefulsets: () =>
       (answers.get("statefulsets") ?? (() => Promise.resolve([])))(),
-    listIngresses: () => Promise.resolve([]),
+    listIngresses: () =>
+      (answers.get("ingresses") ?? (() => Promise.resolve([])))(),
   },
+}));
+
+vi.mock("@/hooks/useServiceRoutes", () => ({
+  useServiceRoutes: () => ({
+    available: routed.routes.length > 0,
+    routes: routed.routes,
+    isPending: false,
+    error: null,
+  }),
+}));
+
+// No TLS supplier is installed in a test; what one has not said yet is set here.
+vi.mock("@/hooks/useIngressTls", () => ({
+  useIngressTls: () => ({
+    available: tls.unread !== false,
+    of: () => null,
+    isPending: false,
+    error: null,
+    unread: tls.unread,
+  }),
 }));
 
 const { APPLICATIONS_CRD, APPLICATIONSETS_CRD, PROJECTS_CRD } =
@@ -39,7 +64,11 @@ function renderOn(tab: string) {
   });
 }
 
-beforeEach(() => answers.clear());
+beforeEach(() => {
+  answers.clear();
+  tls.unread = false;
+  routed.routes = [];
+});
 
 describe("tabs whose own list was refused", () => {
   /**
@@ -254,6 +283,125 @@ describe("what an Application manages, by where it deploys", () => {
       "/c/test/deployments/monitoring/prometheus-operator"
     );
     expect(screen.queryByText(/^Argo deploys this Application to/)).toBeNull();
+  });
+});
+
+describe("where a finding sends the reader for the line-by-line diff", () => {
+  const drifted = application(
+    "shop",
+    {},
+    { sync: { status: "OutOfSync" }, health: { status: "Healthy" } }
+  );
+  const ingress = {
+    name: "argocd",
+    namespace: "argocd",
+    rules: [
+      {
+        host: "argocd.example.com",
+        paths: [{ path: "/", backendService: "argocd-server" }],
+      },
+    ],
+    tlsHosts: ["argocd.example.com"],
+    tlsConfigs: [],
+    hasCatchAllTls: false,
+  };
+  const page = () => document.body;
+
+  /**
+   * Traefik in front, its entry points unread: the Ingress names the host
+   * and nothing settles the scheme. The finding ended "no Ingress in this
+   * cluster serves argocd-server, so there is no address to send you to",
+   * while the Controller tab named that Ingress and its host. Fails if a
+   * known host is reported as no Ingress.
+   */
+  it("names the host of an Ingress whose TLS is not settled, and does not say there is none", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+    answers.set("ingresses", () => Promise.resolve([ingress]));
+    tls.unread = "replaces";
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    await waitFor(() =>
+      expect(page()).toHaveTextContent(
+        "argocd-server is served at argocd.example.com, but whether over TLS is not settled here"
+      )
+    );
+    expect(page()).not.toHaveTextContent("there is no address to send you to");
+  });
+
+  /**
+   * That Ingress stood in front of a route whose address was settled, and
+   * no link was offered at all. Fails if the page stops asking the route
+   * when the Ingress cannot be linked.
+   */
+  it("links through a route where the Ingress's scheme is not settled", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+    answers.set("ingresses", () => Promise.resolve([ingress]));
+    tls.unread = "replaces";
+    routed.routes = [
+      {
+        host: "argo.routes.example.com",
+        path: "/",
+        tls: true,
+        source: { kind: "IngressRoute", name: "argocd", namespace: "argocd" },
+      },
+    ];
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(
+      await screen.findByRole("link", { name: /Open shop in Argo CD/ })
+    ).toHaveAttribute(
+      "href",
+      "https://argo.routes.example.com/applications/argocd/shop"
+    );
+  });
+
+  /** The control: the same Ingress with its TLS settled is a link. */
+  it("links into Argo where the Ingress's scheme is settled", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+    answers.set("ingresses", () => Promise.resolve([ingress]));
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(
+      await screen.findByRole("link", { name: /Open shop in Argo CD/ })
+    ).toHaveAttribute(
+      "href",
+      "https://argocd.example.com/applications/argocd/shop"
+    );
+  });
+
+  /**
+   * Fails if "nothing routes it" is printed while the Ingresses are still
+   * being read, which is before anyone can know.
+   */
+  it("says it is still reading while the Ingresses have not answered", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+    answers.set("ingresses", () => new Promise(() => {}));
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    expect(page()).toHaveTextContent("Reading what routes argocd-server…");
+    expect(page()).not.toHaveTextContent("there is no address to send you to");
+  });
+
+  /** Everything read and no host named: said of what was read, not of the cluster. */
+  it("says nothing it could read routes the Service, once everything answered", async () => {
+    answers.set(APPLICATIONS_CRD, () => Promise.resolve([drifted]));
+
+    await renderOn("applications");
+    await openRow("shop");
+
+    await waitFor(() =>
+      expect(page()).toHaveTextContent(
+        "nothing this app could read routes argocd-server to a hostname, so there is no address to send you to"
+      )
+    );
   });
 });
 

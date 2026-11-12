@@ -221,6 +221,41 @@ export function uiFromFront(front: UiFront, tls: boolean | null): RoutedUi {
   };
 }
 
+/**
+ * The way into Argo's UI: an address that can be linked, from the Ingress or
+ * from a route, before a host whose scheme is not settled. An Ingress whose
+ * TLS could not be read used to stand in front of a route that could be
+ * linked.
+ */
+export function shownUi(
+  viaIngress: RoutedUi | null,
+  viaRoutes: RoutedUi
+): RoutedUi {
+  return (
+    [viaIngress, viaRoutes].find((front) => front?.url) ??
+    viaIngress ??
+    viaRoutes
+  );
+}
+
+/**
+ * What a finding can say of the line-by-line diff: a link, a host it will
+ * not guess a scheme for, that the address is still being read, or that
+ * nothing read gives one.
+ */
+export type WayIn = { url: string } | { host: string } | "reading" | "none";
+
+export function wayInto(
+  front: RoutedUi,
+  reading: boolean,
+  app: { name: string; namespace: string }
+): WayIn {
+  const url = applicationUrl(front.url, app);
+  if (url) return { url };
+  if (front.host) return { host: front.host };
+  return reading ? "reading" : "none";
+}
+
 /** The reads that failed, each with the kind it was a list of. */
 function unreadOf(
   reads: Array<[ArgoComponent["kind"], ListRead<unknown>]>
