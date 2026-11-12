@@ -66,6 +66,11 @@ import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
 import { NotRead } from "./NotRead";
+import {
+  manifestWithheldWords,
+  resourcesNotListedWords,
+  valuesWithheldWords,
+} from "./withheld-words";
 
 const INSTALLED_ROW =
   "grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,150px)] items-baseline gap-2.5 border-b border-hair py-1 last:border-b-0 text-xs";
@@ -97,6 +102,7 @@ function valuesAsYaml(values: unknown, empty: string): string {
 }
 
 const NO_HISTORY: HelmRevision[] = [];
+const NOTHING_SAID: string[] = [];
 
 export function HelmDetail() {
   const t = useT();
@@ -199,15 +205,21 @@ export function HelmDetail() {
     [release?.manifest, release?.namespace]
   );
 
+  const withheld = release?.withheld;
+  const notListed = useMemo(
+    () => (withheld ? resourcesNotListedWords(withheld, t) : NOTHING_SAID),
+    [withheld, t]
+  );
+
   const share = useCallback((): ShareContribution => {
     if (!release) return {};
     const sections = [helmFactsSection(release, t)];
     const historySection = helmHistorySection(history, t);
     if (historySection) sections.push(historySection);
-    const resourcesSection = helmResourcesSection(installed, t);
+    const resourcesSection = helmResourcesSection(installed, notListed, t);
     if (resourcesSection) sections.push(resourcesSection);
     return { status: helmStatusOf(release), sections };
-  }, [release, history, installed, t]);
+  }, [release, history, installed, notListed, t]);
 
   if (!isConnected) {
     return (
@@ -409,18 +421,29 @@ export function HelmDetail() {
       id: "resources",
       label: t("action", "paletteResources"),
       glyph: viewGlyph(Boxes),
-      mark: countMark(installed.length),
+      mark:
+        notListed.length > 0
+          ? readCountMark(installed.length, notListed.join(" "))
+          : countMark(installed.length),
       content: (
         <Section>
           <SectionHeader
             title={t("action", "installedByRelease")}
-            count={installed.length || undefined}
+            count={
+              notListed.length > 0 ? undefined : installed.length || undefined
+            }
           />
-          {installed.length === 0 ? (
+          {notListed.map((line, at) => (
+            <p key={`${at}:${line}`} role="note" className="text-xs text-warn">
+              {line}
+            </p>
+          ))}
+          {installed.length === 0 && notListed.length === 0 && (
             <p className="text-xs text-fg-fnt">
               {t("empty", "manifestDeclaresNoObjects")}
             </p>
-          ) : (
+          )}
+          {installed.length > 0 && (
             <div>
               {installed.map((object) => (
                 <div
@@ -464,6 +487,7 @@ export function HelmDetail() {
           title={t("action", "valuesOf", { name: release?.name ?? name ?? "" })}
           yaml={values}
           note={t("action", "valuesNote")}
+          withheld={withheld ? valuesWithheldWords(withheld, t) : NOTHING_SAID}
           onCopy={() =>
             copyToClipboard(values, t("action", "releaseValuesCopied"))
           }
@@ -482,6 +506,9 @@ export function HelmDetail() {
           })}
           yaml={manifest}
           note={t("action", "manifestNote")}
+          withheld={
+            withheld ? manifestWithheldWords(withheld, t) : NOTHING_SAID
+          }
           onCopy={() =>
             copyToClipboard(manifest, t("action", "renderedManifestCopied"))
           }
@@ -500,9 +527,15 @@ export function HelmDetail() {
             content: (
               <Section>
                 <SectionHeader title={t("action", "notesHeading")} />
-                <pre className="max-h-[560px] overflow-auto whitespace-pre-wrap border-t border-hair pt-2 font-mono text-xs text-fg-mid">
-                  {release.notes}
-                </pre>
+                {release.withheld.notes ? (
+                  <p role="note" className="text-xs text-fg-mut">
+                    {t("action", "helmNotesWithheld")}
+                  </p>
+                ) : (
+                  <pre className="max-h-[560px] overflow-auto whitespace-pre-wrap border-t border-hair pt-2 font-mono text-xs text-fg-mid">
+                    {release.notes}
+                  </pre>
+                )}
               </Section>
             ),
           },
