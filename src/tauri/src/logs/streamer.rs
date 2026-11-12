@@ -150,7 +150,6 @@ impl LogStreamer {
         // all move it — which is how the viewer places them too.
         let mut epoch_ms = Utc::now().timestamp_millis();
 
-        let opened_at = Utc::now();
         // After this the held client is a body being read, and the API
         // server does not re-check an admitted request's token, which is why
         // `useLogStream` does not restart on a renewal.
@@ -313,15 +312,11 @@ impl LogStreamer {
         }
 
         if follow_ended {
+            // The node's stamp on the last line heard, the clock `startedAt`
+            // is written on; this machine's at the open only where none came.
+            let heard = DateTime::from_timestamp_millis(epoch_ms).unwrap_or_else(Utc::now);
             let run = self
-                .run_after_follow(
-                    &namespace,
-                    &pod,
-                    &container,
-                    opened_at,
-                    said.is_none(),
-                    &cancel,
-                )
+                .run_after_follow(&namespace, &pod, &container, heard, said.is_none(), &cancel)
                 .await;
             if let Some(run) = run {
                 let (kind, message) = follow_end(run, said, &target, &container);
@@ -344,7 +339,7 @@ impl LogStreamer {
         namespace: &str,
         pod: &str,
         container: &str,
-        opened_at: DateTime<Utc>,
+        heard: DateTime<Utc>,
         settle: bool,
         cancel: &tokio_util::sync::CancellationToken,
     ) -> Option<Run> {
@@ -361,7 +356,7 @@ impl LogStreamer {
                 Ok(client) => {
                     let api: Api<Pod> = Api::namespaced((*client).clone(), namespace);
                     match api.get(pod).await {
-                        Ok(found) => run_of(&found, container, opened_at),
+                        Ok(found) => run_of(&found, container, heard),
                         Err(kube::Error::Api(status)) if status.code == 404 => {
                             Run::PodGone(status.message)
                         }
@@ -381,7 +376,7 @@ impl LogStreamer {
 /// The followed container's run, as the pod's status tells it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Run {
-    /// Still running, and started before the follow opened.
+    /// Still running, in a run begun by the time the follow was last heard.
     Same,
     /// Exited, waiting to start again, or running a later run.
     Over,
@@ -391,7 +386,7 @@ enum Run {
     Unread(String),
 }
 
-fn run_of(pod: &Pod, container: &str, opened_at: DateTime<Utc>) -> Run {
+fn run_of(pod: &Pod, container: &str, heard: DateTime<Utc>) -> Run {
     let found = pod.status.as_ref().and_then(|status| {
         status
             .container_statuses
@@ -406,7 +401,7 @@ fn run_of(pod: &Pod, container: &str, opened_at: DateTime<Utc>) -> Run {
     };
     match &state.running {
         Some(running) => match &running.started_at {
-            Some(at) if at.moment() > opened_at => Run::Over,
+            Some(at) if at.moment() > heard => Run::Over,
             _ => Run::Same,
         },
         None if state.terminated.is_some() || state.waiting.is_some() => Run::Over,
@@ -1124,6 +1119,23 @@ mod follow_end_tests {
         let later = running_since("2999-01-01T00:00:00Z");
         let (_, failure) = follow(cluster(CLOSED, later)).await;
         assert_eq!(failure.unwrap().0, StreamFailureKind::Gone);
+    }
+
+    /// This machine's clock half a minute behind the cluster's, and a lane
+    /// opened seconds into the run: dated by the local clock, the run began
+    /// "after" its own follow, and a follow the node let go of was reported
+    /// as a container gone, with nothing to reconnect to.
+    #[tokio::test]
+    async fn a_run_is_dated_against_the_nodes_clock_on_the_lines_heard_not_this_machines() {
+        use chrono::SecondsFormat::{Nanos, Secs};
+        let ahead = |seconds| Utc::now() + chrono::Duration::seconds(seconds);
+        let started = ahead(30).to_rfc3339_opts(Secs, true);
+        let line = format!("{} ready\n", ahead(35).to_rfc3339_opts(Nanos, true));
+        let (_, failure) = follow(cluster(line.leak(), running_since(&started))).await;
+        assert_eq!(
+            failure,
+            Some((StreamFailureKind::FollowStopped, String::new()))
+        );
     }
 
     #[tokio::test]
