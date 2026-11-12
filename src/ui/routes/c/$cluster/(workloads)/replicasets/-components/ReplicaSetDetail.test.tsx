@@ -22,6 +22,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
 import { renderWithRouter } from "@/test/render";
 import { ReplicaSetDetail } from "./ReplicaSetDetail";
 
@@ -53,7 +54,7 @@ function buildReplicaSet(
   };
 }
 
-function mockDetail(replicaSet: ReplicaSetInfo) {
+function mockDetail(replicaSet: ReplicaSetInfo, activeTab = "overview") {
   vi.mocked(useResourceDetail).mockReturnValue({
     name: replicaSet.name,
     namespace: replicaSet.namespace,
@@ -62,7 +63,7 @@ function mockDetail(replicaSet: ReplicaSetInfo) {
     error: null,
     yaml: "kind: ReplicaSet\n",
     copyYaml: vi.fn(),
-    activeTab: "overview",
+    activeTab,
     setActiveTab: vi.fn(),
     goBack: vi.fn(),
     refetch: vi.fn(),
@@ -103,5 +104,29 @@ describe("ReplicaSetDetail", () => {
       expect(screen.getByText("2 ready")).toBeInTheDocument()
     );
     expect(screen.queryByTestId("refused-line")).toBeNull();
+  });
+
+  /**
+   * The reader may get the ReplicaSet and is refused its pods: the Pods tab
+   * of a revision running three said "This revision has no pods right now"
+   * under a mark saying they could not be read. Fails if a pod list that
+   * did not answer reads as a revision with no pods.
+   */
+  it("says its pods could not be listed, not that the revision has none", async () => {
+    vi.mocked(commands.getReplicasetPods).mockRejectedValue({
+      code: "PERMISSION_DENIED",
+      message: "pods is forbidden",
+    });
+    mockDetail(
+      buildReplicaSet({
+        replicas: { desired: 3, current: 3, ready: 3, available: 3 },
+      }),
+      "pods"
+    );
+    await renderPage();
+    expect(
+      await screen.findByText("You do not have permission to list these")
+    ).toBeVisible();
+    expect(screen.queryByText(/has no pods/)).toBeNull();
   });
 });
