@@ -204,6 +204,7 @@ export default function FluxPage() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: `Flux · ${activeTab.label}`,
               icon: activeTabIcon,
             }}

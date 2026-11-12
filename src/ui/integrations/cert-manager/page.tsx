@@ -146,6 +146,7 @@ export default function CertManagerPage() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: `cert-manager · ${activeTab.label}`,
               icon: activeTab.id === "issuers" ? Stamp : ShieldCheck,
             }}

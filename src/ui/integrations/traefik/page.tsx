@@ -287,6 +287,7 @@ export default function TraefikPage() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: `Traefik · ${activeTab.label}`,
               icon:
                 activeTab.id === "routes"

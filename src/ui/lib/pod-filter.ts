@@ -3,6 +3,7 @@
  * pod count links to.
  */
 
+import type { T } from "@/i18n/useT";
 import type { AppSearch } from "@/lib/app-search";
 import {
   labelSelectorMatches,
@@ -59,4 +60,18 @@ export function outsideScope(
   if (scope.length === 0) return [];
   if (!filter.namespaces) return ["*"];
   return filter.namespaces.filter((name) => !scope.includes(name));
+}
+
+/**
+ * What the narrowing is, as one sentence: the banner above the list draws
+ * the same words with the selector marked, and the shared file's reader
+ * sees no banner.
+ */
+export function podFilterWords(filter: PodFilter, t: T): string {
+  return t("readings", filter.text ? "podFilterMatching" : "podFilterEvery", {
+    selector: filter.text,
+    namespaces: filter.namespaces
+      ? filter.namespaces.join(", ")
+      : t("readings", "podFilterEveryNamespace"),
+  });
 }

@@ -11,6 +11,10 @@ import { useLocaleStore } from "@/stores/localeStore";
 import { formatWhen } from "@/lib/utils";
 import { renderWithRouter } from "@/test/render";
 import { JOURNAL_KINDS } from "@/hooks/useChangeJournal";
+vi.mock("@/components/share/ShareAction", async (original) =>
+  (await import("@/test/shared-scope")).withSharedScope(original as never)
+);
+
 import { Changes } from "./Changes";
 
 const NOW = Date.now();
@@ -715,5 +719,24 @@ describe("the Changes window toggle", () => {
     expect(screen.getByRole("button", { name: "24 ч" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "7 д." })).toBeInTheDocument();
     useLocaleStore.setState({ choice: null });
+  });
+});
+
+/**
+ * The scope is the window's, in neither the address nor the rows: a file
+ * made from a tab on two namespaces named none and read as the cluster.
+ * Fails if the screen stops telling Share which namespaces it read.
+ */
+describe("the scope Changes tells Share", () => {
+  it("names every namespace the window is on", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["shop", "web"],
+    });
+    await mount();
+    expect(screen.getByTestId("shared-scope")).toHaveTextContent(
+      '["shop","web"]'
+    );
   });
 });

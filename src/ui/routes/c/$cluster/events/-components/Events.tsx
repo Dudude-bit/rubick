@@ -863,7 +863,7 @@ export function Events() {
               refusedAt={refused ? refusedAt : undefined}
             />
             <ShareScreenAction
-              screen={{ title: "Events", namespace: currentNamespace }}
+              screen={{ title: "Events", scope: scope.scope }}
               look={narrow ? "icon" : "button"}
             />
           </div>

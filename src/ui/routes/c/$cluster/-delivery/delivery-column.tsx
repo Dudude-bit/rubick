@@ -12,11 +12,14 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 import type { Delivery } from "@/integrations";
-import { delivered, type DeliveryFilter } from "@/lib/delivery";
+import {
+  delivered,
+  DELIVERY_FILTER_LABEL,
+  type DeliveryFilter,
+} from "@/lib/delivery";
 import { cn } from "@/lib/utils";
 import { DeliveryCell } from "./delivery";
 import { useT } from "@/i18n/useT";
-import type { en } from "@/i18n/catalogue";
 
 const DeliveryRows = createContext<((row: unknown) => Delivery[]) | null>(null);
 
@@ -41,11 +44,9 @@ export function DeliveryColumnCell({ row }: { row: unknown }) {
   return <DeliveryCell deliveries={of?.(row) ?? []} />;
 }
 
-const OPTIONS: Array<{ id: DeliveryFilter; label: keyof typeof en.action }> = [
-  { id: "all", label: "all" },
-  { id: "notDelivered", label: "notDelivered" },
-  { id: "trouble", label: "needsAttention" },
-];
+const OPTIONS = (Object.keys(DELIVERY_FILTER_LABEL) as DeliveryFilter[]).map(
+  (id) => ({ id, label: DELIVERY_FILTER_LABEL[id] })
+);
 
 /**
  * Three answers, and one caveat stated where it would otherwise look like a

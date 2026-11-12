@@ -9,9 +9,19 @@ vi.mock("./ShareDialog", () => ({
   ShareDialog: ({
     report,
   }: {
-    report: { capturedAt: string; notRead: string[]; link: string } | null;
+    report: {
+      capturedAt: string;
+      notRead: string[];
+      link: string;
+      chips: { text: string }[];
+      subject: { namespace: string | null };
+    } | null;
   }) => (
     <>
+      <p data-testid="chips">
+        {report?.chips.map((chip) => chip.text).join(" | ") ?? ""}
+      </p>
+      <p data-testid="namespace">{report?.subject.namespace ?? ""}</p>
       <p data-testid="captured">{report?.capturedAt ?? ""}</p>
       <p data-testid="not-read">{report?.notRead.join(" | ") ?? ""}</p>
       <p data-testid="link">{report?.link ?? ""}</p>
@@ -40,7 +50,7 @@ function Ticking() {
       <button type="button" onClick={() => setTick(tick + 1)}>
         tick
       </button>
-      <ShareScreenAction screen={{ title: "Nodes" }} />
+      <ShareScreenAction screen={{ title: "Nodes", scope: null }} />
     </>
   );
 }
@@ -65,7 +75,9 @@ describe("a screen's Share while its dialog is open", () => {
    * nothing in has to say so.
    */
   it("says nothing on the screen went into the file, when nothing did", async () => {
-    await mount(<ShareScreenAction screen={{ title: "Traefik · Map" }} />);
+    await mount(
+      <ShareScreenAction screen={{ title: "Traefik · Map", scope: null }} />
+    );
     fireEvent.click(screen.getByRole("button", { name: /Share/ }));
     expect(screen.getByTestId("not-read").textContent).toContain(
       "Nothing on this screen was put into the file"
@@ -91,7 +103,7 @@ describe("a screen's Share while its dialog is open", () => {
     await mount(
       <>
         <Part />
-        <ShareScreenAction screen={{ title: "Nodes" }} />
+        <ShareScreenAction screen={{ title: "Nodes", scope: null }} />
       </>
     );
     fireEvent.click(screen.getByRole("button", { name: /Share/ }));
@@ -127,12 +139,43 @@ describe("a screen's Share while its dialog is open", () => {
       <>
         <Notice />
         <Part />
-        <ShareScreenAction screen={{ title: "Pods" }} />
+        <ShareScreenAction screen={{ title: "Pods", scope: null }} />
       </>
     );
     fireEvent.click(screen.getByRole("button", { name: /Share/ }));
     expect(screen.getByTestId("not-read").textContent).toBe(
       "Could not read pods when this was made"
     );
+  });
+
+  /**
+   * The Overview of a tab on one namespace went out as "Overview", chip
+   * prod, "nothing needs attention": the scope is the window's and was in
+   * neither the address nor the rows, so the file read as the cluster.
+   * Fails if the file stops naming every namespace the screen read.
+   */
+  it("names the namespaces the screen read beside the cluster", async () => {
+    await mount(
+      <ShareScreenAction
+        screen={{ title: "Overview", scope: ["shop", "web"] }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Share/ }));
+    expect(screen.getByTestId("chips").textContent).toMatch(/^shop, web \| /);
+    expect(screen.getByTestId("namespace").textContent).toBe("");
+  });
+
+  it("names one namespace as the file's own, and none for the whole cluster", async () => {
+    const one = await mount(
+      <ShareScreenAction screen={{ title: "Pods", scope: ["shop"] }} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Share/ }));
+    expect(screen.getByTestId("namespace").textContent).toBe("shop");
+    expect(screen.getByTestId("chips").textContent).toMatch(/^shop \| /);
+    one.unmount();
+
+    await mount(<ShareScreenAction screen={{ title: "Pods", scope: [] }} />);
+    fireEvent.click(screen.getByRole("button", { name: /Share/ }));
+    expect(screen.getByTestId("chips").textContent).not.toContain("|");
   });
 });

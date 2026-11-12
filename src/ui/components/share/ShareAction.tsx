@@ -60,7 +60,13 @@ export interface ScreenSubject {
   /** The kind the screen lists, for its icon and hue; `null` for a screen of mixed things. */
   kind?: ResourceKind | null;
   icon?: LucideIcon;
-  namespace?: string | null;
+  /**
+   * The namespaces the screen read, `[]` being the whole cluster, or `null`
+   * for a screen that reads the cluster whatever the window is scoped to.
+   * Required: the scope lives in the window, not in the address or the
+   * rows, and a file that leaves it out reads as the whole cluster.
+   */
+  scope: readonly string[] | null;
   stats?: () => ReportStat[];
 }
 
@@ -105,11 +111,12 @@ export function ShareScreenAction({
       ...(caveats?.() ?? []),
     ];
     const icon = screen.icon ?? (screen.kind ? kindIcon(screen.kind) : Share2);
+    const scope = screen.scope ?? [];
     return {
       subject: {
         kind: screen.kind ?? "Screen",
         name: screen.title,
-        namespace: screen.namespace ?? null,
+        namespace: scope.length === 1 ? scope[0] : null,
         context,
       },
       hero: {
@@ -124,8 +131,8 @@ export function ShareScreenAction({
       colouring,
       status: null,
       chips: [
-        ...(screen.namespace
-          ? [{ icon: iconSvg(kindIcon("Namespace")), text: screen.namespace }]
+        ...(scope.length > 0
+          ? [{ icon: iconSvg(kindIcon("Namespace")), text: scope.join(", ") }]
           : []),
         { icon: iconSvg(Server), text: context },
       ],

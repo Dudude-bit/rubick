@@ -171,7 +171,11 @@ export default function CiliumPage() {
         <SectionHeader
           title="Cilium"
           description={t("empty", "ciliumPageDescription")}
-          actions={<ShareScreenAction screen={{ title: "Cilium" }} />}
+          actions={
+            <ShareScreenAction
+              screen={{ title: "Cilium", scope: scope.scope }}
+            />
+          }
         />
         <div className="flex flex-col gap-2">
           {kubernetes && !kubernetes.read && (

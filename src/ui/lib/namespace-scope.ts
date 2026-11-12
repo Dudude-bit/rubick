@@ -279,16 +279,15 @@ export function inNamespace<T extends { namespace: string }>(
 }
 
 /**
- * The one namespace a list is about, for a file's header: none for a
- * cluster-scoped kind, which is one list whatever the tab is on, and none
- * when the tab spans several.
+ * The namespaces a list is about, for a file's header: every one the tab
+ * spans, and `null` for a cluster-scoped kind, which is one list whatever
+ * the tab is on.
  */
-export function namespaceOfList(
+export function scopeOfList(
   scope: readonly string[],
   kind: ResourceKind | null
-): string | null {
-  if (scope.length !== 1) return null;
-  return kind && !narrowingHelps(kind) ? null : scope[0];
+): readonly string[] | null {
+  return kind && !narrowingHelps(kind) ? null : scope;
 }
 
 /** Past this many, a sentence counts the namespaces instead of naming them. */

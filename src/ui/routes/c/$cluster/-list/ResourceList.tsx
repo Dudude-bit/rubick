@@ -14,6 +14,7 @@ import { useDeliveries } from "../-delivery/useDelivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
+  DELIVERY_FILTER_LABEL,
   deliveryOf,
   matchesDeliveryFilter,
   type DeliveryFilter,
@@ -50,7 +51,7 @@ import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
 import {
   keepWatched,
-  namespaceOfList,
+  scopeOfList,
   noneWhereAnswered,
   unreadNamespaceWords,
   whole,
@@ -195,6 +196,11 @@ export interface ResourceListProps<
   headerActions?: ReactNode;
   /** Optional content rendered between header and table */
   headerContent?: ReactNode;
+  /**
+   * How the caller narrowed the rows it hands in, in the words of the
+   * notice it draws for that: the shared file's reader sees no notice.
+   */
+  narrowed?: string | null;
   /** Render without header wrapper for embedded list views */
   embedded?: boolean;
   /** Optional search input placeholder */
@@ -269,6 +275,7 @@ export function ResourceList<
   refresh,
   headerActions,
   headerContent,
+  narrowed = null,
   embedded = false,
   searchPlaceholder,
   getRowHref,
@@ -295,7 +302,7 @@ export function ResourceList<
     () => ({
       title,
       kind: listKind,
-      namespace: namespaceOfList(namespaceScope, listKind),
+      scope: scopeOfList(namespaceScope, listKind),
     }),
     [title, listKind, namespaceScope]
   );
@@ -536,14 +543,29 @@ export function ResourceList<
           : []),
       ].join(" ") ||
       (failedWords ?? t("share", "stillReading"));
+  // Every way the rows were narrowed that is not the search box: the screen
+  // says each above the table, and the file's reader sees only the rows.
+  const listNarrowed =
+    [
+      narrowed,
+      named ? t("readings", "namedRowsOnly", { n: named.size }) : null,
+      showDelivery && deliveryFilter !== "all"
+        ? t("share", "listDelivery", {
+            filter: t("action", DELIVERY_FILTER_LABEL[deliveryFilter]),
+          })
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" ") || null;
   const share = useMemo(
     () => ({
       title,
       kind: listKind,
       unread: listUnread,
       partial: listPartial,
+      narrowed: listNarrowed,
     }),
-    [title, listKind, listUnread, listPartial]
+    [title, listKind, listUnread, listPartial, listNarrowed]
   );
   // The table registers itself; a read that failed with nothing to show has
   // no table, and still has to reach the file.

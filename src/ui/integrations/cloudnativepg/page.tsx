@@ -167,6 +167,7 @@ export default function CloudNativePgPage() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: `CloudNativePG · ${activeTab?.label ?? ""}`,
               icon:
                 activeTab?.id === "clusters"

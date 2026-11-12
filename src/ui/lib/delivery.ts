@@ -357,6 +357,13 @@ export function deliveryCell(
 /** The list filter's three answers. `all` draws every row. */
 export type DeliveryFilter = "all" | "notDelivered" | "trouble";
 
+/** Each answer's word, as a key of the `action` section: the control's and the shared file's. */
+export const DELIVERY_FILTER_LABEL = {
+  all: "all",
+  notDelivered: "notDelivered",
+  trouble: "needsAttention",
+} as const satisfies Record<DeliveryFilter, string>;
+
 export function matchesDeliveryFilter(
   filter: DeliveryFilter,
   deliveries: Delivery[]

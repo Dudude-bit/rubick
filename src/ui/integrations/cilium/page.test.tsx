@@ -18,6 +18,10 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { KINDS } = await import("./data");
+vi.mock("@/components/share/ShareAction", async (original) =>
+  (await import("@/test/shared-scope")).withSharedScope(original as never)
+);
+
 const { useClusterStore } = await import("@/stores/clusterStore");
 const { en } = await import("@/i18n/catalogue");
 const { TONE_TEXT } = await import("@/lib/tone");
@@ -231,6 +235,22 @@ describe("the Cilium page", () => {
 
     expect(await screen.findByText(API_ENDPOINT.name)).toBeInTheDocument();
     expect(screen.queryByText("checkout-api-1")).not.toBeInTheDocument();
+    useClusterStore.setState({ namespaceScope: [] });
+  });
+});
+
+/**
+ * The scope is the window's, in neither the address nor the rows: a file
+ * made from a tab on two namespaces named none and read as the cluster.
+ * Fails if the screen stops telling Share which namespaces it read.
+ */
+describe("the scope the Cilium page tells Share", () => {
+  it("names the namespaces the picker is on", async () => {
+    useClusterStore.setState({ namespaceScope: ["net"] });
+    answers.set(KINDS.endpoints, () => Promise.resolve([API_ENDPOINT]));
+    await renderPage();
+    await screen.findByText(API_ENDPOINT.name);
+    expect(screen.getByTestId("shared-scope")).toHaveTextContent('["net"]');
     useClusterStore.setState({ namespaceScope: [] });
   });
 });

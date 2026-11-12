@@ -28,6 +28,10 @@ import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
 import { renderWithRouter } from "@/test/render";
+vi.mock("@/components/share/ShareAction", async (original) =>
+  (await import("@/test/shared-scope")).withSharedScope(original as never)
+);
+
 import { ClusterOverview } from "./ClusterOverview";
 
 const getClusterOverview = vi.mocked(commands.getClusterOverview);
@@ -308,6 +312,26 @@ describe("what the overview offers Share", () => {
         "overview-nodes",
         "overview-warnings",
       ])
+    );
+  });
+});
+
+/**
+ * The scope is the window's, in neither the address nor the rows: a file
+ * made from a tab on two namespaces named none and read as the cluster.
+ * Fails if the screen stops telling Share which namespaces it read.
+ */
+describe("the scope the Overview tells Share", () => {
+  it("names the namespace the window is on", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["shop"],
+    });
+    getClusterOverview.mockResolvedValue(FULL_OVERVIEW);
+    await mount();
+    expect(await screen.findByTestId("shared-scope")).toHaveTextContent(
+      '["shop"]'
     );
   });
 });

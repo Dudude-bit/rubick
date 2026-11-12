@@ -369,7 +369,9 @@ export function Helm() {
                 stale={freshness.stale}
                 slowRead={freshness.slowRead}
               />
-              <ShareScreenAction screen={{ title: "Helm" }} />
+              <ShareScreenAction
+                screen={{ title: "Helm", scope: scope.scope }}
+              />
             </>
           }
         />

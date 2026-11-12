@@ -122,7 +122,9 @@ export default function LokiPage() {
         count={state?.text}
         description={t("empty", "lokiPageDescription")}
         actions={
-          <ShareScreenAction screen={{ title: "Loki", icon: Database }} />
+          <ShareScreenAction
+            screen={{ title: "Loki", icon: Database, scope: null }}
+          />
         }
       />
 

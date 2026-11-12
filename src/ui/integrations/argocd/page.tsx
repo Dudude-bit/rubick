@@ -236,6 +236,7 @@ export default function ArgoCdPage() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: `Argo CD · ${activeTab.label}`,
               icon: activeTabIcon,
             }}

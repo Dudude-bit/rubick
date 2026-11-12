@@ -101,7 +101,7 @@ export default function AwsLoadBalancerPage() {
         description={t("empty", "albPageDescription")}
         actions={
           <ShareScreenAction
-            screen={{ title: "AWS Load Balancer Controller" }}
+            screen={{ scope: null, title: "AWS Load Balancer Controller" }}
           />
         }
       />

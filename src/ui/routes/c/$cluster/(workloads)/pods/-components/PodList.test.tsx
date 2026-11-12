@@ -66,6 +66,10 @@ vi.mock("@/hooks/usePodsWithMetrics", () => ({
   }),
 }));
 
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 import { renderWithRouter } from "@/test/render";
 import { PodList } from "./PodList";
 import { useShellAskStore } from "@/stores/shellAskStore";
@@ -214,5 +218,29 @@ describe("the row's right-click menu", () => {
     expect(
       within(menu).getByRole("menuitem", { name: "Port forward" })
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * A policy's pod count opens the Pods list narrowed by `?selector=`, with a
+ * banner saying so; the shared file listed the rows as "Pods" with no word
+ * of the narrowing. Fails if the list stops telling Share how the address
+ * narrowed its rows.
+ */
+describe("a pod list an address narrowed, in what it hands Share", () => {
+  it("says what the address narrowed the rows to", async () => {
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <PodList />
+        <Probe />
+      </ScreenShareProvider>,
+      { at: "/c/prod/pods?in=prod" }
+    );
+    expect(collect!()[0].caption).toBe("Every pod in prod");
   });
 });

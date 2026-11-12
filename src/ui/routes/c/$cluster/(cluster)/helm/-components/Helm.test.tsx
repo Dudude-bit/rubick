@@ -24,6 +24,10 @@ import type { HelmRelease } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { renderWithRouter } from "@/test/render";
+vi.mock("@/components/share/ShareAction", async (original) =>
+  (await import("@/test/shared-scope")).withSharedScope(original as never)
+);
+
 import { Helm } from "./Helm";
 
 const release = (name: string): HelmRelease => ({
@@ -146,6 +150,26 @@ describe("upgrading a release from its row", () => {
       expect(commands.helmUpgrade).toHaveBeenCalledWith(
         expect.objectContaining({ releaseName: "web", chart: "bitnami/nginx" })
       )
+    );
+  });
+});
+
+/**
+ * The scope is the window's, in neither the address nor the rows: a file
+ * made from a tab on two namespaces named none and read as the cluster.
+ * Fails if the screen stops telling Share which namespaces it read.
+ */
+describe("the scope Helm tells Share", () => {
+  it("names every namespace the window is on", async () => {
+    useClusterStore.setState({ namespaceScope: ["team-a", "shared"] });
+    listReleases.mockResolvedValue({ rows: [release("web")], unread: [] });
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+    expect(screen.getByTestId("shared-scope")).toHaveTextContent(
+      '["team-a","shared"]'
     );
   });
 });

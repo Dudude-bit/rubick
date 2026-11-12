@@ -78,6 +78,10 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import type { EventFilters, EventInfo, Holder } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
+vi.mock("@/components/share/ShareAction", async (original) =>
+  (await import("@/test/shared-scope")).withSharedScope(original as never)
+);
+
 import { Events } from "./Events";
 
 const listEvents = vi.mocked(commands.listEvents);
@@ -1291,6 +1295,11 @@ describe("a feed a watch keeps", () => {
     useClusterStore.setState({ namespaceScope: ["prod", "staging"] });
     await watched();
     expect(subscribeEventWatch).toHaveBeenCalledWith(["prod", "staging"]);
+    // The file names the same namespaces: the header took the single
+    // legacy namespace, which several leave empty.
+    expect(screen.getByTestId("shared-scope")).toHaveTextContent(
+      '["prod","staging"]'
+    );
     burst([dated("prod", 1), dated("staging", 0)]);
     await waitFor(() =>
       expect(document.body.textContent).toContain("staging-pod-0")
