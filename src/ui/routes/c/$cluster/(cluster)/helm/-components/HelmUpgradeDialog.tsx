@@ -15,6 +15,7 @@ import { KeyValueRow } from "../../../-object/detail-kv";
 import type { HelmRelease } from "@/generated/types";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
+import { WITHHELD_MARKER } from "@/lib/withheld";
 
 export interface HelmUpgradeDialogProps {
   /** Release to upgrade */
@@ -57,6 +58,9 @@ export function HelmUpgradeDialog({
   // Upgrading replaces a release on the cluster, so on a critical one it takes
   // the typed-name gate — as uninstall and rollback already do.
   const gate = useCriticalGate(release !== null);
+  // Values copied off the Values tab: helm would store the placeholder as
+  // the key. The backend refuses the same text.
+  const carriesWithheld = values.includes(WITHHELD_MARKER);
 
   return (
     <Dialog open={release !== null} onOpenChange={(open) => !open && onClose()}>
@@ -115,6 +119,11 @@ export function HelmUpgradeDialog({
               placeholder={t("action", "valuesPlaceholder")}
               className="font-mono text-sm h-32"
             />
+            {carriesWithheld && (
+              <p role="status" className="text-xs text-warn">
+                {t("action", "helmUpgradeCarriesWithheld")}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -134,7 +143,12 @@ export function HelmUpgradeDialog({
           </Button>
           <Button
             onClick={onUpgrade}
-            disabled={isUpgrading || gate.blocked || chart.trim() === ""}
+            disabled={
+              isUpgrading ||
+              gate.blocked ||
+              chart.trim() === "" ||
+              carriesWithheld
+            }
           >
             {isUpgrading ? t("action", "upgrading") : t("action", "upgrade")}
           </Button>

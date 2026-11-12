@@ -93,6 +93,21 @@ pub fn withhold_strings(value: &mut Value) -> Vec<String> {
     blanked
 }
 
+/// Where values written as YAML still hold [`WITHHELD_MARKER`]. Empty for
+/// text that does not read as YAML: its caller refuses it by the text.
+#[must_use]
+pub fn placeholders_in(values: &str) -> Vec<String> {
+    let mut held = Vec::new();
+    if let Ok(mut tree) = serde_yaml::from_str::<Value>(values) {
+        strings(&mut tree, &mut String::new(), &mut |path, text| {
+            if text.trim() == WITHHELD_MARKER {
+                held.push(path.to_string());
+            }
+        });
+    }
+    held
+}
+
 /// Free text as it may leave: whole, or the placeholder where it is a
 /// private key. `true` where it was withheld.
 pub fn withhold_text(text: &mut String) -> bool {
@@ -572,6 +587,23 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains("PRIVATE KEY"), "{text}");
+    }
+
+    /// Values copied off the Values tab hold the placeholder where the key
+    /// was. Fails if one is not found at depth, or a value that only quotes
+    /// the placeholder is taken for one.
+    #[test]
+    fn the_placeholder_is_found_wherever_values_still_hold_it() {
+        let values = format!(
+            "tls:\n  privateKey: '{WITHHELD_MARKER}'\nservers:\n  - key: |\n      \
+             {WITHHELD_MARKER}\nreadme: \"the app prints {WITHHELD_MARKER} for a key\"\n"
+        );
+
+        assert_eq!(
+            placeholders_in(&values),
+            ["servers[0].key", "tls.privateKey"]
+        );
+        assert!(placeholders_in("replicaCount: 2\n").is_empty());
     }
 
     /// A chart's notes are prose, and prose with a key in it is withheld

@@ -49,10 +49,16 @@ async fn helm(args: &[&str], timeout_secs: u64) -> Result<ShellCommand> {
         .timeout(Duration::from_secs(timeout_secs)))
 }
 
+/// What helm said, as it may leave this process: an install prints the
+/// chart's notes, and notes are judged like the ones the release keeps.
 async fn run(cmd: ShellCommand) -> Result<String> {
-    cmd.run_success()
-        .await
-        .map_err(|e| Error::Plugin(PluginError::ExecutionFailed(e.to_string())))
+    let mut said = match cmd.run_success().await {
+        Ok(said) => Ok(said),
+        Err(e) => Err(e.to_string()),
+    };
+    let (Ok(text) | Err(text)) = &mut said;
+    crate::resources::withhold_text(text);
+    said.map_err(|e| Error::Plugin(PluginError::ExecutionFailed(e)))
 }
 
 /// The cluster a mutation is for. No current context is an error, never a
@@ -175,6 +181,7 @@ async fn helm_install_or_upgrade(
     options: &HelmInstallOptions,
     state: &AppState,
 ) -> Result<String> {
+    let values = values_to_send(options)?;
     let mut args = vec![
         command.to_string(),
         options.release_name.clone(),
@@ -202,7 +209,6 @@ async fn helm_install_or_upgrade(
         args.push(timeout.clone());
     }
 
-    let values = options.values.as_deref().filter(|v| !v.trim().is_empty());
     let file = values.map(values_file).transpose().map_err(|e| {
         Error::Plugin(PluginError::ExecutionFailed(format!(
             "Failed to write values file: {e}"
@@ -215,6 +221,22 @@ async fn helm_install_or_upgrade(
 
     let args_refs: Vec<&str> = args.iter().map(std::string::String::as_str).collect();
     exec_helm_on_cluster(state, &args_refs, 300).await
+}
+
+/// The values helm is to be handed, or none to leave it the ones the release
+/// has. Values copied off the Values tab hold the placeholder where the app
+/// withheld a private key, and helm would store it as the key: those are
+/// refused, by the text, so no way of writing YAML carries it through.
+fn values_to_send(options: &HelmInstallOptions) -> Result<Option<&str>> {
+    let values = options.values.as_deref().filter(|v| !v.trim().is_empty());
+    match values {
+        Some(text) if text.contains(crate::resources::WITHHELD_MARKER) => {
+            Err(Error::WithheldValue {
+                keys: crate::resources::placeholders_in(text),
+            })
+        }
+        values => Ok(values),
+    }
 }
 
 /// The values as a file for `-f`: readable by this user only, since values
@@ -275,6 +297,85 @@ mod tests {
             seen,
             "/clusters/prod.yaml --kube-context kubernetes-admin@kubernetes"
         );
+    }
+
+    fn options(values: Option<&str>) -> HelmInstallOptions {
+        HelmInstallOptions {
+            release_name: "web".to_string(),
+            chart: "repo/web".to_string(),
+            namespace: "shop".to_string(),
+            version: None,
+            values: values.map(str::to_string),
+            create_namespace: false,
+            wait: false,
+            timeout: None,
+        }
+    }
+
+    /// The Values tab shows the placeholder where it withheld a private
+    /// key, with Copy. Pasted into Upgrade or Install and sent, helm stored
+    /// the placeholder as the key. Fails if such values get as far as a
+    /// file, however the YAML is written, or if clean values do not.
+    #[test]
+    fn values_that_still_hold_the_placeholder_are_never_handed_to_helm() {
+        use crate::resources::WITHHELD_MARKER;
+        let refused = |values: &str| match values_to_send(&options(Some(values))) {
+            Err(Error::WithheldValue { keys }) => keys,
+            other => panic!("sent: {other:?}"),
+        };
+
+        let copied = format!("password: hunter2\ntls:\n  privateKey: '{WITHHELD_MARKER}'\n");
+        assert_eq!(refused(&copied), ["tls.privateKey"]);
+        let block = format!("privateKey: |-\n  {WITHHELD_MARKER}\n");
+        assert_eq!(refused(&block), ["privateKey"]);
+        // Text helm's parser may take and this one does not is still refused.
+        assert!(refused(&format!("a: b: c\nkey: {WITHHELD_MARKER}\n")).is_empty());
+
+        let clean = options(Some("password: hunter2\n"));
+        let sent = values_to_send(&clean).expect("sent");
+        assert_eq!(sent, Some("password: hunter2\n"));
+        // No values at all: helm keeps the ones the release has.
+        assert_eq!(values_to_send(&options(None)).expect("sent"), None);
+        assert_eq!(values_to_send(&options(Some("  \n"))).expect("sent"), None);
+    }
+
+    /// The refusal comes before a file is written or a cluster is looked
+    /// for: with no cluster connected, values that hold the placeholder are
+    /// refused for what they hold, and clean ones for the missing cluster.
+    #[tokio::test]
+    async fn an_upgrade_and_an_install_refuse_the_placeholder_before_anything_else() {
+        let state = AppState::new().expect("state");
+        let copied = format!("privateKey: '{}'\n", crate::resources::WITHHELD_MARKER);
+
+        for command in ["upgrade", "install"] {
+            let refused = helm_install_or_upgrade(command, &options(Some(&copied)), &state).await;
+            assert!(
+                matches!(&refused, Err(Error::WithheldValue { keys }) if keys == &["privateKey"]),
+                "{command}: {refused:?}"
+            );
+            let clean = helm_install_or_upgrade(command, &options(Some("a: b\n")), &state).await;
+            assert!(
+                matches!(clean, Err(Error::Internal(_))),
+                "{command}: {clean:?}"
+            );
+        }
+    }
+
+    /// `helm install` prints the chart's notes, and the command hands back
+    /// what helm printed. Fails if notes that print a key cross to the
+    /// frontend, or if helm's ordinary words do not.
+    #[tokio::test]
+    async fn what_helm_prints_is_handed_back_without_a_private_key() {
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let prints =
+            |text: &str| ShellCommand::new("sh").args(["-c", r#"printf '%s' "$1""#, "helm", text]);
+
+        let notes = format!("NAME: web\nNOTES:\nYour key:\n{KEY}");
+        let said = run(prints(&notes)).await.expect("runs");
+        assert_eq!(said, crate::resources::WITHHELD_MARKER);
+
+        let said = run(prints("Release \"web\" has been upgraded.")).await;
+        assert_eq!(said.expect("runs"), "Release \"web\" has been upgraded.");
     }
 
     /// Values carry passwords. Written with the default mode they sat in a

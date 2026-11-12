@@ -153,11 +153,12 @@ pub enum Error {
     #[error("No ready pod is behind Service {service}")]
     NoReadyPod { service: String },
 
-    /// A manifest that still carries the placeholder shown in place of a
-    /// private key. Raised before anything is sent: a `ConfigMap` takes the
-    /// placeholder as the key's new value.
+    /// A manifest, or values for helm, that still carry the placeholder
+    /// shown in place of a private key. Raised before anything is sent: a
+    /// `ConfigMap` takes the placeholder as the key's new value, and so does
+    /// a chart.
     #[error(
-        "Not sent: the manifest still carries the placeholder shown in place of a private key ({}), and applying it would write the placeholder as the value",
+        "Not sent: it still carries the placeholder shown in place of a private key ({}), and sending it would write the placeholder as the value",
         keys.join(", ")
     )]
     WithheldValue { keys: Vec<String> },

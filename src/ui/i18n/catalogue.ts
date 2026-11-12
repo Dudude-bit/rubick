@@ -1330,6 +1330,10 @@ export const en = {
     releaseName: "Release Name",
     versionOptional: "Version (optional)",
     valuesYamlOptional: "Values (YAML, optional)",
+    helmUpgradeCarriesWithheld:
+      "These values hold the placeholder the app shows in place of a private key, and an upgrade would store the placeholder as the key. Write the key itself there, or clear the values: with none given, helm keeps the ones the release has.",
+    helmInstallCarriesWithheld:
+      "These values hold the placeholder the app shows in place of a private key, and an install would store the placeholder as the key. Write the key itself there.",
     createNamespace: "Create namespace",
     waitForReady: "Wait for ready",
     configureInSettings: "Configure in Settings",

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 import { HelmInstallDialog } from "./HelmInstallDialog";
 import type { HelmChartSearchResult } from "@/generated/types";
+import { WITHHELD_MARKER } from "@/lib/withheld";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -16,7 +17,7 @@ const chart: HelmChartSearchResult = {
   description: "web server",
 };
 
-const dialog = () => (
+const dialog = (values = "") => (
   <HelmInstallDialog
     chart={chart}
     onClose={() => {}}
@@ -27,7 +28,7 @@ const dialog = () => (
     onNamespaceChange={() => {}}
     version=""
     onVersionChange={() => {}}
-    values=""
+    values={values}
     onValuesChange={() => {}}
     createNamespace={false}
     onCreateNamespaceChange={() => {}}
@@ -71,5 +72,29 @@ describe("installing a chart on critical infrastructure", () => {
     render(dialog());
     expect(screen.queryByRole("alert")).toBeNull();
     expect(installButton()).toBeEnabled();
+  });
+});
+
+describe("installing with values copied off another release", () => {
+  /**
+   * Values copied off a release's Values tab hold a placeholder where the
+   * app withheld a private key, and the new release would get the
+   * placeholder as its key. Fails if Install is offered for them, or the
+   * reason is not given before the reader confirms.
+   */
+  it("refuses values that still hold the placeholder, and says why", () => {
+    const { unmount } = render(
+      dialog(`tls:\n  privateKey: '${WITHHELD_MARKER}'\n`)
+    );
+
+    expect(installButton()).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /an install would store the placeholder as the key\. Write the key itself there\./
+    );
+    unmount();
+
+    render(dialog("replicaCount: 2\n"));
+    expect(installButton()).toBeEnabled();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

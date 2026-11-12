@@ -21,6 +21,7 @@ import {
 import type { HelmChartSearchResult } from "@/generated/types";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
+import { WITHHELD_MARKER } from "@/lib/withheld";
 
 export interface HelmInstallDialogProps {
   /** Chart to install */
@@ -76,6 +77,9 @@ export function HelmInstallDialog({
   // Installing a chart creates a whole release on the cluster, so on a critical
   // one it takes the typed-name gate — as uninstall and rollback already do.
   const gate = useCriticalGate(chart !== null);
+  // Values copied off another release's Values tab: helm would store the
+  // placeholder as the key. The backend refuses the same text.
+  const carriesWithheld = values.includes(WITHHELD_MARKER);
   return (
     <Dialog open={chart !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
@@ -137,6 +141,11 @@ export function HelmInstallDialog({
               placeholder="# Custom values&#10;replicaCount: 2"
               className="font-mono text-sm h-32"
             />
+            {carriesWithheld && (
+              <p role="status" className="text-xs text-warn">
+                {t("action", "helmInstallCarriesWithheld")}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -171,7 +180,11 @@ export function HelmInstallDialog({
           <Button
             onClick={onInstall}
             disabled={
-              !releaseName || !namespace || isInstalling || gate.blocked
+              !releaseName ||
+              !namespace ||
+              isInstalling ||
+              gate.blocked ||
+              carriesWithheld
             }
           >
             {isInstalling ? t("action", "installing") : t("action", "install")}
