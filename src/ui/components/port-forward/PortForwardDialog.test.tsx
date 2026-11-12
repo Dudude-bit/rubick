@@ -159,6 +159,59 @@ describe("the port-forward dialog", () => {
   });
 });
 
+describe("the port-forward dialog beside another cluster's forwards", () => {
+  const ELSEWHERE = { ...session(5432), id: "pf-staging", context: "staging" };
+  const HERE = { ...session(15432), id: "pf-prod" };
+
+  /**
+   * A forward outlives the move to another cluster, and prod and staging
+   * share pod names. Fails if the dialog lists by name and namespace alone:
+   * staging's tunnel then reads as this pod's, with a Stop that ends it.
+   */
+  it("lists only this cluster's forwards to a pod of that name", async () => {
+    usePortForwardStore.setState({ sessions: [ELSEWHERE, HERE] });
+    await mount();
+
+    expect(
+      screen.getByText("localhost:15432 → hello-web-0:80")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/localhost:5432/)).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Stop" })).toHaveLength(1);
+  });
+
+  /** The same through a Service: fails if a Service's forwards are matched without the cluster. */
+  it("lists only this cluster's forwards through a Service of that name", async () => {
+    const via = { kind: "service" as const, name: "hello-web", port: 80 };
+    usePortForwardStore.setState({
+      sessions: [
+        { ...ELSEWHERE, via },
+        { ...HERE, via },
+      ],
+    });
+    await mount({
+      kind: "Service",
+      name: "hello-web",
+      namespace: "lena-sandbox",
+      ports: [{ port: 80, name: null, protocol: "TCP" }],
+    });
+
+    expect(
+      screen.getByText("localhost:15432 → hello-web-0:80")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/localhost:5432/)).toBeNull();
+  });
+
+  /** The other cluster's forward still holds its local port on this machine. Fails if the suggestion forgets it. */
+  it("still keeps off a local port another cluster's forward holds", async () => {
+    usePortForwardStore.setState({
+      sessions: [{ ...ELSEWHERE, localPort: 8080 }],
+    });
+    await mount();
+
+    expect(screen.getByLabelText("Local port")).not.toHaveValue(8080);
+  });
+});
+
 describe("the port-forward dialog where the access review has answered", () => {
   beforeEach(() => {
     useClusterStore.setState((s) => ({

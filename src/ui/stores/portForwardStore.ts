@@ -223,6 +223,23 @@ export function forwardKey(item: {
   return `${item.context}:${pod}:${item.namespace}:${item.localPort}:${remotePort}`;
 }
 
+/**
+ * Whether a forward reaches this pod, or goes through this Service, on this
+ * cluster. Every cluster's forwards are held, and prod and staging share
+ * names and namespaces.
+ */
+export function forwardsTo(
+  session: Pick<PortForwardSession, "context" | "pod" | "namespace" | "via">,
+  context: string | null,
+  target: { kind: "Pod" | "Service"; name: string; namespace: string }
+): boolean {
+  if (session.context !== context || session.namespace !== target.namespace)
+    return false;
+  return target.kind === "Pod"
+    ? session.pod === target.name
+    : session.via.kind === "service" && session.via.name === target.name;
+}
+
 /** A session as it is now, still known by where the one before it was started. */
 function followed(
   before: PortForwardSession | undefined,

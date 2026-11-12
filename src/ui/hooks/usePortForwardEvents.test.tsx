@@ -21,12 +21,14 @@ vi.mock("@/lib/commands", () => ({
   commands: { listPortForwards: vi.fn(async () => []) },
 }));
 
+const toast = vi.fn();
 vi.mock("@/components/ui/use-toast", () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast }),
 }));
 
 import { commands } from "@/lib/commands";
 import { usePortForwardStore } from "@/stores/portForwardStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { usePortForwardEvents } from "./usePortForwardEvents";
 
 const session = {
@@ -110,6 +112,34 @@ describe("a forward the backend moved or ended", () => {
     expect(usePortForwardStore.getState().failed).toEqual([
       { session, note: { says: "podGone", pod: "payments" } },
     ]);
+    hook.unmount();
+  });
+});
+
+describe("a toast about a forward", () => {
+  const said = () => toast.mock.calls.map(([each]) => each.description);
+
+  /**
+   * The event names no cluster and the forward outlives the move to another
+   * one. Fails if the toast drops the name: on staging it then reads as
+   * staging's pod `payments`.
+   */
+  it("names the cluster of a forward the window is no longer on", async () => {
+    useClusterStore.setState({ currentContext: "staging" });
+    const hook = renderHook(() => usePortForwardEvents());
+    await act(async () => {});
+    await emit({ pod: "payments", status: "reconnecting" });
+    expect(said()).toEqual(["prod · localhost:8080 → payments:80"]);
+    hook.unmount();
+  });
+
+  /** The name is spent only where it tells two clusters apart. Fails if every toast carries it. */
+  it("names no cluster for a forward of the cluster on screen", async () => {
+    useClusterStore.setState({ currentContext: "prod" });
+    const hook = renderHook(() => usePortForwardEvents());
+    await act(async () => {});
+    await emit({ pod: "payments", status: "reconnecting" });
+    expect(said()).toEqual(["localhost:8080 → payments:80"]);
     hook.unmount();
   });
 });

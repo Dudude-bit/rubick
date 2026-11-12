@@ -185,9 +185,11 @@ function Via({ via }: { via: ForwardVia }) {
 function FailedRow({
   failed,
   onDismiss,
+  namesCluster,
 }: {
   failed: FailedForward;
   onDismiss: () => void;
+  namesCluster: boolean;
 }) {
   const t = useT();
   const { session } = failed;
@@ -200,6 +202,7 @@ function FailedRow({
       <span className="min-w-0 flex-1">
         <span className="block truncate text-fg-mid">{session.pod}</span>
         <span className="block truncate font-mono text-[11px] text-fg-fnt">
+          {namesCluster && `${session.context} · `}
           {session.namespace} · :{session.localPort} → :{session.remotePort}
         </span>
         <Via via={session.via} />
@@ -422,6 +425,7 @@ export function PortForwardsTab() {
               key={item.session.id}
               failed={item}
               onDismiss={() => dismiss(item.session.id)}
+              namesCluster={item.session.context !== currentContext}
             />
           ))}
         </ActivityGroup>

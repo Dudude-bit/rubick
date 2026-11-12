@@ -53,6 +53,7 @@ vi.mock("@/lib/commands", () => ({
 import { useClusterStore } from "./clusterStore";
 import {
   forwardKey,
+  forwardsTo,
   usePortForwardStore,
   type PortForwardConfig,
 } from "./portForwardStore";
@@ -375,5 +376,34 @@ describe("a cluster's saved forwards", () => {
 
     expect(asked()).toEqual(["pg1-0", "pg2-0", "pg3-0"]);
     expect(result.started).toBe(3);
+  });
+});
+
+describe("which object a forward reaches", () => {
+  const held = {
+    context: "prod",
+    pod: "db-0",
+    namespace: "db",
+    via: { kind: "service" as const, name: "db", port: 5432 },
+  };
+  const pod = { kind: "Pod" as const, name: "db-0", namespace: "db" };
+  const service = { kind: "Service" as const, name: "db", namespace: "db" };
+
+  /** Fails if a forward is matched to an object by name and namespace alone: staging's page then lists and stops prod's tunnel. */
+  it("is that object on the forward's own cluster and no other", () => {
+    expect(forwardsTo(held, "prod", pod)).toBe(true);
+    expect(forwardsTo(held, "prod", service)).toBe(true);
+    expect(forwardsTo(held, "staging", pod)).toBe(false);
+    expect(forwardsTo(held, "staging", service)).toBe(false);
+    expect(forwardsTo(held, null, pod)).toBe(false);
+  });
+
+  /** Fails if a forward started on a pod is filed under a Service that shares its name. */
+  it("is a Service only for a forward that goes through it", () => {
+    const direct = { ...held, pod: "db", via: { kind: "pod" as const } };
+    expect(forwardsTo(direct, "prod", service)).toBe(false);
+    expect(forwardsTo(held, "prod", { ...pod, namespace: "other" })).toBe(
+      false
+    );
   });
 });
