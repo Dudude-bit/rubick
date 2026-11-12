@@ -4097,6 +4097,9 @@ export const en = {
       "The metrics say fewer replicas would do; minReplicas is what is keeping them running.",
     hpaAtCeiling: "{name} wants more replicas than {max}, which is its ceiling",
     hpaAtCeilingDefault: "The desired replica count is above maxReplicas.",
+    hpaAtRate: "{name} is scaling this as fast as its scale rate allows",
+    hpaAtRateDefault:
+      "The replica count it wants is further away than one step of its scale rate.",
     hpaRunning: "{n} running",
     hpaWanted: "{n} wanted",
     hpaWantedNotComputing:

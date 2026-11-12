@@ -217,6 +217,8 @@ describe("a condition its reason settles", () => {
       ["ScalingLimited", "False", "DesiredWithinRange"],
       ["ScalingLimited", "True", "TooFewReplicas"],
       ["ScalingLimited", "True", "TooManyReplicas"],
+      ["ScalingLimited", "True", "ScaleUpLimit"],
+      ["ScalingLimited", "True", "ScaleDownLimit"],
     ];
     const tones = cases.map(([type, status, reason]) => {
       const one = condition(type, status, { reason });
@@ -235,6 +237,8 @@ describe("a condition its reason settles", () => {
       "ok",
       "neutral",
       "warn",
+      "neutral",
+      "neutral",
     ]);
   });
 

@@ -4600,6 +4600,10 @@ export const ru: Catalogue = {
       "Метрики говорят, что хватило бы меньшего числа реплик; их держит minReplicas.",
     hpaAtCeiling: "{name} хочет больше реплик, чем {max}, а это его потолок",
     hpaAtCeilingDefault: "Желаемое число реплик выше maxReplicas.",
+    hpaAtRate:
+      "{name} меняет число реплик так быстро, как позволяет его скорость масштабирования",
+    hpaAtRateDefault:
+      "Нужное число реплик дальше, чем один шаг его скорости масштабирования.",
     hpaRunning: "работает {n}",
     hpaWanted: "хочет {n}",
     hpaWantedNotComputing:

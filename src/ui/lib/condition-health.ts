@@ -112,6 +112,9 @@ const SAID: Record<string, StatusRole> = {
   "containersready=false/PodCompleted": "neutral",
   // Held at minReplicas, and scaled to zero by hand: at rest, not limited.
   "scalinglimited=true/TooFewReplicas": "neutral",
+  // Moving as fast as its scale rate allows: scaling, not stuck.
+  "scalinglimited=true/ScaleUpLimit": "neutral",
+  "scalinglimited=true/ScaleDownLimit": "neutral",
   "scalingactive=false/ScalingDisabled": "neutral",
   // The disruption controller could not work the budget out at all.
   "disruptionallowed=false/SyncFailed": "err",

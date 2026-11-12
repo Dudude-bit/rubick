@@ -9,6 +9,7 @@ import {
   applyWarnings,
   autoscalerFinding,
   autoscalerReplicas,
+  autoscalerVerdict,
   autoscalers,
   boundsProblem,
   budgetFinding,
@@ -297,24 +298,48 @@ describe("what an autoscaler is worth saying", () => {
     expect(autoscalerFinding(floor, t)?.title).toContain("floor");
   });
 
-  it("says nothing about a scale-down stabilisation window", () => {
-    const auto = autoscalers(
+  const limitedBy = (reason: string, message: string) =>
+    autoscalers(
       conns([
         governs(
-          hpa("hpa-settling", {
-            conditions: [
-              condition(
-                "ScalingLimited",
-                "True",
-                "ScaleDownStabilized",
-                "recent recommendations were higher"
-              ),
-            ],
+          hpa("hpa-moving", {
+            conditions: [condition("ScalingLimited", "True", reason, message)],
           })
         ),
       ])
     )[0];
-    expect(autoscalerFinding(auto, t)).toBeNull();
+
+  /**
+   * The controller writes ScalingLimited=True for the scale rate too, with
+   * ScaleDownLimit or ScaleUpLimit. Fails if either is filed as the ceiling:
+   * an autoscaler scaling 10 down to 2 one pod a minute read, in amber,
+   * "wants more replicas than max".
+   */
+  it.each([
+    [
+      "ScaleDownLimit",
+      "the desired replica count is decreasing faster than the maximum scale rate",
+    ],
+    [
+      "ScaleUpLimit",
+      "the desired replica count is increasing faster than the maximum scale rate",
+    ],
+  ])("calls %s the scale rate, not the ceiling", (reason, message) => {
+    const auto = limitedBy(reason, message);
+    expect(autoscalerVerdict(auto.facts)).toMatchObject({
+      says: "atRate",
+      tone: "neutral",
+    });
+    expect(autoscalerFinding(auto, t)).toEqual({
+      tone: "neutral",
+      title: "hpa-moving is scaling this as fast as its scale rate allows",
+      detail: `T${message.slice(1)}.`,
+    });
+  });
+
+  /** Fails if a reason this app does not know is taken for the ceiling again. */
+  it("says nothing of a limit whose reason it does not know", () => {
+    expect(autoscalerFinding(limitedBy("SomethingNew", "words"), t)).toBeNull();
   });
 });
 
