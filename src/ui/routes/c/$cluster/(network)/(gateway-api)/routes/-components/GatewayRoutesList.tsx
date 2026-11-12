@@ -44,6 +44,7 @@ import { useGatewayRoutes } from "../../../../-object/useGatewayRoutes";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useWatchedList } from "@/hooks/useWatchedList";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import {
   backingFrom,
@@ -53,6 +54,7 @@ import {
 } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { listPodRows, type PodRow } from "@/lib/pod-rows";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { hrefOf, listLink, objectLink, rowName } from "@/lib/links";
 import { KIND_TONE } from "@/lib/route-kind-tone";
@@ -71,6 +73,10 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { cn } from "@/lib/utils";
 import { errorToShow } from "@/lib/error-utils";
 import type { RouteInfo } from "@/generated/types";
+
+const EVERY_POD = queryKeys.podRows(null);
+const POD_DETAIL = queryKeys.rowDetail(ResourceType.Pod);
+const subscribeEveryPod = () => commands.subscribePodRowWatch(null);
 
 // Radix refuses an empty string as an item value, so the "no filter"
 // choice needs a name of its own rather than the empty kind it means.
@@ -398,31 +404,22 @@ export function GatewayRoutesList() {
     [board.pulse, filtered, gateways.data, scope.scope]
   );
 
-  // The map's outer columns: pods and deployments, read only while the
-  // map is open — the list alone never pays for them.
-  const pods = useLiveQuery({
-    queryKey: queryKeys.resources(ResourceType.Pod, null),
-    queryFn: () =>
-      commands.listPods({
-        namespace: null,
-        labelSelector: null,
-        fieldSelector: null,
-        limit: null,
-        statusFilter: null,
-        selector: null,
-        nodeName: null,
-      }),
-    staleTime: ROUTING_STALE,
-    refresh: "overview",
+  // The map's last column, read only while the map is open. The Pods list's
+  // own entry and its way of reading: rows in chunks, then kept by the watch.
+  // Every pod whole, in one answer, every ten seconds was 78 MiB a read on
+  // 10 000 pods.
+  const watchedPods = useWatchedList<PodRow>({
     enabled: showMap,
+    subscribe: subscribeEveryPod,
+    queryKey: EVERY_POD,
+    detail: POD_DETAIL,
+    reportFailure: toPlural(ResourceType.Pod),
   });
-  // The Deployments page's own entry for the whole cluster, so the answer is
-  // the same shape it keeps there.
-  const deployments = useLiveQuery({
-    queryKey: queryKeys.resources(ResourceType.Deployment, null),
-    queryFn: () => commands.listDeploymentsIn(null),
+  const pods = useLiveQuery({
+    queryKey: EVERY_POD,
+    queryFn: ({ signal }) => listPodRows(null, signal),
     staleTime: ROUTING_STALE,
-    refresh: "overview",
+    refresh: watchedPods.live ? false : "overview",
     enabled: showMap,
   });
 
@@ -433,21 +430,10 @@ export function GatewayRoutesList() {
         filtered,
         backing.data ? backingFrom(backing.data, null) : undefined,
         t,
-        pods.data && deployments.data
-          ? { pods: pods.data, deployments: deployments.data.rows }
-          : undefined,
+        pods.data && { pods: pods.data.rows },
         { classes: classes.data ?? [], ask: door }
       ),
-    [
-      gateways.data,
-      filtered,
-      backing.data,
-      t,
-      pods.data,
-      deployments.data,
-      classes.data,
-      door,
-    ]
+    [gateways.data, filtered, backing.data, t, pods.data, classes.data, door]
   );
 
   if (!isConnected) {

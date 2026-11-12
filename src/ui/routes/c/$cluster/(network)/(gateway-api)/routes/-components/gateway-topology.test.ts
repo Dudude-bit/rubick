@@ -7,12 +7,11 @@ import type { T } from "@/i18n/useT";
 const t = ((section, key, values) =>
   translate("en", section, key, values)) as T;
 
-import { gatewayTopology } from "./gateway-topology";
+import { gatewayTopology, type MapPod } from "./gateway-topology";
 import type { DoorRead } from "@/lib/policy-door";
 import type {
   ConditionInfo,
   GatewayInfo,
-  PodInfo,
   RouteInfo,
   RouteParentStatusInfo,
 } from "@/generated/types";
@@ -624,9 +623,10 @@ describe("the gateway topology map", () => {
   /**
    * The routing pages carry a summary: one address per Service. Grouping that
    * address by owner drew five replicas as "1 of 1 ready"; the pods the
-   * selector picks are what runs behind the Service.
+   * selector picks are what runs behind the Service. Each is filed under the
+   * workload its row names, which is all of a pod the map is handed.
    */
-  it("counts the pods a backend's selector picks, ReplicaSet hop included", () => {
+  it("counts the pods a backend's selector picks, under the workload each row names", () => {
     const backing = {
       services: [
         {
@@ -655,25 +655,19 @@ describe("the gateway topology map", () => {
       backingKnown: true,
     };
     const pod = (
-      name: string,
-      owners: unknown[],
-      over: { ready?: boolean; namespace?: string; labels?: object } = {}
-    ) => ({
-      name,
+      workload: MapPod["workload"],
+      over: {
+        ready?: boolean;
+        namespace?: string;
+        labels?: Record<string, string>;
+      } = {}
+    ): MapPod => ({
       namespace: over.namespace ?? "gwtest",
       status: { phase: "Running", ready: over.ready ?? true },
       labels: over.labels ?? { app: "promo" },
-      ownerReferences: owners,
+      workload,
     });
-    const rs = [
-      {
-        api_version: "apps/v1",
-        kind: "ReplicaSet",
-        name: "promo-abc123",
-        uid: "rs",
-        controller: true,
-      },
-    ];
+    const promo = { kind: "Deployment", name: "promo" };
     const data = gatewayTopology(
       [gateway("edge")],
       [route("promo")],
@@ -682,15 +676,13 @@ describe("the gateway topology map", () => {
       t,
       {
         pods: [
-          pod("promo-abc123-x1", rs),
-          pod("promo-abc123-x2", rs),
-          pod("promo-abc123-x3", rs, { ready: false }),
-          pod("stray", [], { ready: false }),
-          pod("elsewhere", rs, { namespace: "other" }),
-          pod("unlabelled", rs, { labels: { app: "cart" } }),
-          // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-        ] as any,
-        deployments: [{ name: "promo", namespace: "gwtest" }],
+          pod(promo),
+          pod(promo),
+          pod(promo, { ready: false }),
+          pod(null, { ready: false }),
+          pod(promo, { namespace: "other" }),
+          pod(promo, { labels: { app: "cart" } }),
+        ],
       }
     );
 
@@ -715,24 +707,20 @@ describe("the gateway topology map", () => {
       published: [],
       backingKnown: true,
     } as unknown as Parameters<typeof gatewayTopology>[2];
-    const pods = [
+    const pods: MapPod[] = [
       {
-        name: "anything",
         namespace: "gwtest",
-        status: { ready: true },
+        status: { phase: "Running", ready: true },
         labels: {},
-        ownerReferences: [],
+        workload: null,
       },
-    ] as unknown as PodInfo[];
+    ];
     const data = gatewayTopology(
       [gateway("edge")],
       [route("promo")],
       backing,
       t,
-      {
-        pods,
-        deployments: [],
-      }
+      { pods }
     );
     expect(data.columns.some((column) => column.label === "Workloads")).toBe(
       false
@@ -752,13 +740,11 @@ describe("the gateway topology map", () => {
       published: [],
       backingKnown: true,
     } as unknown as Parameters<typeof gatewayTopology>[2];
-    const rs = [{ kind: "ReplicaSet", name: "promo-abc123", controller: true }];
-    const pod = (name: string, phase: string, ready: boolean) => ({
-      name,
+    const pod = (phase: string, ready: boolean): MapPod => ({
       namespace: "gwtest",
       status: { phase, ready },
       labels: { app: "promo" },
-      ownerReferences: rs,
+      workload: { kind: "Deployment", name: "promo" },
     });
     const data = gatewayTopology(
       [gateway("edge")],
@@ -767,12 +753,11 @@ describe("the gateway topology map", () => {
       t,
       {
         pods: [
-          pod("promo-abc123-x1", "Running", true),
-          pod("promo-abc123-e1", "Failed", false),
-          pod("promo-abc123-e2", "Failed", false),
-          pod("promo-abc123-done", "Succeeded", false),
-        ] as unknown as PodInfo[],
-        deployments: [{ name: "promo", namespace: "gwtest" }],
+          pod("Running", true),
+          pod("Failed", false),
+          pod("Failed", false),
+          pod("Succeeded", false),
+        ],
       }
     );
     const deployment = data.columns

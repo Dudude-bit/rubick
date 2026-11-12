@@ -15,8 +15,8 @@ use std::collections::BTreeMap;
 use super::common::{init_phase, state_of, ContainerPhase, ContainerState};
 use super::pod::{phase_of, resource_totals};
 use super::pod_display::{
-    display_status, exit_unreported, gone, kubectl_status, looping_until, rejected_at_admission,
-    restarting_until, restarts, PodGone,
+    counts_ready, display_status, exit_unreported, gone, kubectl_status, looping_until,
+    rejected_at_admission, restarting_until, restarts, PodGone,
 };
 use crate::utils::Moment;
 
@@ -70,6 +70,8 @@ pub struct PodRowStatus {
     pub phase: String,
     /// See `PodStatusInfo::display`.
     pub display: String,
+    /// Whether a Service publishes it: what the routes map counts behind a backend.
+    pub ready: bool,
     /// See `PodStatusInfo::kubectl_status`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kubectl_status: Option<String>,
@@ -155,6 +157,7 @@ impl From<&Pod> for PodRow {
             status: PodRowStatus {
                 phase: phase_of(pod),
                 display: display_status(pod),
+                ready: counts_ready(pod),
                 kubectl_status: kubectl_status(pod),
                 looping_until: looping_until(pod),
                 exit_unreported: exit_unreported(pod),
@@ -187,9 +190,9 @@ mod tests {
     use crate::resources::PodInfo;
     use k8s_openapi::api::core::v1::{
         ContainerState as K8sContainerState, ContainerStateTerminated, ContainerStateWaiting,
-        EnvVar, PodSpec, PodStatus, Volume,
+        EnvVar, PodCondition, PodSpec, PodStatus, Volume,
     };
-    use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference, Time};
 
     /// A pod the way a Helm chart leaves it: labels, a last-applied
     /// annotation, env, a volume, one crashing container and one sidecar.
@@ -373,5 +376,28 @@ mod tests {
         assert_eq!(row.status.gone, Some(PodGone::Replaced));
         assert_eq!(row.status.gone, PodInfo::from(&pod).status.gone);
         assert_eq!(PodRow::from(&helm_pod()).status.gone, None);
+    }
+
+    /// The routes map counts the pods behind a backend from rows. Fails if a
+    /// row stops saying what the full pod says: a pod whose `Ready` is False,
+    /// or one being deleted, would count as serving.
+    #[test]
+    fn a_row_says_whether_its_pod_counts_ready_as_the_info_does() {
+        let ready = |pod: &Pod| {
+            let (row, info) = (PodRow::from(pod), PodInfo::from(pod));
+            assert_eq!(row.status.ready, info.status.ready);
+            row.status.ready
+        };
+        let mut pod = helm_pod();
+        assert!(!ready(&pod));
+        pod.status.as_mut().unwrap().conditions = Some(vec![PodCondition {
+            type_: "Ready".into(),
+            status: "True".into(),
+            ..Default::default()
+        }]);
+        assert!(ready(&pod));
+        pod.metadata.deletion_timestamp =
+            Some(Time("2026-09-10T10:00:00Z".parse().expect("a time")));
+        assert!(!ready(&pod));
     }
 }
