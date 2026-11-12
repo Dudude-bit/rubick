@@ -20,7 +20,7 @@ use crate::resources::{
     looping_until, pending_since, pod_start, restarting_until, stuck_reason, stuck_since,
     within_pending_grace, JobState, PodStart, Rollout,
 };
-use crate::state::AppState;
+use crate::state::{AppState, Here};
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use crate::utils::Moment;
 use chrono::{DateTime, Utc};
@@ -2804,10 +2804,11 @@ pub async fn cluster_overview(
     scope: Option<Vec<String>>,
 ) -> Result<ClusterOverview> {
     let scope = scope_of(scope)?;
-    let client = (*state.current_client()?).clone();
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    // The holders are kept under this cluster's name, and are read after a
+    // wait: of this cluster, wherever the window is by then.
+    let here = state.here()?;
+    let client = (*here.client).clone();
+    let context = here.context.clone();
     let refused = state.overview_cache.refused_counts(&context);
     let memo = state.overview_cache.holders(&context);
     let (metrics, counts, watched) = tokio::join!(
@@ -2819,7 +2820,7 @@ pub async fn cluster_overview(
                 .snapshot(&context, || client.clone())
                 .await?;
             let looked =
-                look_up_holders(state, &memo, refs(&snapshot.events), scope.as_deref()).await;
+                look_up_holders(&here, &memo, refs(&snapshot.events), scope.as_deref()).await;
             Some((snapshot, looked))
         },
     );
@@ -2835,7 +2836,7 @@ pub async fn cluster_overview(
     let scope = scope.as_deref();
     let Some((snapshot, looked)) = watched else {
         let sides = beside.sides.clone();
-        let mut overview = by_listing(&client, scope, sides, Some((state, &memo))).await?;
+        let mut overview = by_listing(&client, scope, sides, Some((&here, &memo))).await?;
         overview
             .counts_partial
             .extend(beside.partial.iter().cloned());
@@ -2853,19 +2854,18 @@ pub async fn followed_overview(
     scope: Option<Vec<String>>,
 ) -> Result<Option<ClusterOverview>> {
     let scope = scope_of(scope)?;
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    let here = state.here()?;
+    let context = here.context.clone();
     let Some(beside) = state.overview_cache.kept_sides(&context, &scope) else {
         return Ok(None);
     };
-    let client = (*state.current_client()?).clone();
+    let client = (*here.client).clone();
     let Some(snapshot) = state.overview_cache.snapshot(&context, || client).await else {
         return Ok(None);
     };
     let memo = state.overview_cache.holders(&context);
     let scope = scope.as_deref();
-    let looked = look_up_holders(state, &memo, refs(&snapshot.events), scope).await;
+    let looked = look_up_holders(&here, &memo, refs(&snapshot.events), scope).await;
     Ok(Some(followed(&snapshot, scope, &beside, &looked)))
 }
 
@@ -2951,7 +2951,7 @@ fn names_to_look_up<'a>(
 /// longer answers. A read that failed leaves its name out, so its warnings
 /// stay unchecked rather than gone.
 async fn look_up_holders<'a>(
-    state: &AppState,
+    here: &Here<'_>,
     memo: &HolderMemo,
     events: impl IntoIterator<Item = &'a Event>,
     scope: Option<&[String]>,
@@ -2966,7 +2966,7 @@ async fn look_up_holders<'a>(
         }
     }
     let reads = unread.into_iter().map(|(named, uids)| async move {
-        let held = holder_of(state, &named).await;
+        let held = holder_of(here, &named).await;
         (named, uids, held)
     });
     for (named, uids, held) in join_all(reads).await {
@@ -3007,42 +3007,50 @@ pub async fn name_holder(
     }
     let named = (group, kind, namespace, name);
     Ok(
-        crate::client::clock::timed(&state.perf, "nameHolder", name_holder_of(&state, &named))
+        crate::client::clock::timed(&state.perf, "nameHolder", name_holder_in(&state, &named))
             .await,
     )
 }
 
-async fn name_holder_of(state: &AppState, named: &Named) -> Holder {
-    match holder_read(state, named, true).await {
+/// The holder on the window's cluster as it is now, the reads after it too.
+async fn name_holder_in(state: &AppState, named: &Named) -> Holder {
+    match state.here() {
+        Ok(here) => name_holder_of(&here, named).await,
+        Err(_) => Holder::NotRead,
+    }
+}
+
+async fn name_holder_of(here: &Here<'_>, named: &Named) -> Holder {
+    match holder_read(here, named, true).await {
         Some(Held::By(uid)) => Holder::By { uid },
         Some(Held::Nobody) => Holder::Nobody,
         None => Holder::NotRead,
     }
 }
 
-async fn holder_of(state: &AppState, named: &Named) -> Option<Held> {
-    holder_read(state, named, false).await
+async fn holder_of(here: &Here<'_>, named: &Named) -> Option<Held> {
+    holder_read(here, named, false).await
 }
 
 /// `of_event` where the namespace may be the event's own rather than its
 /// object's: an event about a cluster-scoped object is itself in one.
-async fn holder_read(state: &AppState, named: &Named, of_event: bool) -> Option<Held> {
+async fn holder_read(here: &Here<'_>, named: &Named, of_event: bool) -> Option<Held> {
     let (group, kind, namespace, name) = named;
-    let plural = state
+    let plural = here
         .served_kinds(group)
         .await
         .ok()??
         .into_iter()
         .find(|served| served.kind == *kind)?
         .plural;
-    let served = state.served(group, &plural).await.ok()??;
+    let served = here.served(group, &plural).await.ok()??;
     let namespace = match (served.namespaced, namespace) {
         (true, Some(namespace)) => Some(namespace.clone()),
         (false, None) => None,
         (false, Some(_)) if of_event => None,
         _ => return None,
     };
-    match crate::commands::ownership::metadata(state, &served, name, namespace).await {
+    match crate::commands::ownership::metadata(here, &served, name, namespace).await {
         Ok(meta) => meta.uid.map(Held::By),
         Err(error) if error.code() == "NOT_FOUND" => Some(Held::Nobody),
         Err(_) => None,
@@ -3268,7 +3276,7 @@ async fn by_listing(
     client: &Client,
     scope: Option<&[String]>,
     sides: Sides,
-    holders: Option<(&AppState, &HolderMemo)>,
+    holders: Option<(&Here<'_>, &HolderMemo)>,
 ) -> Result<ClusterOverview> {
     let params = ListParams::default();
     let nodes_api: Api<Node> = Api::all(client.clone());
@@ -3338,7 +3346,7 @@ async fn by_listing(
     };
     let nodes_known = nodes.is_some() && accounting_known;
     let looked = match holders {
-        Some((state, memo)) => look_up_holders(state, memo, refs(&listed.events), scope).await,
+        Some((here, memo)) => look_up_holders(here, memo, refs(&listed.events), scope).await,
         None => Looked::new(),
     };
 
@@ -3976,6 +3984,71 @@ mod tests {
         .await
     }
 
+    /// Discovery is a wait, and the window was on another cluster when it
+    /// answered: the name was then read there, and this cluster's warnings
+    /// were kept as about an object that is gone, or another's. Fails if the
+    /// read after discovery asks any cluster but the one it began on.
+    #[tokio::test]
+    async fn a_holder_is_read_on_the_cluster_it_was_asked_of_though_the_window_moved_meanwhile() {
+        use crate::client::served::test_server::{connected, failure};
+        use crate::client::served::ServedIndex;
+        use std::sync::{Arc, OnceLock};
+        let window = Arc::new(OnceLock::new());
+        let moved = window.clone();
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/apis" => {
+                let current: &Arc<parking_lot::RwLock<Option<String>>> =
+                    moved.get().expect("the window");
+                *current.write() = Some("elsewhere".to_string());
+                (
+                    200,
+                    serde_json::json!({ "kind": "APIGroupList", "groups": [{
+                        "name": "autoscaling",
+                        "versions": [{ "groupVersion": "autoscaling/v2", "version": "v2" }],
+                        "preferredVersion": { "groupVersion": "autoscaling/v2", "version": "v2" },
+                    }]})
+                    .to_string(),
+                )
+            }
+            "/apis/autoscaling/v2" => (
+                200,
+                serde_json::json!({
+                    "kind": "APIResourceList", "groupVersion": "autoscaling/v2",
+                    "resources": [{
+                        "name": "horizontalpodautoscalers", "singularName": "",
+                        "namespaced": true, "kind": "HorizontalPodAutoscaler",
+                        "verbs": ["get", "list", "watch"],
+                    }],
+                })
+                .to_string(),
+            ),
+            path if path == format!("{HPAS_AT}/hello-web") => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "autoscaling/v2", "kind": "HorizontalPodAutoscaler",
+                    "metadata": { "name": "hello-web", "namespace": "lena-sandbox", "uid": "8b3e3d88" },
+                })
+                .to_string(),
+            ),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        window.set(state.current_context.clone()).expect("unset");
+        let asked = (
+            "autoscaling".to_string(),
+            "HorizontalPodAutoscaler".to_string(),
+            Some("lena-sandbox".to_string()),
+            "hello-web".to_string(),
+        );
+
+        assert_eq!(
+            name_holder_in(&state, &asked).await,
+            Holder::By {
+                uid: "8b3e3d88".to_string()
+            }
+        );
+    }
+
     /// Fails if a read that was refused calls the object gone, or a found one
     /// is not named as the holder.
     #[tokio::test]
@@ -3994,7 +4067,11 @@ mod tests {
             ("deleted", Some(Held::Nobody)),
             ("refused", None),
         ] {
-            assert_eq!(holder_of(&state, &named(name)).await, expected, "{name}");
+            assert_eq!(
+                holder_of(&state.here().expect("connected"), &named(name)).await,
+                expected,
+                "{name}"
+            );
         }
     }
 
@@ -4015,21 +4092,24 @@ mod tests {
         };
         let hpa = |name: &str| of("autoscaling", "HorizontalPodAutoscaler", name);
         assert_eq!(
-            name_holder_of(&state, &hpa("hello-web")).await,
+            name_holder_of(&state.here().expect("connected"), &hpa("hello-web")).await,
             Holder::By {
                 uid: "8b3e3d88".to_string()
             }
         );
         assert_eq!(
-            name_holder_of(&state, &hpa("deleted")).await,
+            name_holder_of(&state.here().expect("connected"), &hpa("deleted")).await,
             Holder::Nobody
         );
         assert_eq!(
-            name_holder_of(&state, &hpa("refused")).await,
+            name_holder_of(&state.here().expect("connected"), &hpa("refused")).await,
             Holder::NotRead
         );
         let unserved = of("serving.knative.dev", "Service", "web");
-        assert_eq!(name_holder_of(&state, &unserved).await, Holder::NotRead);
+        assert_eq!(
+            name_holder_of(&state.here().expect("connected"), &unserved).await,
+            Holder::NotRead
+        );
     }
 
     /// An event about a cluster-scoped object sits in a namespace of its own,
@@ -4052,16 +4132,31 @@ mod tests {
             uid: "c1".to_string(),
         };
         let asked = issuer("letsencrypt", Some("default"));
-        assert_eq!(name_holder_of(&state, &asked).await, found);
         assert_eq!(
-            name_holder_of(&state, &issuer("letsencrypt", None)).await,
+            name_holder_of(&state.here().expect("connected"), &asked).await,
             found
         );
         assert_eq!(
-            name_holder_of(&state, &issuer("deleted", Some("default"))).await,
+            name_holder_of(
+                &state.here().expect("connected"),
+                &issuer("letsencrypt", None)
+            )
+            .await,
+            found
+        );
+        assert_eq!(
+            name_holder_of(
+                &state.here().expect("connected"),
+                &issuer("deleted", Some("default"))
+            )
+            .await,
             Holder::Nobody
         );
-        assert_eq!(holder_of(&state, &asked).await, None, "the Overview's own");
+        assert_eq!(
+            holder_of(&state.here().expect("connected"), &asked).await,
+            None,
+            "the Overview's own"
+        );
 
         let unplaced = (
             "autoscaling".to_string(),
@@ -4069,7 +4164,10 @@ mod tests {
             None,
             "hello-web".to_string(),
         );
-        assert_eq!(name_holder_of(&state, &unplaced).await, Holder::NotRead);
+        assert_eq!(
+            name_holder_of(&state.here().expect("connected"), &unplaced).await,
+            Holder::NotRead
+        );
     }
 
     /// Fails if a poll reads a name the lists already answer, one outside the
@@ -4123,7 +4221,8 @@ mod tests {
         let reads = || hits.lock().unwrap()[&format!("{HPAS_AT}/hello-web")];
         let polls = [metric_warning("8b3e3d88", 41, 10)];
         for _ in 0..6 {
-            let looked = look_up_holders(&state, &memo, &polls, None).await;
+            let looked =
+                look_up_holders(&state.here().expect("connected"), &memo, &polls, None).await;
             assert_eq!(
                 looked.get(&hello_web),
                 Some(&Held::By("8b3e3d88".to_string()))
@@ -4135,7 +4234,7 @@ mod tests {
             metric_warning("8b3e3d88", 41, 10),
             metric_warning("f00dcafe", 1, 1),
         ];
-        look_up_holders(&state, &memo, &remade, None).await;
+        look_up_holders(&state.here().expect("connected"), &memo, &remade, None).await;
         assert_eq!(reads(), 2, "a new object of the name is read at once");
     }
 

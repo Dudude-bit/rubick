@@ -10,7 +10,7 @@ use crate::client::served::Served;
 use crate::commands::helpers::{scope_of, ResourceContext};
 use crate::error::{Error, Result};
 use crate::ownership::{Dependent, Holds, KindCount, NotRead, Reading, DEPENDENTS_PAGE};
-use crate::state::AppState;
+use crate::state::{AppState, Here};
 use crate::utils::group_of;
 
 /// Deeper than any controller chain a cluster builds; a loop stops here.
@@ -105,10 +105,11 @@ pub async fn preview_cascade(
 }
 
 async fn cascade_of(state: &AppState, uid: String, scope: Option<Vec<String>>) -> Result<Cascade> {
-    let index = state.ownership.ensure(state, scope_of(scope)?).await?;
+    let here = state.here()?;
+    let index = state.ownership.ensure_on(&here, scope_of(scope)?).await?;
     let unindexed = match index.unindexed_definition(&uid) {
         None => None,
-        Some(kind) => match state.served(&kind.group, &kind.plural).await {
+        Some(kind) => match here.served(&kind.group, &kind.plural).await {
             Ok(Some(served)) => {
                 index.watch(kind, served);
                 None
@@ -207,21 +208,20 @@ fn followed(owners: &[OwnerReference]) -> std::result::Result<Option<&OwnerRefer
 }
 
 pub(crate) async fn metadata(
-    state: &AppState,
+    here: &Here<'_>,
     served: &Served,
     name: &str,
     namespace: Option<String>,
 ) -> Result<ObjectMeta> {
     let api: Api<DynamicObject> = if served.namespaced {
-        ResourceContext::for_command(state, namespace)?
+        ResourceContext::held(&here.client, namespace, true)?
             .dynamic_api_for_resource(&served.resource, false)
     } else {
-        ResourceContext::for_list(state, None)?.dynamic_api_for_resource(&served.resource, true)
+        ResourceContext::held(&here.client, None, false)?
+            .dynamic_api_for_resource(&served.resource, true)
     };
     let answer = api.get_metadata(name).await;
-    Ok(state
-        .served_answer(&served.resource.group, answer)?
-        .metadata)
+    Ok(here.served_answer(&served.resource.group, answer)?.metadata)
 }
 
 /// The controllers above one object, read a GET a level, each checked by uid.
@@ -238,19 +238,33 @@ pub async fn object_lineage(
         crate::validation::validate_dns_subdomain(&group)?;
     }
     crate::validation::validate_dns_label(&plural)?;
-    crate::client::clock::timed(&state.perf, "objectLineage", async {
-        let served = state
-            .served(&group, &plural)
-            .await?
-            .ok_or_else(|| Error::not_found("APIResource", plural.clone(), ""))?;
-        let subject = metadata(&state, &served, &name, namespace.clone()).await?;
-        lineage_of(&state, subject, namespace).await
-    })
+    crate::client::clock::timed(
+        &state.perf,
+        "objectLineage",
+        lineage(&state, &group, &plural, &name, namespace),
+    )
     .await
 }
 
-async fn lineage_of(
+async fn lineage(
     state: &AppState,
+    group: &str,
+    plural: &str,
+    name: &str,
+    namespace: Option<String>,
+) -> Result<Lineage> {
+    // Every level above is a wait, and each is asked of this cluster.
+    let here = state.here()?;
+    let served = here
+        .served(group, plural)
+        .await?
+        .ok_or_else(|| Error::not_found("APIResource", plural, ""))?;
+    let subject = metadata(&here, &served, name, namespace.clone()).await?;
+    lineage_of(&here, subject, namespace).await
+}
+
+async fn lineage_of(
+    here: &Here<'_>,
     subject: ObjectMeta,
     namespace: Option<String>,
 ) -> Result<Lineage> {
@@ -288,7 +302,7 @@ async fn lineage_of(
             code: error.code().to_string(),
             message: error.said(),
         };
-        let kinds = match state.served_kinds(&group).await {
+        let kinds = match here.served_kinds(&group).await {
             Ok(kinds) => kinds.unwrap_or_default(),
             Err(error) => {
                 lineage.stop = Some(unread(&error));
@@ -302,7 +316,7 @@ async fn lineage_of(
             });
             break;
         };
-        let served = match state.served(&group, &kind.plural).await {
+        let served = match here.served(&group, &kind.plural).await {
             Ok(Some(served)) => served,
             Ok(None) => {
                 lineage.stop = Some(LineageStop::KindNotServed {
@@ -321,7 +335,7 @@ async fn lineage_of(
         } else {
             None
         };
-        match metadata(state, &served, &owner.name, owner_namespace.clone()).await {
+        match metadata(here, &served, &owner.name, owner_namespace.clone()).await {
             Ok(meta) if meta.uid.as_deref() == Some(owner.uid.as_str()) => {
                 lineage.ancestors.push(Ancestor {
                     uid: owner.uid.clone(),
@@ -440,12 +454,58 @@ mod tests {
             })
         })
         .await;
-        let lineage = lineage_of(&state, pod_of_replicaset(), Some("shop".to_string()))
-            .await
-            .expect("lineage");
+        let lineage = lineage_of(
+            &state.here().expect("connected"),
+            pod_of_replicaset(),
+            Some("shop".to_string()),
+        )
+        .await
+        .expect("lineage");
         let names: Vec<_> = lineage.ancestors.iter().map(|a| a.name.as_str()).collect();
         assert_eq!(names, ["api-7f9", "api"]);
         assert_eq!(lineage.stop, None);
+    }
+
+    /// Discovery is a wait, and the window was on another cluster when it
+    /// answered: the object and each owner above it were then read there, so
+    /// a page of this cluster named the other's objects as its makers, or
+    /// called them gone. Fails if any level asks a cluster but the first's.
+    #[tokio::test]
+    async fn the_chain_is_read_from_the_cluster_it_began_on_though_the_window_moved_meanwhile() {
+        use std::sync::{Arc, OnceLock};
+        let window = Arc::new(OnceLock::new());
+        let moved = window.clone();
+        let (state, _) = connected(ServedIndex::default(), move |path, _| {
+            if path == "/apis" {
+                let current: &Arc<parking_lot::RwLock<Option<String>>> =
+                    moved.get().expect("the window");
+                *current.write() = Some("elsewhere".to_string());
+            }
+            discovery(path).unwrap_or_else(|| match path {
+                "/apis/apps/v1/namespaces/shop/replicasets/api-7f9" => (
+                    200,
+                    object("api-7f9", "r", Some(("Deployment", "api", "d"))),
+                ),
+                "/apis/apps/v1/namespaces/shop/deployments/api" => (200, object("api", "d", None)),
+                _ => (404, "{}".to_string()),
+            })
+        })
+        .await;
+        window.set(state.current_context.clone()).expect("unset");
+
+        let found = lineage(
+            &state,
+            "apps",
+            "replicasets",
+            "api-7f9",
+            Some("shop".to_string()),
+        )
+        .await
+        .expect("read where it began");
+
+        let names: Vec<_> = found.ancestors.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["api"]);
+        assert_eq!(found.stop, None);
     }
 
     /// The same name with another uid is a different object: the owner the
@@ -462,9 +522,13 @@ mod tests {
             })
         })
         .await;
-        let lineage = lineage_of(&state, pod_of_replicaset(), Some("shop".to_string()))
-            .await
-            .expect("lineage");
+        let lineage = lineage_of(
+            &state.here().expect("connected"),
+            pod_of_replicaset(),
+            Some("shop".to_string()),
+        )
+        .await
+        .expect("lineage");
         assert!(lineage.ancestors.is_empty());
         assert!(matches!(lineage.stop, Some(LineageStop::OwnerGone { .. })));
     }
@@ -476,9 +540,13 @@ mod tests {
             discovery(path).unwrap_or_else(|| failure(403, "Forbidden"))
         })
         .await;
-        let lineage = lineage_of(&state, pod_of_replicaset(), Some("shop".to_string()))
-            .await
-            .expect("lineage");
+        let lineage = lineage_of(
+            &state.here().expect("connected"),
+            pod_of_replicaset(),
+            Some("shop".to_string()),
+        )
+        .await
+        .expect("lineage");
         assert!(matches!(
             lineage.stop,
             Some(LineageStop::OwnerUnread { ref code, .. }) if code == "PERMISSION_DENIED"

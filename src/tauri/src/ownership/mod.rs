@@ -284,9 +284,16 @@ impl OwnershipIndexes {
         state: &AppState,
         scope: Option<Vec<String>>,
     ) -> Result<Arc<ClusterIndex>> {
-        // One cluster for the whole of it: the index is kept under this name,
-        // and what it is told after a wait has to be this cluster's too.
-        let here = state.here()?;
+        self.ensure_on(&state.here()?, scope).await
+    }
+
+    /// The index of the cluster in hand: it is kept under that name, and
+    /// what it is told after a wait has to be that cluster's too.
+    pub async fn ensure_on(
+        &self,
+        here: &crate::state::Here<'_>,
+        scope: Option<Vec<String>>,
+    ) -> Result<Arc<ClusterIndex>> {
         let context = here.context.clone();
         if let Some(index) = self.clusters.get(&context).map(|held| held.clone()) {
             *index.last_used.lock() = Instant::now();
@@ -303,12 +310,12 @@ impl OwnershipIndexes {
                     ),
                 }
             }
-            self.regroup(&here, &index).await;
+            self.regroup(here, &index).await;
             self.make_room(&context, &index);
             return Ok(index);
         }
         let client = (*here.client).clone();
-        let catalog = crate::commands::catalog::catalog_on(&here).await?;
+        let catalog = crate::commands::catalog::catalog_on(here).await?;
         let index = Arc::new(ClusterIndex {
             graph: RwLock::new(Graph::default()),
             slots: Mutex::new(BTreeMap::new()),

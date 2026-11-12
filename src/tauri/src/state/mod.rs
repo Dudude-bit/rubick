@@ -63,6 +63,14 @@ impl Here<'_> {
             .await
     }
 
+    /// See [`AppState::served_kinds`].
+    pub async fn served_kinds(
+        &self,
+        group: &str,
+    ) -> Result<Option<Vec<crate::client::served::ServedKind>>> {
+        self.index.kinds(&self.context, &self.client, group).await
+    }
+
     /// See [`AppState::served_recommended`].
     pub async fn served_recommended(
         &self,
@@ -345,8 +353,7 @@ impl AppState {
         &self,
         group: &str,
     ) -> Result<Option<Vec<crate::client::served::ServedKind>>> {
-        let here = self.here()?;
-        here.index.kinds(&here.context, &here.client, group).await
+        self.here()?.served_kinds(group).await
     }
 
     /// Every kind `group` serves on the current cluster, at the version
