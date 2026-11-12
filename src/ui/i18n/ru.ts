@@ -1011,6 +1011,9 @@ export const ru: Catalogue = {
     shareProcessNamespace: "Общее пространство процессов",
     shareProcessNamespaceHint:
       "Разрешить контейнеру для отладки видеть процессы других контейнеров",
+    traceProcesses: "Трассировка процессов",
+    traceProcessesHint:
+      "Добавляет capability SYS_PTRACE: работают strace и gdb, читаются файлы контейнера, запущенного от другого пользователя. Пространство имён с Pod Security уровня baseline или restricted откажет контейнеру с ней.",
     ephemeralUnsupported:
       "Эфемерные контейнеры требуют Kubernetes 1.25+. Этот кластер сообщает {version}, поэтому используйте «Копию пода».",
     unknownVersion: "неизвестную версию",

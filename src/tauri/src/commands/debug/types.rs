@@ -15,6 +15,10 @@ pub struct DebugConfig {
     pub command: Option<Vec<String>>,
     /// Share process namespace with target container (for copy mode)
     pub share_processes: bool,
+    /// Add `SYS_PTRACE` to the debug container: strace, gdb, and the files
+    /// of a container running as another user. Pod Security baseline
+    /// refuses the capability, so it is asked for only when the reader did.
+    pub trace_processes: bool,
     /// Timeout waiting for container readiness (seconds), default 120
     pub timeout_seconds: Option<u32>,
 }

@@ -1279,6 +1279,7 @@ export function PodDetail() {
           namespace={pod.namespace}
           containers={lifetimeContainers(pod).map((c) => c.name)}
           preferredTarget={debug?.target ?? undefined}
+          traceByDefault={debug?.for === "files"}
           kubernetesVersion={clusterInfo?.git_version}
           onDebugStart={handleDebugStart}
         />

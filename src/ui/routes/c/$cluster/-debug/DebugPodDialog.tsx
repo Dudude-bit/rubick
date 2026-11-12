@@ -59,6 +59,12 @@ export interface DebugPodDialogProps {
    * than the one the reader had selected — and label it with theirs.
    */
   preferredTarget?: string;
+  /**
+   * Whether process tracing starts switched on: the caller is after another
+   * container's files, which is what the capability is for. Off otherwise,
+   * so a debug container asks for nothing the reader did not.
+   */
+  traceByDefault?: boolean;
   /** Kubernetes version (e.g., "v1.28.0") for feature detection */
   kubernetesVersion?: string;
   onDebugStart: (result: DebugResult) => void;
@@ -71,6 +77,7 @@ export function DebugPodDialog({
   namespace,
   containers,
   preferredTarget,
+  traceByDefault = false,
   kubernetesVersion,
   onDebugStart,
 }: DebugPodDialogProps) {
@@ -113,11 +120,14 @@ export function DebugPodDialog({
         ? preferredTarget
         : (containers[0] ?? "");
   const [shareProcesses, setShareProcesses] = useState(true);
+  const [pickedTrace, setTrace] = useState<boolean | null>(null);
+  const traceProcesses = pickedTrace ?? traceByDefault;
   // Every way out, so a choice belongs to the opening it was made in: the
   // next one may be for a different container.
   const close = useCallback(() => {
     setPicked(null);
     setMode(null);
+    setTrace(null);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -192,6 +202,7 @@ export function DebugPodDialog({
       targetContainer: mode === "ephemeralContainer" ? targetContainer : null,
       command: null,
       shareProcesses: mode === "copyPod" ? shareProcesses : false,
+      traceProcesses,
       timeoutSeconds: 120,
     };
 
@@ -512,6 +523,22 @@ export function DebugPodDialog({
               />
             </div>
           )}
+
+          <div className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5">
+            <div className="space-y-0.5">
+              <Label htmlFor="trace-processes">
+                {t("action", "traceProcesses")}
+              </Label>
+              <p className="text-[11px] text-fg-mut">
+                {t("action", "traceProcessesHint")}
+              </p>
+            </div>
+            <Switch
+              id="trace-processes"
+              checked={traceProcesses}
+              onCheckedChange={setTrace}
+            />
+          </div>
 
           {/* Info about ephemeral containers support */}
           {!supportsEphemeralContainers && (

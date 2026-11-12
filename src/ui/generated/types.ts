@@ -961,6 +961,7 @@ export interface DebugConfig {
   targetContainer: string | null;
   command: string[] | null;
   shareProcesses: boolean;
+  traceProcesses: boolean;
   timeoutSeconds: number | null;
 }
 

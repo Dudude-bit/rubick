@@ -1015,6 +1015,9 @@ export const en = {
     shareProcessNamespace: "Share Process Namespace",
     shareProcessNamespaceHint:
       "Allow debug container to see processes from other containers",
+    traceProcesses: "Process tracing",
+    traceProcessesHint:
+      "Adds the SYS_PTRACE capability: strace and gdb work, and so does reading the files of a container that runs as another user. A namespace that enforces Pod Security baseline or restricted refuses a container with it.",
     ephemeralUnsupported:
       'Ephemeral containers require Kubernetes 1.25+. This cluster reports {version}, so use "Copy Pod" instead.',
     unknownVersion: "an unknown version",

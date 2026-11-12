@@ -138,6 +138,7 @@ export function DebugNodeDialog({
       targetContainer: null,
       command: null,
       shareProcesses: false,
+      traceProcesses: false,
       timeoutSeconds: 120,
     };
 

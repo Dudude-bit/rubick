@@ -58,6 +58,7 @@ describe("how long a debug container has been awaited", () => {
         targetContainer: null,
         command: null,
         shareProcesses: false,
+        traceProcesses: false,
         timeoutSeconds: null,
       } as never);
     });
