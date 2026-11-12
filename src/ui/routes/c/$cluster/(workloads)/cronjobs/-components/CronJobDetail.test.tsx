@@ -184,6 +184,7 @@ describe("CronJobDetail", () => {
         },
         containers: [],
         ownerReferences: [ownedByRun],
+        workload: { kind: "Job", name: ownedByRun.name },
       } as never,
     ]);
     await renderPage();
@@ -480,6 +481,7 @@ describe("CronJobDetail", () => {
         status: { phase: "Running", display: "Running", ready: true },
         containers: [],
         ownerReferences: [ownedByRun],
+        workload: { kind: "Job", name: ownedByRun.name },
       } as never,
     ]);
     const { router } = await renderPage();

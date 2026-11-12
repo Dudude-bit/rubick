@@ -19,7 +19,7 @@ import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cronBadge, cronOutcome, outcomeWords } from "@/lib/cron-outcome";
-import { cronJobRunsKey } from "@/lib/cron-runs";
+import { cronJobRunsKey, isPodOfRun, isRunOf } from "@/lib/cron-runs";
 import {
   lastRunRefused,
   newestRun,
@@ -68,7 +68,6 @@ import { useResourceDetail } from "@/hooks";
 import { useCronJobShare } from "./useCronJobShare";
 import { useRealtimeAge, useRealtimeCountdown } from "@/hooks/useRealtimeAge";
 import { commands } from "@/lib/commands";
-import { matchCronJobPods } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate, formatTimeUnit } from "@/lib/utils";
@@ -301,7 +300,7 @@ function useRunsWatch(namespace: string | undefined, name: string | undefined) {
     enabled: connected && visible && !!namespace && !!name,
     subscribe,
     queryKey,
-    detail: (job) => (job.name.startsWith(`${name}-`) ? reads : []),
+    detail: (job) => (name && isRunOf(name, job.name) ? reads : []),
     recount: false,
     behind: true,
   });
@@ -453,7 +452,7 @@ export function CronJobDetail() {
         selector: null,
         nodeName: null,
       });
-      return all.filter((pod) => matchCronJobPods({ name, namespace }, pod));
+      return all.filter((pod) => isPodOfRun(name, pod));
     },
     enabled: !!namespace && !!name && inFlight,
     placeholderData: keepPreviousData,

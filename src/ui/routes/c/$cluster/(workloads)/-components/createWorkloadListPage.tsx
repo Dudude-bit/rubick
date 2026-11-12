@@ -26,7 +26,7 @@ import type { Scoped } from "@/generated/types";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
 import { useRefusals } from "@/hooks/useRefusals";
-import { attachAggregatedPodMetrics, type PodMatcher } from "@/lib/metrics";
+import { attachAggregatedPodMetrics, type PodOwner } from "@/lib/metrics";
 import { MetricsStatusBanner } from "../../-metrics";
 import { queryKeys } from "@/lib/query-keys";
 import { hrefOf, objectLink } from "@/lib/links";
@@ -60,11 +60,11 @@ export interface WorkloadListPageConfig<T extends Workload> {
   /** Read the workload list (without metrics) across the selection. */
   fetchList: (params: { scope: string[] | null }) => Promise<Scoped<T>>;
   /**
-   * Which pods belong to a workload of this kind, used to aggregate pod
-   * CPU/memory up to the workload row. One of the `match*Pods` matchers
-   * in `@/lib/metrics`.
+   * Which workload of this kind a pod belongs to, used to aggregate pod
+   * CPU/memory up to the workload row. One of the `match*Pods` in
+   * `@/lib/metrics`.
    */
-  matchPods: PodMatcher;
+  matchPods: PodOwner;
   /** Delete this workload. */
   deleter: (item: T) => Promise<unknown>;
   /** Build columns. T includes the attached `cpuMillicores`, `memoryBytes` and `podsCause`. */

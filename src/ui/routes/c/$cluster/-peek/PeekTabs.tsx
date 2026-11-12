@@ -10,6 +10,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { commands } from "@/lib/commands";
+import { isRunOf } from "@/lib/cron-runs";
 import { errorToShow } from "@/lib/error-utils";
 import { ReadAgain } from "@/components/ui/read-again";
 import { queryKeys } from "@/lib/query-keys";
@@ -406,11 +407,7 @@ function PeekJobsTab({ target }: { target: PeekTarget }) {
         fieldSelector: null,
         limit: null,
       });
-      // The list command carries no owner references, so the naming
-      // convention the controller uses is the only link available.
-      return jobs.filter((job: JobInfo) =>
-        job.name.startsWith(`${target.name}-`)
-      );
+      return jobs.filter((job: JobInfo) => isRunOf(target.name, job.name));
     },
     enabled: !!namespace,
     staleTime: STALE_TIMES.resourceList,

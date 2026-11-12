@@ -3,6 +3,7 @@ import type { PodMetrics } from "@/generated/types";
 
 import {
   attachAggregatedPodMetrics,
+  matchCronJobPods,
   matchDeploymentPods,
   matchStatefulSetPods,
   mergePodsWithMetrics,
@@ -13,6 +14,8 @@ interface PodSpec {
   name: string;
   namespace?: string;
   labels?: Record<string, string>;
+  /** `Kind/name` of the workload its controller reference names. */
+  of?: string;
   cpu?: number | null;
   memory?: number | null;
 }
@@ -21,33 +24,19 @@ function pod({
   name,
   namespace = "default",
   labels = {},
+  of,
   cpu = 10,
   memory = 100,
 }: PodSpec): PodWithMetrics {
+  const [kind, owner] = of?.split("/") ?? [];
   return {
     name,
     namespace,
     labels,
+    workload: of ? { kind, name: owner } : null,
     cpuMillicores: cpu,
     memoryBytes: memory,
   } as PodWithMetrics;
-}
-
-/** What the indexed version replaced: the pairwise scan, kept as the oracle. */
-function byFilter<T extends { name: string; namespace: string }>(
-  resources: T[],
-  pods: PodWithMetrics[],
-  matches: (resource: T, p: PodWithMetrics) => boolean
-) {
-  return resources.map((resource) => {
-    const mine = pods.filter((p) => matches(resource, p));
-    return {
-      name: resource.name,
-      cpuMillicores: mine.length
-        ? mine.reduce((sum, p) => sum + (p.cpuMillicores ?? 0), 0)
-        : null,
-    };
-  });
 }
 
 const usage = (rows: Array<{ name: string; cpuMillicores: number | null }>) =>
@@ -124,28 +113,20 @@ describe("mergePodsWithMetrics", () => {
 });
 
 describe("attachAggregatedPodMetrics", () => {
-  /**
-   * The index has to answer exactly what the pairwise scan answered — it
-   * is the same rule read from the other end, and a drift between them
-   * is a workload row quietly reporting somebody else's usage.
-   */
-  it("matches the pairwise scan it replaced", () => {
+  /** A row is the sum of the pods its workload owns, and of no namesake's in another namespace. */
+  it("sums each workload's own pods, a namespace at a time", () => {
     const deployments = [
-      { name: "web", namespace: "default", labels: { app: "web" } },
-      { name: "api", namespace: "default", labels: { app: "api" } },
-      { name: "web", namespace: "other", labels: { app: "web" } },
+      { name: "web", namespace: "default" },
+      { name: "api", namespace: "default" },
+      { name: "web", namespace: "other" },
     ];
     const pods = [
-      pod({ name: "web-5d4c-x9", labels: { app: "web" } }),
-      pod({ name: "web-5d4c-p2", labels: { app: "web" } }),
-      pod({ name: "api-77b-aa", labels: { deployment: "api" } }),
-      pod({ name: "loose-pod-1" }),
-      pod({ name: "web-5d4c-zz", namespace: "other", labels: { app: "web" } }),
+      pod({ name: "web-5d4c-x9", of: "Deployment/web" }),
+      pod({ name: "web-5d4c-p2", of: "Deployment/web" }),
+      pod({ name: "api-77b-aa", of: "Deployment/api" }),
+      pod({ name: "web-5d4c-zz", namespace: "other", of: "Deployment/web" }),
     ];
 
-    expect(
-      usage(attachAggregatedPodMetrics(deployments, pods, matchDeploymentPods))
-    ).toEqual(usage(byFilter(deployments, pods, matchDeploymentPods)));
     expect(
       usage(attachAggregatedPodMetrics(deployments, pods, matchDeploymentPods))
     ).toEqual([
@@ -156,72 +137,83 @@ describe("attachAggregatedPodMetrics", () => {
   });
 
   /**
-   * A Deployment reaches the same pod by its `app` label and by the pod's
-   * name at once. Counted once by the scan, so it has to be counted once
-   * by the index — otherwise every properly labelled workload reports
-   * double the CPU it is using.
+   * `db` beside `db-replica`, `web` beside `web-api` under one `app` label:
+   * by name prefix and by label the shorter row showed both summed, and its
+   * own page, which reads by owner, showed less. Fails if anything but the
+   * owner decides.
    */
-  it("counts a pod once even when it matches by several keys", () => {
-    const deployments = [
-      { name: "web", namespace: "default", labels: { app: "web" } },
-    ];
-    const pods = [pod({ name: "web-5d4c-x9", labels: { app: "web" } })];
-
-    expect(
-      usage(attachAggregatedPodMetrics(deployments, pods, matchDeploymentPods))
-    ).toEqual([["web", 10]]);
-  });
-
-  /**
-   * Two objects that are both unlabelled are not thereby the same app.
-   * Comparing `labels.app` when neither side has one is `undefined ===
-   * undefined`, which made every unlabelled Deployment in a namespace
-   * report the sum of every unlabelled pod in it.
-   */
-  it("does not treat two unlabelled objects as the same app", () => {
-    const deployments = [{ name: "web", namespace: "default" }];
-    const pods = [pod({ name: "web-5d4c-x9" }), pod({ name: "unrelated-1" })];
-
-    expect(
-      usage(attachAggregatedPodMetrics(deployments, pods, matchDeploymentPods))
-    ).toEqual([["web", 10]]);
-  });
-
-  /** A name is only unique inside its namespace. */
-  it("never aggregates across namespaces", () => {
-    const sets = [{ name: "db", namespace: "prod" }];
-    const pods = [
-      pod({ name: "db-0", namespace: "prod" }),
-      pod({ name: "db-0", namespace: "staging" }),
-    ];
-
-    expect(
-      usage(attachAggregatedPodMetrics(sets, pods, matchStatefulSetPods))
-    ).toEqual([["db", 10]]);
-  });
-
-  /**
-   * A pod name carries every workload name it could have come from:
-   * `db-replica-0` is a pod of `db-replica`, and by the same rule also
-   * looks like one of `db`. That ambiguity is the name-prefix rule's,
-   * not the index's — pinned here so a change to the keys cannot quietly
-   * answer differently from the scan they replaced.
-   */
-  it("reads a generated pod name the same way the scan did", () => {
+  it("gives a sibling's pods to the sibling, whatever their names and labels share", () => {
     const sets = [
       { name: "db", namespace: "default" },
       { name: "db-replica", namespace: "default" },
     ];
-    const pods = [pod({ name: "db-0" }), pod({ name: "db-replica-0" })];
+    const replicas = [
+      pod({ name: "db-0", of: "StatefulSet/db" }),
+      pod({ name: "db-replica-0", of: "StatefulSet/db-replica" }),
+    ];
+    expect(
+      usage(attachAggregatedPodMetrics(sets, replicas, matchStatefulSetPods))
+    ).toEqual([
+      ["db", 10],
+      ["db-replica", 10],
+    ]);
+
+    const app = { app: "shop" };
+    const deployments = [
+      { name: "web", namespace: "default", labels: app },
+      { name: "web-api", namespace: "default", labels: app },
+    ];
+    const pods = [
+      pod({ name: "web-5d4c-x9", labels: app, of: "Deployment/web" }),
+      pod({ name: "web-api-77b-aa", labels: app, of: "Deployment/web-api" }),
+    ];
+    expect(
+      usage(attachAggregatedPodMetrics(deployments, pods, matchDeploymentPods))
+    ).toEqual([
+      ["web", 10],
+      ["web-api", 10],
+    ]);
+  });
+
+  /** A pod nothing controls, or one another kind controls, is not a row's because of its name. */
+  it("leaves a pod it does not own out, though it is named like one of its own", () => {
+    const deployments = [{ name: "web", namespace: "default" }];
+    const pods = [
+      pod({ name: "web-5d4c-x9" }),
+      pod({ name: "web-0", of: "StatefulSet/web" }),
+    ];
 
     expect(
-      usage(attachAggregatedPodMetrics(sets, pods, matchStatefulSetPods))
-    ).toEqual(usage(byFilter(sets, pods, matchStatefulSetPods)));
+      attachAggregatedPodMetrics(deployments, pods, matchDeploymentPods)[0]
+        .cpuMillicores
+    ).toBeNull();
+  });
+
+  /**
+   * A pod names its Job and nothing above it, so a CronJob's are found by
+   * the name its controller gives a run. Fails if `backup` takes the runs
+   * of `backup-nightly`, or a Job that only starts the same.
+   */
+  it("sums a CronJob's scheduled runs and no sibling's", () => {
+    const crons = [
+      { name: "backup", namespace: "default" },
+      { name: "backup-nightly", namespace: "default" },
+    ];
+    const pods = [
+      pod({ name: "backup-28901234-vk2mn", of: "Job/backup-28901234" }),
+      pod({
+        name: "backup-nightly-28901235-x8k2j",
+        of: "Job/backup-nightly-28901235",
+      }),
+      pod({ name: "backup-verify-zz4kq", of: "Job/backup-verify" }),
+      pod({ name: "backup-web-5d4c-x9", of: "Deployment/backup-web" }),
+    ];
+
     expect(
-      usage(attachAggregatedPodMetrics(sets, pods, matchStatefulSetPods))
+      usage(attachAggregatedPodMetrics(crons, pods, matchCronJobPods))
     ).toEqual([
-      ["db", 20],
-      ["db-replica", 10],
+      ["backup", 10],
+      ["backup-nightly", 10],
     ]);
   });
 

@@ -94,43 +94,43 @@ export function aggregatePodMetrics(
 }
 
 /**
+ * Which workload of a list's kind a pod is summed under, by name, or null
+ * where it is none of theirs.
+ */
+export type PodOwner = (pod: Pick<PodRow, "workload">) => string | null;
+
+// The separator is a character no Kubernetes name can contain.
+const key = (namespace: string, name: string) => `${namespace}\u0000${name}`;
+
+/**
  * Sum each workload's pods' usage onto the workload row.
  *
  * Indexed, not filtered: `pods.filter(matches)` per workload is
  * `workloads × pods` comparisons, and this runs again on every pod
- * event — 200 Deployments against 2000 pods is 400 000 selector matches
- * per kubelet heartbeat, on the main thread, for a table nobody has
- * touched. The same answer comes out of one pass over the pods and one
- * lookup per workload.
+ * event — 200 Deployments against 2000 pods is 400 000 matches per kubelet
+ * heartbeat, on the main thread, for a table nobody has touched. The same
+ * answer comes out of one pass over the pods and one lookup per workload.
  */
 export function attachAggregatedPodMetrics<
   T extends { name: string; namespace: string },
 >(
   resources: T[],
   pods: PodWithMetrics[],
-  matcher: PodMatcher
+  ownerOf: PodOwner
 ): Array<T & ResourceMetrics> {
-  const { keysOf, keysOfPod } = matcher.ownership;
-
-  const podsByKey = new Map<string, PodWithMetrics[]>();
+  const byOwner = new Map<string, PodWithMetrics[]>();
   for (const pod of pods) {
-    for (const key of keysOfPod(pod)) {
-      const bucket = podsByKey.get(key);
-      if (bucket) bucket.push(pod);
-      else podsByKey.set(key, [pod]);
-    }
+    const owner = ownerOf(pod);
+    if (owner === null) continue;
+    const at = key(pod.namespace, owner);
+    const own = byOwner.get(at);
+    if (own) own.push(pod);
+    else byOwner.set(at, [pod]);
   }
 
   return resources.map((resource) => {
-    const keys = keysOf(resource);
-    // A Deployment claims its pods by several keys at once, and one pod
-    // can answer to more than one of them — counting it twice would
-    // double the row's usage.
-    const matchedPods =
-      keys.length === 1
-        ? (podsByKey.get(keys[0]) ?? [])
-        : [...new Set(keys.flatMap((key) => podsByKey.get(key) ?? []))];
-    const aggregated = aggregatePodMetrics(matchedPods);
+    const own = byOwner.get(key(resource.namespace, resource.name)) ?? [];
+    const aggregated = aggregatePodMetrics(own);
     return {
       ...resource,
       cpuMillicores: aggregated.cpuMillicores,
@@ -139,106 +139,27 @@ export function attachAggregatedPodMetrics<
   });
 }
 
-/** The parts of a workload row that decide which pods are its own. */
-export interface WorkloadRef {
-  name: string;
-  namespace: string;
-  labels?: Record<string, string> | null;
-}
+/**
+ * A pod is its controller's: the workload Rust read off its owner reference,
+ * a Deployment's through its ReplicaSet, as the row's verdict and its page
+ * count them. Read off the pod's name instead, by every prefix ending before
+ * a `-`, StatefulSet `db` was shown `db` and `db-replica` summed.
+ */
+const ownedBy =
+  (kind: string): PodOwner =>
+  (pod) =>
+    pod.workload?.kind === kind ? pod.workload.name : null;
+
+export const matchDeploymentPods = ownedBy("Deployment");
+export const matchStatefulSetPods = ownedBy("StatefulSet");
+export const matchDaemonSetPods = ownedBy("DaemonSet");
+export const matchJobPods = ownedBy("Job");
 
 /**
- * Which pods belong to a workload, expressed as keys both sides can be
- * indexed by rather than as a predicate over every pair.
- *
- * A pod belongs to a workload when they share a key. Namespace is part
- * of every key, so a workload can never reach across one.
+ * A CronJob's pods name their Job and nothing above it, so the Job's name is
+ * read exactly as the controller writes it: `<cronjob>-<minute>`.
  */
-/** What decides which workload a pod belongs to; a row and the full pod both carry it. */
-export type PodIdentity = Pick<PodRow, "name" | "namespace" | "labels">;
-
-export interface PodOwnership {
-  keysOf: (workload: WorkloadRef) => string[];
-  keysOfPod: (pod: PodIdentity) => string[];
-}
-
-/**
- * The same rule in both forms it is needed in: callable, for the detail
- * pages that ask it about one pod, and indexable, for the list pages
- * that ask it about every pod at once. Hanging one off the other is what
- * keeps them from drifting into two definitions of "belongs to".
- */
-export type PodMatcher = ((
-  workload: WorkloadRef,
-  pod: PodIdentity
-) => boolean) & {
-  readonly ownership: PodOwnership;
-};
-
-// Namespace, then which kind of key, then the value. The separator is a
-// character no Kubernetes name or label value can contain, so no two
-// keys can collide by concatenation.
-const key = (namespace: string, kind: string, value: string) =>
-  `${namespace}\u0000${kind}\u0000${value}`;
-
-/**
- * Every name a pod could have been generated from: `web-5d4c-x9` could
- * belong to `web` or to `web-5d4c`, and to nothing else.
- */
-function nameKeysOfPod(pod: PodIdentity): string[] {
-  const keys: string[] = [];
-  for (let i = 0; i < pod.name.length; i++) {
-    if (pod.name[i] === "-") {
-      keys.push(key(pod.namespace, "name", pod.name.slice(0, i)));
-    }
-  }
-  return keys;
-}
-
-function matcher(ownership: PodOwnership): PodMatcher {
-  const predicate = (workload: WorkloadRef, pod: PodIdentity) => {
-    const keys = new Set(ownership.keysOf(workload));
-    return ownership.keysOfPod(pod).some((podKey) => keys.has(podKey));
-  };
-  return Object.assign(predicate, { ownership });
-}
-
-/**
- * Controllers that name their pods after themselves: a StatefulSet, a
- * DaemonSet, a Job, a CronJob's Jobs.
- */
-const byGeneratedName: PodOwnership = {
-  keysOf: (workload) => [key(workload.namespace, "name", workload.name)],
-  keysOfPod: nameKeysOfPod,
-};
-
-/**
- * A Deployment reaches its pods through its ReplicaSet, so the pod name
- * carries an extra segment and the labels are the more reliable link.
- *
- * `app` is matched only when both sides carry it: two objects that are
- * both unlabelled are not thereby the same app, and treating them as one
- * summed every unlabelled pod in the namespace onto every unlabelled
- * Deployment row.
- */
-const byDeploymentSelector: PodOwnership = {
-  keysOf: (workload) => {
-    const keys = [key(workload.namespace, "name", workload.name)];
-    const app = workload.labels?.app;
-    if (app) keys.push(key(workload.namespace, "app", app));
-    return keys;
-  },
-  keysOfPod: (pod) => {
-    const keys = nameKeysOfPod(pod);
-    const owner = pod.labels?.deployment;
-    if (owner) keys.push(key(pod.namespace, "name", owner));
-    const app = pod.labels?.app;
-    if (app) keys.push(key(pod.namespace, "app", app));
-    return keys;
-  },
-};
-
-export const matchStatefulSetPods = matcher(byGeneratedName);
-export const matchDaemonSetPods = matcher(byGeneratedName);
-export const matchJobPods = matcher(byGeneratedName);
-export const matchCronJobPods = matcher(byGeneratedName);
-export const matchDeploymentPods = matcher(byDeploymentSelector);
+export const matchCronJobPods: PodOwner = (pod) =>
+  pod.workload?.kind === "Job"
+    ? (/^(.+)-\d+$/.exec(pod.workload.name)?.[1] ?? null)
+    : null;
