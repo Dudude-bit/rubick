@@ -1830,6 +1830,25 @@ describe("what the panels offer Share", () => {
       "Warning events: could not be read in prod. Warnings may be missing here."
     );
   });
+
+  /**
+   * One namespace refused its events, or the page cap was hit: the screen
+   * draws the notice and then every warning it did read, and the file kept
+   * the notice and dropped the warnings. Fails if a short read with rows
+   * stops carrying them, or carries them without saying it was short.
+   */
+  it("keeps the warnings it did read under the notice when the read was short", () => {
+    const section = warningsShare([warning], [REFUSED_IN_STAGING], t);
+    expect(section.unread).toBeNull();
+    expect(section.partial).toBe(
+      "Warning events: list is forbidden in staging. Warnings may be missing here."
+    );
+    expect(section.body).toMatchObject({
+      type: "events",
+      rows: [{ reason: "ScalingReplicaSet" }],
+    });
+    expect(unreadLines([section])).toHaveLength(1);
+  });
 });
 
 describe("what Needs attention says it checked", () => {

@@ -783,16 +783,21 @@ export function warningsShare(
           })
         : undefined,
   }));
+  const said =
+    warningsUnread(short, t)
+      .map((line) => line.said)
+      .join(" ") || null;
+  // Read short, the screen still draws every warning it did read under the
+  // notice: `unread` would print the sentence and drop them all, on the
+  // clusters that have the most.
   return {
     id: "overview-warnings",
     order: ORDER.events,
     title: t("cluster", "warningEvents"),
     icon: iconSvg(Bell),
     count: warnings.length,
-    unread:
-      warningsUnread(short, t)
-        .map((line) => line.said)
-        .join(" ") || null,
+    unread: rows.length === 0 ? said : null,
+    partial: rows.length > 0 ? said : null,
     body: { type: "events", rows },
   };
 }
