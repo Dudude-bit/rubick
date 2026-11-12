@@ -713,10 +713,14 @@ fn strip_container(container: &mut Container) {
 /// What the overview never reads, dropped before the object is stored: the
 /// store holds every pod in the cluster, and a pod's env, mounts and probes
 /// are most of its bytes. The readiness probe stays: a not-Ready pod's cause
-/// quotes it, and without it every one read as declaring none.
+/// quotes it, and without it every one read as declaring none. So does a
+/// static pod's mirror annotation, the uid its events carry (`events_uid`).
 pub fn strip_pod(pod: &mut Pod) {
     pod.metadata.managed_fields = None;
-    pod.metadata.annotations = None;
+    pod.metadata.annotations = pod.metadata.annotations.take().and_then(|mut kept| {
+        kept.retain(|key, _| key == crate::resources::MIRROR_POD_ANNOTATION);
+        (!kept.is_empty()).then_some(kept)
+    });
     if let Some(spec) = pod.spec.as_mut() {
         spec.volumes = None;
         spec.affinity = None;

@@ -3590,6 +3590,36 @@ mod tests {
         assert_eq!(warned("9f0c2a11"), Incarnation::Earlier);
     }
 
+    /// The watch-fed Overview reads pods its store stripped. With the mirror
+    /// annotation stripped too, every kubelet warning about a control-plane
+    /// pod was set apart as an earlier pod's, and a static pod stuck creating
+    /// got none of its kubelet's words.
+    #[test]
+    fn a_static_pod_read_from_the_store_is_held_by_the_uid_its_events_carry() {
+        let mut mirror = pod("etcd-cp", PodStatus::default());
+        mirror.metadata.uid = Some("9f0c2a11".to_string());
+        mirror.metadata.annotations = Some(
+            [
+                (
+                    crate::resources::MIRROR_POD_ANNOTATION.to_string(),
+                    "5f3c0d7e".to_string(),
+                ),
+                ("kubernetes.io/config.seen".to_string(), "then".to_string()),
+            ]
+            .into(),
+        );
+        crate::overview::strip_pod(&mut mirror);
+
+        let warned = warnings_with(
+            std::slice::from_ref(&mirror),
+            &[],
+            failed_mount("default", "etcd-cp", "5f3c0d7e"),
+        );
+        assert_eq!(warned[0].incarnation, Incarnation::Current);
+        let kept = mirror.metadata.annotations.map_or(0, |kept| kept.len());
+        assert_eq!(kept, 1, "the rest is still dropped");
+    }
+
     /// A warning about `kind` web in shop, as its `apiVersion` names the kind.
     fn web_warning(api_version: Option<&str>, kind: &str, uid: &str, began: i64) -> Event {
         let mut event = metric_warning(uid, 1, began);
