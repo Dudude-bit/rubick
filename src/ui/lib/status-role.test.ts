@@ -87,6 +87,17 @@ describe("statusRole", () => {
     }
   });
 
+  /**
+   * A CRD's printer column prints a condition's status as it stands, and the
+   * custom resource list badges it from this table: `READY True` on a
+   * Certificate. Fails if True reads as anything but healthy, or False as
+   * anything but a failure.
+   */
+  it("reads a condition's True as healthy and its False as a failure", () => {
+    expect(statusRole("True")).toBe("ok");
+    expect(statusRole("False")).toBe("err");
+  });
+
   it("maps terminal and unknown states to neutral", () => {
     for (const s of ["Completed", "Terminated", "Superseded", "", "wat"])
       expect(statusRole(s)).toBe("neutral");
