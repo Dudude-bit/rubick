@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   cautioningCondition,
-  conditionRole,
+  conditionRole as roleAmong,
   failingCondition,
 } from "./condition-health";
 import { autoscalerVerdict, type AutoscalerFacts } from "./governance";
@@ -22,6 +22,8 @@ function condition(
     ...extra,
   };
 }
+
+const conditionRole = (one: ConditionInfo) => roleAmong(one, [one]);
 
 describe("conditionRole", () => {
   it("reads a satisfied condition as ok, whichever value satisfies it", () => {
@@ -145,6 +147,30 @@ describe("a condition its reason settles", () => {
         condition("PodScheduled", "True"),
       ])
     ).toBeNull();
+  });
+
+  /**
+   * The Conditions tab of a completed Job's pod drew a blue clock on
+   * PodReadyToStartContainers=False: the kubelet gives that row no reason,
+   * and only the rows beside it say the pod ended. Fails if a step of a pod
+   * that completed or failed reads as on its way, or if one of a pod still
+   * starting stops reading so.
+   */
+  it("does not call a step of a pod that has ended on its way", () => {
+    const sandbox = condition("PodReadyToStartContainers", "False");
+    const waiting = condition("Initialized", "False", {
+      reason: "ContainersNotInitialized",
+    });
+    const ended = (reason: string) => [
+      sandbox,
+      waiting,
+      condition("Ready", "False", { reason }),
+    ];
+    expect(roleAmong(sandbox, ended("PodCompleted"))).toBe("neutral");
+    expect(roleAmong(sandbox, ended("PodFailed"))).toBe("neutral");
+    expect(roleAmong(waiting, ended("PodFailed"))).toBe("neutral");
+    expect(roleAmong(sandbox, ended("ContainersNotReady"))).toBe("pending");
+    expect(roleAmong(waiting, ended("ContainersNotReady"))).toBe("pending");
   });
 
   /**

@@ -12,7 +12,7 @@ vi.mock("@/lib/commands", () => ({
   commands: { listCrds: () => crds.answer() },
 }));
 
-const { controlledBy, ref } = await import("./peek-sources-kit");
+const { conditionItem, controlledBy, ref } = await import("./peek-sources-kit");
 
 const say = ((_section: string, key: string) => key) as never;
 
@@ -104,5 +104,27 @@ describe("a reference in a peek row", () => {
       "overflow-hidden"
     );
     expect(screen.getByTestId("resource-ref-cut")).toBeInTheDocument();
+  });
+});
+
+describe("a condition in the peek", () => {
+  /**
+   * A finished pod's PodReadyToStartContainers=False has no reason of its
+   * own. Fails if the peek reads a condition without the ones beside it and
+   * tints a completed pod's sandbox as on its way.
+   */
+  it("is read among the conditions it stands with", () => {
+    const row = (type: string, reason: string | null) => ({
+      type,
+      status: "False",
+      reason,
+      message: null,
+      lastTransitionTime: null,
+    });
+    const sandbox = row("PodReadyToStartContainers", null);
+    const tones = (reason: string) =>
+      [sandbox, row("Ready", reason)].map(conditionItem)[0].tone;
+    expect(tones("PodCompleted")).toBeUndefined();
+    expect(tones("ContainersNotReady")).toBe("info");
   });
 });

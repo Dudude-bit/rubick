@@ -221,7 +221,7 @@ export function conditionsSection(
       rows: conditions.map((condition) => ({
         type: condition.type,
         status: condition.status,
-        role: conditionRole(condition),
+        role: conditionRole(condition, conditions),
         reason: condition.reason,
         message: condition.message,
         since: condition.lastTransitionTime,

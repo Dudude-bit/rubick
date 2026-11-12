@@ -897,6 +897,32 @@ describe("the rest of the parts", () => {
     });
   });
 
+  /**
+   * A finished pod's PodReadyToStartContainers=False has no reason; the rows
+   * beside it say the pod ended. Fails if the shared file reads each
+   * condition alone and calls the sandbox of a completed pod on its way.
+   */
+  it("reads a condition among the ones it stands with", () => {
+    const row = (type: string, status: string, reason: string | null) => ({
+      type,
+      status,
+      reason,
+      message: null,
+      lastTransitionTime: null,
+    });
+    const section = conditionsSection(
+      [
+        row("PodReadyToStartContainers", "False", null),
+        row("Ready", "False", "PodCompleted"),
+      ],
+      t
+    );
+    expect(section.body).toMatchObject({
+      type: "conditions",
+      rows: [{ role: "neutral" }, { role: "neutral" }],
+    });
+  });
+
   it("sorts sections by where they belong, keeping a page's own order among equals", () => {
     const at = (id: string, order: number) => ({
       id,

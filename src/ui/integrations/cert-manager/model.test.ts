@@ -595,13 +595,16 @@ describe("a failed attempt, on the row and in the conditions block", () => {
       ["Unknown", null],
     ];
     for (const [status, reason] of cases) {
-      const painted = conditionRole({
-        type: "Issuing",
-        status,
-        reason,
-        message: null,
-        lastTransitionTime: null,
-      });
+      const painted = conditionRole(
+        {
+          type: "Issuing",
+          status,
+          reason,
+          message: null,
+          lastTransitionTime: null,
+        },
+        []
+      );
       expect(attemptFailed({ status, reason }), `${status}/${reason}`).toBe(
         painted === "err"
       );

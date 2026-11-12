@@ -77,6 +77,9 @@ const CAUTION = new Set([
   "scalingactive",
 ]);
 
+/** The kubelet's reasons on a pod that has ended, which only some of its conditions carry. */
+const ENDED = new Set(["PodCompleted", "PodFailed"]);
+
 /**
  * What a reason says that its status word does not, as `type=status/reason`;
  * a bare `type=status` is that status whatever the reason. Read first: the
@@ -108,8 +111,15 @@ const normalize = (type: string) => type.toLowerCase().replace(/[\s_-]/g, "");
  * drawn with — so a condition row carries the glyph and the hue that a status
  * column, a container block and a pod picker already carry, rather than a
  * private two-colour ladder of its own.
+ *
+ * `among` is the conditions it stands with: a finished pod's sandbox is
+ * `PodReadyToStartContainers=False` with no reason of its own, and only its
+ * siblings say the pod has ended rather than not begun.
  */
-export function conditionRole(condition: ConditionInfo): StatusRole {
+export function conditionRole(
+  condition: ConditionInfo,
+  among: readonly ConditionInfo[]
+): StatusRole {
   const status = condition.status.toLowerCase();
   const type = normalize(condition.type);
   const said =
@@ -124,7 +134,10 @@ export function conditionRole(condition: ConditionInfo): StatusRole {
   if (status === healthyValue) return "ok";
   if (ADVISORY.has(type)) return "neutral";
   if (CAUTION.has(type)) return "warn";
-  return LIFECYCLE_STEP.has(type) ? "pending" : "err";
+  if (!LIFECYCLE_STEP.has(type)) return "err";
+  return among.some((other) => ENDED.has(other.reason ?? ""))
+    ? "neutral"
+    : "pending";
 }
 
 /**
@@ -144,7 +157,7 @@ export function failingCondition(
     conditions.find(
       (condition) =>
         !skip.has(condition.type.toLowerCase()) &&
-        conditionRole(condition) === "err"
+        conditionRole(condition, conditions) === "err"
     ) ?? null
   );
 }
@@ -157,7 +170,9 @@ export function cautioningCondition(
   conditions: readonly ConditionInfo[]
 ): ConditionInfo | null {
   return (
-    conditions.find((condition) => conditionRole(condition) === "warn") ?? null
+    conditions.find(
+      (condition) => conditionRole(condition, conditions) === "warn"
+    ) ?? null
   );
 }
 

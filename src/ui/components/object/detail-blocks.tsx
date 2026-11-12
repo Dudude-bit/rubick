@@ -182,6 +182,7 @@ export function ConditionRows({
         <ConditionRow
           key={`${condition.type}/${condition.lastTransitionTime ?? ""}`}
           condition={condition}
+          among={conditions}
           subject={subject}
           dated={dated}
         />
@@ -192,15 +193,17 @@ export function ConditionRows({
 
 function ConditionRow({
   condition,
+  among,
   subject,
   dated,
 }: {
   condition: ConditionInfo;
+  among: readonly ConditionInfo[];
   subject?: MessageSubject;
   /** Whether the list reserved a trailing column for the transition time. */
   dated: boolean;
 }) {
-  const role = conditionRole(condition);
+  const role = conditionRole(condition, among);
   // Colour is spent on anomalies only: five of a pod's six conditions are
   // satisfied on every healthy pod, and five green ticks per row is the wall
   // of colour that makes the sixth invisible. A satisfied condition keeps its

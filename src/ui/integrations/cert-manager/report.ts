@@ -42,7 +42,7 @@ function at(object: unknown, ...path: string[]): unknown {
 function readyValue(status: unknown, t: T): ReportValue {
   const ready = conditionFromStatus(status, "Ready");
   if (!ready) return { text: t("share", "notWrittenYet"), quiet: true };
-  return { text: ready.status, role: conditionRole(ready) };
+  return { text: ready.status, role: conditionRole(ready, [ready]) };
 }
 
 function certificateSection(

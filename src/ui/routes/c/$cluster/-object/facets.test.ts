@@ -65,6 +65,34 @@ describe("what any object says about itself", () => {
   });
 });
 
+describe("a conditions list on any object", () => {
+  /**
+   * A finished pod's PodReadyToStartContainers=False has no reason of its
+   * own. Fails if the generic reader tints a condition without the ones
+   * beside it, which alone say the pod has ended.
+   */
+  it("reads each condition among the others", () => {
+    const tone = (reason: string) =>
+      objectFacets(
+        {
+          status: {
+            conditions: [
+              { type: "PodReadyToStartContainers", status: "False" },
+              { type: "Ready", status: "False", reason },
+            ],
+          },
+        },
+        t
+      )
+        .groups.flatMap((g) => g.items)
+        .find((item) =>
+          String(item.label).endsWith("PodReadyToStartContainers")
+        )?.tone;
+    expect(tone("PodCompleted")).toBeUndefined();
+    expect(tone("ContainersNotReady")).toBe("info");
+  });
+});
+
 describe("the one word for a custom resource's state", () => {
   const ready = (condition: Record<string, unknown>) =>
     stateOf({ conditions: [{ type: "Ready", ...condition }] });

@@ -58,6 +58,25 @@ describe("ConditionRows", () => {
   });
 
   /**
+   * Seen on a completed Job's pod: a blue clock beside
+   * PodReadyToStartContainers False. Fails if a row is read without the rows
+   * it stands among, which alone say the pod has ended.
+   */
+  it("does not draw a finished pod's sandbox as on its way", async () => {
+    await wrap(
+      <ConditionRows
+        conditions={[
+          condition("PodReadyToStartContainers", "False"),
+          condition("Ready", "False", { reason: "PodCompleted" }),
+        ]}
+      />
+    );
+    const type = screen.getByText("PodReadyToStartContainers");
+    expect(type).toHaveClass("text-fg-mut");
+    expect(type).not.toHaveClass("text-info");
+  });
+
+  /**
    * A node's conditions all carry a sentence, so the age has to keep a column
    * of its own — and the reader who wants the exact moment still gets it from
    * the title, which is the only place a full timestamp fits.
