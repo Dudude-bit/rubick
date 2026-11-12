@@ -130,7 +130,7 @@ async fn busybox_find_rejects_printf_without_hanging() {
     let (pod, container) = pod_named(&client, "kube-system", "traefik-")
         .await
         .expect("a running traefik pod");
-    let command: Vec<String> = k8s_gui_lib::files::gnu_find_command("/etc");
+    let command: Vec<String> = k8s_gui_lib::files::gnu_find_command("/etc", None);
     let captured = tokio::time::timeout(
         std::time::Duration::from_secs(20),
         k8s_gui_lib::files::exec_capture(client, "kube-system", &pod, &container, &command),

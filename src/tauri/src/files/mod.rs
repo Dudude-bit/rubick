@@ -194,13 +194,54 @@ pub async fn exec_capture(
     })
 }
 
-/// Where a path lives when read through a debug container.
-#[must_use]
-pub fn effective_path(path: &str, via: Option<&Via>) -> String {
-    match via {
-        Some(v) => format!("{}{}", v.root.trim_end_matches('/'), path),
-        None => path.to_string(),
-    }
+/// Where a command handed to [`reading`] wants the path.
+const AT: &str = "{}";
+
+/// Walks the path `$2` inside the root `$1` a component at a time, then runs
+/// the rest of its arguments with [`AT`] replaced by where the walk ended.
+///
+/// The kernel resolves a symlink's absolute target against the root of the
+/// process asking, which through a debug container is the debug container's
+/// own: read as written, `/var/run -> /run` listed the debug image's `/run`
+/// under the target's name, and `/etc/localtime` previewed busybox's.
+const WITHIN_ROOT: &str = r#"root="$1"; rest="$2"; shift 2; at=""; hops=0
+while [ -n "$rest" ]; do
+  rest="${rest#/}"; part="${rest%%/*}"
+  case "$rest" in */*) rest="${rest#*/}";; *) rest="";; esac
+  case "$part" in
+    ''|.) continue;;
+    ..) at="${at%/*}"; continue;;
+  esac
+  if [ -L "$root$at/$part" ]; then
+    hops=$((hops + 1))
+    [ "$hops" -le 40 ] || { echo "$at/$part: Too many levels of symbolic links" >&2; exit 1; }
+    to="$(readlink "$root$at/$part")" || exit
+    case "$to" in /*) at="";; esac
+    rest="$to/$rest"
+  else
+    at="$at/$part"
+  fi
+done
+for arg do
+  shift
+  [ "$arg" = "{}" ] && arg="$root${at:-/}"
+  set -- "$@" "$arg"
+done
+exec "$@""#;
+
+/// `command` with `path` where it says [`AT`]; through a debug container,
+/// run behind [`WITHIN_ROOT`] in the target's root.
+fn reading(path: &str, via: Option<&Via>, command: &[&str]) -> Vec<String> {
+    let Some(via) = via else {
+        let placed = |arg: &&str| if *arg == AT { path } else { arg }.to_string();
+        return command.iter().map(placed).collect();
+    };
+    let root = via.root.trim_end_matches('/');
+    let walk = ["sh", "-c", WITHIN_ROOT, "sh", root, path];
+    walk.iter()
+        .chain(command)
+        .map(ToString::to_string)
+        .collect()
 }
 
 /// The container the exec goes to.
@@ -211,29 +252,28 @@ pub fn effective_container<'a>(container: &'a str, via: Option<&'a Via>) -> &'a 
 
 /// GNU find, every entry one level down, tab-separated, one line each.
 #[must_use]
-pub fn gnu_find_command(path: &str) -> Vec<String> {
-    vec![
-        "find".into(),
-        path.into(),
-        "-mindepth".into(),
-        "1".into(),
-        "-maxdepth".into(),
-        "1".into(),
-        "-printf".into(),
-        parse::GNU_FORMAT.into(),
-    ]
+pub fn gnu_find_command(path: &str, via: Option<&Via>) -> Vec<String> {
+    let level = ["-mindepth", "1", "-maxdepth", "1"];
+    let [min, one, max, _] = level;
+    reading(
+        path,
+        via,
+        &["find", AT, min, one, max, one, "-printf", parse::GNU_FORMAT],
+    )
 }
 
 /// A shell loop over busybox `stat`, for images without GNU find.
-#[must_use]
-pub fn busybox_stat_command(path: &str) -> Vec<String> {
-    vec![
-        "sh".into(),
-        "-c".into(),
-        parse::BUSYBOX_SCRIPT.into(),
-        "sh".into(),
-        path.into(),
-    ]
+fn busybox_stat_command(path: &str, via: Option<&Via>) -> Vec<String> {
+    reading(path, via, &["sh", "-c", parse::BUSYBOX_SCRIPT, "sh", AT])
+}
+
+fn preview_command(path: &str, via: Option<&Via>) -> Vec<String> {
+    let cap = (PREVIEW_MAX_BYTES + 1).to_string();
+    reading(path, via, &["head", "-c", &cap, AT])
+}
+
+fn download_command(path: &str, via: Option<&Via>) -> Vec<String> {
+    reading(path, via, &["cat", AT])
 }
 
 /// One directory in one container, reached directly or through a debug container.
@@ -307,16 +347,19 @@ pub async fn list_dir(
         via,
         path,
     } = at;
-    let target = effective_path(path, via);
     let exec_in = effective_container(container, via);
     let api: Api<Pod> = Api::namespaced(client, namespace);
     let mut tried = Vec::new();
 
-    for (with, command) in [
-        (ListedWith::GnuFind, gnu_find_command(&target)),
-        (ListedWith::BusyboxStat, busybox_stat_command(&target)),
+    for (with, tool, command) in [
+        (ListedWith::GnuFind, "find", gnu_find_command(path, via)),
+        (
+            ListedWith::BusyboxStat,
+            "sh",
+            busybox_stat_command(path, via),
+        ),
     ] {
-        tried.push(command[0].clone());
+        tried.push(tool.to_string());
         let mut attached = api.exec(pod, &command, &attach_params(exec_in)).await?;
         let stdout = attached
             .stdout()
@@ -565,13 +608,7 @@ pub async fn read_preview(
     via: Option<&Via>,
     path: &str,
 ) -> Result<std::result::Result<FilePreview, Exit>> {
-    let target = effective_path(path, via);
-    let command = vec![
-        "head".to_string(),
-        "-c".to_string(),
-        (PREVIEW_MAX_BYTES + 1).to_string(),
-        target,
-    ];
+    let command = preview_command(path, via);
     let captured = exec_capture(
         client,
         namespace,
@@ -667,9 +704,8 @@ pub async fn download(
     path: &str,
     destination: &Path,
 ) -> Result<std::result::Result<u64, Exit>> {
-    let target = effective_path(path, via);
     let api: Api<Pod> = Api::namespaced(client, namespace);
-    let command = vec!["cat".to_string(), target];
+    let command = download_command(path, via);
     let mut attached = api
         .exec(
             pod,
@@ -825,17 +861,67 @@ mod tests {
     }
 
     #[test]
-    fn a_debug_container_reads_the_targets_root() {
+    fn a_debug_container_is_the_one_asked_and_a_direct_read_is_sent_as_written() {
         let via = Via {
             container: "debugger-x7k2".into(),
             root: "/proc/1/root".into(),
         };
-        assert_eq!(
-            effective_path("/etc/app", Some(&via)),
-            "/proc/1/root/etc/app"
-        );
         assert_eq!(effective_container("app", Some(&via)), "debugger-x7k2");
-        assert_eq!(effective_path("/etc/app", None), "/etc/app");
+        assert_eq!(download_command("/etc/app", None), ["cat", "/etc/app"]);
+    }
+
+    #[cfg(unix)]
+    fn ran(command: &[String]) -> (String, String, Option<i32>) {
+        let out = std::process::Command::new(&command[0])
+            .args(&command[1..])
+            .output()
+            .expect("ran");
+        let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+        (text(&out.stdout), text(&out.stderr), out.status.code())
+    }
+
+    /// A directory standing in for the target's root, run against for real:
+    /// `/var/run -> /run` is how Debian ships, and read as written the kernel
+    /// took `/run` from the root of whoever asked. Under the target's name
+    /// the reader got the debug image's file, or "No such file" for one that
+    /// was there. Fails if any of the reads stops going behind the walk.
+    #[cfg(unix)]
+    #[test]
+    fn a_read_through_a_debug_container_follows_an_absolute_link_inside_the_targets_root() {
+        use std::os::unix::fs::symlink;
+        let tree = tempfile::tempdir().expect("tempdir");
+        let root = tree.path();
+        std::fs::create_dir_all(root.join("run/secrets")).expect("run");
+        std::fs::create_dir_all(root.join("var")).expect("var");
+        std::fs::create_dir_all(root.join("etc")).expect("etc");
+        std::fs::write(root.join("run/secrets/token"), "inside").expect("token");
+        symlink("/run", root.join("var/run")).expect("absolute");
+        symlink("../var/run/secrets/token", root.join("etc/zone")).expect("relative");
+        symlink("/again", root.join("round")).expect("loop");
+        symlink("/round", root.join("again")).expect("loop");
+        let via = Via {
+            container: "debugger".into(),
+            root: format!("{}/", root.display()),
+        };
+        let via = Some(&via);
+
+        let (saved, _, _) = ran(&download_command("/var/run/secrets/token", via));
+        assert_eq!(saved, "inside");
+        let (previewed, _, _) = ran(&preview_command("/etc/zone", via));
+        assert_eq!(previewed, "inside", "a relative link onto an absolute one");
+        let (listed, _, _) = ran(&reading("/var/run/", via, &["ls", AT]));
+        assert_eq!(listed, "secrets\n", "a directory behind the link");
+        let (_, said, code) = ran(&download_command("/round", via));
+        assert_eq!(code, Some(1), "a loop ends: {said}");
+        assert!(said.contains("Too many levels of symbolic links"), "{said}");
+
+        for rung in [
+            gnu_find_command("/var/run", via),
+            busybox_stat_command("/var/run", via),
+        ] {
+            assert_eq!(rung[..6], reading("/var/run", via, &[])[..], "{rung:?}");
+            assert!(rung.contains(&AT.to_string()), "{rung:?}");
+        }
     }
 
     #[test]
