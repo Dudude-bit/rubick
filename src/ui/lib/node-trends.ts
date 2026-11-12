@@ -1,5 +1,6 @@
 import type { DeclaredPoint, NodeUsageWindow } from "@/integrations";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
+import { nodeMatcher } from "@/lib/node-names";
 import type { NodeInfo } from "@/generated/types";
 
 /** One measure over the window, as a share of what the node can give. */
@@ -39,11 +40,6 @@ export interface NodeTrend {
   cordoned: boolean;
 }
 
-/** The half of a name Prometheus and the cluster are most likely to agree on. */
-export function shortName(name: string): string {
-  return name.split(":")[0].split(".")[0].toLowerCase();
-}
-
 function lane(
   points: readonly DeclaredPoint[],
   allocatable: number | null
@@ -79,20 +75,22 @@ export function nodeTrends(
    */
   windowKnown = true
 ): NodeTrend[] {
-  const byShort = new Map<string, NodeUsageWindow["nodes"][string]>();
-  const newestByShort = new Map<string, number>();
+  const nodeOf = nodeMatcher(nodes.map((node) => node.name));
+  const byNode = new Map<string, NodeUsageWindow["nodes"][string]>();
+  const newestByNode = new Map<string, number>();
   if (window) {
     for (const [name, series] of Object.entries(window.nodes)) {
-      byShort.set(shortName(name), series);
+      const node = nodeOf(name);
+      if (node !== null) byNode.set(node, series);
     }
     for (const [name, at] of Object.entries(window.newestAt)) {
-      newestByShort.set(shortName(name), at);
+      const node = nodeOf(name);
+      if (node !== null) newestByNode.set(node, at);
     }
   }
 
   const trends = nodes.map((node): NodeTrend => {
-    const key = shortName(node.name);
-    const series = byShort.get(key);
+    const series = byNode.get(node.name);
     const cpuAllocatable = node.allocatable.cpu
       ? parseCPU(node.allocatable.cpu)
       : null;
@@ -117,7 +115,7 @@ export function nodeTrends(
         : sampled
           ? "noAllocatable"
           : "noSeries";
-    const newest = newestByShort.get(key);
+    const newest = newestByNode.get(node.name);
     return {
       node,
       cpu,

@@ -87,7 +87,7 @@ export async function serviceRoutes(input: {
   const found = new Map<string, ServiceRoute>();
 
   for (const ingress of sources.ingresses) {
-    if (gceClassOf(ingress.annotations) === null) continue;
+    if (gceClassOf(ingress) === null) continue;
     if (ingress.namespace !== input.namespace) continue;
     for (const rule of ingress.rules) {
       const host = rule.host;

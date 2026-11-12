@@ -24,6 +24,7 @@ import { commands } from "@/lib/commands";
 import { objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 import type { EdgeConfig } from "../registry";
+import { readClasses } from "../ingress";
 import { claimsIngress } from "./ingress-tls";
 
 const PREFIX = "appgw.ingress.kubernetes.io/";
@@ -97,15 +98,21 @@ export async function serviceEdge({
   namespace: string;
   name: string;
 }): Promise<EdgeConfig[]> {
-  const ingresses = await commands.listIngresses(null);
+  const [ingresses, read] = await Promise.all([
+    commands.listIngresses(null),
+    readClasses(),
+  ]);
 
   return ingresses.flatMap((ingress): EdgeConfig[] => {
     if (ingress.namespace !== namespace) return [];
-    if (!claimsIngress(ingress)) return [];
     const routes = ingress.rules.some((rule) =>
       rule.paths.some((path) => path.backendService === name)
     );
     if (!routes) return [];
+    const mine = claimsIngress(ingress, read.classes);
+    // Whose it is went unread: the chain says the gateway was not asked.
+    if (mine === null) throw read.error;
+    if (!mine) return [];
 
     const said = READ.flatMap(({ key, say }) => {
       const value = ingress.annotations[`${PREFIX}${key}`];

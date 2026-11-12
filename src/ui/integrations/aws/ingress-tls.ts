@@ -19,25 +19,19 @@
 import { commands } from "@/lib/commands";
 import type { Saying } from "@/i18n/say";
 import type { IngressTls } from "../registry";
-import { tlsUnread } from "../ingress";
+import {
+  classesOf,
+  readClasses,
+  tlsUnread,
+  type ClassesRead,
+} from "../ingress";
+import { CONTROLLER } from "./data";
+import { claimsIngress } from "./groups";
 
 const PREFIX = "alb.ingress.kubernetes.io/";
 const CERTIFICATE_ARN = `${PREFIX}certificate-arn`;
 const LISTEN_PORTS = `${PREFIX}listen-ports`;
 const SSL_REDIRECT = `${PREFIX}ssl-redirect`;
-const INGRESS_CLASS_ANNOTATION = "kubernetes.io/ingress.class";
-
-/** The classes this controller answers to, by name. */
-const ALB_CLASSES = new Set(["alb"]);
-
-export function claimsIngress(ingress: {
-  className: string | null;
-  annotations: Record<string, string>;
-}): boolean {
-  const annotated = ingress.annotations[INGRESS_CLASS_ANNOTATION];
-  if (annotated !== undefined) return ALB_CLASSES.has(annotated);
-  return ingress.className !== null && ALB_CLASSES.has(ingress.className);
-}
 
 /** The last segment of an ACM ARN, which is what a reader recognises. */
 function certificateLabel(arn: string): Saying {
@@ -77,20 +71,25 @@ export async function ingressTls(
 ): Promise<IngressTls[][]> {
   // One `get` per Ingress the caller named, and never one per host. A list
   // page asks for every row at once; a detail page asks for one.
+  const read = await readClasses();
   return Promise.all(
     wanted.map((input) =>
-      answerFor(input).catch((error) => tlsUnread(input.hosts, error))
+      answerFor(input, read).catch((error) => tlsUnread(input.hosts, error))
     )
   );
 }
 
-async function answerFor(input: {
-  namespace: string;
-  name: string;
-  hosts: string[];
-}): Promise<IngressTls[]> {
+async function answerFor(
+  input: { namespace: string; name: string; hosts: string[] },
+  read: ClassesRead
+): Promise<IngressTls[]> {
   const ingress = await commands.getIngress(input.name, input.namespace);
-  if (!claimsIngress(ingress)) return [];
+  const mine = claimsIngress(
+    ingress,
+    read.classes && classesOf(read.classes, CONTROLLER).map((own) => own.name)
+  );
+  if (mine === null) return tlsUnread(input.hosts, read.error);
+  if (!mine) return [];
 
   const arn = ingress.annotations[CERTIFICATE_ARN];
   const https = listensOnHttps(ingress.annotations[LISTEN_PORTS]);

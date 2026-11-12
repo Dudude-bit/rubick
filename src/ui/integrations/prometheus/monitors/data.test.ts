@@ -172,6 +172,53 @@ describe("what the Alerts tab and the sidebar dot carry", () => {
   });
 
   /**
+   * prometheus-operator-crds and no Prometheus object, the monitors read by
+   * something else: both tabs said "need attention" and the rail dot was
+   * red. Fails if a cluster with no Prometheus object is marked broken.
+   */
+  it("marks nothing broken on a cluster with monitors, rules and no Prometheus object", () => {
+    const of = (kind: string, spec: unknown) => ({
+      name: "web",
+      namespace: "shop",
+      uid: `shop/${kind}/web`,
+      apiVersion: "monitoring.coreos.com/v1",
+      kind,
+      labels: {},
+      annotations: {},
+      spec,
+    });
+    const unjudged = withRules({
+      serviceMonitors: {
+        state: "read",
+        items: [
+          of("ServiceMonitor", {
+            selector: { matchLabels: { app: "web" } },
+            endpoints: [],
+          }),
+        ],
+      },
+      services: {
+        ok: true,
+        items: [{ name: "web", namespace: "shop", labels: { app: "web" } }],
+      },
+      rules: {
+        state: "read",
+        items: [
+          of("PrometheusRule", {
+            groups: [{ name: "app", rules: [{ alert: "Slow", expr: "up" }] }],
+          }),
+        ],
+      },
+      targets: { state: "notConnected" },
+      alertRules: { state: "notConnected" },
+    } as never);
+
+    expect(monitorMark(unjudged)).toEqual({ shows: "count", of: 1 });
+    expect(alertsMark(unjudged)).toEqual({ shows: "unchecked", of: 1 });
+    expect(worstTone(unjudged)).toBe("unchecked");
+  });
+
+  /**
    * The tab grew a "not checked" mark and the dot beside the sidebar row
    * did not, so the same page answered two ways: a hollow ring on the tab
    * and a plain number in the rail.

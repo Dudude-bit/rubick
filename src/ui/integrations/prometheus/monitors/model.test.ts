@@ -500,9 +500,26 @@ describe("a partial install", () => {
     const [row] = rowsOf([fine], { state: "absent" }, services, ok([]), {
       state: "notConnected",
     });
-    expect(row.pickedUp).toEqual({ state: "noKind" });
+    expect(row.pickedUp).toEqual({ state: "notJudged", lacks: "kind" });
     expect(row.findings).toEqual([]);
     expect(row.worst).toBeNull();
+  });
+
+  /**
+   * prometheus-operator-crds with no Prometheus object: the monitors are
+   * read by a PrometheusAgent, the VictoriaMetrics operator, Grafana Alloy
+   * or an OpenTelemetry collector. An empty list was "judged, picked up by
+   * nobody", so every monitor was red while its targets were scraped. Fails
+   * if no object to judge by is read as a verdict again.
+   */
+  it("does not judge pick-up when the kind is served and no Prometheus object exists", () => {
+    const [row] = rowsOf([fine], kind([]), services, ok([]), {
+      state: "notConnected",
+    });
+    expect(row.pickedUp).toEqual({ state: "notJudged", lacks: "object" });
+    expect(row.findings).toEqual([]);
+    expect(row.worst).toBeNull();
+    expect(groupOf(row)).toBe("unchecked");
   });
 
   /**
@@ -574,9 +591,12 @@ describe("a partial install", () => {
     expect(row.findings).toEqual([]);
   });
 
-  /** The same monitor with the kind present and nobody matching is a real finding. */
+  /** The same monitor with a Prometheus there and not selecting it is a real finding. */
   it("still calls a monitor unpicked when the objects were read and none matches", () => {
-    const [row] = rowsOf([fine], kind([]), services, ok([]), {
+    const elsewhere = readPrometheus(
+      cr("Prometheus", "k8s", "monitoring", { serviceMonitorSelector: {} })
+    );
+    const [row] = rowsOf([fine], kind([elsewhere]), services, ok([]), {
       state: "notConnected",
     });
     expect(row.pickedUp).toEqual({ state: "judged", by: [] });

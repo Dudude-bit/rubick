@@ -26,6 +26,7 @@ import {
   RING,
   SELECTED,
   WORDS,
+  NOT_JUDGED,
   unknowableWords,
   type RowTone,
 } from "../monitors/words";
@@ -33,7 +34,7 @@ import { firingWords, rowWords } from "./words";
 import { verdictOf } from "./verdict";
 import { alertsSection, rulesUnread } from "./share";
 import {
-  OBJECT_LABEL,
+  subjectOf,
   RULES_CRD,
   readRule,
   rowsOf,
@@ -541,10 +542,10 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
       ? picture.prometheuses.items.map(readPrometheus)
       : [];
   const by =
-    pickedUp.state === "noKind"
+    pickedUp.state === "notJudged"
       ? []
       : instances.filter((instance) => pickedUp.by.includes(instance.name));
-  const verdict = verdictOf(row, instances.length, t);
+  const verdict = verdictOf(row, t);
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -609,7 +610,7 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
       <div className="flex flex-col">
         <Step
           tone={
-            pickedUp.state === "noKind"
+            pickedUp.state === "notJudged"
               ? "mut"
               : pickedUp.by.length > 0
                 ? "ok"
@@ -619,7 +620,7 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
           }
           title={t("monitors", "pickedUpBy")}
           count={
-            pickedUp.state === "noKind"
+            pickedUp.state === "notJudged"
               ? t("monitors", "notJudged")
               : pickedUp.by.length > 0
                 ? t("monitors", "pickedUpCount", { n: pickedUp.by.length })
@@ -651,9 +652,7 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
           ))}
           {pickedUp.state === "judged" && pickedUp.by.length === 0 && (
             <p className="mt-1 text-xs text-err">
-              {instances.length === 0
-                ? t("monitors", "verdictNoInstances")
-                : t("alerts", "notPickedUp")}
+              {t("alerts", "notPickedUp")}
             </p>
           )}
           {pickedUp.state === "unknown" && pickedUp.by.length === 0 && (
@@ -661,9 +660,9 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
               {unknowableWords(pickedUp.why, t)}
             </p>
           )}
-          {pickedUp.state === "noKind" && (
+          {pickedUp.state === "notJudged" && (
             <p className="mt-1 text-xs text-fg-mut">
-              {t("monitors", "prometheusKindAbsent")}
+              {t("monitors", NOT_JUDGED[pickedUp.lacks].line)}
             </p>
           )}
         </Step>
@@ -748,9 +747,9 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
             {(loaded.state === "read"
               ? loaded.rules
               : object.rules.map((spec) => ({ spec, loaded: null }))
-            ).map((rule) => (
+            ).map((rule, index) => (
               <RuleCard
-                key={`${rule.spec.group}/${rule.spec.alert}`}
+                key={`${rule.spec.group}/${rule.spec.alert}/${index}`}
                 rule={rule}
                 checked={loaded.state === "read"}
                 base={base}
@@ -938,21 +937,4 @@ function RuleCard({
       )}
     </div>
   );
-}
-
-/** The object an alert is about, from the first object label it carries. */
-function subjectOf(
-  labels: Record<string, string>
-): { kind: string; name: string; namespace: string | null } | null {
-  for (const [kind, label] of Object.entries(OBJECT_LABEL)) {
-    if (kind === "Namespace") continue;
-    const name = labels[label];
-    if (name)
-      return {
-        kind,
-        name,
-        namespace: kind === "Node" ? null : (labels.namespace ?? null),
-      };
-  }
-  return null;
 }

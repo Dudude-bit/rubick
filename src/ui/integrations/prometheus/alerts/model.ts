@@ -131,15 +131,29 @@ export function loadedOf(rule: RuleObject, read: RulesRead): Loaded {
   if (read.state !== "read") return read;
   const own = read.rules.filter((entry) => ownsFile(rule, entry.file));
   const files = [...new Set(own.map((entry) => entry.file))];
+  // kube-prometheus-stack writes one alert name twice in a group, critical
+  // and warning. A loaded rule answers one spec: the one whose labels it
+  // carries, and failing that the next namesake in the group's order.
+  const left = [...own];
+  const take = (spec: RuleSpec, byLabels: boolean): AlertRule | null => {
+    const at = left.findIndex(
+      (entry) =>
+        entry.group === spec.group &&
+        entry.name === spec.alert &&
+        (!byLabels ||
+          Object.entries(spec.labels).every(
+            ([key, value]) => entry.labels[key] === value
+          ))
+    );
+    return at === -1 ? null : left.splice(at, 1)[0];
+  };
+  const labelled = rule.rules.map((spec) => take(spec, true));
   return {
     state: "read",
     files,
-    rules: rule.rules.map((spec) => ({
+    rules: rule.rules.map((spec, index) => ({
       spec,
-      loaded:
-        own.find(
-          (entry) => entry.group === spec.group && entry.name === spec.alert
-        ) ?? null,
+      loaded: labelled[index] ?? take(spec, false),
     })),
   };
 }
@@ -291,7 +305,13 @@ export function groupOf(findings: RuleFinding[], loaded: Loaded): RuleGroup {
     findings.some((f) => ["pickedUpUnknown", "notEvaluated"].includes(f.kind))
   )
     return "unchecked";
-  return loaded.state === "read" ? "quiet" : "unchecked";
+  // Alerting rules, not one file of them in the connected Prometheus, and no
+  // finding above: pick-up was not judged, so "loaded and quiet" is not ours
+  // to say about them.
+  return loaded.state === "read" &&
+    (loaded.files.length > 0 || loaded.rules.length === 0)
+    ? "quiet"
+    : "unchecked";
 }
 
 export function rowsOf(
@@ -340,9 +360,66 @@ export const OBJECT_LABEL: Record<string, string> = {
   Node: "node",
   Service: "service",
   PersistentVolumeClaim: "persistentvolumeclaim",
+  PersistentVolume: "persistentvolume",
   HorizontalPodAutoscaler: "horizontalpodautoscaler",
+  PodDisruptionBudget: "poddisruptionbudget",
+  ResourceQuota: "resourcequota",
   Namespace: "namespace",
 };
+
+/**
+ * The kinds whose label Prometheus stamps on a series from its scrape
+ * target. A metric about another object keeps the exporter's own there
+ * wherever it has none: every `kube_deployment_*` series carries the
+ * kube-state-metrics pod.
+ */
+const STAMPED = new Set(["Pod", "Service", "Node", "Namespace"]);
+const CLUSTER_WIDE = new Set(["Node", "PersistentVolume"]);
+
+export interface AlertSubject {
+  kind: string;
+  name: string;
+  namespace: string | null;
+}
+
+/**
+ * The one object an alert is about: the label only a metric about that kind
+ * writes, before any the scrape target is stamped with. On a
+ * kube-state-metrics series (the job its chart gives it and the stock rules
+ * select by) a pod named after the Service it was scraped through is the
+ * exporter, so a node beside it is what the series describes.
+ */
+export function subjectOf(labels: Record<string, string>): AlertSubject | null {
+  const of = (kind: string): AlertSubject => ({
+    kind,
+    name: labels[OBJECT_LABEL[kind]],
+    namespace: CLUSTER_WIDE.has(kind) ? null : (labels.namespace ?? null),
+  });
+  for (const kind of Object.keys(OBJECT_LABEL))
+    if (!STAMPED.has(kind) && labels[OBJECT_LABEL[kind]]) return of(kind);
+  const { pod, service, node } = labels;
+  const exporter =
+    labels.job === "kube-state-metrics" &&
+    Boolean(pod && service) &&
+    ["Deployment", "StatefulSet", "DaemonSet"].some((kind) =>
+      podsOf(kind, service)?.test(pod)
+    );
+  if (node && (!pod || exporter)) return of("Node");
+  if (pod) return of("Pod");
+  return service ? of("Service") : null;
+}
+
+/**
+ * Whether a stamped label can be read as naming `kind` on an alert about
+ * `subject`: a pod is behind a Service, on a Node and in a Namespace, and
+ * anything else beside them is the exporter's own.
+ */
+function standsBeside(kind: string, subject: AlertSubject | null): boolean {
+  if (!STAMPED.has(kind) || subject === null || subject.kind === kind)
+    return true;
+  if (kind === "Namespace") return subject.namespace !== null;
+  return kind !== "Pod" && subject.kind === "Pod";
+}
 
 /** The pods a workload runs, by the name pattern its controller stamps on them. */
 function podsOf(kind: string, name: string): RegExp | null {
@@ -417,13 +494,17 @@ export function alertsAbout(
         alert.labels.namespace !== object.namespace
       )
         continue;
-      if (label && alert.labels[label] === object.name) {
+      const subject = subjectOf(alert.labels);
+      if (
+        label &&
+        alert.labels[label] === object.name &&
+        standsBeside(object.kind, subject)
+      ) {
         names(rule, alert, { label, value: object.name });
         continue;
       }
-      const pod = alert.labels.pod;
-      if (pods && pod !== undefined && pods.test(pod))
-        names(rule, alert, { label: "pod", value: pod });
+      if (pods && subject?.kind === "Pod" && pods.test(subject.name))
+        names(rule, alert, { label: "pod", value: subject.name });
     }
   }
   return out;

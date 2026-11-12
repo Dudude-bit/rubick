@@ -64,11 +64,51 @@ describe("whether this Prometheus is watching this cluster", () => {
   });
 
   /**
+   * Nodes named by address all begin `10`. Compared on that first label, a
+   * central Prometheus scraping only another such cluster knew "every" node
+   * here and the one check for somebody else's Prometheus passed in green.
+   * Fails if 10.9.9.9 is taken for a node of this cluster.
+   */
+  it("does not take another cluster's address-named node for one of its own", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([
+      node("10.0.1.4"),
+      node("10.0.1.5"),
+    ]);
+    vi.mocked(commands.prometheusQuery).mockImplementation(async (query) =>
+      query.includes("kube_node_info")
+        ? series(["10.9.9.9"])
+        : familiesPresent()
+    );
+
+    const found = await coverage();
+    expect(found.matched).toBe(0);
+    expect(found.foreign).toEqual(["10.9.9.9"]);
+    expect(verdict(found, t)).toMatchObject({ tone: "err" });
+  });
+
+  /** One scraped node of two is one seen, not both: they share only `10`. */
+  it("names the address-named node Prometheus does not scrape", async () => {
+    vi.mocked(commands.listNodes).mockResolvedValue([
+      node("10.0.1.4"),
+      node("10.0.1.5"),
+    ]);
+    vi.mocked(commands.prometheusQuery).mockImplementation(async (query) =>
+      query.includes("kube_node_info")
+        ? series(["10.0.1.4"])
+        : familiesPresent()
+    );
+
+    const found = await coverage();
+    expect(found.matched).toBe(1);
+    expect(found.unseen).toEqual(["10.0.1.5"]);
+  });
+
+  /**
    * A node is `ip-10-0-1-4.eu-west-1.compute.internal` to Kubernetes and
    * often `ip-10-0-1-4` to a scrape target. Comparing the whole string would
    * report every EKS cluster as unwatched.
    */
-  it("compares on the first label, which is where the spellings agree", async () => {
+  it("takes a short spelling for the node whose name it begins", async () => {
     vi.mocked(commands.listNodes).mockResolvedValue([
       node("ip-10-0-1-4.eu-west-1.compute.internal"),
     ]);
@@ -189,8 +229,8 @@ describe("a Prometheus that carries no node names", () => {
 
   /**
    * Found by running the real thing rather than by reading it. cAdvisor's
-   * `instance` is routinely `10.0.0.4:10250`, and `shortName` reduces that to
-   * "10" — a name no cluster has. Trusted in both directions it would produce
+   * `instance` is routinely `10.0.0.4:10250`, an address where the cluster
+   * has a name. Trusted in both directions it would produce
    * exactly the false accusation this whole change removes.
    */
   it("does not turn an ip:port instance into a foreign cluster", async () => {

@@ -5,10 +5,10 @@
  * shape is the ordinary one. Read through `spec.tls` alone it was plain HTTP.
  */
 
-import { describe, expect, it, vi } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { getIngress: vi.fn() },
+  commands: { getIngress: vi.fn(), resolveIngressClass: vi.fn() },
 }));
 
 import { commands } from "@/lib/commands";
@@ -35,6 +35,109 @@ const ingress = (annotations: Record<string, string>) =>
 const ask = () => [
   { namespace: "web", name: "shop", hosts: ["shop.example.com"] },
 ];
+
+/** The IngressClass AGIC's chart installs, and somebody else's beside it. */
+const classes = (isDefault = false) => ({
+  available: [
+    {
+      name: "azure-application-gateway",
+      controller: "azure/application-gateway",
+      isDefault,
+      parameters: null,
+    },
+    {
+      name: "nginx",
+      controller: "k8s.io/ingress-nginx",
+      isDefault: false,
+      parameters: null,
+    },
+  ],
+});
+const CERTIFICATE = {
+  "appgw.ingress.kubernetes.io/appgw-ssl-certificate": "wildcard-2026",
+};
+const written = (
+  className: string | null,
+  annotations: Record<string, string> = CERTIFICATE
+) => ({ name: "shop", namespace: "web", className, annotations }) as never;
+
+beforeEach(() => {
+  vi.mocked(commands.resolveIngressClass).mockResolvedValue(classes() as never);
+});
+
+describe("which Ingresses AGIC serves", () => {
+  /**
+   * The documented way to write one: `spec.ingressClassName:
+   * azure-application-gateway` and no annotation. The class name was
+   * compared with the controller's `azure/application-gateway`, which no
+   * class can be called, so the host read as plain HTTP. Fails if the class
+   * is matched by anything but its controller.
+   */
+  it("reads an Ingress that names AGIC's class in spec.ingressClassName", async () => {
+    vi.mocked(commands.getIngress).mockResolvedValue(
+      written("azure-application-gateway")
+    );
+    const [answers] = await ingressTls(ask());
+    expect(answers).toHaveLength(1);
+    expect(answers[0].terminated).toBe(true);
+  });
+
+  /**
+   * AGIC reads the annotation before the field. Fails if a class in the
+   * field outvotes an annotation that names another controller.
+   */
+  it("leaves an Ingress whose annotation names another controller", async () => {
+    vi.mocked(commands.getIngress).mockResolvedValue(
+      written("azure-application-gateway", {
+        ...CERTIFICATE,
+        "kubernetes.io/ingress.class": "nginx",
+      })
+    );
+    await expect(ingressTls(ask())).resolves.toEqual([[]]);
+  });
+
+  /** An Ingress naming no class is AGIC's only where AGIC's class is the default. */
+  it("takes an Ingress with no class only where its own class is the default", async () => {
+    vi.mocked(commands.getIngress).mockResolvedValue(written(null));
+    await expect(ingressTls(ask())).resolves.toEqual([[]]);
+
+    vi.mocked(commands.resolveIngressClass).mockResolvedValue(
+      classes(true) as never
+    );
+    const [answers] = await ingressTls(ask());
+    expect(answers[0]?.terminated).toBe(true);
+  });
+
+  /**
+   * With `ingressclasses` refused nobody can say whose a class named in the
+   * field is. Silence there is read as plain HTTP. Fails if the unread list
+   * is taken for "not AGIC's", or stops an annotated Ingress being answered.
+   */
+  it("could not say for a class in the field when the classes could not be listed", async () => {
+    vi.mocked(commands.resolveIngressClass).mockRejectedValue(
+      new Error("ingressclasses is forbidden")
+    );
+    vi.mocked(commands.getIngress).mockResolvedValue(
+      written("azure-application-gateway")
+    );
+    await expect(ingressTls(ask())).resolves.toEqual([
+      [
+        {
+          host: "shop.example.com",
+          terminated: null,
+          by: {
+            key: "verbatimLine",
+            values: { said: "ingressclasses is forbidden" },
+          },
+        },
+      ],
+    ]);
+
+    vi.mocked(commands.getIngress).mockResolvedValue(ingress(CERTIFICATE));
+    const [answers] = await ingressTls(ask());
+    expect(answers[0].terminated).toBe(true);
+  });
+});
 
 describe("whether an AGIC Ingress serves TLS", () => {
   it("names the certificate installed on the gateway", async () => {

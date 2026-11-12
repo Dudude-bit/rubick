@@ -14,8 +14,8 @@
  * answers it** — and no single object carries it: a `ManagedCertificate` on
  * its own cannot say which hostname it was supposed to serve.
  *
- * Which Ingresses are GKE's: the annotation, and only the annotation. GKE
- * reads `kubernetes.io/ingress.class` and **ignores `spec.ingressClassName`**,
+ * Which Ingresses are GKE's: `gceClassOf`, the one reading. GKE reads
+ * `kubernetes.io/ingress.class` and never serves by `spec.ingressClassName`,
  * so the `IngressClass`-and-controller reasoning every other routing page uses
  * is wrong here — an Ingress with `ingressClassName: gce` and no annotation is
  * served by nothing at all, which is a finding rather than a row.
@@ -198,9 +198,7 @@ const namesUnread = (routes: GkeRoute[], fronts: GkeFront[]) =>
 
 /** Every Ingress this cluster's GKE controller claims. */
 export function claimed(ingresses: IngressInfo[]): IngressInfo[] {
-  return ingresses.filter(
-    (ingress) => gceClassOf(ingress.annotations) !== null
-  );
+  return ingresses.filter((ingress) => gceClassOf(ingress) !== null);
 }
 
 /**
@@ -214,7 +212,7 @@ export function claimed(ingresses: IngressInfo[]): IngressInfo[] {
 export function ignoredByClassName(ingresses: IngressInfo[]): IngressInfo[] {
   return ingresses.filter(
     (ingress) =>
-      gceClassOf(ingress.annotations) === null &&
+      gceClassOf(ingress) === null &&
       ingress.className !== null &&
       GCE_CLASS_NAMES.has(ingress.className)
   );
@@ -231,7 +229,7 @@ function frontOf(ingress: IngressInfo, sources: GkeSources): GkeFront {
   const frontendName = frontendConfigRef(ingress.annotations);
   return {
     ingress: { name: ingress.name, namespace },
-    class: gceClassOf(ingress.annotations) ?? "gce",
+    class: gceClassOf(ingress) ?? "gce",
     addresses: ingress.loadBalancerIps,
     staticIp: staticIpName(ingress.annotations),
     allowsHttp: allowsHttp(ingress.annotations),

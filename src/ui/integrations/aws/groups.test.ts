@@ -12,6 +12,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import {
   albGroups,
+  claimsIngress,
   countGroups,
   groupSeverity,
   readParams,
@@ -189,6 +190,30 @@ describe("which Ingresses share a load balancer", () => {
   });
 
   /**
+   * The controller's annotation table gives `certificate-arn` the merge
+   * behaviour "Merge": each member's certificate is attached to the shared
+   * listener and chosen by SNI. The page said one of the two "is being
+   * discarded", and a reader acting on it removes a certificate serving a
+   * host. Fails if two members' own certificates are a finding again.
+   */
+  it("does not call two members' certificates on one load balancer a disagreement", () => {
+    const [group] = albGroups(
+      sources({
+        ingresses: ["shop", "api"].map((name) =>
+          ingress(name, name, {
+            "alb.ingress.kubernetes.io/group.name": "shared",
+            "alb.ingress.kubernetes.io/scheme": "internet-facing",
+            "alb.ingress.kubernetes.io/certificate-arn": `arn:aws:acm:eu-west-1:1234:certificate/${name}`,
+          })
+        ),
+      })
+    );
+
+    expect(group.members).toHaveLength(2);
+    expect(group.findings.map((finding) => finding.kind)).toEqual(["shared"]);
+  });
+
+  /**
    * With `ingressclassparams` refused every class naming one got a red "names
    * something absent", right under the page's own note that the kind could
    * not be listed.
@@ -280,6 +305,26 @@ describe("which Ingresses share a load balancer", () => {
       expect.objectContaining({ className: "alb", named: "absent-alb" }),
     ]);
     expect(noParams("internal")).toEqual([]);
+  });
+
+  /**
+   * The page and the TLS reader ask one function. Fails if the annotation
+   * stops being read before the field, a class of the controller's stops
+   * being taken, or an unread class list is answered as "not mine".
+   */
+  it("claims by the annotation first, then by a class that is the controller's", () => {
+    const asks = (className: string | null, annotated?: string) => ({
+      className,
+      annotations: (annotated
+        ? { "kubernetes.io/ingress.class": annotated }
+        : {}) as Record<string, string>,
+    });
+    expect(claimsIngress(asks("alb-internal"), ["alb-internal"])).toBe(true);
+    expect(claimsIngress(asks("alb-internal"), [])).toBe(false);
+    expect(claimsIngress(asks("alb-internal"), null)).toBeNull();
+    expect(claimsIngress(asks("alb"), null)).toBe(true);
+    expect(claimsIngress(asks("alb", "nginx"), ["alb"])).toBe(false);
+    expect(claimsIngress(asks(null), ["alb"])).toBe(false);
   });
 
   /** Somebody else's Ingress is not this controller's to draw. */

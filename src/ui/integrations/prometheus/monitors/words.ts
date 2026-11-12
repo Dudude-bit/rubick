@@ -6,6 +6,7 @@ import {
   selectorWords,
   type LabelSelector,
   type MonitorRow,
+  type PickedUp,
   type Unknowable,
 } from "./model";
 
@@ -79,6 +80,15 @@ export function rowWords(row: MonitorRow, t: T): string {
   if (row.scrape.state !== "read") return t("monitors", "rowNotChecked");
   return t("monitors", "rowUp", { n: row.scrape.up });
 }
+
+/** Why pick-up is not judged: the line under the step, and the card's sentence. */
+export const NOT_JUDGED = {
+  kind: { line: "prometheusKindAbsent", verdict: "verdictNoKind" },
+  object: { line: "noInstances", verdict: "verdictNoInstances" },
+} as const satisfies Record<
+  Extract<PickedUp, { state: "notJudged" }>["lacks"],
+  unknown
+>;
 
 /** Why a pick-up cannot be judged, as the line under the step says it. */
 export function unknowableWords(why: Unknowable, t: T): string {

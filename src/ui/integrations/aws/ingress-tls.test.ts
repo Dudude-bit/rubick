@@ -9,10 +9,10 @@
  * behind one, and the `http://` link offered to open it with.
  */
 
-import { describe, expect, it, vi } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { getIngress: vi.fn() },
+  commands: { getIngress: vi.fn(), resolveIngressClass: vi.fn() },
 }));
 
 import { commands } from "@/lib/commands";
@@ -31,6 +31,69 @@ const ingress = (annotations: Record<string, string>, className = "alb") =>
 const ask = () => [
   { namespace: "web", name: "shop", hosts: ["shop.example.com"] },
 ];
+
+/** `alb-internal` is the controller's by its `spec.controller`; `nginx` is not. */
+const CLASSES = {
+  available: [
+    { name: "alb-internal", controller: "ingress.k8s.aws/alb" },
+    { name: "nginx", controller: "k8s.io/ingress-nginx" },
+  ],
+};
+const ARN = {
+  "alb.ingress.kubernetes.io/certificate-arn":
+    "arn:aws:acm:eu-west-1:1234:certificate/abcd-1234",
+};
+
+beforeEach(() => {
+  vi.mocked(commands.resolveIngressClass).mockResolvedValue(CLASSES as never);
+});
+
+describe("which Ingresses the ALB controller's TLS reader speaks for", () => {
+  /**
+   * The page drew an Ingress on class `alb-internal` as a load balancer with
+   * its certificate, while this reader knew the name `alb` alone and every
+   * core surface called the host plain HTTP. Fails if the reader stops
+   * taking a class by its controller, as the page does.
+   */
+  it("answers for an Ingress whose class is the controller's under another name", async () => {
+    vi.mocked(commands.getIngress).mockResolvedValue(
+      ingress(ARN, "alb-internal")
+    );
+    const [answers] = await ingressTls(ask());
+    expect(answers).toHaveLength(1);
+    expect(answers[0].terminated).toBe(true);
+  });
+
+  /**
+   * With `ingressclasses` refused, whose `alb-internal` is cannot be said,
+   * and silence is read as plain HTTP. `alb` needs no list. Fails if the
+   * unread list is taken for "not this controller's".
+   */
+  it("could not say for a class it cannot resolve, and still answers for alb", async () => {
+    vi.mocked(commands.resolveIngressClass).mockRejectedValue(
+      new Error("ingressclasses is forbidden")
+    );
+    vi.mocked(commands.getIngress).mockResolvedValue(
+      ingress(ARN, "alb-internal")
+    );
+    await expect(ingressTls(ask())).resolves.toEqual([
+      [
+        {
+          host: "shop.example.com",
+          terminated: null,
+          by: {
+            key: "verbatimLine",
+            values: { said: "ingressclasses is forbidden" },
+          },
+        },
+      ],
+    ]);
+
+    vi.mocked(commands.getIngress).mockResolvedValue(ingress(ARN));
+    const [answers] = await ingressTls(ask());
+    expect(answers[0].terminated).toBe(true);
+  });
+});
 
 describe("whether an ALB Ingress serves TLS", () => {
   it("reads the certificate ARN the annotation names", async () => {

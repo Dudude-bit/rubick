@@ -168,6 +168,30 @@ describe("a monitor's own detail registers its facts and its targets", () => {
     expect(pickedUp?.values[0].role).toBe("err");
   });
 
+  /**
+   * No Prometheus object to judge by is not "nothing picks it up", and not
+   * the same sentence as a missing CRD. Fails if the file words either
+   * reason as the other, or marks a pick-up nobody judged as a fault.
+   */
+  it("says pick-up was not judged, and why, without a role", () => {
+    const said = (lacks: "kind" | "object") => {
+      const [facts] = monitorDetailSections(
+        row({ pickedUp: { state: "notJudged", lacks } }),
+        { head: "x" },
+        t
+      );
+      if (facts.body.type !== "facts") throw new Error("expected facts");
+      return facts.body.rows.find(
+        (entry) => entry.label === t("monitors", "pickedUpBy")
+      )?.values[0];
+    };
+    expect(said("object")).toEqual({
+      text: t("monitors", "noInstances"),
+      role: undefined,
+    });
+    expect(said("kind")?.text).toBe(t("monitors", "prometheusKindAbsent"));
+  });
+
   /** A refused scrape read is not the same claim as zero targets. */
   it("marks the targets table unread when Prometheus never answered", () => {
     const [, targets] = monitorDetailSections(

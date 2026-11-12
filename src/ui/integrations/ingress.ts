@@ -75,7 +75,7 @@ export function classesOf(
  * somebody else's problem and is not drawn.
  */
 export function claimsIngress(
-  ingress: IngressInfo,
+  ingress: Pick<IngressInfo, "className">,
   classes: IngressClassSummary[],
   controller: string
 ): boolean {
@@ -85,6 +85,18 @@ export function claimsIngress(
   }
   return mine.some((entry) => entry.isDefault);
 }
+
+/** Every IngressClass, or `null` beside the cluster's reason where the list could not be read. */
+export interface ClassesRead {
+  classes: IngressClassSummary[] | null;
+  error: unknown;
+}
+
+export const readClasses = (): Promise<ClassesRead> =>
+  commands.resolveIngressClass(null).then(
+    (binding) => ({ classes: binding.available, error: null }),
+    (error: unknown) => ({ classes: null, error })
+  );
 
 /**
  * The Secret an Ingress serves that host under, where it names one.

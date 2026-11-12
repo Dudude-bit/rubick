@@ -23,7 +23,7 @@ import type {
   IngressClassSummary,
   IngressInfo,
 } from "@/generated/types";
-import { ROUTING_STALE } from "../ingress";
+import { ROUTING_STALE, classesOf } from "../ingress";
 import { INGRESS_CLASS_PARAMS_CRD, TARGET_GROUP_BINDING_CRD } from "./model";
 
 /** What this controller writes into an IngressClass's `spec.controller`. */
@@ -79,9 +79,7 @@ export async function fetchAlbSources(): Promise<AlbSources> {
     listKind(TARGET_GROUP_BINDING_CRD, unread),
   ]);
 
-  const own = binding.available.filter(
-    (entry) => entry.controller === CONTROLLER
-  );
+  const own = classesOf(binding.available, CONTROLLER);
   const ownClasses = own.map((entry) => entry.name);
 
   return {

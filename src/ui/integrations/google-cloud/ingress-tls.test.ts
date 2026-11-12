@@ -4,11 +4,12 @@ import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
 const answers = vi.hoisted(() => ({
   certificates: (): Promise<unknown[]> => Promise.resolve([]),
+  ingress: null as IngressInfo | null,
 }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listIngresses: () => Promise.resolve([shop]),
+    listIngresses: () => Promise.resolve([answers.ingress ?? shop]),
     listCustomResources: (crd: string) =>
       crd.startsWith("managedcertificates")
         ? answers.certificates()
@@ -58,6 +59,7 @@ const ask = async () =>
 
 beforeEach(() => {
   answers.certificates = () => Promise.resolve([]);
+  answers.ingress = null;
 });
 
 describe("whether GKE serves an Ingress's host over TLS", () => {
@@ -77,6 +79,28 @@ describe("whether GKE serves an Ingress's host over TLS", () => {
     expect(await ask()).toEqual([
       expect.objectContaining({ host: "shop.example.com", terminated: null }),
     ]);
+  });
+
+  /**
+   * An Ingress with no class is GKE's by default, and its managed
+   * certificate is in an annotation: read as nobody's, the host was plain
+   * HTTP on every core surface. Fails if GKE has no opinion about a
+   * classless Ingress, or has one about an Ingress another class names.
+   */
+  it("answers for an Ingress that names no class, and not for one another class names", async () => {
+    const rest = {
+      "networking.gke.io/managed-certificates": "shop-cert",
+    };
+    answers.certificates = () =>
+      Promise.resolve([certificate("shop-cert", "Active")]);
+
+    answers.ingress = { ...shop, annotations: rest };
+    expect(await ask()).toEqual([
+      expect.objectContaining({ host: "shop.example.com", terminated: true }),
+    ]);
+
+    answers.ingress = { ...shop, className: "nginx", annotations: rest };
+    expect(await ask()).toEqual([]);
   });
 
   /** The certificates read and none covering the host is silence, not a shrug. */

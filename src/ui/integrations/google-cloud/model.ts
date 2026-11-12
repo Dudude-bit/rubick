@@ -17,7 +17,7 @@
  */
 
 import type { Saying } from "@/i18n/say";
-import type { CustomResourceInfo } from "@/generated/types";
+import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import { getValueByPath } from "../kit";
 import { formatTimeUnit } from "@/lib/utils";
 
@@ -41,8 +41,8 @@ export const BACKEND_CONFIG_ANNOTATIONS = [
  *
  * Each one is an edge from the routing table to an object that is otherwise
  * an anonymous row on a list page. GKE is also explicit that it reads
- * `kubernetes.io/ingress.class` and **ignores `spec.ingressClassName`** — the
- * opposite of every other controller in this tree, and the difference
+ * `kubernetes.io/ingress.class` and never serves by `spec.ingressClassName`
+ * — the opposite of every other controller in this tree, and the difference
  * between an Ingress that is served and one that is silently not.
  */
 export const INGRESS_CLASS_ANNOTATION = "kubernetes.io/ingress.class";
@@ -60,10 +60,18 @@ export const NEG_ANNOTATION = "cloud.google.com/neg";
 /** The classes GKE's own controller answers to. */
 const GCE_CLASSES = new Set(["gce", "gce-internal", "gce-regional-external"]);
 
-/** Which GKE load balancer this Ingress asks for, or `null` for somebody else's. */
-export function gceClassOf(annotations: Record<string, string>): string | null {
-  const value = annotations[INGRESS_CLASS_ANNOTATION];
-  return value !== undefined && GCE_CLASSES.has(value) ? value : null;
+/**
+ * Which GKE load balancer this Ingress asks for, or `null` for somebody
+ * else's. The annotation decides wherever it is set. Without one GKE builds
+ * an external load balancer for an Ingress that names no class at all, and
+ * leaves one that sets `spec.ingressClassName` to whoever that names.
+ */
+export function gceClassOf(
+  ingress: Pick<IngressInfo, "annotations" | "className">
+): string | null {
+  const value = ingress.annotations[INGRESS_CLASS_ANNOTATION];
+  if (value) return GCE_CLASSES.has(value) ? value : null;
+  return ingress.className === null ? "gce" : null;
 }
 
 export function frontendConfigRef(

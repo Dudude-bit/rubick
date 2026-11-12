@@ -85,6 +85,38 @@ const rowWith = (targets: TargetsRead) =>
 
 describe("the sentence the monitor card leads with", () => {
   /**
+   * With no Prometheus object the card said nothing picks the monitor up, in
+   * red; and with a Prometheus connected that has no pool for it, "Picked
+   * up, but…". Neither is known. Fails if either sentence comes back for a
+   * pick-up nobody judged, or the two reasons share one sentence.
+   */
+  it("says pick-up is not judged where there is no Prometheus object, whatever the targets say", () => {
+    const head = (
+      instances: Kind<PrometheusInstance>,
+      targets: TargetsRead
+    ): string =>
+      verdictOf(
+        rowsOf(
+          [monitor()],
+          instances,
+          ok([service("web", "shop")]),
+          ok([]),
+          targets
+        )[0],
+        null,
+        null,
+        t
+      ).head;
+    const none = translate("en", "monitors", "verdictNoInstances");
+    expect(head(kindOf([]), { state: "notConnected" })).toBe(none);
+    expect(head(kindOf([]), { state: "read", targets: [] })).toBe(none);
+    expect(head({ state: "absent" }, { state: "read", targets: [] })).toBe(
+      translate("en", "monitors", "verdictNoKind")
+    );
+    expect(none).not.toBe(translate("en", "monitors", "verdictNoKind"));
+  });
+
+  /**
    * A selector Kubernetes would refuse to build has no arm to fall past:
    * without one the card led with whatever the scrape said, over a
    * selector nobody can say anything about.
@@ -104,7 +136,7 @@ describe("the sentence the monitor card leads with", () => {
       ok([]),
       { state: "notConnected" }
     );
-    const verdict = verdictOf(row, 1, null, null, t);
+    const verdict = verdictOf(row, null, null, t);
     expect(verdict.head).toBe(
       translate("en", "monitors", "verdictSelectorUnevaluable")
     );
@@ -135,7 +167,7 @@ describe("the sentence the monitor card leads with", () => {
     });
 
     expect(row.findings.map((f) => f.kind)).toEqual(["targetsUnscraped"]);
-    const verdict = verdictOf(row, 1, null, null, t);
+    const verdict = verdictOf(row, null, null, t);
     expect(verdict.head).toContain("not scraped yet");
     expect(verdict.head).not.toContain("up, scraped");
     expect(verdict.body).not.toBe(translate("en", "monitors", "nothingToDo"));
@@ -161,7 +193,7 @@ describe("the sentence the monitor card leads with", () => {
     });
 
     expect(row.findings).toEqual([]);
-    const verdict = verdictOf(row, 1, null, "2m", t);
+    const verdict = verdictOf(row, null, "2m", t);
     expect(verdict.head).toContain("up, scraped");
     expect(verdict.body).toBe(translate("en", "monitors", "nothingToDo"));
   });
@@ -187,7 +219,6 @@ describe("the sentence the monitor card leads with", () => {
     });
     const verdict = verdictOf(
       row,
-      1,
       Date.parse("2026-09-20T17:00:00Z"),
       null,
       t,

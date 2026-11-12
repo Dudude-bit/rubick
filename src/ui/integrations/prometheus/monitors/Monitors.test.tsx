@@ -1,7 +1,8 @@
 import { fireEvent, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { CustomResourceInfo } from "@/generated/types";
+import { en } from "@/i18n/catalogue";
 import type { Picture } from "./data";
 
 const monitor = (name: string): CustomResourceInfo => ({
@@ -19,7 +20,7 @@ const monitor = (name: string): CustomResourceInfo => ({
   generation: null,
 });
 
-const PICTURE = {
+let PICTURE = {
   serviceMonitors: {
     state: "read",
     items: [monitor("payments-api"), monitor("web")],
@@ -100,5 +101,42 @@ describe("what the Monitors ladder hands to Share", () => {
     ).toBe(
       "Only the group «broken». Only the rows matching «payments», as the list was searched."
     );
+  });
+});
+
+/**
+ * The page opened with a red "nothing picks the monitors up" and every row
+ * under Broken, on a cluster whose monitors something other than a
+ * Prometheus object reads. Fails if no Prometheus object is drawn as a
+ * fault of the monitors again.
+ */
+describe("a cluster with monitors and no Prometheus object", () => {
+  const before = PICTURE;
+  afterEach(() => {
+    PICTURE = before;
+  });
+
+  it("says pick-up is not judged and files no monitor under broken", async () => {
+    PICTURE = {
+      ...before,
+      prometheuses: { state: "read", items: [] },
+      services: {
+        ok: true,
+        items: ["payments-api", "web"].map((name) => ({
+          name,
+          namespace: "shop",
+          labels: { app: name },
+        })),
+      },
+    } as unknown as Picture;
+    await renderWithRouter(<Monitors />, {
+      at: "/c/prod/integrations/prometheus",
+    });
+
+    const notice = await screen.findByText(en.monitors.noInstances);
+    // A fact about the cluster, not a fault: not in the error tone.
+    expect(notice.className).not.toContain("text-err");
+    expect(screen.queryByText(en.monitors.rowNotPickedUp)).toBeNull();
+    expect(screen.getAllByText(en.monitors.rowNotChecked)).toHaveLength(2);
   });
 });

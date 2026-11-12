@@ -7,12 +7,11 @@
  * deleted with the whole suite green.
  */
 import type { T } from "@/i18n/useT";
-import { unknowableWords } from "../monitors/words";
+import { NOT_JUDGED, unknowableWords } from "../monitors/words";
 import type { RuleRow } from "./model";
 
 export function verdictOf(
   row: RuleRow,
-  instanceCount: number,
   t: T
 ): { head: string; body: string | null } {
   const worst = row.findings[0];
@@ -26,12 +25,10 @@ export function verdictOf(
         body: null,
       };
     case "notPickedUp":
-      return instanceCount === 0
-        ? { head: t("monitors", "verdictNoInstances"), body: null }
-        : {
-            head: t("alerts", "verdictNotPickedUp"),
-            body: t("alerts", "notPickedUp"),
-          };
+      return {
+        head: t("alerts", "verdictNotPickedUp"),
+        body: t("alerts", "notPickedUp"),
+      };
     case "notLoaded":
       return {
         head: t("alerts", "verdictNotLoaded"),
@@ -69,8 +66,11 @@ export function verdictOf(
             : unknowableWords(worst.why, t),
       };
   }
-  if (row.pickedUp.state === "noKind")
-    return { head: t("monitors", "verdictNoKind"), body: null };
+  if (row.pickedUp.state === "notJudged")
+    return {
+      head: t("monitors", NOT_JUDGED[row.pickedUp.lacks].verdict),
+      body: null,
+    };
   if (row.loaded.state === "notConnected")
     return {
       head: t("alerts", "verdictNotChecked"),

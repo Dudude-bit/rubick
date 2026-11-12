@@ -377,11 +377,9 @@ function Notices({ picture }: { picture: Picture }) {
     );
   else if (instances.items.length === 0)
     notices.push(
-      <Finding
-        key="prometheus"
-        tone="err"
-        title={t("monitors", "noInstances")}
-      />
+      <p key="prometheus" className="text-[11.5px] text-fg-fnt">
+        {t("monitors", "noInstances")}
+      </p>
     );
   if (notices.length === 0) return null;
   return <div className="flex flex-col gap-1.5">{notices}</div>;
