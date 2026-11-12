@@ -172,14 +172,29 @@ fn user_block(lines: &[&str], user: &str) -> Option<(usize, usize)> {
             .get(position + 1)
             .copied()
             .unwrap_or_else(|| block_end(lines, start, dash_indent));
-        let named = lines[start..end].iter().any(|line| {
-            value_of(line, "- name") == Some(user) || value_of(line, "name") == Some(user)
-        });
-        if named {
+        if entry_name(&lines[start..end]) == Some(user) {
             return Some((start, end));
         }
     }
     None
+}
+
+/// The `name` of one `users` entry: the key of the entry's own mapping. An
+/// `auth-provider` deeper in it has a `name` too, and `oidc` is what the
+/// guides call both the provider and the user.
+fn entry_name<'a>(entry: &[&'a str]) -> Option<&'a str> {
+    let (first, rest) = entry.split_first()?;
+    let after_dash = first.trim_start().strip_prefix('-')?;
+    let column = if after_dash.trim().is_empty() {
+        indent_of(rest.iter().find(|line| !line.trim().is_empty())?)
+    } else {
+        first.len() - after_dash.trim_start().len()
+    };
+    value_of(after_dash, "name").or_else(|| {
+        rest.iter()
+            .filter(|line| indent_of(line) == column)
+            .find_map(|line| value_of(line, "name"))
+    })
 }
 
 /// Where the block opened at `start` stops: the first later line indented no
@@ -687,6 +702,83 @@ users:
                 .contains("new-id"),
             "the file the link points at did not get the new token"
         );
+    }
+
+    /// `kubectl config set-credentials oidc --auth-provider=oidc` is the name
+    /// the guides use, and kubectl sorts users by name: read by any `name:`
+    /// line in the entry, alice's provider answered for the user `oidc`, and
+    /// her tokens were replaced with somebody else's.
+    #[test]
+    fn a_user_named_like_the_provider_gets_its_own_tokens_and_nobody_elses() {
+        const TWO: &str = r"apiVersion: v1
+users:
+- name: alice
+  user:
+    auth-provider:
+      config:
+        client-id: kubernetes
+        id-token: alice-id
+        refresh-token: alice-refresh
+      name: oidc
+- user:
+    auth-provider:
+      config:
+        client-id: kubernetes
+        id-token: oidc-id
+        refresh-token: oidc-refresh
+      name: oidc
+  name: oidc
+";
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", TWO);
+
+        assert!(can_write_tokens(&path, "oidc"));
+        write_tokens(&path, "oidc", "new-id", Some("new-refresh")).expect("write");
+
+        let after: serde_yaml::Value =
+            serde_yaml::from_str(&std::fs::read_to_string(&path).expect("read")).expect("yaml");
+        let tokens = |user: &str| {
+            let config =
+                &user_entry(&after, user).expect("the user")["user"]["auth-provider"]["config"];
+            (
+                config["id-token"].as_str().map(str::to_string),
+                config["refresh-token"].as_str().map(str::to_string),
+            )
+        };
+        assert_eq!(
+            tokens("alice"),
+            (Some("alice-id".into()), Some("alice-refresh".into())),
+            "another user's entry was rewritten"
+        );
+        assert_eq!(
+            tokens("oidc"),
+            (Some("new-id".into()), Some("new-refresh".into()))
+        );
+    }
+
+    /// A `name` deeper in an entry names something else: an exec plugin's
+    /// environment variable here, which is no user of this file.
+    #[test]
+    fn a_name_deeper_in_an_entry_is_not_the_users_name() {
+        const NESTED: &str = r"apiVersion: v1
+users:
+- name: alice
+  user:
+    auth-provider:
+      name: oidc
+      config:
+        id-token: alice-id
+    exec:
+      env:
+      - name: carol
+        value: x
+";
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = write(dir.path(), "config", NESTED);
+
+        assert!(can_write_tokens(&path, "alice"));
+        assert!(!can_write_tokens(&path, "carol"));
+        assert!(!can_write_tokens(&path, "oidc"));
     }
 
     /// `$KUBECONFIG` naming one file twice is one file, not two claimants.
