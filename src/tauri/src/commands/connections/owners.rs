@@ -59,14 +59,7 @@ pub(super) async fn owner_chain(
         if !seen.insert(controller.uid.clone()) {
             break;
         }
-        let next = match fetch_owners(
-            ctx,
-            &controller.api_version,
-            &controller.kind,
-            &controller.name,
-        )
-        .await?
-        {
+        let next = match fetch_owners(ctx, &controller).await? {
             Above::Owners(next) => next,
             Above::Nothing => break,
             Above::Unread(unread) => {
@@ -101,20 +94,19 @@ pub(super) enum Above {
 /// them would buy nothing, so the walk ends there rather than spending a
 /// request to learn that. A namesake in another group is a top too: reading
 /// the built-in of its name would walk a chain that is not this object's.
-pub(super) async fn fetch_owners(
-    ctx: &ResourceContext,
-    api_version: &str,
-    kind: &str,
-    name: &str,
-) -> Result<Above> {
-    match (crate::utils::group_of(api_version), kind) {
+pub(super) async fn fetch_owners(ctx: &ResourceContext, owner: &OwnerReference) -> Result<Above> {
+    let name = &owner.name;
+    match (
+        crate::utils::group_of(&owner.api_version),
+        owner.kind.as_str(),
+    ) {
         ("apps", "ReplicaSet") => {
             let got = ctx.namespaced_api::<ReplicaSet>().get(name).await;
-            above(got, kind, "apps/v1")
+            above(got, owner, "apps/v1")
         }
         ("batch", "Job") => above(
             ctx.namespaced_api::<Job>().get(name).await,
-            kind,
+            owner,
             "batch/v1",
         ),
         _ => Ok(Above::Nothing),
@@ -122,8 +114,18 @@ pub(super) async fn fetch_owners(
 }
 
 /// An expired session ends the call, as every other read here does.
-fn above<K: kube::Resource>(got: kube::Result<K>, kind: &str, version: &str) -> Result<Above> {
+///
+/// The object read is the owner only by its uid. A Deployment made again
+/// names its `ReplicaSet` as the one before it did, and a pod still leaving
+/// the old one would be given the new one's Deployment for its maker.
+fn above<K: kube::Resource>(
+    got: kube::Result<K>,
+    named: &OwnerReference,
+    version: &str,
+) -> Result<Above> {
+    let kind = named.kind.as_str();
     match got {
+        Ok(owner) if owner.uid().as_deref() != Some(named.uid.as_str()) => Ok(Above::Nothing),
         Ok(owner) => Ok(Above::Owners(owner.owner_references().to_vec())),
         Err(kube::Error::Api(status)) if status.code == 404 => Ok(Above::Nothing),
         Err(err) => match Error::from(err) {
@@ -277,6 +279,36 @@ mod walk_tests {
     async fn an_owner_gone_is_the_top_of_the_walk() {
         let page = pod_page(failure(404, "NotFound")).await.expect("a page");
         assert!(page.not_looked_at.iter().all(|e| e.kind != "ReplicaSet"));
+    }
+
+    /// A Deployment deleted and made again names its `ReplicaSet` as before,
+    /// from the same template. A pod still terminating under the old one was
+    /// shown the new set's Deployment as its maker, while the header's
+    /// lineage, which compares uids, said its owner was gone. Fails if an
+    /// object of the owner's name with another uid is walked through.
+    #[tokio::test]
+    async fn an_owner_made_again_under_its_name_is_not_walked_through() {
+        let set = |uid: &str| {
+            let set = serde_json::json!({
+                "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                "metadata": {
+                    "name": "web-7d9", "namespace": "shop", "uid": uid,
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "Deployment", "name": "web",
+                        "uid": "deploy-uid", "controller": true,
+                    }],
+                },
+            });
+            (200, set.to_string())
+        };
+        let above = |page: ResourceConnections| {
+            page.edges
+                .iter()
+                .any(|edge| edge.from.kind == "Deployment" && edge.to.kind == "ReplicaSet")
+        };
+
+        assert!(above(pod_page(set("rs-uid")).await.expect("a page")));
+        assert!(!above(pod_page(set("another-uid")).await.expect("a page")));
     }
 
     /// Would leave an expired session as one owner "not looked at".
