@@ -301,6 +301,34 @@ pub fn stored_release_json(stored: &[u8]) -> Result<Vec<u8>, String> {
     Ok(json)
 }
 
+/// Whether the release a Secret stores has anything in it the release's own
+/// page withholds: in its values, a manifest, its notes or the chart's files.
+/// A value that is no release is not this rule's to judge.
+pub(super) fn stored_release_withholds(stored: &[u8]) -> bool {
+    let release = stored_release_json(stored)
+        .ok()
+        .and_then(|json| serde_json::from_slice::<Value>(&json).ok());
+    release.as_ref().is_some_and(withholds)
+}
+
+fn withholds(value: &Value) -> bool {
+    match value {
+        Value::String(text) => is_private_key_text(text),
+        Value::Array(items) => items.iter().any(withholds),
+        Value::Object(map) => map.iter().any(|(key, item)| {
+            let manifest = item.as_str().filter(|_| key == "manifest");
+            manifest.is_some_and(manifest_withholds) || withholds(item)
+        }),
+        _ => false,
+    }
+}
+
+fn manifest_withholds(manifest: &str) -> bool {
+    let withheld =
+        |doc: &ManifestDocument| matches!(doc.judged, Judged::Unread | Judged::Keys { .. });
+    manifest_documents(manifest).iter().any(withheld)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

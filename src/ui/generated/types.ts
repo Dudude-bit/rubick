@@ -3337,7 +3337,8 @@ export type Check =
 export type Withheld =
   | { says: "privateKey" }
   | { says: "declared"; by: string }
-  | { says: "keyName" };
+  | { says: "keyName" }
+  | { says: "helmRelease" };
 
 export type WithheldPart =
   | { says: "keys"; keys: string[] }

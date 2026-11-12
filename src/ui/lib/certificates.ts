@@ -308,6 +308,8 @@ export function withheldWords(reason: Withheld, t: T): string {
       return t("readings", "withheldDeclared", { type: reason.by });
     case "keyName":
       return t("readings", "withheldKeyName");
+    case "helmRelease":
+      return t("readings", "withheldHelmRelease");
   }
 }
 

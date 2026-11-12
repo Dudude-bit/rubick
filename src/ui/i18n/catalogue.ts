@@ -3683,6 +3683,8 @@ export const en = {
     withheldDeclared:
       "{type} declares this to be the private key, which the app never shows",
     withheldKeyName: "named like a private key, which the app never shows",
+    withheldHelmRelease:
+      "a Helm release the app withholds part of: the release's page under Helm shows the rest, and says which part",
     withheldInRecord: "withheld by the app: {keys}",
     unreadUnanswered:
       "the app asked for {version} and the cluster did not answer ({said}), so it cannot say whether one applies here",
