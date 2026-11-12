@@ -6,7 +6,7 @@ import {
   it,
   vi,
 } from "vite-plus/test";
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -1992,5 +1992,64 @@ describe("a pod's files read through a debug container", () => {
     expect(next).not.toEqual([]);
     expect(next.filter((listing) => listing.via !== null)).toEqual([]);
     expect(screen.queryByText(/through debug container/)).toBeNull();
+  });
+});
+
+describe("what a pod page's Restart and a debug pod's Delete Now call", () => {
+  /**
+   * A debug pod's delete takes the same two arguments, so a Restart wired to
+   * it compiles. Fails if the confirmed Restart calls anything but
+   * `restart_pod` on the pod the page is on.
+   */
+  it("restarts the pod the page is on", async () => {
+    await arrive(`/c/prod/pods/shop/${NAME}`);
+
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+    const dialog = screen.getByRole("alertdialog");
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: NAME },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restart" }));
+    await advance(0);
+
+    expect(invoke).toHaveBeenCalledWith("restart_pod", {
+      name: NAME,
+      namespace: "shop",
+    });
+  });
+
+  /**
+   * A debug pod outlives its shell, so the shell's end offers to delete it.
+   * Fails if Delete Now calls anything but `delete_debug_pod` on that pod:
+   * a restart in its place leaves the pod running behind a "deleted" toast.
+   */
+  it("deletes the debug pod whose shell just ended", async () => {
+    const answer = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) =>
+      command === "get_pod"
+        ? {
+            ...running("cart-debug"),
+            labels: { "k8s-gui/debug-pod": "true" },
+          }
+        : answer(command, args)
+    );
+    await arrive(
+      "/c/prod/pods/shop/cart-debug",
+      <>
+        <PodDetail />
+        <Toaster />
+      </>
+    );
+    await clickTab(/^Shell/);
+
+    fireEvent.click(screen.getByRole("button", { name: "end the shell" }));
+    await advance(0);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Now" }));
+    await advance(0);
+
+    expect(invoke).toHaveBeenCalledWith("delete_debug_pod", {
+      podName: "cart-debug",
+      namespace: "shop",
+    });
   });
 });

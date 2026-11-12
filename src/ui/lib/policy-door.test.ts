@@ -543,6 +543,18 @@ describe("whether a controller's own egress policies let it reach a Service's po
     ).toMatchObject({ state: "refused" });
   });
 
+  /**
+   * A range lets out the ports between its two ends and no others. Fails if
+   * a range that ends below the pods' port, or starts above it, is read as
+   * reaching them: one end alone would call a default-deny open.
+   */
+  it("holds a controller back where a rule's range ends below the pods' port, or starts above it", () => {
+    for (const range of [tcp("7000", 8079), tcp("8081", 9000)])
+      expect(judged([out([fromNamespace("shop")], [range])])).toMatchObject({
+        state: "refused",
+      });
+  });
+
   /** Only a policy that selects the controller's pods says where they may go. */
   it("holds nothing back where no policy selects the controller's pods", () => {
     const elsewhere = holding([], {

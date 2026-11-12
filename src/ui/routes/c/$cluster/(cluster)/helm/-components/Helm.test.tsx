@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
@@ -9,6 +9,9 @@ vi.mock("@/lib/commands", () => ({
     listHelmRepos: vi.fn(async () => []),
     getHelmHistory: vi.fn(async () => []),
     helmUpgrade: vi.fn(async () => ""),
+    helmInstall: vi.fn(async () => ""),
+    helmUninstall: vi.fn(async () => ""),
+    helmSearchCharts: vi.fn(async () => []),
     checkHelmAvailability: vi.fn(async () => ({
       available: false,
       version: null,
@@ -149,6 +152,87 @@ describe("upgrading a release from its row", () => {
     await waitFor(() =>
       expect(commands.helmUpgrade).toHaveBeenCalledWith(
         expect.objectContaining({ releaseName: "web", chart: "bitnami/nginx" })
+      )
+    );
+  });
+});
+
+describe("uninstalling a release from its row", () => {
+  /**
+   * Adding a repository takes the same two strings, so an Uninstall wired to
+   * it compiles: the release stays and a repository named after it appears.
+   * Fails if the confirmed Uninstall calls anything but the uninstall, on
+   * the row's release in the row's namespace.
+   */
+  it("uninstalls that release once its name is typed", async () => {
+    useDependenciesStore.setState({
+      helm: { available: true, path: "/usr/bin/helm", version: "v3" },
+    } as never);
+    listReleases.mockResolvedValue({ rows: [release("web")], unread: [] });
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Open actions" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Uninstall" })
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    await user.type(within(dialog).getByRole("textbox"), "web");
+    await user.click(within(dialog).getByRole("button", { name: "Uninstall" }));
+
+    await waitFor(() =>
+      expect(commands.helmUninstall).toHaveBeenCalledWith("web", "team-a")
+    );
+  });
+});
+
+describe("installing a chart found by search", () => {
+  /**
+   * Install and upgrade take the same options, so an Install wired to the
+   * upgrade compiles, and `helm upgrade` of a release that does not exist
+   * fails where the install would have made it. Fails if Install calls
+   * anything but the install, with the chart of the row it was pressed on.
+   */
+  it("installs the chart of the row, under the name the dialog shows", async () => {
+    useDependenciesStore.setState({
+      helm: { available: true, path: "/usr/bin/helm", version: "v3" },
+    } as never);
+    listReleases.mockResolvedValue({ rows: [], unread: [] });
+    vi.mocked(commands.helmSearchCharts).mockResolvedValue([
+      {
+        name: "bitnami/nginx",
+        version: "15.0.0",
+        appVersion: "1.25",
+        description: "A web server",
+      },
+    ]);
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: "Charts" }));
+    await user.type(screen.getByPlaceholderText(/^Search charts/), "nginx");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.click(await screen.findByRole("button", { name: "Install" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Install",
+      })
+    );
+
+    await waitFor(() =>
+      expect(commands.helmInstall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          releaseName: "nginx",
+          chart: "bitnami/nginx",
+          version: "15.0.0",
+        })
       )
     );
   });

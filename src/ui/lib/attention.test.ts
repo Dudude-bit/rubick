@@ -1304,6 +1304,54 @@ describe("what Needs attention lists of Gateway API", () => {
       attention({ gatewayApi: gatewayApi() }).checks.map((c) => c.kind)
     ).not.toContain("Gateway");
   });
+
+  const routesCheck = (over: Partial<GatewayApiInputs>) =>
+    attention({
+      gatewayApi: gatewayApi({
+        installed: { data: true, error: null },
+        ...over,
+      }),
+    }).checks.find((check) => check.kind === "HTTPRoute");
+
+  /**
+   * A route's verdict rests on its Gateways. Once those are refused, or fail
+   * to read, no verdict is coming: the route is unread, in its namespace.
+   * Fails if such a route is said to be still reading, which never ends.
+   */
+  it("calls a route unread, not still reading, once its Gateways could not be read", () => {
+    const board = {
+      ...refused.board,
+      verdictsKnown: false,
+      notServing: [],
+      unknown: [routeRow({ servingKnown: false })],
+    };
+    for (const topology of [
+      { known: false, refused: true, error: null },
+      { known: false, refused: false, error: new Error("timed out") },
+    ])
+      expect(routesCheck({ topology, board })).toMatchObject({
+        state: "unread",
+        unread: [{ namespace: "shop" }],
+      });
+  });
+
+  /**
+   * "Read" over a route list nobody has answered is "nothing wrong" before
+   * anyone looked. Fails if a route kind whose list has not answered yet, or
+   * is older than its rate allows, is called read.
+   */
+  it("is still reading a route kind whose list has not answered, or is overdue", () => {
+    const answered = { data: { unread: [], refused: [] }, error: null };
+    expect(
+      routesCheck({ routes: { data: undefined, error: null, refused: false } })
+    ).toMatchObject({ state: "reading" });
+    expect(
+      routesCheck({ routes: { ...answered, refused: false, overdue: true } })
+    ).toMatchObject({ state: "reading" });
+    expect(
+      routesCheck({ routes: { ...answered, refused: false } })
+    ).toMatchObject({ state: "read" });
+  });
 });
 
 describe("the word a row's reason is printed in", () => {

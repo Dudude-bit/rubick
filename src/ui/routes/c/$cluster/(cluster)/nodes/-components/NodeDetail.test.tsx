@@ -688,6 +688,38 @@ describe("the header actions", () => {
   });
 
   /**
+   * Cordon and Uncordon take the same one argument, so each wired to the
+   * other's command compiles and does the opposite of its label. Fails if
+   * either button calls anything but its own command, on the page's node.
+   */
+  it("cordons its node on Cordon, and uncordons a cordoned one on Uncordon", async () => {
+    vi.mocked(commands.cordonNode).mockClear();
+    vi.mocked(commands.uncordonNode).mockClear();
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(buildNode()) as never
+    );
+    const { unmount } = await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Cordon" }));
+    await waitFor(() =>
+      expect(commands.cordonNode).toHaveBeenCalledWith("test-node-1")
+    );
+    expect(commands.uncordonNode).not.toHaveBeenCalled();
+    unmount();
+
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(
+        buildNode({ unschedulable: true })
+      ) as never
+    );
+    await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Uncordon" }));
+    await waitFor(() =>
+      expect(commands.uncordonNode).toHaveBeenCalledWith("test-node-1")
+    );
+    expect(commands.cordonNode).toHaveBeenCalledTimes(1);
+  });
+
+  /**
    * A drain evicts every pod on the node. Fails if its confirmation opens
    * with the focus anywhere but Cancel, or if a stray Enter starts it.
    */

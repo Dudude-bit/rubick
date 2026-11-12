@@ -730,6 +730,45 @@ describe("hintFor", () => {
     expect(hint.checks.map((c) => c.says.key)).toEqual(["checkLastLines"]);
   });
 
+  /**
+   * Every pod mounts the cluster's CA bundle, and a claim is storage:
+   * neither is where a wrong address would be written. Fails if a refused
+   * address sends the reader to ConfigMap kube-root-ca.crt, or to a
+   * PersistentVolumeClaim, as the config to look at.
+   */
+  it("offers the pod's own ConfigMaps and Secrets as the config to look at, never the CA bundle or a claim", () => {
+    const mounted = (kind: string, name: string) => ({
+      name,
+      source: kind,
+      refs: [{ kind, name }],
+      mounts: [],
+      projections: [],
+    });
+    const pod = {
+      ...crashing(),
+      volumes: [
+        mounted("ConfigMap", "kube-root-ca.crt"),
+        mounted("PersistentVolumeClaim", "payments-data"),
+        mounted("ConfigMap", "payments-config"),
+        mounted("Secret", "payments-db-credentials"),
+      ],
+    };
+    const hint = hintFor(troubleOf(pod, [])!, pod, {
+      ...NONE,
+      address: addressIn([
+        "dial tcp 203.0.113.9:5432: connect: connection refused",
+      ]),
+    });
+    expect(
+      hint.checks
+        .filter((check) => check.says.key === "checkConfig")
+        .map((check) => check.says.values)
+    ).toEqual([
+      { kind: "ConfigMap", name: "payments-config" },
+      { kind: "Secret", name: "payments-db-credentials" },
+    ]);
+  });
+
   it("points at the sidecar when the address is this pod itself", () => {
     const sidecar = container("cloud-sql-proxy", {
       ready: false,

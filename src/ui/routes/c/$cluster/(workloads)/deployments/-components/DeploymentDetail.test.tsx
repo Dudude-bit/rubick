@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -733,5 +733,37 @@ describe("a Deployment page before its read has answered", () => {
     });
     await open();
     expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
+  });
+});
+
+describe("Delete on a Deployment's page", () => {
+  /**
+   * Restart takes the same two arguments, so a Delete wired to it compiles
+   * and rolls the pods of a Deployment the reader asked to remove. Fails if
+   * the confirmed Delete calls anything but `delete_deployment` on the
+   * Deployment the page is on.
+   */
+  it("deletes the Deployment the page is on", async () => {
+    const hooks = await vi.importActual<typeof import("@/hooks")>("@/hooks");
+    vi.mocked(useResourceDetail).mockImplementation(hooks.useResourceDetail);
+    const base = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) =>
+      command === "get_deployment" ? ledger : base(command, args)
+    );
+    await open();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: "ledger" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("delete_deployment", {
+        name: "ledger",
+        namespace: "team-blind",
+      })
+    );
   });
 });

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { act, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type {
   ResourceConnections,
@@ -465,5 +471,30 @@ describe("StatefulSetDetail", () => {
     await screen.findByText("replica wanted");
     expect(screen.queryByText("Set by")).toBeNull();
     expect(screen.queryByText("A drain waits")).toBeNull();
+  });
+
+  /**
+   * Restart takes the same two arguments, so a Delete wired to it compiles
+   * and rolls the pods of a set the reader asked to remove. Fails if the
+   * confirmed Delete calls anything but the delete, on the set the page is on.
+   */
+  it("deletes the set the page is on", async () => {
+    const hooks = await vi.importActual<typeof import("@/hooks")>("@/hooks");
+    vi.mocked(useResourceDetail).mockImplementation(hooks.useResourceDetail);
+    await renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: "stateful-demo" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(commands.deleteStatefulset).toHaveBeenCalledWith(
+        "stateful-demo",
+        "k8s-gui-test"
+      )
+    );
   });
 });
