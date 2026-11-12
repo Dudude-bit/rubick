@@ -1,0 +1,697 @@
+//! Any kind the cluster serves, read without knowing it: the catalogue of
+//! what is served, a list as the API server prints it, and one object.
+//!
+//! Every other command names its kind. These take a group and a plural, which
+//! is what an address under `/c/<cluster>/<plural>[.<group>]` carries.
+
+mod table;
+
+use std::collections::HashMap;
+use std::time::Duration;
+
+use futures::future::join_all;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::APIGroupList;
+use kube::api::{Api, DynamicObject};
+use kube::core::params::ListParams;
+use serde::{Deserialize, Serialize};
+use tauri::State;
+use tokio::sync::Semaphore;
+use tokio::time::timeout;
+
+use crate::client::served::Served;
+use crate::client::ASKS_AT_ONCE;
+use crate::commands::helpers::{editor_yaml, scope_of, ResourceContext};
+use crate::error::{Error, Result};
+use crate::state::{AppState, Here};
+
+pub use table::{ResourceTable, TableColumn, TableRow};
+
+/// One kind the cluster serves, at the version kubectl would use.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogEntry {
+    pub group: String,
+    pub version: String,
+    pub kind: String,
+    pub plural: String,
+    pub namespaced: bool,
+    pub verbs: Vec<String>,
+    /// kubectl's short names for it, where aggregated discovery says them.
+    pub short_names: Vec<String>,
+    /// Whether it serves a `status` subresource: a `Lease` or a `ServiceAccount`
+    /// has none, so a missing status is not one still to be written.
+    #[serde(default)]
+    pub has_status: Option<bool>,
+}
+
+/// An API group whose discovery did not answer. Its kinds are absent from
+/// the catalogue because nobody could look, not because there are none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreadGroup {
+    pub group: String,
+    pub code: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiCatalog {
+    pub entries: Vec<CatalogEntry>,
+    pub unread: Vec<UnreadGroup>,
+}
+
+/// Every kind the current cluster serves, group by group. A group that
+/// fails is named in `unread`; the list of groups failing fails the whole.
+#[tauri::command]
+pub async fn list_api_catalog(state: State<'_, AppState>) -> Result<ApiCatalog> {
+    crate::client::clock::timed(&state.perf, "listApiCatalog", catalog(&state)).await
+}
+
+/// Drops what discovery said on the current cluster, so the next read asks
+/// it: a kind installed a moment ago is otherwise "not served" for as long
+/// as the miss is kept, a retry included.
+#[tauri::command]
+pub async fn forget_discovery(state: State<'_, AppState>) -> Result<()> {
+    forget(&state);
+    Ok(())
+}
+
+fn forget(state: &AppState) {
+    if let Some(context) = state.get_current_context() {
+        state.client_manager.served().forget(&context);
+    }
+}
+
+/// How long the catalogue waits for one API group. Every list of a served
+/// kind waits for the catalogue, so a wedged aggregated API would hold all
+/// of them for the read deadline; past the hedge and its duplicate, a group
+/// is named in `unread` and the rest are shown.
+const GROUP_DEADLINE: Duration = Duration::from_secs(10);
+
+pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
+    catalog_on(&state.here()?).await
+}
+
+/// The catalogue of one cluster, groups and kinds alike: the groups are a
+/// wait, and the window may be on another cluster when the kinds are asked.
+pub(crate) async fn catalog_on(here: &Here<'_>) -> Result<ApiCatalog> {
+    catalog_within(here, GROUP_DEADLINE).await
+}
+
+/// The kinds of the groups `wanted` picks and nothing else, short names
+/// left out: for a reader that holds the rest and asks about what is new.
+pub(crate) async fn catalog_of(
+    here: &Here<'_>,
+    wanted: impl Fn(&str) -> bool,
+) -> Result<ApiCatalog> {
+    let listed = timeout(GROUP_DEADLINE, here.client.list_api_groups())
+        .await
+        .map_err(|_| Error::ReadDeadline {
+            after_secs: GROUP_DEADLINE.as_secs(),
+        })??;
+    let names = group_names(listed).filter(|group| wanted(group)).collect();
+    Ok(read_groups(here, names, &HashMap::new(), GROUP_DEADLINE).await)
+}
+
+async fn catalog_within(here: &Here<'_>, deadline: Duration) -> Result<ApiCatalog> {
+    let (groups, short) = futures::join!(
+        here.client.list_api_groups(),
+        timeout(deadline, short_names(&here.client))
+    );
+    let names = group_names(groups?).collect();
+    Ok(read_groups(here, names, &short.unwrap_or_default(), deadline).await)
+}
+
+/// The core group, then every group the cluster lists.
+fn group_names(listed: APIGroupList) -> impl Iterator<Item = String> {
+    std::iter::once(String::new()).chain(listed.groups.into_iter().map(|group| group.name))
+}
+
+/// Each group read on its turn; one that fails is named in `unread`.
+async fn read_groups(
+    here: &Here<'_>,
+    names: Vec<String>,
+    short: &HashMap<(String, String), Vec<String>>,
+    deadline: Duration,
+) -> ApiCatalog {
+    // A cluster of operators serves a hundred groups, each a read of its
+    // own. A group's deadline starts on its turn: one that waited is not one
+    // that did not answer.
+    let turns = &Semaphore::new(ASKS_AT_ONCE);
+    let answers = join_all(names.iter().map(|group| async move {
+        let _turn = turns.acquire().await;
+        timeout(deadline, here.served_recommended(group))
+            .await
+            .unwrap_or(Err(Error::ReadDeadline {
+                after_secs: deadline.as_secs(),
+            }))
+    }))
+    .await;
+
+    let mut catalog = ApiCatalog {
+        entries: Vec::new(),
+        unread: Vec::new(),
+    };
+    for (group, answer) in names.into_iter().zip(answers) {
+        match answer {
+            Ok(found) => catalog
+                .entries
+                .extend(
+                    found
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(resource, caps)| CatalogEntry {
+                            short_names: short
+                                .get(&(resource.group.clone(), resource.plural.clone()))
+                                .cloned()
+                                .unwrap_or_default(),
+                            group: resource.group,
+                            version: resource.version,
+                            kind: resource.kind,
+                            plural: resource.plural,
+                            namespaced: caps.scope == kube::discovery::Scope::Namespaced,
+                            has_status: Some(
+                                caps.subresources
+                                    .iter()
+                                    .any(|(sub, _)| sub.plural == "status"),
+                            ),
+                            verbs: caps.operations,
+                        }),
+                ),
+            Err(failed) => catalog.unread.push(UnreadGroup {
+                group,
+                code: failed.code().to_string(),
+                message: failed.said(),
+            }),
+        }
+    }
+    catalog
+}
+
+/// kubectl's short names by group and plural. Only aggregated discovery says
+/// them in a form kube keeps; a cluster that does not serve it, or refuses
+/// it, leaves every kind without, and the frontend's table stands in.
+async fn short_names(client: &kube::Client) -> HashMap<(String, String), Vec<String>> {
+    let (core, groups) = futures::join!(
+        client.list_core_api_versions_aggregated(),
+        client.list_api_groups_aggregated()
+    );
+    let mut names = HashMap::new();
+    for list in [core, groups].into_iter().flatten() {
+        for group in list.items {
+            let group_name = group
+                .metadata
+                .and_then(|meta| meta.name)
+                .unwrap_or_default();
+            for version in group.versions {
+                for resource in version.resources {
+                    let Some(plural) = resource.resource else {
+                        continue;
+                    };
+                    if !resource.short_names.is_empty() {
+                        names
+                            .entry((group_name.clone(), plural))
+                            .or_insert(resource.short_names);
+                    }
+                }
+            }
+        }
+    }
+    names
+}
+
+/// One page of a kind's list, as the API server prints it for kubectl.
+/// `cursor` is the previous page's, opaque; none starts at the top.
+#[tauri::command]
+pub async fn list_resource_table(
+    group: String,
+    plural: String,
+    scope: Option<Vec<String>>,
+    cursor: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ResourceTable> {
+    crate::client::clock::timed(&state.perf, "listResourceTable", async {
+        let served = served(&state, &group, &plural).await?;
+        let scope = if served.namespaced {
+            scope_of(scope)?
+        } else {
+            None
+        };
+        let client = ResourceContext::for_list(&state, None)?.client;
+        table::page(&client, &served, scope, cursor.as_deref()).await
+    })
+    .await
+}
+
+/// One object of any served kind, whole, as the API server returned it but
+/// for the private keys in it.
+#[tauri::command]
+pub async fn get_served_object(
+    group: String,
+    plural: String,
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value> {
+    crate::client::clock::timed(
+        &state.perf,
+        "getServedObject",
+        whole(&state, &group, &plural, &name, namespace),
+    )
+    .await
+}
+
+async fn whole(
+    state: &AppState,
+    group: &str,
+    plural: &str,
+    name: &str,
+    namespace: Option<String>,
+) -> Result<serde_json::Value> {
+    let object = object(state, group, plural, name, namespace).await?;
+    crate::resources::shown(&object).map_err(|e| Error::Serialization(e.to_string()))
+}
+
+/// The same object as the YAML editor shows every kind.
+#[tauri::command]
+pub async fn get_served_object_yaml(
+    group: String,
+    plural: String,
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    let object = crate::client::clock::timed(
+        &state.perf,
+        "getServedObjectYaml",
+        object(&state, &group, &plural, &name, namespace),
+    )
+    .await?;
+    editor_yaml(&object)
+}
+
+/// How many siblings a page compares one object against. Enough for the
+/// autoscalers of one namespace; past it, the answer says it was cut.
+const SIBLINGS: u32 = 200;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServedObjects {
+    pub items: Vec<serde_json::Value>,
+    /// The kind has more objects here than were read.
+    pub truncated: bool,
+}
+
+/// The objects of a small kind in one namespace, whole but for their
+/// managed fields: what a page needs to compare one object with its
+/// siblings, such as two autoscalers aimed at one workload.
+#[tauri::command]
+pub async fn list_served_objects(
+    group: String,
+    plural: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ServedObjects> {
+    crate::client::clock::timed(
+        &state.perf,
+        "listServedObjects",
+        siblings_of(&state, group, plural, namespace),
+    )
+    .await
+}
+
+async fn siblings_of(
+    state: &AppState,
+    group: String,
+    plural: String,
+    namespace: Option<String>,
+) -> Result<ServedObjects> {
+    let served = served(state, &group, &plural).await?;
+    let api = if served.namespaced {
+        ResourceContext::for_command(state, namespace)?
+            .dynamic_api_for_resource(&served.resource, false)
+    } else {
+        ResourceContext::for_list(state, None)?.dynamic_api_for_resource(&served.resource, true)
+    };
+    let answer = api.list(&page_params(SIBLINGS, None)).await;
+    let list = state.served_answer(&group, answer)?;
+    let truncated = list
+        .metadata
+        .continue_
+        .as_deref()
+        .is_some_and(|token| !token.is_empty());
+    let items = list
+        .items
+        .into_iter()
+        .map(|mut object| {
+            object.metadata.managed_fields = None;
+            crate::resources::shown(&object)
+        })
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|e| Error::Serialization(e.to_string()))?;
+    Ok(ServedObjects { items, truncated })
+}
+
+async fn served(state: &AppState, group: &str, plural: &str) -> Result<Served> {
+    if !group.is_empty() {
+        crate::validation::validate_dns_subdomain(group)?;
+    }
+    crate::validation::validate_dns_label(plural)?;
+    state
+        .served(group, plural)
+        .await?
+        .ok_or_else(|| Error::not_found("APIResource", served_name(group, plural), ""))
+}
+
+fn served_name(group: &str, plural: &str) -> String {
+    if group.is_empty() {
+        plural.to_string()
+    } else {
+        format!("{plural}.{group}")
+    }
+}
+
+async fn object(
+    state: &AppState,
+    group: &str,
+    plural: &str,
+    name: &str,
+    namespace: Option<String>,
+) -> Result<DynamicObject> {
+    crate::validation::validate_path_segment(name)?;
+    let served = served(state, group, plural).await?;
+    let api: Api<DynamicObject> = if served.namespaced {
+        ResourceContext::for_command(state, namespace)?
+            .dynamic_api_for_resource(&served.resource, false)
+    } else {
+        ResourceContext::for_list(state, None)?.dynamic_api_for_resource(&served.resource, true)
+    };
+    let answer = api.get(name).await;
+    Ok(state.served_answer(group, answer)?)
+}
+
+/// The list parameters for one page, `limit` rows from `token`.
+fn page_params(limit: u32, token: Option<String>) -> ListParams {
+    ListParams {
+        limit: Some(limit),
+        continue_token: token,
+        ..ListParams::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::served::test_server::{connected, failure};
+    use crate::client::served::ServedIndex;
+    use serde_json::json;
+
+    fn resources(group_version: &str, kinds: &[(&str, &str)]) -> String {
+        json!({
+            "kind": "APIResourceList",
+            "groupVersion": group_version,
+            "resources": kinds.iter().map(|(plural, kind)| json!({
+                "name": plural, "singularName": "", "namespaced": true,
+                "kind": kind, "verbs": ["get", "list"],
+            })).collect::<Vec<_>>(),
+        })
+        .to_string()
+    }
+
+    fn group(name: &str) -> serde_json::Value {
+        let version = json!({ "groupVersion": format!("{name}/v1"), "version": "v1" });
+        json!({ "name": name, "versions": [version], "preferredVersion": version })
+    }
+
+    /// A group whose discovery fails is named rather than dropped: its kinds
+    /// missing from the list would otherwise read as not installed.
+    #[tokio::test]
+    async fn a_group_that_does_not_answer_is_named_beside_the_ones_that_did() {
+        let (state, _) = connected(ServedIndex::default(), |path, _| match path {
+            "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+            "/api/v1" => (200, resources("v1", &[("configmaps", "ConfigMap")])),
+            "/apis" => (200, json!({ "kind": "APIGroupList", "groups": [group("ok.example.com"), group("broken.example.com")] }).to_string()),
+            "/apis/ok.example.com/v1" => (200, resources("ok.example.com/v1", &[("widgets", "Widget")])),
+            "/apis/broken.example.com/v1" => failure(503, "ServiceUnavailable"),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let found = catalog(&state).await.expect("catalog");
+        let plurals: Vec<_> = found
+            .entries
+            .iter()
+            .map(|e| (e.group.as_str(), e.plural.as_str()))
+            .collect();
+        assert!(plurals.contains(&("", "configmaps")));
+        assert!(plurals.contains(&("ok.example.com", "widgets")));
+        assert_eq!(found.unread.len(), 1);
+        assert_eq!(found.unread[0].group, "broken.example.com");
+        assert!(
+            found.entries.iter().all(|e| e.short_names.is_empty()),
+            "no aggregated discovery, no short names: the frontend's table stands in"
+        );
+    }
+
+    /// Every list of a served kind waits for the catalogue: one wedged
+    /// aggregated API kept Roles and `ServiceAccounts` blank for the minute
+    /// the read deadline allows it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_group_that_hangs_is_named_once_the_others_have_answered() {
+        let (state, _) = connected(ServedIndex::default(), |path, _| match path {
+            "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+            "/api/v1" => (200, resources("v1", &[("configmaps", "ConfigMap")])),
+            "/apis" => (200, json!({ "kind": "APIGroupList", "groups": [group("ok.example.com"), group("hung.example.com")] }).to_string()),
+            "/apis/ok.example.com/v1" => (200, resources("ok.example.com/v1", &[("widgets", "Widget")])),
+            "/apis/hung.example.com/v1" => {
+                std::thread::sleep(Duration::from_secs(3));
+                (200, resources("hung.example.com/v1", &[("gizmos", "Gizmo")]))
+            }
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let started = std::time::Instant::now();
+        let found = catalog_within(&state.here().expect("connected"), Duration::from_secs(1))
+            .await
+            .expect("catalog");
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            started.elapsed()
+        );
+        assert!(found.entries.iter().any(|e| e.plural == "widgets"));
+        assert!(found.entries.iter().all(|e| e.plural != "gizmos"));
+        assert_eq!(found.unread.len(), 1);
+        assert_eq!(found.unread[0].group, "hung.example.com");
+        assert_eq!(found.unread[0].code, "READ_DEADLINE");
+    }
+
+    /// Every group was asked at once: on a cluster of operators that is a
+    /// few hundred requests in one burst. Fails if more than a few groups
+    /// are read at a time, or if a group that waited its turn for longer
+    /// than the deadline is named as one that did not answer.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+    async fn a_catalogue_of_many_groups_reads_a_few_at_a_time() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let names: Vec<String> = (0..40).map(|n| format!("g{n}.example.com")).collect();
+        let listed = json!({
+            "kind": "APIGroupList",
+            "groups": names.iter().map(|name| group(name)).collect::<Vec<_>>(),
+        })
+        .to_string();
+        let (reading, most) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+        let (now, peak) = (reading.clone(), most.clone());
+        let (state, _) = connected(ServedIndex::default(), move |path, _| {
+            let Some(group) = path
+                .strip_prefix("/apis/")
+                .and_then(|rest| rest.strip_suffix("/v1"))
+            else {
+                return match path {
+                    "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+                    "/api/v1" => (200, resources("v1", &[])),
+                    "/apis" => (200, listed.clone()),
+                    _ => (404, "{}".to_string()),
+                };
+            };
+            peak.fetch_max(now.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(100));
+            now.fetch_sub(1, Ordering::SeqCst);
+            (200, resources(&format!("{group}/v1"), &[("widgets", "Widget")]))
+        })
+        .await;
+
+        // Five rounds of eight: the last starts after the deadline has run.
+        let found = catalog_within(
+            &state.here().expect("connected"),
+            Duration::from_millis(600),
+        )
+        .await
+        .expect("catalog");
+
+        assert_eq!(found.unread, []);
+        assert_eq!(found.entries.len(), 40);
+        let most = most.load(Ordering::SeqCst);
+        assert!((2..=ASKS_AT_ONCE).contains(&most), "{most} at once");
+    }
+
+    /// A CRD applied while its list page said "not served" stayed missing
+    /// on "Try the read again" for the two minutes a miss is kept.
+    #[tokio::test]
+    async fn a_kind_installed_after_the_catalogue_was_read_is_listed_once_discovery_is_forgotten() {
+        let (state, _) = connected(ServedIndex::default(), |path, nth| match path {
+            "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+            "/api/v1" => (200, resources("v1", &[])),
+            "/apis" => (200, json!({ "kind": "APIGroupList", "groups": [group("ok.example.com")] }).to_string()),
+            "/apis/ok.example.com/v1" if nth == 1 => (200, resources("ok.example.com/v1", &[("widgets", "Widget")])),
+            "/apis/ok.example.com/v1" => (200, resources("ok.example.com/v1", &[("widgets", "Widget"), ("gizmos", "Gizmo")])),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let gizmos = |found: &ApiCatalog| found.entries.iter().any(|e| e.plural == "gizmos");
+
+        assert!(!gizmos(&catalog(&state).await.expect("catalog")));
+        assert!(
+            !gizmos(&catalog(&state).await.expect("catalog")),
+            "the group's answer is kept, so the second read says what the first did"
+        );
+        forget(&state);
+        assert!(gizmos(&catalog(&state).await.expect("catalog")));
+    }
+
+    /// `po`, `deploy` and `sts` found nothing in the palette: kube's discovery
+    /// drops the short names the API server lists. Aggregated discovery keeps
+    /// them, so the catalogue carries each kind's own, a custom one's too.
+    #[tokio::test]
+    async fn the_catalogue_carries_the_short_names_aggregated_discovery_lists() {
+        let short = |plural: &str, short: &[&str]| json!({ "resource": plural, "shortNames": short, "verbs": ["list"] });
+        let aggregated = |name: &str, resources: Vec<serde_json::Value>| json!({ "metadata": { "name": name }, "versions": [{ "version": "v1", "resources": resources }] });
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/api" => (
+                200,
+                json!({
+                    "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [],
+                    "items": [aggregated("", vec![short("configmaps", &["cm"])])],
+                })
+                .to_string(),
+            ),
+            "/api/v1" => (200, resources("v1", &[("configmaps", "ConfigMap")])),
+            "/apis" => (
+                200,
+                json!({
+                    "kind": "APIGroupList", "groups": [group("ok.example.com")],
+                    "items": [aggregated("ok.example.com", vec![short("widgets", &["wd", "wds"])])],
+                })
+                .to_string(),
+            ),
+            "/apis/ok.example.com/v1" => (
+                200,
+                resources("ok.example.com/v1", &[("widgets", "Widget")]),
+            ),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let found = catalog(&state).await.expect("catalog");
+        let short_of = |plural: &str| {
+            found
+                .entries
+                .iter()
+                .find(|e| e.plural == plural)
+                .map(|e| e.short_names.clone())
+        };
+        assert_eq!(short_of("configmaps"), Some(vec!["cm".to_string()]));
+        assert_eq!(
+            short_of("widgets"),
+            Some(vec!["wd".to_string(), "wds".to_string()])
+        );
+    }
+
+    /// A Lease page said "Status: Nothing reported yet", which reads as
+    /// pending, for a kind that has no status at all. Discovery says which
+    /// kinds serve one.
+    #[tokio::test]
+    async fn the_catalogue_says_which_kinds_serve_a_status() {
+        let listed = |name: &str, kind: &str| json!({ "name": name, "singularName": "", "namespaced": true, "kind": kind, "verbs": ["get"] });
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+            "/api/v1" => (
+                200,
+                json!({
+                    "kind": "APIResourceList", "groupVersion": "v1",
+                    "resources": [
+                        listed("pods", "Pod"),
+                        listed("pods/status", "Pod"),
+                        listed("serviceaccounts", "ServiceAccount"),
+                    ],
+                })
+                .to_string(),
+            ),
+            "/apis" => (200, json!({ "kind": "APIGroupList", "groups": [] }).to_string()),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let found = catalog(&state).await.expect("catalog");
+        let has = |plural: &str| {
+            found
+                .entries
+                .iter()
+                .find(|e| e.plural == plural)
+                .and_then(|e| e.has_status)
+        };
+        assert_eq!(has("pods"), Some(true));
+        assert_eq!(has("serviceaccounts"), Some(false));
+    }
+
+    /// The generic object page, the peek and the pages that compare siblings
+    /// take objects whole; both reads handed over a `ConfigMap`'s key twice,
+    /// under `data` and in the record `kubectl apply` keeps of it.
+    #[tokio::test]
+    async fn an_object_read_whole_is_handed_over_without_its_private_key() {
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let applied = json!({ "kind": "ConfigMap", "data": { "server.key": KEY } });
+        let config = json!({
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": "nginx",
+                "namespace": "team-a",
+                "annotations": {
+                    "kubectl.kubernetes.io/last-applied-configuration": applied.to_string(),
+                },
+            },
+            "data": { "nginx.conf": "worker_processes 2;", "server.key": KEY },
+        });
+        let list = json!({ "kind": "ConfigMapList", "apiVersion": "v1", "metadata": {}, "items": [config] });
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+            "/api/v1" => (200, resources("v1", &[("configmaps", "ConfigMap")])),
+            "/apis" => (200, json!({ "kind": "APIGroupList", "groups": [] }).to_string()),
+            "/api/v1/namespaces/team-a/configmaps/nginx" => (200, list["items"][0].to_string()),
+            "/api/v1/namespaces/team-a/configmaps" => (200, list.to_string()),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+
+        let one = whole(&state, "", "configmaps", "nginx", Some("team-a".into()))
+            .await
+            .expect("read");
+        let siblings = siblings_of(
+            &state,
+            String::new(),
+            "configmaps".into(),
+            Some("team-a".into()),
+        )
+        .await
+        .expect("listed");
+        assert_eq!(siblings.items.len(), 1);
+        for object in [&one, &siblings.items[0]] {
+            assert_eq!(object["data"]["nginx.conf"], "worker_processes 2;");
+            assert_eq!(
+                object["data"]["server.key"],
+                crate::resources::WITHHELD_MARKER
+            );
+            assert!(!object.to_string().contains("PRIVATE KEY"), "{object}");
+        }
+    }
+}

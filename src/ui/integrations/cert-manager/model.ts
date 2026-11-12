@@ -1,0 +1,590 @@
+/**
+ * cert-manager's objects, read as one answer per certificate.
+ *
+ * `Certificate` → `CertificateRequest` → `Order` → `Challenge` is four
+ * unrelated custom resources on four list pages; this walks them in the
+ * browser off the four cluster-wide lists the page already has — the same
+ * lists the sidebar count is read from, so the walk costs nothing extra.
+ *
+ * The backend's `certificate.issuance` capability answers the same question
+ * from the other end (start at a Secret an Ingress named) and is what the
+ * Ingress and Secret pages ask. Not reused here: it lists every Certificate
+ * in a namespace per call, so forty rows would cost forty calls.
+ *
+ * Nothing is paraphrased: `state` is the word the object uses for itself,
+ * `note` the controller's own sentence — that string is what the reader
+ * pastes into a search.
+ */
+
+import { expiryText, managedExpiryOf, type Expiry } from "@/lib/certificates";
+import type { T } from "@/i18n/useT";
+import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
+
+import { conditionOf, conditionSays, getValueByPath } from "../kit";
+import type { Tone } from "../page-kit";
+import { certificateUse, type CertificateUse } from "./serves";
+
+export const CERTIFICATES_CRD = "certificates.cert-manager.io";
+export const REQUESTS_CRD = "certificaterequests.cert-manager.io";
+export const ORDERS_CRD = "orders.acme.cert-manager.io";
+export const CHALLENGES_CRD = "challenges.acme.cert-manager.io";
+export const ISSUERS_CRD = "issuers.cert-manager.io";
+export const CLUSTER_ISSUERS_CRD = "clusterissuers.cert-manager.io";
+/** Not a CRD: named beside them for the one read of a built-in the page makes. */
+export const INGRESSES = "ingresses.networking.k8s.io";
+
+/** One object on the way from "I want a certificate" to a certificate. */
+export interface CertStep {
+  kind: string;
+  name: string;
+  namespace: string | null;
+  crd: string;
+  /** The word the object uses for itself: `pending`, `valid`, `errored`. */
+  state: string;
+  /** The controller's own sentence, verbatim. */
+  note: string | null;
+  failed: boolean;
+}
+
+export interface IssuerRef {
+  name: string;
+  kind: string;
+}
+
+export interface CertRow {
+  key: string;
+  name: string;
+  namespace: string;
+  secretName: string | null;
+  issuer: IssuerRef | null;
+  dnsNames: string[];
+  /** What the certificate itself says, once there is one. */
+  expiry: Expiry | null;
+  renewalTime: string | null;
+  failedAttempts: number | null;
+  /** `null` where cert-manager has written no `Ready`, or `Unknown`. */
+  ready: boolean | null;
+  /** cert-manager is trying to issue or renew right now. */
+  inFlight: boolean;
+  /** No certificate has ever been written to the Secret. */
+  neverIssued: boolean;
+  /** The deepest message on the walk — the one that says what actually failed. */
+  failure: string | null;
+  steps: CertStep[];
+  state: { text: string; tone: Tone };
+  /**
+   * The hostnames this certificate is actually serving, through whatever
+   * mounts its Secret — see `./serves`. A `Certificate` never states this
+   * about itself, and "thirty days left" is not actionable until you know
+   * which address stops working.
+   */
+  use: CertificateUse;
+  /** Sort rank: lower is more urgent. */
+  rank: number;
+}
+
+export interface IssuerRow {
+  key: string;
+  name: string;
+  /** `null` for a ClusterIssuer, which is the difference that matters. */
+  namespace: string | null;
+  kind: "Issuer" | "ClusterIssuer";
+  crd: string;
+  /** ACME, CA, SelfSigned, Vault, Venafi — or `null` where the spec is new to us. */
+  type: string | null;
+  detail: string | null;
+  /** `null` where the controller has written no `Ready`, or `Unknown`. */
+  ready: boolean | null;
+  message: string | null;
+  /** How many Certificates name it. Nobody's issuer is a real finding. */
+  serves: number;
+}
+
+/**
+ * A kind this page needed and did not get.
+ *
+ * "The API server does not serve this kind" and "this read failed" are
+ * different facts and only one is an absence: a CA-only install genuinely has
+ * no `Order` CRD, while a kubeconfig without cluster-scoped
+ * `list clusterissuers` has read nothing about a cluster that may be signing
+ * everything it has. Collapsing the two into an empty list is what tells a
+ * reader their working ClusterIssuer does not exist.
+ */
+export interface UnreadKind {
+  /** The kind as cert-manager names it: `ClusterIssuer`, `Order`. */
+  kind: string;
+  crd: string;
+  /** The API server's own sentence, verbatim. */
+  reason: string;
+}
+
+export interface CertPicture {
+  certificates: CertRow[];
+  issuers: IssuerRow[];
+  /** Whether the ACME kinds are served at all — a CA-only install has none,
+   *  and a kind nobody could read is not counted as absent. */
+  acme: boolean;
+  /**
+   * Kinds nothing on this page may speak for. Every list drawn from one of
+   * them is short by an unknown amount, so a surface that states an absence
+   * has to check this first.
+   */
+  unread: UnreadKind[];
+}
+
+function text(resource: CustomResourceInfo, path: string): string | null {
+  const value = getValueByPath(resource, path);
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+function strings(resource: CustomResourceInfo, path: string): string[] {
+  const value = getValueByPath(resource, path);
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+/** The controller's word for where a condition stands, then its type. */
+type Said = {
+  status: string;
+  reason?: string | null;
+  message?: string | null;
+} | null;
+
+function stateOf(condition: Said, fallback: string): string {
+  return condition?.reason || condition?.status || fallback;
+}
+
+/**
+ * Where a CertificateRequest stands, from its `Denied` and `Ready`
+ * conditions: a denial first, since an approver's "no" ends it. The chain
+ * and the shared file both read it here.
+ */
+export function requestStep(
+  denied: Said,
+  ready: Said
+): { state: string; note: string | null; failed: boolean; done: boolean } {
+  return {
+    state: stateOf(denied?.status === "True" ? denied : ready, "pending"),
+    note: denied?.message ?? ready?.message ?? null,
+    failed:
+      denied?.status === "True" ||
+      ready?.reason === "Failed" ||
+      ready?.reason === "Denied",
+    done: denied?.status !== "True" && ready?.status === "True",
+  };
+}
+
+/**
+ * Whether the last attempt failed. cert-manager then leaves Issuing=False
+ * with the request's reason, through a backoff of up to 32 hours. A success
+ * removes the condition, or under server-side apply leaves it False with
+ * the reason `Issued`.
+ */
+export function attemptFailed(issuing: Said): boolean {
+  return issuing?.status === "False" && issuing.reason !== "Issued";
+}
+
+/** An ACME Order or Challenge `state` the chain calls a failure. */
+export function acmeFailed(state: string): boolean {
+  return state === "invalid" || state === "errored" || state === "expired";
+}
+
+const ownedBy = (resource: CustomResourceInfo, uid: string): boolean =>
+  resource.ownerReferences.some((owner) => owner.uid === uid);
+
+/**
+ * The revision an ACME request is for, so the newest one is the one walked.
+ *
+ * A certificate that has failed four times has four CertificateRequests, and
+ * three of them are history — showing the oldest would report a failure that
+ * was fixed a week ago.
+ */
+function revisionOf(resource: CustomResourceInfo): number {
+  const raw = resource.annotations["cert-manager.io/certificate-revision"];
+  const parsed = Number.parseInt(raw ?? "", 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function newest(resources: CustomResourceInfo[]): CustomResourceInfo | null {
+  if (resources.length === 0) return null;
+  return resources.reduce((best, candidate) =>
+    revisionOf(candidate) > revisionOf(best) ||
+    (candidate.createdAt ?? "") > (best.createdAt ?? "")
+      ? candidate
+      : best
+  );
+}
+
+/**
+ * The walk, and only when there is one to draw.
+ *
+ * A certificate that is simply serving has nothing in flight. Drawing four
+ * green steps under every healthy row is how the walk stops being read on the
+ * one row where it is the answer.
+ */
+function walk(
+  certificate: CustomResourceInfo,
+  requests: CustomResourceInfo[],
+  orders: CustomResourceInfo[],
+  challenges: CustomResourceInfo[]
+): { steps: CertStep[]; failure: string | null } {
+  const issuing = conditionOf(certificate, "Issuing");
+  const ready = conditionOf(certificate, "Ready");
+  const lastFailed = attemptFailed(issuing);
+
+  const steps: CertStep[] = [
+    {
+      kind: "Certificate",
+      name: certificate.name,
+      namespace: certificate.namespace,
+      crd: CERTIFICATES_CRD,
+      state: stateOf(issuing, "pending"),
+      note: issuing?.message ?? null,
+      failed: lastFailed,
+    },
+  ];
+  // Ready=True keeps "Certificate is up to date" for the whole of a renewal:
+  // not a sentence about what failed. A failed attempt's own is.
+  let deepest =
+    (lastFailed ? issuing?.message : null) ??
+    (ready?.status === "True" ? null : ready?.message) ??
+    null;
+
+  const request = newest(
+    requests.filter((item) => ownedBy(item, certificate.uid))
+  );
+  if (!request) return { steps, failure: deepest };
+
+  const step = requestStep(
+    conditionOf(request, "Denied"),
+    conditionOf(request, "Ready")
+  );
+  deepest = step.note ?? deepest;
+  steps.push({
+    kind: "CertificateRequest",
+    name: request.name,
+    namespace: request.namespace,
+    crd: REQUESTS_CRD,
+    state: step.state,
+    note: step.note,
+    failed: step.failed,
+  });
+  if (step.failed) return { steps, failure: deepest };
+
+  const order = newest(orders.filter((item) => ownedBy(item, request.uid)));
+  if (!order) return { steps, failure: deepest };
+
+  const orderState = text(order, "status.state") ?? "pending";
+  const orderReason = text(order, "status.reason");
+  deepest = orderReason ?? deepest;
+  const orderFailed = acmeFailed(orderState);
+  steps.push({
+    kind: "Order",
+    name: order.name,
+    namespace: order.namespace,
+    crd: ORDERS_CRD,
+    state: orderState,
+    note: orderReason,
+    failed: orderFailed,
+  });
+  if (orderFailed) return { steps, failure: deepest };
+
+  // Every unproven domain at once, not the first: a certificate for four
+  // hosts routinely fails on one of them, and naming that one is the answer.
+  for (const challenge of challenges.filter((item) =>
+    ownedBy(item, order.uid)
+  )) {
+    const state = text(challenge, "status.state") ?? "pending";
+    const reason = text(challenge, "status.reason");
+    const failed = acmeFailed(state);
+    if (reason && (failed || state !== "valid")) deepest = reason;
+    // Without a reason, which domain is being proved and how is the whole of
+    // what the step says — and it is what tells `_acme-challenge` apart from
+    // the HTTP path that never got served.
+    const proving = [
+      text(challenge, "spec.type"),
+      text(challenge, "spec.dnsName"),
+    ]
+      .filter(Boolean)
+      .join(" for ");
+    steps.push({
+      kind: "Challenge",
+      name: challenge.name,
+      namespace: challenge.namespace,
+      crd: CHALLENGES_CRD,
+      state,
+      note: reason ?? (proving === "" ? null : proving),
+      failed,
+    });
+  }
+
+  return { steps, failure: deepest };
+}
+
+/**
+ * What is true of one certificate right now, in one phrase and one colour.
+ *
+ * Ordered the way the reader would triage it: a Secret that does not exist
+ * beats a renewal that is failing while the old certificate still serves,
+ * which beats one that is merely running out.
+ */
+function stateOfCertificate(
+  row: {
+    neverIssued: boolean;
+    ready: boolean | null;
+    inFlight: boolean;
+    expiry: Expiry | null;
+    /** cert-manager says it is not ready, or a step of the walk failed. */
+    failed: boolean;
+  },
+  t: T
+): { text: string; tone: Tone; rank: number } {
+  if (row.neverIssued) {
+    return {
+      text: t("readings", "certNeverIssuedShort"),
+      tone: "err",
+      rank: 0,
+    };
+  }
+  if (row.expiry?.expired) {
+    return {
+      text: expiryText(row.expiry, t),
+      tone: "err",
+      rank: 1,
+    };
+  }
+  // Still serving, and cert-manager cannot replace it. The old certificate
+  // has until `notAfter` to be fixed, which is why this is not an outage and
+  // is still the loudest thing on a healthy-looking row.
+  if (row.failed) {
+    return {
+      text: t("readings", "certRenewalFailing"),
+      tone: "err",
+      rank: 2,
+    };
+  }
+  if (row.expiry?.tone === "err") {
+    return {
+      text: expiryText(row.expiry, t),
+      tone: "err",
+      rank: 3,
+    };
+  }
+  if (row.expiry?.tone === "warn") {
+    return {
+      text: expiryText(row.expiry, t),
+      tone: "warn",
+      rank: 4,
+    };
+  }
+  if (row.inFlight)
+    return { text: t("readings", "certRenewing"), tone: "warn", rank: 5 };
+  // cert-manager has said neither yes nor no, so neither does the row.
+  if (row.ready === null)
+    return { text: t("empty", "noStatusYet"), tone: "warn", rank: 5 };
+  return {
+    text: row.expiry ? expiryText(row.expiry, t) : t("readings", "certIssued"),
+    tone: "ok",
+    rank: 6,
+  };
+}
+
+export function certificateRows(
+  certificates: CustomResourceInfo[],
+  requests: CustomResourceInfo[],
+  orders: CustomResourceInfo[],
+  challenges: CustomResourceInfo[],
+  // Ahead of the optional arguments because it has to be: a required
+  // parameter cannot follow one with a default.
+  t: T,
+  /** What mounts the Secrets, for the hosts each certificate serves; `null` where they were not read. */
+  ingresses: IngressInfo[] | null = null,
+  /** False where a routing CRD this file cannot read may also mount them. */
+  unusedIsCertain = false
+): CertRow[] {
+  return certificates
+    .map((certificate): CertRow => {
+      const ready = conditionOf(certificate, "Ready");
+      const issuing = conditionOf(certificate, "Issuing");
+      const notAfter = text(certificate, "status.notAfter");
+      const notBefore = text(certificate, "status.notBefore");
+      const renewalTime = text(certificate, "status.renewalTime");
+      // cert-manager writes this Ready as True or False. Absent, it has
+      // not looked: nothing was refused and there is no walk to draw.
+      const isReady = conditionSays(ready);
+      const inFlight = issuing?.status === "True" || isReady === false;
+
+      const walked =
+        inFlight || attemptFailed(issuing)
+          ? walk(certificate, requests, orders, challenges)
+          : { steps: [], failure: null };
+      const steps = walked.steps;
+      // A renewal under way writes sentences too, and they are progress:
+      // one is a failure only where something has failed.
+      const failed = isReady === false || steps.some((step) => step.failed);
+      const failure = failed ? walked.failure : null;
+
+      const row = {
+        neverIssued: isReady === false && notAfter === null,
+        ready: isReady,
+        inFlight,
+        expiry:
+          notAfter !== null
+            ? managedExpiryOf(
+                { notAfter, notBefore: notBefore ?? "" },
+                renewalTime
+              )
+            : null,
+        failure,
+      };
+      const state = stateOfCertificate({ ...row, failed }, t);
+      const issuerName = text(certificate, "spec.issuerRef.name");
+
+      const namespace = certificate.namespace ?? "";
+      const secretName = text(certificate, "spec.secretName");
+      const dnsNames = strings(certificate, "spec.dnsNames");
+
+      return {
+        key: `${namespace}/${certificate.name}`,
+        name: certificate.name,
+        namespace,
+        secretName,
+        use: certificateUse({ secretName, namespace, dnsNames }, ingresses, {
+          unusedIsCertain,
+        }),
+        issuer: issuerName
+          ? {
+              name: issuerName,
+              kind: text(certificate, "spec.issuerRef.kind") ?? "Issuer",
+            }
+          : null,
+        dnsNames,
+        renewalTime,
+        failedAttempts:
+          typeof getValueByPath(
+            certificate,
+            "status.failedIssuanceAttempts"
+          ) === "number"
+            ? (getValueByPath(
+                certificate,
+                "status.failedIssuanceAttempts"
+              ) as number)
+            : null,
+        steps,
+        ...row,
+        state: { text: state.text, tone: state.tone },
+        rank: state.rank,
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.rank - b.rank ||
+        // The exact remaining time: whole days tie for everything expiring
+        // inside one day, and the alphabet is not a measure of urgency.
+        (a.expiry?.left ?? Infinity) - (b.expiry?.left ?? Infinity) ||
+        a.name.localeCompare(b.name)
+    );
+}
+
+/** Let's Encrypt by the directory's host, not by the name appearing anywhere in the URL. */
+export function acmeServerLabel(server: string | null): string | null {
+  if (!server || !URL.canParse(server)) return server;
+  const host = new URL(server).hostname;
+  if (host !== "letsencrypt.org" && !host.endsWith(".letsencrypt.org"))
+    return server;
+  return host.includes("staging") ? "Let's Encrypt staging" : "Let's Encrypt";
+}
+
+/** ACME, CA, SelfSigned, Vault, Venafi — and what each one points at. */
+function issuerKindOf(
+  issuer: CustomResourceInfo
+): { type: string; detail: string | null } | null {
+  const spec = getValueByPath(issuer, "spec");
+  if (spec === null || typeof spec !== "object") return null;
+  const fields = spec as Record<string, unknown>;
+
+  if (fields.acme) {
+    return {
+      type: "ACME",
+      detail: acmeServerLabel(text(issuer, "spec.acme.server")),
+    };
+  }
+  if (fields.ca) {
+    return { type: "CA", detail: text(issuer, "spec.ca.secretName") };
+  }
+  if (fields.selfSigned) return { type: "SelfSigned", detail: null };
+  if (fields.vault) {
+    return { type: "Vault", detail: text(issuer, "spec.vault.server") };
+  }
+  if (fields.venafi) return { type: "Venafi", detail: null };
+  return null;
+}
+
+/**
+ * Every issuer this cluster has, with how many certificates name it.
+ *
+ * A ClusterIssuer is matched by name alone and an Issuer by name *and*
+ * namespace, which is the whole of the difference between them and the
+ * reason a certificate naming `Issuer/letsencrypt` from the wrong namespace
+ * never issues.
+ */
+export function issuerRows(
+  issuers: CustomResourceInfo[],
+  clusterIssuers: CustomResourceInfo[],
+  certificates: CertRow[]
+): IssuerRow[] {
+  const build = (
+    issuer: CustomResourceInfo,
+    kind: "Issuer" | "ClusterIssuer"
+  ): IssuerRow => {
+    const ready = conditionOf(issuer, "Ready");
+    const shape = issuerKindOf(issuer);
+    return {
+      key: `${kind}/${issuer.namespace ?? ""}/${issuer.name}`,
+      name: issuer.name,
+      namespace: kind === "ClusterIssuer" ? null : (issuer.namespace ?? ""),
+      kind,
+      crd: kind === "ClusterIssuer" ? CLUSTER_ISSUERS_CRD : ISSUERS_CRD,
+      type: shape?.type ?? null,
+      detail: shape?.detail ?? null,
+      ready: conditionSays(ready),
+      message: ready?.status === "True" ? null : (ready?.message ?? null),
+      serves: certificates.filter(
+        (certificate) =>
+          certificate.issuer?.name === issuer.name &&
+          certificate.issuer.kind === kind &&
+          (kind === "ClusterIssuer" ||
+            certificate.namespace === (issuer.namespace ?? ""))
+      ).length,
+    };
+  };
+
+  return [
+    ...clusterIssuers.map((issuer) => build(issuer, "ClusterIssuer")),
+    ...issuers.map((issuer) => build(issuer, "Issuer")),
+  ].sort(
+    (a, b) =>
+      Number(a.ready !== false) - Number(b.ready !== false) ||
+      a.name.localeCompare(b.name)
+  );
+}
+
+/**
+ * The one colour a whole page of certificates is worth in the rail.
+ *
+ * Judged from the certificates alone — the sidebar's query — so a failure
+ * whose sentence lives three objects down the walk still registers here:
+ * `Ready=False` is on the Certificate itself, whatever the Challenge says.
+ */
+export function worstCertificateTone(
+  certificates: CustomResourceInfo[]
+): "warn" | "err" | null {
+  // Only the tones are read, and every sentence the rows carry is thrown
+  // away here.
+  const noWords: T = () => "";
+  const rows = certificateRows(certificates, [], [], [], noWords);
+  if (rows.some((row) => row.state.tone === "err")) return "err";
+  if (rows.some((row) => row.state.tone === "warn")) return "warn";
+  return null;
+}

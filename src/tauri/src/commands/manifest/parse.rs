@@ -1,0 +1,473 @@
+//! YAML manifest parsing — splits multi-document YAML, lifts every
+//! document into a `kube::core::DynamicObject` paired with the
+//! `ApiResource` needed to address its dynamic API. The kube
+//! `pluralize` impl + the `is_cluster_scoped` discriminator live
+//! here too since both are pure-data helpers consumed only by this
+//! module's parser.
+
+use crate::error::{Error, Result};
+use kube::api::GroupVersionKind;
+use kube::core::DynamicObject;
+use kube::discovery::ApiResource;
+use serde::Deserialize as _;
+
+/// Parsed manifest with API resource info
+pub(super) struct ParsedManifest {
+    pub api_resource: ApiResource,
+    pub object: DynamicObject,
+    pub namespace: Option<String>,
+}
+
+impl ParsedManifest {
+    /// Get the effective namespace (from manifest, fallback, or "default")
+    pub fn effective_namespace(&self, fallback: Option<&str>) -> String {
+        self.namespace
+            .clone()
+            .or_else(|| fallback.map(str::to_string))
+            .unwrap_or_else(|| "default".to_string())
+    }
+
+    /// Get the resource name or "<unnamed>"
+    pub fn name(&self) -> String {
+        self.object
+            .metadata
+            .name
+            .clone()
+            .unwrap_or_else(|| "<unnamed>".to_string())
+    }
+
+    /// Format resource identifier for messages (e.g., "deployment/default nginx")
+    pub fn format_id(&self, namespace: &str, action: &str) -> String {
+        format!(
+            "{}/{} {} {}",
+            self.api_resource.kind.to_lowercase(),
+            namespace,
+            self.name(),
+            action
+        )
+    }
+}
+
+/// Parse all documents from a manifest string
+pub(super) fn parse_all_documents(manifest: &str) -> Result<Vec<ParsedManifest>> {
+    let documents = yaml_documents(manifest)?;
+
+    if documents.is_empty() {
+        return Err(Error::InvalidInput(
+            "No valid YAML documents found".to_string(),
+        ));
+    }
+
+    let mut parsed = documents
+        .iter()
+        .enumerate()
+        .map(|(i, doc)| {
+            parse_manifest_document(doc)
+                .map_err(|e| Error::InvalidInput(format!("Document {}: {}", i + 1, e)))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    // Every command that sends a manifest gets its documents here, so this
+    // is the one door: a `ConfigMap` would store the placeholder as the key,
+    // and a Deployment as its container's `env`.
+    let mut keys = Vec::new();
+    for doc in &parsed {
+        let whole =
+            serde_json::to_value(&doc.object).map_err(|e| Error::Serialization(e.to_string()))?;
+        keys.extend(crate::resources::still_withheld(&whole));
+    }
+    if !keys.is_empty() {
+        return Err(Error::WithheldValue { keys });
+    }
+    // A record the screen showed with a key blanked is not the reader's to
+    // send: stored, the placeholder would stand where kubectl wrote the key.
+    // Left out, a server-side apply keeps what another manager owns.
+    for doc in &mut parsed {
+        let meta = &mut doc.object.metadata;
+        if let Some(annotations) = meta.annotations.as_mut() {
+            annotations.retain(|_, value| crate::resources::withheld_copy(value).is_empty());
+        }
+        meta.annotations = meta.annotations.take().filter(|kept| !kept.is_empty());
+    }
+    Ok(parsed)
+}
+
+/// Parse a single YAML document into a `DynamicObject` with API resource info
+fn parse_manifest_document(value: &serde_yaml::Value) -> Result<ParsedManifest> {
+    let api_version = value
+        .get("apiVersion")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::InvalidInput("Missing apiVersion in manifest".to_string()))?;
+
+    let kind = value
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::InvalidInput("Missing kind in manifest".to_string()))?;
+
+    let metadata = value
+        .get("metadata")
+        .ok_or_else(|| Error::InvalidInput("Missing metadata in manifest".to_string()))?;
+
+    let name = metadata
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::InvalidInput("Missing metadata.name in manifest".to_string()))?;
+
+    let namespace = metadata.get("namespace").and_then(|v| v.as_str());
+
+    let (group, version) = parse_api_version(api_version);
+
+    let api_resource = ApiResource::from_gvk_with_plural(
+        &GroupVersionKind::gvk(&group, &version, kind),
+        &pluralize(kind),
+    );
+
+    let mut object: DynamicObject =
+        serde_yaml::from_value(value.clone()).map_err(|e| Error::Serialization(e.to_string()))?;
+
+    if object.metadata.name.is_none() {
+        object.metadata.name = Some(name.to_string());
+    }
+
+    Ok(ParsedManifest {
+        api_resource,
+        object,
+        namespace: namespace.map(String::from),
+    })
+}
+
+/// Build an `ApiResource` directly from kind + apiVersion + name. Used by
+/// `get_manifest` which doesn't have a YAML body to parse.
+pub(super) fn api_resource_for(kind: &str, api_version: &str) -> ApiResource {
+    let (group, version) = parse_api_version(api_version);
+    ApiResource::from_gvk_with_plural(
+        &GroupVersionKind::gvk(&group, &version, kind),
+        &pluralize(kind),
+    )
+}
+
+fn parse_api_version(api_version: &str) -> (String, String) {
+    if api_version.contains('/') {
+        let parts: Vec<&str> = api_version.splitn(2, '/').collect();
+        (parts[0].to_string(), parts[1].to_string())
+    } else {
+        // Core API (v1)
+        (String::new(), api_version.to_string())
+    }
+}
+
+/// Simple pluralization for Kubernetes resource kinds
+pub(super) fn pluralize(kind: &str) -> String {
+    let lower = kind.to_lowercase();
+
+    // Special cases
+    match lower.as_str() {
+        "endpoints" => "endpoints".to_string(),
+        "ingress" => "ingresses".to_string(),
+        "networkpolicy" => "networkpolicies".to_string(),
+        "podsecuritypolicy" => "podsecuritypolicies".to_string(),
+        "storageclass" => "storageclasses".to_string(),
+        "ingressclass" => "ingressclasses".to_string(),
+        "runtimeclass" => "runtimeclasses".to_string(),
+        "priorityclass" => "priorityclasses".to_string(),
+        _ => {
+            // Standard pluralization rules. `-y` becomes `-ies` only after
+            // a consonant: policy → policies, but gateway → gateways — the
+            // "gatewaies" this once produced 404'd every Gateway YAML tab.
+            let consonant_y = lower.ends_with('y')
+                && !matches!(
+                    lower.as_bytes().get(lower.len().wrapping_sub(2)),
+                    Some(b'a' | b'e' | b'i' | b'o' | b'u')
+                );
+            if lower.ends_with('s') || lower.ends_with('x') || lower.ends_with("ch") {
+                format!("{lower}es")
+            } else if consonant_y {
+                format!("{}ies", &lower[..lower.len() - 1])
+            } else {
+                format!("{lower}s")
+            }
+        }
+    }
+}
+
+/// The documents a manifest holds, in order.
+///
+/// Parsed, not split on a separator. Splitting on `\n---` and dropping any
+/// piece that began with `#` threw away every document `helm template`
+/// writes — each one opens with a `# Source: …` line — so applying its output
+/// sent the cluster the first object, silently discarded the rest, and
+/// reported success. A lone comment at the top of a single-document manifest
+/// emptied it entirely and answered "No valid YAML documents found".
+fn yaml_documents(manifest: &str) -> Result<Vec<serde_yaml::Value>> {
+    let mut documents = Vec::new();
+    for document in serde_yaml::Deserializer::from_str(manifest) {
+        let value = serde_yaml::Value::deserialize(document)
+            .map_err(|e| Error::Serialization(e.to_string()))?;
+        // A document of nothing but comments — or the empty tail a trailing
+        // `---` leaves — reads as null, and null is not an object to apply.
+        if !value.is_null() {
+            documents.push(value);
+        }
+    }
+    Ok(documents)
+}
+
+/// Check if a kind is cluster-scoped (not namespaced)
+pub(super) fn is_cluster_scoped(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Namespace"
+            | "Node"
+            | "PersistentVolume"
+            | "ClusterRole"
+            | "ClusterRoleBinding"
+            | "StorageClass"
+            | "PriorityClass"
+            | "IngressClass"
+            | "GatewayClass"
+            | "RuntimeClass"
+            | "CustomResourceDefinition"
+            | "APIService"
+            | "MutatingWebhookConfiguration"
+            | "ValidatingWebhookConfiguration"
+            | "PodSecurityPolicy"
+            | "CertificateSigningRequest"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gateway_class_is_cluster_scoped() {
+        // getManifest built a namespaced path for it and got the
+        // apiserver mux's raw 404 - the detail page could not read
+        // the YAML of a perfectly real GatewayClass.
+        assert!(is_cluster_scoped("GatewayClass"));
+        assert!(!is_cluster_scoped("Gateway"));
+    }
+
+    /// A manifest is applied and its YAML fetched at a path built from these
+    /// two guesses. For a kind the registry knows, the guess and the registry
+    /// are one fact, and a kind that disagreed would 404 on its YAML tab.
+    #[test]
+    fn the_guesses_agree_with_the_registry_on_every_kind_it_knows() {
+        for facts in crate::resources::every_kind() {
+            let kind = facts.kind.as_str();
+            assert_eq!(pluralize(kind), facts.plural, "{kind}");
+            assert_eq!(
+                is_cluster_scoped(kind),
+                facts.scope == crate::resources::KindScope::Cluster,
+                "{kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_pluralize() {
+        assert_eq!(pluralize("Pod"), "pods");
+        assert_eq!(pluralize("Deployment"), "deployments");
+        assert_eq!(pluralize("Service"), "services");
+        assert_eq!(pluralize("Ingress"), "ingresses");
+        assert_eq!(pluralize("NetworkPolicy"), "networkpolicies");
+        assert_eq!(pluralize("StorageClass"), "storageclasses");
+    }
+
+    #[test]
+    fn test_split_yaml_documents() {
+        let yaml = r"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: test1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: test2
+";
+        assert_eq!(yaml_documents(yaml).expect("parses").len(), 2);
+    }
+
+    /// Every document `helm template` writes opens with `# Source: …`, and
+    /// splitting on the separator dropped all but the first — so applying a
+    /// chart sent one object to the cluster and called it a success.
+    #[test]
+    fn keeps_the_documents_helm_writes() {
+        let yaml = r"---
+# Source: demo/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo
+---
+# Source: demo/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo
+---
+# Source: demo/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+";
+        let documents = yaml_documents(yaml).expect("parses");
+        assert_eq!(documents.len(), 3, "helm output lost documents");
+        let kinds: Vec<_> = documents
+            .iter()
+            .filter_map(|doc| doc.get("kind").and_then(serde_yaml::Value::as_str))
+            .collect();
+        assert_eq!(kinds, ["ServiceAccount", "Service", "Deployment"]);
+    }
+
+    /// One document that merely starts with a comment used to leave nothing
+    /// at all, and the reader was told their manifest held no YAML.
+    #[test]
+    fn a_comment_on_the_first_line_is_not_an_empty_manifest() {
+        let yaml =
+            "# my nginx deployment\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: n\n";
+        assert_eq!(yaml_documents(yaml).expect("parses").len(), 1);
+    }
+
+    /// A trailing separator leaves an empty tail, which is not an object.
+    #[test]
+    fn a_trailing_separator_adds_nothing() {
+        let yaml = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n---\n";
+        assert_eq!(yaml_documents(yaml).expect("parses").len(), 1);
+    }
+
+    /// Would let Apply, and the dry run before it, write the placeholder
+    /// over a private key: a `ConfigMap`'s `data` is plain text, so the API
+    /// server stores the sentence. The frontend names the same keys before
+    /// Apply is offered, and the shared cases are what keep the two agreeing.
+    #[test]
+    fn a_manifest_still_holding_the_withheld_placeholder_is_never_parsed_for_sending() {
+        const CORPUS: &str = include_str!("../../../../contracts/withheld-value.json");
+        let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
+        assert_eq!(corpus["marker"], crate::resources::WITHHELD_MARKER);
+
+        let cases = corpus["cases"].as_array().unwrap();
+        assert!(cases.len() >= 6, "the corpus lost its cases");
+        for case in cases {
+            let name = case["name"].as_str().unwrap();
+            let mut expected: Vec<&str> = case["keys"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|key| key.as_str().unwrap())
+                .collect();
+            expected.sort_unstable();
+            let mut found = match parse_all_documents(case["manifest"].as_str().unwrap()) {
+                Ok(_) => Vec::new(),
+                Err(Error::WithheldValue { keys }) => keys,
+                Err(other) => panic!("{name}: {other}"),
+            };
+            found.sort_unstable();
+            assert_eq!(found, expected, "{name}");
+        }
+    }
+
+    /// Would write the placeholder into the record `kubectl apply` keeps: the
+    /// editor's buffer holds that record with its keys blanked, and Apply and
+    /// the dry run send the buffer. Fails if a blanked record is sent, if any
+    /// other annotation is not, or if the editor would name other keys.
+    #[test]
+    fn a_record_blanked_for_the_screen_is_left_out_of_what_is_sent() {
+        use std::collections::{BTreeMap, BTreeSet};
+        const CORPUS: &str = include_str!("../../../../contracts/withheld-value.json");
+        let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
+
+        let mut left_out = 0;
+        for case in corpus["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let manifest = case["manifest"].as_str().unwrap();
+            let expected: BTreeMap<String, Vec<String>> =
+                serde_json::from_value(case["copies"].clone()).unwrap();
+
+            let mut written = BTreeSet::new();
+            let mut copies = BTreeMap::new();
+            for doc in yaml_documents(manifest).unwrap() {
+                let annotations = doc["metadata"]["annotations"].as_mapping();
+                for (key, value) in annotations.into_iter().flatten() {
+                    let (key, value) = (key.as_str().unwrap(), value.as_str().unwrap());
+                    written.insert(key.to_string());
+                    let mut keys = crate::resources::withheld_copy(value);
+                    keys.sort_unstable();
+                    if !keys.is_empty() {
+                        copies.insert(key.to_string(), keys);
+                    }
+                }
+            }
+            assert_eq!(copies, expected, "{name}");
+
+            // A manifest refused for its own keys sends nothing at all.
+            let Ok(parsed) = parse_all_documents(manifest) else {
+                continue;
+            };
+            let sent: BTreeSet<String> = parsed
+                .iter()
+                .flat_map(|doc| doc.object.metadata.annotations.iter().flatten())
+                .map(|(key, _)| key.clone())
+                .collect();
+            let kept: BTreeSet<String> = written
+                .into_iter()
+                .filter(|key| !expected.contains_key(key))
+                .collect();
+            assert_eq!(sent, kept, "{name}");
+            let empty_map = |doc: &ParsedManifest| {
+                let annotations = doc.object.metadata.annotations.as_ref();
+                annotations.is_some_and(BTreeMap::is_empty)
+            };
+            assert!(
+                !parsed.iter().any(empty_map),
+                "{name}: an empty map is sent"
+            );
+            left_out += expected.len();
+        }
+        assert!(left_out >= 4, "the corpus lost its blanked records");
+    }
+
+    #[test]
+    fn test_parse_manifest_document() {
+        let yaml = r"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: test-config
+    namespace: default
+data:
+    key: value
+";
+        let parsed = parse_manifest_document(&serde_yaml::from_str(yaml).unwrap()).unwrap();
+        assert_eq!(parsed.api_resource.kind, "ConfigMap");
+        assert_eq!(parsed.api_resource.version, "v1");
+        assert_eq!(parsed.namespace, Some("default".to_string()));
+    }
+
+    #[test]
+    fn test_parse_apps_api() {
+        let yaml = r"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: test-deploy
+";
+        let parsed = parse_manifest_document(&serde_yaml::from_str(yaml).unwrap()).unwrap();
+        assert_eq!(parsed.api_resource.kind, "Deployment");
+        assert_eq!(parsed.api_resource.group, "apps");
+        assert_eq!(parsed.api_resource.version, "v1");
+    }
+
+    #[test]
+    fn pluralize_keeps_a_vowel_before_the_final_y() {
+        // "-ay" is not "-cy": a Gateway lists at /gateways, and the rule
+        // that turned it into "gatewaies" 404d every Gateway YAML tab.
+        assert_eq!(pluralize("Gateway"), "gateways");
+        assert_eq!(pluralize("NetworkPolicy"), "networkpolicies");
+        assert_eq!(pluralize("HTTPRoute"), "httproutes");
+        assert_eq!(pluralize("TLSRoute"), "tlsroutes");
+    }
+}

@@ -1,0 +1,109 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import type { HelmRevision } from "@/generated/types";
+import { helmHistorySection, helmResourcesSection } from "./helm-share";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+function revision(n: number): HelmRevision {
+  return {
+    revision: n,
+    updated: "2026-01-01T00:00:00Z",
+    status: "superseded",
+    chart: "app-1.0.0",
+    appVersion: "1.0.0",
+    description: null,
+    unreadable: null,
+  };
+}
+
+describe("release history", () => {
+  it("caps the table and says how many revisions were left out", () => {
+    const history = Array.from({ length: 55 }, (_, i) => revision(i + 1));
+    const section = helmHistorySection(history, t);
+    expect(section).not.toBeNull();
+    if (!section || section.body.type !== "table")
+      throw new Error("expected a table");
+    expect(section.body.rows).toHaveLength(50);
+    expect(section.body.more).toContain("5");
+  });
+
+  /**
+   * A revision whose secret would not decode is in the history by its number
+   * alone. Fails if the shared file gives it an empty status, which reads as
+   * a revision with nothing to report.
+   */
+  it("says of a revision that could not be read that it was not", () => {
+    const unread = { ...revision(2), status: "", unreadable: "gzip: eof" };
+    const section = helmHistorySection([unread], t);
+    if (!section || section.body.type !== "table")
+      throw new Error("expected a table");
+    expect(section.body.rows[0].cells[1]).toEqual({
+      text: "could not be read",
+      role: "warn",
+    });
+  });
+
+  /** Written as a time for a person in UTC, not in the sender's zone unmarked. */
+  it("writes when each revision was updated as a time the file draws in UTC", () => {
+    const section = helmHistorySection([revision(1)], t);
+    if (!section || section.body.type !== "table")
+      throw new Error("expected a table");
+    expect(section.body.rows[0].cells[4]).toMatchObject({
+      at: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("is absent rather than an empty table for a release with no history read", () => {
+    expect(helmHistorySection([], t)).toBeNull();
+  });
+});
+
+describe("installed resources", () => {
+  /**
+   * A resource row only ever carries kind, name and namespace, the object
+   * this function is handed has no `values` field to leak in the first
+   * place, which is the guarantee against a values dump ending up in a link.
+   */
+  it("links each installed object without carrying anything beyond its identity", () => {
+    const section = helmResourcesSection(
+      [{ kind: "Deployment", name: "app", namespace: "shop" }],
+      [],
+      t
+    );
+    expect(section).not.toBeNull();
+    expect(section?.count).toBe(1);
+    if (!section || section.body.type !== "table")
+      throw new Error("expected a table");
+    expect(Object.keys(section.body.rows[0].cells[1])).not.toContain("values");
+    expect(section.body.rows[0].cells[1].ref).toMatchObject({
+      kind: "Deployment",
+      namespace: "shop",
+      stem: "app",
+    });
+  });
+
+  /**
+   * A document the app withheld whole is an object the list cannot name.
+   * Fails if the shared file counts the rows as the whole release, or leaves
+   * out the line that says one is missing, with rows or with none.
+   */
+  it("says which documents are not listed, and counts nothing it could not read", () => {
+    const line = "Not listed: document 2 (web/templates/broken.yaml).";
+    const some = helmResourcesSection(
+      [{ kind: "Deployment", name: "app", namespace: "shop" }],
+      [line],
+      t
+    );
+    const none = helmResourcesSection([], [line], t);
+    for (const section of [some, none]) {
+      if (!section || section.body.type !== "table")
+        throw new Error("expected a table");
+      expect(section.count).toBeUndefined();
+      expect(section.body.more).toBe(line);
+    }
+    expect(helmResourcesSection([], [], t)).toBeNull();
+  });
+});

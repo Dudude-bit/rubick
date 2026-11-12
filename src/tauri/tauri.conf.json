@@ -1,0 +1,91 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Rubick",
+  "version": "4.21.2",
+  "identifier": "com.k8s-gui.app",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Rubick",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 768,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "titleBarStyle": "Visible",
+        "backgroundColor": "#1e2024"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    },
+    "trayIcon": null
+  },
+  "bundle": {
+    "active": true,
+    "publisher": "Rubick Team",
+    "homepage": "https://github.com/Dudude-bit/rubick",
+    "createUpdaterArtifacts": true,
+    "targets": ["deb", "rpm", "appimage", "app", "dmg", "nsis", "msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "© 2026 Kirill Inyakin, Ruslan Kusherbayev",
+    "category": "DeveloperTool",
+    "shortDescription": "Kubernetes GUI Client",
+    "longDescription": "A modern, cross-platform Kubernetes GUI client built with Tauri and Rust",
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": null,
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null,
+      "minimumSystemVersion": "10.13"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "rpm": {
+        "release": "1"
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["rubick"]
+      }
+    },
+    "shell": {
+      "open": true
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZBMEQxODgyNEUwRjVERTYKUldUbVhROU9naGdOK3RLdi9MTmdWRlNUR29Tc1RCNjVtWDFTRnBYc2I4ZHhJTUFWU2pkVUYwRHYK",
+      "endpoints": [
+        "https://github.com/Dudude-bit/rubick/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

@@ -1,0 +1,269 @@
+import { describe, expect, it } from "vite-plus/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import type { PodVolumeInfo } from "@/generated/types";
+import {
+  DOWNLOAD_CONFIRM_BYTES,
+  DOWNLOAD_MAX_BYTES,
+  MAX_ENTRIES,
+  PREVIEW_MAX_BYTES,
+  type FileEntry,
+  crumbs,
+  joinPath,
+  modeText,
+  mountFor,
+  parentOf,
+  sortEntries,
+  startPath,
+} from "./container-files";
+
+const volumes: PodVolumeInfo[] = [
+  {
+    name: "config",
+    source: "ConfigMap",
+    refs: [{ kind: "ConfigMap", name: "demo-config" }],
+    projections: [],
+    mounts: [
+      { container: "app", path: "/etc/app", readOnly: true, subPath: null },
+    ],
+  },
+  {
+    name: "secret",
+    source: "Secret",
+    refs: [{ kind: "Secret", name: "demo-secret" }],
+    projections: [],
+    mounts: [
+      {
+        container: "app",
+        path: "/etc/app/password",
+        readOnly: true,
+        subPath: "password",
+      },
+    ],
+  },
+  {
+    name: "scratch",
+    source: "EmptyDir",
+    refs: [],
+    projections: [],
+    mounts: [
+      {
+        container: "sidecar",
+        path: "/scratch",
+        readOnly: false,
+        subPath: null,
+      },
+    ],
+  },
+];
+
+const entry = (over: Partial<FileEntry>): FileEntry => ({
+  name: "x",
+  kind: "file",
+  mode: "644",
+  size: 0,
+  modified: null,
+  owner: "root",
+  group: "root",
+  target: null,
+  ...over,
+});
+
+describe("mountFor", () => {
+  /** The tag is the pod's own fact; a file under two mounts belongs to the inner one. */
+  it("names the deepest mount of this container that the path sits under", () => {
+    expect(mountFor("/etc/app/app.conf", "app", volumes)).toEqual({
+      kind: "ConfigMap",
+      name: "demo-config",
+      volume: "config",
+      at: "/etc/app",
+      sources: [{ kind: "ConfigMap", name: "demo-config" }],
+    });
+    expect(mountFor("/etc/app/password", "app", volumes)).toEqual({
+      kind: "Secret",
+      name: "demo-secret",
+      volume: "secret",
+      at: "/etc/app/password",
+      sources: [{ kind: "Secret", name: "demo-secret" }],
+    });
+  });
+
+  /**
+   * A `projected` volume puts several sources in one directory, and where
+   * they write every key they hold the pod does not say which wrote a file.
+   * Naming
+   * `refs[0]` labelled a token from the serviceaccount as coming from the
+   * ConfigMap next to it — and the Connections tab, which the tab's own
+   * footer points the reader at for the same fact, lists all three.
+   */
+  it("does not pick one source out of a volume that projects several", () => {
+    const projected: PodVolumeInfo[] = [
+      {
+        name: "bundle",
+        source: "Projected",
+        refs: [
+          { kind: "ConfigMap", name: "ca-bundle" },
+          { kind: "Secret", name: "client-cert" },
+        ],
+        projections: [
+          {
+            source: "configMap",
+            object: { kind: "ConfigMap", name: "ca-bundle" },
+            paths: [],
+          },
+          {
+            source: "secret",
+            object: { kind: "Secret", name: "client-cert" },
+            paths: [],
+          },
+        ],
+        mounts: [
+          {
+            container: "app",
+            path: "/var/run/bundle",
+            readOnly: true,
+            subPath: null,
+          },
+        ],
+      },
+    ];
+    const tag = mountFor("/var/run/bundle/tls.crt", "app", projected);
+    expect(tag?.sources).toHaveLength(2);
+    expect(tag?.name).toBe("bundle");
+    expect(tag?.kind).toBe("Projected");
+    expect(tag?.name).not.toBe("ca-bundle");
+  });
+
+  it("does not borrow another container's mounts", () => {
+    expect(mountFor("/scratch/tmp", "app", volumes)).toBeNull();
+    expect(mountFor("/scratch/tmp", "sidecar", volumes)?.kind).toBe("EmptyDir");
+  });
+
+  it("does not match a sibling that merely shares a prefix", () => {
+    expect(mountFor("/etc/application", "app", volumes)).toBeNull();
+  });
+});
+
+describe("startPath", () => {
+  const volumes = (subPath: string | null): PodVolumeInfo[] => [
+    {
+      name: "config",
+      source: "configMap",
+      refs: [{ kind: "ConfigMap", name: "app-config" }],
+      projections: [],
+      mounts: [
+        {
+          container: "app",
+          path: "/etc/app/app.conf",
+          readOnly: true,
+          subPath,
+        },
+      ],
+    },
+  ];
+
+  /**
+   * Issue #178: a ConfigMap key mounted over one file made the tab open on
+   * the file and say it could not be opened. Would break if the tab went
+   * back to opening on the mount path whatever the mount is.
+   */
+  it("opens a single-file mount at its parent, a directory mount at itself", () => {
+    expect(startPath(volumes("app.conf"), "app", null)).toBe("/etc/app");
+    expect(startPath(volumes(null), "app", null)).toBe("/etc/app/app.conf");
+    expect(startPath(volumes("app.conf"), "sidecar", null)).toBe("/");
+  });
+
+  /**
+   * Every pod opened on /var/run/secrets/kubernetes.io/serviceaccount, the
+   * token the kubelet injects. Fails if the working directory loses to a
+   * mount, or the injected token wins over a mount the pod declared.
+   */
+  it("opens where the container works, else on a mount the pod declared", () => {
+    const token: PodVolumeInfo = {
+      name: "kube-api-access-5dxdq",
+      source: "projected",
+      refs: [],
+      projections: [],
+      mounts: [
+        {
+          container: "app",
+          path: "/var/run/secrets/kubernetes.io/serviceaccount",
+          readOnly: true,
+          subPath: null,
+        },
+      ],
+    };
+    expect(startPath([token, ...volumes(null)], "app", "/srv")).toBe("/srv");
+    expect(startPath([token, ...volumes(null)], "app", null)).toBe(
+      "/etc/app/app.conf"
+    );
+    expect(startPath([token], "app", null)).toBe("/");
+  });
+});
+
+describe("paths", () => {
+  it("joins and climbs without doubling the root slash", () => {
+    expect(joinPath("/", "etc")).toBe("/etc");
+    expect(joinPath("/etc", "app")).toBe("/etc/app");
+    expect(parentOf("/etc/app")).toBe("/etc");
+    expect(parentOf("/etc")).toBe("/");
+    expect(parentOf("/")).toBe("/");
+    expect(crumbs("/etc/app").map((c) => c.path)).toEqual([
+      "/",
+      "/etc",
+      "/etc/app",
+    ]);
+  });
+});
+
+describe("sortEntries", () => {
+  it("keeps directories first whatever the key", () => {
+    const sorted = sortEntries(
+      [
+        entry({ name: "b.txt", size: 2 }),
+        entry({ name: "conf.d", kind: "dir" }),
+        entry({ name: "a.txt", size: 9 }),
+      ],
+      "size",
+      true
+    );
+    expect(sorted.map((e) => e.name)).toEqual(["conf.d", "a.txt", "b.txt"]);
+  });
+});
+
+describe("modeText", () => {
+  it("writes the mode the way ls does, with the kind in front", () => {
+    expect(modeText(entry({ mode: "755", kind: "dir" }))).toBe("drwxr-xr-x");
+    expect(modeText(entry({ mode: "400" }))).toBe("-r--------");
+    expect(modeText(entry({ mode: "777", kind: "symlink" }))).toBe(
+      "lrwxrwxrwx"
+    );
+  });
+});
+
+describe("the caps both halves apply", () => {
+  /**
+   * A comment saying "mirrored" is not a check. The download cap was spelled
+   * three times — a literal in the tab, `DOWNLOAD_MAX_BYTES` in Rust and a
+   * number inside the catalogue sentence — with nothing holding them equal.
+   * Fails if this side drifts from `src/contracts/file-limits.json`.
+   */
+  it("matches src/contracts/file-limits.json", () => {
+    const shared = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), "src/contracts/file-limits.json"),
+        "utf8"
+      )
+    ) as {
+      downloadMaxBytes: number;
+      downloadConfirmBytes: number;
+      previewMaxBytes: number;
+      maxEntries: number;
+    };
+    expect(DOWNLOAD_MAX_BYTES).toBe(shared.downloadMaxBytes);
+    expect(DOWNLOAD_CONFIRM_BYTES).toBe(shared.downloadConfirmBytes);
+    expect(PREVIEW_MAX_BYTES).toBe(shared.previewMaxBytes);
+    expect(MAX_ENTRIES).toBe(shared.maxEntries);
+  });
+});

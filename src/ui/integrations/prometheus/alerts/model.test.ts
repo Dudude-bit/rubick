@@ -1,0 +1,852 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import type { AlertRule, CustomResourceInfo } from "@/generated/types";
+import {
+  readPrometheus,
+  type Kind,
+  type PrometheusInstance,
+} from "../monitors/model";
+import {
+  alertsAbout,
+  findingsOf,
+  groupOf,
+  loadedOf,
+  ownsFile,
+  readRule,
+  rowsOf,
+  ruleKey,
+  rulePickedUpBy,
+  speaksOf,
+  subjectOf,
+} from "./model";
+
+const cr = (
+  kind: string,
+  name: string,
+  namespace: string,
+  spec: unknown,
+  labels: Record<string, string> = {}
+): CustomResourceInfo => ({
+  name,
+  namespace,
+  uid: `${namespace}/${kind}/${name}`,
+  apiVersion: "monitoring.coreos.com/v1",
+  kind,
+  spec,
+  status: null,
+  labels,
+  annotations: {},
+  createdAt: null,
+  ownerReferences: [],
+  generation: 1,
+});
+
+const ruleObject = (name = "apps", namespace = "monitoring") =>
+  readRule(
+    cr(
+      "PrometheusRule",
+      name,
+      namespace,
+      {
+        groups: [
+          {
+            name: "kubernetes-apps",
+            rules: [
+              {
+                alert: "KubePodCrashLooping",
+                expr: "max_over_time(kube_pod_container_status_waiting_reason[5m]) >= 1",
+                for: "15m",
+                labels: { severity: "warning" },
+                annotations: { summary: "Pod is crash looping." },
+              },
+              { record: "cluster:cpu", expr: "sum(rate(cpu[5m]))" },
+              {
+                alert: "KubeDeploymentReplicasMismatch",
+                expr: "kube_deployment_spec_replicas != kube_deployment_status_replicas_available",
+              },
+            ],
+          },
+        ],
+      },
+      { release: "kps" }
+    )
+  );
+
+const apiRule = (over: Partial<AlertRule> = {}): AlertRule => ({
+  group: "kubernetes-apps",
+  file: "/etc/prometheus/rules/prometheus-kps-rulefiles-0/monitoring-apps-monitoring/PrometheusRule/apps.yaml",
+  name: "KubePodCrashLooping",
+  state: "inactive",
+  health: "ok",
+  lastError: "",
+  query: "max_over_time(...) >= 1",
+  durationSeconds: 900,
+  lastEvaluation: null,
+  labels: { severity: "warning" },
+  annotations: {},
+  alerts: [],
+  ...over,
+});
+
+const kind = (items: PrometheusInstance[]): Kind<PrometheusInstance> => ({
+  state: "read",
+  items,
+});
+
+describe("readRule", () => {
+  it("keeps the alerting rules with their group and counts the recording ones apart", () => {
+    const object = ruleObject();
+    expect(object.rules.map((r) => r.alert)).toEqual([
+      "KubePodCrashLooping",
+      "KubeDeploymentReplicasMismatch",
+    ]);
+    expect(object.rules[0]).toMatchObject({
+      group: "kubernetes-apps",
+      for: "15m",
+      labels: { severity: "warning" },
+    });
+    expect(object.recording).toBe(1);
+  });
+});
+
+describe("rulePickedUpBy", () => {
+  const prom = (spec: unknown) =>
+    readPrometheus(cr("Prometheus", "k8s", "monitoring", spec));
+
+  /** The chart's default: `ruleSelector` by release, every namespace. A missing ruleSelector picks nothing. */
+  it("reads the rule selectors with the monitors' absent-versus-empty rule", () => {
+    const object = ruleObject("apps", "shop");
+    const byRelease = prom({
+      ruleSelector: { matchLabels: { release: "kps" } },
+      ruleNamespaceSelector: {},
+    });
+    const none = prom({ ruleNamespaceSelector: {} });
+    const ownNamespace = prom({ ruleSelector: {} });
+    expect(
+      rulePickedUpBy(object, kind([byRelease]), { ok: true, items: [] })
+    ).toEqual({
+      state: "judged",
+      by: ["k8s"],
+    });
+    expect(
+      rulePickedUpBy(object, kind([none]), { ok: true, items: [] })
+    ).toEqual({
+      state: "judged",
+      by: [],
+    });
+    expect(
+      rulePickedUpBy(object, kind([ownNamespace]), { ok: true, items: [] })
+    ).toEqual({
+      state: "judged",
+      by: [],
+    });
+  });
+});
+
+describe("loadedOf", () => {
+  const object = ruleObject();
+
+  /** The operator names the file after the object, with or without the uid; anything else is another object's. */
+  it("finds the object's rules by the file the operator named after it", () => {
+    const named = { ...object, uid: "1a2b3c4d-0000-4000-8000-000000000001" };
+    expect(ownsFile(named, "/rules/x/monitoring-apps.yaml")).toBe(true);
+    expect(ownsFile(named, `/rules/x/monitoring-apps-${named.uid}.yaml`)).toBe(
+      true
+    );
+    expect(ownsFile(named, "/rules/x/monitoring-apps-extra.yaml")).toBe(false);
+    expect(ownsFile(named, "/rules/x/shop-apps.yaml")).toBe(false);
+  });
+
+  it("pairs each rule with what Prometheus has, and says which are missing", () => {
+    const read = loadedOf(object, {
+      state: "read",
+      rules: [
+        apiRule({ file: "/rules/monitoring-apps.yaml", state: "firing" }),
+        apiRule({
+          file: "/rules/shop-other.yaml",
+          name: "KubeDeploymentReplicasMismatch",
+        }),
+      ],
+    });
+    expect(read.state).toBe("read");
+    if (read.state !== "read") return;
+    expect(read.files).toEqual(["/rules/monitoring-apps.yaml"]);
+    expect(read.rules.map((r) => r.loaded?.state ?? null)).toEqual([
+      "firing",
+      null,
+    ]);
+  });
+
+  const twice = (labels: [object, object]) =>
+    readRule(
+      cr("PrometheusRule", "apps", "monitoring", {
+        groups: [
+          {
+            name: "kubernetes-storage",
+            rules: labels.map((own) => ({
+              alert: "KubePersistentVolumeFillingUp",
+              expr: "up",
+              labels: own,
+            })),
+          },
+        ],
+      })
+    );
+  const storage = (over: Partial<AlertRule>) =>
+    apiRule({
+      file: "/rules/monitoring-apps.yaml",
+      group: "kubernetes-storage",
+      name: "KubePersistentVolumeFillingUp",
+      ...over,
+    });
+
+  /**
+   * kube-prometheus-stack writes KubePersistentVolumeFillingUp twice in one
+   * group, critical then warning. Paired by name alone both specs read the
+   * first loaded rule, so a firing warning was read by nobody and the object
+   * was filed under Quiet. Fails if a loaded rule answers two specs.
+   */
+  it("gives each of two rules of one name the loaded rule that carries its labels", () => {
+    const read = loadedOf(
+      twice([{ severity: "critical" }, { severity: "warning" }]),
+      {
+        state: "read",
+        rules: [
+          storage({ labels: { severity: "critical" } }),
+          storage({ labels: { severity: "warning" }, state: "firing" }),
+        ],
+      }
+    );
+    if (read.state !== "read") throw new Error("not read");
+    expect(read.rules.map((r) => r.loaded?.state)).toEqual([
+      "inactive",
+      "firing",
+    ]);
+  });
+
+  /**
+   * Prometheus still holding the file from before the critical rule was
+   * added has one rule of the name, the warning. Fails if it is handed to
+   * the first spec of that name instead of the one whose labels it carries.
+   */
+  it("leaves the spec whose labels nothing loaded carries without a rule", () => {
+    const read = loadedOf(
+      twice([{ severity: "critical" }, { severity: "warning" }]),
+      {
+        state: "read",
+        rules: [storage({ labels: { severity: "warning" }, state: "firing" })],
+      }
+    );
+    if (read.state !== "read") throw new Error("not read");
+    expect(read.rules.map((r) => r.loaded?.state ?? null)).toEqual([
+      null,
+      "firing",
+    ]);
+  });
+
+  /**
+   * Labels edited on the object and not yet reloaded tell nothing apart, and
+   * the rules are still loaded: Prometheus keeps a group's order. Fails if
+   * such rules read as not loaded, or the first is handed to both specs.
+   */
+  it("pairs namesakes whose labels match nothing in the order of the group", () => {
+    const read = loadedOf(twice([{ severity: "page" }, { severity: "chat" }]), {
+      state: "read",
+      rules: [
+        storage({ labels: { severity: "critical" }, state: "firing" }),
+        storage({ labels: { severity: "warning" }, state: "pending" }),
+      ],
+    });
+    if (read.state !== "read") throw new Error("not read");
+    expect(read.rules.map((r) => r.loaded?.state)).toEqual([
+      "firing",
+      "pending",
+    ]);
+  });
+
+  it("passes the other two states through untouched", () => {
+    expect(loadedOf(object, { state: "notConnected" })).toEqual({
+      state: "notConnected",
+    });
+    expect(loadedOf(object, { state: "unanswered", reason: "403" })).toEqual({
+      state: "unanswered",
+      reason: "403",
+    });
+  });
+});
+
+describe("rowsOf", () => {
+  const object = ruleObject();
+  const prom = readPrometheus(
+    cr("Prometheus", "k8s", "monitoring", {
+      ruleSelector: {},
+      ruleNamespaceSelector: {},
+    })
+  );
+  const namespaces = { ok: true as const, items: [] };
+  const alert = (state: string, pod: string) => ({
+    state,
+    activeAt: "2026-09-12T20:00:00Z",
+    value: "1",
+    labels: { namespace: "shop", pod, severity: "warning" },
+    annotations: { summary: `Pod shop/${pod} is crash looping.` },
+  });
+
+  /** Firing outranks a broken sibling rule: the alert is what the reader came for. */
+  it("puts firing first, then broken, then pending, and names the worst finding", () => {
+    const rules = [
+      apiRule({
+        file: "/rules/monitoring-apps.yaml",
+        state: "firing",
+        alerts: [alert("firing", "web-1"), alert("firing", "web-2")],
+      }),
+      apiRule({
+        file: "/rules/monitoring-apps.yaml",
+        name: "KubeDeploymentReplicasMismatch",
+        health: "err",
+        lastError: "found duplicate series",
+      }),
+    ];
+    const [row] = rowsOf([object], kind([prom]), namespaces, {
+      state: "read",
+      rules,
+    });
+    expect(row.group).toBe("firing");
+    expect(row.findings.map((f) => f.kind)).toEqual(["firing", "evalError"]);
+    expect(row.findings[0]).toMatchObject({ alerts: 2, rules: 1 });
+  });
+
+  /**
+   * Picked up and yet no file in Prometheus: the operator has not written
+   * it, or wrote it elsewhere. Would break if an unread rule list were
+   * mapped to "loaded nothing", or if not-loaded were raised on top of
+   * "nobody picks it up".
+   */
+  it("says not loaded only when something is known to pick the object up", () => {
+    const [pickedUp] = rowsOf([object], kind([prom]), namespaces, {
+      state: "read",
+      rules: [],
+    });
+    expect(pickedUp.findings.map((f) => f.kind)).toEqual(["notLoaded"]);
+    expect(pickedUp.group).toBe("broken");
+    const nobody = readPrometheus(cr("Prometheus", "k8s", "monitoring", {}));
+    const [unpicked] = rowsOf([object], kind([nobody]), namespaces, {
+      state: "read",
+      rules: [],
+    });
+    expect(unpicked.findings.map((f) => f.kind)).toEqual(["notPickedUp"]);
+    const [unread] = rowsOf(
+      [object],
+      { state: "unread", reason: "forbidden" },
+      namespaces,
+      {
+        state: "notConnected",
+      }
+    );
+    expect(unread.findings.map((f) => f.kind)).toEqual(["pickedUpUnknown"]);
+    expect(unread.group).toBe("unchecked");
+  });
+
+  it("is quiet when everything is loaded and nothing is active, and pending when only pending", () => {
+    const loaded = [
+      apiRule({ file: "/rules/monitoring-apps.yaml" }),
+      apiRule({
+        file: "/rules/monitoring-apps.yaml",
+        name: "KubeDeploymentReplicasMismatch",
+      }),
+    ];
+    const [quiet] = rowsOf([object], kind([prom]), namespaces, {
+      state: "read",
+      rules: loaded,
+    });
+    expect(quiet.findings).toEqual([]);
+    expect(quiet.group).toBe("quiet");
+    const [pending] = rowsOf([object], kind([prom]), namespaces, {
+      state: "read",
+      rules: [
+        apiRule({
+          file: "/rules/monitoring-apps.yaml",
+          state: "pending",
+          alerts: [alert("pending", "web-1")],
+        }),
+        loaded[1],
+      ],
+    });
+    expect(pending.group).toBe("pending");
+    expect(
+      groupOf(
+        findingsOf(
+          object,
+          { state: "judged", by: ["k8s"] },
+          { state: "notConnected" }
+        ),
+        { state: "notConnected" }
+      )
+    ).toBe("unchecked");
+  });
+  /**
+   * The operator's CRDs with no Prometheus object: rules are evaluated by
+   * vmalert or another ruler. An empty list was "picked up by nobody", so
+   * every rule object was red. Not judged, an object the connected
+   * Prometheus has no file of is not checked, and one it has loaded keeps
+   * what Prometheus says. Fails if either reads as broken or as quiet.
+   */
+  it("does not judge a rule object where no Prometheus object exists", () => {
+    const of = (rules: AlertRule[]) =>
+      rowsOf([object], kind([]), namespaces, { state: "read", rules })[0];
+
+    const unloaded = of([]);
+    expect(unloaded.pickedUp).toEqual({ state: "notJudged", lacks: "object" });
+    expect(unloaded.findings).toEqual([]);
+    expect(unloaded.group).toBe("unchecked");
+
+    const firing = of([
+      apiRule({ file: "/rules/monitoring-apps.yaml", state: "firing" }),
+      apiRule({
+        file: "/rules/monitoring-apps.yaml",
+        name: "KubeDeploymentReplicasMismatch",
+      }),
+    ]);
+    expect(firing.group).toBe("firing");
+    const quiet = of([
+      apiRule({ file: "/rules/monitoring-apps.yaml" }),
+      apiRule({
+        file: "/rules/monitoring-apps.yaml",
+        name: "KubeDeploymentReplicasMismatch",
+      }),
+    ]);
+    expect(quiet.group).toBe("quiet");
+  });
+
+  /**
+   * Prometheus writes three healths and the app read one. A rule it has
+   * loaded and never evaluated answers `unknown`, which fell through to the
+   * green "loaded and evaluating" — a claim about a rule that has never run.
+   */
+  it("does not call a rule it has never evaluated an evaluating one", () => {
+    const [row] = rowsOf([object], kind([prom]), namespaces, {
+      state: "read",
+      rules: [
+        apiRule({
+          file: "/rules/monitoring-apps.yaml",
+          health: "unknown",
+        }),
+      ],
+    });
+
+    expect(row.findings.map((f) => f.kind)).toContain("notEvaluated");
+    expect(row.group).not.toBe("quiet");
+  });
+
+  /**
+   * A verdict nobody could reach is not a quiet one: with the Prometheus
+   * list refused, `pickedUpUnknown` was in no group at all and the row was
+   * filed under Quiet, in green, with the word "unknown" beside a check.
+   */
+  it("does not file an unknown pick-up under quiet", () => {
+    const [row] = rowsOf(
+      [object],
+      { state: "unread", reason: "prometheuses is forbidden" },
+      namespaces,
+      { state: "read", rules: [apiRule({ file: "/rules/x.yaml" })] }
+    );
+
+    expect(row.group).toBe("unchecked");
+  });
+
+  /**
+   * And "picked up, but the connected Prometheus has not loaded it" is a
+   * claim about a Prometheus nobody identified, when the pick-up is unknown.
+   */
+  it("does not assert not-loaded while the pick-up is unknown", () => {
+    const [row] = rowsOf(
+      [object],
+      { state: "unread", reason: "prometheuses is forbidden" },
+      namespaces,
+      { state: "read", rules: [] }
+    );
+
+    expect(row.findings.map((f) => f.kind)).not.toContain("notLoaded");
+  });
+});
+
+describe("the pods a CronJob reaches", () => {
+  /**
+   * A CronJob's pods are named after the Job it made — `backup-28901234-vk2mn`
+   * — so a `pod=` alert about a failing backup matched nothing, and the page
+   * a reader actually opens showed no alert at all.
+   */
+  it("finds the alert about a pod of its own Job", () => {
+    const rule: AlertRule = apiRule({
+      state: "firing",
+      alerts: [
+        {
+          state: "firing",
+          activeAt: "2026-09-12T20:00:00Z",
+          value: "1",
+          labels: { namespace: "shop", pod: "backup-28901234-vk2mn" },
+          annotations: { summary: "backup is failing" },
+        },
+      ],
+    });
+
+    const mine = alertsAbout([rule], {
+      kind: "CronJob",
+      name: "backup",
+      namespace: "shop",
+    });
+    expect(mine).toHaveLength(1);
+    expect(mine[0].via).toEqual({
+      label: "pod",
+      value: "backup-28901234-vk2mn",
+    });
+
+    // And not a neighbour's pod that merely starts with the same word.
+    expect(
+      alertsAbout([rule], {
+        kind: "CronJob",
+        name: "back",
+        namespace: "shop",
+      })
+    ).toHaveLength(0);
+  });
+});
+
+describe("speaksOf", () => {
+  /**
+   * The block draws itself wherever the peek is opened, so this is what
+   * keeps "the alerts could not be read" off a ConfigMap — and what keeps
+   * a workload's alerts from being suppressed as un-nameable.
+   */
+  it("names the kinds an alert can carry and no others", () => {
+    for (const kind of [
+      "Pod",
+      "Deployment",
+      "StatefulSet",
+      "DaemonSet",
+      "ReplicaSet",
+      "Job",
+      "CronJob",
+      "Node",
+      "Service",
+      "PersistentVolumeClaim",
+      "PersistentVolume",
+      "HorizontalPodAutoscaler",
+      "PodDisruptionBudget",
+      "ResourceQuota",
+      "Namespace",
+    ]) {
+      expect(speaksOf(kind)).toBe(true);
+    }
+    for (const kind of ["ConfigMap", "Secret", "Role", "Ingress", "Lease"]) {
+      expect(speaksOf(kind)).toBe(false);
+    }
+  });
+});
+
+describe("alertsAbout", () => {
+  const rules: AlertRule[] = [
+    apiRule({
+      state: "firing",
+      alerts: [
+        {
+          state: "firing",
+          activeAt: "2026-09-12T20:00:00Z",
+          value: "1",
+          labels: {
+            namespace: "shop",
+            pod: "web-7f4d9c6b5-abcde",
+            severity: "warning",
+          },
+          annotations: {
+            summary: "Pod shop/web-7f4d9c6b5-abcde is crash looping.",
+          },
+        },
+        {
+          state: "firing",
+          activeAt: null,
+          value: "1",
+          labels: { namespace: "pay", pod: "web-7f4d9c6b5-zzzzz" },
+          annotations: {},
+        },
+      ],
+    }),
+    apiRule({
+      name: "KubeDeploymentReplicasMismatch",
+      state: "pending",
+      alerts: [
+        {
+          state: "pending",
+          activeAt: null,
+          value: "1",
+          labels: { namespace: "shop", deployment: "web" },
+          annotations: {},
+        },
+      ],
+    }),
+    apiRule({
+      name: "KubeNodeNotReady",
+      state: "firing",
+      alerts: [
+        {
+          state: "firing",
+          activeAt: null,
+          value: "1",
+          labels: { node: "agent-0" },
+          annotations: {},
+        },
+      ],
+    }),
+  ];
+
+  /** The label kube-state-metrics writes for the kind, in the object's namespace; a pod of the workload counts, and says so. */
+  it("names the alerts about an object by its own label, and a workload's pods by their name", () => {
+    const pod = alertsAbout(rules, {
+      kind: "Pod",
+      name: "web-7f4d9c6b5-abcde",
+      namespace: "shop",
+    });
+    expect(pod.map((a) => [a.rule, a.state, a.via.label])).toEqual([
+      ["KubePodCrashLooping", "firing", "pod"],
+    ]);
+    expect(pod[0].summary).toContain("crash looping");
+    const deployment = alertsAbout(rules, {
+      kind: "Deployment",
+      name: "web",
+      namespace: "shop",
+    });
+    expect(deployment.map((a) => [a.rule, a.via.label, a.via.value])).toEqual([
+      ["KubePodCrashLooping", "pod", "web-7f4d9c6b5-abcde"],
+      ["KubeDeploymentReplicasMismatch", "deployment", "web"],
+    ]);
+    expect(
+      alertsAbout(rules, {
+        kind: "Deployment",
+        name: "web",
+        namespace: "other",
+      })
+    ).toEqual([]);
+    expect(
+      alertsAbout(rules, { kind: "Node", name: "agent-0", namespace: null })
+    ).toHaveLength(1);
+    expect(
+      alertsAbout(rules, {
+        kind: "StatefulSet",
+        name: "web",
+        namespace: "shop",
+      })
+    ).toEqual([]);
+  });
+});
+
+/**
+ * What the chart's kube-state-metrics scrape leaves on a series about another
+ * object: honorLabels keeps the metric's own labels, and the exporter's pod,
+ * Service and container stay wherever the metric has none.
+ */
+const exporter = {
+  pod: "kps-kube-state-metrics-6d5f7c9b8-x2x4q",
+  service: "kps-kube-state-metrics",
+  container: "kube-state-metrics",
+  endpoint: "http",
+  job: "kube-state-metrics",
+};
+const firingWith = (labels: Record<string, string>): AlertRule =>
+  apiRule({
+    state: "firing",
+    alerts: [
+      { state: "firing", activeAt: null, value: "1", labels, annotations: {} },
+    ],
+  });
+
+describe("the object an alert is about", () => {
+  /**
+   * `pod` was first in the table, so KubeDeploymentReplicasMismatch for
+   * team-a/web read as Pod team-a/kps-kube-state-metrics-…, a pod that is
+   * not in that namespace. Fails if a stamped label outranks the label only
+   * a metric about the kind writes.
+   */
+  it("names the kind the metric wrote, not the exporter that reported it", () => {
+    for (const [label, kind] of [
+      ["deployment", "Deployment"],
+      ["statefulset", "StatefulSet"],
+      ["daemonset", "DaemonSet"],
+      ["job_name", "Job"],
+      ["horizontalpodautoscaler", "HorizontalPodAutoscaler"],
+      ["poddisruptionbudget", "PodDisruptionBudget"],
+      ["resourcequota", "ResourceQuota"],
+    ])
+      expect(
+        subjectOf({ ...exporter, namespace: "team-a", [label]: "web" }),
+        label
+      ).toEqual({ kind, name: "web", namespace: "team-a" });
+  });
+
+  /**
+   * A kubelet series is stamped with the node it was scraped from, so
+   * KubePersistentVolumeFillingUp read as the Node. And a PersistentVolume
+   * has no namespace: the one on its alert is the exporter's.
+   */
+  it("names the claim over the node its kubelet runs on, and a volume without the exporter's namespace", () => {
+    expect(
+      subjectOf({
+        namespace: "shop",
+        persistentvolumeclaim: "data-0",
+        node: "worker-1",
+        service: "kps-kubelet",
+        job: "kubelet",
+      })
+    ).toEqual({
+      kind: "PersistentVolumeClaim",
+      name: "data-0",
+      namespace: "shop",
+    });
+    expect(
+      subjectOf({
+        ...exporter,
+        namespace: "monitoring",
+        persistentvolume: "pv",
+      })
+    ).toEqual({ kind: "PersistentVolume", name: "pv", namespace: null });
+  });
+
+  /**
+   * `kube_node_*` has no pod label, so KubeNodeNotReady carries the
+   * exporter's pod beside the node. A pod named after the Service it was
+   * scraped through is that exporter. Fails if the node alert reads as the
+   * kube-state-metrics pod, or a pod alert that names its node as the Node.
+   */
+  it("names the node when the pod beside it is the exporter, and the pod when it is not", () => {
+    expect(
+      subjectOf({ ...exporter, namespace: "monitoring", node: "worker-1" })
+    ).toEqual({ kind: "Node", name: "worker-1", namespace: null });
+    expect(
+      subjectOf({
+        ...exporter,
+        namespace: "shop",
+        pod: "web-7f4d9c6b5-abcde",
+        node: "worker-1",
+      })
+    ).toEqual({ kind: "Pod", name: "web-7f4d9c6b5-abcde", namespace: "shop" });
+  });
+
+  /**
+   * An application scraped through its own Service, relabelled with the node
+   * it runs on, is the pod it reports about. Fails if every pod named after
+   * its Service is taken for an exporter of something else.
+   */
+  it("names the pod an application reports about itself, then its Service, then nothing", () => {
+    expect(
+      subjectOf({
+        namespace: "shop",
+        pod: "web-7f4d9c6b5-abcde",
+        service: "web",
+        node: "worker-1",
+        job: "web",
+      })
+    ).toEqual({ kind: "Pod", name: "web-7f4d9c6b5-abcde", namespace: "shop" });
+    expect(subjectOf({ namespace: "shop", service: "web" })).toEqual({
+      kind: "Service",
+      name: "web",
+      namespace: "shop",
+    });
+    expect(subjectOf({ namespace: "shop", severity: "warning" })).toBeNull();
+  });
+});
+
+describe("alerts about the exporter's neighbours", () => {
+  const monitoring = (kind: string, name: string) => ({
+    kind,
+    name,
+    namespace: kind === "Node" || kind === "Namespace" ? null : "monitoring",
+  });
+  const nodeDown = firingWith({
+    ...exporter,
+    namespace: "monitoring",
+    node: "worker-1",
+  });
+  const mismatch = firingWith({
+    ...exporter,
+    namespace: "monitoring",
+    deployment: "grafana",
+  });
+
+  /**
+   * Every node alert and every alert about an object in the exporter's
+   * namespace carries the exporter's pod and Service, so the
+   * kube-state-metrics Pod, its Deployment and its Service each said "alerts
+   * firing about this object". Fails if a stamped label is read as the
+   * subject of an alert that names another object.
+   */
+  it("does not put a node's or a Deployment's alert on the kube-state-metrics pod, workload or Service", () => {
+    for (const object of [
+      monitoring("Pod", exporter.pod),
+      monitoring("Deployment", exporter.service),
+      monitoring("Service", exporter.service),
+    ])
+      expect(alertsAbout([nodeDown, mismatch], object), object.kind).toEqual(
+        []
+      );
+    expect(
+      alertsAbout([nodeDown, mismatch], monitoring("Deployment", "grafana"))
+    ).toHaveLength(1);
+  });
+
+  /**
+   * The namespace on a node's alert is the exporter's, and the node on a
+   * claim's alert is the kubelet's. Fails if the Namespace page counts a
+   * node alert, or the Node page a claim's.
+   */
+  it("reads a node's alert on the Node and not on the exporter's Namespace", () => {
+    const filling = firingWith({
+      namespace: "shop",
+      persistentvolumeclaim: "data-0",
+      node: "worker-1",
+    });
+    const rules = [nodeDown, mismatch, filling];
+    expect(
+      alertsAbout(rules, monitoring("Node", "worker-1")).map((a) => a.via)
+    ).toEqual([{ label: "node", value: "worker-1" }]);
+    expect(
+      alertsAbout(rules, monitoring("Namespace", "monitoring")).map(
+        (a) => a.via
+      )
+    ).toEqual([{ label: "namespace", value: "monitoring" }]);
+  });
+
+  /**
+   * A pod is behind its Service and on its node: those pages keep the pod's
+   * alert. Fails if the stamped labels stop matching for a pod's own alert.
+   */
+  it("keeps a pod's alert on the Service it is behind and the node it runs on", () => {
+    const rules = [
+      firingWith({
+        namespace: "shop",
+        pod: "web-7f4d9c6b5-abcde",
+        service: "web",
+        node: "worker-1",
+      }),
+    ];
+    for (const object of [
+      { kind: "Service", name: "web", namespace: "shop" },
+      { kind: "Node", name: "worker-1", namespace: null },
+      { kind: "Deployment", name: "web", namespace: "shop" },
+    ])
+      expect(alertsAbout(rules, object), object.kind).toHaveLength(1);
+  });
+});
+
+describe("what identifies one row of the list", () => {
+  /**
+   * Not the uid: the backend hands over an empty string for an object that
+   * carries none, and two of those would share the id the listbox points
+   * `aria-activedescendant` at.
+   */
+  it("names a row by where it is, not by a uid that may be empty", () => {
+    const row = (namespace: string) =>
+      ({ object: { uid: "", namespace, name: "apps" } }) as never;
+
+    expect(ruleKey(row("shop"))).not.toBe(ruleKey(row("monitoring")));
+    expect(ruleKey(row("shop"))).toBe("shop/apps");
+  });
+});

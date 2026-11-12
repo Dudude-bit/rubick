@@ -1,0 +1,11 @@
+{
+  "kinds": [
+    "Pod",
+    "Node",
+    "Deployment",
+    "StatefulSet",
+    "DaemonSet",
+    "Job",
+    "Event"
+  ]
+}

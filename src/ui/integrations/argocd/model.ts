@@ -1,0 +1,678 @@
+/**
+ * What Argo CD says about itself, read from the `Application` CRD alone.
+ *
+ * Delivery is asked about as *is this in sync, and if not, what differs and
+ * since when*, so this is a list of Applications ordered by trouble, never by
+ * name.
+ *
+ * `OutOfSync` is one word for two opposite problems, and a status column
+ * cannot tell them apart:
+ *
+ * - **Sync failing with auto-sync on.** A manifest the API server refuses,
+ *   retried forever. Argo will never converge; the fix is a commit.
+ * - **Out of sync with auto-sync off.** Nothing is trying. Somebody changed
+ *   the cluster by hand, or changed git and nobody pressed sync. The fix is a
+ *   decision, and until it is made the cluster and git disagree quietly.
+ *
+ * Both are red in every list; one is a machine failing and the other a person
+ * forgetting, and naming which is which is the whole reason to read Argo here.
+ *
+ * Everything comes from the CRD's own status: detected, no credential, tier 2.
+ * The line-by-line diff lives only in Argo's API and needs a token — tier 3 —
+ * so the page says which resources differ and why in Argo's own words
+ * (`status.operationState.syncResult` carries the API server's refusal
+ * verbatim) and hands the diff itself to Argo.
+ */
+
+import type { VendorVerdict } from "../kit";
+import type { T } from "@/i18n/useT";
+import type { CustomResourceInfo } from "@/generated/types";
+import { withoutCredentials } from "@/lib/hints";
+import { getValueByPath } from "../kit";
+
+/** Where an Application's manifests come from. */
+export interface ArgoSource {
+  repoUrl: string;
+  /** A directory in the repository, for a git source. */
+  path: string | null;
+  /** A chart name, for a Helm source — which has no path. */
+  chart: string | null;
+  /** What the Application asks for: a branch, a tag, a range, a commit. */
+  targetRevision: string | null;
+}
+
+/** One object an Application owns, as Argo reports it. */
+export interface ArgoResource {
+  group: string | null;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  /** `Synced`, `OutOfSync`, or absent while Argo has not compared yet. */
+  sync: string | null;
+  health: string | null;
+  /**
+   * Argo's own sentence about this object, in this order of preference: why
+   * the last sync could not apply it, then why it is unhealthy. Never
+   * rewritten — it is usually the API server's own refusal, and it is what
+   * the reader will paste into a search.
+   */
+  message: string | null;
+  /** `SyncFailed` and the rest of Argo's per-object sync outcomes. */
+  outcome: string | null;
+}
+
+export interface ArgoApp {
+  name: string;
+  namespace: string;
+  project: string;
+  destination: {
+    server: string | null;
+    name: string | null;
+    namespace: string | null;
+  };
+  sources: ArgoSource[];
+  autoSync: boolean;
+  selfHeal: boolean;
+  /** `Synced`, `OutOfSync`, `Unknown`. */
+  sync: string;
+  /** The commit Argo last compared against, which is not the branch asked for. */
+  revision: string | null;
+  health: string;
+  healthMessage: string | null;
+  /**
+   * When the last sync operation ended. Argo clears that for as long as the
+   * next one runs, so then it is when the last recorded sync deployed.
+   */
+  lastSyncAt: string | null;
+  operationPhase: string | null;
+  operationMessage: string | null;
+  retries: number;
+  resources: ArgoResource[];
+  /**
+   * The ApplicationSet that generated it, where one did. A generated
+   * Application is a template's output: editing it is undone the next time
+   * the generator runs, and the file to change is the ApplicationSet.
+   */
+  generatedBy: { kind: string; name: string } | null;
+  conditions: ArgoCondition[];
+  findings: ArgoFinding[];
+  /** The worst finding's severity, and what orders the list. */
+  worst: "err" | "warn" | null;
+}
+
+/**
+ * Argo's conditions are not Kubernetes conditions.
+ *
+ * They carry a type and a message and **no status** — the presence of the
+ * entry is the assertion. Reading them through the shared `VendorCondition`
+ * helper would quietly treat every one of them as `status: undefined`, so
+ * they get their own shape rather than being unified with the other vendor's.
+ */
+export interface ArgoCondition {
+  type: string;
+  message?: string;
+  lastTransitionTime?: string;
+}
+
+export type ArgoFinding =
+  /** Auto-sync is on, Argo is retrying, and it fails every time. */
+  | {
+      kind: "syncFailing";
+      severity: "err";
+      message: string | null;
+      since: string | null;
+      retries: number;
+    }
+  /** The last sync somebody asked for failed, and nothing is retrying it. */
+  | {
+      kind: "syncFailedOnce";
+      severity: "err";
+      message: string | null;
+      since: string | null;
+    }
+  /** A sync Argo has started and not ended, with what it says it is waiting for. */
+  | {
+      kind: "syncing";
+      severity: "warn";
+      message: string | null;
+      since: string | null;
+    }
+  /**
+   * Out of sync with nothing on its way to fix it: auto-sync is off, or it is
+   * on and has left the Application this way.
+   */
+  | {
+      kind: "drifted";
+      severity: "warn";
+      since: string | null;
+      autoSync: boolean;
+    }
+  /** No sync status and no error: Argo has not looked at it. */
+  | { kind: "notCompared"; severity: "warn" }
+  /** Running and not working, which sync status says nothing about. */
+  | {
+      kind: "degraded";
+      severity: "err";
+      message: string | null;
+      resources: ArgoResource[];
+    }
+  /** Argo itself is complaining — a bad project, an unreachable repo. */
+  | { kind: "condition"; severity: "err" | "warn"; condition: ArgoCondition };
+
+interface ApplicationSpec {
+  project?: string;
+  source?: RawSource;
+  sources?: RawSource[];
+  destination?: { server?: string; name?: string; namespace?: string };
+  syncPolicy?: { automated?: Automated | null };
+}
+
+interface Automated {
+  prune?: boolean;
+  selfHeal?: boolean;
+  enabled?: boolean;
+}
+
+/**
+ * Whether Argo syncs this Application on its own. Argo CD 3.1 added
+ * `automated.enabled`, and with `false` the controller syncs nothing
+ * whatever `prune` and `selfHeal` say beside it.
+ */
+export function autoSyncOn(automated: unknown): boolean {
+  return (
+    typeof automated === "object" &&
+    automated !== null &&
+    (automated as Automated).enabled !== false
+  );
+}
+
+interface RawSource {
+  repoURL?: string;
+  path?: string;
+  chart?: string;
+  targetRevision?: string;
+}
+
+const CONDITION_ERRORS = ["Error", "SyncError", "ComparisonError", "Unknown"];
+
+/** One entry of `status.operationState.syncResult.resources`. */
+interface SyncResult {
+  group?: string;
+  kind?: string;
+  namespace?: string;
+  name?: string;
+  status?: string;
+  message?: string;
+}
+
+export function readApplication(object: CustomResourceInfo): ArgoApp {
+  const spec = (object.spec ?? {}) as ApplicationSpec;
+  const automated = spec.syncPolicy?.automated;
+  const rawSources = spec.sources ?? (spec.source ? [spec.source] : []);
+
+  const operationPhase =
+    (getValueByPath(object, "status.operationState.phase") as string) ?? null;
+  const operationMessage =
+    (getValueByPath(object, "status.operationState.message") as string) ?? null;
+  const syncResults = (getValueByPath(
+    object,
+    "status.operationState.syncResult.resources"
+  ) ?? []) as SyncResult[];
+
+  const finishedAt =
+    (getValueByPath(object, "status.operationState.finishedAt") as string) ??
+    null;
+  const history = getValueByPath(object, "status.history");
+  const lastDeployedAt = Array.isArray(history)
+    ? ((history.at(-1) as { deployedAt?: string })?.deployedAt ?? null)
+    : null;
+
+  const app: ArgoApp = {
+    name: object.name,
+    namespace: object.namespace ?? "",
+    project: spec.project ?? "default",
+    destination: {
+      server: spec.destination?.server ?? null,
+      name: spec.destination?.name ?? null,
+      namespace: spec.destination?.namespace ?? null,
+    },
+    sources: rawSources
+      .filter((source): source is RawSource & { repoURL: string } =>
+        Boolean(source.repoURL)
+      )
+      .map((source) => ({
+        repoUrl: withoutCredentials(source.repoURL),
+        path: source.path ?? null,
+        chart: source.chart ?? null,
+        targetRevision: source.targetRevision ?? null,
+      })),
+    autoSync: autoSyncOn(automated),
+    selfHeal: autoSyncOn(automated) && Boolean(automated?.selfHeal),
+    sync: (getValueByPath(object, "status.sync.status") as string) ?? "Unknown",
+    revision:
+      (getValueByPath(object, "status.sync.revision") as string) ?? null,
+    health:
+      (getValueByPath(object, "status.health.status") as string) ?? "Unknown",
+    healthMessage:
+      (getValueByPath(object, "status.health.message") as string) ?? null,
+    lastSyncAt: finishedAt ?? lastDeployedAt,
+    operationPhase,
+    operationMessage,
+    retries:
+      (getValueByPath(object, "status.operationState.retryCount") as number) ??
+      0,
+    resources: readResources(object, syncResults),
+    generatedBy: generatorOf(object),
+    conditions: (
+      (getValueByPath(object, "status.conditions") ?? []) as ArgoCondition[]
+    ).filter((condition) => condition?.type),
+    findings: [],
+    worst: null,
+  };
+
+  app.findings = findingsFor(app, syncResults.length > 0, {
+    finishedAt,
+    startedAt:
+      (getValueByPath(object, "status.operationState.startedAt") as string) ??
+      null,
+  });
+  app.worst = worstOf(app.findings);
+  return app;
+}
+
+/**
+ * The sync result that is about this row, by group, kind, namespace and name:
+ * one Application holds a `default-deny` per namespace, and by kind and name
+ * a refusal landed on the first of them.
+ *
+ * Argo writes a core group as `""` in the results and leaves it out of the
+ * row. A row with no namespace is cluster-scoped, and its result carries the
+ * destination namespace the sync stamped on it, so there the namespace is
+ * not compared.
+ */
+function resultFor(
+  resource: {
+    group?: string;
+    kind?: string;
+    namespace?: string;
+    name?: string;
+  },
+  syncResults: SyncResult[]
+): SyncResult | undefined {
+  const named = syncResults.filter(
+    (candidate) =>
+      candidate.kind === resource.kind &&
+      candidate.name === resource.name &&
+      (candidate.group ?? "") === (resource.group ?? "")
+  );
+  return resource.namespace
+    ? named.find((candidate) => candidate.namespace === resource.namespace)
+    : named[0];
+}
+
+function readResources(
+  object: CustomResourceInfo,
+  syncResults: SyncResult[]
+): ArgoResource[] {
+  const reported = (getValueByPath(object, "status.resources") ?? []) as Array<{
+    group?: string;
+    kind?: string;
+    namespace?: string;
+    name?: string;
+    status?: string;
+    health?: { status?: string; message?: string };
+  }>;
+
+  return reported.map((resource) => {
+    const result = resultFor(resource, syncResults);
+    return {
+      group: resource.group ?? null,
+      kind: resource.kind ?? "",
+      namespace: resource.namespace ?? null,
+      name: resource.name ?? "",
+      sync: resource.status ?? null,
+      health: resource.health?.status ?? null,
+      // The sync failure first: an object that could not be applied at all is
+      // a more specific answer than the health of whatever is still running
+      // from the revision before it.
+      message:
+        (result?.status && result.status !== "Synced"
+          ? result.message
+          : null) ??
+        resource.health?.message ??
+        null,
+      outcome: result?.status ?? null,
+    };
+  });
+}
+
+/**
+ * Whether an ApplicationSet made this Application.
+ *
+ * Read from `ownerReferences` rather than from a label: the generator sets
+ * itself as the owner so that deleting it deletes what it made, and that is
+ * the fact, not a convention anyone can copy onto a hand-written object.
+ */
+function generatorOf(
+  object: CustomResourceInfo
+): { kind: string; name: string } | null {
+  const owner = object.ownerReferences.find(
+    (reference) => reference.kind === "ApplicationSet"
+  );
+  return owner ? { kind: owner.kind, name: owner.name } : null;
+}
+
+/**
+ * Whether the last sync failed, in Argo's words rather than by reading its
+ * message.
+ *
+ * `phase` alone is not enough: a retrying automated sync sits at `Running`
+ * with every object already reported `SyncFailed`, and calling that "in
+ * progress" would draw a spinner over a manifest the API server has refused
+ * five times. Argo 3 clears those results when the next attempt starts, so
+ * a retry count is the same answer.
+ */
+function syncFailed(app: ArgoApp, hadResults: boolean): boolean {
+  if (app.operationPhase === "Failed" || app.operationPhase === "Error") {
+    return true;
+  }
+  return (
+    (inProgress(app) && app.retries > 0) ||
+    (hadResults &&
+      app.resources.some((resource) => resource.outcome === "SyncFailed"))
+  );
+}
+
+/** An operation Argo has started and not ended. */
+const inProgress = (app: ArgoApp) =>
+  app.operationPhase === "Running" || app.operationPhase === "Terminating";
+
+/**
+ * What is known of the last sync. `never` only where Argo has recorded no
+ * operation at all: an Application synced fifty times read "never synced"
+ * for as long as its next sync ran.
+ */
+export function lastSyncOf(app: ArgoApp): { at: string } | "running" | "never" {
+  if (app.lastSyncAt) return { at: app.lastSyncAt };
+  return app.operationPhase === null ? "never" : "running";
+}
+
+function findingsFor(
+  app: ArgoApp,
+  hadResults: boolean,
+  operation: { finishedAt: string | null; startedAt: string | null }
+): ArgoFinding[] {
+  const findings: ArgoFinding[] = [];
+  const failed = syncFailed(app, hadResults);
+  // Argo's own words, or nothing: our sentence in this slot would read as
+  // the controller's, which it is not.
+  const message =
+    app.operationMessage ??
+    app.resources.find((resource) => resource.message)?.message ??
+    null;
+
+  if (failed && app.autoSync) {
+    findings.push({
+      kind: "syncFailing",
+      severity: "err",
+      message,
+      since: operation.finishedAt,
+      retries: app.retries,
+    });
+  } else if (failed) {
+    findings.push({
+      kind: "syncFailedOnce",
+      severity: "err",
+      message,
+      since: operation.finishedAt,
+    });
+  } else if (inProgress(app)) {
+    // Before "drifted": a sync is on its way, so "nothing will fix this" is
+    // not true for as long as it runs.
+    findings.push({
+      kind: "syncing",
+      severity: "warn",
+      message: app.operationMessage,
+      since: operation.startedAt,
+    });
+  } else if (app.sync === "OutOfSync") {
+    // The quiet one. Nothing is failing, nothing is retrying, and nothing
+    // will change until a person acts. Auto-sync being on does not make it
+    // otherwise: it leaves alone what needs a prune it was not allowed, an
+    // edit it was not told to heal, or a sync window that is closed.
+    findings.push({
+      kind: "drifted",
+      severity: "warn",
+      since: app.lastSyncAt,
+      autoSync: app.autoSync,
+    });
+  } else if (app.sync !== "Synced" && !app.conditions.some(isError)) {
+    // No status at all, or `Unknown` with no error beside it to say why.
+    findings.push({ kind: "notCompared", severity: "warn" });
+  }
+
+  if (app.health === "Degraded") {
+    findings.push({
+      kind: "degraded",
+      severity: "err",
+      message: app.healthMessage,
+      resources: app.resources.filter(
+        (resource) => resource.health === "Degraded"
+      ),
+    });
+  }
+
+  for (const condition of app.conditions) {
+    // `SyncError` restates the refusal the operation already reported, with
+    // less context around it. Where the sync failure is already a finding,
+    // the condition is the same sentence a second time.
+    if (failed && condition.type === "SyncError") continue;
+    findings.push({
+      kind: "condition",
+      severity: isError(condition) ? "err" : "warn",
+      condition,
+    });
+  }
+
+  return findings;
+}
+
+const isError = (condition: ArgoCondition) =>
+  CONDITION_ERRORS.some((word) => condition.type.includes(word));
+
+function worstOf(findings: ArgoFinding[]): "err" | "warn" | null {
+  if (findings.some((finding) => finding.severity === "err")) return "err";
+  if (findings.length > 0) return "warn";
+  return null;
+}
+
+/** The resources that do not match git — the answer the reader came for. */
+export function differing(app: ArgoApp): ArgoResource[] {
+  return app.resources.filter(
+    (resource) => resource.sync !== null && resource.sync !== "Synced"
+  );
+}
+
+/** How much attention one managed object has earned, lower being worse. */
+function rankOf(resource: ArgoResource): number {
+  if (resource.outcome === "SyncFailed") return 0;
+  if (resource.sync === "Missing") return 1;
+  if (resource.health === "Degraded") return 2;
+  if (resource.sync !== null && resource.sync !== "Synced") return 3;
+  if (resource.health === "Progressing") return 4;
+  return 5;
+}
+
+export interface ResourceKindGroup {
+  kind: string;
+  resources: ArgoResource[];
+  /** How many of them are anything other than synced and healthy. */
+  troubled: number;
+}
+
+/**
+ * Everything an Application manages, grouped by kind.
+ *
+ * The whole list rather than a count of it: *what is in this Application* is
+ * the question somebody opens it with, and the objects are already in
+ * `status.resources` with their own health beside them.
+ *
+ * Kinds are ordered by trouble and then alphabetically, and so are the
+ * objects inside each one, because a hundred-object Helm release is the
+ * ordinary case and the two that are failing must not be somewhere in the
+ * middle of it.
+ */
+export function byKind(resources: ArgoResource[]): ResourceKindGroup[] {
+  const groups = new Map<string, ArgoResource[]>();
+  for (const resource of resources) {
+    groups.set(resource.kind, [...(groups.get(resource.kind) ?? []), resource]);
+  }
+
+  return [...groups.entries()]
+    .map(([kind, list]): ResourceKindGroup => ({
+      kind,
+      resources: [...list].sort(
+        (left, right) =>
+          rankOf(left) - rankOf(right) || left.name.localeCompare(right.name)
+      ),
+      troubled: list.filter((resource) => rankOf(resource) < 5).length,
+    }))
+    .sort((left, right) => {
+      const worst = (group: ResourceKindGroup) =>
+        Math.min(...group.resources.map(rankOf));
+      return worst(left) - worst(right) || left.kind.localeCompare(right.kind);
+    });
+}
+
+/** Whether this object is worth colouring, and how. */
+export function resourceTone(resource: ArgoResource): "err" | "warn" | null {
+  const rank = rankOf(resource);
+  if (rank <= 2) return "err";
+  if (rank <= 4) return "warn";
+  return null;
+}
+
+/**
+ * The word at the right of a row.
+ *
+ * Deliberately close to Argo's own vocabulary, and deliberately not what
+ * distinguishes the two findings — in Argo's vocabulary they are the same
+ * word, so a status column claiming to tell them apart would be inventing one
+ * Argo does not have. The tone separates them and the finding says which.
+ */
+export function appState(app: ArgoApp, t: T): VendorVerdict {
+  const words = [
+    app.sync === "Synced"
+      ? t("readings", "argoSynced")
+      : app.sync === "OutOfSync"
+        ? t("readings", "argoOutOfSync")
+        : t("readings", "argoNotCompared"),
+    app.health.toLowerCase(),
+  ];
+  return {
+    text: words.join(" · "),
+    // Green is for the one state that earns it. Anything else with no
+    // finding (suspended, progressing, a health Argo could not assess) is
+    // not a fault and is not "ok" either.
+    tone:
+      app.worst ??
+      (app.sync === "Synced" && app.health === "Healthy" ? "ok" : "warn"),
+  };
+}
+
+/** Trouble first, then the alphabet, so a reload never reshuffles the list. */
+export function byTrouble(apps: ArgoApp[]): ArgoApp[] {
+  const rank = (app: ArgoApp) =>
+    app.worst === "err" ? 0 : app.worst === "warn" ? 1 : 2;
+  return [...apps].sort(
+    (left, right) =>
+      rank(left) - rank(right) || left.name.localeCompare(right.name)
+  );
+}
+
+/** The address Argo's controller reaches its own cluster by. */
+const IN_CLUSTER =
+  /^https:\/\/kubernetes\.default\.svc(\.cluster\.local)?(:\d+)?\/?$/;
+
+/**
+ * Which cluster an Application's objects are in: the one its own object is
+ * in, or another, named as Argo names it (`null` where the spec names none).
+ *
+ * `here` only for the address and the name Argo gives its own cluster. Any
+ * other destination may still be this cluster registered under its outside
+ * address, which nothing in the Application says, so it is not assumed: a
+ * hub's Application for a spoke lists the spoke's objects, and linked they
+ * opened the hub's namesakes with Delete at hand.
+ */
+export function destinationCluster(
+  app: Pick<ArgoApp, "destination">
+): { here: true } | { here: false; name: string | null } {
+  const { server, name } = app.destination;
+  if (name === "in-cluster" || (server !== null && IN_CLUSTER.test(server))) {
+    return { here: true };
+  }
+  return { here: false, name: name ?? server };
+}
+
+/** Where an Application writes: its namespaces, and its cluster where that is not this one. */
+export function destinationOf(app: ArgoApp, t: T): string {
+  const namespaces = new Set(
+    app.resources
+      .map((resource) => resource.namespace)
+      .filter((namespace): namespace is string => Boolean(namespace))
+  );
+  if (app.destination.namespace) namespaces.add(app.destination.namespace);
+  const within =
+    namespaces.size === 0
+      ? null
+      : namespaces.size === 1
+        ? [...namespaces][0]
+        : t("readings", "argoNamespaceCount", { n: namespaces.size });
+
+  const cluster = destinationCluster(app);
+  if (cluster.here) return within ?? t("readings", "argoThisCluster");
+  if (cluster.name === null) return within ?? t("empty", "noneLower");
+  return within
+    ? t("empty", "namespaceOnCluster", {
+        namespace: within,
+        cluster: cluster.name,
+      })
+    : cluster.name;
+}
+
+/** An empty `sourceRepos` is Argo refusing every repository, not an unset field. */
+export function projectReposWords(repos: readonly string[], t: T): string {
+  if (repos.length === 0) return t("empty", "noRepositoryAllowed");
+  if (!repos.includes("*")) return withoutCredentials(repos.join(", "));
+  const denied = repos.filter((repo) => repo.startsWith("!"));
+  return denied.length === 0
+    ? t("empty", "anyRepository")
+    : t("empty", "anyRepositoryExcept", {
+        repos: denied.map((repo) => repo.slice(1)).join(", "),
+      });
+}
+
+export function projectDestinationsWords(
+  destinations: readonly {
+    namespace?: string;
+    server?: string;
+    name?: string;
+  }[],
+  t: T
+): string {
+  if (destinations.length === 0) return t("empty", "noDestinationAllowed");
+  return destinations
+    .map((destination) =>
+      t("empty", "namespaceOnCluster", {
+        namespace:
+          !destination.namespace || destination.namespace === "*"
+            ? t("empty", "anyNamespace")
+            : destination.namespace,
+        cluster:
+          [destination.server, destination.name].find(
+            (cluster) => cluster && cluster !== "*"
+          ) ?? t("empty", "anyCluster"),
+      })
+    )
+    .join(", ");
+}

@@ -1,0 +1,604 @@
+/**
+ * Whether an Ingress is served, as one verdict for its page, its peek and
+ * the Ingresses list.
+ *
+ * Four things the YAML cannot show: no controller claims its class, a
+ * backend Service that does not exist, a TLS Secret that does not exist, a
+ * backend that publishes nothing. Each input carries whether it was read, so
+ * an Ingress nobody could check is "not checked", never "serving".
+ */
+
+import { EyeOff } from "lucide-react";
+
+import type { T } from "@/i18n/useT";
+import type { Known } from "@/lib/known";
+import {
+  doorDoubt,
+  doorWhy,
+  refusedStop,
+  type DoorAsk,
+  type DoorDoubt,
+} from "@/lib/policy-door";
+import type {
+  IngressClassBinding,
+  IngressInfo,
+  TlsCertificate,
+} from "@/generated/types";
+import {
+  serviceHealthOf,
+  serviceHealthWords,
+  type ServiceHealth,
+  type ServiceHealthInput,
+  type Verdict,
+} from "@/lib/service-health";
+import type { StatusRole } from "@/lib/status-role";
+
+/** One namespace's Services by name, as the Service verdict reads them. */
+export type NamespaceBacking = ReadonlyMap<string, ServiceHealthInput>;
+
+export interface IngressInputs {
+  ingress: Pick<
+    IngressInfo,
+    | "name"
+    | "namespace"
+    | "className"
+    | "classAnnotated"
+    | "rules"
+    | "defaultBackend"
+    | "tlsConfigs"
+    | "loadBalancerIps"
+  >;
+  binding: Known<IngressClassBinding>;
+  backing: Known<NamespaceBacking>;
+  /** By Secret name; `undefined` until read. */
+  certificates: Map<string, TlsCertificate> | undefined;
+  /**
+   * A host its controller serves as plain HTTP whatever `spec.tls` says, as
+   * Traefik does without `router.tls`; `null` where that controller was not
+   * asked or has not answered. Absent, `spec.tls` stands.
+   */
+  servedPlain?: (host: string) => boolean | null;
+  /** Who the class's controller connects from; absent, no backend's NetworkPolicies are asked about it. */
+  door?: DoorAsk;
+  /** Absent, nobody looked: `"unread"`. */
+  classless?: ClasslessTakers;
+}
+
+/**
+ * The controllers found here that take an Ingress naming no class unless set
+ * to a class of their own, by name: none where the scan found none, `unread`
+ * where the cluster would not say what is installed, `reading` until it has.
+ */
+export type ClasslessTakers = readonly string[] | "unread" | "reading";
+
+export type IngressProblem =
+  | { kind: "noController"; className: string | null }
+  | { kind: "backendMissing"; service: string }
+  | { kind: "tlsSecretMissing"; secret: string }
+  /** Its Service's verdict rides along, so the Ingress says why too. */
+  | { kind: "backendDown"; service: string; health: ServiceHealth }
+  /** None ready, and every workload behind the backend is still starting its pods. */
+  | { kind: "backendStarting"; service: string }
+  /** None ready, and the pods the workloads behind the backend wait on were not read. */
+  | { kind: "backendUnconfirmed"; service: string; health: ServiceHealth }
+  /** Every workload behind the backend is scaled to zero, on purpose. */
+  | { kind: "backendIdle"; service: string }
+  /** Its pods are up, and whether their NetworkPolicies let the controller through is not known. */
+  | { kind: "backendDoorUnchecked"; service: string; doubt: DoorDoubt };
+
+/** What nobody settled, where the words are this app's and not the cluster's. */
+export type IngressDoubt =
+  /** The Secret is missing, and whether its controller presents it at all was not asked. */
+  | { kind: "tlsUnasked"; secret: string }
+  /** {@link IngressClaim}'s `unrecorded`, for a class its annotation names. */
+  | { kind: "claimUnrecorded"; className: string }
+  /** The same for an Ingress that names no class. */
+  | { kind: "classlessUnrecorded"; takers: ClasslessTakers };
+
+/**
+ * Who picks an Ingress up. An IngressClass answers for the class
+ * `spec.ingressClassName` names, and for no class where one is the default.
+ * A class only the legacy annotation names, and no class without a default,
+ * are taken by a controller's own settings, which the cluster does not
+ * record: there the address a controller published is the evidence one did.
+ * Without one, an Ingress naming no class is served by nobody only where no
+ * controller found here takes such an Ingress.
+ */
+export type IngressClaim =
+  /** An IngressClass answers for it. */
+  | "class"
+  /** None does, and a controller published its address all the same. */
+  | "address"
+  /** No address, and a controller's own settings may take it: nobody can tell. */
+  | "unrecorded"
+  | "none";
+
+type Classed = Pick<IngressInfo, "classAnnotated" | "loadBalancerIps">;
+
+export function ingressClaimOf(
+  ingress: Classed,
+  binding: Pick<IngressClassBinding, "requested" | "resolved">,
+  classless: ClasslessTakers
+): IngressClaim {
+  if (binding.resolved) return "class";
+  if (binding.requested !== null && !ingress.classAnnotated) return "none";
+  if (ingress.loadBalancerIps.length > 0) return "address";
+  if (ingress.classAnnotated) return "unrecorded";
+  return typeof classless !== "string" && classless.length === 0
+    ? "none"
+    : "unrecorded";
+}
+
+/** A class binding with the claim it makes on the one Ingress it was read for. */
+export type ClaimedBinding = IngressClassBinding & {
+  claim: IngressClaim;
+  /** Absent, nobody looked: `"unread"`. */
+  classless?: ClasslessTakers;
+};
+
+export const claimedBinding = (
+  ingress: Classed,
+  binding: IngressClassBinding,
+  classless: ClasslessTakers
+): ClaimedBinding => ({
+  ...binding,
+  claim: ingressClaimOf(ingress, binding, classless),
+  classless,
+});
+
+/** Why an Ingress that names no class is not known to be served by nobody. */
+function classlessWords(takers: ClasslessTakers, t: T): string {
+  if (takers === "reading") return t("readings", "healthStillReading");
+  return takers === "unread"
+    ? t("empty", "ingressClasslessUnread")
+    : t("empty", "ingressClasslessTaken", { names: takers.join(", ") });
+}
+
+/** The line under a controller hop no IngressClass answers for. */
+export function claimNote(binding: ClaimedBinding, t: T): string {
+  if (binding.claim === "address") return t("empty", "ingressClaimedByAddress");
+  return binding.requested
+    ? t("empty", "ingressClaimUnrecorded")
+    : `${classlessWords(binding.classless ?? "unread", t)}.`;
+}
+
+/** An input the cluster did not answer for, in its words, with the code that says whether it refused. */
+export interface Unanswered {
+  said: string;
+  code: string;
+}
+
+const unanswered = (read: {
+  why: string | null;
+  code?: string;
+}): Unanswered | null =>
+  read.why === null ? null : { said: read.why, code: read.code ?? "" };
+
+export interface IngressHealth {
+  problems: IngressProblem[];
+  /** Why an input was not read; empty when every one was. */
+  unread: Array<Unanswered | null | IngressDoubt>;
+  backends: number;
+  addressed: boolean;
+}
+
+/** Every Service the Ingress sends to, once each. */
+export function backendNames(ingress: IngressInputs["ingress"]): string[] {
+  const names = [
+    ...ingress.rules.flatMap((rule) =>
+      rule.paths.map((path) => path.backendService)
+    ),
+    ingress.defaultBackend?.backendService ?? "",
+  ];
+  return [...new Set(names.filter((name) => name !== ""))];
+}
+
+/** The Service ports an Ingress sends to on that Service. */
+function backendPorts(
+  ingress: IngressInputs["ingress"],
+  service: string
+): string[] {
+  const paths = [
+    ...ingress.rules.flatMap((rule) => rule.paths),
+    ...(ingress.defaultBackend ? [ingress.defaultBackend] : []),
+  ];
+  return [
+    ...new Set(
+      paths
+        .filter((path) => path.backendService === service)
+        .map((path) => path.backendPort)
+    ),
+  ];
+}
+
+/** What each verdict of a backend Service says about the Ingress in front of it. */
+const BACKEND_PROBLEM: Record<
+  ServiceHealth["state"],
+  Exclude<
+    IngressProblem["kind"],
+    | "noController"
+    | "backendMissing"
+    | "tlsSecretMissing"
+    | "backendDoorUnchecked"
+  > | null
+> = {
+  ready: null,
+  partly: null,
+  draining: null,
+  noneReady: "backendDown",
+  noEndpoints: "backendDown",
+  shut: "backendDown",
+  policiesUnread: null,
+  comingUp: "backendStarting",
+  podsUnread: "backendUnconfirmed",
+  idle: "backendIdle",
+  externalName: null,
+  selectorless: null,
+  byHand: null,
+  unknown: null,
+};
+
+export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
+  const { ingress, binding, backing, certificates } = inputs;
+  const problems: IngressProblem[] = [];
+  const unread: IngressHealth["unread"] = [];
+
+  if (!binding.known) unread.push(unanswered(binding));
+  else {
+    const takers = inputs.classless ?? "unread";
+    const claim = ingressClaimOf(ingress, binding.value, takers);
+    if (claim === "none")
+      problems.push({ kind: "noController", className: ingress.className });
+    if (claim === "unrecorded")
+      unread.push(
+        binding.value.requested
+          ? { kind: "claimUnrecorded", className: binding.value.requested }
+          : takers === "reading"
+            ? null
+            : { kind: "classlessUnrecorded", takers }
+      );
+  }
+
+  const controller = binding.known ? binding.value.controller : null;
+  const read = controller ? inputs.door?.(controller) : undefined;
+  const names = backendNames(ingress);
+  if (names.length > 0 && !backing.known) unread.push(unanswered(backing));
+  if (backing.known) {
+    for (const name of names) {
+      const service = backing.value.get(name);
+      if (!service) {
+        problems.push({ kind: "backendMissing", service: name });
+        continue;
+      }
+      const subject = {
+        service: {
+          kind: "Service",
+          name,
+          namespace: ingress.namespace,
+          existence: "present" as const,
+          facts: null,
+        },
+        stop: service.stop,
+        door: service.door,
+        ports: service.targets.map((port) => ({
+          name: null,
+          port,
+          protocol: "TCP",
+          exposed: true,
+        })),
+        networks: service.networks,
+      };
+      const ports = backendPorts(ingress, name);
+      const refused = ports
+        .map((port) => refusedStop(subject, port, read))
+        .find((stop) => stop !== null);
+      const health = serviceHealthOf(
+        service,
+        refused ? { ...service, stop: refused } : service,
+        null
+      );
+      const problem = BACKEND_PROBLEM[health.state];
+      if (problem === "backendDown" || problem === "backendUnconfirmed")
+        problems.push({ kind: problem, service: name, health });
+      else if (problem) problems.push({ kind: problem, service: name });
+      else if (controller && inputs.door) {
+        const doubt = ports
+          .map((port) => doorDoubt(subject, port, read, controller))
+          .find((found) => found !== null);
+        if (doubt)
+          problems.push({ kind: "backendDoorUnchecked", service: name, doubt });
+      }
+    }
+  }
+
+  for (const config of ingress.tlsConfigs) {
+    if (!config.secretName) continue;
+    // Never presented, so its absence breaks nothing a client sees; the
+    // controller's own page says nothing of it either.
+    const plain = config.hosts.map(inputs.servedPlain ?? (() => false));
+    if (plain.length > 0 && plain.every((served) => served === true)) continue;
+    if (!certificates) {
+      unread.push(null);
+      continue;
+    }
+    const problem = certificates.get(config.secretName)?.problem;
+    if (problem?.says === "noSecret") {
+      // Missing is a fault only where the Secret is presented.
+      if (plain.length > 0 && plain.every((served) => served !== false))
+        unread.push({ kind: "tlsUnasked", secret: config.secretName });
+      else
+        problems.push({ kind: "tlsSecretMissing", secret: config.secretName });
+    } else if (problem?.says === "secretUnreadable") {
+      unread.push({ said: problem.said, code: "" });
+    }
+  }
+
+  return {
+    problems,
+    unread,
+    backends: names.length,
+    addressed: ingress.loadBalancerIps.length > 0,
+  };
+}
+
+/**
+ * What an Ingress's load balancer row can say: an address, one on its way
+ * from a controller that serves the class, none because nothing serves it,
+ * or nothing known because who serves it could not be read or is not
+ * recorded.
+ */
+export type IngressAddress =
+  | "assigned"
+  | "pending"
+  | "noController"
+  | "unknown";
+
+const UNADDRESSED: Record<IngressClaim, IngressAddress> = {
+  class: "pending",
+  address: "assigned",
+  unrecorded: "unknown",
+  none: "noController",
+};
+
+export function ingressAddressOf(
+  ingress: Pick<IngressInfo, "loadBalancerIps">,
+  claim: IngressClaim | undefined
+): IngressAddress {
+  if (ingress.loadBalancerIps.length > 0) return "assigned";
+  return claim ? UNADDRESSED[claim] : "unknown";
+}
+
+/**
+ * The class row, on the page and in the shared file: the class is a request
+ * and the controller is who answers it, including "nobody does" and "the
+ * cluster does not say".
+ */
+export function ingressClassWords(
+  className: string | null,
+  binding: ClaimedBinding | undefined,
+  t: T
+): { text: string; tone: "err" | null } {
+  if (!binding) {
+    return { text: className || t("empty", "clusterDefault"), tone: null };
+  }
+  if (binding.resolved) {
+    return {
+      text: binding.controller
+        ? `${binding.resolved} · ${binding.controller}`
+        : binding.resolved,
+      tone: null,
+    };
+  }
+  const unclaimed = binding.claim === "none";
+  return {
+    text: className
+      ? t("empty", unclaimed ? "nothingServesClass" : "classByAnnotation", {
+          name: className,
+        })
+      : t("empty", "noClassNoDefault"),
+    tone: unclaimed ? "err" : null,
+  };
+}
+
+/** The words and tone of each state without an address. */
+export const INGRESS_ADDRESS_WORDS: Record<
+  Exclude<IngressAddress, "assigned">,
+  {
+    key: "pendingInline" | "addressNoController" | "unknownLower";
+    tone: "warn" | "err" | null;
+  }
+> = {
+  pending: { key: "pendingInline", tone: "warn" },
+  noController: { key: "addressNoController", tone: "err" },
+  unknown: { key: "unknownLower", tone: null },
+};
+
+const ORDER: IngressProblem["kind"][] = [
+  "noController",
+  "backendMissing",
+  "tlsSecretMissing",
+  "backendDown",
+  "backendStarting",
+  "backendUnconfirmed",
+  "backendDoorUnchecked",
+  "backendIdle",
+];
+
+function problemSentence(problem: IngressProblem, t: T): string {
+  switch (problem.kind) {
+    case "noController":
+      return problem.className
+        ? t("readings", "healthNothingServesClass", { name: problem.className })
+        : t("readings", "healthNoClassNoDefault");
+    case "backendMissing":
+      return t("nav", "stopNoServiceNamed", { name: problem.service });
+    case "tlsSecretMissing":
+      return t("readings", "healthNoTlsSecret", { name: problem.secret });
+    case "backendDown":
+      return backendWhy(problem, "healthBackendDown", t);
+    case "backendStarting":
+      return t("readings", "healthBackendStarting", { name: problem.service });
+    case "backendUnconfirmed":
+      return backendWhy(problem, "healthBackendUnconfirmed", t);
+    case "backendIdle":
+      return t("readings", "healthBackendIdle", { name: problem.service });
+    case "backendDoorUnchecked": {
+      const said = {
+        name: problem.service,
+        client: problem.doubt.client,
+        why: doorWhy(problem.doubt, t),
+      };
+      const n = problem.doubt.policies.length;
+      const names = problem.doubt.policies.join(", ");
+      if (problem.doubt.side === "client")
+        return n === 0
+          ? t("readings", "healthBackendEgressUnread", said)
+          : t("count", "healthBackendEgressUnchecked", { ...said, n, names });
+      return n === 0
+        ? t("readings", "healthBackendPoliciesUnread", said)
+        : t("count", "healthBackendDoorUnchecked", { ...said, n, names });
+    }
+  }
+}
+
+function doubtWords(doubt: IngressDoubt, t: T): string {
+  switch (doubt.kind) {
+    case "tlsUnasked":
+      return t("readings", "healthTlsUnasked", { name: doubt.secret });
+    case "claimUnrecorded":
+      return t("readings", "healthClaimUnrecorded", { name: doubt.className });
+    case "classlessUnrecorded":
+      return `${t("empty", "ingressNamesNoClass")}. ${classlessWords(doubt.takers, t)}`;
+  }
+}
+
+/** A backend's trouble in its Service's own words, where its verdict has any. */
+function backendWhy(
+  problem: { service: string; health: ServiceHealth },
+  plain: "healthBackendDown" | "healthBackendUnconfirmed",
+  t: T
+): string {
+  const why = serviceHealthWords(problem.health, t).reason;
+  return why
+    ? t("readings", "healthBackendWhy", { name: problem.service, why })
+    : t("readings", plain, { name: problem.service });
+}
+
+const PROBLEM_LABEL: Record<
+  IngressProblem["kind"],
+  | "healthNoController"
+  | "healthMissingBackend"
+  | "healthMissingTlsSecret"
+  | "healthBackendDownShort"
+  | "healthBackendStartingShort"
+  | "healthBackendUnconfirmedShort"
+  | "healthBackendIdleShort"
+> = {
+  noController: "healthNoController",
+  backendMissing: "healthMissingBackend",
+  tlsSecretMissing: "healthMissingTlsSecret",
+  backendDown: "healthBackendDownShort",
+  backendStarting: "healthBackendStartingShort",
+  backendUnconfirmed: "healthBackendUnconfirmedShort",
+  backendDoorUnchecked: "healthBackendUnconfirmedShort",
+  backendIdle: "healthBackendIdleShort",
+};
+
+/** The colour a problem is drawn in where it is the worst one. */
+const PROBLEM_ROLE: Record<IngressProblem["kind"], StatusRole> = {
+  noController: "err",
+  backendMissing: "err",
+  tlsSecretMissing: "err",
+  backendDown: "err",
+  backendStarting: "pending",
+  backendUnconfirmed: "neutral",
+  backendDoorUnchecked: "neutral",
+  backendIdle: "neutral",
+};
+
+/** Problems nobody could confirm or rule out. */
+const UNCONFIRMED: ReadonlySet<IngressProblem["kind"]> = new Set([
+  "backendUnconfirmed",
+  "backendDoorUnchecked",
+]);
+
+/** Every label `ingressHealthWords` can draw, for the column that has to hold the widest. */
+export const ingressVerdictLabels = (t: T) => [
+  ...Object.values(PROBLEM_LABEL).map((key) => t("readings", key)),
+  t("nav", "notChecked"),
+  t("readings", "healthStillReading"),
+  t("readings", "healthNoAddressYet"),
+  t("readings", "healthServed"),
+];
+
+export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
+  const problems = [...health.problems].sort(
+    (a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind)
+  );
+  const worst = problems[0];
+  if (worst) {
+    const down = problems.filter(
+      (problem) => problem.kind === "backendDown"
+    ).length;
+    // A path that still reaches a backend is degraded, not dead.
+    const partial = worst.kind === "backendDown" && down < health.backends;
+    return {
+      code: worst.kind,
+      label: t("readings", PROBLEM_LABEL[worst.kind]),
+      role: partial ? "warn" : PROBLEM_ROLE[worst.kind],
+      glyph: UNCONFIRMED.has(worst.kind) ? EyeOff : undefined,
+      reason: `${problems.map((problem) => problemSentence(problem, t)).join(". ")}.`,
+    };
+  }
+  if (health.unread.length > 0) {
+    const said = health.unread.flatMap((why) =>
+      why === null ? [] : ["said" in why ? why.said : doubtWords(why, t)]
+    );
+    return said.length > 0
+      ? {
+          code: "unknown",
+          label: t("nav", "notChecked"),
+          role: "neutral",
+          reason: said.join(". "),
+        }
+      : {
+          code: "reading",
+          label: t("readings", "healthStillReading"),
+          role: "neutral",
+          reason: null,
+        };
+  }
+  if (!health.addressed) {
+    return {
+      code: "waiting",
+      label: t("readings", "healthNoAddressYet"),
+      role: "pending",
+      reason: t("readings", "healthNoAddressYetWhy"),
+    };
+  }
+  return {
+    code: "serving",
+    label: t("readings", "healthServed"),
+    role: "ok",
+    reason: null,
+  };
+}
+
+/**
+ * The one code every input of an unknown verdict went unread with: a
+ * refusal only where each of them was refused, and none where they differ or
+ * one is a doubt of this app's own.
+ */
+export function unreadCode(health: IngressHealth): string {
+  const codes = new Set(
+    health.unread.flatMap((why) =>
+      why === null ? [] : ["said" in why ? why.code : ""]
+    )
+  );
+  return codes.size === 1 ? [...codes][0] : "";
+}
+
+export const secretNamesOf = (ingress: Pick<IngressInfo, "tlsConfigs">) =>
+  ingress.tlsConfigs.flatMap((config) =>
+    config.secretName ? [config.secretName] : []
+  );

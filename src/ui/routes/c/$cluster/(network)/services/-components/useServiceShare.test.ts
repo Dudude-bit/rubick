@@ -1,0 +1,445 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import type {
+  ResourceConnections,
+  ServiceInfo,
+  ServicePublished,
+} from "@/generated/types";
+import type { ConnectionsQuery } from "@/hooks/useConnections";
+import {
+  serviceStats,
+  servicePortsSection,
+  serviceSelectorSection,
+  servicePublishedSection,
+} from "./useServiceShare";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+const service: ServiceInfo = {
+  name: "checkout",
+  namespace: "shop",
+  uid: "u1",
+  type: "ClusterIP",
+  sessionAffinity: "None",
+  clusterIp: "10.0.0.5",
+  externalName: null,
+  externalIps: [],
+  loadBalancerIps: [],
+  ports: [
+    {
+      name: "http",
+      port: 80,
+      targetPort: "8080",
+      nodePort: null,
+      protocol: "TCP",
+    },
+  ],
+  selector: { app: "checkout" },
+  labels: {},
+  annotations: {},
+  createdAt: null,
+};
+
+const published = (over: Partial<ServicePublished> = {}): ServicePublished => ({
+  service: {
+    kind: "Service",
+    name: "checkout",
+    namespace: "shop",
+    existence: "present",
+    facts: null,
+  },
+  source: "slices",
+  slices: 1,
+  ready: 2,
+  draining: 0,
+  notReady: 0,
+  unrouted: 0,
+  unroutedReady: 0,
+  ports: [],
+  endpoints: [],
+  whole: true,
+  unpublished: [],
+  stop: null,
+  ...over,
+});
+
+const connectionsOf = (
+  data: ResourceConnections | undefined
+): ConnectionsQuery =>
+  ({ data, error: null, isPending: data === undefined }) as ConnectionsQuery;
+
+describe("what the Service report leads with", () => {
+  it("carries type, cluster IP and port count with no endpoints read yet", () => {
+    const stats = serviceStats(service, undefined, t);
+    expect(stats.map((s) => s.value)).toEqual(["ClusterIP", "10.0.0.5", "1"]);
+  });
+
+  it("adds a ready/total stat once endpoints are known, coloured warn when short", () => {
+    const stats = serviceStats(
+      service,
+      published({ ready: 1, notReady: 1 }),
+      t
+    );
+    const last = stats.at(-1);
+    expect(last).toMatchObject({ value: "1/2", role: "warn" });
+  });
+
+  /**
+   * Whole counts over pods nobody could check for a shut door were shared
+   * green. Fails if the file colours them as a verdict or drops why.
+   */
+  it("shares whole counts without colour where the NetworkPolicies went unread", () => {
+    const stats = serviceStats(
+      service,
+      published({
+        door: {
+          state: "unread",
+          reason: "forbidden",
+          code: "PERMISSION_DENIED",
+        },
+      }),
+      t
+    );
+    const last = stats.at(-1);
+    expect(last).toMatchObject({ value: "2/2", role: "neutral", unread: true });
+    expect(last?.note).toContain("forbidden");
+  });
+
+  /**
+   * A short count over pods nobody could check for a shut door was shared
+   * amber with no word of the refusal. Fails if the file drops why.
+   */
+  it("shares a short count with why the NetworkPolicies went unread", () => {
+    const door = {
+      state: "unread" as const,
+      reason: "forbidden",
+      code: "PERMISSION_DENIED",
+    };
+    const short = serviceStats(
+      service,
+      published({ ready: 1, notReady: 1, door }),
+      t
+    ).at(-1);
+    expect(short).toMatchObject({ value: "1/2", role: "warn" });
+    expect(short?.note).toContain("is not checked: forbidden");
+    const legacy = serviceStats(
+      service,
+      published({ ready: 1, notReady: 1, door, source: "legacyEndpoints" }),
+      t
+    ).at(-1);
+    expect(legacy?.note).toContain("is not checked: forbidden. This cluster");
+    expect(
+      serviceStats(service, published({ ready: 1, notReady: 1 }), t).at(-1)
+        ?.note
+    ).toBeNull();
+  });
+
+  /**
+   * Zero ready of zero is not "all ready": the Published tab says the
+   * Service publishes nothing and the chain ends in a red stop, and the
+   * file led with `0/0` and a green check above it.
+   */
+  it("does not call a Service that publishes nothing healthy", () => {
+    const last = serviceStats(
+      service,
+      published({ ready: 0, draining: 0, notReady: 0 }),
+      t
+    ).at(-1);
+    expect(last).toMatchObject({ value: "0/0", role: "warn" });
+    expect(last?.note).toBeTruthy();
+  });
+
+  /**
+   * An ExternalName Service is a DNS alias and one with no selector has its
+   * endpoints written by hand: the page draws both neutral. Fails if the
+   * file reports either as the amber fault "this Service publishes nothing".
+   */
+  it.each([
+    [
+      "a DNS alias",
+      { ...service, type: "ExternalName", externalName: "db.example.com" },
+      translate("en", "readings", "healthDnsAliasWhy"),
+    ],
+    [
+      "a Service with no selector and nothing written",
+      { ...service, selector: {} },
+      translate("en", "nav", "endpointsByHandNoneWritten"),
+    ],
+  ])("shares %s without colour, in the page's words", (_, shaped, why) => {
+    const last = serviceStats(shaped, published({ ready: 0, slices: 0 }), t).at(
+      -1
+    );
+    expect(last).toMatchObject({ value: "0/0", role: "neutral", note: why });
+  });
+
+  /**
+   * hello-web at zero: the page says no pods by intent, and the file must
+   * not lead with the amber "publishes nothing". Fails if the idle stop is
+   * read as an empty Service.
+   */
+  it("says a Service whose workloads are scaled to zero has no pods by intent, without colour", () => {
+    const last = serviceStats(
+      service,
+      published({
+        ready: 0,
+        slices: 0,
+        stop: {
+          reason: "scaledToZero",
+          service: published().service,
+          selector: "app=checkout",
+          workloads: [{ ...published().service, kind: "Deployment" }],
+        },
+      }),
+      t
+    ).at(-1);
+    expect(last).toMatchObject({
+      value: "0/0",
+      role: "neutral",
+      note: "No pods by intent: checkout is scaled to zero",
+    });
+  });
+
+  /**
+   * Sam's big-pull, shared while its pod pulled an image: the page said
+   * coming up and the file would lead with an amber "publishes nothing".
+   * Fails if a Service waiting on its workload's pods is drawn as an empty
+   * one, or one whose pods were not read loses the not-read mark.
+   */
+  it("says a Service with nothing yet behind a workload coming up is coming up", () => {
+    const stat = (stop: ServicePublished["stop"]) =>
+      serviceStats(service, published({ ready: 0, stop }), t).at(-1);
+    expect(
+      stat({
+        reason: "noneReady",
+        service: published().service,
+        selector: "app=checkout",
+        pods: 1,
+        why: "comingUp",
+        cause: null,
+      })
+    ).toMatchObject({
+      value: "0/0",
+      role: "pending",
+      note: "1 pod carries app=checkout, and it is not ready: still starting",
+    });
+    expect(
+      stat({
+        reason: "publishesNothingYet",
+        service: published().service,
+        selector: "app=checkout",
+        podsUnread: true,
+      })
+    ).toMatchObject({ value: "0/0", role: "neutral", unread: true });
+  });
+
+  /**
+   * With neither EndpointSlices nor Endpoints readable, the count is
+   * deduced from pods; it is not the controller's word, and says so.
+   */
+  it("draws a count deduced from pods without colour, with the page's note", () => {
+    const last = serviceStats(
+      service,
+      published({ source: "podReadiness", ready: 2 }),
+      t
+    ).at(-1);
+    expect(last).toMatchObject({ value: "2/2", role: "neutral" });
+    expect(last?.note).toBeTruthy();
+  });
+});
+
+describe("the ports the Service declares", () => {
+  it("lists every port as a table row, deleting this breaks the row content", () => {
+    const section = servicePortsSection(service, t);
+    expect(section.body).toMatchObject({
+      type: "table",
+      rows: [
+        {
+          cells: [
+            { text: "http" },
+            { text: "80" },
+            { text: "8080" },
+            { text: "TCP" },
+            { text: "none" },
+          ],
+        },
+      ],
+    });
+  });
+});
+
+describe("the pod selector", () => {
+  it("turns each label into a fact row", () => {
+    const section = serviceSelectorSection(service, t);
+    expect(section.body).toMatchObject({
+      type: "facts",
+      rows: [{ label: "app", values: [{ text: "checkout" }] }],
+    });
+  });
+});
+
+describe("what the Service actually publishes", () => {
+  it("says the read is still in flight rather than claiming there are no endpoints", () => {
+    const section = servicePublishedSection(connectionsOf(undefined), t);
+    expect(section.unread).toBeTruthy();
+  });
+
+  /**
+   * Slices, Endpoints and pods all refused: the read answered and holds
+   * nothing this Service publishes, and the shared file drew an empty table
+   * under no mark. Fails if such an answer is shared as read.
+   */
+  it("says what it publishes could not be read where the answer names the refusal", () => {
+    const section = servicePublishedSection(
+      {
+        data: {
+          subject: published().service,
+          edges: [],
+          stops: [],
+          published: [],
+          notLookedAt: [
+            {
+              kind: "EndpointSlice",
+              why: {
+                says: "unanswered",
+                version: "discovery.k8s.io/v1",
+                said: "endpointslices is forbidden",
+              },
+            },
+          ],
+        } as unknown as ResourceConnections,
+        error: null,
+        isPending: false,
+      } as unknown as ConnectionsQuery,
+      t
+    );
+    expect(section.unread).toBe(
+      "Could not read what this Service publishes: endpointslices is forbidden"
+    );
+    expect(section.count).toBeUndefined();
+  });
+
+  it("lists ready and not-ready addresses with a pod reference once known", () => {
+    const connections = connectionsOf({
+      subject: {
+        kind: "Service",
+        name: "checkout",
+        namespace: "shop",
+        existence: "present",
+        facts: null,
+      },
+      edges: [],
+      stops: [],
+      notLookedAt: [],
+      published: [
+        published({
+          endpoints: [
+            {
+              address: "10.42.0.1",
+              target: {
+                kind: "Pod",
+                name: "checkout-abc",
+                namespace: "shop",
+                existence: "present",
+                facts: null,
+              },
+              ready: true,
+              serving: true,
+              terminating: false,
+              nodeName: null,
+              zone: null,
+              hintZones: [],
+              ports: [8080],
+            },
+          ],
+        }),
+      ],
+    });
+    const section = servicePublishedSection(connections, t);
+    expect(section.unread).toBeNull();
+    expect(section.body).toMatchObject({
+      type: "table",
+      rows: [
+        {
+          cells: [
+            { text: "10.42.0.1:8080" },
+            { text: "checkout-abc" },
+            { role: "ok" },
+          ],
+        },
+      ],
+    });
+  });
+});
+
+describe("an address not ready in what the Service publishes", () => {
+  const notReadyOf = (why: "podsUnread" | "failingReadiness") => {
+    const subject = published().service;
+    const section = servicePublishedSection(
+      connectionsOf({
+        subject,
+        edges: [],
+        stops: [],
+        notLookedAt: [],
+        published: [
+          published({
+            ready: 0,
+            notReady: 1,
+            stop: {
+              reason: "noneReady",
+              service: subject,
+              selector: "app=checkout",
+              pods: 1,
+              why,
+              cause: null,
+            },
+            endpoints: [
+              {
+                address: "10.42.1.30",
+                target: null,
+                ready: false,
+                serving: false,
+                terminating: false,
+                nodeName: null,
+                zone: null,
+                hintZones: [],
+                ports: [8080],
+              },
+            ],
+          }),
+        ],
+      }),
+      t
+    );
+    return (section.body as { rows: { cells: unknown[] }[] }).rows[0].cells[2];
+  };
+
+  /**
+   * Marco's ledger, pods unread: the file said the address amber where the
+   * Service's verdict is grey. Fails if it takes a fault's colour, or loses
+   * the not-read mark, while the pods are unread.
+   */
+  it("is shared neutral with the not-read mark while the Service's pods are unread", () => {
+    expect(notReadyOf("podsUnread")).toMatchObject({
+      role: "neutral",
+      unread: true,
+    });
+  });
+
+  /** Fails if an address its pods do explain is shared without its amber. */
+  it("is shared amber once the Service's pods were read", () => {
+    expect(notReadyOf("failingReadiness")).toMatchObject({ role: "warn" });
+  });
+});
+
+describe("the shared file's Cluster IP", () => {
+  /** It printed "None" for an ExternalName Service, the headless literal for an address it does not have. */
+  it("says none for an alias and labels the headless literal", () => {
+    const of = (clusterIp: string | null, type: string) =>
+      serviceStats({ ...service, type, clusterIp }, undefined, t)[1].value;
+    expect(of(null, "ExternalName")).toBe("none");
+    expect(of("None", "ClusterIP")).toBe("None (headless)");
+    expect(of("10.0.0.5", "ClusterIP")).toBe("10.0.0.5");
+  });
+});

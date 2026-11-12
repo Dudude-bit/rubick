@@ -1,0 +1,1031 @@
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { commands } from "@/lib/commands";
+import { listenBridgeLag, listenEvent } from "@/lib/events";
+import type { LogLineEvent, StreamLogConfig } from "@/generated/types";
+import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
+import {
+  listenForStreamFailures,
+  type StreamFailure,
+} from "@/lib/stream-failure";
+
+import { groupKeyFor } from "../normalize";
+import type { QueryTerm, StreamedLogLine } from "../types";
+import {
+  appendCapped,
+  backfillPerContainer,
+  emptyBuffer,
+  MAX_PENDING_LINES,
+  orderByTimestamp,
+  REORDER_WINDOW_MS,
+  type FieldIndex,
+  type Frozen,
+  type LogBuffer,
+} from "./log-buffer";
+
+/**
+ * The one number. It bounds the backfill the stream opens with *and*
+ * the lines the viewer keeps, because they were two numbers saying
+ * different things: a selector reading "100 lines" sat above a viewer
+ * holding forty thousand, and neither number described what was on
+ * screen.
+ *
+ * 5 000 is the default rather than the ceiling. A retained line costs
+ * about 1.1 KB now the list is virtualised, so the top option is still
+ * 40 000 for anyone who wants three minutes of a chatty pod instead of
+ * twenty seconds.
+ */
+export const DEFAULT_LOG_LIMIT = 5000;
+
+/** What the "keep" control offers. Ascending; the first is the default. */
+export const LOG_LIMITS = [1000, 5000, 20000, 40000] as const;
+
+/** One container of one pod: what a single stream reads. */
+export interface LogSource {
+  pod: string;
+  namespace: string;
+  container: string;
+  /**
+   * The container has started, so a log can exist. `undefined` means the
+   * caller does not track it — a single-pod pane, which opens on containers
+   * it has already read the status of.
+   */
+  started?: boolean;
+  /** The pod's uid. Another one under the same name is the pod made again. */
+  uid?: string;
+}
+
+export const sourceKey = (source: LogSource) =>
+  `${source.namespace}/${source.pod}/${source.container}`;
+
+const sameSource = (
+  failure: Pick<ContainerFailure, "pod" | "container">,
+  source: Pick<LogSource, "pod" | "container">
+) => failure.pod === source.pod && failure.container === source.container;
+
+/** A stream that stopped on its own, and the container it belonged to. */
+export interface ContainerFailure extends StreamFailure {
+  container: string;
+  pod: string;
+}
+
+/** One line as the backend emits it, before it is given an id and a home. */
+export type LogBatchLine = LogLineEvent;
+
+interface UseLogStreamOptions {
+  /** The pod a single-pod pane reads. */
+  podName?: string;
+  namespace: string;
+  /**
+   * One stream is opened per entry. A multi-container pod raises exactly
+   * one question — what was the sidecar doing when the app failed — and
+   * a viewer that shows one container at a time cannot be asked it.
+   */
+  containers?: string[];
+  /**
+   * The streams of a pane that reads many pods, given outright. They may
+   * change while the pane is open: a rollout replaces every pod in a
+   * minute, and the pane keeps the lines it holds, stops the streams of
+   * pods that left and opens the new ones with their own tail.
+   */
+  sources?: LogSource[];
+  /**
+   * What the pane is about. A change starts a fresh session with an
+   * empty buffer; a change in `sources` under the same key does not.
+   * Defaults to the pod, which is what a single-pod pane is about.
+   */
+  paneKey?: string;
+  /** Backfill and retention, together. See `DEFAULT_LOG_LIMIT`. */
+  limit: number;
+  /**
+   * Read the run before the current one instead of the current one.
+   *
+   * For a crash loop this is the only readable answer: the container is
+   * backing off, its current run has printed nothing, and the run that
+   * printed the reason is the one before it. Whole-pane rather than
+   * per-container, because "which run am I reading" is a question about
+   * the pane and a buffer holding two different runs at once could not
+   * answer it. Containers with nothing earlier come back
+   * `no-previous-run`, which is a fact and not a failure.
+   */
+  previous?: boolean;
+  /**
+   * Terms every arriving line must satisfy to be kept at all, evaluated
+   * in Rust before the line costs an event, an IPC hop or a slot. Empty
+   * is the default and keeps everything.
+   *
+   * Changing this restarts the streams and nothing else: the buffer goes
+   * on holding every line it already has, which is why promoting a chip
+   * is not a destructive act and has nothing to confirm.
+   */
+  intake?: QueryTerm[];
+  /**
+   * A stretch of clock whose lines the cap may not evict. See `Frozen`.
+   * Changing it neither restarts the stream nor touches the lines outside
+   * it; thawing lets the next batch evict as if it had never been set.
+   */
+  frozen?: Frozen | null;
+  /**
+   * Called whenever the buffer is emptied — a Keep change, Clear, a switch
+   * of pod or run. Whoever owns a freeze has to hear it: the interval's
+   * lines are gone and cannot come back, and a chip still offering to thaw
+   * them is the pane promising something it no longer holds.
+   */
+  onWiped?: () => void;
+}
+
+interface UseLogStreamResult {
+  logs: StreamedLogLine[];
+  /** `logs.length`, named so a status bar does not have to explain itself. */
+  retained: number;
+  /** Lines held inside the frozen interval, over and above the cap. */
+  frozenLines: number;
+  limit: number;
+  /**
+   * What the retained lines can be filtered by, counted as they arrived.
+   * Counting it here rather than in a memo over `logs` is the difference
+   * between an O(1) append and a 40 000-line scan four times a second.
+   */
+  fields: FieldIndex;
+  /**
+   * Lines evicted from the head since the stream started. Anything above
+   * zero means the top of the buffer is no longer the top of the log —
+   * which the viewer used to do silently.
+   */
+  dropped: number;
+  /** See `LogBuffer.merged`. */
+  merged: number;
+  /**
+   * When a batch last landed, and the two ids that divide the buffer
+   * into what arrived under intake and what arrived without it.
+   *
+   * They exist because intake makes silence and rates ambiguous. The
+   * first lets a quiet pane say how long it has been quiet instead of
+   * looking dead. The other two bound the last unfiltered stretch —
+   * `[unfilteredFrom, intakeFrom)` — which is the only part of the
+   * buffer that can answer "how fast is this pod writing", since the
+   * lines intake rejects never reach this process at all.
+   */
+  lastBatchAt: number;
+  intakeFrom: number;
+  unfilteredFrom: number;
+  /** True while at least one container's followed stream is attached; a previous run is read, not followed. */
+  isStreaming: boolean;
+  /** What reading a previous run found. See `PreviousRead`. */
+  previousRead: PreviousRead | null;
+  isConnecting: boolean;
+  /**
+   * Why a stream is not running, per container. A sidecar exiting kills
+   * its stream and leaves the other four attached, so this is a list and
+   * not a single verdict.
+   */
+  failures: ContainerFailure[];
+  isPaused: boolean;
+  /**
+   * Clear took the lines away since the streams were last attached afresh:
+   * an empty buffer is then not a container that wrote nothing.
+   */
+  cleared: boolean;
+  clearLogs: () => void;
+  togglePause: () => void;
+  retry: () => void;
+  /** Reconnect one lane, keeping every other lane's lines. */
+  retrySource: (pod: string, container: string) => void;
+}
+
+/**
+ * What reading a previous run found, once every source's read has ended or
+ * failed: how many reads reached the end, and the lines those runs held
+ * before intake chose among them. `null` on the hook until then, and for a
+ * followed pane, so an empty pane cannot say "wrote nothing" ahead of the
+ * read, or about lines that intake or Clear took away.
+ */
+export interface PreviousRead {
+  sources: number;
+  lines: number;
+}
+
+const NO_READS: ReadonlyMap<string, number> = new Map();
+const NO_INTAKE: QueryTerm[] = [];
+/** What `intakeKey` reads as when nothing is being kept at the source. */
+const NO_INTAKE_KEY = JSON.stringify(NO_INTAKE);
+
+/**
+ * A wire line in the shape the buffer holds.
+ *
+ * Lifted out of the batch handler so the copy can be asserted on: every
+ * field here is optional on one side or the other, so dropping one — the
+ * runs most of all — is not a type error and nothing else notices.
+ */
+export function toStreamedLine(
+  line: LogBatchLine,
+  at: {
+    id: number;
+    epoch: number;
+    pod: string;
+    container: string;
+    namespace: string;
+  }
+): StreamedLogLine {
+  const streamed: StreamedLogLine = {
+    id: at.id,
+    epoch: at.epoch,
+    groupKey: "",
+    timestamp: line.timestamp,
+    message: line.message,
+    level: line.level,
+    format: line.format ?? "plain",
+    fields: line.fields,
+    raw: line.raw || line.message,
+    segments: line.segments,
+    pod: at.pod,
+    container: at.container,
+    namespace: at.namespace,
+  };
+  streamed.groupKey = groupKeyFor(streamed);
+  return streamed;
+}
+
+/**
+ * The newest stamped lines heard from a source: where a stream of it opened
+ * again reads on from, and what that stream must not repeat. The node
+ * answers from the whole second, so the lines of that instant come twice.
+ */
+interface Heard {
+  epoch: number;
+  lines: Set<string>;
+}
+
+const heardKey = (line: LogBatchLine) =>
+  `${line.timestamp}\n${line.raw || line.message}`;
+
+/** Everything one session of streams shares, from the listeners to the last epoch per stream. */
+interface Session {
+  active: boolean;
+  /** Listeners are up; a change in sources may open streams now. */
+  listening: boolean;
+  /** Whether the first set of streams opens without a backfill. */
+  resuming: boolean;
+  /** The backfill is spent, whether the sources came with the mount or after it. */
+  seeded: boolean;
+  /** stream id -> what it reads. */
+  sourceOf: Map<string, LogSource>;
+  /** source key -> stream id, or `""` while the open is in flight. */
+  opened: Map<string, string>;
+  live: Set<string>;
+  /** Last timestamp seen per stream, so an untimestamped line sorts where it arrived. */
+  lastEpoch: Map<string, number>;
+  /** When the session's streams were first asked for: where a lane that never said a line reads on from. */
+  since: number;
+  /** source key -> the last lines it said. */
+  heard: Map<string, Heard>;
+  /** stream id -> what it was opened after, until it has read past it. */
+  after: Map<string, Heard>;
+  /** Sources to attach again: they read on from where they stopped. */
+  again: Set<string>;
+  /** The newest stamp any lane has said: how far the pane has got. */
+  high: number;
+  /** Streams attached again that are still behind `high`: what they say is a read-back. */
+  catching: Set<string>;
+  /**
+   * Sources whose open was rejected. Kept out of `opened` so nothing thinks
+   * they are attached, and out of `added` so an unrelated pod joining the
+   * list does not silently retry them and stack another identical failure.
+   * `retry` is what empties it.
+   */
+  refused: Set<string>;
+  /** Sources seen before their container started. */
+  unstarted: Set<string>;
+  /** source key -> the uid of the pod its lane reads. */
+  uidOf: Map<string, string>;
+  unlistens: Array<() => void>;
+}
+
+/** Stops a lane's stream so that `sync` opens it again, reading on from its last line. */
+function letGo(s: Session, key: string, id: string) {
+  s.opened.delete(key);
+  s.again.add(key);
+  s.sourceOf.delete(id);
+  s.live.delete(id);
+  s.lastEpoch.delete(id);
+  s.after.delete(id);
+  s.catching.delete(id);
+  void commands.stopLogStream(id).catch(() => {});
+}
+
+export function useLogStream({
+  podName,
+  namespace,
+  containers,
+  sources: givenSources,
+  paneKey,
+  limit,
+  previous = false,
+  intake = NO_INTAKE,
+  frozen = null,
+  onWiped,
+}: UseLogStreamOptions): UseLogStreamResult {
+  const [buffer, setBuffer] = useState<LogBuffer>(emptyBuffer);
+  // The buffer's index is advanced in place, so each change is worked out
+  // once, here, and never in a state updater: React runs those twice under
+  // StrictMode and again when it replays a render, counting a batch again.
+  const held = useRef(buffer);
+  const writeBuffer = useCallback((next: (prev: LogBuffer) => LogBuffer) => {
+    held.current = next(held.current);
+    setBuffer(held.current);
+  }, []);
+  // Read by the release closure below, which the stream effect owns: a
+  // freeze must reach the next batch without restarting the stream.
+  const frozenRef = useRef(frozen);
+  // oxlint-disable-next-line react-hooks/refs
+  frozenRef.current = frozen;
+  const frozenKey = frozen ? `${frozen.from}-${frozen.to}` : "";
+  useEffect(() => {
+    const interval = frozenRef.current;
+    writeBuffer((prev) => appendCapped(prev, [], limit, interval));
+  }, [frozenKey, limit, writeBuffer]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [failures, setFailures] = useState<ContainerFailure[]>([]);
+  // Source key -> the lines its read held, for each read that reached its end.
+  const [reads, setReads] = useState(NO_READS);
+  const failuresRef = useRef(failures);
+  // oxlint-disable-next-line react-hooks/refs
+  failuresRef.current = failures;
+  const [isPaused, setIsPaused] = useState(false);
+  const [retryTrigger, setRetryTrigger] = useState(0);
+  const [lastBatchAt, setLastBatchAt] = useState(() => Date.now());
+  const [intakeFrom, setIntakeFrom] = useState(0);
+  const [unfilteredFrom, setUnfilteredFrom] = useState(0);
+
+  const nextIdRef = useRef(0);
+
+  // Callers build these arrays inline (`pod.containers.map(c => c.name)`),
+  // so their identity changes every render. Serialised, the effects below
+  // move on a real change and on nothing else.
+  // The started flag and the uid are in the change key and not in
+  // `sourceKey`: they are not part of a stream's identity, they are the
+  // reasons to try it again.
+  const sourcesKey = JSON.stringify(
+    (
+      givenSources ??
+      (containers ?? []).map<LogSource>((container) => ({
+        pod: podName ?? "",
+        namespace,
+        container,
+      }))
+    ).map((source) => [
+      source.namespace,
+      source.pod,
+      source.container,
+      source.started ?? null,
+      source.uid ?? null,
+    ])
+  );
+  const sources = useMemo<LogSource[]>(
+    () =>
+      (
+        JSON.parse(sourcesKey) as [
+          string,
+          string,
+          string,
+          boolean | null,
+          string | null,
+        ][]
+      ).map(([ns, pod, container, started, uid]) => ({
+        namespace: ns,
+        pod,
+        container,
+        started: started ?? undefined,
+        uid: uid ?? undefined,
+      })),
+    [sourcesKey]
+  );
+  const sourcesRef = useRef(sources);
+  // oxlint-disable-next-line react-hooks/refs
+  sourcesRef.current = sources;
+
+  const intakeKey = JSON.stringify(intake);
+  const intakeTerms = useMemo(
+    () => JSON.parse(intakeKey) as QueryTerm[],
+    [intakeKey]
+  );
+
+  /** What the attached streams were opened against. See `resuming` below. */
+  const opened = useRef<{ target: string; intake: string } | null>(null);
+  // `previous` belongs in the key: it selects a different run, so the
+  // buffer must not be resumed across a flip — the lines already held
+  // are from the other run and would be interleaved with it silently.
+  // The sources do not: a pod joining a workload pane mid-session is the
+  // same pane, and its lines join the buffer rather than replacing it.
+  const pane = `${namespace}/${paneKey ?? podName ?? ""}`;
+  const target = `${pane}|${limit}|${previous}`;
+
+  const session = useRef<Session | null>(null);
+
+  const wiped = useRef(onWiped);
+  // oxlint-disable-next-line react-hooks/refs
+  wiped.current = onWiped;
+
+  const [cleared, setCleared] = useState(false);
+  const clearLogs = useCallback(() => {
+    writeBuffer(emptyBuffer);
+    setCleared(true);
+    wiped.current?.();
+  }, [writeBuffer]);
+
+  const togglePause = useCallback(() => {
+    setIsPaused((prev) => !prev);
+  }, []);
+
+  const retry = useCallback(() => {
+    setFailures([]);
+    setIsPaused(false);
+    setRetryTrigger((prev) => prev + 1);
+  }, []);
+
+  /**
+   * Brings the open streams in line with `wanted`: stops the ones no
+   * longer asked for, opens the ones not yet open. Idempotent, and safe
+   * to call while an earlier call is still opening — a source in flight
+   * is marked, and one withdrawn meanwhile is stopped the moment it
+   * answers.
+   */
+  const sync = useCallback(
+    async (s: Session, wanted: LogSource[], initial: boolean) => {
+      const wantedKeys = new Set(wanted.map(sourceKey));
+      for (const [key, id] of [...s.opened]) {
+        if (wantedKeys.has(key)) continue;
+        s.opened.delete(key);
+        if (id === "") continue;
+        s.sourceOf.delete(id);
+        s.live.delete(id);
+        s.lastEpoch.delete(id);
+        s.after.delete(id);
+        s.catching.delete(id);
+        void commands
+          .stopLogStream(id)
+          .catch((err) => console.error("Failed to stop log streaming:", err));
+      }
+      if (!initial) {
+        setFailures((prev) =>
+          prev.filter((f) =>
+            wantedKeys.has(
+              sourceKey({ pod: f.pod, namespace, container: f.container })
+            )
+          )
+        );
+      }
+      for (const kept of [s.refused, s.unstarted, s.uidOf]) {
+        for (const key of [...kept.keys()]) {
+          if (!wantedKeys.has(key)) kept.delete(key);
+        }
+      }
+      // Two things make a lane worth asking again with nothing else about
+      // it changed: its container has started since it was asked, which the
+      // API server answers through the stream, so the lane is still held as
+      // opened; and its pod was made again under the same name.
+      const again = wanted.filter((source) => {
+        const key = sourceKey(source);
+        // An open in flight is answered first; the next pass sees the change.
+        if (s.opened.get(key) === "") return false;
+        const before = s.uidOf.get(key);
+        if (source.uid !== undefined) s.uidOf.set(key, source.uid);
+        if (source.started === false) s.unstarted.add(key);
+        const started = source.started === true && s.unstarted.delete(key);
+        if (before !== undefined && before !== (source.uid ?? before)) {
+          return true;
+        }
+        return (
+          started &&
+          (s.refused.has(key) ||
+            failuresRef.current.some(
+              (failure) =>
+                failure.kind === "broken" && sameSource(failure, source)
+            ))
+        );
+      });
+      for (const source of again) {
+        const key = sourceKey(source);
+        const id = s.opened.get(key);
+        s.refused.delete(key);
+        if (id === undefined) s.again.add(key);
+        else letGo(s, key, id);
+      }
+      if (again.length > 0) {
+        setFailures((prev) =>
+          prev.filter(
+            (failure) => !again.some((source) => sameSource(failure, source))
+          )
+        );
+        setReads((prev) => {
+          const next = new Map(prev);
+          for (const source of again) next.delete(sourceKey(source));
+          return next;
+        });
+      }
+      const added = wanted.filter((src) => {
+        const key = sourceKey(src);
+        return !s.opened.has(key) && !s.refused.has(key);
+      });
+      if (added.length === 0) {
+        setIsStreaming(s.live.size > 0);
+        // Nothing is being waited for. Left true, a workload with no pods
+        // yet sits on the skeleton and a disabled toolbar for ever.
+        setIsConnecting(false);
+        return;
+      }
+      setIsConnecting(true);
+      // The first set opens with the buffer's share of the cap, or with
+      // nothing when the buffer is being resumed.
+      //
+      // A pod that joins later gets no tail at all. Nothing in the buffer is
+      // its, but everything in the buffer is newer than its history, and the
+      // buffer is append-only: a backfill committed now would put minutes of
+      // old lines after the live tail and drag a following reader down into
+      // them. It streams from here, like the pod it replaced did.
+      //
+      // A lane the reader attaches again is neither: it reads on from the
+      // last line it said, so what it wrote while it was down is read rather
+      // than skipped, and a previous run, which is read whole or not at all,
+      // is read again with its share.
+      const first = !s.seeded;
+      s.seeded = true;
+      const share = backfillPerContainer(limit, wanted.length);
+      const tail = first ? share : 0;
+      await Promise.all(
+        added.map(async (source) => {
+          const key = sourceKey(source);
+          s.opened.set(key, "");
+          const again = s.again.delete(key);
+          const heard = again ? s.heard.get(key) : undefined;
+          const since = heard?.epoch ?? (previous ? null : s.since);
+          const config: StreamLogConfig = {
+            podName: source.pod,
+            namespace: source.namespace,
+            container: source.container,
+            tailLines: again
+              ? previous
+                ? share
+                : limit
+              : first && s.resuming
+                ? 0
+                : tail,
+            follow: true,
+            timestamps: true,
+            previous,
+            sinceSeconds: null,
+            sinceTime:
+              again && since !== null ? new Date(since).toISOString() : null,
+            intake: intakeTerms,
+          };
+          try {
+            const streamId = await commands.streamPodLogs(config);
+            if (!s.active || !s.opened.has(key)) {
+              await commands.stopLogStream(streamId).catch(() => {});
+              return false;
+            }
+            s.opened.set(key, streamId);
+            s.sourceOf.set(streamId, source);
+            if (again) s.catching.add(streamId);
+            if (heard) s.after.set(streamId, heard);
+            if (!previous) s.live.add(streamId);
+            // It answered: whatever it said last time is no longer true.
+            setFailures((prev) =>
+              prev.filter(
+                (f) =>
+                  !(f.pod === source.pod && f.container === source.container)
+              )
+            );
+            // Listeners are installed — release the backend gate.
+            // See `commands::logs::stream_pod_logs`.
+            await commands.logStreamSubscribed(streamId);
+            return true;
+          } catch (err) {
+            console.error(`Failed to stream logs of ${source.container}:`, err);
+            if (!s.active) return false;
+            s.opened.delete(key);
+            s.refused.add(key);
+            const message = errorToShow(err);
+            setFailures((prev) =>
+              prev.some(
+                (f) => f.pod === source.pod && f.container === source.container
+              )
+                ? prev
+                : [
+                    ...prev,
+                    {
+                      container: source.container,
+                      pod: source.pod,
+                      kind:
+                        errorCode(err) === ERROR_CODES.NOT_FOUND
+                          ? "gone"
+                          : "broken",
+                      message,
+                    },
+                  ]
+            );
+            return false;
+          }
+        })
+      );
+      if (!s.active) return;
+      setIsConnecting(false);
+      setIsStreaming(s.live.size > 0);
+    },
+    [limit, previous, intakeTerms, namespace]
+  );
+
+  /**
+   * Reconnect one lane without restarting the session.
+   *
+   * The whole-session retry clears the buffer, which on a single-pod pane is
+   * the point and on a workload pane throws away nine other pods' lines —
+   * including the lines of pods that have left, which nothing can read back.
+   */
+  const retrySource = useCallback(
+    (pod: string, container: string) => {
+      const s = session.current;
+      if (!s || !s.listening) {
+        setFailures([]);
+        setIsPaused(false);
+        setRetryTrigger((prev) => prev + 1);
+        return;
+      }
+      const key = sourceKey({ pod, namespace, container });
+      s.refused.delete(key);
+      s.opened.delete(key);
+      s.again.add(key);
+      setFailures((prev) =>
+        prev.filter((f) => !(f.pod === pod && f.container === container))
+      );
+      void sync(s, sourcesRef.current, false);
+    },
+    [namespace, sync]
+  );
+
+  useEffect(() => {
+    const s: Session = {
+      active: true,
+      listening: false,
+      resuming: false,
+      seeded: false,
+      sourceOf: new Map(),
+      opened: new Map(),
+      live: new Set(),
+      lastEpoch: new Map(),
+      since: Date.now(),
+      heard: new Map(),
+      after: new Map(),
+      again: new Set(),
+      high: -Infinity,
+      catching: new Set(),
+      refused: new Set(),
+      unstarted: new Set(),
+      uidOf: new Map(),
+      unlistens: [],
+    };
+    session.current = s;
+
+    let pending: StreamedLogLine[] = [];
+    // Some of `pending` is a lane's read-back, older than lines already held.
+    let readBack = false;
+    let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const release = () => {
+      if (releaseTimer !== null) {
+        clearTimeout(releaseTimer);
+        releaseTimer = null;
+      }
+      if (pending.length === 0 || !s.active) return;
+      const window = orderByTimestamp(pending);
+      const among = readBack;
+      pending = [];
+      readBack = false;
+      writeBuffer((prev) =>
+        appendCapped(prev, window, limit, frozenRef.current, among)
+      );
+      setLastBatchAt(Date.now());
+    };
+
+    const stopAll = async () => {
+      const ids = [...s.sourceOf.keys()];
+      s.sourceOf.clear();
+      s.opened.clear();
+      s.live.clear();
+      await Promise.all(
+        ids.map((id) =>
+          commands
+            .stopLogStream(id)
+            .catch((err) => console.error("Failed to stop log streaming:", err))
+        )
+      );
+    };
+
+    const cleanup = async () => {
+      s.active = false;
+      if (session.current === s) session.current = null;
+      if (releaseTimer !== null) clearTimeout(releaseTimer);
+      releaseTimer = null;
+      pending = [];
+      while (s.unlistens.length > 0) s.unlistens.pop()!();
+      await stopAll();
+      setIsStreaming(false);
+      setIsConnecting(false);
+    };
+
+    const initStreams = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (!s.active || isPaused) return;
+
+      /**
+       * Picking up where the buffer left off, rather than starting a
+       * session. Two ways in, and the same handling for both:
+       *
+       * The reader flipped a chip — the lines already held were kept
+       * under the old rule and stay, because the new rule is about what
+       * arrives. Or intake is set and the stream is being reattached
+       * after a pause or a break — where a backfill is worse than
+       * useless, since `tailLines` is applied by the apiserver *before*
+       * intake sees the lines, so a narrow intake would answer a wipe of
+       * the buffer with a handful of survivors out of the last N.
+       *
+       * Either way there is no backfill: what it would return is the
+       * tail the buffer already holds, as duplicates.
+       */
+      const lastOpened = opened.current;
+      const resuming =
+        lastOpened !== null &&
+        lastOpened.target === target &&
+        (lastOpened.intake !== intakeKey || intakeTerms.length > 0);
+      opened.current = { target, intake: intakeKey };
+      s.resuming = resuming;
+
+      setIsConnecting(true);
+      setFailures([]);
+      setReads(NO_READS);
+      if (!resuming) {
+        writeBuffer(emptyBuffer);
+        setCleared(false);
+        wiped.current?.();
+      }
+      // The next line to arrive is the first one under whatever this
+      // restart changed, so the boundaries move on the transitions and
+      // not on every restart: an intake edited while it is already on
+      // must not move the mark that says where unfiltered lines end, or
+      // the arriving rate would start measuring already-filtered ones.
+      const hadIntake = resuming && lastOpened.intake !== NO_INTAKE_KEY;
+      const hasIntake = intakeTerms.length > 0;
+      if (!resuming || (hasIntake && !hadIntake)) {
+        setIntakeFrom(nextIdRef.current);
+      }
+      if (!resuming || (!hasIntake && hadIntake)) {
+        setUnfilteredFrom(nextIdRef.current);
+      }
+      // The clock on the silence starts at the attach rather than at
+      // whenever the old stream last said something.
+      setLastBatchAt(Date.now());
+
+      // One listener pair for every stream of the session, installed
+      // before any of them is released. The backend holds each stream
+      // shut until its `logStreamSubscribed` call, and Tauri events have
+      // no replay, so a listener registered after the gate loses whatever
+      // was emitted in between — including a stream that failed on its
+      // first read. Registering once up front makes the gate hold for
+      // every stream started later, however many there are.
+      let unlistenBatch: (() => void) | null = null;
+      let unlistenFailure: (() => void) | null = null;
+      let unlistenRead: (() => void) | null = null;
+      let unlistenLagged: (() => void) | null = null;
+      try {
+        // The bridge dropped events and cannot say whose: lines, a failure,
+        // the end of a read. Every lane not already known to have stopped is
+        // attached again and reads on from its last line, which brings back
+        // the lines and finds the lane that died unheard. It stops at once
+        // and attaches after the wait: what it reads back crosses the bridge
+        // that has just dropped it.
+        unlistenLagged = await listenBridgeLag((_dropped, waitMs) => {
+          if (!s.active) return;
+          const stopped = new Set(
+            failuresRef.current.map((f) =>
+              sourceKey({ pod: f.pod, namespace, container: f.container })
+            )
+          );
+          // A lane still being opened is on its way to this already.
+          const lanes = [...s.opened].filter(
+            ([key, id]) => id !== "" && !stopped.has(key)
+          );
+          if (lanes.length === 0) return;
+          for (const [key, id] of lanes) letGo(s, key, id);
+          setReads((prev) => {
+            const next = new Map(prev);
+            for (const [key] of lanes) next.delete(key);
+            return next;
+          });
+          const attach = () => {
+            if (s.active) void sync(s, sourcesRef.current, false);
+          };
+          if (waitMs === 0) return attach();
+          setIsStreaming(s.live.size > 0);
+          setIsConnecting(true);
+          setTimeout(attach, waitMs);
+        });
+        unlistenRead = await listenEvent("log-read", (event) => {
+          const source = s.sourceOf.get(event.payload.stream_id);
+          if (!s.active || source === undefined) return;
+          const key = sourceKey(source);
+          if (s.opened.get(key) !== event.payload.stream_id) return;
+          // The lines it counts go into the buffer before the count is
+          // believed, or the pane is empty and finished for a moment.
+          release();
+          setReads((prev) => new Map(prev).set(key, event.payload.lines));
+        });
+        unlistenBatch = await listenEvent("log-batch", (event) => {
+          const streamId = event.payload.stream_id;
+          const source = s.sourceOf.get(streamId);
+          if (source === undefined || event.payload.lines.length === 0) {
+            return;
+          }
+          // Lines from the stream that holds the source are the source
+          // delivering, whatever an earlier stream of it said: Dana's
+          // header said "1 of 5" over four containers' arriving lines.
+          if (s.opened.get(sourceKey(source)) === streamId) {
+            if (!previous && !s.live.has(streamId)) {
+              s.live.add(streamId);
+              setIsStreaming(true);
+            }
+            if (failuresRef.current.some((f) => sameSource(f, source)))
+              setFailures((prev) => prev.filter((f) => !sameSource(f, source)));
+          }
+
+          let epoch = s.lastEpoch.get(event.payload.stream_id) ?? Date.now();
+          const from = sourceKey(source);
+          for (const line of event.payload.lines) {
+            const stamp = line.timestamp ? Date.parse(line.timestamp) : NaN;
+            if (!Number.isNaN(stamp)) {
+              const said = heardKey(line);
+              const after = s.after.get(streamId);
+              if (after) {
+                // What the buffer already holds of this lane, sent again.
+                const held = stamp === after.epoch && after.lines.has(said);
+                if (stamp < after.epoch || held) continue;
+                if (stamp > after.epoch) s.after.delete(streamId);
+              }
+              const heard = s.heard.get(from);
+              if (!heard || stamp > heard.epoch)
+                s.heard.set(from, { epoch: stamp, lines: new Set([said]) });
+              else if (stamp === heard.epoch) heard.lines.add(said);
+              if (stamp >= s.high) {
+                s.high = stamp;
+                s.catching.delete(streamId);
+              } else if (s.catching.has(streamId)) readBack = true;
+              epoch = stamp;
+            }
+            pending.push(
+              toStreamedLine(line, {
+                id: nextIdRef.current++,
+                epoch,
+                pod: source.pod,
+                container: source.container,
+                namespace: source.namespace,
+              })
+            );
+          }
+          s.lastEpoch.set(event.payload.stream_id, epoch);
+
+          if (pending.length >= MAX_PENDING_LINES) {
+            release();
+          } else if (releaseTimer === null) {
+            releaseTimer = setTimeout(release, REORDER_WINDOW_MS);
+          }
+        });
+
+        unlistenFailure = await listenForStreamFailures((streamId, failure) => {
+          const source = s.sourceOf.get(streamId);
+          if (!s.active || source === undefined) return;
+          s.live.delete(streamId);
+          // A stream the source has since been opened again past says
+          // nothing of the one that holds it now.
+          if (s.opened.get(sourceKey(source)) === streamId)
+            setFailures((prev) =>
+              prev.some((f) => sameSource(f, source))
+                ? prev
+                : [
+                    ...prev,
+                    {
+                      ...failure,
+                      container: source.container,
+                      pod: source.pod,
+                    },
+                  ]
+            );
+          else s.sourceOf.delete(streamId);
+          if (s.live.size === 0) {
+            setIsStreaming(false);
+            setIsConnecting(false);
+          }
+        });
+      } catch (err) {
+        unlistenBatch?.();
+        unlistenFailure?.();
+        unlistenRead?.();
+        unlistenLagged?.();
+        if (!s.active) return;
+        console.error("Failed to listen for log events:", err);
+        setFailures(
+          sourcesRef.current.map((source) => ({
+            container: source.container,
+            pod: source.pod,
+            kind: "broken" as const,
+            message: errorToShow(err),
+          }))
+        );
+        setIsConnecting(false);
+        return;
+      }
+
+      if (!s.active) {
+        unlistenBatch();
+        unlistenFailure();
+        unlistenRead();
+        unlistenLagged();
+        return;
+      }
+      s.unlistens.push(
+        unlistenBatch,
+        unlistenFailure,
+        unlistenRead,
+        unlistenLagged
+      );
+      s.listening = true;
+
+      await sync(s, sourcesRef.current, true);
+    };
+
+    initStreams();
+
+    return () => {
+      cleanup();
+    };
+  }, [
+    limit,
+    isPaused,
+    retryTrigger,
+    intakeKey,
+    intakeTerms,
+    previous,
+    target,
+    namespace,
+    // Deliberately not `renewals`: `stream_logs` opens one body and reads it
+    // to the end, so the client it was built from is never used again. A
+    // watch is restarted because `watcher` re-lists with the old token.
+    sync,
+    writeBuffer,
+  ]);
+
+  // The pane is the same and its pods moved: a rollout, a scale, a pod the
+  // list stopped showing. The session and its buffer stay; only the set of
+  // streams follows.
+  useEffect(() => {
+    const s = session.current;
+    if (!s || !s.listening || isPaused) return;
+    void sync(s, sources, false);
+  }, [sources, sync, isPaused]);
+
+  const previousRead = useMemo<PreviousRead | null>(() => {
+    if (!previous) return null;
+    const found = { sources: 0, lines: 0 };
+    for (const source of sources) {
+      const lines = reads.get(sourceKey(source));
+      if (lines !== undefined) {
+        found.sources += 1;
+        found.lines += lines;
+      } else if (!failures.some((failure) => sameSource(failure, source))) {
+        return null;
+      }
+    }
+    return found;
+  }, [previous, sources, reads, failures]);
+
+  return {
+    logs: buffer.lines,
+    retained: buffer.lines.length,
+    frozenLines: buffer.frozenLines,
+    limit,
+    fields: buffer.fields,
+    dropped: buffer.dropped,
+    merged: buffer.merged,
+    lastBatchAt,
+    intakeFrom,
+    unfilteredFrom,
+    isStreaming,
+    previousRead,
+    isConnecting,
+    failures,
+    isPaused,
+    cleared,
+    clearLogs,
+    togglePause,
+    retry,
+    retrySource,
+  };
+}

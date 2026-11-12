@@ -1,0 +1,90 @@
+/**
+ * nginx's routing, as the two columns a request crosses.
+ *
+ * Host → service, and no entry-point column: nginx listens on 80 and 443
+ * and nothing else, so a left column would carry the same two words beside
+ * every host. A canary rides its host as a tag rather than a node — it is
+ * the same hostname served twice, not a second place a request goes.
+ */
+
+import type { T } from "@/i18n/useT";
+
+import {
+  backendLinkTone,
+  backendNode,
+  hostFilterLink,
+  hostSeverity,
+  hostTlsTag,
+} from "../ingress";
+import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
+import { backingOf, type NginxHostGroup, type NginxSources } from "./model";
+
+/** Where clicking a host goes: its own routes, filtered to it. */
+function toneOf(group: NginxHostGroup): MapTone {
+  return hostSeverity(group) ?? "ok";
+}
+
+export function routingMap(
+  groups: NginxHostGroup[],
+  sources: NginxSources,
+  t: T
+): RoutingMapData {
+  const services = new Map<string, MapNode>();
+  const edges: MapEdge[] = [];
+  const seen = new Set<string>();
+
+  const link = (from: string, to: string, tone: MapTone) => {
+    const key = `${from}->${to}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    edges.push({ from, to, tone });
+  };
+
+  const hosts = groups.map((group, index): MapNode => {
+    const id = `host/${group.host ?? `catch-all-${index}`}`;
+    const tone = toneOf(group);
+
+    for (const route of group.routes) {
+      // Only a real Service gets a node — an API-object backend cannot be
+      // seen into, and drawing it as a backend publishing nothing would be
+      // the map inventing an outage.
+      const service = route.service;
+      if (!service) continue;
+      const serviceId = `service/${service.namespace}/${service.name}`;
+      const backing = backingOf(route, sources);
+      if (!services.has(serviceId)) {
+        services.set(serviceId, backendNode(serviceId, service, backing, t));
+      }
+      link(id, serviceId, backendLinkTone(backing, tone));
+    }
+
+    return {
+      id,
+      label: group.host ?? t("action", "anyHost"),
+      sub: t("count", "paths", { n: group.routes.length }),
+      tone,
+      to: hostFilterLink(group.host),
+      // The split outranks TLS for the one word this node gets: a host
+      // quietly serving two versions is the fact a reader scans for.
+      tag: group.split
+        ? {
+            text:
+              group.split.primaryShare === null
+                ? t("readings", "mapCanary")
+                : t("readings", "mapCanaryShare", {
+                    n: group.split.weightTotal - group.split.primaryShare,
+                  }),
+            tone: "warn",
+          }
+        : hostTlsTag(group.tls, tone === "err", t),
+    };
+  });
+
+  return {
+    columns: [
+      { label: t("columns", "host"), nodes: hosts, width: 216 },
+      { label: t("columns", "service"), nodes: [...services.values()] },
+    ],
+    edges,
+  };
+}

@@ -28,8 +28,8 @@ possible.
 
 In scope:
 
-- The Tauri desktop application itself (`src-tauri/`, `src/`,
-  `k8s-gui-common/`).
+- The Tauri desktop application itself (`src/tauri/`, `src/ui/`,
+  `src/contracts/`).
 - The release pipeline (`.github/workflows/release.yml`) and signing
   configuration.
 - Anything that could let a malicious Kubernetes cluster, kubeconfig, or

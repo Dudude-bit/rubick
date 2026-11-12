@@ -1,0 +1,348 @@
+//! `FailureLatch` — the small state machine that decides whether the
+//! watcher loop should emit a `Failed` op to the frontend.
+//!
+//! kube's runtime watcher retries on its own with backoff. We don't
+//! want a single 503 from a stressed apiserver to show as "watch
+//! failed, falling back to polling" in the UI — that flickers between
+//! states. We do want a permanent denial (403 from a missing `watch`
+//! verb) to surface so the UI can switch to periodic refresh.
+//!
+//! The compromise: emit `Failed` only after `THRESHOLD` consecutive
+//! errors with no successful event between them, and only once per
+//! streak. A successful event resets both the counter and the
+//! emit-once latch, so a recovered stream is free to fail again later
+//! and trigger another `Failed` event after another full streak.
+
+use futures::{Stream, StreamExt};
+use kube::runtime::watcher::Event;
+use std::time::Duration;
+
+const ERROR_THRESHOLD: u32 = 3;
+
+/// Whether a watcher event is the cluster answering, or only a marker that
+/// another attempt has begun.
+///
+/// kube emits `Event::Init` *before* it attempts the initial list, so a
+/// refused stream yields `Init, Err, Init, Err` for ever. Counting `Init` as
+/// a success reset the streak between every pair of errors: `rubick.log`
+/// held 7598 `error (1 in a row)` lines under a 403 and not one `(2 in a
+/// row)`, so the refusal never left this process.
+pub(crate) fn answered<K>(event: &Event<K>) -> bool {
+    !matches!(event, Event::Init)
+}
+
+/// First wait after an error, doubled per error in the streak.
+const BACKOFF_BASE: Duration = Duration::from_secs(1);
+
+/// Longest wait between attempts. kube's own default stops here too.
+const BACKOFF_CAP: Duration = Duration::from_secs(30);
+
+/// How long to wait before re-listing, after `errors` failures in a row.
+///
+/// kube's own `StreamBackoff` resets on any non-error item and `Event::Init`
+/// is one, so a refused stream kept its ramp on the first rung — about one
+/// re-list a second, for ever. The streak this takes survives the marker.
+pub(crate) fn backoff_for(errors: u32) -> Duration {
+    let doublings = errors.saturating_sub(1).min(16);
+    BACKOFF_BASE
+        .saturating_mul(1u32 << doublings)
+        .min(BACKOFF_CAP)
+}
+
+/// A watcher that waits before each attempt following a failure, by its own
+/// streak. One per namespace of a scope stream, so a refused namespace backing
+/// off does not hold up the ones answering.
+pub(super) fn paced<S, K, E, W>(stream: S, wait: W) -> impl Stream<Item = Result<Event<K>, E>>
+where
+    S: Stream<Item = Result<Event<K>, E>> + Unpin,
+    W: Fn(u32) -> Duration + Copy,
+{
+    futures::stream::unfold(
+        (stream, 0u32, false),
+        move |(mut stream, errors, failed)| async move {
+            if failed {
+                tokio::time::sleep(wait(errors)).await;
+            }
+            let item = stream.next().await?;
+            let (errors, failed) = match &item {
+                Err(_) => (errors + 1, true),
+                Ok(event) if answered(event) => (0, false),
+                Ok(_) => (errors, false),
+            };
+            Some((item, (stream, errors, failed)))
+        },
+    )
+}
+
+/// Passes a watcher's items through the first one that `last` says ends it.
+///
+/// A refused namespace of a scope stream ends here: kube retries a 403 for
+/// ever, every thirty seconds, and the answer never changes.
+pub(super) fn until<S, T, P>(stream: S, last: P) -> impl Stream<Item = T>
+where
+    S: Stream<Item = T> + Unpin,
+    P: Fn(&T) -> bool + Copy,
+{
+    futures::stream::unfold((stream, false), move |(mut stream, ended)| async move {
+        if ended {
+            return None;
+        }
+        let item = stream.next().await?;
+        let ended = last(&item);
+        Some((item, (stream, ended)))
+    })
+}
+
+/// What one error does to a watch.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Step {
+    /// Try again without a word: a blip, or a streak still short.
+    Retry,
+    /// Try again, and tell the page the watch is down.
+    Tell,
+    /// The cluster refused it, which no retry changes: tell, and end.
+    Stop,
+}
+
+/// State machine for the watcher's "should we emit Failed yet?" decision.
+pub(super) struct FailureLatch {
+    consecutive_errors: u32,
+    emitted: bool,
+}
+
+impl FailureLatch {
+    pub fn new() -> Self {
+        Self {
+            consecutive_errors: 0,
+            emitted: false,
+        }
+    }
+
+    /// Record one watcher event.
+    ///
+    /// The rule lives here rather than at the call site so the loop cannot
+    /// forget it: only an answer clears a streak, and `Event::Init` — the
+    /// marker kube sends before every list attempt — is not one.
+    pub fn saw<K>(&mut self, event: &Event<K>) {
+        if answered(event) {
+            self.record_success();
+        }
+    }
+
+    /// Record a successful watch event. Resets the counter and clears
+    /// the emit-once latch so a future failure streak can trigger a
+    /// fresh `Failed`.
+    fn record_success(&mut self) {
+        self.consecutive_errors = 0;
+        self.emitted = false;
+    }
+
+    /// Record a watch error. Returns `true` exactly once per failure
+    /// streak — when the threshold is reached. Subsequent errors in
+    /// the same streak return `false` to avoid spamming the UI.
+    pub fn record_error(&mut self) -> bool {
+        self.consecutive_errors += 1;
+        if self.consecutive_errors >= ERROR_THRESHOLD && !self.emitted {
+            self.emitted = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// One error, `refused` when the cluster refused the watch.
+    pub fn failed(&mut self, refused: bool) -> Step {
+        if refused {
+            return Step::Stop;
+        }
+        if self.record_error() {
+            Step::Tell
+        } else {
+            Step::Retry
+        }
+    }
+
+    /// Current consecutive-error count. Used only by the spawn
+    /// closure for tracing.
+    pub fn consecutive_errors(&self) -> u32 {
+        self.consecutive_errors
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::api::core::v1::Pod;
+
+    /// Deleting this rule is how a permanent refusal stays inside the
+    /// process: `Init` precedes every failed list, so counting it resets
+    /// the streak the threshold is measured on.
+    #[test]
+    fn the_init_marker_is_not_the_cluster_answering() {
+        assert!(!answered::<Pod>(&Event::Init));
+    }
+
+    /// The events that carry an object, and the one that says the list
+    /// drained, are the cluster answering — a rule that called them
+    /// markers would leave a healthy stream permanently in a streak.
+    #[test]
+    fn an_object_or_a_drained_list_is_an_answer() {
+        assert!(answered(&Event::InitApply(Pod::default())));
+        assert!(answered::<Pod>(&Event::InitDone));
+        assert!(answered(&Event::Apply(Pod::default())));
+        assert!(answered(&Event::Delete(Pod::default())));
+    }
+
+    /// Deleting the growth leaves a fixed wait, which is what the refused
+    /// stream already had from kube's own backoff — about one re-list a
+    /// second, for ever.
+    #[test]
+    fn the_wait_doubles_with_the_streak_and_stops_at_the_cap() {
+        assert_eq!(backoff_for(1), Duration::from_secs(1));
+        assert_eq!(backoff_for(2), Duration::from_secs(2));
+        assert_eq!(backoff_for(3), Duration::from_secs(4));
+        assert_eq!(backoff_for(6), Duration::from_secs(30), "capped");
+        assert_eq!(backoff_for(99), Duration::from_secs(30), "stays capped");
+    }
+
+    /// A streak of zero is not a case the loop produces, and it must not
+    /// panic or shift the first wait if it ever does.
+    #[test]
+    fn a_streak_of_none_waits_the_base() {
+        assert_eq!(backoff_for(0), Duration::from_secs(1));
+    }
+
+    /// The pattern the log showed, driven exactly as the loop drives it: a
+    /// refused list is preceded by `Init` every time, and the latch must
+    /// still reach its threshold. Deleting the rule inside `saw` — the one
+    /// the loop calls — fails here.
+    #[test]
+    fn a_refused_stream_reaches_the_threshold_despite_its_markers() {
+        let mut latch = FailureLatch::new();
+        let mut emitted = false;
+        for _ in 0..3 {
+            latch.saw::<Pod>(&Event::Init);
+            emitted |= latch.record_error();
+        }
+        assert!(emitted, "three refused lists must emit Failed");
+    }
+
+    /// And the other half: an answer still clears the streak, so a stream
+    /// that recovers is free to fail again later.
+    #[test]
+    fn an_answer_clears_the_streak() {
+        let mut latch = FailureLatch::new();
+        latch.record_error();
+        latch.record_error();
+        latch.saw(&Event::Apply(Pod::default()));
+        assert_eq!(latch.consecutive_errors(), 0);
+    }
+
+    /// Waits only after a failure, by the streak the marker does not reset.
+    /// Waiting after `Init` doubles every retry's delay; resetting on it
+    /// keeps a refused namespace on the first rung for ever.
+    #[tokio::test]
+    async fn a_paced_watcher_waits_after_a_failure_by_its_streak() {
+        static ASKED: std::sync::Mutex<Vec<u32>> = std::sync::Mutex::new(Vec::new());
+        let events: Vec<Result<Event<Pod>, &str>> = vec![
+            Err("refused"),
+            Ok(Event::Init),
+            Err("refused"),
+            Ok(Event::InitApply(Pod::default())),
+            Err("refused"),
+            Ok(Event::InitDone),
+        ];
+        let paced = paced(futures::stream::iter(events), |streak| {
+            ASKED.lock().unwrap().push(streak);
+            Duration::ZERO
+        });
+        assert_eq!(paced.collect::<Vec<_>>().await.len(), 6);
+        assert_eq!(*ASKED.lock().unwrap(), [1, 2, 1]);
+    }
+
+    /// Marco's `DaemonSet` watch retried its 403 every thirty seconds for as
+    /// long as the app ran. Fails if a refusal waits for a streak or retries.
+    #[test]
+    fn a_refusal_ends_the_watch_at_the_first_error() {
+        let mut latch = FailureLatch::new();
+        assert_eq!(latch.failed(true), Step::Stop);
+        assert_eq!(latch.failed(false), Step::Retry, "anything else retries");
+    }
+
+    /// A scope stream's refused namespace stops asking; the item that ended
+    /// it still reaches the stream, or the page is never told.
+    #[tokio::test]
+    async fn a_stream_ends_after_the_item_that_ends_it() {
+        let items: Vec<Result<u8, &str>> = vec![Ok(1), Err("refused"), Ok(2)];
+        let kept: Vec<_> = until(futures::stream::iter(items), Result::is_err)
+            .collect()
+            .await;
+        assert_eq!(kept, [Ok(1), Err("refused")]);
+    }
+
+    #[test]
+    fn does_not_emit_below_threshold() {
+        let mut latch = FailureLatch::new();
+        assert!(!latch.record_error(), "1 error");
+        assert!(!latch.record_error(), "2 errors");
+    }
+
+    #[test]
+    fn emits_exactly_at_threshold() {
+        let mut latch = FailureLatch::new();
+        latch.record_error();
+        latch.record_error();
+        assert!(latch.record_error(), "third error must emit");
+    }
+
+    #[test]
+    fn does_not_re_emit_within_same_streak() {
+        let mut latch = FailureLatch::new();
+        latch.record_error();
+        latch.record_error();
+        assert!(latch.record_error());
+        assert!(!latch.record_error(), "fourth error must not re-emit");
+        assert!(!latch.record_error(), "fifth error must not re-emit");
+    }
+
+    #[test]
+    fn success_resets_counter_and_latch() {
+        let mut latch = FailureLatch::new();
+        latch.record_error();
+        latch.record_error();
+        assert!(latch.record_error(), "first streak emits");
+
+        latch.saw(&Event::Apply(Pod::default()));
+
+        assert!(!latch.record_error(), "1 error after recovery");
+        assert!(!latch.record_error(), "2 errors after recovery");
+        assert!(
+            latch.record_error(),
+            "3rd error after recovery must emit again"
+        );
+    }
+
+    #[test]
+    fn single_success_between_errors_resets_streak() {
+        let mut latch = FailureLatch::new();
+        latch.record_error();
+        latch.record_error();
+        // One success right before threshold should reset.
+        latch.saw(&Event::Apply(Pod::default()));
+        assert!(!latch.record_error(), "1 error after intermediate success");
+        assert!(!latch.record_error(), "2 errors after intermediate success");
+        assert!(latch.record_error(), "3rd must emit on fresh streak");
+    }
+
+    #[test]
+    fn consecutive_errors_count_is_visible() {
+        let mut latch = FailureLatch::new();
+        assert_eq!(latch.consecutive_errors(), 0);
+        latch.record_error();
+        assert_eq!(latch.consecutive_errors(), 1);
+        latch.record_error();
+        assert_eq!(latch.consecutive_errors(), 2);
+        latch.saw(&Event::Apply(Pod::default()));
+        assert_eq!(latch.consecutive_errors(), 0);
+    }
+}

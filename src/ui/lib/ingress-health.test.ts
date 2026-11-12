@@ -1,0 +1,992 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { en } from "@/i18n/catalogue";
+import { ru } from "@/i18n/ru";
+import type {
+  IngressClassBinding,
+  NetworkPolicyInfo,
+  PolicyDoor,
+  TlsCertificate,
+} from "@/generated/types";
+import type { DoorRead } from "./policy-door";
+import type { ServiceHealthInput } from "./service-health";
+import {
+  claimedBinding,
+  claimNote,
+  ingressAddressOf,
+  ingressClaimOf,
+  ingressClassWords,
+  ingressHealthOf,
+  ingressHealthWords,
+  unreadCode,
+  type ClasslessTakers,
+  type IngressInputs,
+  type NamespaceBacking,
+} from "./ingress-health";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+const SERVED: IngressClassBinding = {
+  requested: "nginx",
+  resolved: "nginx",
+  controller: "k8s.io/ingress-nginx",
+  viaDefault: false,
+  available: [],
+};
+const UNSERVED: IngressClassBinding = {
+  ...SERVED,
+  resolved: null,
+  controller: null,
+};
+
+function serving(ready: number): ServiceHealthInput {
+  return {
+    type: "ClusterIP",
+    selectorless: false,
+    ready,
+    draining: 0,
+    notReady: 0,
+    unrouted: 0,
+    targets: [8080],
+  };
+}
+
+const BACKING: NamespaceBacking = new Map([
+  ["web", serving(0)],
+  ["api", serving(2)],
+]);
+
+function ingress(
+  backends: string[],
+  secretName: string | null = null
+): IngressInputs["ingress"] {
+  return {
+    name: "shop",
+    namespace: "net",
+    className: "nginx",
+    rules: [
+      {
+        host: "shop.example.test",
+        paths: backends.map((name) => ({
+          path: `/${name}`,
+          pathType: "Prefix",
+          backendService: name,
+          backendPort: "80",
+          resourceBackend: null,
+        })),
+      },
+    ],
+    defaultBackend: null,
+    tlsConfigs: secretName
+      ? [{ hosts: ["shop.example.test"], secretName, isCatchAll: false }]
+      : [],
+    loadBalancerIps: [],
+  };
+}
+
+const verdict = (inputs: IngressInputs) =>
+  ingressHealthWords(ingressHealthOf(inputs), t);
+
+describe("one verdict for an Ingress on its page, its peek and the list", () => {
+  /**
+   * storefront, admin and api-public all looked healthy in the list while
+   * their pages said no controller serves the class. Fails if the list's
+   * verdict stops reading the class binding.
+   */
+  it("says no controller when nothing serves the class", () => {
+    const said = verdict({
+      ingress: ingress(["api"]),
+      binding: { known: true, value: UNSERVED },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("noController");
+    expect(said.role).toBe("err");
+    expect(said.reason).toContain("No IngressClass named nginx");
+  });
+
+  /**
+   * Lena read "...никто не обслуживает, поэтому этот Ingress никто не
+   * подхватывает" as machine Russian, then "IngressClass nginx не обслуживает
+   * ни один контроллер" as the class serving no controller.
+   */
+  it("says in plain Russian that the cluster has no IngressClass by that name", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const said = ingressHealthWords(
+      ingressHealthOf({
+        ingress: ingress(["api"]),
+        binding: { known: true, value: UNSERVED },
+        backing: { known: true, value: BACKING },
+        certificates: undefined,
+      }),
+      ru
+    );
+    expect(said.reason).toBe(
+      "В этом кластере нет IngressClass с именем nginx, поэтому этот Ingress никто не обрабатывает."
+    );
+  });
+
+  /** The tooltip ended "...для его TLS" with no full stop after a first sentence that had one. */
+  it("ends every sentence of a reason with a full stop", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const said = ingressHealthWords(
+      ingressHealthOf({
+        ingress: ingress(["api"], "checkout-tls"),
+        binding: { known: true, value: UNSERVED },
+        backing: { known: true, value: BACKING },
+        certificates: new Map<string, TlsCertificate>([
+          [
+            "checkout-tls",
+            {
+              secretName: "checkout-tls",
+              certificate: null,
+              problem: { says: "noSecret" },
+            },
+          ],
+        ]),
+      }),
+      ru
+    );
+    expect(said.reason).toBe(
+      "В этом кластере нет IngressClass с именем nginx, поэтому этот Ingress никто не обрабатывает. Нет Secret с именем checkout-tls для его TLS."
+    );
+  });
+
+  it("names a backend Service that does not exist", () => {
+    const said = verdict({
+      ingress: ingress(["admin-ui"]),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendMissing");
+    expect(said.reason).toContain("No Service named admin-ui");
+  });
+
+  it("names a TLS Secret that does not exist", () => {
+    const certificates = new Map<string, TlsCertificate>([
+      [
+        "api-tls",
+        {
+          secretName: "api-tls",
+          certificate: null,
+          problem: { says: "noSecret" },
+        },
+      ],
+    ]);
+    const said = verdict({
+      ingress: ingress(["api"], "api-tls"),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates,
+    });
+    expect(said.code).toBe("tlsSecretMissing");
+    expect(said.reason).toContain("api-tls");
+  });
+
+  /**
+   * Traefik without `router.tls` serves the host as plain HTTP and never
+   * presents the Secret. The page led with a red "missing TLS Secret" while
+   * Traefik's own page and the trace said plain HTTP and nothing of it.
+   */
+  it("says nothing of a missing Secret its controller never presents", () => {
+    const missing = new Map<string, TlsCertificate>([
+      [
+        "api-tls",
+        {
+          secretName: "api-tls",
+          certificate: null,
+          problem: { says: "noSecret" },
+        },
+      ],
+    ]);
+    const health = ingressHealthOf({
+      ingress: ingress(["api"], "api-tls"),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates: missing,
+      servedPlain: (host) => host === "shop.example.test",
+    });
+    expect(health.problems).toEqual([]);
+    expect(health.unread).toEqual([]);
+  });
+
+  /**
+   * The count on every screen asks no controller, so on a cluster where one
+   * could serve the host as plain HTTP a missing Secret is not known to be
+   * a fault. Fails if the unasked answer is read as "it is presented" (a
+   * red the Ingress page then contradicts) or as "it is not" (silence).
+   */
+  it("says a missing Secret was not checked where its controller was not asked", () => {
+    const missing = new Map<string, TlsCertificate>([
+      [
+        "api-tls",
+        {
+          secretName: "api-tls",
+          certificate: null,
+          problem: { says: "noSecret" },
+        },
+      ],
+    ]);
+    const asked = (servedPlain: IngressInputs["servedPlain"]) =>
+      verdict({
+        ingress: {
+          ...ingress(["api"], "api-tls"),
+          loadBalancerIps: ["1.2.3.4"],
+        },
+        binding: { known: true, value: SERVED },
+        backing: { known: true, value: BACKING },
+        certificates: missing,
+        servedPlain,
+      });
+
+    const unasked = asked(() => null);
+    expect(unasked.code).toBe("unknown");
+    expect(unasked.role).toBe("neutral");
+    expect(unasked.reason).toBe(
+      "No Secret named api-tls for its TLS, and its controller was not asked whether it serves these hosts over TLS at all"
+    );
+    expect(asked(() => false).code).toBe("tlsSecretMissing");
+    expect(asked(() => true).code).toBe("serving");
+  });
+
+  /**
+   * root-web's Ingress said "root-web takes no traffic" while the trace
+   * under it said why: Pod Security refuses the pods. The badge already
+   * says the backend is down, so the line leads with the Service's reason.
+   */
+  it("says why a backend takes no traffic, in its Service's words", () => {
+    const service = {
+      kind: "Service",
+      name: "web",
+      namespace: "net",
+      existence: "present",
+      facts: null,
+    } as const;
+    const said = verdict({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([
+          [
+            "web",
+            {
+              ...serving(0),
+              stop: {
+                reason: "podsRefused",
+                service,
+                selector: "app=web",
+                workloads: [{ ...service, kind: "Deployment" }],
+                said: 'pods "web-1" is forbidden: exceeded quota: two-pods, requested: pods=1, used: pods=2, limited: pods=2',
+              },
+            },
+          ],
+        ]),
+      },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendDown");
+    expect(said.reason).toBe(
+      "Service web: ResourceQuota two-pods refuses its pods: no room for pods."
+    );
+  });
+
+  /**
+   * checkout's Ingress was "served" while deny-all-ingress shut the pods
+   * behind it and Traefik answered 502. Fails if two ready addresses read
+   * as a live backend over a policy that admits nobody.
+   */
+  it("calls a backend a policy shuts down, naming the policy", () => {
+    const said = verdict({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([
+          [
+            "web",
+            {
+              ...serving(2),
+              stop: {
+                reason: "policyRefuses",
+                service: {
+                  kind: "Service",
+                  name: "web",
+                  namespace: "net",
+                  existence: "present",
+                  facts: null,
+                },
+                policies: ["deny-all-ingress"],
+                ports: [8080],
+                noRules: true,
+                client: null,
+              },
+            },
+          ],
+        ]),
+      },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendDown");
+    expect(said.reason).toBe(
+      "Service web: NetworkPolicy deny-all-ingress admits no connection to these pods."
+    );
+  });
+
+  const allowTraefik: PolicyDoor = {
+    state: "guarded",
+    isolating: ["allow-traefik"],
+    unsettled: [],
+    ports: [
+      {
+        name: "http",
+        servicePort: 80,
+        port: 8080,
+        protocol: "TCP",
+        rules: [
+          {
+            policy: "allow-traefik",
+            byName: false,
+            peers: [
+              {
+                pods: { kind: "notSaid" },
+                namespaces: {
+                  kind: "written",
+                  query: "kubernetes.io/metadata.name=traefik",
+                },
+                ipBlock: null,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  /**
+   * The list called shop "served" while allow-traefik admitted only Traefik
+   * and nginx served the class, so every request got a 502. Fails if the
+   * class's controller stops being judged at the backend's policies, or a
+   * controller nobody asked about is refused.
+   */
+  it("calls a backend whose policies refuse the class's controller down", () => {
+    const nginx: DoorRead = {
+      name: "ingress-nginx",
+      egress: { known: true, value: { rows: [], unread: [] } },
+      others: { known: true, value: [] },
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "ingress-nginx-controller-5f",
+            namespace: "ingress-nginx",
+            labels: {},
+            ip: "10.42.0.12",
+            hostNetwork: false,
+          },
+        ],
+      },
+      namespaces: {
+        known: true,
+        value: ["traefik", "ingress-nginx"].map((name) => ({
+          name,
+          labels: { "kubernetes.io/metadata.name": name },
+        })),
+      },
+    };
+    const inputs = (ask?: IngressInputs["door"]): IngressInputs => ({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([["web", { ...serving(2), door: allowTraefik }]]),
+      },
+      certificates: undefined,
+      door: ask,
+    });
+    const said = verdict(
+      inputs((controller) =>
+        controller === "k8s.io/ingress-nginx" ? nginx : null
+      )
+    );
+    expect(said.code).toBe("backendDown");
+    expect(said.reason).toBe(
+      "Service web: NetworkPolicy allow-traefik admits no connection from ingress-nginx on port 8080."
+    );
+    expect(verdict(inputs()).code).not.toBe("backendDown");
+    expect(verdict(inputs(() => null)).code).not.toBe("backendDown");
+  });
+
+  /**
+   * A controller on the node's network is seen by a policy as its node,
+   * which the network plugin decides about; the list called the Ingress
+   * served beside a chain that said nobody checked. Fails if the doubt is
+   * dropped, counted as a problem, or claimed where no controller is asked.
+   */
+  it("says a backend's door nobody could settle for the class's controller was not checked", () => {
+    const inputs = (door?: IngressInputs["door"]): IngressInputs => ({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([["web", { ...serving(2), door: allowTraefik }]]),
+      },
+      certificates: undefined,
+      door,
+    });
+    const onNode: DoorRead = {
+      name: "ingress-nginx",
+      egress: { known: true, value: { rows: [], unread: [] } },
+      others: { known: true, value: [] },
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "ingress-nginx-controller-5f",
+            namespace: "ingress-nginx",
+            labels: {},
+            ip: "172.18.0.2",
+            hostNetwork: true,
+          },
+        ],
+      },
+      namespaces: { known: true, value: [] },
+    };
+    const said = verdict(inputs(() => onNode));
+    expect(said).toMatchObject({
+      code: "backendDoorUnchecked",
+      label: "backend not checked",
+      role: "neutral",
+    });
+    expect(said.reason).toBe(
+      "Service web: NetworkPolicy allow-traefik decides who may connect to its pods, and whether ingress-nginx may is not checked: it runs on the node's network, and what a policy sees of it is the network plugin's choice."
+    );
+    expect(verdict(inputs()).code).not.toBe("backendDoorUnchecked");
+  });
+
+  /**
+   * nginx-out let ingress-nginx's pods reach DNS only and the list called
+   * web served over a 504. Fails if the controller's own policies stop being
+   * read, if a refused list of them reads as an open way out, if either is
+   * said in the words of the pods' end, or if the list leaves the networks
+   * its pods sit in out of an ipBlock the chain beside it settles.
+   */
+  it("calls a backend down where the controller's own egress policies reach none of its pods", () => {
+    const egress = (
+      value: Extract<DoorRead["egress"], { known: true }>["value"]
+    ): DoorRead => ({
+      name: "ingress-nginx",
+      egress: { known: true, value },
+      others: { known: true, value: [] },
+      clients: {
+        known: true,
+        value: [
+          {
+            name: "ingress-nginx-controller-5f",
+            namespace: "ingress-nginx",
+            labels: {},
+            ip: "10.42.0.12",
+            hostNetwork: false,
+          },
+        ],
+      },
+      namespaces: { known: true, value: [] },
+    });
+    const inputs = (read: DoorRead): IngressInputs => ({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: new Map([["web", serving(2)]]) },
+      certificates: undefined,
+      door: () => read,
+    });
+    const shut: NetworkPolicyInfo = {
+      name: "nginx-out",
+      namespace: "ingress-nginx",
+      uid: "nginx-out",
+      selects: { kind: "everything" },
+      selected: 1,
+      nearly: null,
+      ingress: {
+        governed: false,
+        rules: [],
+        opensToEverything: false,
+        deniesEverything: false,
+      },
+      egress: {
+        governed: true,
+        rules: [],
+        opensToEverything: false,
+        deniesEverything: true,
+      },
+      labels: {},
+      createdAt: null,
+    };
+    expect(verdict(inputs(egress({ rows: [shut], unread: [] })))).toMatchObject(
+      {
+        code: "backendDown",
+        reason:
+          "Service web: NetworkPolicy nginx-out lets no connection from ingress-nginx out to this Service's pods.",
+      }
+    );
+    const message = "networkpolicies.networking.k8s.io is forbidden";
+    const unread = egress({
+      rows: [],
+      unread: [{ namespace: "ingress-nginx", code: "FORBIDDEN", message }],
+    });
+    expect(verdict(inputs(unread))).toMatchObject({
+      code: "backendDoorUnchecked",
+      role: "neutral",
+      reason: `Service web: the NetworkPolicies over ingress-nginx's own pods could not be read, so whether it may connect is not checked: ${message}.`,
+    });
+    expect(
+      ingressHealthOf(inputs(egress({ rows: [], unread: [] }))).problems
+    ).toEqual([]);
+    const exceptPods: NetworkPolicyInfo = {
+      ...shut,
+      egress: {
+        ...shut.egress,
+        deniesEverything: false,
+        rules: [
+          {
+            peers: [
+              {
+                pods: { kind: "notSaid" },
+                namespaces: { kind: "notSaid" },
+                ipBlock: { cidr: "0.0.0.0/0", except: ["10.42.0.0/16"] },
+              },
+            ],
+            ports: [],
+          },
+        ],
+      },
+    };
+    const netted = (networks?: string[]): IngressInputs => ({
+      ...inputs(egress({ rows: [exceptPods], unread: [] })),
+      backing: {
+        known: true,
+        value: new Map([["web", { ...serving(2), networks }]]),
+      },
+    });
+    expect(verdict(netted(["10.42.0.0/24"])).code).toBe("backendDown");
+    expect(verdict(netted()).code).toBe("backendDoorUnchecked");
+  });
+
+  /**
+   * The cluster refused the NetworkPolicy list and the Ingress read as
+   * served. Fails if the refusal is dropped, or said without the cluster's
+   * words.
+   */
+  it("says a backend's door was not checked where its policies could not be listed", () => {
+    const reason = "networkpolicies.networking.k8s.io is forbidden";
+    const said = verdict({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([
+          [
+            "web",
+            {
+              ...serving(2),
+              door: { state: "unread", reason, code: "PERMISSION_DENIED" },
+            },
+          ],
+        ]),
+      },
+      certificates: undefined,
+      door: () => null,
+    });
+    expect(said).toMatchObject({
+      code: "backendDoorUnchecked",
+      role: "neutral",
+      reason: `Service web: the NetworkPolicies over its pods could not be read, so whether ${SERVED.controller} may connect is not checked: ${reason}.`,
+    });
+  });
+
+  /**
+   * Marco, who may list pods and not Deployments, read idle-web's Ingress as
+   * "its pods could not be read" beside a trace that had read them and could
+   * not read the workloads. Fails if an unconfirmed backend stops saying
+   * which read is missing in its Service's words.
+   */
+  it("says which read an unconfirmed backend is missing, in its Service's words", () => {
+    const said = verdict({
+      ingress: ingress(["web"]),
+      binding: { known: true, value: SERVED },
+      backing: {
+        known: true,
+        value: new Map([
+          [
+            "web",
+            {
+              ...serving(0),
+              stop: {
+                reason: "selectsNothing",
+                service: {
+                  kind: "Service",
+                  name: "web",
+                  namespace: "net",
+                  existence: "present",
+                  facts: null,
+                },
+                selector: "app=web",
+                near: null,
+                makersRead: false,
+              },
+            },
+          ],
+        ]),
+      },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendUnconfirmed");
+    expect(said.reason).toBe(
+      "Service web: No pod carries app=web: workloads not read, so whether one is scaled to zero is not known."
+    );
+  });
+
+  /** One dead path out of two degrades the Ingress; it does not kill it. */
+  it("warns when one backend of several publishes nothing", () => {
+    const said = verdict({
+      ingress: ingress(["web", "api"]),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendDown");
+    expect(said.role).toBe("warn");
+  });
+
+  /**
+   * The class binding or the Services were refused: "not checked", never
+   * "served". Fails if an unread input is skipped instead of carried.
+   */
+  it("says not checked when an input could not be read", () => {
+    const said = verdict({
+      ingress: { ...ingress(["api"]), loadBalancerIps: ["203.0.113.7"] },
+      binding: { known: false, why: "ingressclasses is forbidden" },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("unknown");
+    expect(said.role).toBe("neutral");
+    expect(said.reason).toContain("ingressclasses is forbidden");
+
+    const stillReading = verdict({
+      ingress: ingress(["api"]),
+      binding: { known: false, why: null },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(stillReading).toMatchObject({ code: "reading", role: "neutral" });
+
+    const backingRefused = verdict({
+      ingress: { ...ingress(["api"]), loadBalancerIps: ["203.0.113.7"] },
+      binding: { known: true, value: SERVED },
+      backing: { known: false, why: "services is forbidden" },
+      certificates: undefined,
+    });
+    expect(backingRefused.code).toBe("unknown");
+  });
+
+  /**
+   * Not checked files a verdict under a lock only where every input it
+   * lacks was refused. Fails if one refusal among a failed read or a doubt
+   * of the app's own makes the whole verdict a refusal, or if a refusal
+   * loses its code on the way.
+   */
+  it("calls an unknown verdict refused only where every unread input was", () => {
+    const refused = {
+      known: false as const,
+      why: "ingressclasses is forbidden",
+      code: "PERMISSION_DENIED",
+    };
+    const codeOf = (inputs: Partial<IngressInputs>) =>
+      unreadCode(
+        ingressHealthOf({
+          ingress: ingress(["api"]),
+          binding: refused,
+          backing: { known: true, value: BACKING },
+          certificates: undefined,
+          ...inputs,
+        })
+      );
+    expect(codeOf({})).toBe("PERMISSION_DENIED");
+    expect(
+      codeOf({ backing: { known: false, why: "services is forbidden" } })
+    ).toBe("");
+    expect(
+      codeOf({
+        backing: { known: false, why: "timed out", code: "TIMEOUT_ERROR" },
+      })
+    ).toBe("");
+    const unreadable: TlsCertificate = {
+      secretName: "shop-tls",
+      certificate: null,
+      problem: { says: "secretUnreadable", said: "secrets is forbidden" },
+    };
+    expect(
+      codeOf({
+        ingress: ingress(["api"], "shop-tls"),
+        certificates: new Map([["shop-tls", unreadable]]),
+      })
+    ).toBe("");
+    expect(
+      codeOf({
+        ingress: { ...ingress(["api"]), className: null, classAnnotated: true },
+        binding: { known: true, value: { ...UNSERVED, requested: "nginx" } },
+        backing: { ...refused, why: "services is forbidden" },
+      })
+    ).toBe("");
+  });
+
+  it("calls an addressed Ingress with live backends served", () => {
+    const said = verdict({
+      ingress: { ...ingress(["api"]), loadBalancerIps: ["203.0.113.7"] },
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said).toMatchObject({ code: "serving", role: "ok" });
+  });
+});
+
+describe("who picks up an Ingress no IngressClass answers for", () => {
+  const ADDRESS = ["34.1.2.3"];
+  /** No IngressClass named `gce`, as on every GKE cluster. */
+  const GCE: IngressClassBinding = { ...UNSERVED, requested: "gce" };
+  const NO_DEFAULT: IngressClassBinding = { ...UNSERVED, requested: null };
+
+  const annotated = (loadBalancerIps: string[]): IngressInputs["ingress"] => ({
+    ...ingress(["api"]),
+    className: "gce",
+    classAnnotated: true,
+    loadBalancerIps,
+  });
+
+  /**
+   * Only `spec.ingressClassName` is answered by an IngressClass. Read alone,
+   * a missing IngressClass called every GKE Ingress, and every annotation-only
+   * nginx, ALB and Traefik one, served by nobody. Fails if an annotated or
+   * classless Ingress a controller addressed is "none", if one nobody
+   * addressed is anything firmer than unrecorded, or if an address excuses a
+   * class the spec names and the cluster does not have.
+   */
+  it("takes an address as the claim only where the class is not the spec's to check", () => {
+    const of = (
+      classAnnotated: boolean | undefined,
+      loadBalancerIps: string[],
+      binding: IngressClassBinding
+    ) => ingressClaimOf({ classAnnotated, loadBalancerIps }, binding, []);
+
+    expect(of(true, ADDRESS, GCE)).toBe("address");
+    expect(of(true, [], GCE)).toBe("unrecorded");
+    expect(of(undefined, ADDRESS, NO_DEFAULT)).toBe("address");
+    expect(of(undefined, [], NO_DEFAULT)).toBe("none");
+    expect(of(undefined, ADDRESS, UNSERVED)).toBe("none");
+    expect(of(undefined, [], UNSERVED)).toBe("none");
+    expect(of(true, [], SERVED)).toBe("class");
+  });
+
+  const classless = (loadBalancerIps: string[] = []) => ({
+    ...ingress(["api"]),
+    className: null,
+    loadBalancerIps,
+  });
+
+  /**
+   * Traefik and GKE take an Ingress that names no class by their own
+   * settings, and one of theirs with no address written was red "no
+   * controller" while it served. Fails if such an Ingress is "none" where a
+   * taker was found or the scan could not say, if it stops being "none"
+   * where the scan found no taker, or if a taker excuses a class the spec
+   * names and the cluster does not have.
+   */
+  it("calls a classless Ingress served by nobody only where no controller found here takes one", () => {
+    const of = (takers: ClasslessTakers, binding = NO_DEFAULT) =>
+      ingressClaimOf(classless(), binding, takers);
+
+    expect(of([])).toBe("none");
+    expect(of(["Traefik"])).toBe("unrecorded");
+    expect(of("unread")).toBe("unrecorded");
+    expect(of("reading")).toBe("unrecorded");
+    expect(of(["Traefik"], UNSERVED)).toBe("none");
+    expect(ingressClaimOf(classless(ADDRESS), NO_DEFAULT, ["Traefik"])).toBe(
+      "address"
+    );
+  });
+
+  /**
+   * The verdict every surface draws from it. Fails if a taker found leaves
+   * the Ingress red or without the taker's name, if a scan that could not
+   * look reads as "none found" or as still reading, if a scan still out
+   * reads as final, or if a caller that passed nothing gets the red verdict.
+   */
+  it("says a classless Ingress was not checked, and names who may take it", () => {
+    const said = (takers?: ClasslessTakers) =>
+      verdict({
+        ingress: classless(),
+        binding: { known: true, value: NO_DEFAULT },
+        backing: { known: true, value: BACKING },
+        certificates: undefined,
+        ...(takers && { classless: takers }),
+      });
+
+    expect(said([])).toMatchObject({ code: "noController", role: "err" });
+    expect(said(["Traefik"])).toMatchObject({
+      code: "unknown",
+      role: "neutral",
+      reason:
+        "This Ingress names no class, and this cluster has no default one. Installed here: Traefik. By default such a controller takes an Ingress that names no class; whether this one is set to is not recorded in the cluster, and nothing has published an address yet, so whether anything serves this Ingress is not known",
+    });
+    const unread = {
+      code: "unknown",
+      role: "neutral",
+      reason:
+        "This Ingress names no class, and this cluster has no default one. Some controllers take an Ingress that names no class by their own settings, and what is installed here could not be read, so whether anything serves this Ingress is not known",
+    };
+    expect(said("unread")).toMatchObject(unread);
+    expect(said()).toMatchObject(unread);
+    expect(said("reading")).toMatchObject({ code: "reading", reason: null });
+  });
+
+  /**
+   * The chain hop and the shared file print this line under "names no
+   * class". Fails if it repeats the annotation's sentence for an Ingress
+   * that has none, or drops who was found.
+   */
+  it("words the controller hop of a classless Ingress by who may take it", () => {
+    const note = (takers: ClasslessTakers | undefined, address: string[]) => {
+      const binding = claimedBinding(classless(address), NO_DEFAULT, [
+        "Traefik",
+      ]);
+      return claimNote({ ...binding, classless: takers }, t);
+    };
+
+    expect(note(["Traefik", "GKE Ingress"], [])).toContain(
+      "Installed here: Traefik, GKE Ingress. By default"
+    );
+    expect(note("unread", [])).toContain("could not be read");
+    expect(note(undefined, [])).toBe(note("unread", []));
+    expect(note("reading", [])).toBe("still reading.");
+    expect(note(["Traefik"], ADDRESS)).toBe(
+      "A controller that takes it by its own settings has published its address; the cluster does not record which one."
+    );
+    expect(claimNote(claimedBinding(annotated([]), GCE, ["Traefik"]), t)).toBe(
+      "A controller matches that annotation against its own settings, and nothing has published an address yet, so whether anything serves this Ingress is not known."
+    );
+  });
+
+  /**
+   * The list drew it red "no controller", the count listed it and its
+   * Open in browser was taken away, while it had an address and served.
+   */
+  it("calls an annotated Ingress a controller has addressed served", () => {
+    const health = ingressHealthOf({
+      ingress: annotated(ADDRESS),
+      binding: { known: true, value: GCE },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(health.problems).toEqual([]);
+    expect(ingressHealthWords(health, t)).toMatchObject({
+      code: "serving",
+      role: "ok",
+    });
+  });
+
+  /**
+   * With no address there is no evidence either way: a controller matches
+   * the annotation against its own settings. Fails if that reads as "no
+   * controller" in red, or as "no address yet" from a controller nobody saw.
+   */
+  it("says an annotated Ingress with no address was not checked, and why", () => {
+    const said = verdict({
+      ingress: annotated([]),
+      binding: { known: true, value: GCE },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said).toMatchObject({ code: "unknown", role: "neutral" });
+    expect(said.reason).toBe(
+      "Its class gce is named by the kubernetes.io/ingress.class annotation and no IngressClass has that name, so the cluster does not record whether a controller picks it up, and it has no address yet"
+    );
+  });
+
+  /** The load balancer row promised "pending" or said "nothing serves its class" on the same guess. */
+  it("says the address of an unrecorded claim is unknown, never pending or refused", () => {
+    const claim = (ingress: IngressInputs["ingress"], binding = GCE) =>
+      claimedBinding(ingress, binding, []).claim;
+
+    expect(ingressAddressOf(annotated([]), claim(annotated([])))).toBe(
+      "unknown"
+    );
+    expect(
+      ingressAddressOf(annotated(ADDRESS), claim(annotated(ADDRESS)))
+    ).toBe("assigned");
+    expect(ingressAddressOf(ingress([]), claim(ingress([]), UNSERVED))).toBe(
+      "noController"
+    );
+    expect(ingressAddressOf(ingress([]), claim(ingress([]), SERVED))).toBe(
+      "pending"
+    );
+    expect(ingressAddressOf(ingress([]), undefined)).toBe("unknown");
+  });
+
+  /** The class row was the one place main drew this red; it names the annotation instead. */
+  it("names the annotation on the class row, in red only where nothing serves the class", () => {
+    expect(
+      ingressClassWords("gce", claimedBinding(annotated(ADDRESS), GCE, []), t)
+    ).toEqual({
+      text: "gce: by the kubernetes.io/ingress.class annotation, no IngressClass by that name",
+      tone: null,
+    });
+    expect(
+      ingressClassWords("nginx", claimedBinding(ingress([]), UNSERVED, []), t)
+    ).toEqual({ text: "nginx: no IngressClass by that name", tone: "err" });
+    expect(
+      ingressClassWords(
+        null,
+        claimedBinding({ loadBalancerIps: ADDRESS }, NO_DEFAULT, []),
+        t
+      )
+    ).toEqual({ text: "none named, and no cluster default", tone: null });
+  });
+});
+
+describe("how a backend is named", () => {
+  const SENTENCES = [
+    en.readings.healthBackendDown,
+    en.readings.healthBackendWhy,
+    en.readings.healthBackendIdle,
+    en.readings.healthBackendStarting,
+    en.readings.healthBackendUnconfirmed,
+    en.readings.healthBackendPoliciesUnread,
+    en.readings.healthBackendEgressUnread,
+    ...Object.values(en.count.healthBackendEgressUnchecked),
+    ...Object.values(en.count.healthBackendDoorUnchecked),
+    ru.readings.healthBackendDown,
+    ru.readings.healthBackendWhy,
+    ru.readings.healthBackendIdle,
+    ru.readings.healthBackendStarting,
+    ru.readings.healthBackendUnconfirmed,
+    ru.readings.healthBackendPoliciesUnread,
+    ru.readings.healthBackendEgressUnread,
+    ...Object.values(ru.count.healthBackendEgressUnchecked),
+    ...Object.values(ru.count.healthBackendDoorUnchecked),
+  ];
+
+  /**
+   * An Ingress and its Service usually share a name, a Helm release names
+   * both, so a row read "door-port · port-demo: door-port: NetworkPolicy...".
+   * Fails if a backend sentence stops saying which kind the name is.
+   */
+  it.each(SENTENCES)("says the backend is a Service: %s", (sentence) => {
+    expect(sentence).toContain("Service {name}");
+  });
+});

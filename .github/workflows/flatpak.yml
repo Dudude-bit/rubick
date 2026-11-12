@@ -79,7 +79,12 @@ jobs:
           if [ "${{ matrix.gnome }}" != manifest ]; then
             sed -i "s/^runtime-version: .*/runtime-version: '${{ matrix.gnome }}'/" "$manifest"
           fi
-          version=$(sed -n "s/^runtime-version: '\(.*\)'/\1/p" "$manifest")
+          # Either quote: the formatter rewrites the manifest's to double.
+          version=$(sed -nE "s/^runtime-version: *['\"]?([^'\"]+)['\"]? *$/\1/p" "$manifest")
+          if [ -z "$version" ]; then
+            echo "::error::no runtime-version in $manifest"
+            exit 1
+          fi
           echo "GNOME=$version" >> "$GITHUB_ENV"
           echo "building against org.gnome.Platform//$version"
 

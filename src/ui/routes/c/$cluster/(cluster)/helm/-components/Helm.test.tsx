@@ -1,0 +1,259 @@
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { act, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    listHelmReleasesIn: vi.fn(),
+    listNamespaces: vi.fn(async () => []),
+    listHelmRepos: vi.fn(async () => []),
+    getHelmHistory: vi.fn(async () => []),
+    helmUpgrade: vi.fn(async () => ""),
+    helmInstall: vi.fn(async () => ""),
+    helmUninstall: vi.fn(async () => ""),
+    helmSearchCharts: vi.fn(async () => []),
+    checkHelmAvailability: vi.fn(async () => ({
+      available: false,
+      version: null,
+      path: null,
+      error: null,
+      searchedPaths: [],
+    })),
+  },
+}));
+
+import { commands } from "@/lib/commands";
+import type { HelmRelease } from "@/generated/types";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useDependenciesStore } from "@/stores/dependenciesStore";
+import { renderWithRouter } from "@/test/render";
+vi.mock("@/components/share/ShareAction", async (original) =>
+  (await import("@/test/shared-scope")).withSharedScope(original as never)
+);
+
+import { Helm } from "./Helm";
+
+const release = (name: string): HelmRelease => ({
+  name,
+  namespace: "team-a",
+  revision: 1,
+  status: "deployed",
+  chart: "nginx-1.0.0",
+  appVersion: "1.0.0",
+  updated: "2026-09-05T10:00:00Z",
+  source: "native",
+  suspended: false,
+  sourceRef: null,
+  unreadable: null,
+});
+
+const listReleases = vi.mocked(commands.listHelmReleasesIn);
+const history = vi.mocked(commands.getHelmHistory);
+
+beforeEach(() => {
+  listReleases.mockReset();
+  useDependenciesStore.setState({ helm: null });
+  useClusterStore.setState({ isConnected: true, namespaceScope: [] });
+});
+
+describe("Helm releases whose re-read fails", () => {
+  /**
+   * During the 502 outage the lists kept their rows and said since when,
+   * while Helm kept its releases with nothing saying the reads had stopped
+   * answering: no freshness reached the page at all. Fails if the releases
+   * are dropped for the error, or kept with nothing saying they are old.
+   */
+  it("keeps the releases, says they are from the last read that answered, and its header says the read is failing", async () => {
+    listReleases.mockResolvedValueOnce({
+      rows: [release("web"), release("api")],
+      unread: [],
+    });
+    const { client } = await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+    expect(screen.getByText("polling")).toBeInTheDocument();
+
+    listReleases.mockRejectedValue(new Error("502 Bad Gateway"));
+    await act(() => client.refetchQueries());
+
+    expect(
+      await screen.findByText(/Could not read Helm releases just now/)
+    ).toBeInTheDocument();
+    expect(screen.getByText("web")).toBeInTheDocument();
+    expect(screen.getByText("api")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText("read failing")).toBeInTheDocument()
+    );
+    expect(screen.queryByText("polling")).toBeNull();
+  });
+});
+
+describe("the history dialog opened from a release's row", () => {
+  /**
+   * The dialog took the history's rows and never its error, so a refused or
+   * timed-out read was an empty history and the dialog said Helm keeps none,
+   * while the release's own History tab said the same read had failed.
+   */
+  it("says the history could not be read when the read fails", async () => {
+    listReleases.mockResolvedValue({ rows: [release("web")], unread: [] });
+    history.mockRejectedValue(new Error("secrets is forbidden"));
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Open actions" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "View History" })
+    );
+
+    expect(
+      await screen.findByText("Could not read this release's history.")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/secrets is forbidden/)).toBeInTheDocument();
+    expect(screen.queryByText(/Helm keeps none/)).toBeNull();
+  });
+});
+
+describe("upgrading a release from its row", () => {
+  /**
+   * The row's chart column, `nginx-1.0.0`, went to helm as the chart to
+   * upgrade to. It names no repository, path or URL, so no upgrade could find
+   * its chart. Fails if the dialog sends anything but what the reader typed,
+   * or lets Upgrade through before a chart is named.
+   */
+  it("sends the chart the reader named, and nothing before one is named", async () => {
+    useDependenciesStore.setState({
+      helm: { available: true, path: "/usr/bin/helm", version: "v3" },
+    } as never);
+    listReleases.mockResolvedValue({ rows: [release("web")], unread: [] });
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Open actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Upgrade" }));
+    const upgrade = await screen.findByRole("button", { name: "Upgrade" });
+    expect(upgrade).toBeDisabled();
+
+    await user.type(
+      screen.getByLabelText("Chart to upgrade to"),
+      "bitnami/nginx"
+    );
+    await user.click(upgrade);
+
+    await waitFor(() =>
+      expect(commands.helmUpgrade).toHaveBeenCalledWith(
+        expect.objectContaining({ releaseName: "web", chart: "bitnami/nginx" })
+      )
+    );
+  });
+});
+
+describe("uninstalling a release from its row", () => {
+  /**
+   * Adding a repository takes the same two strings, so an Uninstall wired to
+   * it compiles: the release stays and a repository named after it appears.
+   * Fails if the confirmed Uninstall calls anything but the uninstall, on
+   * the row's release in the row's namespace.
+   */
+  it("uninstalls that release once its name is typed", async () => {
+    useDependenciesStore.setState({
+      helm: { available: true, path: "/usr/bin/helm", version: "v3" },
+    } as never);
+    listReleases.mockResolvedValue({ rows: [release("web")], unread: [] });
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Open actions" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Uninstall" })
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    await user.type(within(dialog).getByRole("textbox"), "web");
+    await user.click(within(dialog).getByRole("button", { name: "Uninstall" }));
+
+    await waitFor(() =>
+      expect(commands.helmUninstall).toHaveBeenCalledWith("web", "team-a")
+    );
+  });
+});
+
+describe("installing a chart found by search", () => {
+  /**
+   * Install and upgrade take the same options, so an Install wired to the
+   * upgrade compiles, and `helm upgrade` of a release that does not exist
+   * fails where the install would have made it. Fails if Install calls
+   * anything but the install, with the chart of the row it was pressed on.
+   */
+  it("installs the chart of the row, under the name the dialog shows", async () => {
+    useDependenciesStore.setState({
+      helm: { available: true, path: "/usr/bin/helm", version: "v3" },
+    } as never);
+    listReleases.mockResolvedValue({ rows: [], unread: [] });
+    vi.mocked(commands.helmSearchCharts).mockResolvedValue([
+      {
+        name: "bitnami/nginx",
+        version: "15.0.0",
+        appVersion: "1.25",
+        description: "A web server",
+      },
+    ]);
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: "Charts" }));
+    await user.type(screen.getByPlaceholderText(/^Search charts/), "nginx");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.click(await screen.findByRole("button", { name: "Install" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Install",
+      })
+    );
+
+    await waitFor(() =>
+      expect(commands.helmInstall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          releaseName: "nginx",
+          chart: "bitnami/nginx",
+          version: "15.0.0",
+        })
+      )
+    );
+  });
+});
+
+/**
+ * The scope is the window's, in neither the address nor the rows: a file
+ * made from a tab on two namespaces named none and read as the cluster.
+ * Fails if the screen stops telling Share which namespaces it read.
+ */
+describe("the scope Helm tells Share", () => {
+  it("names every namespace the window is on", async () => {
+    useClusterStore.setState({ namespaceScope: ["team-a", "shared"] });
+    listReleases.mockResolvedValue({ rows: [release("web")], unread: [] });
+    await renderWithRouter(<Helm />, {
+      at: "/c/prod/helm",
+      route: "/c/$cluster/helm",
+    });
+    await screen.findByText("web");
+    expect(screen.getByTestId("shared-scope")).toHaveTextContent(
+      '["team-a","shared"]'
+    );
+  });
+});

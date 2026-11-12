@@ -1,0 +1,539 @@
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  createBrowserHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+  type AnyRouter,
+} from "@tanstack/react-router";
+import {
+  QueryClientProvider,
+  useQuery,
+  type QueryClient,
+} from "@tanstack/react-query";
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    connectCluster: vi.fn(async (context: string) => ({ context })),
+    disconnectCluster: vi.fn(async () => undefined),
+    focusCluster: vi.fn(async () => null),
+    releaseClusters: vi.fn(async () => []),
+    saveClusterPreferences: vi.fn(async () => undefined),
+  },
+}));
+
+import type { ContextInfo } from "@/generated/types";
+import { commands } from "@/lib/commands";
+import { useScopeTabs } from "./useScopeTabs";
+import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
+import { useClusterStore } from "@/stores/clusterStore";
+import { clusterOf } from "@/lib/links";
+import { renderWithRouter, testQueryClient } from "@/test/render";
+
+const tab = (over: Partial<ScopeTab> = {}): ScopeTab => ({
+  id: "t1",
+  context: null,
+  namespace: "",
+  href: "/",
+  missing: false,
+  ...over,
+});
+
+function Probe() {
+  useScopeTabs();
+  return null;
+}
+
+let client: QueryClient;
+let router: AnyRouter;
+
+async function mount(entry = "/") {
+  client = testQueryClient();
+  ({ router } = await renderWithRouter(<Probe />, {
+    client,
+    at: entry,
+    route: "$",
+  }));
+}
+
+const href = () => router.state.location.href;
+const state = () => useScopeTabStore.getState();
+
+beforeEach(() => {
+  localStorage.clear();
+  useClusterStore.setState({
+    contexts: [],
+    currentContext: null,
+    currentNamespace: "",
+    isConnected: false,
+  });
+  useScopeTabStore.setState({
+    tabs: [tab({ id: "a", href: "/" })],
+    activeId: "a",
+    pendingHref: null,
+    resumed: false,
+  });
+});
+
+describe("the router bridge", () => {
+  it("records a navigation onto the tab it happened in", async () => {
+    await mount("/");
+    await act(async () => {
+      await router.navigate({ href: "/c/prod/pods" });
+    });
+    await vi.waitFor(() => expect(state().tabs[0].href).toBe("/c/prod/pods"));
+  });
+
+  it("takes the reader to the activated tab's route, query string and all", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", href: "/" }),
+        tab({ id: "b", href: "/c/prod/pods?peek=pods%2Fweb%2Fapi-1" }),
+      ],
+      activeId: "a",
+    });
+    await mount("/");
+    await act(async () => {
+      await state().activateTab("b");
+    });
+    await vi.waitFor(() =>
+      expect(href()).toBe("/c/prod/pods?peek=pods%2Fweb%2Fapi-1")
+    );
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+  });
+
+  it("goes to the restored route on boot without recording the boot one over it", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", href: "/c/prod/nodes" })],
+      activeId: "a",
+      pendingHref: "/c/prod/nodes",
+    });
+    await mount("/");
+    await vi.waitFor(() => expect(href()).toBe("/c/prod/nodes"));
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+    expect(state().tabs[0].href).toBe("/c/prod/nodes");
+  });
+
+  /**
+   * The router does not always land where it was asked: a redirect moves it
+   * on, and it writes a query value back in its own encoding. A bridge that
+   * settled only on arriving at the very address asked for asked again,
+   * forever.
+   */
+  it("settles where the router lands when that is not the address asked for", async () => {
+    const asked = "/c/prod/pods?peek=pods/web/api-1";
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", href: asked })],
+      activeId: "a",
+      pendingHref: asked,
+    });
+    await mount("/");
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+    expect(href()).not.toBe(asked);
+    expect(state().tabs[0].href).toBe(href());
+  });
+
+  // One live connection means everything cached belonged to a scope that is
+  // no longer being watched, so none of it may be redrawn as current.
+  it("empties the query cache on a tab switch", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a" }), tab({ id: "b", href: "/c/prod/nodes" })],
+      activeId: "a",
+    });
+    await mount("/");
+    client.setQueryData(["pods", "web"], [{ name: "api-1" }]);
+    await act(async () => {
+      await state().activateTab("b");
+    });
+    expect(client.getQueryData(["pods", "web"])).toBeUndefined();
+  });
+
+  /**
+   * Dana's sidebar said 14 pods beside a list of 15 for twenty seconds
+   * after switching back to a tab: the list mounted onto a fresh read and
+   * the shell's count, which never unmounts, kept its old answer and its
+   * own schedule. Fails if a count the shell is showing is not read again
+   * at the switch.
+   */
+  it("reads the shell's counts again at a tab switch, with the page", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a" }), tab({ id: "b", href: "/c/prod/pods" })],
+      activeId: "a",
+    });
+    let reads = 0;
+    function ShellCount() {
+      const { data } = useQuery({
+        queryKey: ["cluster-overview", "prod", "shop"],
+        queryFn: async () => (reads += 1),
+        staleTime: 60_000,
+      });
+      return <span data-testid="count">{data}</span>;
+    }
+    client = testQueryClient();
+    ({ router } = await renderWithRouter(
+      <>
+        <Probe />
+        <ShellCount />
+      </>,
+      { client, at: "/", route: "$" }
+    ));
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("count")).toHaveTextContent("1")
+    );
+
+    await act(async () => {
+      await state().activateTab("b");
+    });
+
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("count")).toHaveTextContent("2")
+    );
+  });
+});
+
+describe("a tab whose cluster is gone", () => {
+  /** The hook is what hands the connection to the tab; without it the tab
+   *  keeps the lost cluster's name after the window connected elsewhere. */
+  it("takes the cluster a connect from it lands on", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: "gone", missing: true })],
+      activeId: "a",
+    });
+    await mount("/");
+    await act(async () => {
+      await useClusterStore.getState().connect("drain");
+    });
+    expect(state().tabs[0]).toMatchObject({ missing: false, context: "drain" });
+  });
+
+  /** Activating the lost tab drops the window's connection after the tab is
+   *  already active; the connection being dropped is not the tab's. */
+  it("does not take the cluster still open when it is activated", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", context: "prod" }),
+        tab({ id: "b", context: "gone", missing: true }),
+      ],
+      activeId: "a",
+    });
+    await mount("/");
+    await act(async () => {
+      await state().activateTab("b");
+    });
+    expect(state().tabs[1]).toMatchObject({ missing: true, context: "gone" });
+  });
+});
+
+describe("a cluster whose name the address has to spell", () => {
+  /**
+   * Closing the last tab on the overview is the one way back to the picker.
+   * The router hands a path back with spaces and letters decoded, and the
+   * overview's address was built encoded, so for `my cluster` or `прод` the
+   * tab never read as being on the overview: every close sent it "home"
+   * again and none disconnected. Fails if a name that needs spelling in the
+   * address does not come back out of it as the same place.
+   */
+  it.each([
+    "my cluster",
+    "прод",
+    "arn:aws:eks:us-east-1:1234:cluster/prod",
+    "dev@corp",
+    "100% legit",
+  ])("closes the last tab of %s to the picker", async (name) => {
+    const home = `/c/${encodeURIComponent(name)}`;
+    useClusterStore.setState({ currentContext: name, isConnected: true });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: name, href: `${home}/pods` })],
+      activeId: "a",
+    });
+    await mount(`${home}/pods`);
+    expect(clusterOf(router.state.location.pathname)).toBe(name);
+
+    await act(async () => {
+      await state().closeTab("a");
+    });
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+    expect(router.state.location.pathname).not.toMatch(/pods/);
+    expect(useClusterStore.getState().currentContext).toBe(name);
+
+    await act(async () => {
+      await state().closeTab("a");
+    });
+    expect(useClusterStore.getState().currentContext).toBeNull();
+    await vi.waitFor(() => expect(href()).toBe("/"));
+  });
+});
+
+describe("the keyboard", () => {
+  const press = async (init: KeyboardEventInit) => {
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", init));
+      await Promise.resolve();
+    });
+  };
+
+  it("opens a tab on mod+T and closes one on mod+W", async () => {
+    await mount("/");
+    await press({ key: "t", ctrlKey: true });
+    expect(state().tabs).toHaveLength(2);
+    await press({ key: "w", metaKey: true });
+    expect(state().tabs).toHaveLength(1);
+  });
+
+  it("steps with ctrl+Tab in both directions", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a" }), tab({ id: "b" }), tab({ id: "c" })],
+      activeId: "a",
+    });
+    await mount("/");
+    await press({ key: "Tab", ctrlKey: true });
+    expect(state().activeId).toBe("b");
+    await press({ key: "Tab", ctrlKey: true, shiftKey: true });
+    expect(state().activeId).toBe("a");
+  });
+
+  it("jumps by position, with nine meaning the last", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a" }), tab({ id: "b" }), tab({ id: "c" })],
+      activeId: "a",
+    });
+    await mount("/");
+    await press({ key: "2", ctrlKey: true });
+    expect(state().activeId).toBe("b");
+    await press({ key: "9", ctrlKey: true });
+    expect(state().activeId).toBe("c");
+  });
+});
+
+describe("the kubeconfig", () => {
+  it("flags a tab whose cluster the kubeconfig no longer lists", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: "gone" })],
+      activeId: "a",
+    });
+    await mount("/");
+    await act(async () => {
+      useClusterStore.setState({
+        contexts: [
+          {
+            name: "prod",
+            cluster: "prod",
+            user: "prod",
+            namespace: null,
+            is_current: true,
+            server: null,
+            exec_command: null,
+            auth: { kind: "unrecognised" },
+          },
+        ],
+      });
+    });
+    expect(state().tabs[0].missing).toBe(true);
+  });
+});
+
+describe("the tab restored at launch", () => {
+  const listed = (...names: string[]) =>
+    names.map((name) => ({ name }) as ContextInfo);
+
+  beforeEach(() => vi.mocked(commands.connectCluster).mockClear());
+
+  /**
+   * A cluster picked inside a tab moves its address and not its record, and
+   * the active tab is saved as it stands. At the next launch the record's
+   * cluster was connected first and the address's a beat later: a sign-in
+   * for a cluster nobody asked for, opening over the one they did. Fails if
+   * the launch connects a cluster the tab's address does not name.
+   */
+  it("does not connect the cluster a tab was last parked on when its address names another", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({
+          id: "a",
+          context: "acme-dev",
+          namespace: "web",
+          scope: ["web"],
+          href: "/c/acme-prod/pods",
+        }),
+      ],
+      activeId: "a",
+    });
+    await mount("/c/acme-prod/pods");
+    await act(async () => {
+      useClusterStore.setState({ contexts: listed("acme-dev", "acme-prod") });
+    });
+
+    expect(commands.connectCluster).not.toHaveBeenCalled();
+    expect(useClusterStore.getState().namespaceScope).toEqual([]);
+  });
+
+  /** Fails if the rule above also drops the scope of a tab whose record is its own. */
+  it("still applies the scope of a tab standing where it was parked", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({
+          id: "a",
+          context: "acme-prod",
+          namespace: "web",
+          scope: ["web"],
+          href: "/c/acme-prod/pods",
+        }),
+      ],
+      activeId: "a",
+    });
+    await mount("/c/acme-prod/pods");
+    await act(async () => {
+      useClusterStore.setState({ contexts: listed("acme-dev", "acme-prod") });
+    });
+
+    await vi.waitFor(() =>
+      expect(useClusterStore.getState().namespaceScope).toEqual(["web"])
+    );
+    expect(commands.connectCluster).toHaveBeenCalledWith("acme-prod");
+  });
+
+  /**
+   * The shell unmounts at the front door and on a link to a cluster the
+   * kubeconfig lacks, and each time it came back the tab's record was
+   * applied again: a scope as old as the tab's last parking, over the one
+   * the reader had picked since. Fails if the record is applied more than
+   * once for the window.
+   */
+  it("applies it once for the window, not each time the shell mounts", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({
+          id: "a",
+          context: "acme-prod",
+          namespace: "web",
+          scope: ["web"],
+          href: "/c/acme-prod/pods",
+        }),
+      ],
+      activeId: "a",
+    });
+    useClusterStore.setState({ contexts: listed("acme-prod") });
+    await mount("/c/acme-prod/pods");
+    await vi.waitFor(() =>
+      expect(useClusterStore.getState().namespaceScope).toEqual(["web"])
+    );
+    await act(() => useClusterStore.getState().setNamespaceScope(["db"]));
+    cleanup();
+
+    await mount("/c/acme-prod/pods");
+    await act(async () => {});
+
+    expect(useClusterStore.getState().namespaceScope).toEqual(["db"]);
+  });
+});
+
+describe("a tab whose address moves into a lost cluster", () => {
+  /**
+   * A tab's Back can hold a page of a cluster the kubeconfig has lost since.
+   * The tab was only compared with the kubeconfig when the kubeconfig
+   * changed, so it went on wearing the connected cluster's name over the
+   * lost one's notice. Fails if the tab is not marked lost as its address
+   * arrives there, or stays marked after it leaves.
+   */
+  it("marks the tab lost as it arrives there, and clears it as it leaves", async () => {
+    useClusterStore.setState({
+      contexts: [{ name: "acme-prod" } as ContextInfo],
+      currentContext: "acme-prod",
+      isConnected: true,
+    });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: "acme-prod", href: "/c/acme-prod/pods" })],
+      activeId: "a",
+      resumed: true,
+    });
+    await mount("/c/acme-prod/pods");
+
+    await act(() => router.navigate({ href: "/c/acme-old/pods" }));
+    await vi.waitFor(() =>
+      expect(state().tabs[0]).toMatchObject({
+        missing: true,
+        context: "acme-old",
+      })
+    );
+
+    await act(() => router.navigate({ href: "/c/acme-prod/pods" }));
+    await vi.waitFor(() => expect(state().tabs[0].missing).toBe(false));
+  });
+});
+
+describe("Back in a tab", () => {
+  /** The window's own history, as the app runs on, so Back is a real popstate. */
+  async function mountOnWindowHistory(entry: string) {
+    window.history.replaceState(null, "", entry);
+    client = testQueryClient();
+    const root = createRootRoute();
+    const page = createRoute({
+      getParentRoute: () => root,
+      path: "$",
+      component: Probe,
+    });
+    router = createRouter({
+      routeTree: root.addChildren([page]),
+      history: createBrowserHistory(),
+    });
+    await act(() => router.load());
+    const view = render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    );
+    return () => {
+      view.unmount();
+      router.history.destroy();
+    };
+  }
+
+  async function activate(id: string, at: string) {
+    await act(async () => {
+      await state().activateTab(id);
+    });
+    await vi.waitFor(() => expect(href()).toBe(at));
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+  }
+
+  /**
+   * Sam opened ClusterRoles then one ClusterRole in tab 2, looked at tab 1
+   * and came back: Back loaded tab 1's PersistentVolume into tab 2, and both
+   * tabs ended on it.
+   */
+  it("returns to the tab's own last route after a visit to another tab", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", href: "/c/prod/persistentvolumes/pv-demo" }),
+        tab({ id: "b", href: "/c/prod/clusterroles" }),
+      ],
+      activeId: "a",
+    });
+    const unmount = await mountOnWindowHistory(
+      "/c/prod/persistentvolumes/pv-demo"
+    );
+
+    await activate("b", "/c/prod/clusterroles");
+    await act(async () => {
+      await router.navigate({ href: "/c/prod/clusterroles/admin" });
+    });
+    await vi.waitFor(() =>
+      expect(state().tabs[1].href).toBe("/c/prod/clusterroles/admin")
+    );
+    await activate("a", "/c/prod/persistentvolumes/pv-demo");
+    await activate("b", "/c/prod/clusterroles/admin");
+
+    act(() => router.history.back());
+
+    await vi.waitFor(() => expect(href()).toBe("/c/prod/clusterroles"));
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+    expect(state().tabs.map((each) => each.href)).toEqual([
+      "/c/prod/persistentvolumes/pv-demo",
+      "/c/prod/clusterroles",
+    ]);
+    unmount();
+  });
+});

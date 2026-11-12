@@ -1,5 +1,5 @@
 [workspace]
-members = ["src-tauri", "k8s-gui-common"]
+members = ["src/tauri"]
 resolver = "2"
 
 # Optimised release profile — used for `cargo tauri build` artifacts.

@@ -1,0 +1,888 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import type { CustomResourceInfo } from "@/generated/types";
+import {
+  fluxPicture,
+  readRevision,
+  reconcilerState,
+  revisionText,
+  sourceState,
+  sourceWords,
+  type KindUnread,
+} from "./model";
+
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+/** The English catalogue — what these expectations are written in. */
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+const REVISION = "master@sha1:eec06d1ea459af4cb4e10e806f8be7c7bd58b361";
+
+interface Condition {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+  lastTransitionTime?: string;
+}
+
+function object(
+  kind: string,
+  name: string,
+  spec: Record<string, unknown>,
+  status: Record<string, unknown> = {}
+): CustomResourceInfo {
+  return {
+    name,
+    namespace: "flux-system",
+    uid: `${kind}-${name}`,
+    apiVersion: "v1",
+    kind,
+    spec,
+    status,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+    ownerReferences: [],
+    generation: null,
+  };
+}
+
+const ready = (message: string): Condition => ({
+  type: "Ready",
+  status: "True",
+  reason: "ReconciliationSucceeded",
+  message,
+});
+
+const notReady = (reason: string, message: string): Condition => ({
+  type: "Ready",
+  status: "False",
+  reason,
+  message,
+});
+
+function kustomization(
+  name: string,
+  spec: Record<string, unknown>,
+  conditions: Condition[],
+  lastAppliedRevision?: string
+) {
+  return object(
+    "Kustomization",
+    name,
+    {
+      path: "./apps",
+      sourceRef: { kind: "GitRepository", name: "podinfo" },
+      ...spec,
+    },
+    { conditions, lastAppliedRevision }
+  );
+}
+
+function gitRepository(
+  name: string,
+  conditions: Condition[],
+  artifact?: string
+) {
+  return object(
+    "GitRepository",
+    name,
+    { url: "https://github.com/acme/infra", ref: { branch: "master" } },
+    { conditions, artifact: artifact ? { revision: artifact } : undefined }
+  );
+}
+
+const picture = (
+  kustomizations: CustomResourceInfo[],
+  sources: CustomResourceInfo[],
+  helmReleases: CustomResourceInfo[] = [],
+  unread: KindUnread[] = []
+) =>
+  fluxPicture(
+    kustomizations,
+    helmReleases,
+    [
+      { kind: "GitRepository", objects: sources },
+      { kind: "HelmRepository", objects: [] },
+    ],
+    unread
+  );
+
+describe("an OCI HelmRepository, which Flux writes no status on", () => {
+  /** As source-controller 1.2 and later leave one: a spec and nothing else. */
+  const oci = (status: Record<string, unknown> = {}) =>
+    object(
+      "HelmRepository",
+      "bitnami",
+      {
+        type: "oci",
+        url: "oci://registry-1.docker.io/bitnamicharts",
+        interval: "5m",
+        suspend: true,
+      },
+      status
+    );
+  const release = object("HelmRelease", "redis", {
+    chart: {
+      spec: {
+        chart: "redis",
+        sourceRef: { kind: "HelmRepository", name: "bitnami" },
+      },
+    },
+  });
+  const read = (repository: CustomResourceInfo, releases = [release]) =>
+    fluxPicture(
+      [],
+      releases,
+      [{ kind: "HelmRepository", objects: [repository] }],
+      []
+    );
+
+  /**
+   * It is an address its HelmCharts read: never fetched, no artifact, no
+   * conditions, by design. Read as a source that has not reported yet it
+   * was amber "not fetched yet" for good, while the release using it said
+   * "fetched". Fails if it is called pending, fetched, or green.
+   */
+  it("is an address with nothing to fetch, not a fetch still to come", () => {
+    const { sources, reconcilers } = read(oci());
+    expect(sourceState(sources[0], t)).toEqual({
+      text: "OCI address · nothing to fetch",
+      tone: "unknown",
+    });
+    expect(sourceWords(reconcilers[0].source!, t)).toBe("OCI address");
+    expect(sources[0].worst).toBeNull();
+  });
+
+  /** Flux documents both fields as doing nothing on one. Fails if either is shown as acting. */
+  it("has no interval and is not suspended, whatever its spec says", () => {
+    const { sources } = read(oci());
+    expect(sources[0]).toMatchObject({ interval: null, suspended: false });
+  });
+
+  /** An address nobody reads is still worth a look. */
+  it("is still called unused where no release names it", () => {
+    const { sources } = read(oci(), []);
+    expect(sourceState(sources[0], t)).toEqual({
+      text: "OCI address · unused",
+      tone: "warn",
+    });
+  });
+
+  /**
+   * source-controller before 1.2 did reconcile one and wrote `Ready`. Fails
+   * if a failure it reported is hidden behind "nothing to fetch".
+   */
+  it("is read by its Ready where an older controller wrote one", () => {
+    const { sources } = read(
+      oci({
+        conditions: [
+          notReady("AuthenticationFailed", "failed to login to registry"),
+        ],
+      })
+    );
+    expect(sources[0]).toMatchObject({ staticAddress: false, suspended: true });
+    expect(sourceWords(sources[0], t)).toBe("fetch failing");
+  });
+});
+
+describe("what a reconciler's row says of its source", () => {
+  const repository = (conditions: Condition[] | undefined) =>
+    fluxPicture(
+      [],
+      [],
+      [
+        {
+          kind: "HelmRepository",
+          objects: [
+            object(
+              "HelmRepository",
+              "charts",
+              { url: "https://charts.example.com" },
+              { conditions }
+            ),
+          ],
+        },
+      ],
+      []
+    ).sources[0];
+
+  /**
+   * "fetched" was the word for any source with no `spec.ref` whose Ready
+   * was not False: a HelmRepository made a second ago, with no status, read
+   * as fetched. Fails if silence from the controller is read as a fetch.
+   */
+  it("does not call a source fetched before Flux has said so", () => {
+    expect(sourceWords(repository(undefined), t)).toBe("not fetched yet");
+    expect(sourceWords(repository([ready("stored artifact")]), t)).toBe(
+      "fetched"
+    );
+    expect(
+      sourceWords(repository([notReady("IndexationFailed", "503")]), t)
+    ).toBe("fetch failing");
+  });
+});
+
+describe("suspension is never healthy", () => {
+  /**
+   * The single most important assertion on this page. A suspended
+   * Kustomization keeps the `Ready=True` condition it earned on its last
+   * successful run, so every list that reads that condition — Flux's own CLI
+   * included — calls it healthy while it reconciles nothing. It is the one
+   * state that looks perfect and does nothing.
+   *
+   * Would break if the status word or the tone ever came from the `Ready`
+   * condition without checking `spec.suspend` first.
+   */
+  it("reads as suspended, not ready, when it reports Ready=True", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization(
+          "tenant-b",
+          { suspend: true },
+          [ready(`Applied revision: ${REVISION}`)],
+          REVISION
+        ),
+      ],
+      [gitRepository("podinfo", [ready("stored artifact")], REVISION)]
+    );
+
+    const state = reconcilerState(reconcilers[0], t);
+    expect(state.text).toBe("suspended");
+    expect(state.tone).not.toBe("ok");
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toContain(
+      "suspended"
+    );
+  });
+
+  /**
+   * A suspended reconciler is not fetching and not applying, so what its
+   * source is doing is not why the cluster does not match git. Would break if
+   * a second red finding started stacking on top of the one sentence that
+   * matters.
+   */
+  it("does not blame a failing source for a reconciler that is suspended", () => {
+    const { reconcilers, sources } = picture(
+      [
+        kustomization(
+          "tenant-b",
+          { suspend: true },
+          [ready(`Applied revision: ${REVISION}`)],
+          REVISION
+        ),
+      ],
+      [
+        gitRepository(
+          "podinfo",
+          [notReady("GitOperationFailed", "gone")],
+          REVISION
+        ),
+      ]
+    );
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toEqual([
+      "suspended",
+    ]);
+    expect(reconcilers[0].worst).toBe("warn");
+    const failing = sources[0].findings.find(
+      (finding) => finding.kind === "fetchFailing"
+    );
+    expect(failing?.kind === "fetchFailing" && failing.frozen).toEqual([]);
+  });
+
+  /** A reconciler suspended before it ever ran has nothing applied at all. */
+  it("distinguishes suspended-after-running from suspended-from-birth", () => {
+    const { reconcilers } = picture(
+      [kustomization("never-ran", { suspend: true }, [])],
+      [gitRepository("podinfo", [ready("stored artifact")], REVISION)]
+    );
+    const finding = reconcilers[0].findings.find(
+      (candidate) => candidate.kind === "suspended"
+    );
+    expect(finding).toBeDefined();
+    expect(finding?.kind === "suspended" && finding.wasReady).toBe(false);
+  });
+});
+
+describe("a source that stopped fetching freezes everything under it", () => {
+  /**
+   * The failure a shared "GitOps" page would have hidden. The source is the
+   * only object saying anything is wrong; the Kustomization under it reports
+   * `Ready` from the revision it last managed to apply, and the cluster is
+   * quietly running old manifests.
+   */
+  it("marks the applier as frozen even though it reports Ready", () => {
+    const { reconcilers, sources } = picture(
+      [
+        kustomization(
+          "apps",
+          {},
+          [ready(`Applied revision: ${REVISION}`)],
+          REVISION
+        ),
+      ],
+      [
+        gitRepository(
+          "podinfo",
+          [
+            notReady(
+              "GitOperationFailed",
+              "failed to checkout and determine revision: authentication required"
+            ),
+          ],
+          REVISION
+        ),
+      ]
+    );
+
+    expect(reconcilers[0].ready).toBe(true);
+    expect(reconcilerState(reconcilers[0], t).tone).toBe("err");
+    const frozen = reconcilers[0].findings.find(
+      (finding) => finding.kind === "frozen"
+    );
+    expect(frozen?.kind === "frozen" && frozen.message).toContain(
+      "authentication required"
+    );
+
+    // And the source names who is frozen because of it.
+    const failing = sources[0].findings.find(
+      (finding) => finding.kind === "fetchFailing"
+    );
+    expect(failing?.kind === "fetchFailing" && failing.frozen).toEqual([
+      "apps",
+    ]);
+    expect(failing?.kind === "fetchFailing" && failing.everFetched).toBe(true);
+    expect(sourceState(sources[0], t).tone).toBe("err");
+  });
+
+  /** Never fetched is a different sentence: nothing was ever applied. */
+  it("separates a source that never fetched from one that stopped", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization("platform", {}, [
+          notReady("ArtifactFailed", "Source artifact not found"),
+        ]),
+      ],
+      [
+        gitRepository("podinfo", [
+          notReady("GitOperationFailed", "Repository not found"),
+        ]),
+      ]
+    );
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toContain(
+      "noSource"
+    );
+  });
+});
+
+describe("a Ready that is Unknown is a reconcile under way", () => {
+  const progressing: Condition = {
+    type: "Ready",
+    status: "Unknown",
+    reason: "Progressing",
+    message: "Reconciliation in progress",
+  };
+
+  /**
+   * Flux writes `Ready=Unknown` while it reconciles. Read as "not True", it
+   * was a red "not ready" with a finding on every object mid-reconcile, and
+   * the list beside it said Progressing. Fails if Unknown reads as False.
+   */
+  it("does not call a reconciler Flux is still reconciling not ready", () => {
+    const { reconcilers } = picture(
+      [kustomization("apps", {}, [progressing], REVISION)],
+      [gitRepository("podinfo", [ready("stored artifact")], REVISION)]
+    );
+    expect(reconcilers[0].ready).toBeNull();
+    expect(reconcilers[0].findings).toEqual([]);
+    expect(reconcilerState(reconcilers[0], t)).toEqual({
+      text: "Progressing",
+      tone: "warn",
+    });
+  });
+
+  /** The same on a source: a new revision being fetched is not a failed fetch. */
+  it("does not call a source Flux is still fetching failing", () => {
+    const { reconcilers, sources } = picture(
+      [
+        kustomization(
+          "apps",
+          {},
+          [ready(`Applied revision: ${REVISION}`)],
+          REVISION
+        ),
+      ],
+      [gitRepository("podinfo", [progressing], REVISION)]
+    );
+    expect(sources[0].ready).toBeNull();
+    expect(sources[0].findings).toEqual([]);
+    expect(sourceState(sources[0], t)).toEqual({
+      text: "Progressing",
+      tone: "warn",
+    });
+    // And nothing under it is called frozen by a fetch that has not failed.
+    expect(reconcilers[0].findings).toEqual([]);
+  });
+
+  /**
+   * Flux marks Ready=Unknown at the start of every reconcile, so a
+   * Kustomization others depend on turned red and "holding up" once an
+   * interval. Fails if a reconcile under way, or a Ready not written yet,
+   * is reported as blocking its dependants.
+   */
+  it("does not call a reconciler Flux is still reconciling blocking", () => {
+    for (const conditions of [[progressing], []]) {
+      const { reconcilers } = picture(
+        [
+          kustomization("platform", {}, conditions, REVISION),
+          kustomization(
+            "monitoring",
+            { dependsOn: [{ name: "platform" }] },
+            [ready("Applied")],
+            REVISION
+          ),
+        ],
+        [gitRepository("podinfo", [ready("stored artifact")], REVISION)]
+      );
+      const platform = reconcilers.find((entry) => entry.name === "platform")!;
+      expect(platform.ready).toBeNull();
+      expect(platform.findings).toEqual([]);
+      expect(platform.worst).toBeNull();
+    }
+  });
+
+  /** With no condition at all there is no reason to quote, and the row says so. */
+  it("says not reconciled yet where Flux has written no Ready at all", () => {
+    const { reconcilers, sources } = picture(
+      [kustomization("apps", {}, [])],
+      [gitRepository("podinfo", [])]
+    );
+    expect(reconcilerState(reconcilers[0], t).text).toBe("not reconciled yet");
+    expect(sourceState(sources[0], t).text).toBe("not fetched yet");
+  });
+});
+
+describe("dependsOn is an ordering, and its consequence is named", () => {
+  /**
+   * Flux writes `dependency 'flux-system/platform' is not ready` on each
+   * blocked reconciler — true, and useless on its own. Would break if the
+   * page stopped naming *which* reconcilers a stuck one is holding up, which
+   * is what turns one red row into an explained outage.
+   */
+  it("names the reconcilers held up by a stuck one, and what they are waiting on", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization("platform", {}, [
+          notReady("ArtifactFailed", "Source artifact not found"),
+        ]),
+        kustomization("monitoring", { dependsOn: [{ name: "platform" }] }, [
+          notReady(
+            "DependencyNotReady",
+            "dependency 'flux-system/platform' is not ready"
+          ),
+        ]),
+        kustomization("ingress", { dependsOn: [{ name: "platform" }] }, [
+          notReady(
+            "DependencyNotReady",
+            "dependency 'flux-system/platform' is not ready"
+          ),
+        ]),
+      ],
+      [gitRepository("podinfo", [notReady("GitOperationFailed", "gone")])]
+    );
+
+    const platform = reconcilers.find((entry) => entry.name === "platform")!;
+    const blocking = platform.findings.find(
+      (finding) => finding.kind === "blocking"
+    );
+    expect(blocking?.kind === "blocking" && blocking.blocked.sort()).toEqual([
+      "ingress",
+      "monitoring",
+    ]);
+
+    // And the blocked one says what is actually wrong rather than only that
+    // it is waiting.
+    const monitoring = reconcilers.find(
+      (entry) => entry.name === "monitoring"
+    )!;
+    const waiting = monitoring.findings.find(
+      (finding) => finding.kind === "waiting"
+    );
+    expect(waiting?.kind === "waiting" && waiting.on).toBe("platform");
+    expect(waiting?.kind === "waiting" && waiting.because).toContain(
+      "Source artifact not found"
+    );
+  });
+
+  /** A healthy dependency is not a finding: everything below it is proceeding. */
+  it("says nothing about dependants of a reconciler that is working", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization("platform", {}, [ready("Applied")], REVISION),
+        kustomization(
+          "monitoring",
+          { dependsOn: [{ name: "platform" }] },
+          [ready("Applied")],
+          REVISION
+        ),
+      ],
+      [gitRepository("podinfo", [ready("stored artifact")], REVISION)]
+    );
+    expect(
+      reconcilers.find((entry) => entry.name === "platform")!.findings
+    ).toEqual([]);
+  });
+});
+
+describe("a dependency is one of the dependant's own kind", () => {
+  const helmRelease = (
+    name: string,
+    spec: Record<string, unknown>,
+    conditions: Condition[]
+  ) => object("HelmRelease", name, spec, { conditions });
+
+  /**
+   * A Kustomization `redis` that applies the HelmRelease `redis`, and a
+   * release `app` depending on `redis`, which Flux resolves to the release.
+   * Looked up by name alone the Kustomization came first: `app`, failing for
+   * its own reason, was drawn waiting on it, and it was blamed for blocking.
+   */
+  it("does not wait on, or blame, a namesake of another kind", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization("redis", {}, [
+          notReady("BuildFailed", "kustomize build failed"),
+        ]),
+      ],
+      [gitRepository("podinfo", [ready("stored artifact")], REVISION)],
+      [
+        helmRelease("redis", {}, [ready("Helm install succeeded")]),
+        helmRelease("app", { dependsOn: [{ name: "redis" }] }, [
+          notReady("InstallFailed", "install retries exhausted"),
+        ]),
+      ]
+    );
+    const kinds = (kind: string, name: string) =>
+      reconcilers
+        .find((entry) => entry.kind === kind && entry.name === name)!
+        .findings.map((finding) => finding.kind);
+
+    expect(kinds("HelmRelease", "app")).toEqual(["notReady"]);
+    expect(kinds("Kustomization", "redis")).not.toContain("blocking");
+  });
+});
+
+describe("a HelmRelease is a reconciler with a chart for a unit", () => {
+  it("reads its chart, its version and its Helm source", () => {
+    const release = object(
+      "HelmRelease",
+      "podinfo",
+      {
+        chart: {
+          spec: {
+            chart: "podinfo",
+            version: "6.5.4",
+            sourceRef: { kind: "HelmRepository", name: "podinfo" },
+          },
+        },
+        interval: "10m",
+      },
+      {
+        conditions: [ready("Helm install succeeded")],
+        history: [{ chartVersion: "6.5.4", status: "deployed" }],
+      }
+    );
+    const { reconcilers } = fluxPicture(
+      [],
+      [release],
+      [
+        {
+          kind: "HelmRepository",
+          objects: [
+            object(
+              "HelmRepository",
+              "podinfo",
+              { url: "https://stefanprodan.github.io/podinfo" },
+              {
+                conditions: [ready("stored artifact")],
+                artifact: { revision: "sha256:abc" },
+              }
+            ),
+          ],
+        },
+      ],
+      []
+    );
+
+    expect(reconcilers[0].unit).toBe("podinfo 6.5.4");
+    expect(reconcilers[0].sourceRef?.kind).toBe("HelmRepository");
+    // It keeps no inventory: what it owns is in Helm's own storage, and a
+    // number here would be invented.
+    expect(reconcilers[0].objects).toBeNull();
+    expect(reconcilerState(reconcilers[0], t).tone).toBe("ok");
+  });
+});
+
+describe("a HelmRelease whose source is failing", () => {
+  const release = (status: Record<string, unknown>) =>
+    object(
+      "HelmRelease",
+      "podinfo",
+      {
+        chart: {
+          spec: {
+            chart: "podinfo",
+            version: "*",
+            sourceRef: { kind: "HelmRepository", name: "podinfo" },
+          },
+        },
+      },
+      status
+    );
+  const failing = object(
+    "HelmRepository",
+    "podinfo",
+    { url: "https://charts.example" },
+    { conditions: [notReady("Failed", "failed to fetch index")] }
+  );
+  const read = (status: Record<string, unknown>) =>
+    fluxPicture(
+      [],
+      [release(status)],
+      [{ kind: "HelmRepository", objects: [failing] }],
+      []
+    ).reconcilers[0];
+
+  /**
+   * A new release whose HelmRepository cannot fetch has no history, and the
+   * CRD defaults the version it asks for to `*`. Read as applied, the page
+   * said "frozen at *" and "The release is installed and healthy" of a
+   * release that never installed. Fails if a version asked for or attempted
+   * counts as one installed.
+   */
+  it("has applied nothing until it installs, whatever version it asks for", () => {
+    const waiting = [notReady("HelmChartNotReady", "HelmChart is not ready")];
+    const never = read({ conditions: waiting });
+    expect(never.applied).toBeNull();
+    expect(never.findings.map((finding) => finding.kind)).toEqual([
+      "noSource",
+      "notReady",
+    ]);
+    expect(
+      read({ conditions: waiting, lastAttemptedRevision: "6.5.4" }).applied
+    ).toBeNull();
+  });
+
+  /**
+   * The history keeps the attempts that failed, newest first. Its first
+   * entry read as installed, so a release whose only install failed was
+   * "frozen at 6.5.4 ... installed and healthy", and one whose upgrade
+   * failed was said to run the chart that never came up. Fails if an entry
+   * Helm does not call deployed counts as installed.
+   */
+  it("has installed only what Helm calls deployed, not its newest attempt", () => {
+    const failing = [notReady("InstallFailed", "Helm install failed")];
+    const never = read({
+      conditions: failing,
+      history: [{ chartVersion: "6.5.4", status: "failed" }],
+    });
+    expect(never.applied).toBeNull();
+    expect(never.findings.map((finding) => finding.kind)).toEqual([
+      "noSource",
+      "notReady",
+    ]);
+
+    const upgradeFailed = read({
+      conditions: failing,
+      history: [
+        { chartVersion: "7.0.0", status: "failed" },
+        { chartVersion: "6.5.4", status: "deployed" },
+      ],
+    });
+    expect(upgradeFailed.applied?.raw).toBe("6.5.4");
+  });
+
+  /** The case the frozen finding is for: installed, and its source stopped fetching since. */
+  it("is frozen at the version its history says it installed", () => {
+    const installed = read({
+      conditions: [ready("Helm install succeeded")],
+      history: [{ chartVersion: "6.5.4", status: "deployed" }],
+    });
+    expect(installed.findings.map((finding) => finding.kind)).toEqual([
+      "frozen",
+    ]);
+    expect(installed.applied?.raw).toBe("6.5.4");
+  });
+});
+
+describe("a HelmRelease that names its chart through chartRef", () => {
+  const release = object(
+    "HelmRelease",
+    "podinfo",
+    { chartRef: { kind: "OCIRepository", name: "podinfo" } },
+    {
+      conditions: [ready("Helm install succeeded")],
+      history: [{ chartVersion: "6.5.4", status: "deployed" }],
+    }
+  );
+  const repository = (conditions: Condition[]) =>
+    object(
+      "OCIRepository",
+      "podinfo",
+      { url: "oci://ghcr.io/stefanprodan/charts/podinfo" },
+      { conditions, artifact: { revision: "6.5.4@sha256:abc" } }
+    );
+  const read = (conditions: Condition[]) =>
+    fluxPicture(
+      [],
+      [release],
+      [{ kind: "OCIRepository", objects: [repository(conditions)] }],
+      []
+    );
+
+  /**
+   * Only `spec.chart` was read for a source, so a healthy release drew a red
+   * "none / nothing to apply from" and its OCIRepository "fetched · unused".
+   */
+  it("reads from the source chartRef names, which is then in use", () => {
+    const { reconcilers, sources } = read([ready("stored artifact")]);
+    expect(reconcilers[0].sourceRef).toMatchObject({
+      kind: "OCIRepository",
+      name: "podinfo",
+    });
+    expect(reconcilers[0].source).toBe(sources[0]);
+    expect(sources[0].findings).toEqual([]);
+    expect(sourceState(sources[0], t).text).toBe(t("empty", "fluxFetched"));
+  });
+
+  /** The stale-source case this page exists for, which a failing OCIRepository reported as freezing nobody. */
+  it("is frozen when that source stops fetching, and the source names it", () => {
+    const { reconcilers, sources } = read([notReady("Failed", "unauthorized")]);
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toEqual([
+      "frozen",
+    ]);
+    const failing = sources[0].findings[0];
+    expect(failing.kind === "fetchFailing" && failing.frozen).toEqual([
+      "podinfo",
+    ]);
+  });
+});
+
+describe("a source of a kind this page does not list", () => {
+  /**
+   * A Kustomization on an ExternalArtifact, a release on a HelmChart: the
+   * kind was never asked for, and a kind not among the refused ones read as
+   * listed and empty, a red "the source it names is not in this cluster".
+   */
+  it("is not read, rather than found missing", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization(
+          "apps",
+          { sourceRef: { kind: "ExternalArtifact", name: "bundle" } },
+          [ready("Applied")],
+          REVISION
+        ),
+      ],
+      []
+    );
+    expect(reconcilers[0].sourceKnown).toBe(false);
+    expect(reconcilers[0].findings).toEqual([]);
+  });
+});
+
+describe("a source nobody applies", () => {
+  it("is a finding, because nowhere else in the app could say so", () => {
+    const { sources } = picture(
+      [],
+      [gitRepository("orphan", [ready("stored artifact")], REVISION)]
+    );
+    expect(sources[0].findings.map((finding) => finding.kind)).toEqual([
+      "unused",
+    ]);
+  });
+
+  /**
+   * With HelmReleases refused, a HelmRepository only a release uses read as
+   * "fetched, unused" — a warning built on the list nobody could read.
+   */
+  it("is not claimed while a reconciler kind could not be listed", () => {
+    const { sources } = picture(
+      [],
+      [gitRepository("orphan", [ready("stored artifact")], REVISION)],
+      [],
+      [{ kind: "HelmRelease", crd: "helmreleases", reason: "forbidden" }]
+    );
+    expect(sources[0].findings).toEqual([]);
+    expect(sourceState(sources[0], t).text).not.toBe(
+      t("empty", "fluxFetchedUnused")
+    );
+  });
+});
+
+describe("a source whose kind could not be listed", () => {
+  /**
+   * A refused `gitrepositories` list came back empty, and every
+   * Kustomization naming one got a red "the source it names is not in this
+   * cluster" about a GitRepository that is there.
+   */
+  it("is not reported missing", () => {
+    const { reconcilers } = picture(
+      [kustomization("apps", {}, [ready("Applied")], REVISION)],
+      [],
+      [],
+      [{ kind: "GitRepository", crd: "gitrepositories", reason: "forbidden" }]
+    );
+    expect(reconcilers[0].sourceKnown).toBe(false);
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toEqual([]);
+  });
+
+  /** The same Kustomization with the list read and empty is missing its source. */
+  it("is reported missing when its kind was read", () => {
+    const { reconcilers } = picture(
+      [kustomization("apps", {}, [ready("Applied")], REVISION)],
+      []
+    );
+    expect(reconcilers[0].sourceKnown).toBe(true);
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toEqual([
+      "noSource",
+    ]);
+  });
+});
+
+describe("revisions", () => {
+  it("splits Flux's two spellings and shortens only the commit", () => {
+    expect(readRevision(REVISION)).toEqual({
+      raw: REVISION,
+      ref: "master",
+      commit: "eec06d1ea459af4cb4e10e806f8be7c7bd58b361",
+    });
+    expect(revisionText(readRevision(REVISION), t)).toBe("master@eec06d1");
+    expect(revisionText(readRevision("master/eec06d1ea459"), t)).toBe(
+      "master@eec06d1"
+    );
+    expect(revisionText(readRevision("6.5.4"), t)).toBe("6.5.4");
+  });
+});
+
+/**
+ * A GitRepository or HelmRepository may keep its credentials in `spec.url`,
+ * and the page and the shared file both draw what the model read. Fails if
+ * the model hands them the address as written, or loses the host and path.
+ */
+describe("a source address with a token in it", () => {
+  it("is read without what stands before the host", () => {
+    const { sources } = picture(
+      [],
+      [
+        object("GitRepository", "infra", {
+          url:
+            "https://oauth2:glpat-" +
+            "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git",
+        }),
+      ]
+    );
+    expect(sources[0].url).toBe("https://…@gitlab.example.com/org/repo.git");
+  });
+});

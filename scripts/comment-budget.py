@@ -27,7 +27,7 @@ MAX_DENSITY = 20  # per cent of added lines that may be comment
 SOURCE = re.compile(r"\.(rs|ts|tsx)$")
 COMMENT = ("//", "/*", "*", "#!")
 # A directive to a tool, not prose to a reader: weighed as neither.
-DIRECTIVE = re.compile(r"^\s*//\s*(@vitest-environment|eslint-disable|@ts-expect-error)\b")
+DIRECTIVE = re.compile(r"^\s*//\s*(@vitest-environment|(es|ox)lint-disable|@ts-expect-error)\b")
 # What a comment run has to be sitting on for the run to be a test's own.
 TEST_SUBJECT = re.compile(
     r"^\s*(#\[(tokio::)?test\]|#\[cfg\(test\)\]|(it|test|describe)\s*[(<]|mod tests)"

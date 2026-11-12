@@ -1,0 +1,41 @@
+{
+  "about": "The uid the events about a pod carry, as both halves read it: `events_uid` in src/tauri/src/resources/types/pod.rs and `eventsUidIn` in src/ui/hooks/useReadUid.ts. The kubelet knows a static pod by a hash of its manifest and records its events under that hash; the API server's mirror of the pod has a uid of its own and carries the hash in `kubernetes.io/config.mirror`, which is what `kubectl describe pod` searches events by. An event search by `metadata.uid` finds nothing for every control-plane pod of a kubeadm or kind cluster.",
+  "cases": [
+    {
+      "name": "a pod's events carry its own uid",
+      "pod": { "metadata": { "name": "web-1", "uid": "4afe41e6" } },
+      "uid": "4afe41e6"
+    },
+    {
+      "name": "a static pod's carry the hash in its mirror annotation",
+      "pod": {
+        "metadata": {
+          "name": "etcd-control-plane",
+          "uid": "9f0c2a11",
+          "annotations": {
+            "kubernetes.io/config.hash": "5f3c0d7e2b1a49868c7d6e5f4a3b2c1d",
+            "kubernetes.io/config.mirror": "5f3c0d7e2b1a49868c7d6e5f4a3b2c1d",
+            "kubernetes.io/config.source": "file"
+          }
+        }
+      },
+      "uid": "5f3c0d7e2b1a49868c7d6e5f4a3b2c1d"
+    },
+    {
+      "name": "an empty mirror annotation names no hash",
+      "pod": {
+        "metadata": {
+          "name": "web-1",
+          "uid": "4afe41e6",
+          "annotations": { "kubernetes.io/config.mirror": "" }
+        }
+      },
+      "uid": "4afe41e6"
+    },
+    {
+      "name": "a pod read without a uid has none",
+      "pod": { "metadata": { "name": "web-1" } },
+      "uid": null
+    }
+  ]
+}

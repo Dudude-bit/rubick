@@ -1,0 +1,81 @@
+{
+  "about": "A path from this computer as a screen prints it while Redact names and paths is on: PathIdentity::hide in src/tauri/src/diagnostics/redact.rs (the copied report) and hidePath in src/ui/lib/hide-paths.ts (every other screen). Each root is replaced where the name it ends does not go on; the login name only where it stands as a path segment.",
+  "cases": [
+    {
+      "identity": {
+        "roots": [{ "root": "/home/marco", "standIn": "~" }],
+        "user": "marco"
+      },
+      "text": "/home/marco/.local/bin/helm",
+      "hidden": "~/.local/bin/helm"
+    },
+    {
+      "identity": {
+        "roots": [{ "root": "/home/marco", "standIn": "~" }],
+        "user": "marco"
+      },
+      "text": "/home/marco",
+      "hidden": "~"
+    },
+    {
+      "identity": {
+        "roots": [{ "root": "/home/marco", "standIn": "~" }],
+        "user": "marco"
+      },
+      "text": "Failed to read kubeconfig from /home/marco/.kube/config.",
+      "hidden": "Failed to read kubeconfig from ~/.kube/config."
+    },
+    {
+      "identity": {
+        "roots": [{ "root": "/home/marco", "standIn": "~" }],
+        "user": "marco"
+      },
+      "text": "/home/marcos/bin and /data/marco/.kube/config",
+      "hidden": "/home/marcos/bin and /data/<user>/.kube/config"
+    },
+    {
+      "identity": {
+        "roots": [{ "root": "/home/dev", "standIn": "~" }],
+        "user": "dev"
+      },
+      "text": "the dev cluster, /srv/devbox/bin",
+      "hidden": "the dev cluster, /srv/devbox/bin"
+    },
+    {
+      "identity": {
+        "roots": [
+          {
+            "root": "/tmp/rubick-fix/live/lena/xdg/config",
+            "standIn": "$XDG_CONFIG_HOME"
+          },
+          { "root": "/tmp/rubick-fix/live/lena/home", "standIn": "~" },
+          { "root": "/home/belliel", "standIn": "~" }
+        ],
+        "user": "belliel"
+      },
+      "text": "Где искали: /usr/bin/helm, /tmp/rubick-fix/live/lena/home/.local/bin/helm, /home/belliel/.cargo/bin/helm, /tmp/rubick-fix/live/lena/xdg/config/k8s-gui/config.toml",
+      "hidden": "Где искали: /usr/bin/helm, ~/.local/bin/helm, ~/.cargo/bin/helm, $XDG_CONFIG_HOME/k8s-gui/config.toml"
+    },
+    {
+      "identity": {
+        "roots": [{ "root": "C:\\Users\\marco", "standIn": "~" }],
+        "user": "marco"
+      },
+      "text": "C:\\Users\\marco\\.kube\\config, D:\\marco\\bin",
+      "hidden": "~\\.kube\\config, D:\\<user>\\bin"
+    },
+    {
+      "identity": {
+        "roots": [{ "root": "/home/лена", "standIn": "~" }],
+        "user": "лена"
+      },
+      "text": "/home/лена/bin, /data/лена/x, /data/ленаб/x",
+      "hidden": "~/bin, /data/<user>/x, /data/ленаб/x"
+    },
+    {
+      "identity": { "roots": [], "user": null },
+      "text": "/home/marco/.kube/config",
+      "hidden": "/home/marco/.kube/config"
+    }
+  ]
+}

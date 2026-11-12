@@ -1,0 +1,1884 @@
+// @vitest-environment jsdom
+import {
+  afterEach,
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+} from "vite-plus/test";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+  type QueryKey,
+} from "@tanstack/react-query";
+import { createElement, type ReactNode } from "react";
+
+// ----- Mocks -----
+
+let callCounter = 0;
+const listenCalls: Array<{ event: string; index: number }> = [];
+const subscribedCalls: Array<{ streamId: string; index: number }> = [];
+
+const listeners: Record<
+  string,
+  ((event: { payload: unknown }) => void) | undefined
+> = {};
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    async (event: string, handler: (e: { payload: unknown }) => void) => {
+      listenCalls.push({ event, index: callCounter++ });
+      listeners[event] = handler;
+      return () => {
+        delete listeners[event];
+      };
+    }
+  ),
+}));
+
+const subscribeMock = vi.fn(async () => "stream-cm-1");
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    resourceWatchSubscribed: vi.fn(async (streamId: string) => {
+      subscribedCalls.push({ streamId, index: callCounter++ });
+    }),
+    unsubscribeResourceWatch: vi.fn(async () => undefined),
+  },
+}));
+
+import { commands } from "@/lib/commands";
+import {
+  applyChanges,
+  useResourceWatch,
+  type Keep,
+  type Kept,
+} from "./useResourceWatch";
+import { useWatchedList } from "./useWatchedList";
+import { testQueryClient } from "@/test/render";
+import { credentialsRenewed } from "@/lib/credentials";
+import { LAG_WAIT_MS } from "@/lib/events";
+import { queryKeys } from "@/lib/query-keys";
+import { useWindowActivity } from "@/lib/window-activity";
+import type { Scoped } from "@/generated/types";
+
+// ----- Test harness -----
+
+type Item = { name: string; namespace?: string | null; data?: number };
+
+// One reference for the whole file, the way every consumer passes it: a
+// key rebuilt on each render re-subscribes the watch on each render.
+const KEY = ["configmaps", "default"];
+
+// The cache holds a list's `Scoped` answer; these read and seed its rows.
+function rowsIn(client: QueryClient): Item[] | undefined {
+  return client.getQueryData<Scoped<Item>>(KEY)?.rows;
+}
+
+function seed(client: QueryClient, rows: Item[]) {
+  client.setQueryData<Scoped<Item>>(KEY, { rows, unread: [] });
+}
+
+function makeWrapper(client: QueryClient) {
+  return ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client }, children);
+}
+
+type Op = "applied" | "deleted" | "restarted" | "synced";
+
+function emitBatch(
+  streamId: string,
+  changes: Array<{ op: Op; resource: Item | null }>
+) {
+  const handler = listeners["resource-event"];
+  if (!handler) throw new Error("resource-event handler not registered");
+  handler({
+    payload: { stream_id: streamId, changes, error: null },
+  });
+}
+
+function emit(streamId: string, op: Op, resource: Item | null) {
+  emitBatch(streamId, [{ op, resource }]);
+}
+
+function emitFailed(streamId: string, error: string) {
+  const handler = listeners["resource-event"];
+  if (!handler) throw new Error("resource-event handler not registered");
+  handler({
+    payload: {
+      stream_id: streamId,
+      changes: [{ op: "failed", resource: null }],
+      error,
+    },
+  });
+}
+
+describe("useResourceWatch", () => {
+  beforeEach(() => {
+    listenCalls.length = 0;
+    subscribedCalls.length = 0;
+    callCounter = 0;
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  async function start(client: QueryClient) {
+    const hook = renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    return hook;
+  }
+
+  /** Rebuilding the index rescans 10,000 keys; cloning rows invalidates untouched row memos. */
+  it("updates one of 10,000 rows without rereading untouched keys or replacing their objects", async () => {
+    let keyReads = 0;
+    const rows = Array.from({ length: 10_000 }, (_, index) => ({
+      get name() {
+        keyReads++;
+        return `pod-${index}`;
+      },
+      namespace: "default",
+      data: 0,
+    }));
+    const client = new QueryClient();
+    seed(client, rows);
+    await start(client);
+    emit("stream-cm-1", "applied", {
+      name: "pod-9999",
+      namespace: "default",
+      data: 1,
+    });
+
+    for (const data of [1, 2]) {
+      const before = rowsIn(client)!;
+      keyReads = 0;
+      emit("stream-cm-1", "applied", {
+        name: "pod-1234",
+        namespace: "default",
+        data,
+      });
+      const after = rowsIn(client)!;
+      expect(after).not.toBe(before);
+      expect(after).toHaveLength(10_000);
+      expect(after[1234]).not.toBe(before[1234]);
+      expect(after[1234].data).toBe(data);
+      expect(before[1234].data).toBe(data - 1);
+      for (let index = 0; index < before.length; index++) {
+        if (index !== 1234) expect(after[index]).toBe(before[index]);
+      }
+      expect(keyReads).toBeLessThan(10);
+    }
+  });
+
+  /** Publishing staged rows early would expose an incomplete collection to cache readers. */
+  it("replaces the complete collection in one atomic resync write", async () => {
+    const client = new QueryClient();
+    const before = [{ name: "old", data: 1 }];
+    seed(client, before);
+    await start(client);
+    const writes: Item[][] = [];
+    const off = client.getQueryCache().subscribe((event) => {
+      if (event.type === "updated" && event.action.type === "success") {
+        writes.push(rowsIn(client)!);
+      }
+    });
+
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "applied", { name: "first" });
+    emit("stream-cm-1", "applied", { name: "second" });
+    expect(rowsIn(client)).toBe(before);
+    expect(writes).toEqual([]);
+    emit("stream-cm-1", "synced", null);
+    expect(writes).toEqual([[{ name: "first" }, { name: "second" }]]);
+    emit("stream-cm-1", "applied", { name: "second", data: 2 });
+    expect(rowsIn(client)).toEqual([
+      { name: "first" },
+      { name: "second", data: 2 },
+    ]);
+    off();
+  });
+
+  /**
+   * A polled read left a namespace unread; the watch then synced every
+   * namespace of its stream. Keeping the old `unread` would leave the page
+   * saying "could not read staging" over staging's rows.
+   */
+  it("clears the unread namespaces once a resync has every namespace's rows", async () => {
+    const client = new QueryClient();
+    const missing = {
+      namespace: "staging",
+      code: "PERMISSION_DENIED",
+      message: "",
+    };
+    client.setQueryData<Scoped<Item>>(KEY, {
+      rows: [{ name: "a", namespace: "prod" }],
+      unread: [missing],
+    });
+    await start(client);
+
+    emit("stream-cm-1", "applied", { name: "b", namespace: "prod" });
+    expect(client.getQueryData<Scoped<Item>>(KEY)?.unread).toEqual([missing]);
+
+    emitBatch("stream-cm-1", [
+      { op: "restarted", resource: null },
+      { op: "applied", resource: { name: "a", namespace: "prod" } },
+      { op: "applied", resource: { name: "s", namespace: "staging" } },
+      { op: "synced", resource: null },
+    ]);
+    const answer = client.getQueryData<Scoped<Item>>(KEY);
+    expect(answer?.rows.map((row) => row.name)).toEqual(["a", "s"]);
+    expect(answer?.unread).toEqual([]);
+  });
+
+  /**
+   * Dana saw reports-29855212-snmdw land under search-d76577dcb at the
+   * bottom of shop until she left the page. Fails if a new row stops landing
+   * where the list puts it, if any other row is replaced, or if finding the
+   * place reads more than a handful of the 10,000 keys.
+   */
+  it("puts one new pod of 10,000 in its sorted place and leaves every other row as it was", async () => {
+    let keyReads = 0;
+    const rows = Array.from({ length: 10_000 }, (_, index) => {
+      const name = `pod-${String(index).padStart(5, "0")}`;
+      return {
+        get name() {
+          keyReads++;
+          return name;
+        },
+        namespace: "shop",
+      };
+    });
+    // The app's own client: structural sharing is where a shifted row lost
+    // its identity.
+    const client = testQueryClient();
+    seed(client, rows);
+    await start(client);
+    // The first event indexes the list, which reads every key once.
+    emit("stream-cm-1", "applied", { name: "pod-09999", namespace: "shop" });
+    const before = rowsIn(client)!;
+    keyReads = 0;
+    emit("stream-cm-1", "applied", { name: "pod-04999x", namespace: "shop" });
+    const after = rowsIn(client)!;
+    expect(after).toHaveLength(10_001);
+    expect(after[5000].name).toBe("pod-04999x");
+    for (let index = 0; index < before.length; index++) {
+      expect(after[index < 5000 ? index : index + 1]).toBe(before[index]);
+    }
+    expect(keyReads).toBeLessThan(40);
+  });
+
+  /** Fails if a new row stops landing inside its own namespace's rows. */
+  it("puts a new row among its own namespace's rows", async () => {
+    const client = new QueryClient();
+    seed(client, [
+      { name: "cart-9df89489c-kzfc6", namespace: "shop" },
+      { name: "search-d76577dcb-zbtv9", namespace: "shop" },
+      { name: "checkout-7db8bc9ffd-w5b7p", namespace: "team-checkout" },
+    ]);
+    await start(client);
+    emit("stream-cm-1", "applied", {
+      name: "reports-29855212-snmdw",
+      namespace: "shop",
+    });
+    expect(rowsIn(client)?.map((row) => row.name)).toEqual([
+      "cart-9df89489c-kzfc6",
+      "reports-29855212-snmdw",
+      "search-d76577dcb-zbtv9",
+      "checkout-7db8bc9ffd-w5b7p",
+    ]);
+  });
+
+  /** Stale positions after deletion would update the wrong row, or put a row added again anywhere but its place. */
+  it("keeps updates in place and puts a deleted row back in its place when it is added again", async () => {
+    const client = new QueryClient();
+    seed(
+      client,
+      ["a", "b", "c"].map((name) => ({ name }))
+    );
+    await start(client);
+    emitBatch("stream-cm-1", [
+      { op: "applied", resource: { name: "b", data: 1 } },
+      { op: "deleted", resource: { name: "a" } },
+      { op: "applied", resource: { name: "a", data: 2 } },
+    ]);
+    expect(rowsIn(client)).toEqual([
+      { name: "a", data: 2 },
+      { name: "b", data: 1 },
+      { name: "c" },
+    ]);
+    emit("stream-cm-1", "deleted", { name: "c" });
+    emit("stream-cm-1", "applied", { name: "c", data: 3 });
+    emit("stream-cm-1", "applied", { name: "b", data: 4 });
+    expect(rowsIn(client)).toEqual([
+      { name: "a", data: 2 },
+      { name: "b", data: 4 },
+      { name: "c", data: 3 },
+    ]);
+  });
+
+  /** Newest first by `data`, the shape the events feed keeps. */
+  const newest = (a: Item, b: Item) =>
+    (a.data ?? 0) !== (b.data ?? 0)
+      ? (a.data ?? 0) > (b.data ?? 0)
+      : a.name < b.name;
+
+  async function startOrdered(
+    client: QueryClient,
+    order: (a: Item, b: Item) => boolean
+  ) {
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          order,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+  }
+
+  /**
+   * An event that happens again keeps its name and gets a newer time, and
+   * the feed is newest first. Fails if the change is written where the row
+   * was, which leaves the newest event at the bottom, or if any row it
+   * passes is replaced.
+   */
+  it("moves a row its change moves in a list of its own order and leaves the others as they were", async () => {
+    const client = testQueryClient();
+    seed(client, [
+      { name: "c", data: 3 },
+      { name: "b", data: 2 },
+      { name: "a", data: 1 },
+    ]);
+    await startOrdered(client, newest);
+    const before = rowsIn(client)!;
+
+    emit("stream-cm-1", "applied", { name: "a", data: 4 });
+    const after = rowsIn(client)!;
+    expect(after.map((row) => row.name)).toEqual(["a", "c", "b"]);
+    expect(after[1]).toBe(before[0]);
+    expect(after[2]).toBe(before[1]);
+
+    emitBatch("stream-cm-1", [
+      { op: "applied", resource: { name: "b", data: 5 } },
+      { op: "applied", resource: { name: "d", data: 0 } },
+      { op: "deleted", resource: { name: "c", data: 3 } },
+    ]);
+    expect(rowsIn(client)!.map((row) => row.name)).toEqual(["b", "a", "d"]);
+  });
+
+  /** Fails if a resync of a list kept in its own order lands in the API's order. */
+  it("puts a resync in the list's own order", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    await startOrdered(client, newest);
+
+    emitBatch("stream-cm-1", [
+      { op: "restarted", resource: null },
+      { op: "applied", resource: { name: "a", data: 1 } },
+      { op: "applied", resource: { name: "b", data: 3 } },
+      { op: "applied", resource: { name: "c", data: 2 } },
+      { op: "synced", resource: null },
+    ]);
+    expect(rowsIn(client)!.map((row) => row.name)).toEqual(["b", "c", "a"]);
+  });
+
+  /**
+   * A watch that never started sent nothing, and a list that waits on it
+   * waits for ever under "live". Fails if a subscribe that throws is only
+   * logged.
+   */
+  it("tells the caller when no watch could be started", async () => {
+    const client = new QueryClient();
+    const onError = vi.fn();
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: () => Promise.reject(new Error("no client for prod")),
+          queryKey: KEY,
+          onError,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.stringContaining("no client for prod")
+      )
+    );
+  });
+
+  /** Polling or another observer can replace the array and invalidate every cached position. */
+  it("rebuilds positions after another writer replaces the cached list", async () => {
+    const client = new QueryClient();
+    seed(client, [{ name: "a" }, { name: "b" }]);
+    await start(client);
+    emit("stream-cm-1", "applied", { name: "a", data: 1 });
+    seed(client, [{ name: "b" }, { name: "c" }]);
+    emit("stream-cm-1", "applied", { name: "b", data: 2 });
+    emit("stream-cm-1", "deleted", { name: "c" });
+    expect(rowsIn(client)).toEqual([{ name: "b", data: 2 }]);
+  });
+
+  it("registers resource-event listener before calling resourceWatchSubscribed", async () => {
+    const client = new QueryClient();
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    const lc = listenCalls.find((c) => c.event === "resource-event");
+    expect(lc, "resource-event listener was never registered").toBeDefined();
+    expect(lc!.index).toBeLessThan(subscribedCalls[0].index);
+  });
+
+  it("does not subscribe while disabled", async () => {
+    const client = new QueryClient();
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: false,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(subscribeMock).not.toHaveBeenCalled();
+    expect(subscribedCalls).toHaveLength(0);
+  });
+
+  it("appends an applied event for an unseen item", async () => {
+    const client = new QueryClient();
+    seed(client, [{ name: "a", namespace: "default" }]);
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emit("stream-cm-1", "applied", {
+      name: "b",
+      namespace: "default",
+      data: 1,
+    });
+
+    await waitFor(() => {
+      const list = rowsIn(client);
+      expect(list).toHaveLength(2);
+    });
+
+    const list = rowsIn(client)!;
+    expect(list.map((i) => i.name)).toEqual(["a", "b"]);
+  });
+
+  it("replaces an existing item on applied", async () => {
+    const client = new QueryClient();
+    seed(client, [{ name: "a", namespace: "default", data: 1 }]);
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emit("stream-cm-1", "applied", {
+      name: "a",
+      namespace: "default",
+      data: 999,
+    });
+
+    await waitFor(() => {
+      const list = rowsIn(client)!;
+      expect(list[0].data).toBe(999);
+    });
+
+    expect(rowsIn(client)).toHaveLength(1);
+  });
+
+  it("removes the matching item on deleted", async () => {
+    const client = new QueryClient();
+    seed(client, [
+      { name: "a", namespace: "default" },
+      { name: "b", namespace: "default" },
+    ]);
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emit("stream-cm-1", "deleted", { name: "a", namespace: "default" });
+
+    await waitFor(() => {
+      const list = rowsIn(client)!;
+      expect(list.map((i) => i.name)).toEqual(["b"]);
+    });
+  });
+
+  /**
+   * A resync used to empty the cache and refill it from the burst that
+   * follows. The list query is long since loaded, so nothing renders a
+   * skeleton and the table draws "No resources of this type in the
+   * current scope" over a cluster that is fine — for as long as the
+   * burst takes. The rows we already have are the last complete state
+   * and stay until the new one is complete.
+   */
+  it("keeps the rows it has for the length of a resync", async () => {
+    const client = new QueryClient();
+    seed(client, [
+      { name: "a", namespace: "default" },
+      { name: "b", namespace: "default" },
+    ]);
+
+    const { result } = renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emitBatch("stream-cm-1", [
+      { op: "restarted", resource: null },
+      { op: "applied", resource: { name: "a", namespace: "default", data: 2 } },
+    ]);
+
+    await waitFor(() => expect(result.current.resyncing).toBe(true));
+    expect(rowsIn(client)!.map((i) => i.name)).toEqual(["a", "b"]);
+
+    // The burst ends without `b`, which is how a watch says it is gone.
+    emitBatch("stream-cm-1", [
+      { op: "applied", resource: { name: "c", namespace: "default" } },
+      { op: "synced", resource: null },
+    ]);
+
+    await waitFor(() => expect(result.current.resyncing).toBe(false));
+    const list = rowsIn(client)!;
+    expect(list.map((i) => i.name)).toEqual(["a", "c"]);
+    expect(list[0].data).toBe(2);
+  });
+
+  /**
+   * One batch is one cache write, whatever it holds. Per-event writes
+   * were per-event renders — a thousand-object init burst rebuilt the
+   * whole table a thousand times.
+   */
+  it("applies a whole batch in a single cache write", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    const writes = vi.spyOn(client, "setQueryData");
+    emitBatch("stream-cm-1", [
+      { op: "applied", resource: { name: "a", namespace: "default" } },
+      { op: "applied", resource: { name: "b", namespace: "default" } },
+      { op: "applied", resource: { name: "c", namespace: "default" } },
+      { op: "deleted", resource: { name: "a", namespace: "default" } },
+    ]);
+
+    await waitFor(() => {
+      expect(rowsIn(client)!.map((i) => i.name)).toEqual(["b", "c"]);
+    });
+    expect(writes).toHaveBeenCalledTimes(1);
+    writes.mockRestore();
+  });
+
+  it("ignores events for a different stream id", async () => {
+    const client = new QueryClient();
+    seed(client, [{ name: "a", namespace: "default" }]);
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    // Event from a different stream — must not touch the cache.
+    emit("some-other-stream", "deleted", { name: "a", namespace: "default" });
+
+    await new Promise((r) => setTimeout(r, 30));
+    expect(rowsIn(client)).toHaveLength(1);
+  });
+
+  it("calls onError on a failed event without mutating the cache", async () => {
+    const client = new QueryClient();
+    seed(client, [{ name: "a", namespace: "default" }]);
+    const onError = vi.fn();
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emitFailed("stream-cm-1", "watch verb forbidden");
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith("watch verb forbidden");
+    });
+
+    // Failed events MUST NOT touch the cache. The consumer is the one
+    // that decides what to do (toast + re-enable polling, etc.).
+    expect(rowsIn(client)).toEqual([{ name: "a", namespace: "default" }]);
+  });
+
+  /**
+   * The bridge dropping events is this watch failing: the list is short, not
+   * stale. The payload is `{ missed }`; reading it as the bare number it
+   * once was prints "dropped [object Object] updates".
+   */
+  it("reports a lagging event bridge as a failure, with how many were dropped", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    const onError = vi.fn();
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(listeners["event-bridge-lagged"]).toBeDefined();
+    });
+    listeners["event-bridge-lagged"]?.({
+      payload: { channel: "event-bridge-lagged", missed: 37 },
+    });
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining("dropped 37 updates")
+    );
+  });
+
+  describe("a stream the bridge dropped events of", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      subscribeMock.mockImplementation(async () => "stream-cm-1");
+    });
+
+    const notice = () =>
+      listeners["event-bridge-lagged"]?.({
+        payload: { channel: "event-bridge-lagged", missed: 1200 },
+      });
+    const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+
+    async function lagged(client: QueryClient) {
+      const onError = vi.fn();
+      const onRecovered = vi.fn();
+      let streams = 0;
+      subscribeMock.mockImplementation(async () => `stream-cm-${++streams}`);
+      renderHook(
+        () =>
+          useResourceWatch<Item>({
+            enabled: true,
+            subscribe: subscribeMock,
+            queryKey: KEY,
+            onError,
+            onRecovered,
+          }),
+        { wrapper: makeWrapper(client) }
+      );
+      await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+      listeners["event-bridge-lagged"]?.({
+        payload: { channel: "event-bridge-lagged", missed: 1200 },
+      });
+      expect(onError).toHaveBeenCalledTimes(1);
+      return { onRecovered };
+    }
+
+    /** The first notice is answered at once; this is the watch after it, listening on its second stream. */
+    async function laggedAgain(client: QueryClient) {
+      const first = await lagged(client);
+      await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      notice();
+      return first;
+    }
+
+    /**
+     * Every notice had every mounted watch list its collection again at
+     * once, and through a lagging bridge those lists are the next notice.
+     * Fails if a notice that follows another is answered before its wait,
+     * if notices during the wait each add a list, or if the stream that
+     * lost events is left sending through the bridge meanwhile.
+     */
+    it("waits before listing again when one notice follows another", async () => {
+      const client = new QueryClient();
+      seed(client, [{ name: "a" }]);
+      await laggedAgain(client);
+      notice();
+      notice();
+
+      expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith(
+        "stream-cm-2"
+      );
+      await advance(LAG_WAIT_MS - 1);
+      expect(subscribeMock).toHaveBeenCalledTimes(2);
+
+      await advance(1);
+      expect(subscribeMock).toHaveBeenCalledTimes(3);
+      expect(subscribedCalls.at(-1)?.streamId).toBe("stream-cm-3");
+    });
+
+    /**
+     * A renewal during the wait subscribes the watch again on its own.
+     * Fails if the wait then ends in one more list of the same collection.
+     */
+    it("does not list twice when something else subscribed the watch again during the wait", async () => {
+      const client = new QueryClient();
+      seed(client, [{ name: "a" }]);
+      await laggedAgain(client);
+
+      act(() => credentialsRenewed());
+      await advance(LAG_WAIT_MS);
+      expect(subscribeMock).toHaveBeenCalledTimes(3);
+    });
+
+    /**
+     * The stream's remaining events arrived milliseconds after the lag and
+     * the first of them ended the failure: the list was "live" again before
+     * its first poll, short of every change the bridge had dropped. Fails if
+     * an event of that stream is taken for the watch recovering, or applied.
+     */
+    it("does not take that stream's next event for a recovery", async () => {
+      const client = new QueryClient();
+      seed(client, [{ name: "a" }, { name: "b" }]);
+      const { onRecovered } = await lagged(client);
+
+      emit("stream-cm-1", "deleted", { name: "a" });
+      expect(onRecovered).not.toHaveBeenCalled();
+      expect(rowsIn(client)).toEqual([{ name: "a" }, { name: "b" }]);
+    });
+
+    /**
+     * Nothing sends a dropped change again, so a row whose delete was
+     * dropped stayed for good. Fails if the collection is not listed again
+     * by a new stream, if the old one is left running, or if the list is
+     * not live again once the new one answers.
+     */
+    it("lists the collection again on a new stream, which is what ends the failure", async () => {
+      const client = new QueryClient();
+      seed(client, [{ name: "a" }, { name: "b" }]);
+      const { onRecovered } = await lagged(client);
+
+      await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+      expect(subscribedCalls[1].streamId).toBe("stream-cm-2");
+      expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith(
+        "stream-cm-1"
+      );
+      expect(onRecovered).not.toHaveBeenCalled();
+
+      emitBatch("stream-cm-2", [
+        { op: "restarted", resource: null },
+        { op: "applied", resource: { name: "b" } },
+        { op: "applied", resource: { name: "c" } },
+        { op: "synced", resource: null },
+      ]);
+      expect(onRecovered).toHaveBeenCalledTimes(1);
+      expect(rowsIn(client)).toEqual([{ name: "b" }, { name: "c" }]);
+    });
+  });
+
+  it("calls onRecovered exactly once when a non-failed event follows a failed one", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    const onError = vi.fn();
+    const onRecovered = vi.fn();
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError,
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    // Watch fails, then recovers, then keeps receiving applied events.
+    emitFailed("stream-cm-1", "transient");
+    emit("stream-cm-1", "applied", { name: "x", namespace: "default" });
+    emit("stream-cm-1", "applied", { name: "y", namespace: "default" });
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onRecovered).toHaveBeenCalledTimes(1);
+    });
+
+    // Cache reflects both applied events.
+    expect(rowsIn(client)!.map((i) => i.name)).toEqual(["x", "y"]);
+  });
+
+  /**
+   * A list's key is built again each time its scope changes, so the scope a
+   * reader left and came back to is the same stream under a new array. Its
+   * failure was remembered by the array, the new stream never counted as
+   * failing, and the list that was told "failed" was never told "recovered":
+   * it polled beside a healthy watch for as long as the page stayed open.
+   * Fails if the stream of a scope come back to does not end the failure
+   * that scope's last stream reported.
+   */
+  it("ends the failure of a scope the reader left and came back to", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    const onError = vi.fn();
+    const onRecovered = vi.fn();
+    subscribeMock
+      .mockResolvedValueOnce("stream-a")
+      .mockResolvedValueOnce("stream-b")
+      .mockResolvedValueOnce("stream-a-again");
+    const { rerender } = renderHook(
+      ({ queryKey }) =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey,
+          onError,
+          onRecovered,
+        }),
+      {
+        wrapper: makeWrapper(client),
+        initialProps: { queryKey: ["configmaps", "default"] as QueryKey },
+      }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    emitFailed("stream-a", "connection reset");
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+
+    rerender({ queryKey: ["configmaps", "other"] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    rerender({ queryKey: ["configmaps", "default"] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(3));
+    expect(onRecovered).not.toHaveBeenCalled();
+
+    emit("stream-a-again", "applied", { name: "x", namespace: "default" });
+
+    await waitFor(() => expect(onRecovered).toHaveBeenCalledTimes(1));
+  });
+
+  /** The same round trip as the list sees it: polling, then live again. Fails if the list stays on the timer beside a watch that answers. */
+  it("puts a list back on its watch once the scope it came back to answers", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    subscribeMock
+      .mockResolvedValueOnce("stream-a")
+      .mockResolvedValueOnce("stream-b")
+      .mockResolvedValueOnce("stream-a-again");
+    const { result, rerender } = renderHook(
+      ({ queryKey }) =>
+        useWatchedList<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey,
+          detail: () => [],
+          reportFailure: () => {},
+        }),
+      {
+        wrapper: makeWrapper(client),
+        initialProps: { queryKey: ["configmaps", "default"] as QueryKey },
+      }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    emitFailed("stream-a", "connection reset");
+    await waitFor(() => expect(result.current.live).toBe(false));
+
+    rerender({ queryKey: ["configmaps", "other"] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    rerender({ queryKey: ["configmaps", "default"] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(3));
+    expect(result.current).toMatchObject({ live: false, watchFailed: true });
+
+    emit("stream-a-again", "applied", { name: "x", namespace: "default" });
+
+    await waitFor(() =>
+      expect(result.current).toMatchObject({ live: true, refresh: false })
+    );
+  });
+
+  /**
+   * The marker kube sends before every list attempt is not the cluster
+   * answering: a watch the cluster refuses emits one between every pair of
+   * failures. Recovering on it hands the list back to a watch that does not
+   * work, stops the polling that was standing in for it, and shows a resync
+   * that never syncs.
+   */
+  it("does not treat the restart marker of a refused watch as a recovery", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    const onError = vi.fn();
+    const onRecovered = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError,
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emitFailed("stream-cm-1", "pods is forbidden");
+    // Three more attempts, each announced and each refused.
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "restarted", null);
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+    expect(onRecovered).not.toHaveBeenCalled();
+    expect(result.current.resyncing).toBe(false);
+
+    // The list a reader would be shown is still the one polling fills, and
+    // the first real answer is what ends the failure.
+    emit("stream-cm-1", "applied", { name: "x", namespace: "default" });
+    await waitFor(() => {
+      expect(onRecovered).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * The marker must not end the failure — and it must still do its work.
+   * Returning early on it skipped the staging map the resync is collected
+   * into, so the rows that went away while the watch was down stayed in the
+   * cache after it came back: `synced` had nothing to commit.
+   */
+  it("commits the resync that follows a failure, dropping what went away", async () => {
+    const client = new QueryClient();
+    seed(client, [
+      { name: "gone", namespace: "default" },
+      { name: "stays", namespace: "default" },
+    ]);
+    const onRecovered = vi.fn();
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError: vi.fn(),
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emitFailed("stream-cm-1", "pods is forbidden");
+    // The watch comes back: the marker, the list it re-read, the commit.
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "applied", { name: "stays", namespace: "default" });
+    emit("stream-cm-1", "synced", null);
+
+    await waitFor(() => {
+      expect(onRecovered).toHaveBeenCalledTimes(1);
+    });
+    expect(rowsIn(client)!.map((i) => i.name)).toEqual(["stays"]);
+  });
+
+  it("calls onRecovered again on a second failure→recovery cycle", async () => {
+    const client = new QueryClient();
+    const onRecovered = vi.fn();
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError: vi.fn(),
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emitFailed("stream-cm-1", "first");
+    emit("stream-cm-1", "applied", { name: "a" });
+    emitFailed("stream-cm-1", "second");
+    emit("stream-cm-1", "applied", { name: "b" });
+
+    await waitFor(() => {
+      expect(onRecovered).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  /**
+   * A renewal or a re-enable subscribes again under the same key. The new
+   * stream began as "not failed", so its first answer recovered nothing and
+   * the list kept polling beside a watch that worked, marked not live.
+   */
+  it("recovers a failed watch when a new stream under the same key answers", async () => {
+    const client = new QueryClient();
+    const onRecovered = vi.fn();
+    subscribeMock
+      .mockResolvedValueOnce("stream-cm-1")
+      .mockResolvedValueOnce("stream-cm-2");
+
+    const { rerender } = renderHook(
+      ({ enabled }) =>
+        useResourceWatch<Item>({
+          enabled,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError: vi.fn(),
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client), initialProps: { enabled: true } }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    emitFailed("stream-cm-1", "Unauthorized");
+
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    emit("stream-cm-2", "applied", { name: "a" });
+
+    await waitFor(() => expect(onRecovered).toHaveBeenCalledTimes(1));
+  });
+
+  /** A new key is a new stream, which owes no recovery for the last one. */
+  it("starts a stream under a new key without the last key's failure", async () => {
+    const client = new QueryClient();
+    const onRecovered = vi.fn();
+    subscribeMock
+      .mockResolvedValueOnce("stream-cm-1")
+      .mockResolvedValueOnce("stream-cm-2");
+    const other = ["configmaps", "prod"];
+
+    const { rerender, result } = renderHook(
+      ({ queryKey }) =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey,
+          onError: vi.fn(),
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client), initialProps: { queryKey: KEY } }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    emitFailed("stream-cm-1", "Unauthorized");
+
+    rerender({ queryKey: other });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    emit("stream-cm-2", "restarted", null);
+
+    await waitFor(() => expect(result.current.resyncing).toBe(true));
+    expect(onRecovered).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A watch that fails mid-resync never sends the `synced` that ends it.
+   * Left resyncing, a surface with nothing to show waits on a skeleton
+   * that can never resolve — and the half-delivered burst must not be
+   * committed either, or rows that still exist are deleted from a list
+   * that has already stopped being live.
+   */
+  it("abandons a resync the watch failed in the middle of", async () => {
+    const client = new QueryClient();
+    seed(client, [{ name: "a", namespace: "default" }]);
+
+    const { result } = renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError: vi.fn(),
+          onRecovered: vi.fn(),
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emitBatch("stream-cm-1", [
+      { op: "restarted", resource: null },
+      { op: "applied", resource: { name: "b", namespace: "default" } },
+    ]);
+    await waitFor(() => expect(result.current.resyncing).toBe(true));
+
+    emitFailed("stream-cm-1", "connection reset");
+    await waitFor(() => expect(result.current.resyncing).toBe(false));
+
+    // A `synced` that arrives after the failure has nothing to commit.
+    emit("stream-cm-1", "synced", null);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(rowsIn(client)!.map((i) => i.name)).toEqual(["a"]);
+  });
+
+  describe("a read of the list that lands after the watch changed it", () => {
+    const BEFORE: Item[] = [{ name: "a" }, { name: "b" }, { name: "c" }];
+
+    /** A read of the list left now, answered when the test says. */
+    function reading(client: QueryClient) {
+      let answer: (rows: Item[]) => void = () => {};
+      const landed = client.fetchQuery({
+        queryKey: KEY,
+        queryFn: () =>
+          new Promise<Scoped<Item>>((resolve) => {
+            answer = (rows) => resolve({ rows, unread: [] });
+          }),
+      });
+      return { answer: (rows: Item[]) => (answer(rows), landed) };
+    }
+
+    /**
+     * Dana deleted a pod with kubectl while the Pods list was read again:
+     * the watch took the row away, the read's answer, listed before the
+     * delete, put it back under "live", and no event ever removed it. Fails
+     * if a read's answer undoes what the watch changed while it was out, or
+     * if the watch loses its rows' places in that answer.
+     */
+    it("keeps what the watch deleted, changed and added while the read was out", async () => {
+      const client = new QueryClient();
+      seed(client, BEFORE);
+      await start(client);
+      const read = reading(client);
+      emit("stream-cm-1", "deleted", { name: "a" });
+      emit("stream-cm-1", "applied", { name: "b", data: 2 });
+      emit("stream-cm-1", "applied", { name: "d" });
+
+      await read.answer(BEFORE);
+      expect(rowsIn(client)).toEqual([
+        { name: "b", data: 2 },
+        { name: "c" },
+        { name: "d" },
+      ]);
+
+      emit("stream-cm-1", "applied", { name: "c", data: 3 });
+      expect(rowsIn(client)).toEqual([
+        { name: "b", data: 2 },
+        { name: "c", data: 3 },
+        { name: "d" },
+      ]);
+    });
+
+    /** Fails if the watch stops a read's answer from landing when nothing changed while it was out. */
+    it("takes the read's answer as it is when the watch changed nothing meanwhile", async () => {
+      const client = new QueryClient();
+      seed(client, BEFORE);
+      await start(client);
+      emit("stream-cm-1", "deleted", { name: "c" });
+
+      await reading(client).answer([{ name: "a" }, { name: "z" }]);
+      expect(rowsIn(client)).toEqual([{ name: "a" }, { name: "z" }]);
+    });
+
+    /**
+     * A resync is the whole list, listed after the read left. Fails if the
+     * read's answer replaces it, which drops every change between the two
+     * that the watch will never send again.
+     */
+    it("keeps a resync that landed while the read was out, and what followed it", async () => {
+      const client = new QueryClient();
+      seed(client, BEFORE);
+      await start(client);
+      const read = reading(client);
+      emitBatch("stream-cm-1", [
+        { op: "restarted", resource: null },
+        { op: "applied", resource: { name: "x" } },
+        { op: "applied", resource: { name: "y" } },
+        { op: "synced", resource: null },
+      ]);
+      emit("stream-cm-1", "applied", { name: "z" });
+
+      await read.answer(BEFORE);
+      expect(rowsIn(client)).toEqual([
+        { name: "x" },
+        { name: "y" },
+        { name: "z" },
+      ]);
+    });
+
+    /**
+     * A page reads its list and starts its watch at once, and on a large
+     * cluster the watch's list lands first. Fails if only a read that left
+     * after the watch started is told from one that was already out.
+     */
+    it("keeps the watch's first list when the read that was out before it lands", async () => {
+      const client = new QueryClient();
+      const read = reading(client);
+      await start(client);
+      emitBatch("stream-cm-1", [
+        { op: "restarted", resource: null },
+        { op: "applied", resource: { name: "x" } },
+        { op: "synced", resource: null },
+      ]);
+
+      await read.answer(BEFORE);
+      expect(rowsIn(client)).toEqual([{ name: "x" }]);
+    });
+  });
+
+  /**
+   * The API's own order is not this one where a namespace's name starts
+   * another's, so a row's sorted place is not always where it is. Fails if a
+   * row an insert moved is then looked for only where the order would put
+   * it: its update lands as a second row and its delete removes nothing.
+   */
+  it("finds a row an insert moved in a list that is not in its own order", async () => {
+    const client = new QueryClient();
+    seed(client, [
+      { name: "x", namespace: "app-staging" },
+      { name: "y", namespace: "app-staging" },
+      { name: "a", namespace: "app" },
+      { name: "b", namespace: "app" },
+    ]);
+    await start(client);
+    emit("stream-cm-1", "applied", { name: "z", namespace: "aaa" });
+    emitBatch("stream-cm-1", [
+      { op: "applied", resource: { name: "b", namespace: "app", data: 1 } },
+      { op: "deleted", resource: { name: "a", namespace: "app" } },
+    ]);
+    const rows = rowsIn(client)!;
+    expect(rows.map((row) => `${row.namespace}/${row.name}`).sort()).toEqual([
+      "aaa/z",
+      "app-staging/x",
+      "app-staging/y",
+      "app/b",
+    ]);
+    expect(rows.find((row) => row.name === "b")?.data).toBe(1);
+  });
+
+  /**
+   * Dana's Events page stalled on a busy cluster: each event that happened
+   * again rewrote the place of every row under it, so a batch cost its
+   * changes times the list. Fails if a batch writes where rows are more than
+   * once per row it touches, or touches the record of any other row.
+   */
+  it("writes where a row is once per row a batch touches, however long the list", () => {
+    class Counted<K, V> extends Map<K, V> {
+      writes = 0;
+      set(key: K, value: V) {
+        this.writes++;
+        return super.set(key, value);
+      }
+    }
+    const rows: Item[] = Array.from({ length: 10_000 }, (_, index) => ({
+      name: `e-${index}`,
+      data: 10_000 - index,
+    }));
+    const moved = Array.from({ length: 20 }, (_, index) => index * 499 + 7);
+    const held = new Counted<string, { row: Item; at: number }>(
+      rows.map((row, at) => {
+        const slot = { row, at };
+        // A write to the record of a row the batch does not touch throws.
+        return [
+          `\0${row.name}`,
+          moved.includes(at) ? slot : Object.freeze(slot),
+        ];
+      })
+    );
+    held.writes = 0;
+
+    const next = applyChanges(
+      rows,
+      moved.map((at, index) => ({
+        op: "applied" as const,
+        resource: { name: `e-${at}`, data: 20_000 + index },
+      })),
+      held,
+      newest
+    );
+
+    expect(held.writes).toBeLessThanOrEqual(moved.length);
+    expect(next).toHaveLength(10_000);
+    expect(next.slice(0, 20).map((row) => row.name)).toEqual(
+      moved.map((at) => `e-${at}`).reverse()
+    );
+    const untouched = rows.filter((_, at) => !moved.includes(at));
+    expect(next.slice(20).every((row, at) => row === untouched[at])).toBe(true);
+  });
+
+  describe("a list kept to its first rows", () => {
+    const KEEP: Keep<Item> = { rows: 50, of: (row) => row.namespace ?? "" };
+    const loud = (data: number): Item => ({
+      name: `loud-${String(data).padStart(4, "0")}`,
+      namespace: "loud",
+      data,
+    });
+    const quiet = (data: number): Item => ({
+      name: `quiet-${data}`,
+      namespace: "quiet",
+      data,
+    });
+    const entry = (client: QueryClient) =>
+      client.getQueryData<Kept<Item>>(KEY)!;
+    const dataOf = (client: QueryClient, namespace: string) =>
+      entry(client)
+        .rows.filter((row) => row.namespace === namespace)
+        .map((row) => row.data);
+
+    async function startKept(client: QueryClient) {
+      renderHook(
+        () =>
+          useResourceWatch<Item>({
+            enabled: true,
+            subscribe: subscribeMock,
+            queryKey: KEY,
+            order: newest,
+            keep: KEEP,
+          }),
+        { wrapper: makeWrapper(client) }
+      );
+      await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    }
+
+    /** A first read as the backend sends it: the API's order, two hundred to a batch. */
+    function burst(rows: Item[]) {
+      const changes: Array<{ op: Op; resource: Item | null }> = [
+        { op: "restarted", resource: null },
+        ...rows.map((resource) => ({ op: "applied" as const, resource })),
+        { op: "synced", resource: null },
+      ];
+      for (let at = 0; at < changes.length; at += 200)
+        emitBatch("stream-cm-1", changes.slice(at, at + 200));
+    }
+
+    /**
+     * The Events page held every event of its scope to show the latest 500.
+     * Fails if a first read leaves more than the kept number of a class in
+     * the cache, keeps any but the first of that class, or stops naming the
+     * class it left rows out of.
+     */
+    it("holds the first rows of each class of a first read and names the class it cut", async () => {
+      const client = new QueryClient();
+      await startKept(client);
+      burst([
+        ...Array.from({ length: 1000 }, (_, index) => loud(index + 1)),
+        ...Array.from({ length: 30 }, (_, index) => quiet(index + 1)),
+      ]);
+
+      expect(entry(client).rows).toHaveLength(80);
+      expect(dataOf(client, "loud")).toEqual(
+        Array.from({ length: 50 }, (_, index) => 1000 - index)
+      );
+      expect(dataOf(client, "quiet")).toHaveLength(30);
+      expect(entry(client).cut).toEqual(["loud"]);
+    });
+
+    /**
+     * Fails if a live change grows a kept list past its number, if a row
+     * that comes to stand first is left out, or if a class that loses a row
+     * only now is not named.
+     */
+    it("stays within its number as rows arrive, move up and go", async () => {
+      const client = new QueryClient();
+      await startKept(client);
+      burst([
+        ...Array.from({ length: 50 }, (_, index) => loud(index + 1)),
+        quiet(1),
+      ]);
+      expect(entry(client).cut).toEqual([]);
+
+      emit("stream-cm-1", "applied", loud(51));
+      expect(dataOf(client, "loud")).toHaveLength(50);
+      expect(dataOf(client, "loud")[0]).toBe(51);
+      expect(dataOf(client, "loud").at(-1)).toBe(2);
+      expect(entry(client).cut).toEqual(["loud"]);
+
+      // The row it dropped happens again: first now, and the last one goes.
+      emitBatch("stream-cm-1", [
+        { op: "applied", resource: { ...loud(1), data: 60 } },
+        { op: "applied", resource: quiet(2) },
+      ]);
+      expect(dataOf(client, "loud").slice(0, 2)).toEqual([60, 51]);
+      expect(dataOf(client, "loud")).toHaveLength(50);
+      expect(dataOf(client, "loud").at(-1)).toBe(3);
+      expect(dataOf(client, "quiet")).toEqual([2, 1]);
+
+      // A row past the number changes or goes: nothing held moves.
+      const before = entry(client).rows;
+      emit("stream-cm-1", "deleted", loud(2));
+      expect(entry(client).rows).toBe(before);
+
+      emit("stream-cm-1", "deleted", { ...loud(1), data: 60 });
+      expect(dataOf(client, "loud")).toHaveLength(49);
+      expect(entry(client).cut).toEqual(["loud"]);
+    });
+  });
+
+  it("calls unsubscribeResourceWatch on unmount", async () => {
+    const client = new QueryClient();
+    const { unmount } = renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    unmount();
+
+    await waitFor(() => {
+      expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith(
+        "stream-cm-1"
+      );
+    });
+  });
+});
+
+describe("the readers beside a watched list", () => {
+  beforeEach(() => {
+    subscribedCalls.length = 0;
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+    useWindowActivity.setState({ visible: true });
+  });
+
+  const DEPLOYMENTS = ["deployments", "shop"];
+  const PODS = ["pods", "shop"];
+  const PEEK = queryKeys.detail("Deployment", "shop", "search");
+  const SIDEBAR = queryKeys.clusterOverview("acme-staging", ["shop"]);
+
+  /** A poll that never fires on its own, so only the watch can move it. */
+  function useReader<A>(queryKey: QueryKey, read: () => Promise<A>) {
+    return useQuery({ queryKey, queryFn: read, staleTime: Infinity }).data;
+  }
+
+  async function watching<A>(
+    client: QueryClient,
+    listKey: string[],
+    readerKey: QueryKey,
+    read: () => Promise<A>
+  ) {
+    const detail = queryKeys.rowDetail(listKey === PODS ? "Pod" : "Deployment");
+    const hook = renderHook(
+      () => {
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: listKey,
+          detail,
+        });
+        return useReader(readerKey, read);
+      },
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    await waitFor(() => expect(hook.result.current).toBeDefined());
+    return hook;
+  }
+
+  /**
+   * Dana scaled search to 3: the Deployments row said 3/3 while the open
+   * peek said "Stalled, 2 of 3 ready" for five seconds, until its own poll.
+   * Fails if the watch's change does not make the peek's entry read again.
+   */
+  it("has the peek read a Deployment again when the list's watch sees it change", async () => {
+    const client = testQueryClient();
+    const getDeployment = vi
+      .fn()
+      .mockResolvedValueOnce({ name: "search", ready: 2 })
+      .mockResolvedValue({ name: "search", ready: 3 });
+    client.setQueryData<Scoped<Item>>(DEPLOYMENTS, {
+      rows: [{ name: "search", namespace: "shop", data: 2 }],
+      unread: [],
+    });
+    const hook = await watching(client, DEPLOYMENTS, PEEK, getDeployment);
+    expect(hook.result.current).toEqual({ name: "search", ready: 2 });
+
+    emit("stream-cm-1", "applied", {
+      name: "search",
+      namespace: "shop",
+      data: 3,
+    });
+    await waitFor(() =>
+      expect(hook.result.current).toEqual({ name: "search", ready: 3 })
+    );
+    expect(getDeployment).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * Lena's peek YAML showed the old revision about four seconds after the
+   * rollout went Ready, while its Overview had followed the row. Fails if the
+   * watch's change reads the Deployment again but not its manifest.
+   */
+  it("has the peek's YAML read the manifest again when the list's watch sees it change", async () => {
+    const client = testQueryClient();
+    const getManifest = vi
+      .fn()
+      .mockResolvedValueOnce("revision: '1'\n")
+      .mockResolvedValue("revision: '2'\n");
+    client.setQueryData<Scoped<Item>>(DEPLOYMENTS, {
+      rows: [{ name: "search", namespace: "shop", data: 1 }],
+      unread: [],
+    });
+    const hook = await watching(
+      client,
+      DEPLOYMENTS,
+      queryKeys.manifest("Deployment", "shop", "search"),
+      getManifest
+    );
+
+    emit("stream-cm-1", "applied", {
+      name: "search",
+      namespace: "shop",
+      data: 2,
+    });
+    await waitFor(() => expect(hook.result.current).toBe("revision: '2'\n"));
+  });
+
+  /**
+   * Scale 2 to 4: the Pods header said 16 while the sidebar and the status
+   * bar said 14 until the overview's next ten-second read. Fails if a pod
+   * the watch added leaves the counts to that poll, or if two pods landing
+   * together cost two overview reads.
+   */
+  it("reads the overview's counts once again when the watch adds pods", async () => {
+    const client = testQueryClient();
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 14 })
+      .mockResolvedValue({ pods: 16 });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: Array.from({ length: 14 }, (_, i) => ({
+        name: `pod-${i}`,
+        namespace: "shop",
+      })),
+      unread: [],
+    });
+    const hook = await watching(client, PODS, SIDEBAR, overview);
+
+    emit("stream-cm-1", "applied", { name: "search-2cw59", namespace: "shop" });
+    emit("stream-cm-1", "applied", { name: "search-4bmgj", namespace: "shop" });
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 16 }), {
+      timeout: 3000,
+    });
+    expect(overview).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * The events feed changes several times a second on a busy cluster, and
+   * the overview is the costliest read in the app. Fails if a list that
+   * asks not to recount still re-reads it on every new row.
+   */
+  it("leaves the overview to its own poll for a list that asks not to recount", async () => {
+    const client = testQueryClient();
+    const overview = vi.fn().mockResolvedValue({ events: 1 });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    const hook = renderHook(
+      () => {
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: PODS,
+          recount: false,
+        });
+        return useReader(SIDEBAR, overview);
+      },
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    await waitFor(() => expect(hook.result.current).toBeDefined());
+
+    emit("stream-cm-1", "applied", { name: "event-1", namespace: "shop" });
+    emitBatch("stream-cm-1", [
+      { op: "restarted", resource: null },
+      { op: "applied", resource: { name: "pod-0", namespace: "shop" } },
+      { op: "synced", resource: null },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(overview).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A watch that was down comes back with a resync, and pods that came or
+   * went meanwhile arrive in it rather than as changes. Fails if a resync
+   * that changes the count leaves the sidebar on the old one.
+   */
+  it("reads the overview again when a resync brings a different count", async () => {
+    const client = testQueryClient();
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 1 })
+      .mockResolvedValue({ pods: 2 });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    const hook = await watching(client, PODS, SIDEBAR, overview);
+
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "applied", { name: "pod-0", namespace: "shop" });
+    emit("stream-cm-1", "applied", { name: "pod-1", namespace: "shop" });
+    emit("stream-cm-1", "synced", null);
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 2 }), {
+      timeout: 3000,
+    });
+  });
+
+  /**
+   * A read already in flight may have left before the pod arrived. Fails if
+   * the watch's re-read joins it instead of following it, which leaves the
+   * sidebar on the count from before the change.
+   */
+  it("reads the overview after a read that was already in flight", async () => {
+    const client = testQueryClient();
+    let release: (value: { pods: number }) => void = () => {};
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 14 })
+      .mockImplementationOnce(
+        () => new Promise<{ pods: number }>((resolve) => (release = resolve))
+      )
+      .mockResolvedValue({ pods: 15 });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    const hook = await watching(client, PODS, SIDEBAR, overview);
+    void client.refetchQueries({ queryKey: SIDEBAR });
+
+    emit("stream-cm-1", "applied", { name: "search-2cw59", namespace: "shop" });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    release({ pods: 14 });
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 15 }), {
+      timeout: 3000,
+    });
+    expect(overview).toHaveBeenCalledTimes(3);
+  });
+
+  /**
+   * Sam's chain named the old pod for a second after its page's header said
+   * the new one was Ready: a re-read that found a read in flight waited a
+   * whole settle again after it landed. Fails if the re-read does not follow
+   * the read it waited on as soon as that one lands.
+   */
+  it("follows a read that was in flight as soon as it lands", async () => {
+    const client = testQueryClient();
+    let release: (value: { pods: number }) => void = () => {};
+    let followedAt = 0;
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 14 })
+      .mockImplementationOnce(
+        () => new Promise<{ pods: number }>((resolve) => (release = resolve))
+      )
+      .mockImplementation(async () => {
+        followedAt ||= Date.now();
+        return { pods: 15 };
+      });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    const hook = await watching(client, PODS, SIDEBAR, overview);
+    void client.refetchQueries({ queryKey: SIDEBAR });
+
+    emit("stream-cm-1", "applied", { name: "search-2cw59", namespace: "shop" });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const landed = Date.now();
+    release({ pods: 14 });
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 15 }), {
+      timeout: 3000,
+    });
+    expect(followedAt - landed).toBeLessThan(250);
+  });
+
+  /**
+   * The Deployment's own pod watch reads its chain a quarter second after a
+   * change and the Service's watches a twentieth; the slower one asking
+   * first held Sam's chain to its own settle. Fails if a sooner read waits
+   * on one asked for later.
+   */
+  it("reads as soon as the soonest watch asks, not when the first one would", async () => {
+    const client = testQueryClient();
+    let readAt = 0;
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 1 })
+      .mockImplementation(async () => {
+        readAt ||= Date.now();
+        return { pods: 2 };
+      });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    let settleMs = 1000;
+    const hook = renderHook(
+      () => {
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: PODS,
+          detail: () => [SIDEBAR],
+          settleMs,
+        });
+        return useReader(SIDEBAR, overview);
+      },
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    await waitFor(() => expect(hook.result.current).toBeDefined());
+
+    emit("stream-cm-1", "applied", {
+      name: "pod-0",
+      namespace: "shop",
+      data: 1,
+    });
+    settleMs = 50;
+    hook.rerender();
+    const asked = Date.now();
+    emit("stream-cm-1", "applied", {
+      name: "pod-0",
+      namespace: "shop",
+      data: 2,
+    });
+
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 2 }), {
+      timeout: 3000,
+    });
+    expect(readAt - asked).toBeLessThan(500);
+  });
+
+  /**
+   * A minimised window stops polling; a watch still writing rows must not
+   * start reading on its behalf. Fails if a hidden window re-reads at once.
+   */
+  it("leaves a hidden window's peek stale for its return rather than reading it", async () => {
+    const client = testQueryClient();
+    const getDeployment = vi
+      .fn()
+      .mockResolvedValue({ name: "search", ready: 2 });
+    client.setQueryData<Scoped<Item>>(DEPLOYMENTS, {
+      rows: [{ name: "search", namespace: "shop", data: 2 }],
+      unread: [],
+    });
+    await watching(client, DEPLOYMENTS, PEEK, getDeployment);
+    useWindowActivity.setState({ visible: false });
+
+    emit("stream-cm-1", "applied", {
+      name: "search",
+      namespace: "shop",
+      data: 3,
+    });
+    await waitFor(() =>
+      expect(client.getQueryState(PEEK)?.isInvalidated).toBe(true)
+    );
+    expect(getDeployment).toHaveBeenCalledTimes(1);
+  });
+});

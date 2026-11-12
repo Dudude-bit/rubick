@@ -1,0 +1,15 @@
+{
+  "backingOff": "CrashLoopBackOff",
+  "blocked": [
+    "ErrImagePull",
+    "ImagePullBackOff",
+    "ErrImageNeverPull",
+    "ImageInspectError",
+    "InvalidImageName",
+    "RegistryUnavailable",
+    "SignatureValidationFailed",
+    "CreateContainerConfigError",
+    "CreateContainerError",
+    "RunContainerError"
+  ]
+}

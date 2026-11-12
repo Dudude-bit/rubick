@@ -1,0 +1,142 @@
+{
+  "about": "Which condition says whether a Gateway is programmed, as both halves read it: programmed in src/tauri/src/resources/gateway.rs (the connections graph) and gatewayProgrammed in src/ui/lib/route-trace.ts (the trace, the routes list, the Gateway pages, the map and the peek). Accepted: False decides first, since a Gateway its controller did not accept is not programmed; then Programmed wherever it was written; else the legacy Ready some controllers still write; else nobody has said. `said` is the type and status of the condition that decides, or null.",
+  "cases": [
+    {
+      "name": "nobody has said",
+      "conditions": [],
+      "said": null
+    },
+    {
+      "name": "Accepted alone says nothing about programming",
+      "conditions": [
+        {
+          "type": "Accepted",
+          "status": "True"
+        }
+      ],
+      "said": null
+    },
+    {
+      "name": "programmed",
+      "conditions": [
+        {
+          "type": "Accepted",
+          "status": "True"
+        },
+        {
+          "type": "Programmed",
+          "status": "True"
+        }
+      ],
+      "said": {
+        "type": "Programmed",
+        "status": "True"
+      }
+    },
+    {
+      "name": "refused",
+      "conditions": [
+        {
+          "type": "Accepted",
+          "status": "True"
+        },
+        {
+          "type": "Programmed",
+          "status": "False",
+          "reason": "AddressNotAssigned"
+        }
+      ],
+      "said": {
+        "type": "Programmed",
+        "status": "False"
+      }
+    },
+    {
+      "name": "the legacy Ready where Programmed was never written",
+      "conditions": [
+        {
+          "type": "Ready",
+          "status": "False"
+        }
+      ],
+      "said": {
+        "type": "Ready",
+        "status": "False"
+      }
+    },
+    {
+      "name": "Programmed outranks a legacy Ready written before it",
+      "conditions": [
+        {
+          "type": "Ready",
+          "status": "False"
+        },
+        {
+          "type": "Programmed",
+          "status": "True"
+        }
+      ],
+      "said": {
+        "type": "Programmed",
+        "status": "True"
+      }
+    },
+    {
+      "name": "Unknown is said, and is not a refusal",
+      "conditions": [
+        {
+          "type": "Programmed",
+          "status": "Unknown",
+          "reason": "Pending"
+        }
+      ],
+      "said": {
+        "type": "Programmed",
+        "status": "Unknown"
+      }
+    },
+    {
+      "name": "not accepted, and Programmed never written, as Traefik refuses a Gateway",
+      "conditions": [
+        {
+          "type": "Accepted",
+          "status": "False",
+          "reason": "ListenersNotValid"
+        }
+      ],
+      "said": {
+        "type": "Accepted",
+        "status": "False"
+      }
+    },
+    {
+      "name": "not accepting outranks a Programmed left over from before",
+      "conditions": [
+        {
+          "type": "Accepted",
+          "status": "False",
+          "reason": "Invalid"
+        },
+        {
+          "type": "Programmed",
+          "status": "True"
+        }
+      ],
+      "said": {
+        "type": "Accepted",
+        "status": "False"
+      }
+    },
+    {
+      "name": "Accepted Unknown is not a refusal",
+      "conditions": [
+        {
+          "type": "Accepted",
+          "status": "Unknown",
+          "reason": "Pending"
+        }
+      ],
+      "said": null
+    }
+  ]
+}

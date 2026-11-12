@@ -1,8 +1,11 @@
 # Working in this repo
 
-Tauri 2 + React 19 + TypeScript desktop Kubernetes client. Rust in `src-tauri/`,
-frontend in `src/`, a shared crate in `k8s-gui-common/`, and the marketing site
-in `web/` — a separate app that no workflow builds, lints or tests.
+Tauri 2 + React 19 + TypeScript desktop Kubernetes client. Rust in `src/tauri/`,
+frontend in `src/ui/`, the JSON both halves of IPC read in `src/contracts/`,
+test-cluster manifests in `tests/manifests/`, and the marketing site in
+`src/website/`, a separate app that no workflow builds, lints or tests. It
+runs on Vite+ and TypeScript 7 like the app, with its own install and config:
+`bun run lint`, `bun run check` and `bun run build` from inside it.
 
 **bun, not npm.** `bun install`, `bun run test`, `bunx tsc --noEmit`.
 
@@ -74,7 +77,7 @@ Claims here are settled by running things, not by reasoning about them.
 - **Sabotage your own test.** Break the code and confirm it fails _for the right
   reason_. A test that passes against broken code is worse than none.
 - **There is no pre-push hook.** Run `bun run test` and `bunx tsc --noEmit`
-  yourself. The pre-commit hook formats what you stage with prettier and
+  yourself. The pre-commit hook formats what you stage with `vp fmt` and
   rustfmt and stages the result; `ci.yml` checks both again, in the Frontend
   and Rust jobs — a squash merge runs no hook, so main arrived at 4.18.0 red
   on both, and every open PR inherited the failure.
@@ -83,12 +86,32 @@ Claims here are settled by running things, not by reasoning about them.
   `make dev` runs it. Before drawing a conclusion from a screenshot, check
   `ps -eo pid,command | grep Rubick` — an installed `/Applications/Rubick.app`
   looks exactly like your build and is not it.
-- Some behaviour only exists on a cluster. `src-tauri/tests/live/` and
-  `test-manifests/` are the harnesses; a `kind` cluster is enough for most.
+- Some behaviour only exists on a cluster. `src/tauri/tests/live/` and
+  `tests/manifests/` are the harnesses; a `kind` cluster is enough for most.
   They are one test binary: `cargo test --test live live_tls:: -- --ignored`.
 
 ## Frontend
 
+- **Code lives under the route that uses it.** A screen's own code sits in a
+  `-components/` folder beside its route files; code several routes share
+  sits in a `-` folder at their lowest common route (`c/$cluster/-peek`,
+  `(workloads)/-components`). Only what vendor pages, hooks or the shell
+  outside the tree also need stays in `components/`. A `-` folder is imported
+  only from inside its route, which `test/colocation.test.ts` holds; a test
+  may reach across.
+- **Every in-app address is built in `@/lib/links`** (`objectLink`,
+  `listLink`, `pageLink`, ...). A link is the router's own options object, so
+  `to` is checked against the route tree when it compiles; a path string
+  written in code is a dead link waiting to be found by a click. A string
+  exists only where something stores one, and it comes from `hrefOf`.
+- A query key a screen reads is declared in `AppSearch` (`@/lib/app-search`).
+  The router drops every other key on arrival, so a new one that is not
+  there reads as absent with nothing failing.
+- Only two files import `@tauri-apps/*`: the IPC adapter in
+  `@/lib/transport` and the host facade in `@/lib/host` (dialogs,
+  clipboard, links, notifications, updater, window). Everything else goes
+  through them, so the same screens can run over another transport;
+  `transport/boundary.test.ts` holds the line.
 - Call the backend through `commands` from `@/lib/commands` — never
   `@/generated/commands`, never `invoke`. The wrapper is the only place that
   normalises errors and notices an expired session.
@@ -100,7 +123,7 @@ Claims here are settled by running things, not by reasoning about them.
   component _type_, so a new arrow each render remounts the cell and the button
   under the pointer disappears mid-click. Memoize the `columns` array too.
 - Polling goes through `useLiveQuery({ refresh: "<rate>" })` with a rate from
-  `src/lib/refresh.ts`. A hand-written `refetchInterval` is a lint error, and
+  `src/ui/lib/refresh.ts`. A hand-written `refetchInterval` is a lint error, and
   the reason is that it polls a screen nobody is looking at.
 - Anything that keeps a subtree mounted while off screen — Radix `forceMount`
   tabs, panels, sheets — must wrap it in a `SurfaceVisibility` provider set to
@@ -115,13 +138,21 @@ Claims here are settled by running things, not by reasoning about them.
   …). No raw Tailwind colours, no `dark:`, no legacy shadcn tokens.
 - `<select>` comes from `components/ui` — the native one is painted by the OS
   and is white in a dark window.
-- Outside `src/integrations/`, ask for a facet (`useCapability`, `useCrdView`,
+- Outside `src/ui/integrations/`, ask for a facet (`useCapability`, `useCrdView`,
   `flavourOf`) and never name a vendor.
 - **A watch replaces a row wholesale.** Whatever the watch closure builds is
   the whole row from the next tick on, so anything the closure cannot compute
   from the object alone has to be merged at render — never written into the
   watched cache entry, and never assumed to survive. This is how a Gateway
   correct on first read went wrong a second later.
+- What is kept under a context name and nothing else, in a module-level
+  store, a ref or an open editor, is named with `keptByName` from
+  `@/lib/kept-by-name`. A kubeconfig change can put another cluster behind
+  the name (k3s calls every one `default`), and a holder not named there goes
+  on answering for the cluster before. What is **persisted** under a context
+  name (pins, tell-me-when, recent namespaces) is named with
+  `persistedByName` instead: it is let go only for the one name the change
+  journal sees turn into another cluster, by its `kube-system` uid.
 - **The peek panel renders the same objects as the detail pages.** A fix on one
   leaves the other wrong; check both.
 - **A scroller sized in per cent does not scroll here.** `height: 100%`
@@ -132,7 +163,7 @@ Claims here are settled by running things, not by reasoning about them.
   editor (#163) and What's New. `ScrollArea` needs a height of its own
   (`h-[200px]`, `max-h-[60vh]`), which `scroll-area.test.ts` checks; where the
   height comes from a flex parent, make the element itself the scroller —
-  `min-h-0 flex-1 overflow-y-auto scrollbar-thin`.
+  `min-h-0 flex-1 overflow-y-auto scrollbar-lane`.
 
 ## Rust
 
@@ -147,8 +178,17 @@ Claims here are settled by running things, not by reasoning about them.
 - Spawn external binaries through `crate::shell::ShellCommand`. A GUI app
   inherits a stripped `PATH`, so `std::process::Command` works under
   `cargo run` from your terminal and not in the shipped app.
+- A CLI that acts on a cluster — helm, `kubectl proxy` — takes its context
+  and kubeconfig from `client_manager.cli_target(context)`. Left to its own
+  defaults it reads the file's current context, which is not the cluster on
+  screen once two files name a context alike.
 - Write `config.toml` only through `crate::config::private_file::write` — it
   holds bearer tokens, and `std::fs::write` leaves them world-readable.
+- `config.toml` is shared with the release before: a rollback, or a copy
+  still installed. 4.21.2 moves the whole file aside when one item will not
+  parse, so a field it requires is written as it wrote it and what is new
+  goes in a field of its own. `config/as_4_21_2.rs` is that build's shape,
+  and the tests beside `update_at` parse every save with it.
 - Ask `Error::is_refusal()` whether the cluster refused. A 403 stays
   `Error::KubeApi`; only 401 has its own variant.
 - Do not touch the text of `Error::CredentialsExpired` — the `CREDENTIALS_EXPIRED:`
@@ -156,9 +196,19 @@ Claims here are settled by running things, not by reasoning about them.
 - An `Error` crosses IPC as `{ code, message }`. Branch on `errorCode(error)`
   on the frontend, never on words in the message: "not found" is also in a
   refused list and a container with no previous run. A new variant needs its
-  code in `shared/error-codes.json`; both sides test against it.
+  code in `src/contracts/error-codes.json`; both sides test against it.
+- Ask `Error::is_unanswered()` whether a request got no answer: the read
+  deadline, a 5xx, a dropped connection. It crosses as `NO_ANSWER` or
+  `READ_DEADLINE`, and a write that ends there is worded through
+  `toastWriteError` or `toastedUnanswered` (`@/lib/toast-error`): the cluster
+  may have done it, and "failed" invites doing it twice. `toast-error.test.ts`
+  counts the places that say so.
 - Inside a long-running task, get the client per attempt from
   `state.client_manager`; a held `kube::Client` carries a token that expires.
+- State built on a context's client — a cache, an index, a remembered
+  refusal — is let go in `AppState::client_replaced`, which every connect,
+  disconnect and credential renewal calls. A holder not named there keeps
+  answering with the old credentials.
 - A spawned operation that emits events waits on its subscribe gate, exposes a
   `<thing>_subscribed` command to release it, and **always** emits its terminal
   event — including on cancel and on early error. Tauri events have no replay.
@@ -167,6 +217,13 @@ Claims here are settled by running things, not by reasoning about them.
   serde. Listen through `listenEvent` from `@/lib/events`, which takes the
   payload's type from the generated union — a hand-written `listen<T>` is
   the copy nothing compares, and `events.test.ts` refuses it.
+- A file that takes watch events (`listenResourceEvents`) also reads
+  `useRenewals()` and resubscribes when it changes: a watch holds the client
+  it was given, and a renewal leaves that client's token to die.
+  `events.test.ts` refuses a file that does not. It hears the bridge drop
+  events through `listenBridgeLag`, which says how long to wait before
+  subscribing again: each new stream lists its collection through the same
+  bridge, and answering every notice at once is the next lag.
 
 ## Connections and traces
 
@@ -186,12 +243,42 @@ each has a contract nothing checks for you.
   must set `verifiable: true`; the render site hides `notChecked` otherwise.
 - A route's status about one parent is read through `verdictOf` /
   `verdict_of` and nothing else, held together by
-  `shared/route-verdict-conformance.json`. The graph read the first entry and
+  `src/contracts/route-verdict-conformance.json`. The graph read the first entry and
   the trace the first `Accepted`, so a route two controllers disagreed about
   was green on one screen and red on the next.
 - Implementations of `delivery.source` and `ingress.tls` answer **positionally**
   — same length as the input, a hole rather than a dropped element. The caller
   indexes the answer by row.
+
+## What is never shown
+
+The app never draws a private key, and never sends back the placeholder it
+drew in one's place. Both halves fail by looking fine: a key on screen is
+more text, and a placeholder stored as the value is an apply that succeeded.
+
+- **Whatever leaves Rust for the screen passes the one door**, in
+  `resources/tls.rs`. An object whole goes through `shown`, and as YAML
+  through `editor_yaml`; a part carried as read, a `spec` or a pod template,
+  through `shown_value`; annotations through `annotations_of`; a string a
+  wire type carries, an `env` literal or a release's description, through
+  `shown_text`. A field cloned off the object instead is the key on the page
+  beside a YAML tab that withholds it. The guards at the end of `main.rs`
+  hold the YAML and the annotations; nothing holds a new `Value` or `String`
+  field, so the builder that adds one is the check.
+- **The rule judges what a string is, not where it stands.** The three key
+  maps add the Secret's type and the key's name; every other string is a key
+  or not by `is_private_key_text` alone. A new net goes there or into
+  `withhold_reason`, never beside a call site: the Data tab, the YAML tab, a
+  Helm release and the Files tab ask the same two functions.
+- **The placeholder never travels back.** `parse_all_documents` refuses a
+  manifest that still holds `WITHHELD_MARKER` anywhere, and leaves out an
+  annotation whose record was blanked; values for helm are refused by their
+  text. A command that sends what the reader edited by another way stores
+  the sentence as the key, and the API server takes it.
+- **`src/contracts/withheld-value.json` holds both sides to the marker** and
+  to one answer about where a manifest holds it: Rust refuses, and
+  TypeScript names the same places before Apply is offered. A new case goes
+  into the corpus, not into one side's test.
 
 ## Performance
 
@@ -220,8 +307,8 @@ the recorder; the rules that fail silently are these.
   API field names, PromQL, or anything the cluster wrote. A reader matches
   `CrashLoopBackOff` against their terminal.
 - A sentence composed in **Rust** ships as a `#[serde(tag = "says")]` enum the
-  frontend switches on. A literal written in `src-tauri/` is invisible to every
-  scanner, test and lint in this project — all of them walk `src/`.
+  frontend switches on. A literal written in `src/tauri/` is invisible to every
+  scanner, test and lint in this project — all of them walk `src/ui/`.
 - A sentence composed in a `queryFn`, or in a module-level table, stores a
   `Saying` (`{key, values}`) and becomes words at render. A `t` called inside a
   query freezes the language into the cache.
@@ -240,15 +327,18 @@ the recorder; the rules that fail silently are these.
 
 ## Tests
 
-- A frontend test lives beside its subject as `<name>.test.ts(x)` under `src/`.
+- A frontend test lives beside its subject as `<name>.test.ts(x)` under `src/ui/`.
   A `__tests__/` folder or any other suffix is collected by nothing and reports
   nothing.
+- A component that reads route params or builds links renders through
+  `renderWithRouter` from `@/test/render`, which waits for the router's first
+  load; a navigation is asserted on `router.state.location`.
 - A `.test.tsx` runs under jsdom and a `.test.ts` under node. A `.test.ts`
   that needs a DOM starts with `// @vitest-environment jsdom` — and so does
   one whose subject checks `typeof window`, which under node passes quietly
   through the other branch.
 - Rust unit tests go in an inline `#[cfg(test)] mod tests` in the file they
-  cover. `src-tauri/tests/live/` is reserved for the `#[ignore]`d live
+  cover. `src/tauri/tests/live/` is reserved for the `#[ignore]`d live
   harnesses — a module each in one test crate, because every file under
   `tests/` is a binary that every `cargo test` links.
 - Name a test as a sentence stating the behaviour, with a doc comment above
@@ -256,64 +346,79 @@ the recorder; the rules that fail silently are these.
   1918 test names here starts with "should".
 - **No snapshots.** Assert the behaviour, not the markup. A snapshot
   re-recorded on failure asserts whatever the code now does.
-- `src/lib/__fixtures__/*.json` are recordings of what a real controller wrote.
+- `src/ui/lib/__fixtures__/*.json` are recordings of what a real controller wrote.
   Never hand-edit them; regenerate with the ignored Rust dumper against the
   specimen cluster.
 - The table guards — `resource-registry.test.ts`, `catalogue.test.ts`,
   `vendor-copy.test.ts`, `release-assets.test.ts` — each encode a contract
   nothing else states. When one fails, the code is wrong, not the table.
 - Touch a log query term and both evaluators must agree: add the cases to
-  `shared/log-query-conformance.json` and run the Rust and the TypeScript side.
-  The same holds for a resource quantity: `shared/quantity-conformance.json`,
+  `src/contracts/log-query-conformance.json` and run the Rust and the TypeScript side.
+  The same holds for a resource quantity: `src/contracts/quantity-conformance.json`,
   against `utils::quantities::parse_quantity` and `parseQuantity` — and for a
-  log line as text (Download in Rust, Copy in TS): `shared/log-text-conformance.json`.
-  So does a label selector, `null` included: `shared/label-selector-conformance.json`.
+  log line as text (Download in Rust, Copy in TS): `src/contracts/log-text-conformance.json`.
+  So does a label selector, `null` included: `src/contracts/label-selector-conformance.json`.
   Where one question has two evaluators, the corpus is what makes them one
   answer; a doc comment listing what the second one does not implement is a
   record of the drift, not a check on it.
-- A number both halves of the IPC boundary apply lives in `shared/`, with a
+- A number both halves of the IPC boundary apply lives in `src/contracts/`, with a
   test on **each** side asserting its own constant matches the file. A
   comment saying "mirrored" is not a check; `MAX_PROBLEMS` was one for a
   year. Changing the value means changing the shared file, not a constant.
 
 ## Tooling
 
-- `src/generated/{commands,types}.ts` are generated. Never hand-edit them.
+- `src/ui/generated/routeTree.gen.ts` is generated from `src/ui/routes/` by
+  `bun run routes` (and by Vite on every start). Commit it: `tsc` runs
+  before Vite in `bun run build`, and type-checks against the committed copy.
+- `src/ui/generated/{commands,types}.ts` are generated. Never hand-edit them.
+  The generator writes Tauri's own `invoke` into every binding and has no
+  option to change it; `make gen-entities-tauri` points that import at
+  `@/lib/transport` afterwards (`scripts/retarget-invoke.mjs`), which is what
+  puts every command behind the transport.
   Regenerate with `make gen-entities-tauri` — which needs `cargo-expand`,
   without which it silently drops every macro-generated `subscribe_*_watch`
   binding. If it refuses because the command count dropped, that is the guard
-  working: `git checkout -- src/generated/`, or say `REMOVED=n` if you deleted
+  working: `git checkout -- src/ui/generated/`, or say `REMOVED=n` if you deleted
   n commands on purpose.
-- Keep every `no-restricted-syntax` selector in the **one** config block in
-  `eslint.config.js`. A second config object naming that rule _replaces_ the
-  list rather than extending it, switching off all of the guards above at once.
+- Lint, format and test run through Vite+ (`vp lint`, `vp fmt`, `vp test`),
+  configured in `vite.config.ts`. Test files import from `vite-plus/test`,
+  not `vitest`; a lint rule refuses the old path.
+- The project's own guards (role tokens, no vendor imports, no
+  `refetchInterval`, untranslated `status`, no native `<select>`) are the
+  local oxlint plugin `scripts/lint/rubick.mjs`, one rule each. A rule the
+  config does not switch on guards nothing and fails nothing;
+  `src/ui/test/lint-guards.test.ts` lints one violation per rule to catch that.
 - `bun run lint` runs with `--max-warnings 0 --report-unused-disable-directives`,
-  so every "warn" rule is a hard failure and a stale `eslint-disable` is an
+  so every "warn" rule is a hard failure and a stale `oxlint-disable` is an
   error. An unused caught error must be `catch {` with no binding — `catch (_e)`
   is not exempt.
-- ESLint never reads `src-tauri/`, `web/`, `src/generated/`, `dist/` or any
+- The linter never reads `src/tauri/`, `src/website/`, `src/ui/generated/`, `dist/` or any
   `*.config.*`. Nothing guards the code there.
 - A duplicated npm package is fixed by `rm -rf node_modules bun.lock &&
 bun install` — never `bun add pkg@ver`, never an `overrides` entry. Two copies
   of one package do not error; they make one copy's objects silently invisible
-  to the other.
+  to the other. The one `overrides` entry is Vite+'s own: it points every
+  `vite` in the tree at `@voidzero-dev/vite-plus-core`, so a plugin that ships
+  a `vite` of its own cannot bring a second copy. Bump it with `vite-plus`.
 
 ## Adding a resource kind
 
 Half-done is invisible: each of these fails by the kind simply not appearing.
 
 `RESOURCE_REGISTRY` entry · its group, version, plural and scope in
-`shared/kinds.json`, which the registry reads them from and a Rust test holds
-to `k8s-openapi` · a route file under the right section · the item in the
-Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
+`src/contracts/kinds.json`, which the registry reads them from and a Rust test holds
+to `k8s-openapi` · a folder `src/ui/routes/c/$cluster/(<section>)/<plural>/`
+with `index.tsx` and `$namespace.$name.tsx` (or `$name.tsx`) and the
+screens in its `-components/`, then `bun run routes` · the item in the Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
 optionally a `subscribe_*_watch` command, which must also be registered in
 `generate_handler!`.
 
-Then two tables keyed by kind, each of which fails by staying quiet rather
-than by breaking. `ROUTABLE` in `ResourceRef.tsx` — absent, and every
-reference to the kind renders as text instead of a link. `peek-actions.ts` —
-absent, and the peek offers no Delete even though the command exists. Both
-have guards now; the guards are what noticed.
+Then one table keyed by kind that fails by staying quiet rather than by
+breaking: `peek-actions.ts`. Absent, and the peek offers no Delete even though
+the command exists. It has a guard; the guard is what noticed. A kind with no
+folder still opens, on the generic object page under `$resource`, so a
+missing folder shows up as a plain YAML page rather than as nothing.
 
 Adding an integration is one folder and one line — [CONTRIBUTING](CONTRIBUTING.md)
 has it — but two things it does not say: a **detected** vendor needs its id in
@@ -324,9 +429,9 @@ scan.
 
 ## Releasing
 
-Bump the version in **four** files in one commit — `package.json`,
-`src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `k8s-gui-common/Cargo.toml`
-— then refresh `Cargo.lock`. Nothing compares them, so a partial bump releases
+Bump the version in **three** files in one commit: `package.json`,
+`src/tauri/tauri.conf.json` and `src/tauri/Cargo.toml`. Then refresh
+`Cargo.lock`. Nothing compares them, so a partial bump releases
 green with artifacts whose names disagree with the tag.
 
 Write the `## [X.Y.Z] - YYYY-MM-DD` section in `CHANGELOG.md` **before** pushing

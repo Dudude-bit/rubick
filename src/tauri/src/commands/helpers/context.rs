@@ -1,0 +1,173 @@
+//! `ResourceContext` — bundles a Kubernetes `Client` with an
+//! optional namespace scope, plus convenience constructors over
+//! various namespaced/cluster `Api` shapes.
+
+use crate::error::Result;
+use crate::state::AppState;
+use crate::utils::normalize_optional_namespace;
+use kube::api::DynamicObject;
+use kube::discovery::ApiResource;
+use kube::Resource;
+use kube::{Api, Client};
+
+/// Context for Kubernetes API access with optional namespace scope.
+pub struct ResourceContext {
+    pub client: Client,
+    pub namespace: Option<String>,
+}
+
+impl ResourceContext {
+    /// Create context from `AppState`. If `require_namespace` is true,
+    /// defaults to `"default"`.
+    ///
+    /// Both Tauri command callers (which hold `tauri::State<'_, AppState>`)
+    /// and non-Tauri callers (which hold `&AppState` directly) flow through
+    /// this one constructor — `State<'_, T>` derefs to `&T`, so the
+    /// `for_command` / `for_list` wrappers just borrow the inner state.
+    fn from_app_state(
+        state: &AppState,
+        namespace: Option<String>,
+        require_namespace: bool,
+    ) -> Result<Self> {
+        let client = state.current_client()?;
+        Self::held(&client, namespace, require_namespace)
+    }
+
+    /// The same on a client already held: for a command that waited, and
+    /// must go on with the cluster it began on, not the window's.
+    pub fn held(
+        client: &Client,
+        namespace: Option<String>,
+        require_namespace: bool,
+    ) -> Result<Self> {
+        let client = client.clone();
+        let namespace = if require_namespace {
+            Some(normalize_optional_namespace(namespace).unwrap_or_else(|| "default".to_string()))
+        } else {
+            normalize_optional_namespace(namespace)
+        };
+        // A path segment of every request made through this context, and
+        // normalising only trims it.
+        if let Some(ns) = namespace.as_deref() {
+            crate::validation::validate_namespace(ns)?;
+        }
+
+        Ok(ResourceContext { client, namespace })
+    }
+
+    /// Create context directly from a client (for use outside of Tauri commands)
+    #[must_use]
+    pub fn from_client(client: Client, namespace: String) -> Self {
+        ResourceContext {
+            client,
+            namespace: Some(namespace),
+        }
+    }
+
+    /// For single-resource commands (get/delete) - requires namespace, defaults to "default"
+    pub fn for_command(state: &AppState, namespace: Option<String>) -> Result<Self> {
+        Self::from_app_state(state, namespace, true)
+    }
+
+    /// For list commands - namespace is optional (None = all namespaces)
+    pub fn for_list(state: &AppState, namespace: Option<String>) -> Result<Self> {
+        Self::from_app_state(state, namespace, false)
+    }
+
+    /// For list commands without Tauri state - namespace is optional (None = all namespaces)
+    pub fn for_list_from_app_state(state: &AppState, namespace: Option<String>) -> Result<Self> {
+        Self::from_app_state(state, namespace, false)
+    }
+
+    /// # Panics
+    ///
+    /// If the context has no namespace. Callers reach this only from a
+    /// namespaced command, where `for_command` has already required one.
+    #[must_use]
+    pub fn namespaced_api<K>(&self) -> Api<K>
+    where
+        K: kube::Resource<Scope = k8s_openapi::NamespaceResourceScope>,
+        K::DynamicType: Default,
+    {
+        let namespace = self
+            .namespace
+            .as_deref()
+            .expect("namespaced_api() requires namespace to be Some");
+        Api::namespaced(self.client.clone(), namespace)
+    }
+
+    /// A namespaced built-in kind as the cluster wrote it. The compiled
+    /// bindings know the fields of one Kubernetes release and drop every
+    /// other on the way in, so what is read to be written back, or compared
+    /// whole, is read through here.
+    #[must_use]
+    pub fn raw_api<K>(&self) -> Api<DynamicObject>
+    where
+        K: Resource<DynamicType = (), Scope = k8s_openapi::NamespaceResourceScope>,
+    {
+        self.dynamic_api_for_resource(&ApiResource::erase::<K>(&()), false)
+    }
+
+    #[must_use]
+    pub fn namespaced_or_cluster_api<K>(&self) -> Api<K>
+    where
+        K: kube::Resource<Scope = k8s_openapi::NamespaceResourceScope>,
+        K::DynamicType: Default,
+    {
+        if self.namespace.is_some() {
+            self.namespaced_api()
+        } else {
+            self.cluster_api()
+        }
+    }
+
+    /// Create dynamic API for a resource (without `ApiCapabilities`)
+    #[must_use]
+    pub fn dynamic_api_for_resource(
+        &self,
+        api_resource: &ApiResource,
+        is_cluster_scoped: bool,
+    ) -> Api<DynamicObject> {
+        if is_cluster_scoped {
+            Api::all_with(self.client.clone(), api_resource)
+        } else {
+            match self.namespace.as_deref() {
+                Some(ns) => Api::namespaced_with(self.client.clone(), ns, api_resource),
+                None => Api::all_with(self.client.clone(), api_resource),
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn cluster_api<K: Resource>(&self) -> Api<K>
+    where
+        K::DynamicType: Default,
+    {
+        Api::all(self.client.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::served::{test_server::connected, ServedIndex};
+
+    /// Would let a namespace from the frontend reach a request path unchecked
+    /// in every command but the few that validated it themselves.
+    #[tokio::test]
+    async fn a_namespace_that_is_not_a_name_is_refused_before_any_request() {
+        let (state, hits) = connected(ServedIndex::default(), |_, _| (404, "{}".into())).await;
+
+        for bad in ["../kube-system", "a/b", "Shop"] {
+            assert!(ResourceContext::for_command(&state, Some(bad.into())).is_err());
+            assert!(ResourceContext::for_list(&state, Some(bad.into())).is_err());
+        }
+        let ctx = ResourceContext::for_command(&state, Some(" shop ".into())).expect("a name");
+        assert_eq!(ctx.namespace.as_deref(), Some("shop"));
+        assert!(ResourceContext::for_list(&state, None)
+            .expect("every namespace")
+            .namespace
+            .is_none());
+        assert!(hits.lock().unwrap().is_empty());
+    }
+}

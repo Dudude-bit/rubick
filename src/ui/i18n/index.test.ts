@@ -1,0 +1,159 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import { en, type Plural } from "./catalogue";
+import { ru } from "./ru";
+import { isTranslated, localeFrom, LOCALES, translate } from "./index";
+
+describe("looking a string up", () => {
+  it("gives English when English is asked for", () => {
+    expect(translate("en", "action", "cancel")).toBe("Cancel");
+  });
+
+  it("gives the translation when there is one", () => {
+    expect(translate("ru", "action", "cancel")).toBe("Отмена");
+  });
+
+  /**
+   * Per key, not per language. A contributor who translates half a file
+   * should see their half, not have the whole language refused — and the
+   * English remainder is what shows them where to keep going.
+   */
+  it("falls back to English for a key a language has not reached", () => {
+    expect(translate("de", "action", "cancel")).toBe("Cancel");
+  });
+
+  it("leaves a placeholder alone when nothing was given for it", () => {
+    expect(translate("en", "activity", "active")).toBe("{n} active");
+  });
+});
+
+describe("counting things", () => {
+  /**
+   * The reason there is no `n === 1 ? x : y` anywhere in this app. Russian
+   * needs three forms and picks between them by the number's last digits:
+   * 1 проброс, 2 проброса, 5 пробросов, and then 21 проброс again.
+   */
+  it("picks the Russian form the number actually calls for", () => {
+    const say = (n: number) =>
+      translate("ru", "activity", "portForwards", { n });
+    expect(say(1)).toBe("1 проброс");
+    expect(say(2)).toBe("2 проброса");
+    expect(say(5)).toBe("5 пробросов");
+    expect(say(21)).toBe("21 проброс");
+    expect(say(11)).toBe("11 пробросов");
+  });
+
+  it("still has only the two English forms", () => {
+    const say = (n: number) =>
+      translate("en", "activity", "portForwards", { n });
+    expect(say(1)).toBe("1 port forward");
+    expect(say(2)).toBe("2 port forwards");
+    expect(say(21)).toBe("21 port forwards");
+  });
+
+  /**
+   * A language with no catalogue, or one whose catalogue failed to load,
+   * reads English — and was counted by its own rules. French calls 0 `one`,
+   * so the whole interface said "0 pod" to a French system.
+   */
+  it("counts an English fallback by English rules", () => {
+    expect(translate("fr", "cluster", "podCount", { n: 0 })).toBe("0 pods");
+    expect(translate("fr", "cluster", "podCount", { n: 1 })).toBe("1 pod");
+  });
+
+  /** Zero is `other` in both, and neither language wants a special case. */
+  it("counts none of something without a special case", () => {
+    expect(translate("en", "cluster", "podCount", { n: 0 })).toBe("0 pods");
+    expect(translate("ru", "cluster", "podCount", { n: 0 })).toBe("0 подов");
+  });
+});
+
+describe("a count past a thousand", () => {
+  /**
+   * The Share dialog printed "41423 символа" while the ConfigMap label, fixed
+   * on its own, read "1 107 символов". Every plural prints its `{n}` grouped,
+   * so a caller that forgets still gets it right.
+   */
+  it("groups the thousands of a counted string, in both languages", () => {
+    expect(translate("ru", "share", "charactersLong", { n: 41423 })).toBe(
+      "41\u202f423 символа"
+    );
+    expect(translate("ru", "count", "chars", { n: 1107 })).toBe(
+      "1\u202f107 символов"
+    );
+    expect(translate("en", "count", "chars", { n: 45598 })).toBe(
+      "45\u202f598 chars"
+    );
+  });
+
+  /** A revision is a name, not a quantity: only a counted string groups. */
+  it("leaves a number in a plain string as it was given", () => {
+    expect(translate("en", "changes", "revisionNumber", { n: 1234 })).toBe(
+      "revision 1234"
+    );
+  });
+
+  /** The form comes from the number, not from the grouped text. */
+  it("still picks the Russian form from the whole number", () => {
+    expect(translate("ru", "count", "chars", { n: 21000 })).toBe(
+      "21\u202f000 символов"
+    );
+    expect(translate("ru", "count", "chars", { n: 21001 })).toBe(
+      "21\u202f001 символ"
+    );
+  });
+});
+
+describe("choosing a language from the system", () => {
+  it("matches on the language, not the region", () => {
+    expect(localeFrom("ru-RU")).toBe("ru");
+    expect(localeFrom("ru_KZ")).toBe("ru");
+    expect(localeFrom("de")).toBe("de");
+  });
+
+  it("falls back to English for anything unoffered or absent", () => {
+    expect(localeFrom("ja-JP")).toBe("en");
+    expect(localeFrom(undefined)).toBe("en");
+    expect(localeFrom("")).toBe("en");
+  });
+});
+
+describe("the catalogue itself", () => {
+  /**
+   * The guarantee the `Catalogue` type is there to make. It is checked at
+   * build time, but a test says so out loud for anyone adding a language.
+   */
+  it("has a Russian entry for every English one", () => {
+    for (const section of Object.keys(en) as Array<keyof typeof en>) {
+      for (const key of Object.keys(en[section])) {
+        expect(
+          (ru as Record<string, Record<string, unknown>>)[section][key],
+          `ru.${section}.${key} is missing`
+        ).toBeDefined();
+      }
+    }
+  });
+
+  /** Every plural must have `other`, because it is what the fallback uses. */
+  it("gives every counted string an `other` form in both languages", () => {
+    const catalogues: Array<Record<string, Record<string, string | Plural>>> = [
+      en,
+      ru,
+    ];
+    for (const catalogue of catalogues) {
+      for (const section of Object.values(catalogue)) {
+        for (const entry of Object.values(section)) {
+          if (typeof entry !== "string") {
+            expect(entry.other).toBeTruthy();
+          }
+        }
+      }
+    }
+  });
+
+  it("offers a language nobody has filled in, and says so", () => {
+    expect(LOCALES).toContain("de");
+    expect(isTranslated("ru")).toBe(true);
+    expect(isTranslated("de")).toBe(false);
+  });
+});

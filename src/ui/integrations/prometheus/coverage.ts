@@ -1,0 +1,245 @@
+/**
+ * Whether the Prometheus somebody connected is watching *this* cluster.
+ *
+ * A probe only proves the address answers PromQL, so pointing the app at the
+ * organisation's central Prometheus — which scrapes four clusters and not
+ * this one — produces a connection that reads as healthy and charts that are
+ * about somebody else's pods. Every number is real. None of them is yours.
+ *
+ * The check is a comparison rather than a judgement: the node names Prometheus
+ * knows against the node names this cluster has. Nothing else identifies a
+ * cluster from the outside — a namespace called `default` exists everywhere,
+ * and a pod name is gone by tomorrow — while a node name is long, specific and
+ * stable enough to be a fingerprint.
+ *
+ * The families the capabilities are built on are checked by name too, once,
+ * and a missing one is named: a Prometheus that scrapes the right cluster but
+ * not its kubelets answers every query with an empty series, and "install
+ * kube-state-metrics" and "your pod used no CPU" are the same empty chart
+ * with very different repairs.
+ */
+
+import type { VendorVerdict } from "../kit";
+import type { T } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
+
+/**
+ * A line this module can say, named rather than written.
+ *
+ * The metric table is built once at module load, so a sentence chosen there
+ * is in whatever language happened to be first. Keys survive a language
+ * change; sentences do not.
+ */
+type Reading = keyof (typeof en)["readings"];
+import { commands } from "@/lib/commands";
+import { nodeMatcher } from "@/lib/node-names";
+import type { PromSeries } from "@/generated/types";
+
+// The label a node's name lands in, per exporter, most specific first. The
+// one list the queries group by: a spelling this reader lacked meant every
+// series carrying it was keyed to nothing and silently dropped.
+import { NODE_LABELS } from "./queries";
+
+/**
+ * The families each capability is built on, named so a gap can be attributed,
+ * with what each buys the reader and who scrapes it.
+ *
+ * Deliberately the metric *this app queries*, not a representative one: the
+ * point is to answer "why is that chart empty", and only the exact name the
+ * query uses can. The metric names are Prometheus's own and never move; the
+ * two sentences about each are catalogue keys.
+ */
+export const FAMILIES: Array<{
+  metric: string;
+  powers: Reading;
+  from: Reading;
+}> = [
+  {
+    metric: "container_cpu_usage_seconds_total",
+    powers: "promCpuHistory",
+    from: "promFromCadvisor",
+  },
+  {
+    metric: "container_memory_working_set_bytes",
+    powers: "promMemoryHistory",
+    from: "promFromCadvisor",
+  },
+  {
+    metric: "kubelet_volume_stats_used_bytes",
+    powers: "promVolumeFullness",
+    from: "promFromKubelet",
+  },
+  {
+    metric: "container_network_receive_bytes_total",
+    powers: "promNetworkBytes",
+    from: "promFromCadvisor",
+  },
+  {
+    metric: "kube_pod_container_resource_requests",
+    powers: "promDeclaredHistory",
+    from: "promFromKsm",
+  },
+];
+
+export interface Coverage {
+  /** Node names this cluster has and Prometheus has never scraped. */
+  unseen: string[];
+  /** Node names Prometheus knows that are not in this cluster. */
+  foreign: string[];
+  /** How many of the cluster's nodes it does know. */
+  matched: number;
+  clusterNodes: number;
+  /** Families the app queries and this Prometheus has no series for. */
+  missing: Array<(typeof FAMILIES)[number]>;
+  /**
+   * How many series each family answers with, by metric name — the row's
+   * own evidence, so "is it there" is read off the page rather than clicked
+   * into the graph UI. `null` where the count could not be read; a family
+   * that answered nothing at all is in {@link missing} instead.
+   */
+  series: Record<string, number | null>;
+  /** Set where the comparison could not be made at all. */
+  problem: Reading | null;
+}
+
+/** The node a series is about, under whichever label this Prometheus writes. */
+export function nodeNameOf(series: PromSeries): string | null {
+  return nameFrom(series);
+}
+
+const nameFrom = (series: PromSeries): string | null => {
+  for (const label of NODE_LABELS) {
+    const value = series.labels[label];
+    if (typeof value === "string" && value !== "") {
+      // `instance` is `10.0.0.4:9100` on a node exporter; the host half is
+      // the part that could match a node name, and often does not — which is
+      // why it is the last label tried rather than the first.
+      return value.split(":")[0];
+    }
+  }
+  return null;
+};
+
+export async function coverage(): Promise<Coverage> {
+  const empty: Coverage = {
+    unseen: [],
+    foreign: [],
+    matched: 0,
+    clusterNodes: 0,
+    missing: [],
+    series: {},
+    problem: null,
+  };
+
+  const nodes = await commands.listNodes(null).catch(() => null);
+  if (nodes === null) {
+    return {
+      ...empty,
+      problem: "promNoNodesListed",
+    };
+  }
+
+  // One instant query per family, plus the node one. `up` is deliberately not
+  // used: it is present on any Prometheus at all and would say nothing about
+  // whether this cluster is among what it scrapes. The count is kept, not
+  // reduced to presence — it is the row's own evidence of what is there.
+  const [seen, ...counts] = await Promise.all([
+    commands
+      .prometheusQuery("count by (node, instance) (kube_node_info)")
+      .catch(() => null),
+    ...FAMILIES.map((family) =>
+      commands
+        .prometheusQuery(`count(${family.metric})`)
+        .then((answer): number | null =>
+          answer.length === 0 ? 0 : (answer[0].points[0]?.v ?? null)
+        )
+        // A failed read is unknown, never "missing": the difference between
+        // "install kube-state-metrics" and "the tunnel dropped".
+        .catch((): number | null => null)
+    ),
+  ]);
+
+  const missing = FAMILIES.filter((_, index) => counts[index] === 0);
+  const series = Object.fromEntries(
+    FAMILIES.map((family, index) => [family.metric, counts[index]])
+  );
+
+  // Prometheus and Kubernetes may spell one node differently; `nodeMatcher`
+  // is the reading the Nodes utilisation view shares.
+  const nodeOf = nodeMatcher(nodes.map((node) => node.name));
+  const namesIn = (answer: PromSeries[] | null) =>
+    new Set(
+      (answer ?? []).flatMap((series) => {
+        const name = nameFrom(series);
+        return name ? [name] : [];
+      })
+    );
+
+  // An empty answer is not evidence of a foreign cluster, only that the
+  // question cannot be answered: kube-state-metrics is not everywhere,
+  // cAdvisor is. Asked only when the first came back empty, so the ordinary
+  // cluster still costs one query, and grouped by both labels because which
+  // one carries the name is the scrape config's choice.
+  //
+  // Read one way only, and that asymmetry is the point. `instance` is
+  // routinely `10.0.0.4:10250`, an address where the cluster has a name.
+  // From this source a match is evidence that this cluster is
+  // being scraped; a non-match is evidence of nothing at all, and must never
+  // become a foreign node. `kube_node_info` is the only source trusted in
+  // both directions, because there the label *is* the node's name.
+  const authoritative = namesIn(seen);
+  const known =
+    authoritative.size > 0
+      ? authoritative
+      : new Set(
+          [
+            ...namesIn(
+              await commands
+                .prometheusQuery(
+                  "count by (node, instance) (container_cpu_usage_seconds_total)"
+                )
+                .catch(() => null)
+            ),
+          ].filter((name) => nodeOf(name) !== null)
+        );
+  if (known.size === 0) {
+    return {
+      ...empty,
+      clusterNodes: nodes.length,
+      missing,
+      series,
+      problem: "promNoNodeLabel",
+    };
+  }
+  const scraped = new Set([...known].map(nodeOf));
+  const unseen = nodes
+    .filter((node) => !scraped.has(node.name))
+    .map((node) => node.name);
+  const foreign = [...known].filter((name) => nodeOf(name) === null);
+
+  return {
+    unseen,
+    foreign: foreign.sort(),
+    matched: nodes.length - unseen.length,
+    clusterNodes: nodes.length,
+    missing,
+    series,
+    problem: null,
+  };
+}
+
+/** What the comparison amounts to, in one word for the row. */
+export function verdict(found: Coverage, t: T): VendorVerdict {
+  if (found.problem !== null)
+    return { text: t("readings", "promCouldNotTell"), tone: "warn" };
+  if (found.clusterNodes === 0)
+    return { text: t("readings", "promNoNodesToCompare"), tone: "warn" };
+  if (found.matched === 0) {
+    return { text: t("readings", "promAnotherCluster"), tone: "err" };
+  }
+  if (found.unseen.length > 0)
+    return { text: t("readings", "promPartOfIt"), tone: "warn" };
+  if (found.foreign.length > 0)
+    return { text: t("readings", "promMoreThanThis"), tone: "ok" };
+  return { text: t("readings", "promThisCluster"), tone: "ok" };
+}
