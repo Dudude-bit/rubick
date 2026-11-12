@@ -15,7 +15,7 @@ pub use collect::{
     SearchPathEntry, ToolStatus,
 };
 pub use findings::{
-    missing_plugin_finding, settings_recovered_finding, shell_env_finding,
-    unreadable_kubeconfig_finding, Finding, Severity,
+    kubeconfig_reload_failed_finding, missing_plugin_finding, settings_recovered_finding,
+    shell_env_finding, unreadable_kubeconfig_finding, Finding, Severity,
 };
 pub use redact::redacted;
