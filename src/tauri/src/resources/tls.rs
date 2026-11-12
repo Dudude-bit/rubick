@@ -8,6 +8,9 @@
 //! short strings; it does not need a certificate, and it must never be
 //! handed the private key sitting in the next key of the same Secret.
 
+use std::collections::BTreeMap;
+
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
 use x509_parser::prelude::*;
 
@@ -334,9 +337,82 @@ pub fn still_withheld(object: &serde_json::Value) -> Vec<String> {
 /// for the same reason: it is a `ConfigMap`'s base64 map, and a key put there
 /// is no less a key than one in `data`.
 ///
-/// Returns the keys it blanked, so the surface can say what is missing
-/// rather than leaving the reader to notice.
+/// An annotation that holds a whole object as JSON is judged the same way:
+/// `kubectl apply` records the manifest it sent under one, and with it a
+/// second copy of every key these maps hold.
+///
+/// Returns the keys it blanked, each once, so the surface can say what is
+/// missing rather than leaving the reader to notice.
 pub fn redact_private_keys(object: &mut serde_json::Value) -> Vec<String> {
+    let mut blanked = redact_key_maps(object);
+    let annotations = object
+        .pointer_mut("/metadata/annotations")
+        .and_then(serde_json::Value::as_object_mut);
+    for value in annotations.into_iter().flat_map(|map| map.values_mut()) {
+        if let Some((shown, keys)) = value.as_str().and_then(redact_embedded) {
+            *value = serde_json::Value::String(shown);
+            blanked.extend(keys);
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    blanked.retain(|key| seen.insert(key.clone()));
+    blanked
+}
+
+/// A record's text names a key map only with one of these in it: the name's
+/// own letters, or the one escape JSON can spell a letter with. A record
+/// inside a record keeps them under its added backslashes. The few kilobytes
+/// every applied Deployment carries have none, and are never parsed.
+const SPELLS_A_KEY_MAP: [&str; 3] = ["\"data", "Data", "\\u"];
+
+/// The object an annotation's value is, where it is one written as JSON
+/// that could hold a key map.
+fn embedded_object(text: &str) -> Option<serde_json::Value> {
+    (text.trim_start().starts_with('{') && SPELLS_A_KEY_MAP.iter().any(|sign| text.contains(sign)))
+        .then(|| serde_json::from_str(text).ok())
+        .flatten()
+}
+
+/// An annotation's value with the private keys of the object it holds
+/// blanked, and which. `None` where it holds no object or nothing in it was
+/// blanked: that value is left byte for byte.
+fn redact_embedded(text: &str) -> Option<(String, Vec<String>)> {
+    let mut object = embedded_object(text)?;
+    let keys = redact_private_keys(&mut object);
+    if keys.is_empty() {
+        return None;
+    }
+    // kubectl ends its record with a newline, and the YAML keeps its shape.
+    let tail = &text[text.trim_end().len()..];
+    Some((format!("{object}{tail}"), keys))
+}
+
+/// An object's annotations as they may leave this process. Every wire type
+/// that carries annotations is filled from here, which a guard in `main.rs`
+/// holds.
+#[must_use]
+pub fn annotations_of(meta: &ObjectMeta) -> BTreeMap<String, String> {
+    let shown =
+        |value: &String| redact_embedded(value).map_or_else(|| value.clone(), |(shown, _)| shown);
+    meta.annotations
+        .iter()
+        .flatten()
+        .map(|(key, value)| (key.clone(), shown(value)))
+        .collect()
+}
+
+/// An object whole, as it may leave this process.
+///
+/// # Errors
+///
+/// If the object does not serialise.
+pub fn shown<T: Serialize>(object: &T) -> serde_json::Result<serde_json::Value> {
+    let mut value = serde_json::to_value(object)?;
+    redact_private_keys(&mut value);
+    Ok(value)
+}
+
+fn redact_key_maps(object: &mut serde_json::Value) -> Vec<String> {
     let secret_type = object
         .get("type")
         .and_then(serde_json::Value::as_str)
@@ -507,5 +583,199 @@ mod tests {
         assert_eq!(object["data"]["server.key"], WITHHELD_MARKER);
         assert_eq!(object["binaryData"]["bundle.p12"], WITHHELD_MARKER);
         assert_eq!(object["data"]["app.conf"], "log_level = debug");
+    }
+
+    const LAST_APPLIED: &str = "kubectl.kubernetes.io/last-applied-configuration";
+
+    fn encoded(text: &str) -> String {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(text)
+    }
+
+    /// An object as `kubectl apply` leaves it: its record of `applied` in
+    /// the annotation, newline and all.
+    fn applied(mut live: serde_json::Value, applied: &serde_json::Value) -> serde_json::Value {
+        live["metadata"]["annotations"][LAST_APPLIED] = format!("{applied}\n").into();
+        live
+    }
+
+    fn record_of(object: &serde_json::Value) -> serde_json::Value {
+        let text = object["metadata"]["annotations"][LAST_APPLIED]
+            .as_str()
+            .expect("the annotation");
+        serde_json::from_str(text).expect("still JSON")
+    }
+
+    /// `kubectl apply` keeps the manifest it sent in an annotation, so the
+    /// key withheld under `data` was on screen in full three lines lower.
+    /// Fails if the record is not judged, stops being JSON, or the one key
+    /// is named twice.
+    #[test]
+    fn the_record_kubectl_keeps_of_a_configmap_does_not_carry_the_key() {
+        let manifest = serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": { "name": "nginx", "namespace": "team-a" },
+            "data": { "nginx.conf": "worker_processes 2;", "server.key": KEY_PEM },
+        });
+        let mut object = applied(manifest.clone(), &manifest);
+
+        assert_eq!(redact_private_keys(&mut object), vec!["server.key"]);
+
+        let record = record_of(&object);
+        assert_eq!(record["data"]["server.key"], WITHHELD_MARKER);
+        assert_eq!(record["data"]["nginx.conf"], "worker_processes 2;");
+        assert_eq!(record["metadata"], manifest["metadata"]);
+        let text = object["metadata"]["annotations"][LAST_APPLIED].as_str();
+        assert!(text.is_some_and(|text| text.ends_with("}\n")));
+        assert!(!object.to_string().contains("PRIVATE KEY"));
+    }
+
+    /// A Secret applied from a file has its `tls.key` in the record as
+    /// base64, one `base64 -d` from the key. The second Secret is caught by
+    /// what its bytes are, under a name and a type that say nothing.
+    #[test]
+    fn the_record_of_a_secret_does_not_carry_the_key_in_base64() {
+        let tls = serde_json::json!({
+            "kind": "Secret",
+            "type": "kubernetes.io/tls",
+            "metadata": { "name": "tls" },
+            "data": { "tls.crt": encoded(LEAF_PEM), "tls.key": encoded(KEY_PEM) },
+        });
+        let mut object = applied(tls.clone(), &tls);
+        assert_eq!(redact_private_keys(&mut object), vec!["tls.key"]);
+        assert_eq!(record_of(&object)["data"]["tls.key"], WITHHELD_MARKER);
+        assert_eq!(record_of(&object)["data"]["tls.crt"], encoded(LEAF_PEM));
+        assert!(!object.to_string().contains(&encoded(KEY_PEM)));
+
+        let opaque = serde_json::json!({
+            "kind": "Secret",
+            "metadata": { "name": "notes" },
+            "data": { "notes": encoded(KEY_PEM) },
+        });
+        let mut object = applied(opaque.clone(), &opaque);
+        assert_eq!(redact_private_keys(&mut object), vec!["notes"]);
+        assert!(!object.to_string().contains(&encoded(KEY_PEM)));
+    }
+
+    /// `stringData` is written once and never read back, so the live Secret
+    /// has only `data` while the record still has the key as plain text.
+    #[test]
+    fn the_record_of_a_secret_does_not_carry_the_key_it_was_given_as_text() {
+        let live = serde_json::json!({
+            "kind": "Secret",
+            "metadata": { "name": "deploy" },
+            "data": { "user": encoded("git") },
+        });
+        let manifest = serde_json::json!({
+            "kind": "Secret",
+            "metadata": { "name": "deploy" },
+            "stringData": { "user": "git", "id_rsa": KEY_PEM },
+        });
+        let mut object = applied(live, &manifest);
+
+        assert_eq!(redact_private_keys(&mut object), vec!["id_rsa"]);
+        assert_eq!(record_of(&object)["stringData"]["id_rsa"], WITHHELD_MARKER);
+        assert_eq!(record_of(&object)["stringData"]["user"], "git");
+        assert!(!object.to_string().contains("PRIVATE KEY"));
+    }
+
+    /// Would rewrite, or drop, an annotation the rule has no business in:
+    /// one that is not JSON, one that is JSON and not an object, and a
+    /// record with no key in it, which comes through byte for byte.
+    #[test]
+    fn an_annotation_with_no_key_in_it_is_left_as_it_was_written() {
+        let record = "{ \"kind\":\"ConfigMap\", \"data\":{\"b\":\"2\",\"a\":\"1\"} }\n";
+        let mut object = serde_json::json!({
+            "kind": "ConfigMap",
+            "metadata": { "annotations": {
+                LAST_APPLIED: record,
+                "note": "{not json: server.key",
+                "list": "[{\"data\":{\"server.key\":\"x\"}}]",
+                "word": "\"server.key\"",
+            } },
+            "data": { "a": "1", "b": "2" },
+        });
+        let before = object.clone();
+
+        assert!(redact_private_keys(&mut object).is_empty());
+        assert_eq!(object, before);
+        assert_eq!(object["metadata"]["annotations"][LAST_APPLIED], record);
+    }
+
+    /// A record with no key map in it is not parsed, and is told from one
+    /// that has by its text. JSON lets a name be spelled with escapes, and a
+    /// record that spelled `data` that way would be waved through whole.
+    #[test]
+    fn a_key_map_spelled_with_an_escape_is_still_a_key_map() {
+        let record = serde_json::json!({ "data": { "server.key": KEY_PEM } });
+        let escaped = record.to_string().replace("\"data\"", "\"d\\u0061ta\"");
+        assert!(escaped.contains("\\u0061") && !escaped.contains("\"data"));
+        let mut object = serde_json::json!({
+            "kind": "ConfigMap",
+            "metadata": { "annotations": { LAST_APPLIED: escaped } },
+        });
+
+        assert_eq!(redact_private_keys(&mut object), vec!["server.key"]);
+        assert_eq!(record_of(&object)["data"]["server.key"], WITHHELD_MARKER);
+        assert!(!object.to_string().contains("PRIVATE KEY"));
+    }
+
+    /// One tool's record can hold an object that carries another's, and a
+    /// key two records deep is as readable as one.
+    #[test]
+    fn a_record_inside_a_record_is_judged_too() {
+        let inner = serde_json::json!({ "kind": "ConfigMap", "data": { "client.key": KEY_PEM } });
+        let outer = applied(serde_json::json!({ "kind": "ConfigMap" }), &inner);
+        let mut object = applied(serde_json::json!({ "kind": "ConfigMap" }), &outer);
+
+        assert_eq!(redact_private_keys(&mut object), vec!["client.key"]);
+        assert_eq!(
+            record_of(&record_of(&object))["data"]["client.key"],
+            WITHHELD_MARKER
+        );
+        assert!(!object.to_string().contains("PRIVATE KEY"));
+    }
+
+    /// The typed builders hand annotations out as a map and never see the
+    /// rendered object: the Metadata tab and the peek draw this map.
+    #[test]
+    fn the_annotations_a_builder_hands_out_do_not_carry_the_key() {
+        let manifest =
+            serde_json::json!({ "kind": "ConfigMap", "data": { "server.key": KEY_PEM } });
+        let meta = ObjectMeta {
+            annotations: Some(BTreeMap::from([
+                (LAST_APPLIED.to_string(), format!("{manifest}\n")),
+                ("team".to_string(), "edge".to_string()),
+            ])),
+            ..ObjectMeta::default()
+        };
+
+        let handed = annotations_of(&meta);
+        let record: serde_json::Value = serde_json::from_str(&handed[LAST_APPLIED]).expect("JSON");
+        assert_eq!(record["data"]["server.key"], WITHHELD_MARKER);
+        assert!(!handed[LAST_APPLIED].contains("PRIVATE KEY"));
+        assert_eq!(handed["team"], "edge");
+        assert!(annotations_of(&ObjectMeta::default()).is_empty());
+    }
+
+    /// The generic object page and the peek take the object whole, as JSON.
+    #[test]
+    fn an_object_handed_over_whole_does_not_carry_the_key() {
+        let secret: k8s_openapi::api::core::v1::Secret = serde_json::from_value(applied(
+            serde_json::json!({
+                "metadata": { "name": "tls" },
+                "type": "kubernetes.io/tls",
+                "data": { "tls.key": encoded(KEY_PEM) },
+            }),
+            &serde_json::json!({ "stringData": { "tls.key": KEY_PEM } }),
+        ))
+        .expect("a Secret");
+
+        let whole = shown(&secret).expect("serialises");
+        assert_eq!(whole["data"]["tls.key"], WITHHELD_MARKER);
+        assert_eq!(record_of(&whole)["stringData"]["tls.key"], WITHHELD_MARKER);
+        assert!(!whole.to_string().contains("PRIVATE KEY"));
+        assert!(!whole.to_string().contains(&encoded(KEY_PEM)));
     }
 }
