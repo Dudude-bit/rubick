@@ -491,6 +491,38 @@ describe("an object made again under the same name", () => {
   });
 
   /**
+   * A custom resource's page keeps its read under its CRD's name, where the
+   * lineage never looked: an Application made again under its name kept the
+   * uid before, and its Owns tab went on asking what that one owns until
+   * the page was opened anew. Fails if the page's own read of a custom
+   * resource does not have the lineage asked again.
+   */
+  it("is known by the uid a custom resource's page now reads", async () => {
+    function Uid() {
+      const lineage = useLineage(
+        { group: "argoproj.io", plural: "applications" },
+        "shop",
+        "argocd"
+      );
+      return <output>{lineage.data?.uid ?? "not known"}</output>;
+    }
+    const client = testQueryClient();
+    const page = queryKeys.customResource(
+      "applications.argoproj.io",
+      "argocd",
+      "shop"
+    );
+    client.setQueryData(page, { uid: "old" });
+    answers.lineage = () => Promise.resolve(lineageOf("old"));
+    await renderWithRouter(<Uid />, { client });
+    expect(await screen.findByText("old")).toBeInTheDocument();
+
+    answers.lineage = () => Promise.resolve(lineageOf("new"));
+    act(() => client.setQueryData(page, { uid: "new" }));
+    expect(await screen.findByText("new")).toBeInTheDocument();
+  });
+
+  /**
    * Delete opened from a list has no page reading the object: the lineage it
    * found in the cache could be thirty seconds old and about the object
    * before this one. Fails if the dialog trusts a cached lineage without

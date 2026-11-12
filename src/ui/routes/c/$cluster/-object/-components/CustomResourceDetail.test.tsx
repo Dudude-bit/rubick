@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -6,6 +6,7 @@ import type {
   CrdDetailInfo,
   CustomResourceDetailInfo,
 } from "@/generated/types";
+import { useWindowActivity } from "@/lib/window-activity";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { renderWithRouter } from "@/test/render";
@@ -14,6 +15,8 @@ const answers = vi.hoisted(() => ({
   crd: {} as unknown,
   crds: [] as unknown[],
   resource: {} as unknown,
+  /** The object's read where a test answers it otherwise than with `resource`. */
+  read: null as null | (() => Promise<unknown>),
   events: vi.fn((_filter: { involved_object_kind: string | null }) =>
     Promise.resolve([])
   ),
@@ -24,7 +27,8 @@ const answers = vi.hoisted(() => ({
 vi.mock("@/lib/commands", () => ({
   commands: {
     getCrd: () => Promise.resolve(answers.crd),
-    getCustomResource: () => Promise.resolve(answers.resource),
+    getCustomResource: () =>
+      answers.read?.() ?? Promise.resolve(answers.resource),
     getCustomResourceYaml: () => Promise.resolve(""),
     listEvents: answers.events,
     getDeploymentReplicasets: answers.replicaSets,
@@ -77,9 +81,35 @@ const open = (crdName: string, tab = "overview") =>
 
 beforeEach(() => {
   useClusterStore.setState({ currentContext: "test", isConnected: true });
+  answers.read = null;
   answers.events.mockClear();
   answers.replicaSets.mockClear();
   answers.connections.mockClear();
+});
+
+describe("a custom resource its page found gone", () => {
+  /**
+   * No watch follows a custom resource by name, and the page stopped asking
+   * at the first NotFound: an Application deleted and applied again stayed
+   * "no longer exists" until the page was opened anew. Fails if an object
+   * the page found gone is not asked for again when the reader comes back.
+   */
+  it("is found once it is made again under its name", async () => {
+    answers.crd = crd("example.dev", "Widget", "widgets");
+    answers.read = () =>
+      Promise.reject({ code: "NOT_FOUND", message: "widgets not found" });
+    await open("widgets.example.dev");
+    await screen.findByRole("button", { name: "Go back" });
+
+    answers.read = null;
+    answers.resource = object("example.dev/v1", "Widget");
+    act(() => useWindowActivity.setState({ focused: false }));
+    act(() => useWindowActivity.setState({ focused: true }));
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "frontend"
+    );
+  });
 });
 
 describe("the page of a custom resource named like a built-in", () => {
