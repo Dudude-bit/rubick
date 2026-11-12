@@ -57,7 +57,9 @@ import {
 import { useAsk } from "../-object/useAsk";
 import { askableKind } from "@/lib/tell-me-when";
 import { AlertTriangle, Play, FileCheck } from "lucide-react";
-import { errorToShow } from "@/lib/error-utils";
+import { ERROR_CODES, errorToShow } from "@/lib/error-utils";
+import { credentialsExpired } from "@/lib/credentials";
+import { currentConnection } from "@/lib/refusals";
 
 import { YamlEditor } from "./YamlEditor";
 import { YamlEditorToolbar } from "./YamlEditorToolbar";
@@ -320,6 +322,7 @@ export function YamlEditorDialog() {
     setShowApplyConfirm(false);
     setIsApplying(true);
     setApplyResult(null);
+    const connection = currentConnection();
 
     try {
       const applied = await commands.applyManifest(
@@ -349,6 +352,13 @@ export function YamlEditorDialog() {
         const refusal = applied.documents.find(
           (doc) => doc.outcome.says === "refused"
         )?.outcome;
+        // A session that ended after a document went in is that document's
+        // answer, not a failed command, so the sign-in screen is told here.
+        if (
+          refusal?.says === "refused" &&
+          refusal.code === ERROR_CODES.CREDENTIALS_EXPIRED
+        )
+          credentialsExpired(refusal.said, connection);
         if (resourceKey && refusal?.says === "refused")
           noteDenied(
             "patch",

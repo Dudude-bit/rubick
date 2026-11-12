@@ -28,6 +28,7 @@ import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { marcoReview } from "@/test/marco";
 import { WITHHELD_MARKER } from "@/lib/withheld";
+import { credentialsRestored, readExpiredCredentials } from "@/lib/credentials";
 
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();
@@ -396,6 +397,35 @@ describe("what an apply says when it ends", () => {
     expect(toast.mock.calls[0][0].description).toContain(
       "configmap/shop a applied"
     );
+  });
+
+  /**
+   * A token that ran out between two documents comes back as the answer of
+   * the document it ran out on, with the ones stored before it listed. Fails
+   * if they are not listed, or the sign-in screen is not told the session
+   * is over: the command did not fail, so nothing else would tell it.
+   */
+  it("lists what went in before the session ended, and says the session ended", async () => {
+    credentialsRestored();
+    const result = await applyAnswering(async () => ({
+      documents: [
+        { id: "configmap/shop a", outcome: { says: "applied" } },
+        {
+          id: "configmap/shop b",
+          outcome: {
+            says: "refused",
+            code: "CREDENTIALS_EXPIRED",
+            said: "token expired",
+          },
+        },
+        { id: "configmap/shop c", outcome: { says: "notSent" } },
+      ],
+    }));
+
+    expect(result).toHaveTextContent("configmap/shop a applied");
+    expect(result).toHaveTextContent("configmap/shop b refused: token expired");
+    expect(readExpiredCredentials()?.reason).toBe("token expired");
+    credentialsRestored();
   });
 
   /**

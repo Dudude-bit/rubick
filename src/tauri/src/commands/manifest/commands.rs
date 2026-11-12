@@ -67,15 +67,19 @@ async fn apply_of(state: &AppState, manifest: &str, namespace: Option<&str>) -> 
         let outcome = if stopped {
             ApplyOutcome::NotSent
         } else {
-            let ctx = ResourceContext::for_command(state, Some(ns.clone()))?;
-            let api = ctx.dynamic_api_for_resource(
-                &parsed.api_resource,
-                is_cluster_scoped(&parsed.api_resource.kind),
-            );
-            applied_of(
-                api.patch(&parsed.name(), &patch_params, &Patch::Apply(&parsed.object))
-                    .await,
-            )?
+            let sent = async {
+                let ctx = ResourceContext::for_command(state, Some(ns.clone()))?;
+                let api = ctx.dynamic_api_for_resource(
+                    &parsed.api_resource,
+                    is_cluster_scoped(&parsed.api_resource.kind),
+                );
+                let patch = Patch::Apply(&parsed.object);
+                applied_of(api.patch(&parsed.name(), &patch_params, &patch).await)
+            };
+            match sent.await {
+                Ok(outcome) => outcome,
+                Err(error) => cut_short(error, documents.len())?,
+            }
         };
         stopped = outcome != ApplyOutcome::Applied;
         documents.push(AppliedDocument {
@@ -85,6 +89,21 @@ async fn apply_of(state: &AppState, manifest: &str, namespace: Option<&str>) -> 
     }
 
     Ok(Applied { documents })
+}
+
+/// The answer for a document the command itself failed on: the session
+/// ended, or the window left its cluster. With nothing stored yet that is
+/// the command's own failure, by the door the sign-in screen listens at.
+/// After `stored` documents went in it is this document's answer instead: a
+/// failed command lists nothing, and the reader would apply them again.
+fn cut_short(error: Error, stored: usize) -> Result<ApplyOutcome> {
+    if stored == 0 {
+        return Err(error);
+    }
+    Ok(ApplyOutcome::Refused {
+        code: error.code().to_string(),
+        said: shown(&error),
+    })
 }
 
 /// How one document's apply ended.
@@ -149,9 +168,9 @@ fn live_failure(err: kube::Error) -> Live {
 /// app's plumbing on screen, and so is the variant's own label.
 fn shown(error: &Error) -> String {
     let said = error.said();
-    said.strip_prefix("READ_DEADLINE: ")
-        .unwrap_or(&said)
-        .to_string()
+    let markers = ["READ_DEADLINE: ", "CREDENTIALS_EXPIRED: "];
+    let prose = markers.iter().find_map(|marker| said.strip_prefix(marker));
+    prose.unwrap_or(&said).to_string()
 }
 
 /// A 401 is the session being over, not the server refusing this manifest.
@@ -957,6 +976,69 @@ mod tests {
         assert!(yaml.contains("nginx.conf: worker_processes 2;"), "{yaml}");
         assert!(yaml.contains("last-applied-configuration"), "{yaml}");
         assert!(!yaml.contains("PRIVATE KEY"), "{yaml}");
+    }
+
+    const TWO_CONFIGMAPS: &str = "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: a}\n---\n\
+        apiVersion: v1\nkind: ConfigMap\nmetadata: {name: b}\n---\n\
+        apiVersion: v1\nkind: ConfigMap\nmetadata: {name: c}\n";
+
+    /// A token that ran out between two documents failed the whole command:
+    /// the editor said "Apply failed" and listed nothing, with the first
+    /// document stored. Fails if the documents that went in are not listed
+    /// beside the one the session ended on, or the rest are still sent.
+    #[tokio::test]
+    async fn an_apply_cut_by_the_session_ending_says_which_documents_went_in() {
+        let (state, hits) = connected(ServedIndex::default(), |path, _| match path {
+            "/api/v1/namespaces/shop/configmaps/a" => (
+                200,
+                r#"{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"a"}}"#.to_string(),
+            ),
+            _ => failure(401, "Unauthorized"),
+        })
+        .await;
+
+        let applied = super::apply_of(&state, TWO_CONFIGMAPS, Some("shop"))
+            .await
+            .expect("an answer per document");
+
+        let said: Vec<(&str, &ApplyOutcome)> = applied
+            .documents
+            .iter()
+            .map(|doc| (doc.id.as_str(), &doc.outcome))
+            .collect();
+        assert_eq!(said[0], ("configmap/shop a", &ApplyOutcome::Applied));
+        assert_eq!(said[1].0, "configmap/shop b");
+        match said[1].1 {
+            ApplyOutcome::Refused { code, said } => {
+                assert_eq!(code, "CREDENTIALS_EXPIRED");
+                assert!(
+                    !said.contains("CREDENTIALS_EXPIRED"),
+                    "a wire marker: {said}"
+                );
+            }
+            other => panic!("the session ended on it: {other:?}"),
+        }
+        assert_eq!(said[2], ("configmap/shop c", &ApplyOutcome::NotSent));
+        let sent = |name: &str| {
+            let path = format!("/api/v1/namespaces/shop/configmaps/{name}");
+            hits.lock().unwrap().get(path.as_str()).copied()
+        };
+        assert_eq!((sent("b"), sent("c")), (Some(1), None));
+    }
+
+    /// The cost of the one above: with nothing stored, the session ending
+    /// is still the command failing, which is what puts the sign-in screen up.
+    #[tokio::test]
+    async fn an_apply_the_session_ended_before_fails_as_the_session_ending() {
+        let (state, _) =
+            connected(ServedIndex::default(), |_, _| failure(401, "Unauthorized")).await;
+
+        let failed = super::apply_of(&state, TWO_CONFIGMAPS, Some("shop")).await;
+
+        assert!(
+            matches!(failed, Err(Error::CredentialsExpired(_))),
+            "{failed:?}"
+        );
     }
 
     /// Would keep the YAML tab of a route read at a version the cluster
