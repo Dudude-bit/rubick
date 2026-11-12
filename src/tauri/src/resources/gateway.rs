@@ -476,7 +476,7 @@ impl GatewayInfo {
             conditions: status.conditions,
             generation: obj.metadata.generation,
             labels: obj.metadata.labels.clone().unwrap_or_default(),
-            annotations: obj.metadata.annotations.clone().unwrap_or_default(),
+            annotations: crate::resources::annotations_of(&obj.metadata),
             created_at: obj.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
         }
     }
@@ -577,7 +577,7 @@ impl GatewayClassInfo {
             accepted,
             conditions: status.conditions,
             labels: obj.metadata.labels.clone().unwrap_or_default(),
-            annotations: obj.metadata.annotations.clone().unwrap_or_default(),
+            annotations: crate::resources::annotations_of(&obj.metadata),
             created_at: obj.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
         }
     }
@@ -1067,7 +1067,7 @@ impl RouteInfo {
                 .collect(),
             generation: obj.metadata.generation,
             labels: obj.metadata.labels.clone().unwrap_or_default(),
-            annotations: obj.metadata.annotations.clone().unwrap_or_default(),
+            annotations: crate::resources::annotations_of(&obj.metadata),
             created_at: obj.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
         }
     }
@@ -1165,7 +1165,7 @@ impl BackendTlsPolicyInfo {
             ancestors,
             generation: obj.metadata.generation,
             labels: obj.metadata.labels.clone().unwrap_or_default(),
-            annotations: obj.metadata.annotations.clone().unwrap_or_default(),
+            annotations: crate::resources::annotations_of(&obj.metadata),
             created_at: obj.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
         }
     }

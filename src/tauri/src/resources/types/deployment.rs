@@ -286,7 +286,7 @@ impl From<&Deployment> for DeploymentInfo {
             pod_resources: template.pod_resources,
             replica: template.replica,
             labels: deployment.labels().clone(),
-            annotations: deployment.annotations().clone(),
+            annotations: crate::resources::annotations_of(&deployment.metadata),
             template_annotations: spec
                 .and_then(|s| s.template.metadata.as_ref())
                 .and_then(|m| m.annotations.clone())

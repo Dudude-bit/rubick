@@ -129,7 +129,7 @@ impl ReplicaSetInfo {
             init_containers: template.init_containers,
             service_account_name: template.service_account_name,
             labels: rs.labels().clone(),
-            annotations: rs.annotations().clone(),
+            annotations: crate::resources::annotations_of(&rs.metadata),
             template_annotations: spec
                 .and_then(|s| s.template.as_ref())
                 .and_then(|t| t.metadata.as_ref())

@@ -1124,4 +1124,81 @@ mod tests {
             );
         }
     }
+
+    /// A wire type's `annotations` is filled by `annotations_of`, which
+    /// blanks the private keys in the record `kubectl apply` keeps there. A
+    /// builder that clones the map instead hands the key to the Metadata tab
+    /// and the peek with nothing failing. Fails on an initialiser that is not
+    /// the helper, not the metadata of an object being built, and not listed.
+    #[test]
+    fn every_builder_hands_out_annotations_through_the_one_helper() {
+        const NOT_AN_OBJECTS_OWN: [&str; 5] = [
+            "f.annotations,",
+            "string_map(rule.get(\"annotations\")),",
+            "string_map(alert.get(\"annotations\")),",
+            "BTreeMap::new(),",
+            "revision.map(|r| {",
+        ];
+        const A_TYPE: [&str; 2] = ["BTreeMap<", "&BTreeMap<"];
+        let (_, sources) = command_sources();
+        let mut through = 0;
+        let mut listed = BTreeSet::new();
+        let mut strays = Vec::new();
+        for line in sources.iter().flat_map(|source| source.lines()) {
+            let line = line.trim();
+            let value = match line.strip_prefix("annotations:") {
+                Some(value) => value.trim_start(),
+                None if line == "annotations," => line,
+                None => continue,
+            };
+            if value.contains("crate::resources::annotations_of(") {
+                through += 1;
+            } else if NOT_AN_OBJECTS_OWN.contains(&value) {
+                listed.insert(value);
+            } else if !(value.starts_with("Some(")
+                || value.starts_with("None")
+                || A_TYPE.iter().any(|a_type| value.starts_with(a_type)))
+            {
+                strays.push(line);
+            }
+        }
+        assert!(
+            through >= 20,
+            "the scan found only {through} builders; it is not reading the tree"
+        );
+        assert!(
+            strays.is_empty(),
+            "hand out annotations without crate::resources::annotations_of: {strays:?}"
+        );
+        assert_eq!(
+            listed.len(),
+            NOT_AN_OBJECTS_OWN.len(),
+            "listed and no longer in the tree; drop the exemption"
+        );
+    }
+
+    /// A manifest reaches the screen as YAML only through `editor_yaml`,
+    /// which withholds private keys. Four commands wrote theirs beside it,
+    /// so a custom resource and any kind on the generic page showed a key
+    /// the YAML tab of a `ConfigMap` withheld.
+    #[test]
+    fn every_manifest_for_the_screen_is_written_by_the_one_helper() {
+        // In pieces, so that this file is not what the scan finds.
+        let writes = concat!("serde_yaml::", "to_string(");
+        let helper = concat!("pub fn ", "editor_yaml<");
+        let (_, sources) = command_sources();
+        let helpers = sources.iter().filter(|source| source.contains(helper));
+        assert_eq!(helpers.count(), 1, "the helper moved; the scan lost it");
+        let strays: Vec<&str> = sources
+            .iter()
+            .filter(|source| !source.contains(helper))
+            .flat_map(|source| source.lines())
+            .map(str::trim)
+            .filter(|line| line.contains(writes) && !line.contains("(kubeconfig)"))
+            .collect();
+        assert!(
+            strays.is_empty(),
+            "write YAML without commands::helpers::editor_yaml: {strays:?}"
+        );
+    }
 }

@@ -20,7 +20,7 @@ use tokio::time::timeout;
 
 use crate::client::served::Served;
 use crate::client::ASKS_AT_ONCE;
-use crate::commands::helpers::{clean_yaml_for_editor, scope_of, ResourceContext};
+use crate::commands::helpers::{editor_yaml, scope_of, ResourceContext};
 use crate::error::{Error, Result};
 use crate::state::AppState;
 
@@ -240,7 +240,8 @@ pub async fn list_resource_table(
     .await
 }
 
-/// One object of any served kind, whole, as the API server returned it.
+/// One object of any served kind, whole, as the API server returned it but
+/// for the private keys in it.
 #[tauri::command]
 pub async fn get_served_object(
     group: String,
@@ -249,13 +250,23 @@ pub async fn get_served_object(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value> {
-    let object = crate::client::clock::timed(
+    crate::client::clock::timed(
         &state.perf,
         "getServedObject",
-        object(&state, &group, &plural, &name, namespace),
+        whole(&state, &group, &plural, &name, namespace),
     )
-    .await?;
-    serde_json::to_value(object).map_err(|e| Error::Serialization(e.to_string()))
+    .await
+}
+
+async fn whole(
+    state: &AppState,
+    group: &str,
+    plural: &str,
+    name: &str,
+    namespace: Option<String>,
+) -> Result<serde_json::Value> {
+    let object = object(state, group, plural, name, namespace).await?;
+    crate::resources::shown(&object).map_err(|e| Error::Serialization(e.to_string()))
 }
 
 /// The same object as the YAML editor shows every kind.
@@ -273,8 +284,7 @@ pub async fn get_served_object_yaml(
         object(&state, &group, &plural, &name, namespace),
     )
     .await?;
-    let yaml = serde_yaml::to_string(&object).map_err(|e| Error::Serialization(e.to_string()))?;
-    clean_yaml_for_editor(&yaml)
+    editor_yaml(&object)
 }
 
 /// How many siblings a page compares one object against. Enough for the
@@ -332,7 +342,7 @@ async fn siblings_of(
         .into_iter()
         .map(|mut object| {
             object.metadata.managed_fields = None;
-            serde_json::to_value(object)
+            crate::resources::shown(&object)
         })
         .collect::<std::result::Result<_, _>>()
         .map_err(|e| Error::Serialization(e.to_string()))?;
@@ -624,5 +634,57 @@ mod tests {
         };
         assert_eq!(has("pods"), Some(true));
         assert_eq!(has("serviceaccounts"), Some(false));
+    }
+
+    /// The generic object page, the peek and the pages that compare siblings
+    /// take objects whole; both reads handed over a `ConfigMap`'s key twice,
+    /// under `data` and in the record `kubectl apply` keeps of it.
+    #[tokio::test]
+    async fn an_object_read_whole_is_handed_over_without_its_private_key() {
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let applied = json!({ "kind": "ConfigMap", "data": { "server.key": KEY } });
+        let config = json!({
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": "nginx",
+                "namespace": "team-a",
+                "annotations": {
+                    "kubectl.kubernetes.io/last-applied-configuration": applied.to_string(),
+                },
+            },
+            "data": { "nginx.conf": "worker_processes 2;", "server.key": KEY },
+        });
+        let list = json!({ "kind": "ConfigMapList", "apiVersion": "v1", "metadata": {}, "items": [config] });
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+            "/api/v1" => (200, resources("v1", &[("configmaps", "ConfigMap")])),
+            "/apis" => (200, json!({ "kind": "APIGroupList", "groups": [] }).to_string()),
+            "/api/v1/namespaces/team-a/configmaps/nginx" => (200, list["items"][0].to_string()),
+            "/api/v1/namespaces/team-a/configmaps" => (200, list.to_string()),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+
+        let one = whole(&state, "", "configmaps", "nginx", Some("team-a".into()))
+            .await
+            .expect("read");
+        let siblings = siblings_of(
+            &state,
+            String::new(),
+            "configmaps".into(),
+            Some("team-a".into()),
+        )
+        .await
+        .expect("listed");
+        assert_eq!(siblings.items.len(), 1);
+        for object in [&one, &siblings.items[0]] {
+            assert_eq!(object["data"]["nginx.conf"], "worker_processes 2;");
+            assert_eq!(
+                object["data"]["server.key"],
+                crate::resources::WITHHELD_MARKER
+            );
+            assert!(!object.to_string().contains("PRIVATE KEY"), "{object}");
+        }
     }
 }

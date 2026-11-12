@@ -213,7 +213,7 @@ impl From<&Job> for JobDetailInfo {
             pod_resources: template.pod_resources,
             replica: template.replica,
             labels: job.labels().clone(),
-            annotations: job.annotations().clone(),
+            annotations: crate::resources::annotations_of(&job.metadata),
             conditions,
             owner_references: extract_owner_references(job.metadata.owner_references.as_ref()),
             created_at: job.creation_timestamp().to_rfc3339_opt(),

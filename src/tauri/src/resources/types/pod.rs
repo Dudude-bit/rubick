@@ -391,7 +391,7 @@ impl From<&Pod> for PodInfo {
             containers,
             init_containers,
             labels: pod.labels().clone(),
-            annotations: pod.annotations().clone(),
+            annotations: crate::resources::annotations_of(&pod.metadata),
             created_at: pod.creation_timestamp().map(|t| t.moment()),
             restart_count,
             last_restart_at,

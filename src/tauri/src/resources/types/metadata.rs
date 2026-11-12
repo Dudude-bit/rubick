@@ -65,7 +65,7 @@ impl From<&ConfigMap> for ConfigMapInfo {
                 .chain(cm.binary_data.iter().flatten().map(|(key, _)| key.clone()))
                 .collect(),
             labels: cm.labels().clone(),
-            annotations: cm.annotations().clone(),
+            annotations: crate::resources::annotations_of(&cm.metadata),
             created_at: cm.creation_timestamp().map(|t| t.moment()),
         }
     }
@@ -98,7 +98,7 @@ impl From<&Secret> for SecretInfo {
                 .map(|d| d.keys().cloned().collect())
                 .unwrap_or_default(),
             labels: secret.labels().clone(),
-            annotations: secret.annotations().clone(),
+            annotations: crate::resources::annotations_of(&secret.metadata),
             created_at: secret.creation_timestamp().map(|t| t.moment()),
         }
     }

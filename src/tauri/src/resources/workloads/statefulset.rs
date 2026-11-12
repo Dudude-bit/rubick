@@ -150,7 +150,7 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
             pod_resources: template.pod_resources,
             replica: template.replica,
             labels: ss.labels().clone(),
-            annotations: ss.annotations().clone(),
+            annotations: crate::resources::annotations_of(&ss.metadata),
             conditions,
             owner_references: extract_owner_references(ss.metadata.owner_references.as_ref()),
             generation: ss.metadata.generation,

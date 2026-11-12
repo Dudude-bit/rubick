@@ -41,8 +41,7 @@ fn deployment(name: &str, replicas: u32) -> String {
 async fn live_edit(client: kube::Client, ns: &str, name: &str, replicas: u32) -> String {
     let api: kube::Api<k8s_openapi::api::apps::v1::Deployment> = kube::Api::namespaced(client, ns);
     let live = api.get(name).await.expect("the deployment exists");
-    let yaml = serde_yaml::to_string(&live).expect("yaml");
-    let cleaned = k8s_gui_lib::commands::helpers::clean_yaml_for_editor(&yaml).expect("cleaned");
+    let cleaned = k8s_gui_lib::commands::helpers::editor_yaml(&live).expect("cleaned");
     let edited = regex_replace_replicas(&cleaned, replicas);
     assert_ne!(edited, cleaned, "the edit changed the replica count");
     edited

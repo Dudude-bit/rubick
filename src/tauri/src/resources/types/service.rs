@@ -101,7 +101,7 @@ impl From<&Service> for ServiceInfo {
             ports,
             selector: spec.and_then(|s| s.selector.clone()).unwrap_or_default(),
             labels: service.labels().clone(),
-            annotations: service.annotations().clone(),
+            annotations: crate::resources::annotations_of(&service.metadata),
             created_at: service.creation_timestamp().map(|t| t.moment()),
         }
     }

@@ -140,7 +140,7 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             pod_resources: template.pod_resources,
             replica: template.replica,
             labels: ds.labels().clone(),
-            annotations: ds.annotations().clone(),
+            annotations: crate::resources::annotations_of(&ds.metadata),
             selector,
             conditions,
             owner_references: extract_owner_references(ds.metadata.owner_references.as_ref()),

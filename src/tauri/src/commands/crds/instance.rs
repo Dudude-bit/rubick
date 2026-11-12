@@ -172,8 +172,7 @@ pub async fn get_custom_resource_yaml(
     )
     .await?;
 
-    let yaml = serde_yaml::to_string(&obj).map_err(|e| Error::Serialization(e.to_string()))?;
-    crate::commands::helpers::clean_yaml_for_editor(&yaml)
+    crate::commands::helpers::editor_yaml(&obj)
 }
 
 /// A merge patch on one custom resource: how an operator's knobs are turned
