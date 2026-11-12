@@ -63,6 +63,23 @@ impl Here<'_> {
             .await
     }
 
+    /// See [`AppState::served_recommended`].
+    pub async fn served_recommended(
+        &self,
+        group: &str,
+    ) -> Result<
+        Option<
+            Vec<(
+                kube::discovery::ApiResource,
+                kube::discovery::ApiCapabilities,
+            )>,
+        >,
+    > {
+        self.index
+            .recommended(&self.context, &self.client, group)
+            .await
+    }
+
     /// See [`AppState::served_answer`].
     pub fn served_answer<T>(&self, group: &str, answer: kube::Result<T>) -> kube::Result<T> {
         self.index.answered(&self.context, group, answer)
@@ -349,10 +366,7 @@ impl AppState {
             )>,
         >,
     > {
-        let here = self.here()?;
-        here.index
-            .recommended(&here.context, &here.client, group)
-            .await
+        self.here()?.served_recommended(group).await
     }
 
     /// Discovery as read for `context`, for a reader that asks it of a

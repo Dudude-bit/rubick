@@ -284,14 +284,15 @@ impl OwnershipIndexes {
         state: &AppState,
         scope: Option<Vec<String>>,
     ) -> Result<Arc<ClusterIndex>> {
-        let context = state.get_current_context().ok_or_else(|| {
-            crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
-        })?;
+        // One cluster for the whole of it: the index is kept under this name,
+        // and what it is told after a wait has to be this cluster's too.
+        let here = state.here()?;
+        let context = here.context.clone();
         if let Some(index) = self.clusters.get(&context).map(|held| held.clone()) {
             *index.last_used.lock() = Instant::now();
             index.rescope(scope);
             for kind in index.unread_definitions() {
-                match state.served(&kind.group, &kind.plural).await {
+                match here.served(&kind.group, &kind.plural).await {
                     Ok(Some(served)) => index.watch(kind, served),
                     Ok(None) => index.unserved(kind, Reading::Unlistable),
                     Err(error) => index.unserved(
@@ -302,12 +303,12 @@ impl OwnershipIndexes {
                     ),
                 }
             }
-            self.regroup(state, &index).await;
+            self.regroup(&here, &index).await;
             self.make_room(&context, &index);
             return Ok(index);
         }
-        let client = crate::commands::helpers::ResourceContext::for_list(state, None)?.client;
-        let catalog = crate::commands::catalog::catalog(state).await?;
+        let client = (*here.client).clone();
+        let catalog = crate::commands::catalog::catalog_on(&here).await?;
         let index = Arc::new(ClusterIndex {
             graph: RwLock::new(Graph::default()),
             slots: Mutex::new(BTreeMap::new()),
@@ -345,7 +346,7 @@ impl OwnershipIndexes {
     /// an aggregated API installed since the index started has no CRD to
     /// tell it, and a group that did not answer then may answer now. One
     /// that fails is named, as at the start.
-    async fn regroup(&self, state: &AppState, index: &Arc<ClusterIndex>) {
+    async fn regroup(&self, here: &crate::state::Here<'_>, index: &Arc<ClusterIndex>) {
         {
             let mut last = index.regrouped.lock();
             if last.elapsed() < self.regroup_every {
@@ -354,7 +355,7 @@ impl OwnershipIndexes {
             *last = Instant::now();
         }
         let unread = |group: &str| !index.reads(group);
-        let Ok(found) = crate::commands::catalog::catalog_of(state, unread).await else {
+        let Ok(found) = crate::commands::catalog::catalog_of(here, unread).await else {
             return;
         };
         *index.unread_groups.lock() = found.unread;
@@ -1833,6 +1834,42 @@ mod tests {
             Ok(vec![("one".to_string(), None)])
         );
         assert!(!unread(&index));
+        state.ownership.forget_all();
+    }
+
+    /// The groups are a wait, and the window was on another cluster when they
+    /// answered: the kinds were then asked of that one, and this cluster's
+    /// index, kept under its name, was told the other's. Fails if the index
+    /// asks any cluster but the one it is kept for.
+    #[tokio::test]
+    async fn an_index_reads_the_cluster_it_is_kept_for_though_the_window_moved_meanwhile() {
+        use crate::client::served::test_server::connected;
+        use std::sync::OnceLock;
+
+        let window = Arc::new(OnceLock::new());
+        let moved = window.clone();
+        let (state, hits) = connected(
+            crate::client::served::ServedIndex::default(),
+            move |path, _| {
+                if path == "/apis" {
+                    let current: &Arc<parking_lot::RwLock<Option<String>>> =
+                        moved.get().expect("the window");
+                    *current.write() = Some("elsewhere".to_string());
+                }
+                crds_and_widgets(path, true)
+            },
+        )
+        .await;
+        window.set(state.current_context.clone()).expect("unset");
+
+        let index = state.ownership.ensure(&state, None).await.expect("index");
+
+        assert!(index.reads(WIDGETS.0), "its own kinds, by its own client");
+        assert_eq!(
+            hits.lock().unwrap().get("/apis/demo.example.com/v1"),
+            Some(&1)
+        );
+        assert!(state.ownership.running("fake").is_some());
         state.ownership.forget_all();
     }
 
