@@ -15,6 +15,13 @@
 //! refused, the list is asked again as it was, and past the wait it is asked
 //! as it was beside the floored one, which is kept. Silence is also a big
 //! list still being assembled, and the first of the two to answer is taken.
+//!
+//! Up to Kubernetes 1.30 a cache does not ask etcd where it stands. The
+//! version a consistent list answers with is the store's, the cache of a
+//! collection nothing is changing in reaches it only on etcd's next progress
+//! notice, and the list asked as it was leaves a newer one. So a collection
+//! whose cache did not reach its floor is not waited on alone the next time:
+//! both are asked at once until the cache answers a floor again.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -22,7 +29,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use http::{Method, Request, Response, StatusCode, Uri};
 use http_body::{Body, Frame, SizeHint};
 use kube::client::Body as KubeBody;
@@ -87,6 +94,8 @@ pub(super) struct Floors {
     /// How long a request's floored answer last took to begin, where that
     /// was over [`FLOOR_WAIT`], by the target as asked.
     slow: Arc<DashMap<String, Duration>>,
+    /// The collections whose cache did not reach the floor last asked of it.
+    behind: Arc<DashSet<String>>,
 }
 
 impl Floors {
@@ -113,14 +122,19 @@ impl Floors {
     }
 
     /// How long `target`'s floored list is waited on alone: a list known to
-    /// begin late is not asked twice on every read.
-    fn patience(&self, target: &str) -> Duration {
+    /// begin late is not asked twice on every read, and one whose cache was
+    /// behind the last floor is not waited on at all.
+    fn patience(&self, collection: &str, target: &str) -> Duration {
+        if self.behind.contains(collection) {
+            return Duration::ZERO;
+        }
         self.slow
             .get(target)
             .map_or(FLOOR_WAIT, |took| *took + FLOOR_WAIT)
     }
 
-    fn began(&self, target: &str, took: Duration) {
+    fn began(&self, collection: &str, target: &str, took: Duration) {
+        self.behind.remove(collection);
         if took > FLOOR_WAIT {
             self.slow.insert(target.to_string(), took);
         } else {
@@ -211,7 +225,7 @@ where
             .path_and_query()
             .map(ToString::to_string)
             .unwrap_or_default();
-        let patience = floors.patience(&target);
+        let patience = floors.patience(&key, &target);
         let spare = self.inner.clone();
         let sent = Instant::now();
         let mut answer = Box::pin(self.inner.call(with_floor(request, &query, floor)));
@@ -224,14 +238,20 @@ where
                 tokio::select! {
                     biased;
                     late = &mut answer => late,
-                    asked = &mut plain => return Ok(Learned::wrap(asked?, fallback)),
+                    asked = &mut plain => {
+                        floors.behind.insert(key);
+                        return Ok(Learned::wrap(asked?, fallback));
+                    }
                 }
             };
             let response = late?;
             if refused(response.status()) {
+                if response.status() == StatusCode::GATEWAY_TIMEOUT {
+                    floors.behind.insert(key);
+                }
                 return Ok(Learned::wrap(plain.await?, fallback));
             }
-            floors.began(&target, sent.elapsed());
+            floors.began(&key, &target, sent.elapsed());
             Ok(Learned::wrap(response, floored))
         })
     }
@@ -623,6 +643,53 @@ mod tests {
         assert_eq!(floored(&asked[2]), None, "asked again as it was: {asked:?}");
     }
 
+    /// Up to Kubernetes 1.30 the floor a consistent list leaves is the
+    /// store's revision, which the cache of a collection nothing changes in
+    /// reaches only on etcd's next progress notice. Each list of one sat out
+    /// the floor's wait, was asked again as it was, and left a newer floor
+    /// for the next to sit out. Fails if a list waits alone on a cache that
+    /// was behind the floor before it, stops asking the cache meanwhile, or
+    /// is not waited on alone again once the cache has answered a floor.
+    #[tokio::test]
+    async fn a_cache_that_did_not_reach_the_floor_is_not_waited_on_alone_the_next_time() {
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
+        let store = Arc::new(AtomicU64::new(500));
+        let caught_up = Arc::new(AtomicBool::new(false));
+        let cache = caught_up.clone();
+        let (client, asked) = slow_server(move |target| {
+            let from_cache = target.contains("NotOlderThan");
+            (!from_cache || cache.load(SeqCst))
+                .then(|| (Duration::ZERO, (200, pod_list(store.fetch_add(1, SeqCst)))))
+        })
+        .await;
+        let pods: Api<Pod> = Api::namespaced(client, "shop");
+        let timed = || async {
+            let started = std::time::Instant::now();
+            pods.list(&ListParams::default()).await.expect("listed");
+            started.elapsed()
+        };
+        timed().await;
+        assert!(timed().await >= FLOOR_WAIT, "the first floor is waited on");
+
+        let took = timed().await;
+        assert!(took < FLOOR_WAIT / 2, "waited on alone again: {took:?}");
+        let floors: Vec<_> = asked
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|target| floored(target).is_some())
+            .collect();
+        assert_eq!(floors, [false, true, false, true, false]);
+
+        caught_up.store(true, SeqCst);
+        timed().await;
+        caught_up.store(false, SeqCst);
+        assert!(
+            timed().await >= FLOOR_WAIT,
+            "a cache that answered is waited on"
+        );
+    }
+
     /// A big list, or any over a slow link, begins its answer later than the
     /// floor's wait. Dropped there and asked again from scratch, every read
     /// of it took a second and a whole list longer than with no floor at all.
@@ -803,9 +870,10 @@ mod tests {
         refused.await.expect("task").expect("asked again");
         pods.list(&ListParams::default()).await.expect("after");
 
+        // The cache refused the floor before, so the list is asked beside it.
         let asked = asked.lock().unwrap().clone();
-        let last = asked.last().expect("asked");
-        assert_eq!(floored(last), Some("600"), "{asked:?}");
+        let last = asked.iter().rev().find_map(|target| floored(target));
+        assert_eq!(last, Some("600"), "{asked:?}");
     }
 
     /// An object's answer raises the floor by its own version, which comes
