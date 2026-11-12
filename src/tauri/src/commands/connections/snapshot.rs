@@ -1187,7 +1187,7 @@ mod read_live_tests {
                 .code
         };
         assert_eq!(code(refused(403, "Forbidden")), "PERMISSION_DENIED");
-        assert_eq!(code(refused(500, "InternalError")), "KUBE_API_ERROR");
+        assert_eq!(code(refused(500, "InternalError")), "NO_ANSWER");
     }
 }
 
