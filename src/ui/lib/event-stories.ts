@@ -816,8 +816,9 @@ function whenOf(events: EventInfo[], since: number): Saying {
 
 /** The events in the window, folded into stories. Order is not meaningful; see {@link sortStories}. */
 export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
-  const { now, windowMs } = options;
+  const { now, windowMs, readFrom = null } = options;
   const since = now - windowMs;
+  const cutShort = readFrom !== null && readFrom > since;
   const inWindow = events.filter((event) => {
     const last = at(event.lastTimestamp);
     return last === null || last >= since;
@@ -879,9 +880,10 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
       ? group.subject.past
       : warnings === 0
         ? // Nothing went wrong *in what was read*. Where a filter narrowed
-          // that, the difference between "nothing went wrong" and "the
+          // that, or the read stopped at the limit short of the window's
+          // start, the difference between "nothing went wrong" and "the
           // warnings were not in the set" is the whole answer.
-          options.narrowed
+          options.narrowed || cutShort
           ? "unknown"
           : "done"
         : latestWarningAt === null
@@ -990,6 +992,26 @@ export interface DensityBucket {
    * happened", the quietest thing it can say.
    */
   read: boolean;
+}
+
+/**
+ * The earliest moment a read cut at a limit covers. Each part is newest
+ * first and was cut on its own, so a scope polled a namespace at a time is
+ * read only from the latest of those cuts: a quiet namespace's old event
+ * says nothing of how far back a noisy one's rows reach. A part shorter than
+ * `limit` was read whole.
+ */
+export function readFromOf(
+  parts: readonly (readonly EventInfo[])[],
+  limit = 0
+): number | null {
+  let from: number | null = null;
+  for (const rows of parts) {
+    if (rows.length < limit) continue;
+    const oldest = at(rows.at(-1)?.lastTimestamp ?? null);
+    if (oldest !== null && (from === null || oldest > from)) from = oldest;
+  }
+  return from;
 }
 
 /** When each event was last seen, over the window, in `buckets` equal slices. */
