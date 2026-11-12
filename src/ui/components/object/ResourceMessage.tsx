@@ -1,6 +1,7 @@
 import { Fragment, type ReactElement, type ReactNode } from "react";
 
 import { linkifyMessage, type MessageSubject } from "@/lib/message-refs";
+import { withoutCredentials } from "@/lib/hints";
 import { ImageRef } from "./ImageRef";
 import { objectLink } from "@/lib/links";
 import { ObjectLink, ResourceRef } from "./ResourceRef";
@@ -60,6 +61,8 @@ export function ResourceMessage({
   oneLine = false,
 }: ResourceMessageProps) {
   const pieces: Array<string | ReactElement> = [];
+  // A controller quotes the address it failed on, token and all.
+  message = withoutCredentials(message);
   for (const segment of linkifyMessage(message, subject)) {
     const piece =
       segment.kind === "text" ? (

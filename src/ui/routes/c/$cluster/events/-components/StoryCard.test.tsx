@@ -34,6 +34,39 @@ const backOff: EventInfo = {
 const unreadSlices = () =>
   screen.getByRole("img").querySelectorAll(".border-dashed").length;
 
+describe("a story's words", () => {
+  /** A card says what happened in the event's own message, and lists each beside its time. Fails if the token in an address it quotes is printed in either. */
+  it("prints an event's message without the credentials in an address", async () => {
+    const options: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const failed: EventInfo = {
+      ...backOff,
+      reason: "GitOperationFailed",
+      message:
+        "failed to clone 'https://git.example.com/acme/infra.git?access_token=s3cr3t-value': 401",
+    };
+    const [story] = storiesOf([failed], options);
+    const { container } = await renderWithRouter(
+      <StoryCard
+        crd={undefined}
+        story={story}
+        options={options}
+        showNamespace={false}
+      />
+    );
+    expect(container.textContent).toContain("infra.git?access_token=…': 401");
+    fireEvent.click(screen.getByRole("button", { name: /Timeline/ }));
+    expect(
+      screen.getAllByText(/infra\.git\?access_token=…': 401/).length
+    ).toBeGreaterThan(1);
+    expect(container.textContent).not.toContain("s3cr3t-value");
+  });
+});
+
 describe("a story card held between watch ticks", () => {
   /**
    * The card skips a redraw when its own events did not change. Fails if a

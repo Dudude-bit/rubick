@@ -1014,12 +1014,19 @@ const PREFIXED: Shape = [
   "…",
 ];
 
+// ?token=…, &X-Amz-Signature=… in an address. Keyed, but only by a key a
+// query string opens with `?` or `&` and ends with `=`, which no image tag does
+const QUERY_SECRET: Shape = [
+  /([?&](?:[\w.-]*(?:pass(?:word|wd)?|pwd|token|secret|api[-_]?key|access[-_]?key|signature|credential)[\w.-]*|sig|key|auth)=)[^\s&#"'<>)\]]+/gi,
+  "$1…",
+];
+
 /**
  * The shapes that are a credential wherever they stand, in a name or an
  * address as much as in a sentence. The keyed ones below are not among
  * them: outside a log line they take `oauth2-proxy:v7.5` for a password.
  */
-const CREDENTIAL_SHAPES: Shape[] = [URL_USERINFO, JWT, PREFIXED];
+const CREDENTIAL_SHAPES: Shape[] = [URL_USERINFO, JWT, PREFIXED, QUERY_SECRET];
 
 /**
  * What a line may not carry off this machine.
@@ -1058,9 +1065,10 @@ export function redact(line: string): string {
 
 /**
  * Any text the cluster wrote, without the credentials it carries: a
- * repository address with a token before its host, a message quoting it.
- * What a shared file prints and what a screen draws of an address both
- * pass here, so the host and path stay and what unlocks them never shows.
+ * repository address with a token before its host or in its query string,
+ * a controller's message quoting it. What a shared file prints and what a
+ * screen draws of an address, a message or a printed column all pass here,
+ * so the host and path stay and what unlocks them never shows.
  */
 export function withoutCredentials(text: string): string {
   return without(CREDENTIAL_SHAPES, text);

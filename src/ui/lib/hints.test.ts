@@ -1553,6 +1553,34 @@ describe("withoutCredentials", () => {
   });
 
   /**
+   * A presigned bucket address, a webhook and a git remote carry what
+   * unlocks them after the `?`, and a controller's message quotes them
+   * whole. The keyed pattern a log line gets cannot run on a name or an
+   * image; this one is keyed only by what a query string opens and closes a
+   * key with. Fails if the value reaches a screen or a file, or the rest of
+   * the address goes with it.
+   */
+  it("cuts a credential out of an address's query string and keeps the rest", () => {
+    expect(
+      withoutCredentials(
+        "failed to clone 'https://git.example.com/acme/infra.git?access_token=s3cr3t-value&ref=main': 401"
+      )
+    ).toBe(
+      "failed to clone 'https://git.example.com/acme/infra.git?access_token=…&ref=main': 401"
+    );
+    expect(
+      withoutCredentials(
+        'GET "https://charts.s3.amazonaws.com/web.tgz?X-Amz-Expires=300&X-Amz-Signature=0f3a9c41" 403'
+      )
+    ).toBe(
+      'GET "https://charts.s3.amazonaws.com/web.tgz?X-Amz-Expires=300&X-Amz-Signature=…" 403'
+    );
+    expect(
+      withoutCredentials("https://hooks.example.com/notify?key=abc123")
+    ).toBe("https://hooks.example.com/notify?key=…");
+  });
+
+  /**
    * This runs over names, images and addresses, not only sentences: the
    * keyed pattern a log line gets would print `oauth2-proxy:…` for a tag.
    * Fails if anything that is not a credential is taken out.
@@ -1564,6 +1592,8 @@ describe("withoutCredentials", () => {
       "https://github.com/acme/infra",
       "https://charts.example.com?owner=ops@example.com",
       "automountServiceAccountToken: false",
+      "https://docs.example.com/search?keyword=token&page=2",
+      "registry.example.com/secret-store/token-rotator:v1.2",
     ])
       expect(withoutCredentials(text)).toBe(text);
   });

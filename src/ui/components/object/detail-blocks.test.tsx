@@ -228,6 +228,35 @@ describe("an event row at drawer width", () => {
   });
 });
 
+describe("an event row's tooltip", () => {
+  /** The row truncates and the tooltip is the whole message: fails if it carries the token the row itself does not draw. */
+  it("holds the message without the credentials in an address", async () => {
+    await wrap(
+      <EventRows
+        compact
+        events={[
+          {
+            uid: "e1",
+            type: "Warning",
+            reason: "GitOperationFailed",
+            message:
+              "failed to clone 'https://git.example.com/acme/infra.git?access_token=s3cr3t-value': 401",
+            namespace: "shop",
+            involvedObject: { kind: "Pod", name: "web-0", namespace: "shop" },
+            count: 1,
+            lastTimestamp: null,
+          } as unknown as EventInfo,
+        ]}
+      />
+    );
+    const row = screen.getByText(/failed to clone/).closest("[title]");
+    expect(row).toHaveAttribute(
+      "title",
+      "failed to clone 'https://git.example.com/acme/infra.git?access_token=…': 401"
+    );
+  });
+});
+
 describe("an event row's message", () => {
   const event = (uid: string, count: number) =>
     ({

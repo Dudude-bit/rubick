@@ -11,6 +11,7 @@ import {
 } from "../../-list/columns";
 import type { Catalogue } from "@/i18n/catalogue";
 import { widestText } from "@/lib/text-width";
+import { withoutCredentials } from "@/lib/hints";
 import { ResourceList } from "../../-list/ResourceList";
 import { servedOf, useServed } from "../../-object/served";
 import { Unserved } from "../../-object/Unserved";
@@ -374,8 +375,10 @@ function Cell({
   createdAt: string | null;
 }) {
   if (value === null || value === undefined || value === "") return <None />;
-  const text =
-    typeof value === "object" ? JSON.stringify(value) : String(value);
+  // A printed column is a path into the object, and an address is one.
+  const text = withoutCredentials(
+    typeof value === "object" ? JSON.stringify(value) : String(value)
+  );
   if (target)
     return (
       <ObjectLink {...target} className="font-mono text-info hover:underline">
