@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { focusManager } from "@tanstack/react-query";
 import { act, screen, waitFor } from "@testing-library/react";
 
 import { renderWithProviders } from "@/test/render";
@@ -47,5 +48,56 @@ describe("a refused action asked again", () => {
     checkAccess.mockResolvedValue([{ allowed: true }, { allowed: true }]);
     act(() => credentialsRenewed());
     expect(await screen.findByText("allowed")).toBeVisible();
+  });
+});
+
+describe("how often the access review is asked", () => {
+  /** Long enough for a retry or a refetch that was going to happen to have asked. */
+  const settled = () =>
+    act(() => new Promise<void>((resolve) => setTimeout(resolve, 30)));
+
+  /**
+   * Once per connection is the whole budget, answered or not: every greyed
+   * button on screen asks it. Fails if a review the cluster did not answer is
+   * retried, or asked again each time the window takes focus.
+   */
+  it("asks a review that could not be asked once, not again on focus", async () => {
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    checkAccess.mockReset();
+    checkAccess.mockRejectedValue(new Error("the cluster did not answer"));
+    renderWithProviders(<Delete />);
+    await waitFor(() => expect(checkAccess).toHaveBeenCalledTimes(1));
+    await settled();
+
+    act(() => focusManager.setFocused(false));
+    act(() => focusManager.setFocused(true));
+    await settled();
+    focusManager.setFocused(undefined);
+
+    expect(checkAccess).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("allowed")).toBeVisible();
+  });
+
+  /**
+   * Fails if a surface with no action to ask about sends the authorizer an
+   * empty review, or one is sent before the cluster is connected.
+   */
+  it("asks nothing with nothing to ask, or with no cluster connected", async () => {
+    checkAccess.mockReset();
+    checkAccess.mockResolvedValue([]);
+    function Nothing() {
+      useDenied(null);
+      return null;
+    }
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    const connected = renderWithProviders(<Nothing />);
+    await settled();
+    connected.unmount();
+
+    useClusterStore.setState({ isConnected: false, currentContext: "prod" });
+    renderWithProviders(<Delete />);
+    await settled();
+
+    expect(checkAccess).not.toHaveBeenCalled();
   });
 });
