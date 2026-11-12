@@ -513,11 +513,10 @@ impl Error {
     #[must_use]
     pub fn is_unanswered(&self) -> bool {
         match self {
-            Error::ReadDeadline { .. } => true,
             Error::KubeApi(kube::Error::Api(response)) => {
                 !(400..500).contains(&response.code) && !self.is_refusal()
             }
-            Error::KubeApi(_) => true,
+            Error::ReadDeadline { .. } | Error::KubeApi(_) => true,
             _ => false,
         }
     }
