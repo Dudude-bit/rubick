@@ -7,6 +7,7 @@ import type { LogScope, UsageRange } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { shownPath } from "@/lib/hide-paths";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 import { initialFocus, type FocusReason } from "./focus";
@@ -204,6 +205,9 @@ export function LogViewer({
 }: LogViewerProps) {
   const t = useT();
   const { toast } = useToast();
+  // The cluster the pane is drawn for: a Download outlasts the page, and the
+  // window's own is another one after a tab change.
+  const cluster = useClusterStore((s) => s.currentContext) ?? "";
   // Two panes in one: a pod's containers, or a workload's pods. `lanes`
   // is the switch, and every "which lane is this line in" question below
   // asks it once through `laneOf`.
@@ -802,6 +806,7 @@ export function LogViewer({
         // crosses IPC as ten thousand parsed lines just to become a file.
         saved.push(
           await commands.savePodLog(
+            cluster,
             target.pod,
             target.namespace,
             target.container,
@@ -821,6 +826,7 @@ export function LogViewer({
     if (notice)
       toast({ ...notice, description: shownPath(notice.description) });
   }, [
+    cluster,
     containers,
     lanes,
     namespace,

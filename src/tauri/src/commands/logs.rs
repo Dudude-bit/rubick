@@ -136,8 +136,40 @@ pub async fn get_pod_logs(
     previous: bool,
     state: State<'_, AppState>,
 ) -> Result<Vec<LogLine>> {
-    let client = state.current_client()?;
+    let asked = Asked {
+        pod_name,
+        namespace,
+        container,
+        tail_lines,
+        since_seconds,
+        previous,
+    };
+    logs_of(&state, state.current_client()?, asked).await
+}
 
+/// One container's log as `get_pod_logs` is asked for it.
+struct Asked {
+    pod_name: String,
+    namespace: Option<String>,
+    container: Option<String>,
+    tail_lines: Option<i64>,
+    since_seconds: Option<i64>,
+    previous: bool,
+}
+
+async fn logs_of(
+    state: &AppState,
+    client: Arc<kube::Client>,
+    asked: Asked,
+) -> Result<Vec<LogLine>> {
+    let Asked {
+        pod_name,
+        namespace,
+        container,
+        tail_lines,
+        since_seconds,
+        previous,
+    } = asked;
     let namespace =
         normalize_optional_namespace(namespace).unwrap_or_else(|| "default".to_string());
 
@@ -168,8 +200,13 @@ pub async fn get_pod_logs(
 /// Written here rather than handed to the webview to write: ten thousand
 /// parsed lines, about six fields each, made one IPC answer of well over a
 /// megabyte for a file that needs only the text of each line.
+///
+/// `context` is the cluster the pane is on. A pane with several containers
+/// asks once for each, and the window may be on another cluster before the
+/// last: the rest were read there, and saved under this pod's name.
 #[tauri::command]
 pub async fn save_pod_log(
+    context: String,
     pod_name: String,
     namespace: Option<String>,
     container: String,
@@ -177,20 +214,15 @@ pub async fn save_pod_log(
     previous: bool,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    // Both names become the file's name: validated, nothing in them can
-    // reach outside the folder.
-    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&pod_name)?;
-    crate::validation::validate_dns_label(&container)?;
-    let lines = get_pod_logs(
-        pod_name.clone(),
+    let asked = Asked {
+        pod_name: pod_name.clone(),
         namespace,
-        Some(container.clone()),
+        container: Some(container.clone()),
         tail_lines,
-        None,
+        since_seconds: None,
         previous,
-        state,
-    )
-    .await?;
+    };
+    let lines = log_on(&state, &context, asked).await?;
     let dir = save_dir(dirs::download_dir(), dirs::home_dir());
     let stem = format!(
         "{pod_name}-{container}{}",
@@ -201,6 +233,15 @@ pub async fn save_pod_log(
         .await?;
     tokio::io::AsyncWriteExt::flush(&mut file).await?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// The log to save, read on the cluster it was asked of.
+async fn log_on(state: &AppState, context: &str, asked: Asked) -> Result<Vec<LogLine>> {
+    // Both names become the file's name: validated, nothing in them can
+    // reach outside the folder.
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&asked.pod_name)?;
+    crate::validation::validate_dns_label(asked.container.as_deref().unwrap_or_default())?;
+    logs_of(state, state.client_of(context)?, asked).await
 }
 
 /// Where a saved log goes: Downloads where there is one, else home.
@@ -235,6 +276,56 @@ mod tests {
         // answers depending on which command you asked.
         assert_eq!(tail_or_default(None), DEFAULT_TAIL_LINES);
         assert_eq!(tail_or_default(Some(42)), 42);
+    }
+
+    fn asked() -> Asked {
+        Asked {
+            pod_name: "web-0".into(),
+            namespace: Some("shop".into()),
+            container: Some("app".into()),
+            tail_lines: Some(10),
+            since_seconds: None,
+            previous: false,
+        }
+    }
+
+    /// A pane with several containers saves them one after another, and the
+    /// window was on another cluster before the last. The rest were read
+    /// from the namesake pod there and saved under this pod's name. Fails if
+    /// a log asked of one cluster is read from, or asks, the window's.
+    #[tokio::test]
+    async fn a_log_asked_of_another_cluster_is_not_read_from_the_windows() {
+        use crate::client::served::{test_server::connected, test_server::failure, ServedIndex};
+        let (state, hits) =
+            connected(ServedIndex::default(), |_, _| failure(404, "NotFound")).await;
+
+        let refused = log_on(&state, "prod", asked()).await;
+
+        assert!(matches!(
+            refused,
+            Err(crate::error::Error::NotConnected(context)) if context == "prod"
+        ));
+        assert!(hits.lock().unwrap().is_empty());
+    }
+
+    /// The other half: the cluster named is the one read, wherever the
+    /// window has got to. Fails if the window's cluster decides anything.
+    #[tokio::test]
+    async fn a_log_is_read_from_the_cluster_it_was_asked_of() {
+        use crate::client::served::{test_server::connected, ServedIndex};
+        let (state, hits) = connected(ServedIndex::default(), |_, _| (200, String::new())).await;
+        state.set_current_context(Some("elsewhere".into()));
+
+        log_on(&state, "fake", asked())
+            .await
+            .expect("the cluster it names is held");
+
+        assert_eq!(
+            hits.lock()
+                .unwrap()
+                .get("/api/v1/namespaces/shop/pods/web-0/log"),
+            Some(&1)
+        );
     }
 
     /// A Linux desktop without xdg-user-dirs has no Downloads folder, and

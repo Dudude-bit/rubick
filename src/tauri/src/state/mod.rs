@@ -239,12 +239,16 @@ impl AppState {
 
     /// The current context's client, or why there is none.
     pub fn current_client(&self) -> Result<Arc<kube::Client>> {
-        let context = self.get_current_context().ok_or_else(|| {
-            crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
-        })?;
+        Ok(self.current()?.1)
+    }
+
+    /// The client held for `context`, wherever the window is. What runs
+    /// longer than one call asks by the name it was started on: the window's
+    /// cluster is another one after a tab change.
+    pub fn client_of(&self, context: &str) -> Result<Arc<kube::Client>> {
         self.client_manager
-            .get_client(&context)
-            .ok_or(crate::error::Error::NotConnected(context))
+            .get_client(context)
+            .ok_or_else(|| crate::error::Error::NotConnected(context.to_string()))
     }
 
     /// Where `plural` in `group` is served on the current cluster; `None`
@@ -350,14 +354,14 @@ impl AppState {
         }
     }
 
-    fn current(&self) -> Result<(String, Arc<kube::Client>)> {
+    /// The window's cluster and its client, read together. A command that
+    /// waits takes both once: read apart, a tab change between the two pairs
+    /// one cluster's client with the other's name.
+    pub fn current(&self) -> Result<(String, Arc<kube::Client>)> {
         let context = self.get_current_context().ok_or_else(|| {
             crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
         })?;
-        let client = self
-            .client_manager
-            .get_client(&context)
-            .ok_or_else(|| crate::error::Error::NotConnected(context.clone()))?;
+        let client = self.client_of(&context)?;
         Ok((context, client))
     }
 

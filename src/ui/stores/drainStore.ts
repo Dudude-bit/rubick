@@ -200,7 +200,7 @@ export async function startDrain(
 
   try {
     await listen();
-    const { drainId } = await commands.startNodeDrain(node, options);
+    const { drainId } = await commands.startNodeDrain(context, node, options);
     handle.drainId = drainId;
     // The name was let go while the start was in flight: nothing holds this drain.
     if (handles.get(key) !== handle) {
