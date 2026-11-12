@@ -3585,6 +3585,38 @@ describe("what a delete leaves pointing at the object", () => {
   });
 
   /**
+   * Deleting a bound PersistentVolume leaves its claim Lost, and the dialog
+   * named nothing: a volume's graph draws the claim from the volume's side.
+   * Fails if the claim it is bound to is not named, or its class is, or a
+   * claim the cluster no longer has.
+   */
+  it("names the claim a volume is bound to, and not its class or a claim that is gone", () => {
+    const volume = ref("PersistentVolume", "pv-data");
+    const bound = (to: ObjectRef): ResourceConnections => ({
+      ...conns([
+        { from: volume, to, relation: { verb: "binds" } },
+        {
+          from: volume,
+          to: ref("StorageClass", "fast"),
+          relation: { verb: "binds" },
+        },
+      ]),
+      subject: volume,
+    });
+    const named = (to: ObjectRef) =>
+      dependentsOf(bound(to), t).map(({ object }) => object.name);
+    expect(named(ref("PersistentVolumeClaim", "data-db-0"))).toEqual([
+      "data-db-0",
+    ]);
+    expect(
+      named(ref("PersistentVolumeClaim", "data-db-0", null, "notChecked"))
+    ).toEqual(["data-db-0"]);
+    expect(
+      named(ref("PersistentVolumeClaim", "data-db-0", null, "missing"))
+    ).toEqual([]);
+  });
+
+  /**
    * A policy and a budget match labels and name no object. Fails if the
    * delete dialog warns of references unchecked in a refused list of
    * either, or stops warning of a kind that does name its target.

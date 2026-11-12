@@ -2562,6 +2562,16 @@ export interface Dependent {
 export function dependentsOf(conns: ResourceConnections, t: T): Dependent[] {
   const found = new Map<string, Dependent>();
   for (const edge of conns.edges) {
+    // A volume's graph draws its claim from the volume's side: the claim
+    // stays when the volume goes, bound to nothing.
+    if (
+      conns.subject.kind === "PersistentVolume" &&
+      sameObject(edge.from, conns.subject) &&
+      edge.relation.verb === "binds" &&
+      edge.to.kind === "PersistentVolumeClaim" &&
+      edge.to.existence !== "missing"
+    )
+      found.set(refKey(edge.to), { object: edge.to, ways: [] });
     if (!sameObject(edge.to, conns.subject)) continue;
     if (sameObject(edge.from, conns.subject)) continue;
     const ways = dependentWays(edge, t);
