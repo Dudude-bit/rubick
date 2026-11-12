@@ -386,19 +386,35 @@ describe("the findings", () => {
     expect(hostState(group, null, t).text).toBe("serving");
   });
 
-  /** The other half: a block that covers another host leaves this one with no TLS. */
-  it("still calls a host no TLS block covers served in the clear", () => {
+  /**
+   * nginx gives every host of an Ingress that has a tls section a
+   * certificate, its default one where no block lists the host. Fails if a
+   * host beside a block for another name is called served in the clear.
+   */
+  it("serves a host its Ingress's TLS section does not list over TLS too", () => {
     const other = {
       ...ingress("app", "app.test"),
       tlsConfigs: [
-        { hosts: ["other.test"], secretName: null, isCatchAll: false },
+        { hosts: ["other.test"], secretName: "other-tls", isCatchAll: false },
       ],
     };
 
     const [group] = hostGroups(sources([other]), t);
 
+    expect(group.routes[0].tls).toBe(true);
+    expect(group.routes[0].tlsSecret).toBeNull();
+    expect(group.findings.map((finding) => finding.kind)).not.toContain(
+      "clear"
+    );
+  });
+
+  /** The other half: with no tls section at all, the host has no TLS and says so. */
+  it("still calls a host whose Ingress has no TLS section served in the clear", () => {
+    const [group] = hostGroups(sources([ingress("app", "app.test")]), t);
+
     expect(group.routes[0].tls).toBe(false);
     expect(group.findings.map((finding) => finding.kind)).toContain("clear");
+    expect(group.tls).toEqual({ at: "none" });
   });
 
   /** Would break if a host with a certificate were called clear. */

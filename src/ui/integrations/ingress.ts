@@ -100,25 +100,13 @@ export function tlsSecretFor(
   ingress: IngressInfo,
   host: string | null
 ): string | null {
-  return tlsBlockFor(ingress, host)?.secretName ?? null;
+  for (const config of ingress.tlsConfigs) {
+    if (config.isCatchAll || (host !== null && covers(config.hosts, host))) {
+      return config.secretName;
+    }
+  }
+  return null;
 }
-
-const tlsBlockFor = (ingress: IngressInfo, host: string | null) =>
-  ingress.tlsConfigs.find(
-    (config) =>
-      config.isCatchAll || (host !== null && covers(config.hosts, host))
-  );
-
-/**
- * Whether a `spec.tls` block covers this host at all. Not the same question
- * as {@link tlsSecretFor}: a block may name no Secret, and what that means is
- * the controller's. ingress-nginx serves such a host over TLS under its
- * default certificate, which is the documented way to use one.
- */
-export const tlsBlockCovers = (
-  ingress: IngressInfo,
-  host: string | null
-): boolean => tlsBlockFor(ingress, host) !== undefined;
 
 // --- what is behind a route ---------------------------------------------
 

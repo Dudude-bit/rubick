@@ -799,7 +799,7 @@ function HostChain({
       ) : (
         route.tls && (
           <span className="text-[11px] text-fg-fnt">
-            {t("empty", "servedUnderDefaultNoSecret")}
+            {t("empty", "servedUnderPicked")}
           </span>
         )
       )}

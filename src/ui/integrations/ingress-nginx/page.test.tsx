@@ -137,7 +137,7 @@ describe("a host whose TLS block names no Secret", () => {
     expect(await screen.findByText(":443")).toBeInTheDocument();
     expect(screen.getByText("TLS terminated here")).toBeInTheDocument();
     expect(
-      screen.getByText(/default certificate: the tls block names no Secret/)
+      screen.getByText(/served under a certificate nginx picks/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/no TLS/)).not.toBeInTheDocument();
   });

@@ -33,7 +33,6 @@ import {
   claimsIngress,
   classesOf,
   SEVERITY_RANK as RANK,
-  tlsBlockCovers,
   tlsSecretFor,
   worstOf,
   type Backing,
@@ -94,9 +93,10 @@ export interface NginxRoute {
   resourceBackend: string | null;
   tlsSecret: string | null;
   /**
-   * A `spec.tls` block covers this host, so nginx serves it on :443: under
-   * {@link tlsSecret}, or under its default certificate where the block
-   * names none.
+   * The Ingress has a `spec.tls` section. nginx then gives every host of its
+   * rules a certificate and the redirect to it: the Secret a block names for
+   * the host, else one it picks, its default where no listed Secret covers
+   * the host. So this is not {@link tlsSecret} being set.
    */
   tls: boolean;
   annotations: AnnotationReading[];
@@ -281,7 +281,7 @@ function routesFrom(ingress: IngressInfo, index: number, t: T): NginxRoute[] {
           : null,
         resourceBackend: path.resourceBackend,
         tlsSecret: tlsSecretFor(ingress, host),
-        tls: tlsBlockCovers(ingress, host),
+        tls: ingress.tlsConfigs.length > 0,
         annotations,
         canary,
         createdAt: ingress.createdAt,
@@ -310,7 +310,7 @@ function routesFrom(ingress: IngressInfo, index: number, t: T): NginxRoute[] {
       },
       resourceBackend: fallback.resourceBackend,
       tlsSecret: tlsSecretFor(ingress, null),
-      tls: tlsBlockCovers(ingress, null),
+      tls: ingress.tlsConfigs.length > 0,
       annotations,
       canary,
       createdAt: ingress.createdAt,

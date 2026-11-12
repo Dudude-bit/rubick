@@ -6708,8 +6708,8 @@ export const en = {
     servedUnder: "served under",
     servedUnderDefault:
       "served under the controller's default certificate: {secret} does not exist",
-    servedUnderDefaultNoSecret:
-      "served under the controller's default certificate: the tls block names no Secret",
+    servedUnderPicked:
+      "served under a certificate nginx picks, its default one unless a listed Secret covers this host: no tls block names a Secret for it",
     rawNginxConfig: "Raw nginx configuration, injected verbatim",
     shownAsWritten: "Shown as written",
     andMoreOpenRow: "and {n} more: open the row",

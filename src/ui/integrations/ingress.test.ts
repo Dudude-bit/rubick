@@ -12,8 +12,6 @@ import {
   stopsRowState,
   stopsRowTone,
   stopWeight,
-  tlsBlockCovers,
-  tlsSecretFor,
   type BackingSources,
 } from "./ingress";
 import type { StopMood } from "@/lib/connections";
@@ -23,7 +21,6 @@ import { ru } from "@/i18n/ru";
 import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
-  IngressInfo,
   PolicyDoor,
   ServiceInfo,
   ServicePublished,
@@ -82,38 +79,6 @@ const sources = (over: Partial<BackingSources> = {}): BackingSources => ({
 });
 
 const from = { kind: "HTTPRoute", name: "web", namespace: "shop" };
-
-describe("the TLS block an Ingress covers a host with", () => {
-  const withTls = (tlsConfigs: IngressInfo["tlsConfigs"]) =>
-    ({ tlsConfigs }) as IngressInfo;
-  const block = (hosts: string[], secretName: string | null = null) => ({
-    hosts,
-    secretName,
-    isCatchAll: hosts.length === 0,
-  });
-
-  /**
-   * A block may cover a host and name no Secret; "which Secret" then answers
-   * null, the same as no block at all. Fails if the two are not told apart,
-   * or a block for another host is taken as covering this one.
-   */
-  it("is there whether or not it names a Secret", () => {
-    const bare = withTls([block(["*.example.com"])]);
-    expect(tlsSecretFor(bare, "app.example.com")).toBeNull();
-    expect(tlsBlockCovers(bare, "app.example.com")).toBe(true);
-    expect(tlsBlockCovers(bare, "app.other.com")).toBe(false);
-    expect(tlsBlockCovers(withTls([]), "app.example.com")).toBe(false);
-    // A block with no hosts covers every rule, a host-less one included.
-    expect(tlsBlockCovers(withTls([block([])]), null)).toBe(true);
-    expect(tlsBlockCovers(bare, null)).toBe(false);
-    expect(
-      tlsSecretFor(
-        withTls([block(["app.example.com"], "tls")]),
-        "app.example.com"
-      )
-    ).toBe("tls");
-  });
-});
 
 describe("what a route's backend is doing", () => {
   /**
