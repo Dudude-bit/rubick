@@ -95,7 +95,12 @@ fn combined(
             Ok(mut part) => data.append(&mut part),
             Err(err) => {
                 refused.get_or_insert_with(|| metrics_status_from_error(&err));
-                unread.push(UnreadNamespace::of(name.clone(), &Error::from(err)));
+                // A 401 that got here is the metrics API's own, not the session's.
+                let said = match crate::error::session_over(&err) {
+                    Some(_) => Error::KubeApi(err),
+                    None => Error::from(err),
+                };
+                unread.push(UnreadNamespace::of(name.clone(), &said));
             }
         }
     }
@@ -348,6 +353,10 @@ mod tests {
         use crate::client::served::{test_server::connected, test_server::failure, ServedIndex};
         crate::tls::provider();
         let (state, hits) = connected(ServedIndex::default(), |path, nth| {
+            // The API server refuses a lapsed token itself, on any path.
+            if path == "/version" {
+                return failure(401, "Unauthorized");
+            }
             if !path.starts_with("/apis/metrics.k8s.io/") {
                 return (404, "{}".to_string());
             }
@@ -389,6 +398,47 @@ mod tests {
         assert_eq!(
             asked("/apis/metrics.k8s.io/v1beta1/namespaces/shop/pods"),
             2
+        );
+    }
+
+    /// A metrics-server that rejects the front proxy's certificate answers
+    /// 401 while the API server takes the session. Taken for the session
+    /// ending, every metrics poll put the whole window on "Credentials
+    /// expired", and signing in again led straight back to it. Fails if a
+    /// 401 the API server does not give itself leaves as an expired session,
+    /// is not said as the metrics API's refusal, or is asked again inside
+    /// the retry time.
+    #[tokio::test]
+    async fn a_401_from_the_metrics_api_alone_is_its_refusal_and_the_session_stands() {
+        use crate::client::served::{test_server::connected, test_server::failure, ServedIndex};
+        crate::tls::provider();
+        let version = r#"{"major":"1","minor":"31","gitVersion":"v1.31.0","gitCommit":"","gitTreeState":"","buildDate":"","goVersion":"","compiler":"","platform":"linux/amd64"}"#;
+        let (state, hits) = connected(ServedIndex::default(), move |path, _| {
+            if path == "/version" {
+                (200, version.to_string())
+            } else if path.starts_with("/apis/metrics.k8s.io/") {
+                failure(401, "Unauthorized")
+            } else {
+                (404, "{}".to_string())
+            }
+        })
+        .await;
+        let asked = |path: &str| hits.lock().unwrap().get(path).copied().unwrap_or(0);
+        let scope = ["shop".to_string(), "team".to_string()];
+
+        for _ in 0..2 {
+            let nodes = get_node_metrics(&state).await.expect("the session stands");
+            assert!(matches!(nodes.status.status, MetricsStatusKind::Forbidden));
+            assert!(nodes.status.message.is_some(), "the metrics API's words");
+            let pods = get_pod_metrics_in(Some(&scope), &state)
+                .await
+                .expect("the session stands");
+            assert!(matches!(pods.status.status, MetricsStatusKind::Forbidden));
+        }
+        assert_eq!(asked("/apis/metrics.k8s.io/v1beta1/nodes"), 1);
+        assert_eq!(
+            asked("/apis/metrics.k8s.io/v1beta1/namespaces/shop/pods"),
+            1
         );
     }
 
@@ -462,7 +512,9 @@ mod tests {
     /// Would break if a namespace's unread samples skipped the mapping every
     /// other unread namespace goes through: a read that ran out of time was
     /// a generic API fault here, beside the pods notice naming the deadline
-    /// for the same namespace, and an expired session was not one.
+    /// for the same namespace. A 401 that gets this far is the metrics API's
+    /// own, the session asked and standing, so it is not filed as the
+    /// session expiring.
     #[test]
     fn an_unread_namespace_says_why_as_every_other_read_does() {
         let deadline = kube::Error::Service(Box::new(tower::timeout::error::Elapsed::new()));
@@ -475,7 +527,7 @@ mod tests {
             ],
         );
         let codes: Vec<&str> = answer.unread.iter().map(|u| u.code.as_str()).collect();
-        assert_eq!(codes, ["READ_DEADLINE", "CREDENTIALS_EXPIRED"]);
+        assert_eq!(codes, ["READ_DEADLINE", "KUBE_API_ERROR"]);
     }
 
     /// With no namespace answering, the refusal is the answer, never an

@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { ListAccess, ListQuery } from "@/generated/types";
+import { credentialsRenewed } from "@/lib/credentials";
 import { useClusterStore } from "@/stores/clusterStore";
 import { testQueryClient } from "@/test/render";
 
@@ -86,6 +87,41 @@ describe("where a refused kind may be listed instead", () => {
     await waitFor(() =>
       expect(result.current.get(POD_METRICS)).toEqual({ says: "refused" })
     );
+    expect(result.current.get(CORE_PODS)).toBeUndefined();
+  });
+});
+
+describe("a lock while its question is asked again", () => {
+  /**
+   * EKS renews its token every quarter of an hour, and a renewal asks every
+   * rights question again. With nothing held meanwhile, the sidebar's locks
+   * and the namespaces a refused kind may be listed in went out with each
+   * renewal and came back when the reviews answered. Fails if either is
+   * dropped while the same question is out again, or if the answer to one
+   * scope's question is shown for another's.
+   */
+  it("stays, with where the kind may be listed instead, through a credential renewal", async () => {
+    checkListAccess.mockImplementation(coreOnly);
+    const { result } = renderHook(() => useLocks([CORE_PODS]), {
+      wrapper: oneCache(),
+    });
+    const lock = {
+      says: "clusterWide",
+      readableIn: ["team-checkout"],
+      refusedIn: [],
+      unasked: false,
+    };
+    await waitFor(() => expect(result.current.get(CORE_PODS)).toEqual(lock));
+
+    const asked = checkListAccess.mock.calls.length;
+    checkListAccess.mockImplementation(() => new Promise(() => {}));
+    act(() => credentialsRenewed());
+    await waitFor(() =>
+      expect(checkListAccess.mock.calls.length).toBe(asked + 2)
+    );
+    expect(result.current.get(CORE_PODS)).toEqual(lock);
+
+    act(() => useClusterStore.setState({ namespaceScope: ["team-payments"] }));
     expect(result.current.get(CORE_PODS)).toBeUndefined();
   });
 });

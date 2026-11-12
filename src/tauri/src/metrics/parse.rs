@@ -36,7 +36,12 @@ pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
                     status: MetricsStatusKind::NotInstalled,
                     message: Some(server_words(api_err)),
                 }
-            } else if api_err.code == 403 || api_err.reason == "Forbidden" {
+            } else if api_err.code == 403
+                || api_err.reason == "Forbidden"
+                // Only the metrics API's own: `list_metrics` has asked the
+                // API server, and the session stands.
+                || session_over(err).is_some()
+            {
                 MetricsStatus {
                     status: MetricsStatusKind::Forbidden,
                     message: Some(server_words(api_err)),
@@ -147,9 +152,10 @@ pub(super) async fn fetch_metrics<T>(
     })
 }
 
-/// The samples, or the API's refusal or fault kept whole. A 401 is neither:
-/// it is the session ending, and leaves as the error every other read gives,
-/// so nothing files it as an answer about metrics.
+/// The samples, or the API's refusal or fault kept whole. A 401 the API
+/// server gives too is neither: it is the session ending, and leaves as the
+/// error every other read gives, so nothing files it as an answer about
+/// metrics. One the metrics API gives alone is its refusal.
 pub(super) async fn list_metrics<T>(
     state: &AppState,
     namespace: Option<&str>,
@@ -159,8 +165,22 @@ pub(super) async fn list_metrics<T>(
     let ctx = ResourceContext::for_list_from_app_state(state, namespace.map(str::to_string))?;
     let api = metrics_api(&ctx, kind);
     match api.list(&ListParams::default()).await {
-        Err(err) if session_over(&err).is_some() => Err(err.into()),
+        Err(err) if session_over(&err).is_some() && !session_stands(&ctx.client).await => {
+            Err(err.into())
+        }
         answer => Ok(answer.map(|list| list.items.iter().filter_map(parse).collect())),
+    }
+}
+
+/// Whether the API server itself still takes these credentials: `/version`,
+/// the proof a connect asks for. An aggregated API answers 401 by itself
+/// when its server rejects the front proxy's certificate, and taken for the
+/// session ending that put the whole window on "Credentials expired" at
+/// every metrics poll. No answer at all proves nothing, and is not a yes.
+async fn session_stands(client: &kube::Client) -> bool {
+    match client.apiserver_version().await {
+        Ok(_) => true,
+        Err(err) => matches!(err, kube::Error::Api(_)) && session_over(&err).is_none(),
     }
 }
 
@@ -193,6 +213,18 @@ mod tests {
         let status = metrics_status_from_error(&page);
         assert!(matches!(status.status, MetricsStatusKind::Error));
         assert_eq!(status.message.as_deref(), Some("502 Bad Gateway"));
+    }
+
+    /// No answer from the API server proves nothing about the session.
+    /// Fails if a `/version` that could not be asked is taken for the
+    /// session standing: a lapsed token's 401 on a network that also blinked
+    /// is then filed as the metrics API's refusal, and stands five minutes.
+    #[tokio::test]
+    async fn an_api_server_that_does_not_answer_does_not_vouch_for_the_session() {
+        crate::tls::provider();
+        let nowhere = kube::Config::new("http://127.0.0.1:1".parse().expect("url"));
+        let client = kube::Client::try_from(nowhere).expect("client");
+        assert!(!session_stands(&client).await);
     }
 
     /// A wrong plural or apiVersion lists a path the server does not have,

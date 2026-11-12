@@ -136,3 +136,28 @@ describe("a release whose secret would not decode", () => {
     expect(screen.getByTitle("missing field `config`")).toBeInTheDocument();
   });
 });
+
+describe("two releases whose namespace and name run together the same way", () => {
+  /**
+   * `nightly` in `data-sync` and `sync-nightly` in `data` were both the row
+   * `native-data-sync-nightly`: one React key for two rows, and a selection,
+   * an Enter or a row menu on the second reached the first. Fails if the two
+   * releases are not a row each.
+   */
+  it("are a row each", async () => {
+    const twice = vi.spyOn(console, "error").mockImplementation(() => {});
+    await mount({
+      releases: [
+        { ...release("nightly"), namespace: "data-sync" },
+        { ...release("sync-nightly"), namespace: "data" },
+      ],
+    });
+
+    expect(screen.getByText("nightly")).toBeInTheDocument();
+    expect(screen.getByText("sync-nightly")).toBeInTheDocument();
+    expect(
+      twice.mock.calls.filter(([said]) => /same key/.test(String(said)))
+    ).toEqual([]);
+    twice.mockRestore();
+  });
+});

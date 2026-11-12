@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const ran = vi.hoisted(() => ({ selects: 0, joins: 0 }));
@@ -54,6 +54,8 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { commands } from "@/lib/commands";
+import { credentialsRenewed } from "@/lib/credentials";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useIntegrationPages } from "./index";
 
@@ -102,5 +104,29 @@ describe("the number beside a vendor's row", () => {
   it("joins Cilium's endpoints and policies once for the number and its dot", async () => {
     await settled();
     expect(ran.joins).toBe(1);
+  });
+
+  /**
+   * A vendor page the reader may not list is marked in the sidebar. Every
+   * credential renewal asks the gate again, and with nothing held meanwhile
+   * the mark went out until the review answered. Fails if a refused vendor
+   * row loses its mark while the same gate is out again.
+   */
+  it("keeps a refused vendor row marked while its gate is asked again after a renewal", async () => {
+    const gate = vi.mocked(commands.checkListAccess);
+    gate.mockImplementation(async (queries) =>
+      queries.map((query) => ({ resource: query.resource, allowed: false }))
+    );
+    const { result } = renderHook(() => useIntegrationPages(), { wrapper });
+    const cilium = () =>
+      result.current.pages.find((page) => page.id === "cilium");
+    await waitFor(() => expect(cilium()?.forbidden).toBe(true));
+
+    const asked = gate.mock.calls.length;
+    gate.mockImplementation(() => new Promise(() => {}));
+    act(() => credentialsRenewed());
+    await waitFor(() => expect(gate.mock.calls.length).toBeGreaterThan(asked));
+    expect(cilium()?.forbidden).toBe(true);
+    gate.mockImplementation(async () => []);
   });
 });

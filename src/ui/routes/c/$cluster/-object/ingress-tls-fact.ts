@@ -5,7 +5,12 @@ import { useIngressTls } from "@/hooks/useIngressTls";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { useT } from "@/i18n/useT";
 import { expiryOf, expiryText } from "@/lib/certificates";
-import { hostTlsOf, namedTlsHosts, vendorTlsAnswer } from "./vendor-tls";
+import {
+  hostTlsOf,
+  ingressTlsVerdict,
+  namedTlsHosts,
+  vendorTlsAnswer,
+} from "./vendor-tls";
 
 /** An Ingress's TLS in one line: words, tone, and whether it could tell. */
 export interface IngressTlsFact {
@@ -45,19 +50,9 @@ export function useIngressTlsFact(ingress: IngressInfo | undefined) {
   const tlsOf = (host: string): boolean | null =>
     ingress ? hostTlsOf(ingress, host, vendor) : false;
   const tlsConfigs = ingress?.tlsConfigs ?? [];
-  // "no TLS" is a claim about the whole way in, and `spec.tls` is only part
-  // of it on every managed cloud, and not all of it under Traefik.
-  const verdicts = (ingress?.rules ?? []).flatMap((rule) =>
-    rule.host ? [tlsOf(rule.host)] : []
-  );
-  const named = tlsConfigs.length > 0 && (vendor?.plain.length ?? 0) === 0;
-  // `spec.tls` cannot say yes for the controller whose answer replaces it.
-  const tls: "yes" | "no" | "unknown" =
-    verdicts.includes(true) || (named && vendorTls.unread !== "replaces")
-      ? "yes"
-      : verdicts.includes(null) || named
-        ? "unknown"
-        : "no";
+  const tls = ingress
+    ? ingressTlsVerdict(ingress, vendor, vendorTls.unread)
+    : "no";
 
   const secretNames = tlsConfigs.flatMap((config) =>
     config.secretName ? [config.secretName] : []

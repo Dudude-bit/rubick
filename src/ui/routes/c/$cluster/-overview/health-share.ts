@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 import type { CompositionSegment } from "@/components/object/detail-blocks";
-import { groupIn } from "@/lib/event-incarnation";
+import { groupNamed } from "@/lib/event-incarnation";
 import { drawnCrd } from "@/lib/links";
 import { iconSvg } from "@/lib/icon-svg";
 import { allocatedPercent } from "@/lib/node-amount";
@@ -765,7 +765,7 @@ export function warningsShare(
             namespace: warning.namespace,
             crd: drawnCrd({
               kind: warning.objectKind,
-              group: groupIn(warning.objectApiVersion),
+              group: groupNamed(warning.objectKind, warning.objectApiVersion),
             }),
           })
         : undefined,

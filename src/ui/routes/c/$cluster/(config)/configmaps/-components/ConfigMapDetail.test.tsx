@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { useParams } from "@tanstack/react-router";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/hooks", async (importOriginal) => ({
@@ -84,6 +85,80 @@ describe("a ConfigMap's values on its page", () => {
     await waitFor(() =>
       expect(command("getConfigmapData")).toHaveBeenCalledTimes(2)
     );
+  });
+});
+
+/** The page of whichever ConfigMap the address names, as the real hook reads it. */
+function pageOfTheAddress() {
+  vi.mocked(useResourceDetail).mockImplementation((() => {
+    const { namespace, name } = useParams({ strict: false });
+    return {
+      name,
+      namespace,
+      resource: {
+        name,
+        namespace,
+        dataKeys: ["config.yaml"],
+        labels: {},
+        annotations: {},
+      },
+      isLoading: false,
+      error: null,
+      yaml: "",
+      copyYaml: vi.fn(),
+      activeTab: "data",
+      setActiveTab: vi.fn(),
+      goBack: vi.fn(),
+      refetch: vi.fn(),
+      deleteMutation: { mutate: vi.fn(), isPending: false },
+    };
+  }) as unknown as typeof useResourceDetail);
+  command("getConfigmapData").mockImplementation(async (_name, namespace) => ({
+    values: { "config.yaml": `text of ${namespace}` },
+    withheld: {},
+    binary: {},
+  }));
+}
+
+describe("a ConfigMap page moved to another ConfigMap", () => {
+  /**
+   * An editor left open on prod/app-config stayed open when the palette
+   * moved the page to staging/app-config, still holding prod's text, and
+   * Save wrote it into staging's key. Fails if anything a reader began on
+   * one object is still there on the next: the page is the same component
+   * at the same route, and nothing else ends it.
+   */
+  it("starts over, so an edit begun on one is not saved into the other", async () => {
+    pageOfTheAddress();
+    command("setConfigmapKey").mockClear();
+    const { router } = await renderWithRouter(<ConfigMapDetail />, {
+      at: "/c/k/configmaps/prod/app-config",
+      route: "/c/$cluster/configmaps/$namespace/$name",
+    });
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Value of config.yaml" })
+    );
+    const field = screen.getByRole("textbox", { name: "Value of config.yaml" });
+    expect(field).toHaveValue("text of prod");
+    await user.type(field, " edited");
+
+    await act(() =>
+      router.navigate({ href: "/c/k/configmaps/staging/app-config" })
+    );
+    await waitFor(() =>
+      expect(command("getConfigmapData")).toHaveBeenCalledWith(
+        "app-config",
+        "staging"
+      )
+    );
+
+    expect(
+      screen.queryByRole("textbox", { name: "Value of config.yaml" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(await screen.findByText("text of staging")).toBeInTheDocument();
+    expect(command("setConfigmapKey")).not.toHaveBeenCalled();
   });
 });
 

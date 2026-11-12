@@ -123,12 +123,16 @@ export const drawnCrd = (ref: {
 }): null | undefined =>
   ref.group == null || isBuiltInGroup(ref.kind, ref.group) ? undefined : null;
 
-/** Whether `group` is the one the built-in `kind` is served in. */
-export function isBuiltInGroup(kind: string, group: string): boolean {
+/** The group the built-in of that name is served in; `null` where no built-in has the name. */
+export function builtInGroupOf(kind: string): string | null {
   const known = isResourceType(kind) ? toKind(kind) : null;
   const builtIn = known ? getResourceDefinition(known) : accessKind(kind);
-  return builtIn?.group === group;
+  return builtIn?.group ?? null;
 }
+
+/** Whether `group` is the one the built-in `kind` is served in. */
+export const isBuiltInGroup = (kind: string, group: string): boolean =>
+  builtInGroupOf(kind) === group;
 
 /**
  * Where one object opens, or `null` when it cannot be addressed: a kind

@@ -9,6 +9,8 @@
  * next to.
  */
 
+import { hashKey } from "@tanstack/react-query";
+
 import { segmentOf } from "./access-kinds";
 import { scopeCacheKey } from "./namespace-scope";
 import { ResourceKind, ResourceType, toPlural } from "./resource-registry";
@@ -610,3 +612,21 @@ export const queryKeys = {
     [...new Set(secretNames)].sort().join(","),
   ],
 };
+
+/**
+ * The last answer to a {@link queryKeys.listAccess} question, shown while
+ * the same question is asked again under rights that may have changed. A
+ * credential renewal asks every one again, and with nothing held the locks
+ * went out and came back with each renewal. An answer to another question,
+ * another cluster's or scope's or kinds', is nobody's to hold.
+ */
+export function heldWhileAskedAgain(key: readonly unknown[]) {
+  const question = hashKey(key.slice(0, -1));
+  return <T>(
+    last: T | undefined,
+    asked?: { queryKey: readonly unknown[] }
+  ): T | undefined =>
+    asked && hashKey(asked.queryKey.slice(0, -1)) === question
+      ? last
+      : undefined;
+}

@@ -7,7 +7,7 @@ import { eventsUidIn, useReadAt } from "@/hooks/useReadUid";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import {
-  groupIn,
+  groupNamed,
   namesToAsk,
   nameKey,
   type Named,
@@ -31,8 +31,8 @@ interface Asked extends Named {
 
 /**
  * The registry's kind an event's object is: `null` for a custom kind, for one
- * that only shares a built-in's name in another group, and for an event that
- * names no group. Read at the built-in's address, a namesake is never found.
+ * that only shares a built-in's name in another group, and for one no group
+ * is known for. Read at the built-in's address, a namesake is never found.
  */
 export const registryKindNamed = (
   named: Pick<Named, "kind" | "group">
@@ -48,8 +48,8 @@ export const registryKindNamed = (
  * the one answer every story, row and chip reads. A refused or failed read
  * leaves its name out, which is unknown. A kind the registry does not hold
  * in that group is asked through discovery, as the Overview asks it; one
- * whose events name no group is not asked. A name the Overview's own check
- * calls gone is asked again at once.
+ * with no group ({@link groupNamed}) is not asked. A name the Overview's own
+ * check calls gone is asked again at once.
  *
  * The answer is one string, so it draws the page only when a holder
  * changes: the stories follow the watch once a second.
@@ -168,7 +168,7 @@ function useGoneInOverview() {
       .map((group) =>
         nameKey({
           kind: group.objectKind,
-          group: groupIn(group.objectApiVersion),
+          group: groupNamed(group.objectKind, group.objectApiVersion),
           namespace: group.namespace,
           name: group.objectName ?? "",
         })

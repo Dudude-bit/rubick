@@ -7,6 +7,7 @@ import {
   namedOf,
   namesToAsk,
   pastObjects,
+  pastOf,
   refOfNamed,
 } from "./event-incarnation";
 import { getApiVersion } from "./resource-registry";
@@ -166,17 +167,56 @@ describe("a custom kind that shares a built-in's name", () => {
   });
 
   /**
-   * An event that names no `apiVersion` does not say which kind it means.
-   * Fails if it is keyed as the core group's, or as any group's.
+   * The kubelet names its Node with no `apiVersion`, and the node controller
+   * with `v1`: keyed apart, one node was two names, and the kubelet's was
+   * never asked who holds it. Fails if an event that names no group is not
+   * the built-in of its kind's name, or is filed with a namesake's group.
    */
-  it("keeps an event that names no group apart from every kind that has one", () => {
+  it("reads an event that names no group as the built-in of that name", () => {
     const unsaid: EventInfo = {
       ...core,
       involvedObject: { ...core.involvedObject, apiVersion: undefined },
     };
-    expect(namedOf(unsaid).group).toBeNull();
-    const keys = [unsaid, core, knative].map((e) => nameKey(namedOf(e)));
-    expect(new Set(keys).size).toBe(3);
+    expect(namedOf(unsaid).group).toBe("");
+    expect([unsaid, core, knative].map((e) => nameKey(namedOf(e)))).toEqual([
+      "lena-sandbox/Service/web",
+      "lena-sandbox/Service/web",
+      "lena-sandbox/Service.serving.knative.dev/web",
+    ]);
+  });
+
+  /**
+   * Fails if a kind no built-in is named like, in an event that names no
+   * group, is filed under the core group: no group is known for it, and it
+   * is no kind anyone can read.
+   */
+  it("knows no group for a kind no built-in has, where the event names none", () => {
+    const widget = event("Widget", "w1", "u1", null, "Warning", "");
+    const said = event("Widget", "w1", "u1", null, "Warning", "acme.io/v1");
+    expect(namedOf(widget).group).toBeNull();
+    expect(nameKey(namedOf(widget))).not.toBe(nameKey(namedOf(said)));
+    expect(nameKey(namedOf(widget))).toBe("lena-sandbox/Widget?/w1");
+  });
+
+  /**
+   * A deleted node's kubelet warnings kept a live link: its name was never
+   * among those asked, and no answer was read under the key its rows go by.
+   * Fails if the kubelet's Node event is not asked by the name the node
+   * controller's is, or a name nothing holds does not make its row gone.
+   */
+  it("asks who holds a Node its kubelet warned about, and reads its rows by that answer", () => {
+    const kubelet = event("Node", "n1", "n1", null, "Warning", "");
+    const controller = event("Node", "n1", "5e1f", null);
+    const asked = namesToAsk([kubelet, controller]);
+    expect([...asked]).toEqual([
+      [
+        "lena-sandbox/Node/n1",
+        { kind: "Node", group: "", namespace: "lena-sandbox", name: "n1" },
+      ],
+    ]);
+    const nobody = new Set(asked.keys());
+    expect(pastOf(kubelet, new Map(), nobody)).toBe("gone");
+    expect(pastOf(kubelet, new Map(), new Set())).toBeUndefined();
   });
 
   /**

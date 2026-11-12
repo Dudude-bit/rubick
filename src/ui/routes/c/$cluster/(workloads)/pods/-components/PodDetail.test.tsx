@@ -1691,7 +1691,8 @@ describe("a pod page runs nothing in the container until the reader asks on it",
   /**
    * Dana went from a pod with a shell to the next one and came Back: the
    * shell had ended with the page, and the page opened another on arrival.
-   * Fails if one ask opens two shells.
+   * Fails if one ask opens two shells. The page is a new one for each pod,
+   * so what it offers is a first shell, as on any other arrival.
    */
   it("offers a shell, and opens none, on coming back to the pod whose shell ended with the page", async () => {
     const { router } = await arrive("/c/prod/pods/shop/cart-a");
@@ -1708,7 +1709,9 @@ describe("a pod page runs nothing in the container until the reader asks on it",
     await advance(0);
 
     expect(execs()).toEqual(["open_pod_shell cart-a"]);
-    expect(screen.getByText("The shell was ended")).toBeInTheDocument();
+    expect(
+      screen.getByText("No shell is running here yet")
+    ).toBeInTheDocument();
   });
 });
 

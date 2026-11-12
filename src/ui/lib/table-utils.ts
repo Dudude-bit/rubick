@@ -7,27 +7,15 @@
  */
 
 /**
- * Generates a stable row ID for a Kubernetes resource.
- * Uses uid if available, otherwise falls back to namespace + name.
- *
- * @param row - Resource object with name and optionally namespace/uid
- * @returns Stable unique identifier for the row
- *
- * @example
- * ```tsx
- * <ResourceList
- *   getRowId={getResourceRowId}
- *   // ...
- * />
- * ```
+ * One row's id: its uid, or its namespace and name where the row carries
+ * none, joined by the one character neither can hold. A hyphen is in both,
+ * so `data-sync`/`nightly` and `data`/`sync-nightly` were one row.
  */
 export function getResourceRowId<
   T extends { name: string; namespace?: string | null; uid?: string },
 >(row: T): string {
-  // Prefer uid if available (unique within cluster)
   if ("uid" in row && row.uid) {
     return row.uid;
   }
-  // Fallback: namespace + name (unique for namespaced resources)
-  return `${row.namespace ?? ""}-${row.name}`;
+  return `${row.namespace ?? ""}/${row.name}`;
 }

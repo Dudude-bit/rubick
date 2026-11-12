@@ -4,7 +4,7 @@ import { useQueries } from "@tanstack/react-query";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { eventLanding } from "../../-object/attachment";
 import { PastObjectRef } from "../../-object/PastObjectRef";
-import { groupIn, involvedUid } from "@/lib/event-incarnation";
+import { groupNamed, involvedUid } from "@/lib/event-incarnation";
 import { crdFor } from "@/lib/links";
 import { eventsUidIn } from "@/hooks/useReadUid";
 import { commands } from "@/lib/commands";
@@ -513,7 +513,7 @@ function landingOfStory(story: Story) {
       (event) =>
         event.involvedObject.kind === kind &&
         event.involvedObject.name === name &&
-        groupIn(event.involvedObject.apiVersion) === group
+        groupNamed(kind, event.involvedObject.apiVersion) === group
     );
   return own ? eventLanding({ kind, group }, own) : undefined;
 }

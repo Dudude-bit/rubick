@@ -20,7 +20,7 @@ import { Composition } from "@/components/object/detail-blocks";
 import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { PastObjectRef, type Past } from "../-object/PastObjectRef";
-import { groupIn, refOfNamed } from "@/lib/event-incarnation";
+import { groupNamed, refOfNamed } from "@/lib/event-incarnation";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { CauseLine, RefusedLine, StopCauseLine } from "../-object/CauseLine";
 import { KindIcon } from "@/components/object/KindIcon";
@@ -1245,7 +1245,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
       ? refOfNamed(
           {
             kind: warning.objectKind,
-            group: groupIn(warning.objectApiVersion),
+            group: groupNamed(warning.objectKind, warning.objectApiVersion),
             name: warning.objectName,
             namespace: warning.namespace,
           },

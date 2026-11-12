@@ -10,7 +10,7 @@
 import type { EventInfo } from "@/generated/types";
 import type { Saying } from "@/i18n/say";
 import {
-  groupIn,
+  groupNamed,
   involvedUid,
   nameKey,
   pastOf,
@@ -167,7 +167,7 @@ const foldedKind = (kind: string | null, group: string | null) =>
 const foldedOf = (event: EventInfo) =>
   foldedKind(
     event.involvedObject.kind,
-    groupIn(event.involvedObject.apiVersion)
+    groupNamed(event.involvedObject.kind, event.involvedObject.apiVersion)
   );
 
 const CREATED_POD = /(?:Created|Deleted) pod: (\S+)/;
@@ -292,7 +292,7 @@ function evidenceOf(events: EventInfo[]): Map<string, Owner> {
   const owner = new Map<string, Owner>();
   for (const event of events) {
     const { kind, name } = event.involvedObject;
-    const group = groupIn(event.involvedObject.apiVersion);
+    const group = groupNamed(kind, event.involvedObject.apiVersion);
     const namespace = event.involvedObject.namespace ?? event.namespace;
     const message = event.message ?? "";
     const claim = (childKind: string, child: string | undefined) => {
@@ -328,7 +328,7 @@ function place(
 ): Placement {
   const namespace = event.involvedObject.namespace ?? event.namespace;
   let kind = event.involvedObject.kind;
-  let group = groupIn(event.involvedObject.apiVersion);
+  let group = groupNamed(kind, event.involvedObject.apiVersion);
   let name = event.involvedObject.name;
   const past = pastOf(event, pastObjects);
   if (past) {

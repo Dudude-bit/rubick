@@ -41,7 +41,7 @@ import type { ListQuery } from "@/generated/types";
 import { askListAccess } from "@/hooks/useListAccess";
 import { commands } from "@/lib/commands";
 import { pageLink, vendorLink, type AppLink } from "@/lib/links";
-import { queryKeys } from "@/lib/query-keys";
+import { heldWhileAskedAgain, queryKeys } from "@/lib/query-keys";
 import { useRightsAsked } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
@@ -1055,8 +1055,16 @@ export function useIntegrationPages(): {
   // Asked at the cluster scope, whatever namespaces are picked: every vendor
   // page lists its objects across the cluster, so a reader allowed only in
   // their own namespaces opens a page that is refused.
+  const gateKey = queryKeys.listAccess(
+    "vendors",
+    context,
+    [],
+    gateQueries,
+    rights
+  );
   const { data: gateAnswers } = useQuery({
-    queryKey: queryKeys.listAccess("vendors", context, [], gateQueries, rights),
+    queryKey: gateKey,
+    placeholderData: heldWhileAskedAgain(gateKey),
     queryFn: () => askListAccess(gateQueries, []),
     enabled: isConnected && Boolean(context) && gateQueries.length > 0,
     staleTime: 5 * 60 * 1000,

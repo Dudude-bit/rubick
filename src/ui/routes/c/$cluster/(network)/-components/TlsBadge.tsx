@@ -2,6 +2,7 @@ import { useT } from "@/i18n/useT";
 import {
   namedTlsHosts,
   TLS_NOT_CHECKED_TONE,
+  type IngressTlsVerdict,
   type VendorTlsAnswer,
 } from "../../-object/vendor-tls";
 import {
@@ -22,6 +23,12 @@ interface TlsBadgeProps {
    * cluster.
    */
   vendor?: VendorTlsAnswer | null;
+  /**
+   * The Ingress's verdict as its page says it ({@link ingressTlsVerdict}).
+   * `spec.tls` names a host whatever its controller has said, so counted
+   * here alone it read "1 host" beside a page saying TLS was not checked.
+   */
+  tls: IngressTlsVerdict;
 }
 
 /**
@@ -41,7 +48,12 @@ const BARE_TONE: Record<"none" | "notChecked" | "plain", string> = {
  * reads as text: a green pill on every TLS row claimed something had gone
  * right, and left "No TLS" looking like a failure rather than a choice.
  */
-export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
+export function TlsBadge({
+  tlsHosts,
+  hasCatchAllTls,
+  vendor,
+  tls,
+}: TlsBadgeProps) {
   const t = useT();
   const vendorHosts = vendor?.hosts ?? [];
   const unchecked = vendor?.unchecked ?? [];
@@ -50,9 +62,17 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
   const catchAll = hasCatchAllTls && plain.length === 0;
   const explicitCount = named.length;
 
-  if (explicitCount === 0 && !catchAll && vendorHosts.length === 0) {
+  const unknown = tls === "unknown";
+  if (
+    unknown ||
+    (explicitCount === 0 && !catchAll && vendorHosts.length === 0)
+  ) {
     const bare =
-      unchecked.length > 0 ? "notChecked" : plain.length > 0 ? "plain" : "none";
+      unknown || unchecked.length > 0
+        ? "notChecked"
+        : plain.length > 0
+          ? "plain"
+          : "none";
     const words = t("empty", bare === "notChecked" ? "tlsNotChecked" : "noTls");
     const why =
       bare === "plain"

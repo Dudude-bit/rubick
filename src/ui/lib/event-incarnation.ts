@@ -1,5 +1,5 @@
 import type { EventInfo } from "@/generated/types";
-import { crdInGroup, type ObjectRef } from "./links";
+import { builtInGroupOf, crdInGroup, type ObjectRef } from "./links";
 
 /** The uid of the object an event is about; the kubelet writes a Node's name there, which names no incarnation. */
 export function involvedUid(event: EventInfo): string | null {
@@ -14,6 +14,17 @@ export function groupIn(apiVersion: string | null | undefined): string | null {
   return slash === -1 ? "" : apiVersion.slice(0, slash);
 }
 
+/**
+ * The group of the kind an object is named by. Where no `apiVersion` is
+ * given, as the kubelet gives none for its Node, it is the built-in of that
+ * name: the page its link opens and the story its events fold into. `null`
+ * where no built-in has the name, which is no kind anyone can read.
+ */
+export const groupNamed = (
+  kind: string | null | undefined,
+  apiVersion: string | null | undefined
+): string | null => groupIn(apiVersion) ?? (kind ? builtInGroupOf(kind) : null);
+
 /** Why a name an event gives is not the object there now: another took the name, or none has it. */
 export type Past = "earlier" | "gone";
 
@@ -23,7 +34,7 @@ export type Past = "earlier" | "gone";
  */
 export interface Named {
   kind: string;
-  /** `null` where the event names no `apiVersion`, which is no kind anyone can read. */
+  /** As {@link groupNamed} reads it: `null` only where no group is named and no built-in has the kind's name. */
   group: string | null;
   namespace: string | null;
   name: string;
@@ -43,7 +54,7 @@ export const nameKey = (
 /** The object an event is about. */
 export const namedOf = (event: EventInfo): Named => ({
   kind: event.involvedObject.kind,
-  group: groupIn(event.involvedObject.apiVersion),
+  group: groupNamed(event.involvedObject.kind, event.involvedObject.apiVersion),
   namespace: event.involvedObject.namespace ?? event.namespace,
   name: event.involvedObject.name,
 });

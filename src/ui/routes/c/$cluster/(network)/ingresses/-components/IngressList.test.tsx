@@ -1,4 +1,4 @@
-import { waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vite-plus/test";
 
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -6,6 +6,7 @@ import type { ColumnDef } from "@/components/ui/table-features";
 import type { IngressInfo } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
+import { useIngressTls } from "@/hooks/useIngressTls";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { ResourceList } from "../../../-list/ResourceList";
@@ -84,6 +85,10 @@ vi.mock("@/hooks/useWatchedList", () => ({
 vi.mock("../../../-list/ResourceList", () => ({
   ResourceList: vi.fn(() => null),
 }));
+vi.mock("@/hooks/useIngressTls", async (original) => {
+  const real = await original<typeof import("@/hooks/useIngressTls")>();
+  return { ...real, useIngressTls: vi.fn(real.useIngressTls) };
+});
 
 function openAction(): QuickAction<IngressInfo> {
   const build = vi.mocked(ResourceList).mock.calls.at(-1)![0]
@@ -174,4 +179,53 @@ it("calls an annotated Ingress a controller has addressed served, and offers to 
   });
   expect(openAction().reason?.(gke)).toBeUndefined();
   Object.assign(answers, before);
+});
+
+/**
+ * Traefik's answer replaces `spec.tls`. While it was out, the Ingress's page
+ * said "TLS not checked" and its row here said "1 host". Fails if the row's
+ * TLS cell is not handed the verdict the page reads, from the same unread
+ * answer.
+ */
+it("says TLS was not checked in a row whose controller replaces spec.tls and has not answered", async () => {
+  const secured: IngressInfo = {
+    ...plain,
+    tlsHosts: ["plain.k8s-gui.test"],
+    tlsConfigs: [
+      {
+        hosts: ["plain.k8s-gui.test"],
+        secretName: "plain-tls",
+        isCatchAll: false,
+      },
+    ],
+  };
+  const real = vi.mocked(useIngressTls).getMockImplementation()!;
+  vi.mocked(useIngressTls).mockReturnValue({
+    available: true,
+    of: () => null,
+    isPending: true,
+    error: null,
+    unread: "replaces",
+  });
+  vi.mocked(ResourceList).mockImplementation(((props: {
+    columns: ColumnDef<IngressInfo>[];
+  }) => {
+    const tls = props.columns.find(
+      (column) => "accessorKey" in column && column.accessorKey === "tlsHosts"
+    );
+    const Cell = tls!.cell as (props: {
+      row: { original: IngressInfo };
+    }) => React.ReactNode;
+    return <Cell row={{ original: secured }} />;
+  }) as never);
+  useClusterStore.setState({ isConnected: true });
+  await renderWithRouter(<IngressList />, {
+    at: "/c/prod/ingresses",
+    route: "/c/$cluster/ingresses",
+  });
+
+  expect(await screen.findByText("TLS not checked")).toBeInTheDocument();
+  expect(screen.queryByText("1 host")).toBeNull();
+  vi.mocked(useIngressTls).mockImplementation(real);
+  vi.mocked(ResourceList).mockImplementation((() => null) as never);
 });

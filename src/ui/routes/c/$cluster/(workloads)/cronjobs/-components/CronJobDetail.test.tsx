@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useParams } from "@tanstack/react-router";
 import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
 
 const listeners = vi.hoisted(
@@ -441,6 +442,60 @@ describe("CronJobDetail", () => {
     expect(usage).toHaveTextContent("No run of this CronJob is in flight.");
     expect(usage).not.toHaveTextContent("still reading");
     expect(commands.listPods).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The page moved from a CronJob with a run in flight to an idle one kept
+   * the first one's pods: the idle one asks for none, and the read it never
+   * made was answered with the last one made on the page. Fails if a
+   * CronJob's Usage counts pods of the CronJob the page showed before it.
+   */
+  it("draws none of another CronJob's pods after the page moves to an idle one", async () => {
+    vi.mocked(useResourceDetail).mockImplementation((() => {
+      const { name } = useParams({ strict: false });
+      return {
+        name,
+        namespace: "ops",
+        resource: buildCronJob({
+          name,
+          uid: `uid-${name}`,
+          active: name === "nightly-backup" ? 1 : 0,
+        }),
+        isLoading: false,
+        error: null,
+        yaml: "",
+        copyYaml: vi.fn(),
+        activeTab: "overview",
+        setActiveTab: vi.fn(),
+        goBack: vi.fn(),
+        refetch: vi.fn(),
+        deleteMutation: { mutate: vi.fn(), isPending: false },
+      };
+    }) as unknown as typeof useResourceDetail);
+    vi.mocked(commands.listPods).mockResolvedValue([
+      {
+        name: "nightly-backup-29000000-x",
+        namespace: "ops",
+        uid: "pod-x",
+        status: { phase: "Running", display: "Running", ready: true },
+        containers: [],
+        ownerReferences: [ownedByRun],
+      } as never,
+    ]);
+    const { router } = await renderPage();
+    await waitFor(async () =>
+      expect(await usageSection()).toHaveTextContent("summed over 1 pod")
+    );
+
+    await act(() =>
+      router.navigate({ href: "/c/prod/cronjobs/ops/weekly-report" })
+    );
+    await screen.findByText("weekly-report");
+
+    const usage = await usageSection();
+    expect(usage).not.toHaveTextContent("summed over");
+    expect(usage).toHaveTextContent("No run of this CronJob is in flight.");
+    vi.mocked(commands.listPods).mockResolvedValue([]);
   });
 
   /** A Job still running is a run in flight, whatever the controller's count says; fails if its pods go unasked. */
