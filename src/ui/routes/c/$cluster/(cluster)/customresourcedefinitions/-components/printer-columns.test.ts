@@ -122,6 +122,51 @@ describe("a printer column's JSONPath, as the API server reads it", () => {
   });
 });
 
+describe("a printer column that reads outside spec and status", () => {
+  const report: CustomResourceInfo = {
+    name: "polr-ns-shop",
+    namespace: "shop",
+    uid: "uid-2",
+    apiVersion: "wgpolicyk8s.io/v1alpha2",
+    kind: "PolicyReport",
+    spec: null,
+    status: null,
+    labels: {},
+    annotations: {},
+    createdAt: "2026-10-06T17:40:00Z",
+    ownerReferences: [],
+    generation: 1,
+  };
+
+  /**
+   * Kyverno's PolicyReport keeps `summary` at the top level, Trivy its
+   * `report`, a VolumeSnapshotClass its `driver`, and a list row carries
+   * none of them. Fails if such a column is answered as a field the object
+   * does not have: Pass read "none" where kubectl prints 12.
+   */
+  it("is not evaluated, because the row does not carry the field", () => {
+    for (const path of [
+      ".summary.pass",
+      ".scope.kind",
+      ".report.summary.criticalCount",
+      ".driver",
+    ])
+      expect(printerCell(report, path)).toEqual({ evaluated: false });
+  });
+
+  /** Fails if the guard also refuses the top-level fields a row does carry. */
+  it("still reads the kind and the apiVersion the row carries", () => {
+    expect(printerCell(report, ".kind")).toEqual({
+      evaluated: true,
+      value: "PolicyReport",
+    });
+    expect(printerCell(report, ".apiVersion")).toEqual({
+      evaluated: true,
+      value: "wgpolicyk8s.io/v1alpha2",
+    });
+  });
+});
+
 describe("a printer column that reads the owner", () => {
   /** widget-demo as `list_custom_resources_in` returns it, owned by a ConfigMap. */
   const widget: CustomResourceInfo = {

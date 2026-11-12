@@ -260,6 +260,9 @@ function run(steps: Step[], values: unknown[]): unknown[] {
   );
 }
 
+/** The top-level fields a list row carries; a PolicyReport's `summary` is not one. */
+const CARRIED_ROOT = ["apiVersion", "kind", "metadata", "spec", "status"];
+
 /** The metadata a list row carries; a column reading any other field was not read. */
 const CARRIED_METADATA = [
   "name",
@@ -313,6 +316,7 @@ export function printerCell(
   const [first, second] = steps;
   if (
     first?.op !== "keys" ||
+    !first.keys.every((key) => CARRIED_ROOT.includes(key)) ||
     (first.keys.includes("metadata") &&
       (second?.op !== "keys" ||
         !second.keys.every((key) => CARRIED_METADATA.includes(key)) ||
