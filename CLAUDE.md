@@ -194,6 +194,12 @@ Claims here are settled by running things, not by reasoning about them.
   on the frontend, never on words in the message: "not found" is also in a
   refused list and a container with no previous run. A new variant needs its
   code in `src/contracts/error-codes.json`; both sides test against it.
+- Ask `Error::is_unanswered()` whether a request got no answer: the read
+  deadline, a 5xx, a dropped connection. It crosses as `NO_ANSWER` or
+  `READ_DEADLINE`, and a write that ends there is worded through
+  `toastWriteError` or `toastedUnanswered` (`@/lib/toast-error`): the cluster
+  may have done it, and "failed" invites doing it twice. `toast-error.test.ts`
+  counts the places that say so.
 - Inside a long-running task, get the client per attempt from
   `state.client_manager`; a held `kube::Client` carries a token that expires.
 - State built on a context's client — a cache, an index, a remembered
@@ -240,6 +246,36 @@ each has a contract nothing checks for you.
 - Implementations of `delivery.source` and `ingress.tls` answer **positionally**
   — same length as the input, a hole rather than a dropped element. The caller
   indexes the answer by row.
+
+## What is never shown
+
+The app never draws a private key, and never sends back the placeholder it
+drew in one's place. Both halves fail by looking fine: a key on screen is
+more text, and a placeholder stored as the value is an apply that succeeded.
+
+- **Whatever leaves Rust for the screen passes the one door**, in
+  `resources/tls.rs`. An object whole goes through `shown`, and as YAML
+  through `editor_yaml`; a part carried as read, a `spec` or a pod template,
+  through `shown_value`; annotations through `annotations_of`; a string a
+  wire type carries, an `env` literal or a release's description, through
+  `shown_text`. A field cloned off the object instead is the key on the page
+  beside a YAML tab that withholds it. The guards at the end of `main.rs`
+  hold the YAML and the annotations; nothing holds a new `Value` or `String`
+  field, so the builder that adds one is the check.
+- **The rule judges what a string is, not where it stands.** The three key
+  maps add the Secret's type and the key's name; every other string is a key
+  or not by `is_private_key_text` alone. A new net goes there or into
+  `withhold_reason`, never beside a call site: the Data tab, the YAML tab, a
+  Helm release and the Files tab ask the same two functions.
+- **The placeholder never travels back.** `parse_all_documents` refuses a
+  manifest that still holds `WITHHELD_MARKER` anywhere, and leaves out an
+  annotation whose record was blanked; values for helm are refused by their
+  text. A command that sends what the reader edited by another way stores
+  the sentence as the key, and the API server takes it.
+- **`src/contracts/withheld-value.json` holds both sides to the marker** and
+  to one answer about where a manifest holds it: Rust refuses, and
+  TypeScript names the same places before Apply is offered. A new case goes
+  into the corpus, not into one side's test.
 
 ## Performance
 
