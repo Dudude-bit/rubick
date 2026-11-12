@@ -33,7 +33,7 @@ import { firingWords, rowWords } from "./words";
 import { verdictOf } from "./verdict";
 import { alertsSection, rulesUnread } from "./share";
 import {
-  OBJECT_LABEL,
+  subjectOf,
   RULES_CRD,
   readRule,
   rowsOf,
@@ -938,21 +938,4 @@ function RuleCard({
       )}
     </div>
   );
-}
-
-/** The object an alert is about, from the first object label it carries. */
-function subjectOf(
-  labels: Record<string, string>
-): { kind: string; name: string; namespace: string | null } | null {
-  for (const [kind, label] of Object.entries(OBJECT_LABEL)) {
-    if (kind === "Namespace") continue;
-    const name = labels[label];
-    if (name)
-      return {
-        kind,
-        name,
-        namespace: kind === "Node" ? null : (labels.namespace ?? null),
-      };
-  }
-  return null;
 }

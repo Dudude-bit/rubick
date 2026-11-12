@@ -7,7 +7,14 @@ import type {
   NamespaceInfo,
 } from "@/generated/types";
 import { readPrometheus } from "../monitors/model";
-import { alertsAbout, readRule, rowsOf, type RuleRow } from "./model";
+import {
+  alertsAbout,
+  readRule,
+  rowsOf,
+  speaksOf,
+  subjectOf,
+  type RuleRow,
+} from "./model";
 
 /**
  * What kube-prometheus-stack wrote on a real cluster, plus three rule
@@ -130,6 +137,58 @@ describe("rules the chart writes twice under one name", () => {
       alerts: 1,
       rules: 1,
     });
+  });
+});
+
+describe("what the chart's kube-state-metrics alerts are about", () => {
+  /**
+   * Recorded: the crashing pod's own `pod` and `container` beside the
+   * exporter's `service`, `endpoint` and `instance`. This is what shows the
+   * scrape keeps the exporter's labels wherever the metric has none.
+   */
+  it("reads the recorded crash-loop alert as the crashing pod, not the exporter's Service", () => {
+    const [alert] = loaded.rules.find(
+      (r) => r.name === "ShopPodCrashLooping"
+    )!.alerts;
+    expect(alert.labels.service).toBe("kps-kube-state-metrics");
+    expect(subjectOf(alert.labels)).toEqual({
+      kind: "Pod",
+      name: "crash-demo",
+      namespace: "k8s-gui-test",
+    });
+  });
+
+  /**
+   * An alert on a `kube_<kind>_*` family carries that kind's label and, the
+   * family having no pod label, the exporter's pod. Fails if the chart's
+   * rules query a family whose kind the table lacks: its alerts would name
+   * the kube-state-metrics pod.
+   */
+  it("knows the label of every kind the chart's rules query", () => {
+    const families = new Set(
+      loaded.rules.flatMap((rule) =>
+        [...rule.query.matchAll(/\bkube_([a-z]+)[_{]/g)].map((m) => m[1])
+      )
+    );
+    // `kube_state_metrics_*` is the exporter about itself.
+    families.delete("state");
+    expect(families.size).toBeGreaterThan(8);
+    const known = [
+      "Pod",
+      "Node",
+      "Job",
+      "Deployment",
+      "StatefulSet",
+      "DaemonSet",
+      "HorizontalPodAutoscaler",
+      "PersistentVolumeClaim",
+      "PersistentVolume",
+      "PodDisruptionBudget",
+      "ResourceQuota",
+    ].filter(speaksOf);
+    expect([...families].sort()).toEqual(
+      known.map((kind) => kind.toLowerCase()).sort()
+    );
   });
 });
 

@@ -110,62 +110,94 @@ describe("two rules of one name on the Alerts tab", () => {
     vi.restoreAllMocks();
   });
 
-  it("draws the firing alert once, under a card of its own", async () => {
-    const loaded = (severity: string, state: string) => ({
-      group: "g",
-      file: "/rules/shop-storage.yaml",
-      name: "VolumeFillingUp",
-      state,
-      health: "ok",
-      lastError: "",
-      query: "up",
-      durationSeconds: 0,
-      lastEvaluation: null,
-      labels: { severity },
-      annotations: {},
-      alerts:
-        state === "firing"
-          ? [
-              {
-                state,
-                activeAt: null,
-                value: "1",
-                labels: { namespace: "shop", persistentvolumeclaim: "data-0" },
-                annotations: {},
-              },
-            ]
-          : [],
-    });
-    const storage = {
-      ...rule("storage"),
-      spec: {
-        groups: [
-          {
-            name: "g",
-            rules: ["critical", "warning"].map((severity) => ({
-              alert: "VolumeFillingUp",
-              expr: "up",
-              labels: { severity },
-            })),
-          },
-        ],
-      },
-    };
+  const loaded = (
+    severity: string,
+    state: string,
+    labels: Record<string, string> = {
+      namespace: "shop",
+      persistentvolumeclaim: "data-0",
+    }
+  ) => ({
+    group: "g",
+    file: "/rules/shop-storage.yaml",
+    name: "VolumeFillingUp",
+    state,
+    health: "ok",
+    lastError: "",
+    query: "up",
+    durationSeconds: 0,
+    lastEvaluation: null,
+    labels: { severity },
+    annotations: {},
+    alerts:
+      state === "firing"
+        ? [
+            {
+              state,
+              activeAt: null,
+              value: "1",
+              labels,
+              annotations: {},
+            },
+          ]
+        : [],
+  });
+  const storage = {
+    ...rule("storage"),
+    spec: {
+      groups: [
+        {
+          name: "g",
+          rules: ["critical", "warning"].map((severity) => ({
+            alert: "VolumeFillingUp",
+            expr: "up",
+            labels: { severity },
+          })),
+        },
+      ],
+    },
+  };
+  const show = (second: ReturnType<typeof loaded>) => {
     PICTURE = {
       ...before,
       rules: { state: "read", items: [storage] },
       alertRules: {
         state: "read",
-        rules: [loaded("critical", "inactive"), loaded("warning", "firing")],
+        rules: [loaded("critical", "inactive"), second],
       },
     } as unknown as Picture;
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    await renderWithRouter(<Alerts />, {
+    return renderWithRouter(<Alerts />, {
       at: "/c/prod/integrations/prometheus?tab=alerts",
     });
+  };
+
+  it("draws the firing alert once, under a card of its own", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    await show(loaded("warning", "firing"));
     expect(await screen.findAllByText("shop/data-0")).toHaveLength(1);
     expect(
       errors.mock.calls.filter((call) => String(call[0]).includes("same key"))
     ).toEqual([]);
+  });
+
+  /**
+   * A kube-state-metrics series about a Deployment carries the exporter's
+   * own pod, and the row linked to that pod in the Deployment's namespace,
+   * where no such pod is. Fails if the row names the exporter again.
+   */
+  it("names the Deployment an alert is about, not the pod that exported it", async () => {
+    await show(
+      loaded("warning", "firing", {
+        namespace: "team-a",
+        deployment: "web",
+        pod: "kps-kube-state-metrics-6d5f7c9b8-x2x4q",
+        service: "kps-kube-state-metrics",
+      })
+    );
+    const link = await screen.findByText("team-a/web");
+    expect(link.closest("a")?.getAttribute("href")).toContain(
+      "/deployments/team-a/web"
+    );
+    expect(screen.queryByText(/kps-kube-state-metrics/)).toBeNull();
   });
 });

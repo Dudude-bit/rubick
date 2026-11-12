@@ -354,9 +354,65 @@ export const OBJECT_LABEL: Record<string, string> = {
   Node: "node",
   Service: "service",
   PersistentVolumeClaim: "persistentvolumeclaim",
+  PersistentVolume: "persistentvolume",
   HorizontalPodAutoscaler: "horizontalpodautoscaler",
+  PodDisruptionBudget: "poddisruptionbudget",
+  ResourceQuota: "resourcequota",
   Namespace: "namespace",
 };
+
+/**
+ * The labels Prometheus stamps on a series from its scrape target. A metric
+ * about another object keeps the exporter's own here wherever it has none:
+ * every `kube_deployment_*` series carries the kube-state-metrics pod.
+ */
+const STAMPED = new Set(["Pod", "Service", "Node", "Namespace"]);
+const CLUSTER_WIDE = new Set(["Node", "PersistentVolume"]);
+
+export interface AlertSubject {
+  kind: string;
+  name: string;
+  namespace: string | null;
+}
+
+/**
+ * The one object an alert is about: the label only a metric about that kind
+ * writes, before any the scrape target is stamped with. On a
+ * kube-state-metrics series (the job its chart gives it and the stock rules
+ * select by) a pod named after the Service it was scraped through is the
+ * exporter, so a node beside it is what the series describes.
+ */
+export function subjectOf(labels: Record<string, string>): AlertSubject | null {
+  const of = (kind: string): AlertSubject => ({
+    kind,
+    name: labels[OBJECT_LABEL[kind]],
+    namespace: CLUSTER_WIDE.has(kind) ? null : (labels.namespace ?? null),
+  });
+  for (const kind of Object.keys(OBJECT_LABEL))
+    if (!STAMPED.has(kind) && labels[OBJECT_LABEL[kind]]) return of(kind);
+  const { pod, service, node } = labels;
+  const exporter =
+    labels.job === "kube-state-metrics" &&
+    Boolean(pod && service) &&
+    ["Deployment", "StatefulSet", "DaemonSet"].some((kind) =>
+      podsOf(kind, service)?.test(pod)
+    );
+  if (node && (!pod || exporter)) return of("Node");
+  if (pod) return of("Pod");
+  return service ? of("Service") : null;
+}
+
+/**
+ * Whether a stamped label can be read as naming `kind` on an alert about
+ * `subject`: a pod is behind a Service, on a Node and in a Namespace, and
+ * anything else beside them is the exporter's own.
+ */
+function standsBeside(kind: string, subject: AlertSubject | null): boolean {
+  if (!STAMPED.has(kind) || subject === null || subject.kind === kind)
+    return true;
+  if (kind === "Namespace") return subject.namespace !== null;
+  return kind !== "Pod" && subject.kind === "Pod";
+}
 
 /** The pods a workload runs, by the name pattern its controller stamps on them. */
 function podsOf(kind: string, name: string): RegExp | null {
@@ -431,13 +487,17 @@ export function alertsAbout(
         alert.labels.namespace !== object.namespace
       )
         continue;
-      if (label && alert.labels[label] === object.name) {
+      const subject = subjectOf(alert.labels);
+      if (
+        label &&
+        alert.labels[label] === object.name &&
+        standsBeside(object.kind, subject)
+      ) {
         names(rule, alert, { label, value: object.name });
         continue;
       }
-      const pod = alert.labels.pod;
-      if (pods && pod !== undefined && pods.test(pod))
-        names(rule, alert, { label: "pod", value: pod });
+      if (pods && subject?.kind === "Pod" && pods.test(subject.name))
+        names(rule, alert, { label: "pod", value: subject.name });
     }
   }
   return out;

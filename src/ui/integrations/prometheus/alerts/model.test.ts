@@ -17,6 +17,7 @@ import {
   ruleKey,
   rulePickedUpBy,
   speaksOf,
+  subjectOf,
 } from "./model";
 
 const cr = (
@@ -495,7 +496,10 @@ describe("speaksOf", () => {
       "Node",
       "Service",
       "PersistentVolumeClaim",
+      "PersistentVolume",
       "HorizontalPodAutoscaler",
+      "PodDisruptionBudget",
+      "ResourceQuota",
       "Namespace",
     ]) {
       expect(speaksOf(kind)).toBe(true);
@@ -598,6 +602,203 @@ describe("alertsAbout", () => {
         namespace: "shop",
       })
     ).toEqual([]);
+  });
+});
+
+/**
+ * What the chart's kube-state-metrics scrape leaves on a series about another
+ * object: honorLabels keeps the metric's own labels, and the exporter's pod,
+ * Service and container stay wherever the metric has none.
+ */
+const exporter = {
+  pod: "kps-kube-state-metrics-6d5f7c9b8-x2x4q",
+  service: "kps-kube-state-metrics",
+  container: "kube-state-metrics",
+  endpoint: "http",
+  job: "kube-state-metrics",
+};
+const firingWith = (labels: Record<string, string>): AlertRule =>
+  apiRule({
+    state: "firing",
+    alerts: [
+      { state: "firing", activeAt: null, value: "1", labels, annotations: {} },
+    ],
+  });
+
+describe("the object an alert is about", () => {
+  /**
+   * `pod` was first in the table, so KubeDeploymentReplicasMismatch for
+   * team-a/web read as Pod team-a/kps-kube-state-metrics-…, a pod that is
+   * not in that namespace. Fails if a stamped label outranks the label only
+   * a metric about the kind writes.
+   */
+  it("names the kind the metric wrote, not the exporter that reported it", () => {
+    for (const [label, kind] of [
+      ["deployment", "Deployment"],
+      ["statefulset", "StatefulSet"],
+      ["daemonset", "DaemonSet"],
+      ["job_name", "Job"],
+      ["horizontalpodautoscaler", "HorizontalPodAutoscaler"],
+      ["poddisruptionbudget", "PodDisruptionBudget"],
+      ["resourcequota", "ResourceQuota"],
+    ])
+      expect(
+        subjectOf({ ...exporter, namespace: "team-a", [label]: "web" }),
+        label
+      ).toEqual({ kind, name: "web", namespace: "team-a" });
+  });
+
+  /**
+   * A kubelet series is stamped with the node it was scraped from, so
+   * KubePersistentVolumeFillingUp read as the Node. And a PersistentVolume
+   * has no namespace: the one on its alert is the exporter's.
+   */
+  it("names the claim over the node its kubelet runs on, and a volume without the exporter's namespace", () => {
+    expect(
+      subjectOf({
+        namespace: "shop",
+        persistentvolumeclaim: "data-0",
+        node: "worker-1",
+        service: "kps-kubelet",
+        job: "kubelet",
+      })
+    ).toEqual({
+      kind: "PersistentVolumeClaim",
+      name: "data-0",
+      namespace: "shop",
+    });
+    expect(
+      subjectOf({
+        ...exporter,
+        namespace: "monitoring",
+        persistentvolume: "pv",
+      })
+    ).toEqual({ kind: "PersistentVolume", name: "pv", namespace: null });
+  });
+
+  /**
+   * `kube_node_*` has no pod label, so KubeNodeNotReady carries the
+   * exporter's pod beside the node. A pod named after the Service it was
+   * scraped through is that exporter. Fails if the node alert reads as the
+   * kube-state-metrics pod, or a pod alert that names its node as the Node.
+   */
+  it("names the node when the pod beside it is the exporter, and the pod when it is not", () => {
+    expect(
+      subjectOf({ ...exporter, namespace: "monitoring", node: "worker-1" })
+    ).toEqual({ kind: "Node", name: "worker-1", namespace: null });
+    expect(
+      subjectOf({
+        ...exporter,
+        namespace: "shop",
+        pod: "web-7f4d9c6b5-abcde",
+        node: "worker-1",
+      })
+    ).toEqual({ kind: "Pod", name: "web-7f4d9c6b5-abcde", namespace: "shop" });
+  });
+
+  /**
+   * An application scraped through its own Service, relabelled with the node
+   * it runs on, is the pod it reports about. Fails if every pod named after
+   * its Service is taken for an exporter of something else.
+   */
+  it("names the pod an application reports about itself, then its Service, then nothing", () => {
+    expect(
+      subjectOf({
+        namespace: "shop",
+        pod: "web-7f4d9c6b5-abcde",
+        service: "web",
+        node: "worker-1",
+        job: "web",
+      })
+    ).toEqual({ kind: "Pod", name: "web-7f4d9c6b5-abcde", namespace: "shop" });
+    expect(subjectOf({ namespace: "shop", service: "web" })).toEqual({
+      kind: "Service",
+      name: "web",
+      namespace: "shop",
+    });
+    expect(subjectOf({ namespace: "shop", severity: "warning" })).toBeNull();
+  });
+});
+
+describe("alerts about the exporter's neighbours", () => {
+  const monitoring = (kind: string, name: string) => ({
+    kind,
+    name,
+    namespace: kind === "Node" || kind === "Namespace" ? null : "monitoring",
+  });
+  const nodeDown = firingWith({
+    ...exporter,
+    namespace: "monitoring",
+    node: "worker-1",
+  });
+  const mismatch = firingWith({
+    ...exporter,
+    namespace: "monitoring",
+    deployment: "grafana",
+  });
+
+  /**
+   * Every node alert and every alert about an object in the exporter's
+   * namespace carries the exporter's pod and Service, so the
+   * kube-state-metrics Pod, its Deployment and its Service each said "alerts
+   * firing about this object". Fails if a stamped label is read as the
+   * subject of an alert that names another object.
+   */
+  it("does not put a node's or a Deployment's alert on the kube-state-metrics pod, workload or Service", () => {
+    for (const object of [
+      monitoring("Pod", exporter.pod),
+      monitoring("Deployment", exporter.service),
+      monitoring("Service", exporter.service),
+    ])
+      expect(alertsAbout([nodeDown, mismatch], object), object.kind).toEqual(
+        []
+      );
+    expect(
+      alertsAbout([nodeDown, mismatch], monitoring("Deployment", "grafana"))
+    ).toHaveLength(1);
+  });
+
+  /**
+   * The namespace on a node's alert is the exporter's, and the node on a
+   * claim's alert is the kubelet's. Fails if the Namespace page counts a
+   * node alert, or the Node page a claim's.
+   */
+  it("reads a node's alert on the Node and not on the exporter's Namespace", () => {
+    const filling = firingWith({
+      namespace: "shop",
+      persistentvolumeclaim: "data-0",
+      node: "worker-1",
+    });
+    const rules = [nodeDown, mismatch, filling];
+    expect(
+      alertsAbout(rules, monitoring("Node", "worker-1")).map((a) => a.via)
+    ).toEqual([{ label: "node", value: "worker-1" }]);
+    expect(
+      alertsAbout(rules, monitoring("Namespace", "monitoring")).map(
+        (a) => a.via
+      )
+    ).toEqual([{ label: "namespace", value: "monitoring" }]);
+  });
+
+  /**
+   * A pod is behind its Service and on its node: those pages keep the pod's
+   * alert. Fails if the stamped labels stop matching for a pod's own alert.
+   */
+  it("keeps a pod's alert on the Service it is behind and the node it runs on", () => {
+    const rules = [
+      firingWith({
+        namespace: "shop",
+        pod: "web-7f4d9c6b5-abcde",
+        service: "web",
+        node: "worker-1",
+      }),
+    ];
+    for (const object of [
+      { kind: "Service", name: "web", namespace: "shop" },
+      { kind: "Node", name: "worker-1", namespace: null },
+      { kind: "Deployment", name: "web", namespace: "shop" },
+    ])
+      expect(alertsAbout(rules, object), object.kind).toHaveLength(1);
   });
 });
 
