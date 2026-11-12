@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { keptByName } from "@/lib/kept-by-name";
 import { toKind } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -23,6 +24,7 @@ export function ownersOf(data: unknown): Owner[] | undefined {
 /** Enough for every pod a long session reads; the oldest goes first. */
 const KEPT = 2000;
 const lastRead = new Map<string, Owner[]>();
+keptByName(() => lastRead.clear());
 
 interface Named {
   kind: string;

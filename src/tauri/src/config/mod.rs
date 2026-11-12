@@ -16,6 +16,8 @@
 //! `ClusterPreferences`.
 
 mod app;
+#[cfg(test)]
+pub(crate) mod as_4_21_2;
 mod cloud;
 mod connection;
 mod editor;

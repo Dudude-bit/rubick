@@ -21,6 +21,7 @@ import type { ContextInfo } from "@/generated/types";
 import { errorToShow } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { credentialsRestored } from "@/lib/credentials";
+import { namesRebound } from "@/lib/kept-by-name";
 import { followConnections } from "@/lib/refusals";
 import {
   clampScope,
@@ -37,7 +38,10 @@ interface ClusterState {
   contexts: ContextInfo[];
   /** The kubeconfig was read: `contexts` is its answer, not an empty start. */
   contextsKnown: boolean;
-  /** Where the window was last connected, else the kubeconfig's current context. */
+  /**
+   * Where the launch sends the window: the cluster it was last connected
+   * to, else the kubeconfig's current context. `null` once it was left.
+   */
   lastContext: string | null;
   currentContext: string | null;
   /**
@@ -139,7 +143,8 @@ interface ClusterState {
   /**
    * The backend let go of every session, as it does when the kubeconfig
    * files change. The cluster on screen is connected again where the new
-   * files still name it, and left where they do not.
+   * files still name it, and left where they do not. Either way a name may
+   * be another cluster now, and what was kept under one is let go.
    */
   sessionsDropped: () => Promise<void>;
 }
@@ -288,8 +293,16 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         // Ignore errors loading preferences - not critical
       }
       // The address decides which cluster to connect to; this only says
-      // which one the front door sends the window back to.
-      set({ contexts, contextsKnown: true, lastContext, isLoading: false });
+      // which one the front door sends the window back to. Said once, by
+      // the launch's read: Reload or another file picked at the door read
+      // the kubeconfig again, and sent the window into a cluster before the
+      // list was drawn, the one just left on purpose included.
+      set({
+        contexts,
+        contextsKnown: true,
+        lastContext: get().contextsKnown ? get().lastContext : lastContext,
+        isLoading: false,
+      });
     } catch (error) {
       set({
         error: errorToShow(error),
@@ -553,6 +566,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
 
   sessionsDropped: async () => {
     const { currentContext, contexts, isConnected, isAuthenticating } = get();
+    namesRebound();
     set({ live: [], paths: {}, wayBack: null });
     if (!currentContext || (!isConnected && !isAuthenticating)) return;
     if (!contexts.some((c) => c.name === currentContext)) {

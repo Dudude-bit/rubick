@@ -86,8 +86,116 @@ where
 #[cfg(test)]
 mod tests {
     use super::{off_main, update_at};
-    use crate::config::AppConfig;
+    use crate::config::{as_4_21_2, AppConfig, RecentItem};
     use crate::error::Error;
+
+    fn opened(context: &str, name: &str) -> RecentItem {
+        RecentItem {
+            name: name.to_string(),
+            namespace: Some("shop".to_string()),
+            kind: "Pod".to_string(),
+            context: Some(context.to_string()),
+            crd: None,
+            timestamp: 9,
+        }
+    }
+
+    fn recents(path: &std::path::Path) -> Vec<String> {
+        let ours = AppConfig::load_from(path).unwrap();
+        let named = ours.recent_items.objects.iter();
+        named.map(|item| item.name.clone()).collect()
+    }
+
+    fn as_4_21_2_reads(path: &std::path::Path) -> as_4_21_2::AppConfig {
+        let saved = std::fs::read_to_string(path).unwrap();
+        toml::from_str(&saved).expect("4.21.2 moves aside a file it cannot parse")
+    }
+
+    /// 4.21.2 shares `config.toml` with this build, after a rollback or
+    /// installed beside it, and one item it cannot parse makes it move the
+    /// whole file aside and start on defaults: pinned kubeconfigs, tokens
+    /// and port-forwards gone from the window. Fails if a save by this build
+    /// leaves a file that build's types refuse, loses anything it had
+    /// written, or puts this build's recents among the ones it reads.
+    #[test]
+    fn a_file_this_build_saved_is_still_read_by_4_21_2() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let mut theirs = as_4_21_2::written();
+        std::fs::write(&path, toml::to_string_pretty(&theirs).unwrap()).unwrap();
+
+        update_at(&path, |_| Ok(())).unwrap();
+        assert_eq!(as_4_21_2_reads(&path), theirs);
+
+        update_at(&path, |config| {
+            config.recent_items.add_item(opened("prod", "cart"));
+            config.theme.theme = "light".to_string();
+            Ok(())
+        })
+        .unwrap();
+        theirs.theme.theme = "light".to_string();
+        assert_eq!(as_4_21_2_reads(&path), theirs);
+        assert_eq!(recents(&path), ["cart"]);
+    }
+
+    /// The same for a file this build was the first to write. Fails if what
+    /// it remembers of the palette is something 4.21.2 cannot start with.
+    #[test]
+    fn a_file_this_build_started_is_read_by_4_21_2() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        update_at(&path, |config| {
+            config.recent_items.add_item(opened("prod", "cart"));
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(as_4_21_2_reads(&path).recent_items.items, []);
+        assert_eq!(recents(&path), ["cart"]);
+    }
+
+    /// Builds of this version saved their recents in 4.21.2's list for a
+    /// while, with no `path`, and dropped the path of the ones already
+    /// there. Fails if this build cannot load such a file, leaves those
+    /// items where 4.21.2 cannot parse them, or forgets the ones that name
+    /// their cluster.
+    #[test]
+    fn recents_saved_without_a_path_leave_the_list_4_21_2_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let saved = r#"
+[theme]
+[kubernetes]
+
+[[recent_items.items]]
+name = "api"
+namespace = "shop"
+kind = "Pod"
+path = "/pods/shop/api"
+timestamp = 3
+
+[[recent_items.items]]
+name = "cart"
+namespace = "shop"
+kind = "Pod"
+context = "prod"
+timestamp = 2
+
+[[recent_items.items]]
+name = "node-1"
+kind = "Node"
+timestamp = 1
+"#;
+        std::fs::write(&path, saved).unwrap();
+
+        update_at(&path, |_| Ok(())).unwrap();
+
+        let theirs = as_4_21_2_reads(&path).recent_items.items;
+        let paths: Vec<_> = theirs.iter().map(|item| item.path.as_str()).collect();
+        assert_eq!(paths, ["/pods/shop/api"]);
+        assert_eq!(recents(&path), ["cart"]);
+    }
 
     /// The theme's save left the main thread, where every save used to wait
     /// its turn. Fails if two saves that meet can each load the file before

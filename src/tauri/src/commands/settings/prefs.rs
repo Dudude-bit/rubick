@@ -134,7 +134,7 @@ pub async fn add_yaml_history_entry(
 
 #[tauri::command]
 pub async fn get_recent_items() -> Result<Vec<RecentItem>> {
-    read_config(|config| config.recent_items.items.clone()).await
+    read_config(|config| config.recent_items.objects.clone()).await
 }
 
 #[tauri::command]

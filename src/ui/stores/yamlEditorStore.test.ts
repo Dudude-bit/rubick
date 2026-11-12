@@ -8,6 +8,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import { namesRebound } from "@/lib/kept-by-name";
 import { followConnections } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useYamlEditorStore } from "./yamlEditorStore";
@@ -79,6 +80,31 @@ describe("a manifest still being read when the window moves", () => {
       editedContent: "kind: Deployment\n",
     });
     useYamlEditorStore.getState().closeEditor();
+  });
+});
+
+describe("a manifest open when the kubeconfig files change", () => {
+  /**
+   * Apply goes to the window's cluster, and the editor lets it through while
+   * the name it opened on is the name on screen. After the files change that
+   * name can be another cluster. Fails if the manifest read before stays
+   * open to be applied there.
+   */
+  it("is closed, rather than left to be applied to whatever the name is now", async () => {
+    await useYamlEditorStore.getState().openEditor({
+      title: "api",
+      resourceKey: { kind: "Deployment", name: "api", namespace: "shop" },
+      fetchYaml: async () => "kind: Deployment\n",
+    });
+    expect(useYamlEditorStore.getState().open).toBe(true);
+
+    namesRebound();
+
+    expect(useYamlEditorStore.getState()).toMatchObject({
+      open: false,
+      openedOn: null,
+      editedContent: "",
+    });
   });
 });
 

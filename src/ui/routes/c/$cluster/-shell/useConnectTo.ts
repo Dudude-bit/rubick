@@ -9,10 +9,18 @@ import { useClusterStore } from "@/stores/clusterStore";
  * page, says why and offers the retry.
  */
 export function useConnectTo(cluster: string, ready: boolean): void {
-  const asked = useRef<string | null>(null);
+  const arrivedAt = useRef<string | null>(null);
+  const asked = useRef(false);
   useEffect(() => {
-    if (!ready || asked.current === cluster) return;
-    asked.current = cluster;
+    // Coming back is arriving again, wherever the address was meanwhile: a
+    // stay at a cluster the kubeconfig lacks asks nothing, and left the
+    // cluster before it remembered as asked.
+    if (arrivedAt.current !== cluster) {
+      arrivedAt.current = cluster;
+      asked.current = false;
+    }
+    if (!ready || asked.current) return;
+    asked.current = true;
     const s = useClusterStore.getState();
     if (
       s.currentContext === cluster &&

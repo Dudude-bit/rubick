@@ -14,12 +14,23 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { readOverview } from "@/hooks/useClusterOverview";
 import { commands } from "@/lib/commands";
+import { keptByName } from "@/lib/kept-by-name";
 import { listPodRows } from "@/lib/pod-rows";
 import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
+
+/**
+ * The kubeconfig files changed since the cache was last emptied, so the name
+ * it was filled under may be another cluster's. Outside the hook: the layout
+ * that mounts it is gone at the front door, where the files change too.
+ */
+let rebound = false;
+keptByName(() => {
+  rebound = true;
+});
 
 export function usePrefetchCoreLists(): void {
   const isConnected = useClusterStore((state) => state.isConnected);
@@ -37,14 +48,17 @@ export function usePrefetchCoreLists(): void {
   // same beat the store lands on another, before the first frame under the
   // new name can draw it. Invalidating instead left it on screen until the
   // refetch answered, and forever where the new cluster refuses the read.
+  // A landing under the name it left is another cluster too, once the
+  // kubeconfig files changed in between.
   useEffect(
     () =>
       useClusterStore.subscribe((state, prev) => {
-        if (
-          prev.lastConnected === null ||
-          state.lastConnected === prev.lastConnected
-        )
-          return;
+        const elsewhere =
+          prev.lastConnected !== null &&
+          state.lastConnected !== prev.lastConnected;
+        const landed = state.isConnected && !prev.isConnected;
+        if (!elsewhere && !(landed && rebound)) return;
+        rebound = false;
         queryClient.removeQueries();
         dropped.current = state.lastConnected;
       }),

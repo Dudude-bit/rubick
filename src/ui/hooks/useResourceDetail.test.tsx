@@ -47,6 +47,7 @@ import {
   type UseResourceDetailResult,
 } from "./useResourceDetail";
 import { useLastOwners, type Owner } from "./useLastOwners";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 
 interface Pod {
   name: string;
@@ -329,6 +330,44 @@ describe("a page left open on a pod a restart replaced", () => {
     expect(connections).toHaveBeenCalledTimes(1);
     expect(logged.lines).toEqual(["INFO Query found the object gone"]);
   }, 10_000);
+});
+
+describe("a detail page whose object the reader deletes", () => {
+  /**
+   * The page went back through the window's history, which is one for every
+   * tab and has nothing behind it at launch: after a delete in a tab
+   * restored onto the object, the page stayed on what was just deleted.
+   * Fails if the delete does not ask the tab itself to leave the page.
+   */
+  it("asks its tab to leave the page, whatever the window's history holds", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        { id: "a", context: "prod", namespace: "", href: PATH, missing: false },
+      ],
+      activeId: "a",
+      pendingHref: null,
+    });
+    const result = {} as { current: UseResourceDetailResult<Pod> };
+    function Probe() {
+      result.current = useResourceDetail<Pod>({
+        resourceKind: "Pod",
+        fetchResource: async () => ({ name: "api-7bcd" }),
+        deleteResource: async () => {},
+        refresh: false,
+      });
+      return null;
+    }
+    await renderWithRouter(<Probe />, {
+      at: PATH,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+
+    await act(async () => {
+      await result.current.deleteMutation?.mutateAsync();
+    });
+
+    expect(useScopeTabStore.getState().pendingHref).toBe("/c/prod/pods");
+  });
 });
 
 describe("the tab a detail page is open on", () => {

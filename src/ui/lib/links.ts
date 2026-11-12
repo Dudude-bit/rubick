@@ -354,6 +354,28 @@ export function clusterOf(pathname: string): string | null {
   }
 }
 
+const respelled = (segment: string) => {
+  try {
+    return encodeURIComponent(decodeURIComponent(segment));
+  } catch {
+    return segment;
+  }
+};
+
+/**
+ * Whether two addresses are one place. The router hands a path back with its
+ * spaces and non-ASCII letters decoded and a built one keeps them encoded,
+ * so for a cluster named `my cluster` or `прод` the two are different
+ * strings.
+ */
+export function sameAddress(a: string, b: string): boolean {
+  const spelled = (href: string) => {
+    const [path, ...query] = href.split("?");
+    return [path.split("/").map(respelled).join("/"), ...query].join("?");
+  };
+  return spelled(a) === spelled(b);
+}
+
 /**
  * The namespace an address shows one object in, and `null` where it shows a
  * list, a page or a cluster-scoped object. A Namespace's own page is in it.

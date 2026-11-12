@@ -5370,6 +5370,8 @@ export const en = {
     clusterMissing: "{cluster} is not in the kubeconfig",
     clusterMissingBody:
       "The link names a cluster this kubeconfig does not list. Open one it does.",
+    clusterMissingTabBody:
+      "This tab is on a cluster the kubeconfig does not list. Open one it does, or close the tab.",
     kubeconfigUnread: "Could not read the kubeconfig",
     kubeconfigUnreadBody: "So whether {cluster} is in it is not known. {error}",
     notServed: "This cluster serves no {resource}",

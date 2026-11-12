@@ -1,4 +1,3 @@
-import { useRouter } from "@tanstack/react-router";
 import { Info, Link2, Network } from "lucide-react";
 import { useMemo } from "react";
 
@@ -36,6 +35,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { isResourceType, ResourceType, toKind } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
+import { backInTab } from "@/stores/scopeTabStore";
 
 /**
  * An object of any kind the cluster serves and no screen draws: what it says
@@ -53,7 +53,6 @@ export function GenericObjectPage({
   name: string;
 }) {
   const t = useT();
-  const router = useRouter();
   const copy = useCopyToClipboard();
   const isConnected = useClusterStore((state) => state.isConnected);
   const served = useServed(servedOf(resource));
@@ -242,7 +241,7 @@ export function GenericObjectPage({
           ) : undefined
         }
         createdAt={facets?.createdAt}
-        onBack={() => router.history.back()}
+        onBack={backInTab}
         dataUpdatedAt={yaml.dataUpdatedAt}
         slowed={yaml.freshness.slowed}
         stale={yaml.freshness.stale || object.freshness.stale}

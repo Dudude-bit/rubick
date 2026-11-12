@@ -145,6 +145,11 @@ Claims here are settled by running things, not by reasoning about them.
   from the object alone has to be merged at render — never written into the
   watched cache entry, and never assumed to survive. This is how a Gateway
   correct on first read went wrong a second later.
+- What is kept under a context name and nothing else, in a module-level
+  store, a ref or an open editor, is named with `keptByName` from
+  `@/lib/kept-by-name`. A kubeconfig change can put another cluster behind
+  the name (k3s calls every one `default`), and a holder not named there goes
+  on answering for the cluster before.
 - **The peek panel renders the same objects as the detail pages.** A fix on one
   leaves the other wrong; check both.
 - **A scroller sized in per cent does not scroll here.** `height: 100%`
@@ -176,6 +181,11 @@ Claims here are settled by running things, not by reasoning about them.
   screen once two files name a context alike.
 - Write `config.toml` only through `crate::config::private_file::write` — it
   holds bearer tokens, and `std::fs::write` leaves them world-readable.
+- `config.toml` is shared with the release before: a rollback, or a copy
+  still installed. 4.21.2 moves the whole file aside when one item will not
+  parse, so a field it requires is written as it wrote it and what is new
+  goes in a field of its own. `config/as_4_21_2.rs` is that build's shape,
+  and the tests beside `update_at` parse every save with it.
 - Ask `Error::is_refusal()` whether the cluster refused. A 403 stays
   `Error::KubeApi`; only 401 has its own variant.
 - Do not touch the text of `Error::CredentialsExpired` — the `CREDENTIALS_EXPIRED:`

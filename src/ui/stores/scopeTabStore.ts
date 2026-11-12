@@ -34,7 +34,12 @@ import {
   wireNamespace,
 } from "@/lib/namespace-scope";
 import { ACCESS_KINDS, segmentOf } from "@/lib/access-kinds";
-import { clusterOf, namespaceShownBy, retargetHref } from "@/lib/links";
+import {
+  clusterOf,
+  namespaceShownBy,
+  retargetHref,
+  sameAddress,
+} from "@/lib/links";
 import {
   RESOURCE_REGISTRY,
   getDisplayPlural,
@@ -100,6 +105,13 @@ interface ScopeTabState {
    * restored session would have put back. The tabs are still restored.
    */
   linked: boolean;
+  /**
+   * The restored tab's scope was applied. Once for the window, not once for
+   * each time the shell mounts: it unmounts at the front door, and applying
+   * the record again put a scope as old as the tab's last parking back over
+   * the one on screen.
+   */
+  resumed: boolean;
 
   openTab: (options?: {
     href?: string;
@@ -115,7 +127,7 @@ interface ScopeTabState {
   activateRelative: (delta: number) => Promise<void>;
   /** Activate by position; negative counts from the end, as `Array.at` does. */
   activateIndex: (index: number) => Promise<void>;
-  /** Re-apply the active tab's scope, e.g. once the kubeconfig has loaded. */
+  /** Apply the restored tab's scope, once the kubeconfig has loaded. */
   resumeActive: () => Promise<void>;
   /** The link the window was launched with takes the active tab, not the route restored for it. */
   yieldToLink: (link: { context: string; path: string }) => void;
@@ -152,6 +164,14 @@ function makeTab(init: Partial<ScopeTab> = {}): ScopeTab {
     ...init,
   };
 }
+
+/**
+ * The cluster a tab is in: the one its address names. `context` is as old as
+ * the tab's last parking, and a cluster picked inside the tab since moved
+ * the address and not the record.
+ */
+const clusterOfTab = (tab: ScopeTab): string | null =>
+  clusterOf(tab.href) ?? tab.context;
 
 /** Park the live scope on the tab that currently owns it. */
 function parkActive(tabs: ScopeTab[], activeId: string): ScopeTab[] {
@@ -252,6 +272,7 @@ export const useScopeTabStore = create<ScopeTabState>()(
       pendingHref: null,
       pendingReplace: false,
       linked: false,
+      resumed: false,
 
       openTab: async ({ href, context, namespace, background } = {}) => {
         const live = useClusterStore.getState();
@@ -325,11 +346,16 @@ export const useScopeTabStore = create<ScopeTabState>()(
       },
 
       resumeActive: async () => {
-        const { tabs, activeId, linked } = get();
+        const { tabs, activeId, linked, resumed } = get();
+        if (resumed) return;
+        set({ resumed: true });
         // The link's route connects its own cluster and narrows its own scope.
         if (linked) return;
         const active = tabs.find((tab) => tab.id === activeId);
-        if (active) await applyScope(active);
+        // A record older than the address is another cluster's: the address
+        // connects, and that cluster restores its own scope.
+        if (active && clusterOfTab(active) === active.context)
+          await applyScope(active);
       },
 
       yieldToLink: ({ context, path }) =>
@@ -358,7 +384,7 @@ export const useScopeTabStore = create<ScopeTabState>()(
           // namespace via the popover since this tab went live).
           const parked = parkActive(tabs, only.id)[0];
           const home = homeOf(parked.context);
-          if (only.href !== home && !only.missing) {
+          if (!sameAddress(only.href, home) && !only.missing) {
             // Keep the scope and send the view home, with no disconnect and
             // no cleared namespace.
             set({ tabs: [{ ...parked, href: home }], pendingHref: home });
@@ -475,8 +501,11 @@ export const useScopeTabStore = create<ScopeTabState>()(
           const active = state.tabs.find((tab) => tab.id === state.activeId);
           if (!active) return state;
           const back = active.back ?? [];
-          // Nothing behind it: the tab stays where it is, as a browser tab does.
-          const to = back.at(-1) ?? active.href;
+          // Nothing behind it, as in a tab restored at launch or opened at
+          // an object: its page gives way to its list, which is what the
+          // page's own Back says it does. Any other page stays where it is,
+          // as a browser tab does.
+          const to = back.at(-1) ?? listBehind(active.href) ?? active.href;
           return {
             tabs: state.tabs.map((tab) =>
               tab.id === active.id
@@ -498,7 +527,8 @@ export const useScopeTabStore = create<ScopeTabState>()(
           const known = new Set(names);
           let goTo: string | null = null;
           const tabs = state.tabs.map((tab) => {
-            const missing = !!tab.context && !known.has(tab.context);
+            const context = clusterOfTab(tab);
+            const missing = !!context && !known.has(context);
             // An object in a cluster this kubeconfig does not have is a page
             // nothing can answer. From the state, not the change, so a tab
             // already flagged is not left holding the dead route.
@@ -509,7 +539,13 @@ export const useScopeTabStore = create<ScopeTabState>()(
             // Rewriting the record takes nobody anywhere, and `recordHref`
             // would write the dead route straight back.
             if (href !== tab.href && tab.id === state.activeId) goTo = href;
-            return { ...tab, missing, href };
+            // A lost tab is named by its record, so that names what is lost.
+            return {
+              ...tab,
+              missing,
+              href,
+              context: missing ? context : tab.context,
+            };
           });
           if (tabs.every((tab, i) => tab === state.tabs[i])) return state;
           return goTo === null ? { tabs } : { tabs, pendingHref: goTo };
@@ -582,6 +618,13 @@ export const useScopeTabStore = create<ScopeTabState>()(
     }
   )
 );
+
+/**
+ * Back as a page's own control means it: in the tab, not in the window. The
+ * window's history is one for every tab and has nothing behind it at launch,
+ * where asking it to go back does nothing at all.
+ */
+export const backInTab = (): void => useScopeTabStore.getState().goBack();
 
 // A parked tab is a cluster on screen a click away: switching in another
 // tab must not disconnect it, and coming back to it must not reconnect.

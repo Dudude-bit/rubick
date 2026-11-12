@@ -7,6 +7,7 @@ import type {
   CustomResourceDetailInfo,
 } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
@@ -174,6 +175,34 @@ describe("the page of a custom resource named like a built-in", () => {
     ).toHaveAttribute(
       "href",
       "/c/test/services.serving.knative.dev/storefront/frontend"
+    );
+  });
+});
+
+describe("Back on a custom resource's page", () => {
+  /**
+   * The arrow went back through the window's history, which has nothing
+   * behind it in a tab restored onto the object: it did nothing, and neither
+   * did the Back a delete makes. Fails if the arrow does not ask the tab
+   * itself, which leads to the kind's list.
+   */
+  it("leaves for the kind's list in a tab with nothing behind it", async () => {
+    const at = "/c/test/services.serving.knative.dev/storefront/frontend";
+    useScopeTabStore.setState({
+      tabs: [
+        { id: "a", context: "test", namespace: "", href: at, missing: false },
+      ],
+      activeId: "a",
+      pendingHref: null,
+    });
+    answers.crd = crd("serving.knative.dev", "Service", "services");
+    answers.resource = object("serving.knative.dev/v1", "Service");
+    await open("services.serving.knative.dev");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Back" }));
+
+    expect(useScopeTabStore.getState().pendingHref).toBe(
+      "/c/test/services.serving.knative.dev"
     );
   });
 });

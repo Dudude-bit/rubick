@@ -31,6 +31,7 @@ import {
   credentialsRestored,
   readExpiredCredentials,
 } from "@/lib/credentials";
+import { keptByName } from "@/lib/kept-by-name";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import { currentConnection } from "@/lib/refusals";
 import type { ClusterInfo, ContextInfo } from "@/generated/types";
@@ -286,6 +287,8 @@ describe("restoring the last cluster on launch", () => {
   beforeEach(() => {
     vi.mocked(commands.connectCluster).mockClear();
     useClusterStore.setState({
+      contextsKnown: false,
+      lastContext: null,
       currentContext: null,
       connectionAttemptId: 0,
       pendingContext: null,
@@ -323,6 +326,39 @@ describe("restoring the last cluster on launch", () => {
     await state().loadContexts();
     await state().disconnect();
     expect(state().lastContext).toBeNull();
+  });
+
+  /**
+   * Reload and Change sit on the front door, and both read the kubeconfig
+   * again. That read named the last cluster once more, and the door sent
+   * the window into it before drawing its list: the cluster just left, or
+   * the current context of the file just picked. Fails if a read after the
+   * launch's decides where the door sends the window.
+   */
+  it("does not send the window back into a cluster when the kubeconfig is read again", async () => {
+    useClusterStore.setState({ contextsKnown: false, lastContext: null });
+    await state().loadContexts();
+    expect(state().lastContext).toBe("prod");
+    await state().disconnect();
+
+    await state().loadContexts();
+
+    expect(state().lastContext).toBeNull();
+    expect(state().contexts.map((c) => c.name)).toEqual(["dev", "prod"]);
+  });
+
+  /** Fails if a launch whose first read failed never learns where to go from the read that worked. */
+  it("still names the last cluster when the first read that works is not the first read", async () => {
+    useClusterStore.setState({ contextsKnown: false, lastContext: null });
+    vi.mocked(commands.listContexts).mockRejectedValueOnce(
+      new Error("Tauri command 'listContexts' failed: kubeconfig: bad yaml")
+    );
+    await state().loadContexts();
+    expect(state().lastContext).toBeNull();
+
+    await state().loadContexts();
+
+    expect(state().lastContext).toBe("prod");
   });
 });
 
@@ -841,5 +877,38 @@ describe("the kubeconfig files changed under a connected window", () => {
     expect(commands.connectCluster).not.toHaveBeenCalled();
     expect(state().isConnected).toBe(false);
     expect(state().live).toEqual([]);
+  });
+
+  /**
+   * k3s names every cluster `default`: after the files change, the name on
+   * screen can be another cluster. Fails if what was kept under a context
+   * name is not let go before the window connects to that name again.
+   */
+  it("lets go of what was kept by context name before connecting again", async () => {
+    const connectedAt: boolean[] = [];
+    const off = keptByName(() =>
+      connectedAt.push(vi.mocked(commands.connectCluster).mock.calls.length > 0)
+    );
+
+    await state().sessionsDropped();
+    off();
+
+    expect(connectedAt).toEqual([false]);
+    expect(commands.connectCluster).toHaveBeenCalledWith("acme-staging");
+  });
+
+  /**
+   * At the front door the last cluster's answers are still cached under its
+   * name. Fails if a file change there leaves them for the next connect.
+   */
+  it("lets go of it for a window that was not connected too", async () => {
+    const forget = vi.fn();
+    const off = keptByName(forget);
+    useClusterStore.setState({ isConnected: false, currentContext: null });
+
+    await state().sessionsDropped();
+    off();
+
+    expect(forget).toHaveBeenCalledTimes(1);
   });
 });

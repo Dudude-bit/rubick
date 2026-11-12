@@ -52,6 +52,24 @@ describe("the address connecting the window", () => {
     expect(connect).toHaveBeenLastCalledWith("dev", { keepRoute: true });
   });
 
+  /**
+   * A tab on a cluster the kubeconfig lost takes the address there and
+   * disconnects the window. The cluster picked on that page was the one the
+   * window had been in, so it counted as already asked: the pick landed in a
+   * disconnected shell and had to be made twice. Fails if coming back to a
+   * cluster after a stay at one that could not be opened does not connect.
+   */
+  it("connects again on coming back from a cluster that could not be opened", () => {
+    const { rerender } = renderHook(
+      ({ cluster, ready }) => useConnectTo(cluster, ready),
+      { initialProps: { cluster: "prod", ready: true } }
+    );
+    rerender({ cluster: "gone", ready: false });
+    rerender({ cluster: "prod", ready: true });
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenLastCalledWith("prod", { keepRoute: true });
+  });
+
   /** A tab activation already connected; a second connect would restart its auth. */
   it("leaves a connection already in flight to that cluster alone", () => {
     useClusterStore.setState({
