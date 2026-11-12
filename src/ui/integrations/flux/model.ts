@@ -152,6 +152,12 @@ export interface FluxSource {
   suspended: boolean;
   /** `null` where the controller has written no `Ready`, or `Unknown`. */
   ready: boolean | null;
+  /**
+   * An OCI HelmRepository Flux has written no status on: see
+   * {@link isStaticSource}. Its `interval` and `suspend` do nothing, so
+   * neither is read.
+   */
+  staticAddress: boolean;
   reason: string | null;
   /** The controller's own sentence, never rewritten. */
   message: string | null;
@@ -273,9 +279,28 @@ export function fluxPicture(
   };
 }
 
+/**
+ * Whether a source is what Flux calls a static object: a HelmRepository of
+ * type `oci`. Since source-controller 1.2 it is an address its HelmCharts
+ * read; it is never fetched, has no artifact and no status, and never will.
+ * Earlier controllers did write `Ready` on one, and where a `Ready` is
+ * written it is read like any other source's.
+ */
+export function isStaticSource(
+  kind: string,
+  object: CustomResourceInfo
+): boolean {
+  return (
+    kind === "HelmRepository" &&
+    getValueByPath(object, "spec.type") === "oci" &&
+    conditionOf(object, "Ready") === null
+  );
+}
+
 function readSource(kind: string, object: CustomResourceInfo): FluxSource {
   const url = getValueByPath(object, "spec.url");
   const ready = conditionOf(object, "Ready");
+  const staticAddress = isStaticSource(kind, object);
   const fetchFailed = conditionOf(object, "FetchFailed");
   const revision = readRevision(
     (getValueByPath(object, "status.artifact.revision") as string) ?? null
@@ -286,9 +311,13 @@ function readSource(kind: string, object: CustomResourceInfo): FluxSource {
     namespace: object.namespace ?? "",
     url: typeof url === "string" ? withoutCredentials(url) : null,
     ref: refOf(object),
-    interval: (getValueByPath(object, "spec.interval") as string) ?? null,
-    suspended: getValueByPath(object, "spec.suspend") === true,
+    interval: staticAddress
+      ? null
+      : ((getValueByPath(object, "spec.interval") as string) ?? null),
+    suspended:
+      !staticAddress && getValueByPath(object, "spec.suspend") === true,
     ready: conditionSays(ready),
+    staticAddress,
     reason: ready?.reason ?? null,
     // FetchFailed is the specific sentence where there is one; Ready's copy of
     // it is the same string, and where they differ the specific one is why.
@@ -649,7 +678,18 @@ export function reconcilerState(
   return { text: t("empty", "readyLower"), tone: reconciler.worst ?? "ok" };
 }
 
-export function sourceState(source: FluxSource, t: T): VendorVerdict {
+export function sourceState(
+  source: FluxSource,
+  t: T
+): { text: string; tone: VendorVerdict["tone"] | "unknown" } {
+  const unused = source.usedBy.length === 0 && source.usersKnown;
+  // Before "not fetched yet": nothing here is pending. Not green either,
+  // since nothing was fetched and nothing says the registry answers.
+  if (source.staticAddress) {
+    return unused
+      ? { text: t("empty", "fluxSourceStaticUnused"), tone: "warn" }
+      : { text: t("empty", "fluxSourceStatic"), tone: "unknown" };
+  }
   if (source.suspended)
     return { text: t("action", "suspendedLower"), tone: "warn" };
   if (source.ready === false) {
@@ -666,9 +706,24 @@ export function sourceState(source: FluxSource, t: T): VendorVerdict {
       tone: "warn",
     };
   }
-  if (source.usedBy.length === 0 && source.usersKnown)
-    return { text: t("empty", "fluxFetchedUnused"), tone: "warn" };
+  if (unused) return { text: t("empty", "fluxFetchedUnused"), tone: "warn" };
   return { text: t("empty", "fluxFetched"), tone: "ok" };
+}
+
+/**
+ * What a reconciler's row says of its source. "fetched" only where Flux says
+ * so: it was the word for any source without a `spec.ref` whose `Ready` was
+ * not `False`, a HelmRepository made a second ago among them.
+ */
+export function sourceWords(source: FluxSource, t: T): string {
+  if (source.ready === false) return t("empty", "fetchFailingLower");
+  if (source.staticAddress) return t("empty", "fluxOciAddress");
+  return (
+    source.ref ??
+    (source.ready === null
+      ? t("empty", "fluxNotFetchedYet")
+      : t("empty", "fetchedLower"))
+  );
 }
 
 function rank(worst: "err" | "warn" | null): number {

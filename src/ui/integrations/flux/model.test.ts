@@ -7,6 +7,7 @@ import {
   reconcilerState,
   revisionText,
   sourceState,
+  sourceWords,
   type KindUnread,
 } from "./model";
 
@@ -108,6 +109,121 @@ const picture = (
     ],
     unread
   );
+
+describe("an OCI HelmRepository, which Flux writes no status on", () => {
+  /** As source-controller 1.2 and later leave one: a spec and nothing else. */
+  const oci = (status: Record<string, unknown> = {}) =>
+    object(
+      "HelmRepository",
+      "bitnami",
+      {
+        type: "oci",
+        url: "oci://registry-1.docker.io/bitnamicharts",
+        interval: "5m",
+        suspend: true,
+      },
+      status
+    );
+  const release = object("HelmRelease", "redis", {
+    chart: {
+      spec: {
+        chart: "redis",
+        sourceRef: { kind: "HelmRepository", name: "bitnami" },
+      },
+    },
+  });
+  const read = (repository: CustomResourceInfo, releases = [release]) =>
+    fluxPicture(
+      [],
+      releases,
+      [{ kind: "HelmRepository", objects: [repository] }],
+      []
+    );
+
+  /**
+   * It is an address its HelmCharts read: never fetched, no artifact, no
+   * conditions, by design. Read as a source that has not reported yet it
+   * was amber "not fetched yet" for good, while the release using it said
+   * "fetched". Fails if it is called pending, fetched, or green.
+   */
+  it("is an address with nothing to fetch, not a fetch still to come", () => {
+    const { sources, reconcilers } = read(oci());
+    expect(sourceState(sources[0], t)).toEqual({
+      text: "OCI address · nothing to fetch",
+      tone: "unknown",
+    });
+    expect(sourceWords(reconcilers[0].source!, t)).toBe("OCI address");
+    expect(sources[0].worst).toBeNull();
+  });
+
+  /** Flux documents both fields as doing nothing on one. Fails if either is shown as acting. */
+  it("has no interval and is not suspended, whatever its spec says", () => {
+    const { sources } = read(oci());
+    expect(sources[0]).toMatchObject({ interval: null, suspended: false });
+  });
+
+  /** An address nobody reads is still worth a look. */
+  it("is still called unused where no release names it", () => {
+    const { sources } = read(oci(), []);
+    expect(sourceState(sources[0], t)).toEqual({
+      text: "OCI address · unused",
+      tone: "warn",
+    });
+  });
+
+  /**
+   * source-controller before 1.2 did reconcile one and wrote `Ready`. Fails
+   * if a failure it reported is hidden behind "nothing to fetch".
+   */
+  it("is read by its Ready where an older controller wrote one", () => {
+    const { sources } = read(
+      oci({
+        conditions: [
+          notReady("AuthenticationFailed", "failed to login to registry"),
+        ],
+      })
+    );
+    expect(sources[0]).toMatchObject({ staticAddress: false, suspended: true });
+    expect(sourceWords(sources[0], t)).toBe("fetch failing");
+  });
+});
+
+describe("what a reconciler's row says of its source", () => {
+  const repository = (conditions: Condition[] | undefined) =>
+    fluxPicture(
+      [],
+      [],
+      [
+        {
+          kind: "HelmRepository",
+          objects: [
+            object(
+              "HelmRepository",
+              "charts",
+              { url: "https://charts.example.com" },
+              { conditions }
+            ),
+          ],
+        },
+      ],
+      []
+    ).sources[0];
+
+  /**
+   * "fetched" was the word for any source with no `spec.ref` whose Ready
+   * was not False: a HelmRepository made a second ago, with no status, read
+   * as fetched. Fails if silence from the controller is read as a fetch.
+   */
+  it("does not call a source fetched before Flux has said so", () => {
+    expect(sourceWords(repository(undefined), t)).toBe("not fetched yet");
+    expect(sourceWords(repository([ready("stored artifact")]), t)).toBe(
+      "fetched"
+    );
+    expect(
+      sourceWords(repository([notReady("IndexationFailed", "503")]), t)
+    ).toBe("fetch failing");
+  });
+});
 
 describe("suspension is never healthy", () => {
   /**

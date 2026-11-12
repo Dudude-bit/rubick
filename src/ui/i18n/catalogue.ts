@@ -5538,6 +5538,10 @@ export const en = {
     fluxNotFetchedYet: "not fetched yet",
     fluxFetchedUnused: "fetched · unused",
     fluxFetched: "fetched",
+    fluxOciAddress: "OCI address",
+    fluxSourceStatic: "OCI address · nothing to fetch",
+    fluxSourceStaticUnused: "OCI address · unused",
+    fluxStaticNotFetched: "not fetched: an OCI repository is only an address",
     fluxSaidNothingMore: "The controller gave no reason.",
     notBoundYet: "not bound",
     spotReclaim:

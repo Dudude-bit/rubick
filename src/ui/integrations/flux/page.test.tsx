@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import type { CustomResourceInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
@@ -85,6 +85,48 @@ describe("a source kind the reader may not list", () => {
     await waitFor(() =>
       expect(screen.getByText(/^No source objects/)).toBeInTheDocument()
     );
+  });
+});
+
+describe("an OCI HelmRepository on the Sources tab", () => {
+  /**
+   * The opened row said "Last fetched: never" and "every 5m" of an object
+   * Flux never fetches. Fails if the row reads as a fetch that has not
+   * happened yet.
+   */
+  it("says it is an address, and nothing of a fetch to come", async () => {
+    answers.crds.set("helmrepositories.source.toolkit.fluxcd.io", () =>
+      Promise.resolve([
+        {
+          name: "bitnami",
+          namespace: "flux-system",
+          uid: "oci",
+          apiVersion: "source.toolkit.fluxcd.io/v1",
+          kind: "HelmRepository",
+          spec: {
+            type: "oci",
+            url: "oci://registry-1.docker.io/bitnamicharts",
+            interval: "5m",
+          },
+          status: null,
+          labels: {},
+          annotations: {},
+          createdAt: null,
+          ownerReferences: [],
+          generation: null,
+        },
+      ])
+    );
+
+    await renderOn("sources");
+    fireEvent.click(await screen.findByText("bitnami"));
+
+    expect(
+      screen.getByText("not fetched: an OCI repository is only an address")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("never")).toBeNull();
+    expect(screen.queryByText("not fetched yet")).toBeNull();
+    expect(screen.queryByText(/every 5m/)).toBeNull();
   });
 });
 

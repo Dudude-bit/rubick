@@ -6146,6 +6146,10 @@ export const ru: Catalogue = {
     fluxNotFetchedYet: "ещё не загружался",
     fluxFetchedUnused: "загружен · никем не используется",
     fluxFetched: "загружен",
+    fluxOciAddress: "адрес OCI",
+    fluxSourceStatic: "адрес OCI · загружать нечего",
+    fluxSourceStaticUnused: "адрес OCI · никем не используется",
+    fluxStaticNotFetched: "не загружается: репозиторий OCI здесь только адрес",
     fluxSaidNothingMore: "Контроллер не назвал причину.",
     notBoundYet: "не привязан",
     spotReclaim:
