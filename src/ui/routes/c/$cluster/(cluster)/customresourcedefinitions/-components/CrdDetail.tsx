@@ -48,7 +48,7 @@ import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 import { scopeKey } from "./crd-scope";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
@@ -136,7 +136,7 @@ export function CrdDetail() {
       goBack();
     },
     onError: (err: Error) => {
-      toastError(t("action", "deleteKindFailed", { kind: "CRD" }), err);
+      toastWriteError(t("action", "deleteKindFailed", { kind: "CRD" }), err);
     },
   });
 

@@ -10,6 +10,7 @@ import {
 import { useClusterStore } from "@/stores/clusterStore";
 import { useToast } from "@/components/ui/use-toast";
 import { errorToShow } from "@/lib/error-utils";
+import { toastedUnanswered } from "@/lib/toast-error";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
 import { useT } from "@/i18n/useT";
@@ -147,12 +148,12 @@ export function useResourceMutation<
       options.onSuccess?.(data, variables);
     },
     onError: (error, variables) => {
-      const errorMessage = errorToShow(error);
-      toast({
-        title: t("action", "error"),
-        description: `${options.toast.errorPrefix}: ${errorMessage}`,
-        variant: "destructive",
-      });
+      if (!toastedUnanswered(error))
+        toast({
+          title: t("action", "error"),
+          description: `${options.toast.errorPrefix}: ${errorToShow(error)}`,
+          variant: "destructive",
+        });
       options.onError?.(error, variables);
     },
   } as UseMutationOptions<TData, TError, TVariables>);

@@ -36,7 +36,7 @@ import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
 import { scopeCellPx, scopeKey } from "./crd-scope";
 import { columnHeader } from "@/i18n/column-header";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
 
 // CRDs are cluster-scoped, so `namespace` carries the API group instead:
@@ -112,7 +112,7 @@ export function Crds() {
       queryClient.invalidateQueries({ queryKey: queryKeys.crds() });
     },
     onError: (error: Error) => {
-      toastError(t("action", "deleteKindFailed", { kind: "CRD" }), error);
+      toastWriteError(t("action", "deleteKindFailed", { kind: "CRD" }), error);
     },
   });
 

@@ -1,4 +1,5 @@
 import { commands } from "@/lib/commands";
+import { ERROR_CODES } from "@/lib/error-utils";
 import type { en } from "@/i18n/catalogue";
 import { CLUSTERS_CRD } from "./data";
 import {
@@ -206,8 +207,12 @@ export async function perform(
         // The cluster's own words when it has any; otherwise the caller
         // says it in the reader's language — a literal here is invisible to
         // every scanner in this project.
-        throw new Error(
-          (outcome && "said" in outcome && outcome.said) || BACKUP_REFUSED
+        const words =
+          (outcome && "said" in outcome && outcome.said) || BACKUP_REFUSED;
+        // Nobody answering keeps its code: the Backup may have been created.
+        throw Object.assign(
+          new Error(words),
+          outcome?.says === "unanswered" && { code: ERROR_CODES.NO_ANSWER }
         );
       }
       return;

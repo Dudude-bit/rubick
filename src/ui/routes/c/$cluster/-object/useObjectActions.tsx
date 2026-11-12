@@ -80,7 +80,7 @@ import {
 } from "@/lib/access";
 import { askableKind } from "@/lib/tell-me-when";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { toast } from "@/components/ui/use-toast";
 
 /** Whatever the surface fetched, seen only as the count the dialog seeds from. */
@@ -196,7 +196,7 @@ export function useObjectActions({
 
   const failed = (verb: "restart" | "delete" | "scale") => (error: unknown) => {
     noteDenied(verbOf[verb], guarded, error);
-    toastError(
+    toastWriteError(
       t("action", "couldNotDo", {
         action: t("action", verb).toLowerCase(),
         name,

@@ -1383,6 +1383,9 @@ export const en = {
     applyDocUnanswered:
       "{id} got no answer ({said}). It may have been applied: check the object before applying again.",
     applyDocNotSent: "{id} not sent",
+    writeUnanswered: "The cluster did not answer",
+    writeUnansweredDetail:
+      "No answer came back ({said}). The cluster may have done it all the same: check before doing it again.",
 
     custom: "Custom",
     stripFull: "Full",

@@ -77,7 +77,7 @@ import { useRefusals } from "@/hooks/useRefusals";
 import { toldRuns } from "@/lib/create-refusal";
 import type { JobStatus } from "@/lib/status-meaning";
 import { useT, type T } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
 
 /**
@@ -381,7 +381,7 @@ export function CronJobDetail() {
     },
     onError: (error: Error) => {
       noteDenied("create", runs, error);
-      toastError(t("action", "cronRunFailed"), error);
+      toastWriteError(t("action", "cronRunFailed"), error);
     },
   });
 

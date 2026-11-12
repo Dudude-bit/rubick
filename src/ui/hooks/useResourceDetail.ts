@@ -27,6 +27,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
 import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
+import { toastedUnanswered } from "@/lib/toast-error";
 import { useRememberOwners } from "./useLastOwners";
 import { useObjectWatch, watchedByName } from "./useObjectWatch";
 import { useStaleNotFound } from "./useStaleNotFound";
@@ -241,6 +242,7 @@ export function useResourceDetail<T>(
       }
     },
     onError: (err) => {
+      if (toastedUnanswered(err)) return;
       toast({
         title: t("action", "error"),
         description: t("action", "deleteFailed", {

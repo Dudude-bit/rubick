@@ -237,6 +237,7 @@ impl Error {
             {
                 "NOT_FOUND"
             }
+            Error::KubeApi(_) if self.is_unanswered() => "NO_ANSWER",
             Error::KubeApi(_) => "KUBE_API_ERROR",
             Error::CredentialsExpired(_) => "CREDENTIALS_EXPIRED",
             Error::Config(_) => "CONFIG_ERROR",
@@ -504,6 +505,22 @@ impl Error {
             _ => false,
         }
     }
+
+    /// Whether nobody answered a request that left: the read deadline, a
+    /// 5xx, a dropped connection. Only a 4xx with a `Status` is the server's
+    /// own no. Asked of a write, because one nobody answered may have been
+    /// stored all the same, and "failed" is a verdict on what nobody saw.
+    #[must_use]
+    pub fn is_unanswered(&self) -> bool {
+        match self {
+            Error::ReadDeadline { .. } => true,
+            Error::KubeApi(kube::Error::Api(response)) => {
+                !(400..500).contains(&response.code) && !self.is_refusal()
+            }
+            Error::KubeApi(_) => true,
+            _ => false,
+        }
+    }
 }
 
 /// " in namespace x", or nothing for an object no namespace holds.
@@ -584,7 +601,7 @@ mod tests {
         let wire = serde_json::to_value(&err).unwrap();
         assert_eq!(wire["said"], "502 Bad Gateway");
         assert!(!err.to_string().contains('<'), "{err}");
-        assert_eq!(err.code(), "KUBE_API_ERROR");
+        assert_eq!(err.code(), "NO_ANSWER");
 
         let untitled = Error::from(page(
             503,
@@ -613,7 +630,7 @@ mod tests {
         );
         assert_eq!(Error::from(api_error(404, "NotFound")).code(), "NOT_FOUND");
         assert_eq!(
-            Error::from(api_error(500, "InternalError")).code(),
+            Error::from(api_error(409, "Conflict")).code(),
             "KUBE_API_ERROR"
         );
         assert_eq!(
@@ -679,6 +696,7 @@ mod tests {
         let samples = [
             Error::from(api_error(403, "Forbidden")),
             Error::from(api_error(404, "NotFound")),
+            Error::from(api_error(409, "Conflict")),
             Error::from(api_error(500, "InternalError")),
             Error::from(api_error(401, "Unauthorized")),
             Error::Config(String::new()),
@@ -742,6 +760,42 @@ mod tests {
             known.len(),
             "the list names a code nothing sends"
         );
+    }
+
+    /// Scale, restart, delete, rollback and cordon called a deadline, a 502
+    /// and a dropped connection "failed", though the write may have landed:
+    /// the code is how the frontend tells nobody answering from the server
+    /// saying no. Fails if a refusal, a conflict or anything never sent is
+    /// filed as unanswered, or an unanswered write keeps a refusal's code.
+    #[test]
+    fn a_request_nobody_answered_is_told_apart_from_one_the_server_refused() {
+        let dropped = kube::Error::Service("connection reset by peer".into());
+        for unanswered in [
+            Error::from(api_error(500, "InternalError")),
+            Error::from(api_error(502, "")),
+            Error::from(api_error(504, "Timeout")),
+            Error::from(dropped),
+        ] {
+            assert!(unanswered.is_unanswered(), "{unanswered}");
+            assert_eq!(unanswered.code(), "NO_ANSWER", "{unanswered}");
+        }
+        let deadline = Error::ReadDeadline { after_secs: 30 };
+        assert!(deadline.is_unanswered());
+        assert_eq!(deadline.code(), "READ_DEADLINE");
+
+        for answered in [
+            Error::from(api_error(403, "Forbidden")),
+            Error::from(api_error(0, "Forbidden")),
+            Error::from(api_error(404, "NotFound")),
+            Error::from(api_error(409, "Conflict")),
+            Error::from(api_error(422, "Invalid")),
+            Error::from(api_error(401, "Unauthorized")),
+            Error::InvalidInput("a name".into()),
+            Error::NotConnected("no cluster".into()),
+        ] {
+            assert!(!answered.is_unanswered(), "{answered}");
+            assert_ne!(answered.code(), "NO_ANSWER", "{answered}");
+        }
     }
 
     fn api_error(code: u16, reason: &str) -> kube::Error {

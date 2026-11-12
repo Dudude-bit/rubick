@@ -21,6 +21,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { listQueryFor, ResourceType } from "@/lib/resource-registry";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
+import { toastedUnanswered } from "@/lib/toast-error";
 import { guardedOf, noteDenied, useDenied, useRowDenial } from "@/lib/access";
 
 export interface NodeActions {
@@ -72,6 +73,7 @@ export function useNodeActions(asked: string | null): NodeActions {
     },
     onError: (error, nodeName) => {
       noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
+      if (toastedUnanswered(error)) return;
       toast({
         title: t("action", "error"),
         description: t("action", "cordonFailed", { error: errorToShow(error) }),
@@ -91,6 +93,7 @@ export function useNodeActions(asked: string | null): NodeActions {
     },
     onError: (error, nodeName) => {
       noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
+      if (toastedUnanswered(error)) return;
       toast({
         title: t("action", "error"),
         description: t("action", "uncordonFailed", {

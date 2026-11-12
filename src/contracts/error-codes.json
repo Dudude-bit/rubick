@@ -12,6 +12,7 @@
     "LOG_NOT_KEPT",
     "LOG_STREAM_ERROR",
     "NETWORK_ERROR",
+    "NO_ANSWER",
     "NO_PREVIOUS_RUN",
     "NO_READY_POD",
     "NOT_CONNECTED",

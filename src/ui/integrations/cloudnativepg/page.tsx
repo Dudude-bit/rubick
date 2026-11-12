@@ -14,6 +14,7 @@ import {
 } from "@/components/object/detail-tab";
 import { crdInstancesLink, objectLink } from "@/lib/links";
 import { errorToShow } from "@/lib/error-utils";
+import { toastedUnanswered } from "@/lib/toast-error";
 import { ResourceType } from "@/lib/resource-registry";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatAge, formatSince } from "@/lib/utils";
@@ -407,14 +408,15 @@ function ClusterRow({
         predicate: (query) => query.queryKey.includes("cloudnativepg"),
       });
     } catch (error) {
-      toast({
-        title: t("operators", "actionFailed", {
-          action: t("operators", action.label),
-          cluster: cluster.name,
-        }),
-        description: sentenceFor(error, t),
-        variant: "destructive",
-      });
+      if (!toastedUnanswered(error))
+        toast({
+          title: t("operators", "actionFailed", {
+            action: t("operators", action.label),
+            cluster: cluster.name,
+          }),
+          description: sentenceFor(error, t),
+          variant: "destructive",
+        });
     } finally {
       setBusy(false);
       setPending(null);

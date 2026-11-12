@@ -31,7 +31,7 @@ import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
 import { Progress } from "@/components/ui/progress";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastError, toastWriteError } from "@/lib/toast-error";
 import { ReasonTip } from "@/components/object/detail-blocks";
 import { useNodeDebugDenied, useNodeDebugNamespace } from "@/lib/access";
 import { isNamespaceName } from "@/lib/namespace-scope";
@@ -178,7 +178,7 @@ export function DebugNodeDialog({
           }),
         });
       } catch (err) {
-        toastError(t("action", "failedToDeletePod"), err);
+        toastWriteError(t("action", "failedToDeletePod"), err);
       }
     }
     setShowTimeoutDialog(false);

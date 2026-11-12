@@ -41,7 +41,7 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
 import { ControllerLine, Fact, OperatorActionButton } from "../operator-kit";
 import { troubleMark, reachWord } from "../kit";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
@@ -350,7 +350,7 @@ function ClusterRow({
         predicate: (query) => query.queryKey.includes("scylla"),
       });
     } catch (error) {
-      toastError(
+      toastWriteError(
         t("operators", "actionFailed", {
           action: t("operators", action.label),
           cluster: cluster.name,

@@ -217,10 +217,8 @@ fn no_answer(err: kube::Error) -> NoAnswer {
 /// Whether the server itself said no, and the error it said it with. Only a
 /// 4xx with a `Status` is its own answer; a deadline or a proxy's 502 is not.
 fn answered_no(err: kube::Error) -> (bool, Error) {
-    let client_error =
-        matches!(&err, kube::Error::Api(status) if (400..500).contains(&status.code));
     let error = Error::from(err);
-    (client_error || error.is_refusal(), error)
+    (!error.is_unanswered(), error)
 }
 
 /// Which of the six answers this document gets.

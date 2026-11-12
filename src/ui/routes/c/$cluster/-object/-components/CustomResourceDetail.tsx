@@ -40,7 +40,7 @@ import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useClusterStore } from "@/stores/clusterStore";
 import { backInTab } from "@/stores/scopeTabStore";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
 import { useRereadWith } from "@/hooks/useRereadWith";
 
@@ -245,7 +245,7 @@ export function CustomResourceDetail({
     },
     onError: (error: Error) => {
       noteDenied("delete", guarded, error);
-      toastError(
+      toastWriteError(
         t("action", "deleteKindFailed", {
           kind: crdInfo?.kind || t("action", "resourceNoun"),
         }),
