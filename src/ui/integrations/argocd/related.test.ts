@@ -19,7 +19,12 @@ vi.mock("@/lib/commands", () => ({
 
 const { relatedTo } = await import("./related");
 
-function application(resources: unknown[]): CustomResourceInfo {
+function application(
+  resources: unknown[],
+  destination: Record<string, unknown> = {
+    server: "https://kubernetes.default.svc",
+  }
+): CustomResourceInfo {
   return {
     name: "shop",
     namespace: "argocd",
@@ -33,6 +38,7 @@ function application(resources: unknown[]): CustomResourceInfo {
     spec: {
       project: "prod",
       source: { repoURL: "https://github.com/acme/infra", path: "manifests" },
+      destination,
     },
     status: {
       sync: { status: "Synced" },
@@ -142,6 +148,30 @@ describe("what an Argo Application is connected to", () => {
 
     const related = await relatedTo(subject);
     expect(related?.[1]).toMatchObject({ tone: "err", note: "Missing" });
+  });
+
+  /**
+   * A hub's Application for a spoke lists the spoke's objects, and the tab
+   * linked each to the hub's namesake. Fails if a row of an Application that
+   * deploys elsewhere stops saying which cluster it is in.
+   */
+  it("says which cluster a managed object is in where that is not this one", async () => {
+    const prometheus = {
+      group: "apps",
+      kind: "Deployment",
+      namespace: "monitoring",
+      name: "prometheus-operator",
+    };
+    listCustomResources.mockResolvedValue([
+      application([prometheus], { name: "spoke1" }),
+    ]);
+    expect((await relatedTo(subject))?.[1]).toMatchObject({
+      name: "prometheus-operator",
+      cluster: "spoke1",
+    });
+
+    listCustomResources.mockResolvedValue([application([prometheus])]);
+    expect((await relatedTo(subject))?.[1]).not.toHaveProperty("cluster");
   });
 
   it("leaves a healthy resource with nothing to say", async () => {

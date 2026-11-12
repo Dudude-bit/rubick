@@ -76,6 +76,7 @@ import {
   appState,
   byKind,
   byTrouble,
+  destinationCluster,
   destinationOf,
   differing,
   lastSyncOf,
@@ -553,6 +554,7 @@ function Manages({ app }: { app: ArgoApp }) {
   const t = useT();
   const groups = byKind(app.resources);
   const { crdFor } = useCrdIndex();
+  const where = destinationCluster(app);
 
   if (groups.length === 0) {
     return (
@@ -564,6 +566,15 @@ function Manages({ app }: { app: ArgoApp }) {
 
   return (
     <div className="flex flex-col gap-2">
+      {!where.here && (
+        <p className="max-w-[80ch] text-[11px] text-fg-mut">
+          {where.name === null
+            ? t("empty", "argoManagedNoCluster")
+            : parts(t("empty", "argoManagedElsewhere"), {
+                cluster: <span className="font-mono">{where.name}</span>,
+              })}
+        </p>
+      )}
       {groups.map((group) => {
         // Trouble is never hidden: the cap is measured past the ones worth
         // looking at, and whatever it dropped is said out loud.
@@ -591,6 +602,7 @@ function Manages({ app }: { app: ArgoApp }) {
                 key={`${resource.kind}/${resource.namespace}/${resource.name}`}
                 resource={resource}
                 crdFor={crdFor}
+                elsewhere={!where.here}
               />
             ))}
             {hidden > 0 && (
@@ -617,9 +629,12 @@ function Manages({ app }: { app: ArgoApp }) {
 function ResourceLine({
   resource,
   crdFor,
+  elsewhere,
 }: {
   resource: ArgoResource;
   crdFor: CrdLookup;
+  /** Not known to be in the cluster on screen: named, never linked. */
+  elsewhere: boolean;
 }) {
   const t = useT();
   const tone = resourceTone(resource);
@@ -645,6 +660,7 @@ function ResourceLine({
           namespace={resource.namespace}
           crd={crdInGroup(resource, crdFor)}
           showKind={false}
+          elsewhere={elsewhere}
         />
       </span>
       <span className="min-w-0 truncate">

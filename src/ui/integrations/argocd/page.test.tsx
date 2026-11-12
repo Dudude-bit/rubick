@@ -185,6 +185,78 @@ describe("Applications that are not in sync", () => {
   });
 });
 
+describe("what an Application manages, by where it deploys", () => {
+  const prometheus = (destination: Record<string, unknown>) =>
+    application(
+      "monitoring",
+      { destination },
+      {
+        sync: { status: "Synced" },
+        health: { status: "Healthy" },
+        resources: [
+          {
+            group: "apps",
+            kind: "Deployment",
+            namespace: "monitoring",
+            name: "prometheus-operator",
+            status: "Synced",
+          },
+        ],
+      }
+    );
+  const linkToIt = () =>
+    screen.queryByRole("link", { name: "Deployment prometheus-operator" });
+
+  /**
+   * A hub's Application for a spoke lists the spoke's Deployment, and the
+   * row linked it: the click opened the hub's namesake, with Restart, Scale
+   * and Delete. Fails if an object of a destination other than Argo's own
+   * cluster is an anchor, or the row stops saying where it deploys.
+   */
+  it("names the objects of another cluster and does not link them", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([prometheus({ name: "spoke1", namespace: "monitoring" })])
+    );
+
+    await renderOn("applications");
+    await openRow("monitoring");
+
+    expect(linkToIt()).toBeNull();
+    expect(
+      screen.getByText("Deployment prometheus-operator")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Argo deploys this Application to/)
+    ).toHaveTextContent(
+      "Argo deploys this Application to spoke1. Nothing here says that is the cluster on screen"
+    );
+    expect(
+      screen.getByText("project default → monitoring on spoke1")
+    ).toBeInTheDocument();
+  });
+
+  /** The control: the same Application deploying to Argo's own cluster links. */
+  it("links the objects of an Application that deploys here", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([
+        prometheus({
+          server: "https://kubernetes.default.svc",
+          namespace: "monitoring",
+        }),
+      ])
+    );
+
+    await renderOn("applications");
+    await openRow("monitoring");
+
+    expect(linkToIt()).toHaveAttribute(
+      "href",
+      "/c/test/deployments/monitoring/prometheus-operator"
+    );
+    expect(screen.queryByText(/^Argo deploys this Application to/)).toBeNull();
+  });
+});
+
 describe("an Application whose sync is running", () => {
   /**
    * The row said "(never synced)" twice and "Nothing is going to fix this on

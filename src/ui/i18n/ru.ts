@@ -6860,6 +6860,10 @@ export const ru: Catalogue = {
     unknownLower: "неизвестно",
     argoNotComparedYet:
       "Argo ещё не сравнивал этот Application, поэтому объектов не перечисляет.",
+    argoManagedElsewhere:
+      "Argo развёртывает этот Application в {cluster}. Ничто здесь не говорит, что это кластер на экране, поэтому его объекты ниже названы, но не открываются.",
+    argoManagedNoCluster:
+      "Этот Application не называет кластер назначения, поэтому его объекты ниже названы, но не открываются.",
     generatedByApplicationSet: "Сгенерировано ApplicationSet",
     editingGeneratedAppUndone:
       ". Правки этого Application отменятся при следующем запуске генератора, поэтому менять нужно ApplicationSet.",

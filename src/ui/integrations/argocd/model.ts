@@ -590,7 +590,31 @@ export function byTrouble(apps: ArgoApp[]): ArgoApp[] {
   );
 }
 
-/** How many namespaces an Application actually writes into. */
+/** The address Argo's controller reaches its own cluster by. */
+const IN_CLUSTER =
+  /^https:\/\/kubernetes\.default\.svc(\.cluster\.local)?(:\d+)?\/?$/;
+
+/**
+ * Which cluster an Application's objects are in: the one its own object is
+ * in, or another, named as Argo names it (`null` where the spec names none).
+ *
+ * `here` only for the address and the name Argo gives its own cluster. Any
+ * other destination may still be this cluster registered under its outside
+ * address, which nothing in the Application says, so it is not assumed: a
+ * hub's Application for a spoke lists the spoke's objects, and linked they
+ * opened the hub's namesakes with Delete at hand.
+ */
+export function destinationCluster(
+  app: Pick<ArgoApp, "destination">
+): { here: true } | { here: false; name: string | null } {
+  const { server, name } = app.destination;
+  if (name === "in-cluster" || (server !== null && IN_CLUSTER.test(server))) {
+    return { here: true };
+  }
+  return { here: false, name: name ?? server };
+}
+
+/** Where an Application writes: its namespaces, and its cluster where that is not this one. */
 export function destinationOf(app: ArgoApp, t: T): string {
   const namespaces = new Set(
     app.resources
@@ -598,10 +622,22 @@ export function destinationOf(app: ArgoApp, t: T): string {
       .filter((namespace): namespace is string => Boolean(namespace))
   );
   if (app.destination.namespace) namespaces.add(app.destination.namespace);
-  if (namespaces.size === 0)
-    return app.destination.server ?? t("readings", "argoThisCluster");
-  if (namespaces.size === 1) return [...namespaces][0];
-  return t("readings", "argoNamespaceCount", { n: namespaces.size });
+  const within =
+    namespaces.size === 0
+      ? null
+      : namespaces.size === 1
+        ? [...namespaces][0]
+        : t("readings", "argoNamespaceCount", { n: namespaces.size });
+
+  const cluster = destinationCluster(app);
+  if (cluster.here) return within ?? t("readings", "argoThisCluster");
+  if (cluster.name === null) return within ?? t("empty", "noneLower");
+  return within
+    ? t("empty", "namespaceOnCluster", {
+        namespace: within,
+        cluster: cluster.name,
+      })
+    : cluster.name;
 }
 
 /** An empty `sourceRepos` is Argo refusing every repository, not an unset field. */

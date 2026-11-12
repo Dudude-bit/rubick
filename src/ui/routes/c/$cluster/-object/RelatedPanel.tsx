@@ -51,11 +51,17 @@ function Row({ entry }: { entry: RelatedRef }) {
           namespace={entry.namespace}
           crd={entry.crd}
           showKind={false}
+          elsewhere={entry.cluster !== undefined}
         />
       </span>
       <span className="flex min-w-0 items-baseline gap-2">
         <span className="flex-none text-[11px] text-fg-fnt">
-          {entry.namespace ?? t("apiResources", "clusterWide")}
+          {entry.cluster
+            ? t("empty", "namespaceOnCluster", {
+                namespace: entry.namespace ?? t("apiResources", "clusterWide"),
+                cluster: entry.cluster,
+              })
+            : (entry.namespace ?? t("apiResources", "clusterWide"))}
         </span>
         {entry.note && (
           <span

@@ -6,6 +6,8 @@ import {
   autoSyncOn,
   byKind,
   byTrouble,
+  destinationCluster,
+  destinationOf,
   differing,
   lastSyncOf,
   projectDestinationsWords,
@@ -745,6 +747,65 @@ describe("what an Application manages", () => {
   /** A healthy object earns no colour at all. */
   it("leaves a synced, healthy object uncoloured", () => {
     expect(resourceTone(resource("Service", "api"))).toBeNull();
+  });
+});
+
+describe("which cluster an Application's objects are in", () => {
+  const to = (
+    destination: Record<string, unknown>,
+    resources: unknown[] = []
+  ) =>
+    readApplication(
+      application(
+        "monitoring",
+        { destination },
+        { sync: { status: "Synced" }, resources }
+      )
+    );
+
+  /** The address and the name Argo gives the cluster it runs in. */
+  it.each([
+    [{ server: "https://kubernetes.default.svc" }],
+    [{ server: "https://kubernetes.default.svc.cluster.local:443/" }],
+    [{ name: "in-cluster" }],
+  ])("is this one for %o", (destination) => {
+    expect(destinationCluster(to(destination))).toEqual({ here: true });
+  });
+
+  /**
+   * A hub's Application for a spoke lists the spoke's objects, and nothing
+   * read where it deploys. Fails if any destination but Argo's own cluster
+   * is taken for the cluster on screen.
+   */
+  it.each([
+    [{ server: "https://spoke1.example.com" }, "https://spoke1.example.com"],
+    [
+      { server: "https://kubernetes.default.svc.spoke1.example.com" },
+      "https://kubernetes.default.svc.spoke1.example.com",
+    ],
+    [{ name: "spoke1" }, "spoke1"],
+    [{ namespace: "monitoring" }, null],
+  ])("is not assumed to be this one for %o", (destination, name) => {
+    expect(destinationCluster(to(destination))).toEqual({ here: false, name });
+  });
+
+  /**
+   * The row printed the namespace alone, and "this cluster" for a destination
+   * named by `name` with nothing compared yet. Fails if the cluster drops out
+   * of where an Application is said to deploy.
+   */
+  it("names the cluster beside the namespace, and never calls another one this cluster", () => {
+    expect(
+      destinationOf(to({ name: "spoke1", namespace: "monitoring" }), t)
+    ).toBe("monitoring on spoke1");
+    expect(destinationOf(to({ name: "spoke1" }), t)).toBe("spoke1");
+    expect(destinationOf(to({ name: "in-cluster" }), t)).toBe("this cluster");
+    expect(
+      destinationOf(
+        to({ server: "https://kubernetes.default.svc", namespace: "shop" }),
+        t
+      )
+    ).toBe("shop");
   });
 });
 

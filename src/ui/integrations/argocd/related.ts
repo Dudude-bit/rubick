@@ -17,7 +17,7 @@
 
 import type { RelatedObject } from "../registry";
 import { fetchApplications, GROUP } from "./data";
-import type { ArgoApp, ArgoResource } from "./model";
+import { destinationCluster, type ArgoApp, type ArgoResource } from "./model";
 
 /**
  * How this app relates a managed object, and what Argo said about it.
@@ -25,7 +25,10 @@ import type { ArgoApp, ArgoResource } from "./model";
  * The tone is Argo's verdict, never a reading of silence: an object with no
  * `sync` at all is one Argo has not compared, which is not a fault.
  */
-function managed(resource: ArgoResource): RelatedObject {
+function managed(
+  resource: ArgoResource,
+  where: ReturnType<typeof destinationCluster>
+): RelatedObject {
   const failed =
     resource.outcome === "SyncFailed" || resource.sync === "Missing";
   const drifted = resource.sync !== null && resource.sync !== "Synced";
@@ -46,6 +49,7 @@ function managed(resource: ArgoResource): RelatedObject {
     // the panel was the one row with nothing coloured on it.
     note: resource.message ?? said(resource, failed, drifted, unhealthy),
     tone: failed || unhealthy ? "err" : drifted ? "warn" : undefined,
+    ...(where.here ? {} : { cluster: where.name }),
   };
 }
 
@@ -106,5 +110,9 @@ export async function relatedTo(subject: {
   // this kind — an empty one.
   if (!app) return [];
 
-  return [project(app), ...app.resources.map(managed)];
+  const where = destinationCluster(app);
+  return [
+    project(app),
+    ...app.resources.map((resource) => managed(resource, where)),
+  ];
 }

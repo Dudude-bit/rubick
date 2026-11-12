@@ -75,6 +75,60 @@ describe("what an Application tells a reader with no cluster access", () => {
   });
 });
 
+describe("an Application that deploys to another cluster", () => {
+  const report = (destination: Record<string, unknown>) =>
+    reportOf(
+      {
+        group: "argoproj.io",
+        kind: "Application",
+        namespace: "argocd",
+        name: "monitoring-spoke1",
+        spec: { destination },
+        status: {
+          sync: { status: "Synced" },
+          resources: [
+            {
+              group: "apps",
+              kind: "Deployment",
+              namespace: "monitoring",
+              name: "prometheus-operator",
+              status: "Synced",
+            },
+          ],
+        },
+      },
+      t
+    );
+  const nameCell = (sections: ReturnType<typeof reportOf>) => {
+    const table = sections?.find((one) => one.id === "argocd-resources")?.body;
+    if (table?.type !== "table") throw new Error("expected a table");
+    return table.rows[0]?.cells[1];
+  };
+
+  /**
+   * The file drew a spoke's object as a reference to the reported cluster's
+   * object of that name. Fails if such a row carries a reference, or the
+   * destination stops naming the cluster.
+   */
+  it("names its objects without referring to this cluster's, and says where they are", () => {
+    const sections = report({ name: "spoke1", namespace: "monitoring" });
+    expect(nameCell(sections)).toMatchObject({ text: "prometheus-operator" });
+    expect(nameCell(sections)?.ref).toBeUndefined();
+    const facts = sections?.[0]?.body;
+    if (facts?.type !== "facts") throw new Error("expected facts");
+    expect(
+      facts.rows.find((row) => row.label === "Destination")?.values[0]?.text
+    ).toBe("monitoring on spoke1");
+  });
+
+  /** The control: an Application of this cluster refers to its objects. */
+  it("refers to the objects of an Application that deploys here", () => {
+    expect(
+      nameCell(report({ server: "https://kubernetes.default.svc" }))?.ref
+    ).toBeDefined();
+  });
+});
+
 describe("what an AppProject tells a reader with no cluster access", () => {
   /** An empty `sourceRepos` was written as "-", which reads as "unset"; in
    *  Argo it refuses every repository, and the Projects tab says so. */

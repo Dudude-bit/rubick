@@ -16,6 +16,7 @@ import { statusRole } from "@/lib/status-role";
 import {
   appState,
   byKind,
+  destinationCluster,
   destinationOf,
   projectDestinationsWords,
   projectReposWords,
@@ -105,6 +106,7 @@ function applicationSections(
     });
   }
 
+  const { here } = destinationCluster(app);
   const kinds = byKind(app.resources);
   const flat = kinds.flatMap((group) => group.resources);
   const kept = flat.slice(0, MAX_ROWS);
@@ -134,11 +136,14 @@ function applicationSections(
             { text: resource.kind },
             {
               text: resource.name,
-              ref: refOf({
-                kind: resource.kind,
-                name: resource.name,
-                namespace: resource.namespace,
-              }),
+              // An object of another cluster is not one of the reported one.
+              ref: here
+                ? refOf({
+                    kind: resource.kind,
+                    name: resource.name,
+                    namespace: resource.namespace,
+                  })
+                : undefined,
             },
             resource.sync
               ? {
