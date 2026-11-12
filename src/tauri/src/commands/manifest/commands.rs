@@ -61,13 +61,16 @@ async fn apply_of(state: &AppState, manifest: &str, namespace: Option<&str>) -> 
     let patch_params = PatchParams::apply("k8s-gui").force();
     let mut documents = Vec::new();
     let mut stopped = false;
+    // Once, for every document: read again after the first one's wait, the
+    // rest of a manifest went to whichever cluster the window was on by then.
+    let client = state.current_client()?;
 
     for parsed in parsed_docs {
         let ns = parsed.effective_namespace(namespace);
         let outcome = if stopped {
             ApplyOutcome::NotSent
         } else {
-            let ctx = ResourceContext::for_command(state, Some(ns.clone()))?;
+            let ctx = ResourceContext::held(&client, Some(ns.clone()), true)?;
             let api = ctx.dynamic_api_for_resource(
                 &parsed.api_resource,
                 is_cluster_scoped(&parsed.api_resource.kind),
@@ -924,6 +927,45 @@ mod tests {
         let asked = hits.lock().unwrap();
         assert_eq!(asked.get(&path("a")), Some(&1));
         assert_eq!(asked.get(&path("c")), None, "sent after the refusal");
+    }
+
+    /// The client was read again for each document, after the wait for the
+    /// one before: with the window on another cluster by then, the rest of
+    /// the manifest was force-applied there. Fails if a later document asks
+    /// any cluster but the one the first went to.
+    #[tokio::test]
+    async fn every_document_goes_to_the_cluster_the_first_did_though_the_window_moved_meanwhile() {
+        use std::sync::{Arc, OnceLock};
+        let window = Arc::new(OnceLock::new());
+        let moved = window.clone();
+        let (state, hits) = connected(ServedIndex::default(), move |path, _| {
+            if path.ends_with("/configmaps/a") {
+                let current: &Arc<parking_lot::RwLock<Option<String>>> =
+                    moved.get().expect("the window");
+                *current.write() = Some("elsewhere".to_string());
+            }
+            let stored = r#"{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"x"}}"#;
+            (200, stored.to_string())
+        })
+        .await;
+        window.set(state.current_context.clone()).expect("unset");
+
+        let manifest = ["a", "b"]
+            .map(|name| {
+                format!("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {name}\n---\n")
+            })
+            .concat();
+        let applied = super::apply_of(&state, &manifest, Some("shop"))
+            .await
+            .expect("both are answered by the cluster the apply began on");
+
+        assert_eq!(applied.documents[1].outcome, ApplyOutcome::Applied);
+        assert_eq!(
+            hits.lock()
+                .unwrap()
+                .get("/api/v1/namespaces/shop/configmaps/b"),
+            Some(&1)
+        );
     }
 
     /// The YAML tab of every kind with a page of its own, the peek's YAML and

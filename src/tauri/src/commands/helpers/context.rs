@@ -29,8 +29,18 @@ impl ResourceContext {
         namespace: Option<String>,
         require_namespace: bool,
     ) -> Result<Self> {
-        let client = (*state.current_client()?).clone();
+        let client = state.current_client()?;
+        Self::held(&client, namespace, require_namespace)
+    }
 
+    /// The same on a client already held: for a command that waited, and
+    /// must go on with the cluster it began on, not the window's.
+    pub fn held(
+        client: &Client,
+        namespace: Option<String>,
+        require_namespace: bool,
+    ) -> Result<Self> {
+        let client = client.clone();
         let namespace = if require_namespace {
             Some(normalize_optional_namespace(namespace).unwrap_or_else(|| "default".to_string()))
         } else {

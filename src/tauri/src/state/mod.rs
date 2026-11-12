@@ -30,6 +30,45 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
+/// The cluster a command began on: its name, its client and its discovery,
+/// read together and once. A command that waits and then asks again goes
+/// through this: the window's cluster is another one after a tab change, and
+/// a second read of it sends the rest of the command there.
+pub struct Here<'a> {
+    pub context: String,
+    pub client: Arc<kube::Client>,
+    index: &'a crate::client::served::ServedIndex,
+}
+
+impl Here<'_> {
+    /// See [`AppState::served`].
+    pub async fn served(
+        &self,
+        group: &str,
+        plural: &str,
+    ) -> Result<Option<crate::client::served::Served>> {
+        self.index
+            .resource(&self.context, &self.client, group, plural)
+            .await
+    }
+
+    /// See [`AppState::served_kind`].
+    pub async fn served_kind(
+        &self,
+        group: &str,
+        plural: &str,
+    ) -> Result<Option<crate::client::served::ServedKind>> {
+        self.index
+            .kind(&self.context, &self.client, group, plural)
+            .await
+    }
+
+    /// See [`AppState::served_answer`].
+    pub fn served_answer<T>(&self, group: &str, answer: kube::Result<T>) -> kube::Result<T> {
+        self.index.answered(&self.context, group, answer)
+    }
+}
+
 /// Global application state
 pub struct AppState {
     /// Application configuration
@@ -239,7 +278,7 @@ impl AppState {
 
     /// The current context's client, or why there is none.
     pub fn current_client(&self) -> Result<Arc<kube::Client>> {
-        Ok(self.current()?.1)
+        Ok(self.here()?.client)
     }
 
     /// The client held for `context`, wherever the window is. What runs
@@ -262,11 +301,7 @@ impl AppState {
         group: &str,
         plural: &str,
     ) -> Result<Option<crate::client::served::Served>> {
-        let (context, client) = self.current()?;
-        self.client_manager
-            .served()
-            .resource(&context, &client, group, plural)
-            .await
+        self.here()?.served(group, plural).await
     }
 
     /// `plural` in `group` on the current cluster, with every version that
@@ -280,11 +315,7 @@ impl AppState {
         group: &str,
         plural: &str,
     ) -> Result<Option<crate::client::served::ServedKind>> {
-        let (context, client) = self.current()?;
-        self.client_manager
-            .served()
-            .kind(&context, &client, group, plural)
-            .await
+        self.here()?.served_kind(group, plural).await
     }
 
     /// Every kind `group` serves on the current cluster, with each version
@@ -297,11 +328,8 @@ impl AppState {
         &self,
         group: &str,
     ) -> Result<Option<Vec<crate::client::served::ServedKind>>> {
-        let (context, client) = self.current()?;
-        self.client_manager
-            .served()
-            .kinds(&context, &client, group)
-            .await
+        let here = self.here()?;
+        here.index.kinds(&here.context, &here.client, group).await
     }
 
     /// Every kind `group` serves on the current cluster, at the version
@@ -321,10 +349,9 @@ impl AppState {
             )>,
         >,
     > {
-        let (context, client) = self.current()?;
-        self.client_manager
-            .served()
-            .recommended(&context, &client, group)
+        let here = self.here()?;
+        here.index
+            .recommended(&here.context, &here.client, group)
             .await
     }
 
@@ -354,15 +381,16 @@ impl AppState {
         }
     }
 
-    /// The window's cluster and its client, read together. A command that
-    /// waits takes both once: read apart, a tab change between the two pairs
-    /// one cluster's client with the other's name.
-    pub fn current(&self) -> Result<(String, Arc<kube::Client>)> {
+    /// The window's cluster as it is now, to go on asking after a wait.
+    pub fn here(&self) -> Result<Here<'_>> {
         let context = self.get_current_context().ok_or_else(|| {
             crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
         })?;
-        let client = self.client_of(&context)?;
-        Ok((context, client))
+        Ok(Here {
+            client: self.client_of(&context)?,
+            context,
+            index: self.client_manager.served(),
+        })
     }
 
     /// A context's client was replaced or let go: a connect, a disconnect,
