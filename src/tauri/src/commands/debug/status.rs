@@ -38,14 +38,10 @@ pub(super) fn check_ephemeral_container_status(pod: &Pod, container_name: &str) 
                         .clone()
                         .unwrap_or_else(|| "Waiting".to_string());
                     if reason.contains("ImagePull") && reason.contains("Back") {
-                        return DebugStatus::Failed {
-                            error: format!("Image pull failed: {reason}"),
-                        };
+                        return DebugStatus::failed(format!("Image pull failed: {reason}"));
                     }
                     if reason.contains("Err") {
-                        return DebugStatus::Failed {
-                            error: waiting.message.clone().unwrap_or(reason),
-                        };
+                        return DebugStatus::failed(waiting.message.clone().unwrap_or(reason));
                     }
                     return DebugStatus::Pending { reason };
                 }
@@ -54,9 +50,7 @@ pub(super) fn check_ephemeral_container_status(pod: &Pod, container_name: &str) 
                         .reason
                         .clone()
                         .unwrap_or_else(|| "Terminated".to_string());
-                    return DebugStatus::Failed {
-                        error: format!("Container terminated: {reason}"),
-                    };
+                    return DebugStatus::failed(format!("Container terminated: {reason}"));
                 }
             }
             DebugStatus::Pending {
@@ -99,12 +93,10 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
                 .as_ref()
                 .and_then(|s| s.reason.clone())
                 .unwrap_or_else(|| "Pod failed".to_string());
-            return DebugStatus::Failed { error: reason };
+            return DebugStatus::failed(reason);
         }
         "Succeeded" => {
-            return DebugStatus::Failed {
-                error: "Pod completed".to_string(),
-            };
+            return DebugStatus::failed("Pod completed".to_string());
         }
         _ => {}
     }
@@ -159,9 +151,7 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
                         .reason
                         .clone()
                         .unwrap_or_else(|| "Terminated".to_string());
-                    return DebugStatus::Failed {
-                        error: format!("Container terminated: {reason}"),
-                    };
+                    return DebugStatus::failed(format!("Container terminated: {reason}"));
                 }
             }
             DebugStatus::Pending {
@@ -179,14 +169,10 @@ fn waiting_status(waiting: &ContainerStateWaiting) -> DebugStatus {
         .clone()
         .unwrap_or_else(|| "Waiting".to_string());
     if reason.contains("ImagePull") && reason.contains("Back") {
-        return DebugStatus::Failed {
-            error: format!("Image pull failed: {reason}"),
-        };
+        return DebugStatus::failed(format!("Image pull failed: {reason}"));
     }
     if reason.contains("Err") || reason.contains("CrashLoop") {
-        return DebugStatus::Failed {
-            error: waiting.message.clone().unwrap_or(reason),
-        };
+        return DebugStatus::failed(waiting.message.clone().unwrap_or(reason));
     }
     DebugStatus::Pending { reason }
 }

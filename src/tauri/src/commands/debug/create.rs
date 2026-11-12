@@ -70,6 +70,23 @@ fn debugger_container(name: &str, config: &DebugConfig) -> Container {
     }
 }
 
+/// Create a pod this app makes for a debug session. A create nobody
+/// answered may have been stored all the same, and the operation that would
+/// remember its name is never recorded: it is asked to go at once.
+async fn create_made(api: &Api<Pod>, pod: &Pod) -> Result<()> {
+    let Err(err) = api.create(&PostParams::default(), pod).await else {
+        return Ok(());
+    };
+    let err = Error::from(err);
+    if err.is_unanswered() {
+        let (api, name) = (api.clone(), pod.metadata.name.clone().unwrap_or_default());
+        tokio::spawn(async move {
+            let _ = api.delete(&name, &kube::api::DeleteParams::default()).await;
+        });
+    }
+    Err(err)
+}
+
 /// Add an ephemeral debug container to an existing pod
 #[tauri::command]
 pub async fn debug_pod_ephemeral(
@@ -216,7 +233,7 @@ pub async fn debug_pod_copy(
         ..Default::default()
     };
 
-    api.create(&PostParams::default(), &debug_pod).await?;
+    create_made(&api, &debug_pod).await?;
 
     // Create and store the debug operation
     let operation_id = crate::utils::generate_id("debug");
@@ -327,7 +344,7 @@ pub async fn debug_node(
         ..Default::default()
     };
 
-    api.create(&PostParams::default(), &debug_pod).await?;
+    create_made(&api, &debug_pod).await?;
 
     // Create and store the debug operation
     let operation_id = crate::utils::generate_id("debug");
@@ -377,6 +394,55 @@ mod tests {
             debugger_container("debugger-1", &config(false)).security_context,
             None
         );
+    }
+
+    /// The answer to a create can be lost after the pod was stored, and the
+    /// operation that would remember the pod is recorded only after it: a
+    /// copy of the workload then ran its hour with nothing knowing its name.
+    #[tokio::test]
+    async fn a_pod_whose_create_nobody_answered_is_asked_to_go() {
+        use crate::client::served::test_server::answering;
+        const MADE: &str = "/api/v1/namespaces/shop/pods/orders-debug-1";
+        let (client, hits) = answering(|path, _| match path {
+            "/api/v1/namespaces/shop/pods" => (500, "{}".into()),
+            _ => (200, "{}".into()),
+        })
+        .await;
+        let api: Api<Pod> = Api::namespaced(client, "shop");
+        let mut pod = Pod::default();
+        pod.metadata.name = Some("orders-debug-1".into());
+
+        let err = create_made(&api, &pod).await.expect_err("nobody answered");
+
+        assert!(err.is_unanswered(), "{err}");
+        let asked = || hits.lock().unwrap().get(MADE).copied().unwrap_or(0);
+        for _ in 0..40 {
+            if asked() > 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert_eq!(asked(), 1, "the delete was never sent");
+    }
+
+    /// A refusal is the cluster's own no: nothing was stored, nothing to remove.
+    #[tokio::test]
+    async fn a_refused_create_leaves_nothing_to_remove() {
+        use crate::client::served::test_server::{answering, failure};
+        let (client, hits) = answering(|path, _| match path {
+            "/api/v1/namespaces/shop/pods" => failure(403, "Forbidden"),
+            _ => (200, "{}".into()),
+        })
+        .await;
+        let api: Api<Pod> = Api::namespaced(client, "shop");
+        let mut pod = Pod::default();
+        pod.metadata.name = Some("orders-debug-1".into());
+
+        let err = create_made(&api, &pod).await.expect_err("refused");
+
+        assert!(err.is_refusal(), "{err}");
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert_eq!(hits.lock().unwrap().len(), 1, "only the create was sent");
     }
 
     /// Asked for, it is the one capability and nothing beside it.

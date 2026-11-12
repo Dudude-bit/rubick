@@ -965,6 +965,11 @@ export interface DebugConfig {
   timeoutSeconds: number | null;
 }
 
+export interface MadePod {
+  name: string;
+  deleted: boolean;
+}
+
 export interface DebugResult {
   podName: string;
   containerName: string;
@@ -2819,7 +2824,7 @@ export type DebugOperationType = "ephemeral" | "copyPod" | "nodeDebug";
 export type DebugStatus =
   | { type: "pending"; reason: string }
   | { type: "ready"; result: DebugResult }
-  | { type: "failed"; error: string }
+  | { type: "failed"; error: string; pod: MadePod | null }
   | { type: "timeout" };
 
 export type SetupFault =

@@ -1249,6 +1249,9 @@ export const en = {
     debugContainerReadyDetail:
       'Container "{container}" is ready in pod "{pod}"',
     debugFailed: "Debug failed",
+    debugPodRemoved: "Its pod {pod} was deleted.",
+    debugPodLeft:
+      "Its pod {pod} could not be deleted and is still in the cluster: delete it from its page.",
     invalidImage: "Invalid image",
     invalidImageDetail: "Please select or enter a valid debug image",
     debugPodDeleted: "Debug pod deleted",

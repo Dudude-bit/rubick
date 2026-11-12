@@ -1254,6 +1254,9 @@ export const ru: Catalogue = {
     debugContainerReady: "Контейнер для отладки готов",
     debugContainerReadyDetail: "Контейнер «{container}» готов в поде «{pod}»",
     debugFailed: "Отладка не удалась",
+    debugPodRemoved: "Созданный для неё Pod {pod} удалён.",
+    debugPodLeft:
+      "Созданный для неё Pod {pod} удалить не удалось, он остался в кластере: удалите его с его страницы.",
     invalidImage: "Некорректный образ",
     invalidImageDetail: "Выберите или введите корректный образ для отладки",
     debugPodDeleted: "Под для отладки удалён",

@@ -19,6 +19,16 @@ vi.mock("@/lib/commands", () => ({
       createdAt: 0,
       timeoutSeconds: 120,
     }),
+    debugPodCopy: vi.fn().mockResolvedValue({
+      id: "op-copy",
+      podName: "web-debug-1",
+      namespace: "shop",
+      containerName: "debugger-1",
+      operationType: "CopyPod",
+      createdAt: 0,
+      timeoutSeconds: 120,
+    }),
+    cancelDebugOperation: vi.fn().mockResolvedValue(null),
     getDebugStatus: vi
       .fn()
       .mockResolvedValue({ type: "pending", reason: "ContainerCreating" }),
@@ -26,7 +36,9 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { useWindowActivity } from "@/lib/window-activity";
-import { useDebugOperation } from "./useDebugOperation";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { debugFailureWords, useDebugOperation } from "./useDebugOperation";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -116,5 +128,124 @@ describe("a debug container the cluster refused", () => {
     });
 
     expect(onError).toHaveBeenCalledWith('pods "web" is forbidden');
+  });
+});
+
+describe("a debug pod nobody is waiting for any more", () => {
+  const waiting = () =>
+    renderHook(() =>
+      useDebugOperation({
+        onReady: vi.fn(),
+        onError: vi.fn(),
+        onTimeout: vi.fn(),
+      })
+    );
+
+  /**
+   * Leaving the page mid-wait cleared the timer and nothing else: the copy
+   * ran the workload a second time for its hour with no one told its name.
+   * Fails if unmounting while waiting does not cancel the operation.
+   */
+  it("is cancelled when the dialog goes away while still waiting", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.cancelDebugOperation).mockClear();
+    const { result, unmount } = waiting();
+    await act(async () => {
+      await result.current.startCopyPod("web", "shop", {} as never);
+    });
+    expect(commands.cancelDebugOperation).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(commands.cancelDebugOperation).toHaveBeenCalledWith("op-copy");
+  });
+
+  /** A session that became ready is the reader's to keep: leaving its page must not delete the pod under their shell. */
+  it("is left alone once the debugger is ready", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.cancelDebugOperation).mockClear();
+    vi.mocked(commands.getDebugStatus).mockResolvedValueOnce({
+      type: "ready",
+      result: {
+        podName: "web-debug-1",
+        containerName: "debugger-1",
+        namespace: "shop",
+        isNewPod: true,
+        seesRootOf: null,
+      },
+    });
+    const { result, unmount } = waiting();
+    await act(async () => {
+      await result.current.startCopyPod("web", "shop", {} as never);
+    });
+
+    unmount();
+
+    expect(commands.cancelDebugOperation).not.toHaveBeenCalled();
+  });
+
+  /** The create was still in flight when the dialog went: the operation it returns has nobody to poll it, so it is cancelled on arrival. */
+  it("is cancelled on arrival when its create outlived the dialog", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.cancelDebugOperation).mockClear();
+    let arrive: (op: never) => void = () => {};
+    vi.mocked(commands.debugPodCopy).mockReturnValueOnce(
+      new Promise((resolve) => (arrive = resolve))
+    );
+    const { result, unmount } = waiting();
+    let started: Promise<void> = Promise.resolve();
+    act(() => {
+      started = result.current.startCopyPod("web", "shop", {} as never);
+    });
+    unmount();
+    arrive({ id: "op-late" } as never);
+    await started;
+
+    expect(commands.cancelDebugOperation).toHaveBeenCalledWith("op-late");
+    expect(commands.getDebugStatus).not.toHaveBeenCalledWith("op-late");
+  });
+});
+
+describe("what a failed debug session says of the pod it made", () => {
+  const en: T = (section, key, values) => translate("en", section, key, values);
+
+  /** "Container terminated: Completed" and a copy left running was all the reader got; the pod's fate is the other half of the answer. */
+  it("says the pod was deleted, or names the one still there", () => {
+    expect(
+      debugFailureWords(
+        "Container terminated: Completed",
+        { name: "web-debug-1", deleted: true },
+        en
+      )
+    ).toBe("Container terminated: Completed. Its pod web-debug-1 was deleted.");
+    expect(
+      debugFailureWords("x", { name: "web-debug-1", deleted: false }, en)
+    ).toBe(
+      "x. Its pod web-debug-1 could not be deleted and is still in the cluster: delete it from its page."
+    );
+    expect(debugFailureWords("x", null, en)).toBe("x");
+  });
+
+  /** The failed status carries the pod; dropped on the way to the dialog, the toast is the old one. */
+  it("hands the dialog the pod with the error", async () => {
+    const { commands } = await import("@/lib/commands");
+    const pod = { name: "web-debug-1", deleted: true };
+    vi.mocked(commands.getDebugStatus).mockResolvedValueOnce({
+      type: "failed",
+      error: "Container terminated: Completed",
+      pod,
+    });
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useDebugOperation({ onReady: vi.fn(), onError, onTimeout: vi.fn() })
+    );
+    await act(async () => {
+      await result.current.startCopyPod("web", "shop", {} as never);
+    });
+
+    expect(onError).toHaveBeenCalledWith(
+      "Container terminated: Completed",
+      pod
+    );
   });
 });

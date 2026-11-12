@@ -2,11 +2,29 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useNowSeconds } from "@/hooks/useNow";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
+import type { T } from "@/i18n/useT";
 import type {
   DebugConfig,
   DebugOperation,
   DebugResult,
+  MadePod,
 } from "@/generated/types";
+
+/**
+ * Why a debug session failed, and what became of the pod it made: a copy
+ * left running is the workload a second time, so it is never left unsaid.
+ */
+export function debugFailureWords(
+  error: string,
+  pod: MadePod | null | undefined,
+  t: T
+): string {
+  if (!pod) return error;
+  const fate = t("action", pod.deleted ? "debugPodRemoved" : "debugPodLeft", {
+    pod: pod.name,
+  });
+  return `${error}. ${fate}`;
+}
 
 export type DebugOperationState =
   | "idle"
@@ -18,7 +36,8 @@ export type DebugOperationState =
 
 interface UseDebugOperationOptions {
   onReady: (result: DebugResult) => void;
-  onError: (error: string) => void;
+  /** `pod` is what the operation made in the cluster, removed or still there. */
+  onError: (error: string, pod?: MadePod | null) => void;
   onTimeout: (operation: DebugOperation) => void;
   pollInterval?: number;
 }
@@ -45,6 +64,9 @@ export function useDebugOperation({
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isCancelledRef = useRef(false);
+  // The operation still waited on. Unmounting then is no choice to keep its
+  // pod: nobody is left to enter it, or to be told its name.
+  const waitingRef = useRef<string | null>(null);
 
   const cleanup = useCallback(() => {
     if (pollIntervalRef.current) {
@@ -57,6 +79,7 @@ export function useDebugOperation({
     (op: DebugOperation) => {
       cleanup();
       isCancelledRef.current = false;
+      waitingRef.current = op.id;
       setStartedAt(Date.now());
 
       const poll = async () => {
@@ -67,16 +90,17 @@ export function useDebugOperation({
 
           if (isCancelledRef.current) return;
 
-          if (status.type === "ready") {
+          if (status.type !== "pending") {
             cleanup();
+            waitingRef.current = null;
+          }
+          if (status.type === "ready") {
             setState("ready");
             onReady(status.result);
           } else if (status.type === "failed") {
-            cleanup();
             setState("failed");
-            onError(status.error);
+            onError(status.error, status.pod);
           } else if (status.type === "timeout") {
-            cleanup();
             setState("timeout");
             onTimeout(op);
           } else if (status.type === "pending") {
@@ -93,14 +117,20 @@ export function useDebugOperation({
     [cleanup, pollInterval, onReady, onError, onTimeout]
   );
 
-  const startEphemeral = useCallback(
-    async (podName: string, namespace: string, config: DebugConfig) => {
+  const start = useCallback(
+    async (create: () => Promise<DebugOperation>) => {
       setState("creating");
       setStatusReason(null);
       isCancelledRef.current = false;
 
       try {
-        const op = await commands.debugPodEphemeral(podName, namespace, config);
+        const op = await create();
+        // Cancelled or unmounted while the create was in flight: nobody
+        // waits for this operation, so what it made goes with it.
+        if (isCancelledRef.current) {
+          void commands.cancelDebugOperation(op.id).catch(() => {});
+          return;
+        }
         setOperation(op);
         setState("polling");
         startPolling(op);
@@ -110,48 +140,29 @@ export function useDebugOperation({
       }
     },
     [startPolling, onError]
+  );
+
+  const startEphemeral = useCallback(
+    (podName: string, namespace: string, config: DebugConfig) =>
+      start(() => commands.debugPodEphemeral(podName, namespace, config)),
+    [start]
   );
 
   const startCopyPod = useCallback(
-    async (podName: string, namespace: string, config: DebugConfig) => {
-      setState("creating");
-      setStatusReason(null);
-      isCancelledRef.current = false;
-
-      try {
-        const op = await commands.debugPodCopy(podName, namespace, config);
-        setOperation(op);
-        setState("polling");
-        startPolling(op);
-      } catch (err) {
-        setState("failed");
-        onError(errorToShow(err));
-      }
-    },
-    [startPolling, onError]
+    (podName: string, namespace: string, config: DebugConfig) =>
+      start(() => commands.debugPodCopy(podName, namespace, config)),
+    [start]
   );
 
   const startNodeDebug = useCallback(
-    async (nodeName: string, namespace: string, config: DebugConfig) => {
-      setState("creating");
-      setStatusReason(null);
-      isCancelledRef.current = false;
-
-      try {
-        const op = await commands.debugNode(nodeName, namespace, config);
-        setOperation(op);
-        setState("polling");
-        startPolling(op);
-      } catch (err) {
-        setState("failed");
-        onError(errorToShow(err));
-      }
-    },
-    [startPolling, onError]
+    (nodeName: string, namespace: string, config: DebugConfig) =>
+      start(() => commands.debugNode(nodeName, namespace, config)),
+    [start]
   );
 
   const cancel = useCallback(async () => {
     isCancelledRef.current = true;
+    waitingRef.current = null;
     cleanup();
 
     if (operation) {
@@ -187,6 +198,9 @@ export function useDebugOperation({
     return () => {
       isCancelledRef.current = true;
       cleanup();
+      const waited = waitingRef.current;
+      waitingRef.current = null;
+      if (waited) void commands.cancelDebugOperation(waited).catch(() => {});
     };
   }, [cleanup]);
 
