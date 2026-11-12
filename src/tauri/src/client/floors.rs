@@ -11,14 +11,16 @@
 //! read included.
 //!
 //! A cache that has not reached the floor holds the list for up to three
-//! seconds and then refuses it, so the floor is given [`FLOOR_WAIT`] and no
-//! more: past it, or refused, the list is asked again as it was.
+//! seconds and then refuses it, so the floor is given [`FLOOR_WAIT`] alone:
+//! refused, the list is asked again as it was, and past the wait it is asked
+//! as it was beside the floored one, which is kept. Silence is also a big
+//! list still being assembled, and the first of the two to answer is taken.
 
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use http::{Method, Request, Response, StatusCode, Uri};
@@ -26,8 +28,9 @@ use http_body::{Body, Frame, SizeHint};
 use kube::client::Body as KubeBody;
 use tower::{Layer, Service, ServiceExt};
 
-/// The most a list waits on a floor. A cache behind it catches up on the
-/// progress notice a read asks for, in under half a second on k3s.
+/// How long a floored list is waited on alone. A cache behind the floor
+/// catches up on the progress notice a read asks for, in under half a second
+/// on k3s.
 pub(super) const FLOOR_WAIT: Duration = Duration::from_secs(1);
 
 /// Groups the API server's own cache answers. Aggregated APIs, metrics above
@@ -81,6 +84,9 @@ pub(super) fn has_param(query: &str, names: &[&str]) -> bool {
 #[derive(Clone, Default)]
 pub(super) struct Floors {
     seen: Arc<DashMap<String, u64>>,
+    /// How long a request's floored answer last took to begin, where that
+    /// was over [`FLOOR_WAIT`], by the target as asked.
+    slow: Arc<DashMap<String, Duration>>,
 }
 
 impl Floors {
@@ -104,6 +110,22 @@ impl Floors {
 
     fn get(&self, collection: &str) -> Option<u64> {
         self.seen.get(collection).map(|held| *held)
+    }
+
+    /// How long `target`'s floored list is waited on alone: a list known to
+    /// begin late is not asked twice on every read.
+    fn patience(&self, target: &str) -> Duration {
+        self.slow
+            .get(target)
+            .map_or(FLOOR_WAIT, |took| *took + FLOOR_WAIT)
+    }
+
+    fn began(&self, target: &str, took: Duration) {
+        if took > FLOOR_WAIT {
+            self.slow.insert(target.to_string(), took);
+        } else {
+            self.slow.remove(target);
+        }
     }
 }
 
@@ -136,6 +158,7 @@ impl<S, B> Service<Request<KubeBody>> for Floored<S>
 where
     S: Service<Request<KubeBody>, Response = Response<B>> + Clone + Send + 'static,
     S::Future: Send + 'static,
+    S::Error: Send + 'static,
     B: Send + 'static,
 {
     type Response = Response<Learned<B>>;
@@ -183,18 +206,33 @@ where
             return Box::pin(async move { Ok(Learned::wrap(answer.await?, learning)) });
         };
         let (floored, fallback) = (learning(None), learning(Some(floor)));
+        let target = request
+            .uri()
+            .path_and_query()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        let patience = floors.patience(&target);
         let spare = self.inner.clone();
-        let answer = self.inner.call(with_floor(request, &query, floor));
+        let sent = Instant::now();
+        let mut answer = Box::pin(self.inner.call(with_floor(request, &query, floor)));
         Box::pin(async move {
-            match tokio::time::timeout(FLOOR_WAIT, answer).await {
-                Ok(Ok(response)) if !refused(response.status()) => {
-                    return Ok(Learned::wrap(response, floored));
+            let alone = tokio::time::timeout(patience, &mut answer).await;
+            let mut plain = Box::pin(spare.oneshot(as_asked));
+            let late = if let Ok(early) = alone {
+                early
+            } else {
+                tokio::select! {
+                    biased;
+                    late = &mut answer => late,
+                    asked = &mut plain => return Ok(Learned::wrap(asked?, fallback)),
                 }
-                Ok(Err(error)) => return Err(error),
-                Ok(Ok(_)) | Err(_) => {}
+            };
+            let response = late?;
+            if refused(response.status()) {
+                return Ok(Learned::wrap(plain.await?, fallback));
             }
-            let response = spare.oneshot(as_asked).await?;
-            Ok(Learned::wrap(response, fallback))
+            floors.began(&target, sent.elapsed());
+            Ok(Learned::wrap(response, floored))
         })
     }
 }
@@ -404,6 +442,9 @@ mod tests {
     use k8s_openapi::api::core::v1::Pod;
     use kube::api::{Api, ListParams, WatchParams};
 
+    /// How long a list too slow for the floor's wait takes to begin.
+    const LATE: Duration = Duration::from_millis(1600);
+
     fn pod_list(version: u64) -> Vec<String> {
         vec![format!(
             r#"{{"kind":"PodList","apiVersion":"v1","metadata":{{"resourceVersion":"{version}"}},"items":[]}}"#
@@ -562,8 +603,7 @@ mod tests {
     /// before it refuses, and a list that waited on it for good sat out the
     /// whole deadline while the lists beside it answered.
     #[tokio::test]
-    async fn a_floor_the_cache_does_not_answer_within_a_second_is_dropped_and_the_list_asked_as_it_was(
-    ) {
+    async fn a_floor_the_cache_does_not_answer_within_a_second_has_the_list_asked_as_it_was() {
         let (client, asked) = slow_server(|target| {
             (!target.contains("NotOlderThan")).then(|| (Duration::ZERO, (200, pod_list(500))))
         })
@@ -581,6 +621,87 @@ mod tests {
         let asked = asked.lock().unwrap().clone();
         assert_eq!(floored(&asked[1]), Some("500"), "{asked:?}");
         assert_eq!(floored(&asked[2]), None, "asked again as it was: {asked:?}");
+    }
+
+    /// A big list, or any over a slow link, begins its answer later than the
+    /// floor's wait. Dropped there and asked again from scratch, every read
+    /// of it took a second and a whole list longer than with no floor at all.
+    #[tokio::test]
+    async fn a_floored_list_slow_to_begin_is_kept_and_its_answer_is_the_one_taken() {
+        let (client, _) = slow_server(|target| {
+            let version = if target.contains("NotOlderThan") {
+                501
+            } else {
+                500
+            };
+            Some((LATE, (200, pod_list(version))))
+        })
+        .await;
+        let pods: Api<Pod> = Api::namespaced(client, "shop");
+        pods.list(&ListParams::default()).await.expect("learn 500");
+
+        let started = std::time::Instant::now();
+        let listed = pods.list(&ListParams::default()).await.expect("slow");
+        let took = started.elapsed();
+
+        assert_eq!(
+            listed.metadata.resource_version.as_deref(),
+            Some("501"),
+            "the floored answer, after {took:?}"
+        );
+        assert!(took < LATE + FLOOR_WAIT, "{took:?}");
+    }
+
+    /// The list asked beside a slow one is a second whole list for the server
+    /// to assemble; sent on every read, a big collection cost it double.
+    #[tokio::test]
+    async fn a_list_known_to_begin_late_is_waited_on_alone_the_next_time() {
+        let (client, asked) = slow_server(|_| Some((LATE, (200, pod_list(500))))).await;
+        let pods: Api<Pod> = Api::namespaced(client, "shop");
+        pods.list(&ListParams::default()).await.expect("learn 500");
+        pods.list(&ListParams::default()).await.expect("late");
+
+        pods.list(&ListParams::default()).await.expect("known");
+
+        let asked = asked.lock().unwrap().clone();
+        let floors: Vec<_> = asked.iter().map(|target| floored(target)).collect();
+        assert_eq!(
+            floors,
+            [None, Some("500"), None, Some("500")],
+            "asked beside it once, then alone"
+        );
+    }
+
+    /// The cache gives up on a floor three seconds in, after the list has
+    /// been asked beside it: taken as the answer, the refusal was a failed
+    /// read where the plain list was a moment from answering.
+    #[tokio::test]
+    async fn a_floor_refused_after_the_list_was_asked_beside_it_is_not_the_answer() {
+        let (client, asked) = slow_server(|target| {
+            if target.contains("NotOlderThan") && target.contains("resourceVersion=500") {
+                let refusal = r#"{"kind":"Status","apiVersion":"v1","code":504}"#;
+                Some((
+                    FLOOR_WAIT + Duration::from_millis(300),
+                    (504, vec![refusal.into()]),
+                ))
+            } else if target.contains("NotOlderThan") {
+                Some((Duration::ZERO, (200, pod_list(8))))
+            } else if target.contains("labelSelector") {
+                Some((Duration::from_millis(800), (200, pod_list(7))))
+            } else {
+                Some((Duration::ZERO, (200, pod_list(500))))
+            }
+        })
+        .await;
+        let pods: Api<Pod> = Api::namespaced(client, "shop");
+        pods.list(&ListParams::default()).await.expect("learn 500");
+
+        let again = pods.list(&ListParams::default().labels("x=y")).await;
+        pods.list(&ListParams::default()).await.expect("after");
+
+        assert!(again.is_ok(), "{again:?}");
+        let asked = asked.lock().unwrap().clone();
+        assert_eq!(floored(&asked[3]), Some("7"), "{asked:?}");
     }
 
     /// Kubernetes 1.35 refuses a list with a version while the cache is still
