@@ -36,20 +36,36 @@ const INGRESS_CLASS_ANNOTATION = "kubernetes.io/ingress.class";
 const ALB_CLASSES = new Set(["alb"]);
 
 /** Which class an Ingress asks for, annotation first as the controller reads it. */
-export function classOf(ingress: IngressInfo): string | null {
+export function classOf(
+  ingress: Pick<IngressInfo, "className" | "annotations">
+): string | null {
   return ingress.annotations[INGRESS_CLASS_ANNOTATION] ?? ingress.className;
+}
+
+/**
+ * Whether this controller serves the Ingress: the one reading, for the page
+ * and for whoever asks about its TLS. The class it asks for is `alb`, or one
+ * whose `spec.controller` is this controller; `null` where only the
+ * IngressClass list could say and it was not read.
+ */
+export function claimsIngress(
+  ingress: Pick<IngressInfo, "className" | "annotations">,
+  /** Classes whose controller is this one, beyond the built-in `alb` name. */
+  ownClasses: string[] | null
+): boolean | null {
+  const asked = classOf(ingress);
+  if (asked === null) return false;
+  if (ALB_CLASSES.has(asked)) return true;
+  return ownClasses && ownClasses.includes(asked);
 }
 
 export function claimed(
   ingresses: IngressInfo[],
-  /** Classes whose controller is this one, beyond the built-in `alb` name. */
   ownClasses: string[]
 ): IngressInfo[] {
-  const mine = new Set([...ALB_CLASSES, ...ownClasses]);
-  return ingresses.filter((ingress) => {
-    const asked = classOf(ingress);
-    return asked !== null && mine.has(asked);
-  });
+  return ingresses.filter(
+    (ingress) => claimsIngress(ingress, ownClasses) === true
+  );
 }
 
 /** What an `IngressClassParams` sets, read once for every surface. */

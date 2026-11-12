@@ -12,6 +12,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import {
   albGroups,
+  claimsIngress,
   countGroups,
   groupSeverity,
   readParams,
@@ -280,6 +281,26 @@ describe("which Ingresses share a load balancer", () => {
       expect.objectContaining({ className: "alb", named: "absent-alb" }),
     ]);
     expect(noParams("internal")).toEqual([]);
+  });
+
+  /**
+   * The page and the TLS reader ask one function. Fails if the annotation
+   * stops being read before the field, a class of the controller's stops
+   * being taken, or an unread class list is answered as "not mine".
+   */
+  it("claims by the annotation first, then by a class that is the controller's", () => {
+    const asks = (className: string | null, annotated?: string) => ({
+      className,
+      annotations: (annotated
+        ? { "kubernetes.io/ingress.class": annotated }
+        : {}) as Record<string, string>,
+    });
+    expect(claimsIngress(asks("alb-internal"), ["alb-internal"])).toBe(true);
+    expect(claimsIngress(asks("alb-internal"), [])).toBe(false);
+    expect(claimsIngress(asks("alb-internal"), null)).toBeNull();
+    expect(claimsIngress(asks("alb"), null)).toBe(true);
+    expect(claimsIngress(asks("alb", "nginx"), ["alb"])).toBe(false);
+    expect(claimsIngress(asks(null), ["alb"])).toBe(false);
   });
 
   /** Somebody else's Ingress is not this controller's to draw. */
