@@ -247,3 +247,69 @@ describe("the eye on one Secret-backed variable", () => {
     expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
   });
 });
+
+describe("variables taken whole from a Secret or a ConfigMap", () => {
+  const whole = (
+    <EnvironmentVariables
+      namespace="team-checkout"
+      env={[]}
+      envFrom={[
+        {
+          prefix: null,
+          secretRef: "checkout-db",
+          configMapRef: null,
+          optional: null,
+        },
+        {
+          prefix: "APP_",
+          secretRef: null,
+          configMapRef: "app",
+          optional: null,
+        },
+      ]}
+    />
+  );
+
+  /**
+   * With the switch on, an envFrom Secret whose values read failed drew no
+   * row at all, and a ConfigMap's said "(no data found)": a refusal and a
+   * fault both read as a source holding nothing. Fails if such a row goes,
+   * or says there is no data where nobody could look.
+   */
+  it("says a source that could not be read was refused or failed, never that it holds nothing", async () => {
+    vi.mocked(commands.getSecret).mockResolvedValue({
+      dataKeys: ["DB_PASSWORD"],
+    } as never);
+    vi.mocked(commands.getSecretData).mockRejectedValue({
+      code: "PERMISSION_DENIED",
+      message: "secrets is forbidden",
+    });
+    vi.mocked(commands.getConfigmapData).mockRejectedValue(
+      new Error("connection reset by peer")
+    );
+    await renderWithRouter(whole, POD);
+    await userEvent.click(await screen.findByRole("switch"));
+
+    expect(
+      await screen.findByText("not readable with this access")
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("connection reset by peer")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("(no data found)")).toBeNull();
+  });
+
+  /** A source that answered and holds no key is the one that has no data. */
+  it("says a source that answered with nothing has no data", async () => {
+    const none = { values: {}, withheld: {}, binary: {} };
+    vi.mocked(commands.getSecret).mockResolvedValue({ dataKeys: [] } as never);
+    vi.mocked(commands.getSecretData).mockResolvedValue(none);
+    vi.mocked(commands.getConfigmapData).mockResolvedValue(none);
+    await renderWithRouter(whole, POD);
+    await userEvent.click(await screen.findByRole("switch"));
+
+    await waitFor(() =>
+      expect(screen.getAllByText("(no data found)")).toHaveLength(2)
+    );
+  });
+});
