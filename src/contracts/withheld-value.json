@@ -1,0 +1,46 @@
+{
+  "about": "The placeholder a rendered manifest carries in place of a private key, and which keys of a manifest still hold it. Such a manifest is never sent: a ConfigMap would store the placeholder as the key. Rust: `WITHHELD_MARKER` in src/tauri/src/resources/tls.rs and the guard in `parse_all_documents` (src/tauri/src/commands/manifest/parse.rs). TypeScript: `WITHHELD_MARKER` and `withheldKeysIn` in src/ui/routes/c/$cluster/-yaml/manifest-reads.ts, which name the keys before Apply is offered.",
+  "marker": "<withheld: the app never shows a private key>",
+  "cases": [
+    {
+      "name": "a ConfigMap as the editor shows it",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nginx\n  namespace: shop\ndata:\n  nginx.conf: worker_processes 2;\n  server.key: '<withheld: the app never shows a private key>'\n",
+      "keys": ["server.key"]
+    },
+    {
+      "name": "every map a key can sit in",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: bundle\n  namespace: shop\nbinaryData:\n  bundle.p12: \"<withheld: the app never shows a private key>\"\nstringData:\n  id_rsa: '<withheld: the app never shows a private key>'\n",
+      "keys": ["bundle.p12", "id_rsa"]
+    },
+    {
+      "name": "a Secret, whose data the server would refuse anyway",
+      "manifest": "apiVersion: v1\nkind: Secret\nmetadata:\n  name: tls\n  namespace: shop\ntype: kubernetes.io/tls\ndata:\n  tls.crt: Y2VydA==\n  tls.key: '<withheld: the app never shows a private key>'\n",
+      "keys": ["tls.key"]
+    },
+    {
+      "name": "reflowed into a block scalar",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nginx\n  namespace: shop\ndata:\n  server.key: |\n    <withheld: the app never shows a private key>\n",
+      "keys": ["server.key"]
+    },
+    {
+      "name": "in the second document of two",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n  namespace: shop\ndata:\n  a: b\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n  namespace: shop\ndata:\n  client.key: '<withheld: the app never shows a private key>'\n",
+      "keys": ["client.key"]
+    },
+    {
+      "name": "the withheld key removed from the manifest",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nginx\n  namespace: shop\ndata:\n  nginx.conf: worker_processes 2;\n",
+      "keys": []
+    },
+    {
+      "name": "a value that only mentions the placeholder",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: notes\n  namespace: shop\ndata:\n  readme: \"the app prints <withheld: the app never shows a private key> for a key\"\n",
+      "keys": []
+    },
+    {
+      "name": "the placeholder outside the maps a key is read from",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: notes\n  namespace: shop\n  annotations:\n    note: '<withheld: the app never shows a private key>'\ndata:\n  a: b\n",
+      "keys": []
+    }
+  ]
+}

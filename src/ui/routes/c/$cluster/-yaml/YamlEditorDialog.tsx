@@ -19,10 +19,9 @@
  */
 
 import { useCallback, useMemo, useState, useDeferredValue } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { isReadDeadline } from "@/lib/read-deadline";
+import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
-import type { DryRunDocument } from "@/generated/types";
+import type { Applied, ApplyOutcome, DryRunDocument } from "@/generated/types";
 import {
   Dialog,
   DialogContent,
@@ -43,9 +42,18 @@ import { useConnections } from "@/hooks/useConnections";
 import { useDelivery } from "../-delivery/useDelivery";
 import { deliveryApplyIntercept } from "@/lib/delivery";
 import { applyWarnings } from "@/lib/governance";
-import { changesReplicaCount, deliveryOfManifest } from "./manifest-reads";
+import {
+  changesReplicaCount,
+  deliveryOfManifest,
+  liveReplicaMove,
+  withheldKeysIn,
+} from "./manifest-reads";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useYamlEditorStore } from "@/stores/yamlEditorStore";
+import {
+  editorSession,
+  useYamlEditorStore,
+  type ResultShown,
+} from "@/stores/yamlEditorStore";
 import { useAsk } from "../-object/useAsk";
 import { askableKind } from "@/lib/tell-me-when";
 import { AlertTriangle, Play, FileCheck } from "lucide-react";
@@ -59,12 +67,53 @@ import { cn } from "@/lib/utils";
 import { YamlDiffViewer } from "./YamlDiffViewer";
 import { YamlResultDisplay } from "./YamlResultDisplay";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
+
+const APPLY_LINE: Record<
+  ApplyOutcome["says"],
+  | "applyDocApplied"
+  | "applyDocRefused"
+  | "applyDocUnanswered"
+  | "applyDocNotSent"
+> = {
+  applied: "applyDocApplied",
+  refused: "applyDocRefused",
+  unanswered: "applyDocUnanswered",
+  notSent: "applyDocNotSent",
+};
+
+/**
+ * An apply's answer as the result block draws it: a line per document, the
+ * ones that went in apart from the rest. An apply stops at the first document
+ * that did not go in, so that document's answer is the verdict.
+ */
+function applyShown(applied: Applied, t: T): ResultShown {
+  const lines = (stored: boolean) =>
+    applied.documents
+      .filter((doc) => (doc.outcome.says === "applied") === stored)
+      .map((doc) =>
+        t("action", APPLY_LINE[doc.outcome.says], {
+          id: doc.id,
+          said: "said" in doc.outcome ? doc.outcome.said : "",
+        })
+      )
+      .join("\n");
+  const some = (says: ApplyOutcome["says"]) =>
+    applied.documents.some((doc) => doc.outcome.says === says);
+  return {
+    verdict: some("unanswered")
+      ? "unanswered"
+      : applied.documents.every((doc) => doc.outcome.says === "applied")
+        ? "ok"
+        : "failed",
+    stdout: lines(true),
+    stderr: lines(false),
+  };
+}
 
 export function YamlEditorDialog() {
   const asking = useAsk();
   const t = useT();
-  const queryClient = useQueryClient();
   const { toast } = useToast();
   const currentNamespace = useClusterStore((state) => state.currentNamespace);
 
@@ -97,6 +146,8 @@ export function YamlEditorDialog() {
   } = useYamlEditorStore();
 
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+  // Counts the openings of the confirmation: each one asks the server anew.
+  const [asked, setAsked] = useState(0);
   // Applying an edited manifest replaces the whole object — the most powerful
   // write here — so on a critical cluster it takes the same typed-name gate,
   // and the field is bound to the notice so neither can appear without the other.
@@ -110,7 +161,17 @@ export function YamlEditorDialog() {
       ? t("action", "yamlFromAnotherCluster", { cluster: openedOn ?? "" })
       : undefined;
   if (elsewhere && showApplyConfirm) setShowApplyConfirm(false);
-  const applyDenied = elsewhere ?? editDenied;
+  // A private key reads here as a placeholder, and a ConfigMap would store
+  // the placeholder as the key: said while editing, not after confirming.
+  const withheld = useMemo(
+    () => withheldKeysIn(editedContent),
+    [editedContent]
+  );
+  const carriesWithheld =
+    !readOnly && withheld.length > 0
+      ? t("action", "yamlCarriesWithheld", { keys: withheld.join(", ") })
+      : undefined;
+  const applyDenied = elsewhere ?? carriesWithheld ?? editDenied;
 
   const history = getResourceHistory();
   const hasChanges = originalContent !== editedContent;
@@ -126,35 +187,13 @@ export function YamlEditorDialog() {
   const { deliveries } = useDelivery(delivery);
   const intercept = deliveryApplyIntercept(deliveries, t);
 
-  // The autoscaler owns `spec.replicas` and nothing else, so it is asked
-  // about only when that field is what moved — see `applyWarnings`. Asked
-  // while the editor is open rather than when the confirmation appears, so
-  // the sentence is already there when the reader gets to it; the query key
-  // is the detail page's, so a page that has read its connections pays
-  // nothing.
-  // Two whole-document parses per keystroke on a long manifest, and the
-  // answer is only needed by the time the confirmation opens: deferred, so
-  // typing is never behind them, and memoised on what was actually parsed.
-  const settledContent = useDeferredValue(editedContent);
-  const replicasMoved = useMemo(
-    () =>
-      !readOnly &&
-      originalContent !== settledContent &&
-      changesReplicaCount(originalContent, settledContent),
-    [readOnly, originalContent, settledContent]
-  );
-  const governance = useConnections(
-    resourceKey?.kind ?? "",
-    resourceKey?.name,
-    resourceKey?.namespace ?? null,
-    open && replicasMoved
-  );
-
-  const warnings = applyWarnings(governance, intercept, replicasMoved, t);
-
   // What the server would store against what it holds now. Asked only once
   // the confirmation is open, of the buffer as it is at that moment; the
   // editor's own diff stands in while the answer is on its way, and says so.
+  // `asked` is in the key because "now" is: an answer kept from an earlier
+  // opening describes the object as it was then, under the same buffer.
+  // Asked of an untouched buffer too: it is as old as the moment it was
+  // read, and applying it undoes whatever moved on the cluster since.
   const dryRun = useQuery({
     queryKey: [
       "dry-run",
@@ -162,17 +201,57 @@ export function YamlEditorDialog() {
       resourceKey?.namespace ?? "",
       resourceKey?.name ?? "",
       editedContent,
+      asked,
     ],
     queryFn: () =>
       commands.dryRunManifest(
         editedContent,
         resourceKey?.namespace || currentNamespace || null
       ),
-    enabled: showApplyConfirm && hasChanges,
+    enabled: showApplyConfirm,
     retry: false,
     staleTime: Infinity,
     gcTime: 0,
   });
+
+  // The autoscaler owns `spec.replicas` and nothing else, so it is asked
+  // about only when that field is what moved — see `applyWarnings`. A typed
+  // count is known while the editor is open, so the sentence is already
+  // there when the reader gets to the confirmation; the query key is the
+  // detail page's, so a page that has read its connections pays nothing.
+  // Two whole-document parses per keystroke on a long manifest, and the
+  // answer is only needed by the time the confirmation opens: deferred, so
+  // typing is never behind them, and memoised on what was actually parsed.
+  const settledContent = useDeferredValue(editedContent);
+  const typedReplicas = useMemo(
+    () =>
+      !readOnly &&
+      originalContent !== settledContent &&
+      changesReplicaCount(originalContent, settledContent),
+    [readOnly, originalContent, settledContent]
+  );
+  // A count that moved on the cluster after the manifest was read is in no
+  // buffer: only the dry run's current object shows it.
+  const documents = dryRun.data?.documents;
+  const unanswered = dryRun.isError;
+  const liveMove = useMemo(
+    () =>
+      showApplyConfirm && (documents || unanswered)
+        ? liveReplicaMove(originalContent, editedContent, documents ?? null)
+        : null,
+    [showApplyConfirm, documents, unanswered, originalContent, editedContent]
+  );
+  const replicasMoved =
+    typedReplicas || (liveMove === "unknown" ? null : liveMove !== null);
+  const governance = useConnections(
+    resourceKey?.kind ?? "",
+    resourceKey?.name,
+    resourceKey?.namespace ?? null,
+    open && replicasMoved !== false
+  );
+
+  const warnings = applyWarnings(governance, intercept, replicasMoved, t);
+
   const refused =
     dryRun.data?.documents.find((doc) => doc.outcome.says === "refused") ??
     null;
@@ -186,6 +265,8 @@ export function YamlEditorDialog() {
   }, [editedContent, toast, t]);
 
   const handleValidate = useCallback(async () => {
+    const session = editorSession();
+    const mine = () => session === editorSession();
     setIsValidating(true);
     setValidationResult(null);
 
@@ -194,6 +275,7 @@ export function YamlEditorDialog() {
         editedContent,
         resourceKey?.namespace || currentNamespace || null
       );
+      if (!mine()) return;
       setValidationResult(result);
 
       if (result.success) {
@@ -203,6 +285,7 @@ export function YamlEditorDialog() {
         });
       }
     } catch (error) {
+      if (!mine()) return;
       setValidationResult({
         success: false,
         stdout: "",
@@ -210,7 +293,7 @@ export function YamlEditorDialog() {
         exit_code: 1,
       });
     } finally {
-      setIsValidating(false);
+      if (mine()) setIsValidating(false);
     }
   }, [
     editedContent,
@@ -223,26 +306,26 @@ export function YamlEditorDialog() {
   ]);
 
   const handleApply = useCallback(async () => {
+    // The answer can outlast the editor: closed, or opened on another object
+    // since, it is told in the toast and filed under the object it was
+    // applied to, and the editor on screen is left alone.
+    const session = editorSession();
+    const mine = () => session === editorSession();
     setShowApplyConfirm(false);
     setIsApplying(true);
     setApplyResult(null);
 
     try {
-      const result = await commands.applyManifest(
+      const applied = await commands.applyManifest(
         editedContent,
         resourceKey?.namespace || currentNamespace || null
       );
-      setApplyResult(result);
+      const shown = applyShown(applied, t);
+      if (mine()) setApplyResult(shown);
+      const lines = [shown.stdout, shown.stderr].filter(Boolean).join("\n");
 
-      if (result.success) {
-        addHistoryEntry(editedContent, "Applied");
-        // The preview describes the cluster as it was before this apply,
-        // and its key changes only with the buffer — so opening the
-        // confirmation again for a second apply showed the first apply's
-        // answer: "would be created" about an object that now exists.
-        void queryClient.invalidateQueries({
-          queryKey: ["dry-run", resourceKey?.kind ?? ""],
-        });
+      if (shown.verdict === "ok") {
+        addHistoryEntry(editedContent, "Applied", { resourceKey, openedOn });
         const askable = resourceKey ? askableKind(resourceKey.kind) : null;
         if (askable && resourceKey && askable !== "Pod" && askable !== "Job") {
           asking.ask(
@@ -255,57 +338,51 @@ export function YamlEditorDialog() {
           );
         }
 
-        toast({
-          title: t("action", "applySucceeded"),
-          description: result.stdout || t("action", "manifestApplied"),
-        });
+        toast({ title: t("action", "applySucceeded"), description: lines });
       } else {
+        const refusal = applied.documents.find(
+          (doc) => doc.outcome.says === "refused"
+        )?.outcome;
+        if (resourceKey && refusal?.says === "refused")
+          noteDenied(
+            "patch",
+            guardedOf(
+              resourceKey.kind,
+              resourceKey.namespace ?? null,
+              resourceKey.name
+            ),
+            { code: refusal.code, message: refusal.said, said: refusal.said }
+          );
+        // Nobody answering is not a refusal: admission can outlast the wait
+        // and the server may have stored it. "Apply failed" there is a
+        // verdict on something nobody saw, and invites a second apply.
+        const unanswered = shown.verdict === "unanswered";
         toast({
-          title: t("action", "applyFailed"),
-          description: result.stderr || t("action", "failedToApplyManifest"),
-          variant: "destructive",
+          title: unanswered
+            ? t("action", "applyUnanswered")
+            : t("action", "applyFailed"),
+          description: lines,
+          variant: unanswered ? "default" : "destructive",
         });
       }
     } catch (error) {
-      if (resourceKey)
-        noteDenied(
-          "patch",
-          guardedOf(
-            resourceKey.kind,
-            resourceKey.namespace ?? null,
-            resourceKey.name
-          ),
-          error
-        );
+      // The command itself failed: nothing was sent, or the session is over.
       const errorMessage = errorToShow(error);
-      // A deadline is not a refusal. The layer that fires it drops our
-      // request; it does not undo what the apiserver may already have
-      // committed — a chain of admission webhooks can outlast the wait.
-      // "Apply failed" there is a verdict about something nobody looked at,
-      // and it invites a second apply on top of a first that may have run.
-      const ranOut = isReadDeadline(error);
-      const errorResult = {
-        success: false,
-        stdout: "",
-        stderr: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
-        exit_code: 1,
-      };
-      setApplyResult(errorResult);
+      if (mine())
+        setApplyResult({ verdict: "failed", stdout: "", stderr: errorMessage });
       toast({
-        title: ranOut
-          ? t("action", "applyUnanswered")
-          : t("action", "applyFailed"),
-        description: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
-        variant: ranOut ? "default" : "destructive",
+        title: t("action", "applyFailed"),
+        description: errorMessage,
+        variant: "destructive",
       });
     } finally {
-      setIsApplying(false);
+      if (mine()) setIsApplying(false);
     }
   }, [
     asking,
-    queryClient,
     editedContent,
     resourceKey,
+    openedOn,
     currentNamespace,
     setIsApplying,
     setApplyResult,
@@ -404,7 +481,11 @@ export function YamlEditorDialog() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={() => !applyDenied && setShowApplyConfirm(true)}
+                    onClick={() => {
+                      if (applyDenied) return;
+                      setAsked((n) => n + 1);
+                      setShowApplyConfirm(true);
+                    }}
                     disabled={
                       !applyDenied && (isLoading || isValidating || isApplying)
                     }
@@ -422,6 +503,12 @@ export function YamlEditorDialog() {
               </div>
             )}
           </div>
+
+          {carriesWithheld && (
+            <p role="status" className="py-2 text-xs text-warn">
+              {carriesWithheld}
+            </p>
+          )}
 
           {/* Main Content */}
           <div className="flex-1 min-h-0 overflow-hidden">
@@ -451,7 +538,15 @@ export function YamlEditorDialog() {
           {/* Results */}
           {(validationResult || applyResult) && (
             <div className="mt-2">
-              <YamlResultDisplay result={applyResult || validationResult!} />
+              <YamlResultDisplay
+                result={
+                  applyResult ?? {
+                    verdict: validationResult!.success ? "ok" : "failed",
+                    stdout: validationResult!.stdout,
+                    stderr: validationResult!.stderr,
+                  }
+                }
+              />
             </div>
           )}
 
@@ -483,8 +578,19 @@ export function YamlEditorDialog() {
               the only thing safe to leave out is the second naming of the
               owner, which the lead sentence carries anyway. */}
           <ActionWarnings warnings={warnings} headingFor="warnUndoApply" />
+          {liveMove !== null && liveMove !== "unknown" && liveMove.drifted && (
+            <p
+              className="min-w-0 wrap-break-word text-xs text-warn"
+              data-testid="replicas-moved"
+            >
+              {t("action", "replicasMovedUnderEditor", {
+                now: liveMove.from,
+                set: liveMove.to,
+              })}
+            </p>
+          )}
 
-          {hasChanges && dryRun.data ? (
+          {dryRun.data ? (
             <div className="min-w-0 py-4" data-testid="dry-run">
               <p className="mb-2 text-xs text-fg-mut">
                 {t("action", "dryRunFromServer")}
@@ -499,35 +605,41 @@ export function YamlEditorDialog() {
                 ))}
               </div>
             </div>
-          ) : hasChanges ? (
+          ) : (
             // The diff is arbitrarily wide and this dialog is a grid, whose
             // items default to `min-width: auto` — without this the longest
             // line of the manifest sets the column width and everything above
             // it, warning included, is dragged off the right of the screen.
             <div className="min-w-0 py-4">
-              <p className="mb-2 text-xs text-fg-mut">
-                {t("action", "changesToBeApplied")}
-              </p>
-              <ScrollArea className="h-[200px] w-full overflow-hidden rounded-md border">
-                <YamlDiffViewer
-                  original={originalContent}
-                  modified={editedContent}
-                  height="200px"
-                />
-              </ScrollArea>
+              {hasChanges && (
+                <>
+                  <p className="mb-2 text-xs text-fg-mut">
+                    {t("action", "changesToBeApplied")}
+                  </p>
+                  <ScrollArea className="mb-2 h-[200px] w-full overflow-hidden rounded-md border">
+                    <YamlDiffViewer
+                      original={originalContent}
+                      modified={editedContent}
+                      height="200px"
+                    />
+                  </ScrollArea>
+                </>
+              )}
               <p
-                className="mt-2 text-[11px] text-fg-fnt"
+                className="text-[11px] text-fg-fnt"
                 role="status"
                 data-testid="dry-run-standing"
               >
                 {dryRun.isError
-                  ? t("action", "dryRunFailed", {
-                      error: errorToShow(dryRun.error),
-                    })
+                  ? t(
+                      "action",
+                      hasChanges ? "dryRunFailed" : "dryRunFailedNoDiff",
+                      { error: errorToShow(dryRun.error) }
+                    )
                   : t("action", "dryRunAsking")}
               </p>
             </div>
-          ) : null}
+          )}
 
           {gate.input}
 

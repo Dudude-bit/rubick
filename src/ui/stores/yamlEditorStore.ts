@@ -10,6 +10,16 @@ export interface HistoryEntry {
   label?: string;
 }
 
+/**
+ * How a validate or an apply ended, for the result block. `unanswered` is an
+ * answer of its own: the server may have stored what nobody confirmed.
+ */
+export interface ResultShown {
+  verdict: "ok" | "failed" | "unanswered";
+  stdout: string;
+  stderr: string;
+}
+
 export interface ResourceKey {
   kind: string;
   name: string;
@@ -37,7 +47,7 @@ interface YamlEditorState {
 
   // Validation/Apply results
   validationResult: ManifestResult | null;
-  applyResult: ManifestResult | null;
+  applyResult: ResultShown | null;
 
   // History (per resource, stored by key)
   history: Record<string, HistoryEntry[]>;
@@ -53,10 +63,15 @@ interface YamlEditorState {
   setEditedContent: (content: string) => void;
   setShowDiff: (show: boolean) => void;
   setValidationResult: (result: ManifestResult | null) => void;
-  setApplyResult: (result: ManifestResult | null) => void;
+  setApplyResult: (result: ResultShown | null) => void;
   setIsValidating: (validating: boolean) => void;
   setIsApplying: (applying: boolean) => void;
-  addHistoryEntry: (content: string, label?: string) => void;
+  /** Filed under `of`, the object it was applied to; the open editor's if not given. */
+  addHistoryEntry: (
+    content: string,
+    label?: string,
+    of?: Pick<YamlEditorState, "resourceKey" | "openedOn">
+  ) => void;
   restoreFromHistory: (timestamp: number) => void;
   getResourceHistory: () => HistoryEntry[];
   resetToOriginal: () => void;
@@ -79,6 +94,13 @@ function historyKey({
 /** Moves on every open and every close, so a read can tell whether the editor
  *  on screen is still the one that asked for it. */
 let opening = 0;
+
+/**
+ * Which opening of the editor is on screen. An apply or a validate answers
+ * after a wait, and the editor may have been closed or opened on another
+ * object since: the answer belongs to the opening that asked.
+ */
+export const editorSession = (): number => opening;
 
 export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
   // Initial state
@@ -205,9 +227,9 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
     set({ isApplying: applying });
   },
 
-  addHistoryEntry: (content, label) => {
+  addHistoryEntry: (content, label, of = get()) => {
     const { history } = get();
-    const key = historyKey(get());
+    const key = historyKey(of);
     if (!key) return;
 
     const newEntry: HistoryEntry = {

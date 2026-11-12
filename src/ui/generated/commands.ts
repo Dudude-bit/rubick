@@ -10,6 +10,7 @@ import type {
   ApiCatalog,
   AppEvent,
   AppInfo,
+  Applied,
   AutoscalerInfo,
   AzureProfile,
   AzureProfileInfo,
@@ -690,8 +691,8 @@ export async function validateManifest(
 export async function applyManifest(
   manifest: string,
   namespace: string | null
-): Promise<ManifestResult> {
-  return invoke<ManifestResult>("apply_manifest", { manifest, namespace });
+): Promise<Applied> {
+  return invoke<Applied>("apply_manifest", { manifest, namespace });
 }
 
 export async function dryRunManifest(

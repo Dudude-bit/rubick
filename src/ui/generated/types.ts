@@ -1810,6 +1810,15 @@ export interface DryRunDocument {
   would: string | null;
 }
 
+export interface Applied {
+  documents: AppliedDocument[];
+}
+
+export interface AppliedDocument {
+  id: string;
+  outcome: ApplyOutcome;
+}
+
 export interface ManifestResult {
   success: boolean;
   stdout: string;
@@ -3002,6 +3011,12 @@ export type SearchContextStatus =
   | "done"
   | "failed"
   | "skipped";
+
+export type ApplyOutcome =
+  | { says: "applied" }
+  | { says: "refused"; code: string; said: string }
+  | { says: "unanswered"; said: string }
+  | { says: "notSent" };
 
 export type DryRunOutcome =
   | { says: "created" }

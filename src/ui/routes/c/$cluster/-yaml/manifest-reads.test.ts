@@ -1,6 +1,41 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
-import { changesReplicaCount, deliveryOfManifest } from "./manifest-reads";
+import {
+  changesReplicaCount,
+  deliveryOfManifest,
+  liveReplicaMove,
+  WITHHELD_MARKER,
+  withheldKeysIn,
+} from "./manifest-reads";
+
+describe("the keys a manifest still withholds", () => {
+  const corpus = JSON.parse(
+    readFileSync(
+      resolve(process.cwd(), "src/contracts/withheld-value.json"),
+      "utf8"
+    )
+  ) as {
+    marker: string;
+    cases: { name: string; manifest: string; keys: string[] }[];
+  };
+
+  /**
+   * The backend refuses a manifest holding its placeholder; the editor has to
+   * name the same keys before Apply is offered, or the reader learns of the
+   * refusal only after confirming. Fails when the two stop agreeing.
+   */
+  it("names the keys the backend would refuse the manifest for", () => {
+    expect(WITHHELD_MARKER).toBe(corpus.marker);
+    expect(corpus.cases.length).toBeGreaterThanOrEqual(6);
+    for (const { name, manifest, keys } of corpus.cases) {
+      expect([...withheldKeysIn(manifest)].sort(), name).toEqual(
+        [...keys].sort()
+      );
+    }
+  });
+});
 
 describe("the delivery question read out of the document itself", () => {
   it("takes the group from apiVersion, which no table has to know", () => {
@@ -132,5 +167,83 @@ describe("whether a save moves the replica count, in a buffer of several documen
   it("compares the object the editor opened, not the first one it finds", () => {
     const edited = `${deployment("worker", 9)}---\n${deployment("api", 3)}`;
     expect(changesReplicaCount(deployment("api", 3), edited)).toBe(false);
+  });
+});
+
+describe("what applying does to the replica count the cluster holds now", () => {
+  const answer = (
+    says: "configured" | "created" | "refused" | "liveUnread",
+    live: string | null,
+    would: string | null
+  ) => ({
+    outcome: says === "configured" ? { says } : { says, said: "" },
+    live,
+    would,
+  });
+  const at3 = deployment("api", 3);
+
+  /**
+   * The buffer says 3 because the cluster did when it was read; an autoscaler
+   * has since gone to 12 and the forced apply takes it back. Both buffers
+   * agree, so only the dry run's current object shows it. Fails if the move
+   * is missed, or is not told apart from a count the reader typed.
+   */
+  it("sees a count that moved on the cluster after the manifest was read", () => {
+    expect(
+      liveReplicaMove(at3, at3, [
+        answer("configured", deployment("api", 12), at3),
+      ])
+    ).toEqual({ from: 12, to: 3, drifted: true });
+    expect(
+      liveReplicaMove(at3, deployment("api", 5), [
+        answer("configured", at3, deployment("api", 5)),
+      ])
+    ).toEqual({ from: 3, to: 5, drifted: false });
+  });
+
+  /** The other half: a save that leaves the count alone must stay quiet, or the warning is on every save. */
+  it("says nothing moves when the cluster holds the count being applied", () => {
+    expect(
+      liveReplicaMove(at3, at3, [answer("configured", at3, at3)])
+    ).toBeNull();
+  });
+
+  /**
+   * "Could not read what is there" is not "the count is the same": a refused
+   * get, or a dry run nobody answered, leaves the question open while the
+   * buffer still sets a number. Fails if either reads as nothing moving.
+   */
+  it("calls the move unknown when the current object was not shown", () => {
+    expect(liveReplicaMove(at3, at3, [answer("liveUnread", null, at3)])).toBe(
+      "unknown"
+    );
+    expect(liveReplicaMove(at3, at3, null)).toBe("unknown");
+  });
+
+  /** Unknown is only worth saying of a buffer that sets a count at all. */
+  it("has nothing to be unsure of when the buffer sets no count", () => {
+    expect(liveReplicaMove(configMap, configMap, null)).toBeNull();
+  });
+
+  /** An object that is not there has no count to reset, and a refused apply resets nothing. */
+  it("does not take a missing or refused object for an unread one", () => {
+    expect(
+      liveReplicaMove(at3, at3, [answer("created", null, at3)])
+    ).toBeNull();
+    expect(
+      liveReplicaMove(at3, at3, [
+        answer("refused", deployment("api", 12), null),
+      ])
+    ).toBeNull();
+  });
+
+  /** Another Deployment in the buffer moving its own count is not this one's autoscaler's business. */
+  it("reads the editor's own object out of the dry run", () => {
+    expect(
+      liveReplicaMove(at3, at3, [
+        answer("configured", deployment("worker", 1), deployment("worker", 9)),
+        answer("configured", at3, at3),
+      ])
+    ).toBeNull();
   });
 });

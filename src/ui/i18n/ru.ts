@@ -819,8 +819,6 @@ export const ru: Catalogue = {
     editYaml: "Изменить YAML",
     yamlCopiedToClipboard: "YAML скопирован в буфер обмена.",
     manifestIsValid: "Манифест корректен, его можно применить.",
-    manifestApplied: "Манифест применён к кластеру.",
-    failedToApplyManifest: "Не удалось применить манифест.",
     formatted: "Отформатировано",
     yamlFormatted: "YAML отформатирован.",
     restored: "Восстановлено",
@@ -831,6 +829,8 @@ export const ru: Catalogue = {
       "Отредактируйте YAML-манифест и примените изменения к кластеру",
     yamlFromAnotherCluster:
       "Прочитан из {cluster}, а окно теперь на другом кластере. Чтобы применить его, вернитесь в {cluster}.",
+    yamlCarriesWithheld:
+      "Скрыто: {keys}. Приложение не показывает закрытые ключи, поэтому в манифесте на их месте заглушка, и применение записало бы её как значение. Уберите скрытое из манифеста, чтобы применить остальное: предпросмотр покажет, сохранит ли его кластер.",
     applyChangesQuestion: "Применить изменения?",
     applyManifestConfirm:
       "Манифест будет применён к вашему кластеру Kubernetes. Убедитесь, что вы проверили изменения.",
@@ -839,6 +839,10 @@ export const ru: Catalogue = {
     dryRunAsking: "Спрашиваем кластер, что изменится…",
     dryRunFailed:
       "Кластер не ответил на dry run ({error}); это собственный diff редактора.",
+    dryRunFailedNoDiff:
+      "Кластер не ответил на dry run ({error}), поэтому неизвестно, что изменит применение.",
+    replicasMovedUnderEditor:
+      "Число реплик в кластере изменилось до {now} с тех пор, как манифест был прочитан. Применение установит {set}.",
     dryRunCreated: "будет создан",
     dryRunConfigured: "изменится",
     dryRunUnchanged: "не изменится",
@@ -1359,8 +1363,11 @@ export const ru: Catalogue = {
     applySucceeded: "Применение выполнено",
     applyFailed: "Не удалось применить",
     applyUnanswered: "Кластер не ответил",
-    applyUnansweredHint:
-      "Мы перестали ждать. Неизвестно, применилось ли изменение: допуск может длиться дольше ожидания. Посмотрите объект, прежде чем применять снова.",
+    applyDocApplied: "{id} применён",
+    applyDocRefused: "{id} отклонён: {said}",
+    applyDocUnanswered:
+      "{id} остался без ответа ({said}). Возможно, он применён: посмотрите объект, прежде чем применять снова.",
+    applyDocNotSent: "{id} не отправлен",
     custom: "Указать вручную",
     stripFull: "Полная",
     stripFullHint: "Объём во времени, с часами и счётчиками ошибок",
@@ -4600,6 +4607,8 @@ export const ru: Catalogue = {
     hpaWillRevertDetail:
       "Он держит это между {min} и {max} и перечитывает метрики примерно раз в пятнадцать секунд.",
     hpaAutoscalerNamed: "Автомасштабировщик {name}",
+    replicasMoveUnchecked:
+      "Не удалось проверить, изменит ли это применение число реплик: кластер не показал, что хранит сейчас.",
     hpaUnreadHead: "Автомасштабировщик может вернуть это число обратно.",
     docNoReplicaCount: "в документе нет числа реплик",
     cannotTell: "определить нельзя",

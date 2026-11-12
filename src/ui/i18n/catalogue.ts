@@ -842,8 +842,6 @@ export const en = {
     editYaml: "Edit YAML",
     yamlCopiedToClipboard: "YAML copied to clipboard.",
     manifestIsValid: "Manifest is valid and can be applied.",
-    manifestApplied: "Manifest applied to cluster.",
-    failedToApplyManifest: "Failed to apply manifest.",
     formatted: "Formatted",
     yamlFormatted: "YAML has been formatted.",
     restored: "Restored",
@@ -854,6 +852,8 @@ export const en = {
       "Edit the YAML manifest and apply changes to the cluster",
     yamlFromAnotherCluster:
       "Read from {cluster}, and the window is on another cluster now. Go back to {cluster} to apply it.",
+    yamlCarriesWithheld:
+      "Withheld: {keys}. The app never shows a private key, so the manifest holds a placeholder there, and applying would write the placeholder as the value. Remove what is withheld from the manifest to apply the rest: the preview shows whether the cluster keeps it.",
     applyChangesQuestion: "Apply Changes?",
     applyManifestConfirm:
       "This will apply the manifest to your Kubernetes cluster. Make sure you have reviewed the changes.",
@@ -862,6 +862,10 @@ export const en = {
     dryRunAsking: "Asking the cluster what would change…",
     dryRunFailed:
       "The cluster did not answer the dry run ({error}); this is the editor's own diff.",
+    dryRunFailedNoDiff:
+      "The cluster did not answer the dry run ({error}), so what applying would change is unknown.",
+    replicasMovedUnderEditor:
+      "The replica count on the cluster has moved to {now} since this manifest was read. Applying sets it to {set}.",
     dryRunCreated: "would be created",
     dryRunConfigured: "would change",
     dryRunUnchanged: "would not change",
@@ -1351,8 +1355,11 @@ export const en = {
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
     applyUnanswered: "The cluster did not answer",
-    applyUnansweredHint:
-      "We stopped waiting. Admission can outlast the wait, so whether the change was applied is unknown: check the object before applying again.",
+    applyDocApplied: "{id} applied",
+    applyDocRefused: "{id} refused: {said}",
+    applyDocUnanswered:
+      "{id} got no answer ({said}). It may have been applied: check the object before applying again.",
+    applyDocNotSent: "{id} not sent",
 
     custom: "Custom",
     stripFull: "Full",
@@ -4094,6 +4101,8 @@ export const en = {
     hpaWillRevertDetail:
       "It keeps this between {min} and {max} and re-reads its metrics about every fifteen seconds.",
     hpaAutoscalerNamed: "The autoscaler {name}",
+    replicasMoveUnchecked:
+      "Whether this apply changes the replica count could not be checked: the cluster did not show what it holds now.",
     hpaUnreadHead: "An autoscaler may put this number back.",
     docNoReplicaCount: "the document has no replica count",
     cannotTell: "cannot tell",

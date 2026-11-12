@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 // `pub use commands::*` is needed instead of named.
 pub use commands::*;
 
-/// Result of manifest operation (validate or apply)
+/// Result of validating a manifest
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ManifestResult {
     /// Whether the operation succeeded
@@ -46,6 +46,42 @@ impl ManifestResult {
             exit_code: 1,
         }
     }
+}
+
+/// What applying a manifest did, document by document and in order.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Applied {
+    pub documents: Vec<AppliedDocument>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppliedDocument {
+    /// `deployment/shop api`, the way the dry run names it.
+    pub id: String,
+    pub outcome: ApplyOutcome,
+}
+
+/// Four answers, because "the server said no" and "nobody answered" both
+/// arrive as an error and only one of them means nothing was stored.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum ApplyOutcome {
+    Applied,
+    /// The server answered no, and stored nothing of this document. `code`
+    /// is one of `src/contracts/error-codes.json`.
+    Refused {
+        code: String,
+        said: String,
+    },
+    /// Nobody answered: the read deadline, a 5xx, a dropped connection. The
+    /// request left, so the server may have stored it all the same.
+    Unanswered {
+        said: String,
+    },
+    /// Never sent: the document before it did not end in `Applied`.
+    NotSent,
 }
 
 /// What a server-side dry run said about one document.

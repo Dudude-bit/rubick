@@ -665,6 +665,25 @@ describe("what the YAML editor's apply reads", () => {
   });
 
   /**
+   * Whether the apply moves the count is read from the cluster, and that read
+   * can fail. Unanswered is not "it does not move": the autoscaler is still
+   * named, and the warning says which part nobody could check.
+   */
+  it("still names the autoscaler when nobody could tell whether the count moves", () => {
+    const warnings = applyWarnings(
+      read([governs(hpa("hpa-busy"))]),
+      null,
+      null,
+      t
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].lead).toContain("hpa-busy");
+    expect(warnings[0].description).toMatch(
+      /^Whether this apply changes the replica count could not be checked/
+    );
+  });
+
+  /**
    * A delivery controller re-applies the whole object, so it is true whatever
    * was edited — the gate above must never be allowed to swallow it.
    */
