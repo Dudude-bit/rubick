@@ -2116,6 +2116,29 @@ describe("PeekPanel on an object that is gone", () => {
     expect(screen.queryByText(/replaces/)).toBeNull();
   });
 
+  /**
+   * A ConfigMap's read carries no owner references, and neither does a
+   * Service's, a Secret's or an Ingress's. "Not read" was kept as "none", so
+   * a ConfigMap an operator was putting back was said, as a fact, to have
+   * had no owner and nothing to replace it. Fails if a read that never
+   * looked for owners is said to have found none.
+   */
+  it("says only that a ConfigMap is gone, where its read never named owners", async () => {
+    await wrap(CONFIGMAP_PEEK);
+    await screen.findByRole("tab", { name: "Data" });
+    vi.mocked(commands.getConfigmap).mockRejectedValue(
+      Object.assign(new Error('configmaps "app-config" not found'), {
+        code: "NOT_FOUND",
+      })
+    );
+    await act(() => wrap.client.refetchQueries());
+
+    expect(
+      await screen.findByText("This ConfigMap no longer exists.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing owned it/)).toBeNull();
+  });
+
   /** A bare pod has no controller to bring it back, and saying so is the answer. */
   it("says nothing replaces a gone pod that nothing owned", async () => {
     await replacedAfterRead(buildPod({ ownerReferences: [] }));

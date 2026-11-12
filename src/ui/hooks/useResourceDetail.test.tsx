@@ -46,7 +46,7 @@ import {
   useResourceDetail,
   type UseResourceDetailResult,
 } from "./useResourceDetail";
-import { useLastOwners, type Owner } from "./useLastOwners";
+import { useLastOwners, type KnownOwners, type Owner } from "./useLastOwners";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useWindowActivity } from "@/lib/window-activity";
 
@@ -68,7 +68,7 @@ async function detail(
 ) {
   const result = {} as {
     current: UseResourceDetailResult<Pod>;
-    owners: Owner[] | undefined;
+    owners: KnownOwners;
   };
   function Probe() {
     result.current = useResourceDetail<Pod>({

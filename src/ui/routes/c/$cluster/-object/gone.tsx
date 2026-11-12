@@ -10,7 +10,7 @@ import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
-import type { Owner } from "@/hooks/useLastOwners";
+import type { KnownOwners, Owner } from "@/hooks/useLastOwners";
 import { OwnerRef } from "../-peek/OwnerRef";
 
 /**
@@ -27,7 +27,7 @@ export function GoneNotice({
 }: {
   kind: string;
   namespace: string | null;
-  owners: Owner[] | undefined;
+  owners: KnownOwners;
   error: Error | string;
   className?: string;
 }) {
@@ -38,7 +38,9 @@ export function GoneNotice({
     <Alert className={className}>
       <Ghost aria-hidden="true" />
       <AlertTitle className="text-fg">
-        {t("empty", owners ? "goneTitle" : "absentTitle", { kind })}
+        {t("empty", owners === undefined ? "absentTitle" : "goneTitle", {
+          kind,
+        })}
       </AlertTitle>
       <AlertDescription className="space-y-1.5">
         {owner ? (
@@ -57,6 +59,7 @@ export function GoneNotice({
             )}
           </p>
         ) : (
+          // Only a read that looked can say nothing owned it.
           owners && <p>{t("empty", "goneUnowned")}</p>
         )}
         <ErrorDetails text={errorToShow(error)} />
