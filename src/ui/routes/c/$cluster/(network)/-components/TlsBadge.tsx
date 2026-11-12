@@ -1,7 +1,9 @@
 import { useT } from "@/i18n/useT";
 import {
   namedTlsHosts,
+  tlsCellWords,
   TLS_NOT_CHECKED_TONE,
+  type BareTls,
   type IngressTlsVerdict,
   type VendorTlsAnswer,
 } from "../../-object/vendor-tls";
@@ -35,7 +37,7 @@ interface TlsBadgeProps {
  * "Not checked" is its own colour, or it reads as the "no" beside it. A
  * certificate named and not served is a mistake, not the choice "none" is.
  */
-const BARE_TONE: Record<"none" | "notChecked" | "plain", string> = {
+const BARE_TONE: Record<BareTls, string> = {
   none: "text-fg-fnt",
   notChecked: TLS_NOT_CHECKED_TONE,
   plain: "text-warn",
@@ -62,18 +64,13 @@ export function TlsBadge({
   const catchAll = hasCatchAllTls && plain.length === 0;
   const explicitCount = named.length;
 
-  const unknown = tls === "unknown";
-  if (
-    unknown ||
-    (explicitCount === 0 && !catchAll && vendorHosts.length === 0)
-  ) {
-    const bare =
-      unknown || unchecked.length > 0
-        ? "notChecked"
-        : plain.length > 0
-          ? "plain"
-          : "none";
-    const words = t("empty", bare === "notChecked" ? "tlsNotChecked" : "noTls");
+  const { words, bare } = tlsCellWords(
+    { tlsHosts, hasCatchAllTls },
+    vendor,
+    tls,
+    t
+  );
+  if (bare) {
     const why =
       bare === "plain"
         ? vendor?.plainWhy
@@ -96,9 +93,7 @@ export function TlsBadge({
   if (explicitCount === 0 && !catchAll) {
     return (
       <Tooltip>
-        <TooltipTrigger className="text-fg-mid">
-          {t("count", "hosts", { n: vendorHosts.length })}
-        </TooltipTrigger>
+        <TooltipTrigger className="text-fg-mid">{words}</TooltipTrigger>
         <TooltipContent>
           <div className="text-xs">
             {vendor && t("readings", "tlsFromVendor", { by: vendor.by })}
@@ -121,11 +116,6 @@ export function TlsBadge({
     );
   }
 
-  // A catch-all certificate covers every host, whatever spec.tls also names.
-  const label = catchAll
-    ? t("empty", "tlsEveryHost")
-    : t("count", "hosts", { n: explicitCount + vendorHosts.length });
-
   const hosts = [
     ...named,
     ...(catchAll ? [t("empty", "catchAllCertificate")] : []),
@@ -137,7 +127,7 @@ export function TlsBadge({
 
   return (
     <Tooltip>
-      <TooltipTrigger className="text-fg-mid">{label}</TooltipTrigger>
+      <TooltipTrigger className="text-fg-mid">{words}</TooltipTrigger>
       <TooltipContent>
         {hosts.map((host) => (
           <div key={host} className="text-xs">

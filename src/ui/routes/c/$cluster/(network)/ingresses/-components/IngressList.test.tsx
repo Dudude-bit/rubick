@@ -229,3 +229,46 @@ it("says TLS was not checked in a row whose controller replaces spec.tls and has
   vi.mocked(useIngressTls).mockImplementation(real);
   vi.mocked(ResourceList).mockImplementation((() => null) as never);
 });
+
+/**
+ * The file shared from the list printed `spec.tls`'s names in the TLS
+ * column beside a cell saying "TLS not checked". Fails if the column shares
+ * anything but its cell's words, or a not checked cell is not marked unread,
+ * or a counted one is.
+ */
+it("shares the TLS cell's own words, marking not checked as not read", async () => {
+  const secured: IngressInfo = { ...plain, tlsHosts: ["plain.k8s-gui.test"] };
+  const real = vi.mocked(useIngressTls).getMockImplementation()!;
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const shared = () => {
+    const columns = vi.mocked(ResourceList).mock.calls.at(-1)![0]
+      .columns as ColumnDef<IngressInfo>[];
+    const tls = columns.find(
+      (column) => "accessorKey" in column && column.accessorKey === "tlsHosts"
+    );
+    return tls?.meta?.share?.(secured as never, t);
+  };
+  const page = {
+    at: "/c/prod/ingresses",
+    route: "/c/$cluster/ingresses",
+  };
+  useClusterStore.setState({ isConnected: true });
+  const counted = await renderWithRouter(<IngressList />, page);
+  await waitFor(() =>
+    expect(shared()).toEqual({ text: "1 host", unread: false })
+  );
+  counted.unmount();
+
+  vi.mocked(useIngressTls).mockReturnValue({
+    available: true,
+    of: () => null,
+    isPending: true,
+    error: null,
+    unread: "replaces",
+  });
+  await renderWithRouter(<IngressList />, page);
+  await waitFor(() =>
+    expect(shared()).toEqual({ text: "TLS not checked", unread: true })
+  );
+  vi.mocked(useIngressTls).mockImplementation(real);
+});
