@@ -7695,6 +7695,12 @@ export const ru: Catalogue = {
     previousRunWroteNothing: "Предыдущий запуск ничего не записал.",
     streamAttachedNothingWritten:
       "Поток подключён; с момента старта этих контейнеров ничего не записано.",
+    intakeKeptNone: "Ни одной строки пока не оставлено.",
+    streamAttachedIntake:
+      "Поток подключён; фильтр приёма отбрасывает неподходящие строки по мере поступления.",
+    bufferCleared: "Буфер очищен.",
+    streamAttachedNothingSince:
+      "Поток подключён; с тех пор ничего не записано.",
     notStreaming: "Чтение не идёт.",
     useStreamControl: "Подключитесь кнопкой потока на панели инструментов.",
     noPodsForJob: "У этой задачи нет подов",

@@ -6988,6 +6988,12 @@ export const en = {
     previousRunWroteNothing: "The previous run wrote nothing.",
     streamAttachedNothingWritten:
       "The stream is attached; nothing has been written since these containers started.",
+    intakeKeptNone: "No line kept yet.",
+    streamAttachedIntake:
+      "The stream is attached; intake discards the lines that do not match as they arrive.",
+    bufferCleared: "The buffer was cleared.",
+    streamAttachedNothingSince:
+      "The stream is attached; nothing has been written since.",
     notStreaming: "Not streaming.",
     useStreamControl: "Use the stream control in the toolbar to attach.",
     noPodsForJob: "No pods for this job",

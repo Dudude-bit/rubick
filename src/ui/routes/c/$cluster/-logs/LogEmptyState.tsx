@@ -42,6 +42,7 @@ export function EmptyState({
   filtered,
   settling,
   intake,
+  cleared = false,
   allHidden,
   noPods = false,
   idle = null,
@@ -60,6 +61,8 @@ export function EmptyState({
   settling: boolean;
   /** Set, so "received" and "kept" are no longer the same number. */
   intake: boolean;
+  /** Clear emptied the buffer since the streams were attached. */
+  cleared?: boolean;
   allHidden: boolean;
   /** A workload pane with nothing to read from yet. */
   noPods?: boolean;
@@ -203,15 +206,20 @@ export function EmptyState({
   }
 
   if (streaming) {
+    // An empty buffer is a container that wrote nothing only where every
+    // line written gets here and stays: intake discards the rest on the
+    // way, and Clear took away the ones that came.
+    const [says, attached] = intake
+      ? (["intakeKeptNone", "streamAttachedIntake"] as const)
+      : cleared
+        ? (["bufferCleared", "streamAttachedNothingSince"] as const)
+        : (["noOutputYet", "streamAttachedNothingWritten"] as const);
     return (
       <Note>
-        {t("empty", "noOutputYet")}
+        {t("empty", says)}
         {/* Safe to claim the stream is attached: a stream that dies emits
             `stream-failed`, which replaces this with the notice above. */}
-        <span className="text-fg-fnt">
-          {" "}
-          {t("empty", "streamAttachedNothingWritten")}
-        </span>
+        <span className="text-fg-fnt"> {t("empty", attached)}</span>
       </Note>
     );
   }

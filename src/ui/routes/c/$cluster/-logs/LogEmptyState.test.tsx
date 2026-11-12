@@ -70,3 +70,44 @@ describe("an empty pane on a previous run", () => {
     expect(screen.getByText("Not streaming.")).toBeInTheDocument();
   });
 });
+
+/**
+ * "Nothing has been written since these containers started" is a verdict on
+ * the containers, and an empty buffer is the evidence for it only where
+ * every line written gets here and stays.
+ */
+describe("an empty pane on an attached stream", () => {
+  const SILENT =
+    "The stream is attached; nothing has been written since these containers started.";
+
+  /** The one case the sentence is true in. */
+  it("says nothing has been written where nothing was kept out or taken away", () => {
+    pane({ streaming: true });
+    expect(screen.getByText("No output yet.")).toBeInTheDocument();
+    expect(screen.getByText(SILENT)).toBeInTheDocument();
+  });
+
+  /** Fails if a container writing hundreds of lines a second, all discarded at the source, is called silent. */
+  it("says no line was kept, not that none was written, under intake", () => {
+    pane({ streaming: true, intake: true, cleared: true });
+    expect(screen.queryByText(SILENT)).toBeNull();
+    expect(screen.getByText("No line kept yet.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The stream is attached; intake discards the lines that do not match as they arrive."
+      )
+    ).toBeInTheDocument();
+  });
+
+  /** Fails if Clear turns thousands of lines just on screen into containers that never wrote. */
+  it("says the buffer was cleared, not that nothing was ever written, after Clear", () => {
+    pane({ streaming: true, cleared: true });
+    expect(screen.queryByText(SILENT)).toBeNull();
+    expect(screen.getByText("The buffer was cleared.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The stream is attached; nothing has been written since."
+      )
+    ).toBeInTheDocument();
+  });
+});

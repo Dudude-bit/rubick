@@ -620,6 +620,34 @@ function fireBatch(
 
 const START = Date.parse("2026-08-06T12:00:00.000Z");
 
+describe("LogViewer after Clear", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Fails if the emptied pane goes back to "nothing has been written since
+   * these containers started" over lines that were on screen a moment ago.
+   */
+  it("says the buffer was cleared, not that the containers never wrote", async () => {
+    const user = userEvent.setup();
+    await renderStreaming();
+    fireBatch([{ at: START, level: null, message: "listening on :8080" }]);
+    await waitFor(() => expect(screen.queryByText(/No output yet/)).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "More log actions" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Clear what is buffered" })
+    );
+
+    expect(
+      await screen.findByText("The buffer was cleared.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/since these containers started/)).toBeNull();
+  });
+});
+
 describe("a pod's own pane when the pod is made again under its name", () => {
   beforeEach(() => {
     for (const k of Object.keys(listeners)) delete listeners[k];

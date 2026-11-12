@@ -340,6 +340,7 @@ export function LogViewer({
     isPaused,
     failures,
     lastBatchAt,
+    cleared,
     intakeFrom,
     unfilteredFrom,
     clearLogs,
@@ -1304,6 +1305,7 @@ export function LogViewer({
           filtered={effectiveTerms.length > 0}
           settling={settling}
           intake={intake.length > 0}
+          cleared={cleared}
           allHidden={shownLanes.length === 0 && laneKeys.length > 0}
           noPods={lanes && pods.length === 0 && laneKeys.length === 0}
           idle={idle}
