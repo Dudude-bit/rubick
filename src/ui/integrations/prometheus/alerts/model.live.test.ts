@@ -39,6 +39,100 @@ const row = (name: string): RuleRow => {
   return found;
 };
 
+/** The recording with one loaded rule made to fire about a claim; the fixture itself is not touched. */
+const firingNth = (name: string, nth: number): AlertRule[] => {
+  let seen = 0;
+  return loaded.rules.map((rule) =>
+    rule.name === name && seen++ === nth
+      ? {
+          ...rule,
+          state: "firing",
+          alerts: [
+            {
+              state: "firing",
+              activeAt: null,
+              value: "1",
+              labels: {
+                alertname: name,
+                namespace: "shop",
+                persistentvolumeclaim: "data-0",
+                severity: rule.labels.severity,
+              },
+              annotations: {},
+            },
+          ],
+        }
+      : rule
+  );
+};
+const rowWith = (rules: AlertRule[], name: string): RuleRow =>
+  rowsOf(objects, instances, namespaces, { state: "read", rules }).find(
+    (r) => r.object.name === name
+  )!;
+
+describe("rules the chart writes twice under one name", () => {
+  /**
+   * The chart has fourteen alert names that occur more than once in one
+   * group. Fails if any loaded rule is read by two specs, which is what
+   * pairing by name did to every one of them.
+   */
+  it("reads each loaded rule of the recording for one spec, the one with its labels", () => {
+    let namesakes = 0;
+    for (const r of rows) {
+      if (r.loaded.state !== "read") continue;
+      const paired = r.loaded.rules.filter((x) => x.loaded !== null);
+      expect(new Set(paired.map((x) => x.loaded)).size, r.object.name).toBe(
+        paired.length
+      );
+      for (const x of paired)
+        expect(x.loaded!.labels, x.spec.alert).toEqual(x.spec.labels);
+      const names = paired.map((x) => `${x.spec.group}/${x.spec.alert}`);
+      namesakes += names.length - new Set(names).size;
+    }
+    expect(namesakes).toBeGreaterThanOrEqual(14);
+  });
+
+  /**
+   * KubePersistentVolumeFillingUp is critical first, warning second, and a
+   * volume four days from full fires the warning alone. The tab read the
+   * critical rule for both and filed the object under Quiet while the
+   * claim's own page counted one alert. Fails if the two disagree again.
+   */
+  it("files the object under firing when only the second rule of the name fires, as the claim's page does", () => {
+    const rules = firingNth("KubePersistentVolumeFillingUp", 1);
+    const storage = rowWith(
+      rules,
+      "kps-kube-prometheus-stack-kubernetes-storage"
+    );
+    expect(storage.group).toBe("firing");
+    expect(storage.findings[0]).toMatchObject({
+      kind: "firing",
+      alerts: 1,
+      rules: 1,
+    });
+    expect(
+      alertsAbout(rules, {
+        kind: "PersistentVolumeClaim",
+        name: "data-0",
+        namespace: "shop",
+      })
+    ).toHaveLength(1);
+  });
+
+  /** NodeFilesystemAlmostOutOfSpace is warning first: one firing alert was counted for both specs. */
+  it("counts one firing alert once when the first rule of the name fires", () => {
+    const node = rowWith(
+      firingNth("NodeFilesystemAlmostOutOfSpace", 0),
+      "kps-kube-prometheus-stack-node-exporter"
+    );
+    expect(node.findings[0]).toMatchObject({
+      kind: "firing",
+      alerts: 1,
+      rules: 1,
+    });
+  });
+});
+
 describe("the chart's rule objects", () => {
   /** The chart's Prometheus selects by `release: kps` in every namespace, and every chart object carries that label. */
   it("sees every chart object picked up by the chart's Prometheus", () => {

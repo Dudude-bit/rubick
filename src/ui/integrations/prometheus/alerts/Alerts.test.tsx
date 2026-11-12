@@ -1,5 +1,5 @@
 import { fireEvent, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { CustomResourceInfo } from "@/generated/types";
 import { en } from "@/i18n/catalogue";
@@ -24,7 +24,7 @@ const rule = (name: string): CustomResourceInfo => ({
   generation: null,
 });
 
-const PICTURE = {
+let PICTURE = {
   serviceMonitors: { state: "absent" },
   podMonitors: { state: "absent" },
   prometheuses: { state: "absent" },
@@ -93,5 +93,79 @@ describe("what the Alerts ladder hands to Share", () => {
     expect(section().caption).toBe(
       "Only the group «not checked». Only the rows matching «payments», as the list was searched."
     );
+  });
+});
+
+/**
+ * Two rules of one name in one group, the second firing about a claim. The
+ * cards were keyed by group and name, so the two shared a React key, and
+ * both read the first loaded rule, so the firing alert was on neither.
+ * Fails if the alert is drawn under no card or under both, or the keys
+ * collide again.
+ */
+describe("two rules of one name on the Alerts tab", () => {
+  const before = PICTURE;
+  afterEach(() => {
+    PICTURE = before;
+    vi.restoreAllMocks();
+  });
+
+  it("draws the firing alert once, under a card of its own", async () => {
+    const loaded = (severity: string, state: string) => ({
+      group: "g",
+      file: "/rules/shop-storage.yaml",
+      name: "VolumeFillingUp",
+      state,
+      health: "ok",
+      lastError: "",
+      query: "up",
+      durationSeconds: 0,
+      lastEvaluation: null,
+      labels: { severity },
+      annotations: {},
+      alerts:
+        state === "firing"
+          ? [
+              {
+                state,
+                activeAt: null,
+                value: "1",
+                labels: { namespace: "shop", persistentvolumeclaim: "data-0" },
+                annotations: {},
+              },
+            ]
+          : [],
+    });
+    const storage = {
+      ...rule("storage"),
+      spec: {
+        groups: [
+          {
+            name: "g",
+            rules: ["critical", "warning"].map((severity) => ({
+              alert: "VolumeFillingUp",
+              expr: "up",
+              labels: { severity },
+            })),
+          },
+        ],
+      },
+    };
+    PICTURE = {
+      ...before,
+      rules: { state: "read", items: [storage] },
+      alertRules: {
+        state: "read",
+        rules: [loaded("critical", "inactive"), loaded("warning", "firing")],
+      },
+    } as unknown as Picture;
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    await renderWithRouter(<Alerts />, {
+      at: "/c/prod/integrations/prometheus?tab=alerts",
+    });
+    expect(await screen.findAllByText("shop/data-0")).toHaveLength(1);
+    expect(
+      errors.mock.calls.filter((call) => String(call[0]).includes("same key"))
+    ).toEqual([]);
   });
 });

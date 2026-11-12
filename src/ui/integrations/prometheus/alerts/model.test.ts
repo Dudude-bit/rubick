@@ -176,6 +176,93 @@ describe("loadedOf", () => {
     ]);
   });
 
+  const twice = (labels: [object, object]) =>
+    readRule(
+      cr("PrometheusRule", "apps", "monitoring", {
+        groups: [
+          {
+            name: "kubernetes-storage",
+            rules: labels.map((own) => ({
+              alert: "KubePersistentVolumeFillingUp",
+              expr: "up",
+              labels: own,
+            })),
+          },
+        ],
+      })
+    );
+  const storage = (over: Partial<AlertRule>) =>
+    apiRule({
+      file: "/rules/monitoring-apps.yaml",
+      group: "kubernetes-storage",
+      name: "KubePersistentVolumeFillingUp",
+      ...over,
+    });
+
+  /**
+   * kube-prometheus-stack writes KubePersistentVolumeFillingUp twice in one
+   * group, critical then warning. Paired by name alone both specs read the
+   * first loaded rule, so a firing warning was read by nobody and the object
+   * was filed under Quiet. Fails if a loaded rule answers two specs.
+   */
+  it("gives each of two rules of one name the loaded rule that carries its labels", () => {
+    const read = loadedOf(
+      twice([{ severity: "critical" }, { severity: "warning" }]),
+      {
+        state: "read",
+        rules: [
+          storage({ labels: { severity: "critical" } }),
+          storage({ labels: { severity: "warning" }, state: "firing" }),
+        ],
+      }
+    );
+    if (read.state !== "read") throw new Error("not read");
+    expect(read.rules.map((r) => r.loaded?.state)).toEqual([
+      "inactive",
+      "firing",
+    ]);
+  });
+
+  /**
+   * Prometheus still holding the file from before the critical rule was
+   * added has one rule of the name, the warning. Fails if it is handed to
+   * the first spec of that name instead of the one whose labels it carries.
+   */
+  it("leaves the spec whose labels nothing loaded carries without a rule", () => {
+    const read = loadedOf(
+      twice([{ severity: "critical" }, { severity: "warning" }]),
+      {
+        state: "read",
+        rules: [storage({ labels: { severity: "warning" }, state: "firing" })],
+      }
+    );
+    if (read.state !== "read") throw new Error("not read");
+    expect(read.rules.map((r) => r.loaded?.state ?? null)).toEqual([
+      null,
+      "firing",
+    ]);
+  });
+
+  /**
+   * Labels edited on the object and not yet reloaded tell nothing apart, and
+   * the rules are still loaded: Prometheus keeps a group's order. Fails if
+   * such rules read as not loaded, or the first is handed to both specs.
+   */
+  it("pairs namesakes whose labels match nothing in the order of the group", () => {
+    const read = loadedOf(twice([{ severity: "page" }, { severity: "chat" }]), {
+      state: "read",
+      rules: [
+        storage({ labels: { severity: "critical" }, state: "firing" }),
+        storage({ labels: { severity: "warning" }, state: "pending" }),
+      ],
+    });
+    if (read.state !== "read") throw new Error("not read");
+    expect(read.rules.map((r) => r.loaded?.state)).toEqual([
+      "firing",
+      "pending",
+    ]);
+  });
+
   it("passes the other two states through untouched", () => {
     expect(loadedOf(object, { state: "notConnected" })).toEqual({
       state: "notConnected",

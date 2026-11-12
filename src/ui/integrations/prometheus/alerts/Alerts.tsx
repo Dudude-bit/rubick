@@ -748,9 +748,9 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
             {(loaded.state === "read"
               ? loaded.rules
               : object.rules.map((spec) => ({ spec, loaded: null }))
-            ).map((rule) => (
+            ).map((rule, index) => (
               <RuleCard
-                key={`${rule.spec.group}/${rule.spec.alert}`}
+                key={`${rule.spec.group}/${rule.spec.alert}/${index}`}
                 rule={rule}
                 checked={loaded.state === "read"}
                 base={base}

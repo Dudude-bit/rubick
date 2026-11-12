@@ -131,15 +131,29 @@ export function loadedOf(rule: RuleObject, read: RulesRead): Loaded {
   if (read.state !== "read") return read;
   const own = read.rules.filter((entry) => ownsFile(rule, entry.file));
   const files = [...new Set(own.map((entry) => entry.file))];
+  // kube-prometheus-stack writes one alert name twice in a group, critical
+  // and warning. A loaded rule answers one spec: the one whose labels it
+  // carries, and failing that the next namesake in the group's order.
+  const left = [...own];
+  const take = (spec: RuleSpec, byLabels: boolean): AlertRule | null => {
+    const at = left.findIndex(
+      (entry) =>
+        entry.group === spec.group &&
+        entry.name === spec.alert &&
+        (!byLabels ||
+          Object.entries(spec.labels).every(
+            ([key, value]) => entry.labels[key] === value
+          ))
+    );
+    return at === -1 ? null : left.splice(at, 1)[0];
+  };
+  const labelled = rule.rules.map((spec) => take(spec, true));
   return {
     state: "read",
     files,
-    rules: rule.rules.map((spec) => ({
+    rules: rule.rules.map((spec, index) => ({
       spec,
-      loaded:
-        own.find(
-          (entry) => entry.group === spec.group && entry.name === spec.alert
-        ) ?? null,
+      loaded: labelled[index] ?? take(spec, false),
     })),
   };
 }
