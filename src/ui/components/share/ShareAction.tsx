@@ -26,7 +26,7 @@ import { useLocale } from "@/stores/localeStore";
 import { Server } from "lucide-react";
 
 import type { ShareContribution, ShareFrame } from "./contribution";
-import { useScreenSections } from "./screen-share";
+import { useScreenCaveats, useScreenSections } from "./screen-share";
 import { ShareDialog } from "./ShareDialog";
 
 /** Share on a detail page: the object, and everything the page adds about it. */
@@ -60,7 +60,13 @@ export interface ScreenSubject {
   /** The kind the screen lists, for its icon and hue; `null` for a screen of mixed things. */
   kind?: ResourceKind | null;
   icon?: LucideIcon;
-  namespace?: string | null;
+  /**
+   * The namespaces the screen read, `[]` being the whole cluster, or `null`
+   * for a screen that reads the cluster whatever the window is scoped to.
+   * Required: the scope lives in the window, not in the address or the
+   * rows, and a file that leaves it out reads as the whole cluster.
+   */
+  scope: readonly string[] | null;
   stats?: () => ReportStat[];
 }
 
@@ -83,6 +89,7 @@ export function ShareScreenAction({
   const colouring = useDisplaySettingsStore((s) => s.resourceColouring);
   const version = useAppInfo();
   const collect = useScreenSections();
+  const caveats = useScreenCaveats();
   const [open, setOpen] = useState(false);
   // Per opening, not per render: the dialog keys the public-target tick and
   // the published link on it, and a screen object built inline changes
@@ -97,16 +104,19 @@ export function ShareScreenAction({
     const sections = collect();
     // A screen whose parts registered nothing still gets a file; it must not
     // be one that reads as "all of it, and all of it was read".
-    const notRead =
-      sections.length === 0
+    const notRead = [
+      ...(sections.length === 0
         ? [t("share", "screenGaveNothing")]
-        : unreadLines(sections);
+        : unreadLines(sections)),
+      ...(caveats?.() ?? []),
+    ];
     const icon = screen.icon ?? (screen.kind ? kindIcon(screen.kind) : Share2);
+    const scope = screen.scope ?? [];
     return {
       subject: {
         kind: screen.kind ?? "Screen",
         name: screen.title,
-        namespace: screen.namespace ?? null,
+        namespace: scope.length === 1 ? scope[0] : null,
         context,
       },
       hero: {
@@ -121,8 +131,8 @@ export function ShareScreenAction({
       colouring,
       status: null,
       chips: [
-        ...(screen.namespace
-          ? [{ icon: iconSvg(kindIcon("Namespace")), text: screen.namespace }]
+        ...(scope.length > 0
+          ? [{ icon: iconSvg(kindIcon("Namespace")), text: scope.join(", ") }]
           : []),
         { icon: iconSvg(Server), text: context },
       ],
@@ -137,6 +147,7 @@ export function ShareScreenAction({
   }, [
     open,
     collect,
+    caveats,
     capturedAt,
     version.data,
     screen,

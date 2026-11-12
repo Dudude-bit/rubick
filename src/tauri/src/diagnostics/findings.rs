@@ -70,6 +70,28 @@ pub fn unreadable_kubeconfig_finding(path: &str, why: &str) -> Finding {
     }
 }
 
+/// The finding for a kubeconfig that was read once and failed to read again.
+///
+/// Misconfigured, not blocking: the app keeps the earlier read and every
+/// cluster still connects, so the blocks below describe that read and look
+/// healthy. This is the only place that says the file no longer loads.
+#[must_use]
+pub fn kubeconfig_reload_failed_finding(failed: &str, loaded: &str, why: &str) -> Finding {
+    Finding {
+        severity: Severity::Misconfigured,
+        title: "Kubeconfig could not be read again".to_string(),
+        detail: format!(
+            "{why}. The app is still running on what it read from {loaded} \
+             before that, which is what the contexts below describe. A file \
+             that does not parse gives an empty cluster list at the next \
+             launch. Check it with `kubectl config view`, which reports the \
+             same error against the same file."
+        ),
+        subject: Some(failed.to_string()),
+        about_shell: false,
+    }
+}
+
 /// The finding for a `config.toml` that would not parse and was moved aside.
 ///
 /// Misconfigured, not blocking: the cluster still connects, but the reader's

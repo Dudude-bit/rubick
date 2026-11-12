@@ -168,6 +168,7 @@ export default function PrometheusPage() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: `Prometheus · ${activeTab.label}`,
               icon:
                 activeTab.id === "monitors"

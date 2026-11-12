@@ -2,6 +2,7 @@ import type { VendorFact } from "../registry";
 import { ScrollText } from "lucide-react";
 
 import { commands } from "@/lib/commands";
+import { addressOf } from "../address";
 import { explain, unreachable } from "../reachability";
 import { errorToShow } from "@/lib/error-utils";
 import {
@@ -138,7 +139,7 @@ export default defineVendor({
     facts: (saved: SavedConnection, probe: ProbeResult): VendorFact[] => {
       if (!probe.ok) {
         return [
-          { text: hostOf(saved.url) },
+          { text: addressOf(saved.url).shown },
           {
             say: {
               key: "connDidNotAnswer" as const,
@@ -149,7 +150,7 @@ export default defineVendor({
         ];
       }
       return [
-        { text: hostOf(saved.url) },
+        { text: addressOf(saved.url).shown },
         {
           say: {
             key: "connAnsweredAgo",
@@ -209,9 +210,4 @@ function asSaved(
     hasToken: connection.hasToken,
     insecureTls: connection.insecureTls,
   };
-}
-
-/** The address without its scheme — the row is narrow and `http://` is noise. */
-function hostOf(url: string): string {
-  return url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
 }

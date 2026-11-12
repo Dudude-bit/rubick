@@ -236,7 +236,11 @@ export const columns = (
 ];
 
 const NODES_TITLE = "Nodes";
-const NODES_SCREEN = { title: NODES_TITLE, kind: ResourceType.Node };
+const NODES_SCREEN = {
+  title: NODES_TITLE,
+  kind: ResourceType.Node,
+  scope: null,
+};
 
 const linkOf = (node: NodeInfo) =>
   objectLink({ kind: ResourceType.Node, name: node.name })!;

@@ -1146,7 +1146,7 @@ pub(crate) fn canonicalize_kubeconfig_path(path: &std::path::Path) -> Result<Pat
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::io::Write;
 
@@ -1356,13 +1356,13 @@ users:
     /// whole process.
     static KUBECONFIG_TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-    struct KubeconfigEnv {
+    pub(crate) struct KubeconfigEnv {
         prior: Option<std::ffi::OsString>,
         _turn: tokio::sync::MutexGuard<'static, ()>,
     }
 
     impl KubeconfigEnv {
-        async fn set(value: impl AsRef<std::ffi::OsStr>) -> Self {
+        pub(crate) async fn set(value: impl AsRef<std::ffi::OsStr>) -> Self {
             let turn = KUBECONFIG_TURN.lock().await;
             let prior = std::env::var_os("KUBECONFIG");
             // SAFETY: every test that writes the variable holds the turn.

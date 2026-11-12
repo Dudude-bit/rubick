@@ -1793,6 +1793,27 @@ describe("what the panels offer Share", () => {
     });
   });
 
+  /**
+   * Every other time in the file is UTC and says so; "+12 since 14:05" was
+   * the sender's local clock with no zone, three hours after the UTC stamp
+   * of the last occurrence it is meant to precede. Fails if the file prints
+   * the start of the older repeats in anything but UTC with the zone named.
+   */
+  it("says since when the older repeats ran in UTC, zone named", () => {
+    const section = warningsShare(
+      [
+        {
+          ...warning,
+          older: { count: 12, since: "2026-11-12T11:05:00Z" },
+        },
+      ],
+      [],
+      t
+    );
+    const rows = section.body.type === "events" ? section.body.rows : [];
+    expect(rows[0].older).toBe("+12 since 2026-11-12 11:05 UTC");
+  });
+
   /** Fails if the shared file says nothing of an events list not read, or says a refused one and a failed one alike. */
   it("marks the section unread with why the events list was not read", () => {
     expect(warningsShare([], [], t).unread).toBeNull();
@@ -1808,6 +1829,25 @@ describe("what the panels offer Share", () => {
     expect(warningsShare([], [failed], t).unread).toBe(
       "Warning events: could not be read in prod. Warnings may be missing here."
     );
+  });
+
+  /**
+   * One namespace refused its events, or the page cap was hit: the screen
+   * draws the notice and then every warning it did read, and the file kept
+   * the notice and dropped the warnings. Fails if a short read with rows
+   * stops carrying them, or carries them without saying it was short.
+   */
+  it("keeps the warnings it did read under the notice when the read was short", () => {
+    const section = warningsShare([warning], [REFUSED_IN_STAGING], t);
+    expect(section.unread).toBeNull();
+    expect(section.partial).toBe(
+      "Warning events: list is forbidden in staging. Warnings may be missing here."
+    );
+    expect(section.body).toMatchObject({
+      type: "events",
+      rows: [{ reason: "ScalingReplicaSet" }],
+    });
+    expect(unreadLines([section])).toHaveLength(1);
   });
 });
 

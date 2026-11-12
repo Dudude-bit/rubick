@@ -38,7 +38,7 @@ import { podStatusValue } from "@/lib/share/pod-status";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT, type T as Translate } from "@/i18n/useT";
 import { T } from "@/i18n/T";
-import { narrowPods } from "@/lib/pod-filter";
+import { narrowPods, podFilterWords } from "@/lib/pod-filter";
 import { usePodFilter } from "@/hooks/usePodFilter";
 import { PodSelectorBanner } from "./PodSelectorBanner";
 import { PodStatusBadge } from "./PodStatusBadge";
@@ -347,6 +347,7 @@ export function PodList() {
       columns={columns}
       quickActions={quickActions}
       emptyStateLabel={toPlural(ResourceType.Pod)}
+      narrowed={filter ? podFilterWords(filter, t) : null}
       // Inside the list rather than above it, as the Nodes page has it: the
       // list owns the window's height now, and a banner outside it is one more
       // box the height has to be threaded through.

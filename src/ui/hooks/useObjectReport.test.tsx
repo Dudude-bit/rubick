@@ -35,6 +35,10 @@ vi.mock("@/integrations", async (original) => ({
     key === "object.report" ? [vendorReport] : [],
 }));
 
+import {
+  ScreenShareProvider,
+  useShareCaveat,
+} from "@/components/share/screen-share";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
@@ -405,6 +409,35 @@ describe("the report of any object", () => {
     await waitFor(() => expect(result.current.report).not.toBeNull());
     expect(result.current.report!.notRead).toContain(
       "Pods on this node: The Pods tab was not open"
+    );
+  });
+
+  /**
+   * A detail page keeps the object a failed re-read left and says so in a
+   * notice; the report took the old status under a new capture time with
+   * nothing in Not read. Fails if the page's notices do not reach the file.
+   */
+  it("says in Not read what the page's own notices say of its read", async () => {
+    function Stale({ children }: { children: ReactNode }) {
+      useShareCaveat("Could not read IngressRoute shop when this was made");
+      return <>{children}</>;
+    }
+    const { result } = renderHook(
+      () => useObjectReport(subject, resource, undefined, true),
+      {
+        wrapper: ({ children }) =>
+          wrapper({
+            children: (
+              <ScreenShareProvider>
+                <Stale>{children}</Stale>
+              </ScreenShareProvider>
+            ),
+          }),
+      }
+    );
+    await waitFor(() => expect(result.current.report).not.toBeNull());
+    expect(result.current.report!.notRead).toContain(
+      "Could not read IngressRoute shop when this was made"
     );
   });
 

@@ -297,11 +297,7 @@ pub async fn set_kubeconfig_path(
     path: String,
     state: tauri::State<'_, crate::state::AppState>,
 ) -> Result<()> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return clear_kubeconfig_path(state).await;
-    }
-    set_kubeconfig_paths(vec![trimmed.to_string()], state).await
+    set_kubeconfig_paths(vec![path], state).await
 }
 
 /// Pin these files, in this order, as the kubeconfig the app reads.
@@ -324,29 +320,51 @@ pub async fn set_kubeconfig_paths(
         .map(std::path::PathBuf::from)
         .collect();
 
-    if wanted.is_empty() {
-        return clear_kubeconfig_path(state).await;
-    }
+    repin(&state, wanted).await
+}
 
-    // Validated through the loader the rest of the app reads clusters with,
-    // so a rejection here is the rejection the cluster list would have hit.
-    state
-        .client_manager
-        .load_kubeconfig_resolved(wanted.clone())
+/// The list the reader asked for, loaded and only then saved: an empty one
+/// is the default lookup, and is checked like any other. Saved first, a
+/// default lookup that found no file was refused on screen, with every
+/// cluster still working, and in force after the next launch.
+async fn checked_then_saved(
+    manager: &crate::client::K8sClientManager,
+    wanted: Vec<std::path::PathBuf>,
+    save: impl std::future::Future<Output = Result<()>>,
+) -> Result<()> {
+    let pinned = !wanted.is_empty();
+    // Through the loader the rest of the app reads clusters with, so a
+    // rejection here is the rejection the cluster list would have hit.
+    manager
+        .load_kubeconfig_resolved(wanted)
         .await
-        .map_err(|e| crate::error::Error::Config(format!("Invalid kubeconfig path: {e}")))?;
+        .map_err(|e| {
+            crate::error::Error::Config(if pinned {
+                format!("Invalid kubeconfig path: {e}")
+            } else {
+                e.to_string()
+            })
+        })?;
+    save.await
+}
 
-    with_config(move |config| {
-        // The single field carries the first of them, for a build that has
-        // never heard of the list.
-        config.kubernetes.kubeconfig_path = wanted.first().cloned();
-        config.kubernetes.kubeconfig_paths.clone_from(&wanted);
-    })
+async fn repin(state: &crate::state::AppState, wanted: Vec<std::path::PathBuf>) -> Result<()> {
+    let saved = wanted.clone();
+    checked_then_saved(
+        &state.client_manager,
+        wanted,
+        with_config(move |config| {
+            // The single field carries the first of them, for a build that
+            // has never heard of the list.
+            config.kubernetes.kubeconfig_path = saved.first().cloned();
+            config.kubernetes.kubeconfig_paths = saved;
+        }),
+    )
     .await?;
 
     // Every session was bound to the previous kubeconfig and would now
     // point at the wrong cluster. The caller reconnects the one on screen.
-    crate::commands::cluster::teardown_all(&state);
+    crate::commands::cluster::teardown_all(state);
 
     Ok(())
 }
@@ -354,20 +372,71 @@ pub async fn set_kubeconfig_paths(
 /// Clear the kubeconfig override, reverting to default lookup.
 #[tauri::command]
 pub async fn clear_kubeconfig_path(state: tauri::State<'_, crate::state::AppState>) -> Result<()> {
-    with_config(move |config| {
-        config.kubernetes.kubeconfig_path = None;
-        config.kubernetes.kubeconfig_paths = Vec::new();
-    })
-    .await?;
+    repin(&state, Vec::new()).await
+}
 
-    // Re-load using the now-cleared override (i.e. default lookup) so
-    // subsequent list_contexts sees the right cluster set immediately.
-    state
-        .client_manager
-        .load_kubeconfig_resolved(Vec::new())
-        .await
-        .map_err(|e| crate::error::Error::Config(e.to_string()))?;
-    crate::commands::cluster::teardown_all(&state);
+#[cfg(test)]
+mod tests {
+    use super::checked_then_saved;
+    use crate::client::tests::KubeconfigEnv;
+    use crate::client::K8sClientManager;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
-    Ok(())
+    const GOOD: &str =
+        "apiVersion: v1\nkind: Config\ncontexts:\n  - name: prod\n    context:\n      \
+                        cluster: prod\n      user: prod\nclusters: []\nusers: []\n";
+
+    /// "Use default lookup" with no default file wrote the cleared pin to
+    /// `config.toml` and then failed: the toast said it could not, every
+    /// cluster kept working, and the pin was gone after the next launch.
+    /// Fails if a default lookup that finds no file is saved all the same.
+    #[tokio::test]
+    async fn a_default_lookup_that_finds_no_file_is_refused_before_anything_is_saved() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let pinned = dir.path().join("work.yaml");
+        std::fs::write(&pinned, GOOD).expect("write");
+        let manager = K8sClientManager::new();
+        manager
+            .load_kubeconfig_resolved(vec![pinned.clone()])
+            .await
+            .expect("the pinned file loads");
+
+        let saved = AtomicBool::new(false);
+        let env = KubeconfigEnv::set(dir.path().join("no-such-file.yaml")).await;
+        let cleared = checked_then_saved(&manager, Vec::new(), async {
+            saved.store(true, Ordering::SeqCst);
+            Ok(())
+        })
+        .await;
+        drop(env);
+
+        assert!(cleared.is_err(), "there is no default file to go back to");
+        assert!(!saved.load(Ordering::SeqCst), "the pin was cleared on disk");
+        assert_eq!(
+            manager.kubeconfig_path().await,
+            Some(pinned.canonicalize().expect("canonical")),
+            "the app still lives on the file it had"
+        );
+    }
+
+    /// The other half: a list that loads is the one that is saved.
+    #[tokio::test]
+    async fn a_default_lookup_that_loads_is_saved() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let default = dir.path().join("config");
+        std::fs::write(&default, GOOD).expect("write");
+        let manager = K8sClientManager::new();
+
+        let saved = AtomicBool::new(false);
+        let env = KubeconfigEnv::set(&default).await;
+        let cleared = checked_then_saved(&manager, Vec::new(), async {
+            saved.store(true, Ordering::SeqCst);
+            Ok(())
+        })
+        .await;
+        drop(env);
+
+        cleared.expect("the default file loads");
+        assert!(saved.load(Ordering::SeqCst));
+    }
 }

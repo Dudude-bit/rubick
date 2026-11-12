@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  namespaceOfList,
+  scopeOfList,
   SCOPE_LIMIT,
   clampScope,
   decodeScope,
@@ -291,17 +291,25 @@ describe("reading a list across the selection", () => {
   });
 });
 
-describe("the namespace a shared list names in its header", () => {
+describe("the namespaces a shared list names in its header", () => {
   /**
    * Nodes are one list whatever the tab is on; the file's header named the
    * tab's namespace above them, as if the nodes were in it.
    */
   it("names none for a cluster-scoped kind", () => {
-    expect(namespaceOfList(["shop"], ResourceType.Node)).toBeNull();
-    expect(namespaceOfList(["shop"], ResourceType.Pod)).toBe("shop");
+    expect(scopeOfList(["shop"], ResourceType.Node)).toBeNull();
+    expect(scopeOfList(["shop"], ResourceType.Pod)).toEqual(["shop"]);
   });
 
-  it("names none when the tab spans several", () => {
-    expect(namespaceOfList(["shop", "web"], ResourceType.Pod)).toBeNull();
+  /**
+   * A tab on two namespaces named none, and the file of their pods read as
+   * the pods of the cluster. Fails if a list spanning several stops naming
+   * every one of them.
+   */
+  it("names every namespace when the tab spans several", () => {
+    expect(scopeOfList(["shop", "web"], ResourceType.Pod)).toEqual([
+      "shop",
+      "web",
+    ]);
   });
 });

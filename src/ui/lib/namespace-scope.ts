@@ -28,6 +28,7 @@
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { listWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
+import { verbatim } from "@/lib/error-utils";
 import { narrowingHelps, type ResourceKind } from "@/lib/resource-registry";
 
 /**
@@ -163,6 +164,24 @@ export function answeredIn(
 }
 
 /**
+ * The unread-namespace notices as one sentence each, for the file a screen
+ * shares: its reader sees no notice, only what the table says of itself.
+ */
+export function unreadNamespaceWords(
+  t: T,
+  label: string,
+  unread: readonly UnreadNamespace[]
+): string[] {
+  return unread.map(
+    (missing) =>
+      `${t("empty", "couldNotReadInNamespace", {
+        label,
+        namespace: missing.namespace,
+      })} (${verbatim(missing.message)})`
+  );
+}
+
+/**
  * "None" said only of the namespaces that answered — and when none did, not
  * said at all.
  */
@@ -260,16 +279,15 @@ export function inNamespace<T extends { namespace: string }>(
 }
 
 /**
- * The one namespace a list is about, for a file's header: none for a
- * cluster-scoped kind, which is one list whatever the tab is on, and none
- * when the tab spans several.
+ * The namespaces a list is about, for a file's header: every one the tab
+ * spans, and `null` for a cluster-scoped kind, which is one list whatever
+ * the tab is on.
  */
-export function namespaceOfList(
+export function scopeOfList(
   scope: readonly string[],
   kind: ResourceKind | null
-): string | null {
-  if (scope.length !== 1) return null;
-  return kind && !narrowingHelps(kind) ? null : scope[0];
+): readonly string[] | null {
+  return kind && !narrowingHelps(kind) ? null : scope;
 }
 
 /** Past this many, a sentence counts the namespaces instead of naming them. */

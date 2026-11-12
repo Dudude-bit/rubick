@@ -13,6 +13,7 @@ import { DetailAction } from "@/components/object/detail-blocks";
 
 import type { HelmRepository } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { withoutCredentials } from "@/lib/hints";
 
 export interface HelmRepositoriesTabProps {
   repositories: HelmRepository[];
@@ -76,7 +77,7 @@ export function HelmRepositoriesTab({
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 font-mono text-info hover:underline"
                   >
-                    {repo.url}
+                    {withoutCredentials(repo.url)}
                     <ExternalLink className="h-3 w-3" aria-hidden="true" />
                   </a>
                 </TableCell>

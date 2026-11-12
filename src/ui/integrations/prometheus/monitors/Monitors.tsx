@@ -9,6 +9,7 @@ import { objectLink, pageLink } from "@/lib/links";
 import { cn, formatSince } from "@/lib/utils";
 import { Finding, FilterBox, VendorReadFailure } from "../../page-kit";
 import { useShareSection } from "@/components/share/screen-share";
+import { narrowedWords } from "@/lib/report-parts";
 import { ladderSection, ladderUnread } from "./share";
 import { Detail } from "./Detail";
 import { useHeartbeat } from "./heartbeat";
@@ -56,9 +57,6 @@ export default function Monitors() {
     () => (picture.data ? rowsOfPicture(picture.data) : null),
     [picture.data]
   );
-  useShareSection("prometheus-monitors-ladder", () =>
-    ladderSection(rows, ladderUnread(picture, t), t)
-  );
   const prefix = useMemo(
     () => (rows ? sharedPrefix(rows.map((row) => row.monitor.name)) : null),
     [rows]
@@ -74,6 +72,22 @@ export default function Monitors() {
           row.monitor.namespace.toLowerCase().includes(needle))
     );
   }, [rows, filter, only]);
+  // The rows the reader narrowed the ladder to, and the words for how: the
+  // file carries what the screen lists, not every monitor in the cluster.
+  useShareSection("prometheus-monitors-ladder", () =>
+    ladderSection(
+      rows && shown,
+      ladderUnread(picture, t),
+      t,
+      narrowedWords(
+        t,
+        filter,
+        only && picture.data
+          ? t("monitors", chipKey(only, picture.data.targets))
+          : null
+      )
+    )
+  );
 
   const asked = search.monitor;
   const selected =

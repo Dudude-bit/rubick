@@ -258,6 +258,7 @@ export default function IngressNginxPage() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: `ingress-nginx · ${activeTab.label}`,
               icon:
                 activeTab.id === "routes"

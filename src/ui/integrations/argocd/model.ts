@@ -27,6 +27,7 @@
 import type { VendorVerdict } from "../kit";
 import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
+import { withoutCredentials } from "@/lib/hints";
 import { getValueByPath } from "../kit";
 
 /** Where an Application's manifests come from. */
@@ -190,7 +191,7 @@ export function readApplication(object: CustomResourceInfo): ArgoApp {
         Boolean(source.repoURL)
       )
       .map((source) => ({
-        repoUrl: source.repoURL,
+        repoUrl: withoutCredentials(source.repoURL),
         path: source.path ?? null,
         chart: source.chart ?? null,
         targetRevision: source.targetRevision ?? null,
@@ -488,7 +489,7 @@ export function destinationOf(app: ArgoApp, t: T): string {
 /** An empty `sourceRepos` is Argo refusing every repository, not an unset field. */
 export function projectReposWords(repos: readonly string[], t: T): string {
   if (repos.length === 0) return t("empty", "noRepositoryAllowed");
-  if (!repos.includes("*")) return repos.join(", ");
+  if (!repos.includes("*")) return withoutCredentials(repos.join(", "));
   const denied = repos.filter((repo) => repo.startsWith("!"));
   return denied.length === 0
     ? t("empty", "anyRepository")

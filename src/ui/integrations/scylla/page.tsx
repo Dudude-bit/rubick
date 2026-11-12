@@ -137,6 +137,7 @@ export default function ScyllaPage() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: `Scylla · ${activeTab?.label ?? ""}`,
               icon:
                 activeTab?.id === "clusters"

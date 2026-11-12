@@ -246,6 +246,7 @@ export function Crds() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: "Custom Resource Definitions",
               kind: ResourceType.CustomResourceDefinition,
             }}

@@ -41,7 +41,9 @@ const clock = (ms: number) =>
  */
 export function changesScreenSection(
   items: readonly ChangeItem[],
-  t: T
+  t: T,
+  /** How far back the screen was looking, as its own toggle words it. */
+  window: string
 ): PlacedSection {
   const changes: ReportChange[] = items.flatMap((item): ReportChange[] => {
     if (item.kind === "journal") {
@@ -92,6 +94,7 @@ export function changesScreenSection(
     title: t("share", "sectionChanges"),
     icon: iconSvg(History),
     count: items.filter((item) => item.kind === "journal").length,
+    caption: t("share", "changesWindow", { window }),
     body: {
       type: "changes",
       changes:

@@ -26,6 +26,10 @@ const store = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("@/components/share/ShareAction", async (original) =>
+  (await import("@/test/shared-scope")).withSharedScope(original as never)
+);
+
 vi.mock("@/stores/clusterStore", () => ({
   useClusterStore: vi.fn(<T,>(selector?: (s: typeof store.state) => T) =>
     typeof selector === "function" ? selector(store.state) : store.state
@@ -34,6 +38,7 @@ vi.mock("@/stores/clusterStore", () => ({
 
 import {
   ScreenShareProvider,
+  useScreenCaveats,
   useScreenSections,
 } from "@/components/share/screen-share";
 import type { PlacedSection } from "@/lib/report-parts";
@@ -839,6 +844,76 @@ describe("what a list hands to Share", () => {
     expect(section.partial ?? null).toBeNull();
     expect(section.count).toBe(1);
   });
+
+  /**
+   * A tab on two namespaces named neither in the file's header, and their
+   * pods read as the pods of the cluster; Nodes, which no namespace
+   * narrows, must still name none. Fails if a list stops telling Share
+   * every namespace it read, or names one over a cluster-scoped kind.
+   */
+  it("tells Share the namespaces it read, and none for a kind no namespace narrows", async () => {
+    store.state.namespaceScope = ["shop", "web"];
+    try {
+      const pods = await draw(
+        <ResourceList<Item>
+          title="Pods"
+          kind="Pod"
+          columns={columns}
+          emptyStateLabel="Pods"
+          data={[]}
+        />
+      );
+      expect(screen.getByTestId("shared-scope")).toHaveTextContent(
+        '["shop","web"]'
+      );
+      pods.unmount();
+      await draw(
+        <ResourceList<Item>
+          title="Nodes"
+          kind="Node"
+          columns={columns}
+          emptyStateLabel="Nodes"
+          data={[]}
+        />
+      );
+      expect(screen.getByTestId("shared-scope")).toHaveTextContent("null");
+    } finally {
+      store.state.namespaceScope = [];
+    }
+  });
+
+  /**
+   * The API server stopped answering at 14:05; the list kept its rows and
+   * said so, and the file made at 14:25 listed them under "Captured 14:25"
+   * with everything read. Fails if a list holding rows from a failed
+   * re-read tells Share nothing of it.
+   */
+  it("says the rows are from the last read that answered when a re-read failed", async () => {
+    let said: (() => string[]) | null = null;
+    function Probe() {
+      said = useScreenCaveats();
+      return null;
+    }
+    await draw(
+      <ScreenShareProvider>
+        <ResourceList<Item>
+          title="Pods"
+          kind="Pod"
+          columns={columns}
+          emptyStateLabel="Pods"
+          data={[{ name: "web-1", namespace: "shop" }]}
+          error={new Error("502 Bad Gateway")}
+          dataUpdatedAt={Date.UTC(2026, 10, 12, 14, 5)}
+        />
+        <Probe />
+      </ScreenShareProvider>
+    );
+    expect(said!()).toEqual([
+      expect.stringMatching(
+        /^Could not read pods when this was made.*2026-11-12 14:05 UTC.*502 Bad Gateway/
+      ),
+    ]);
+  });
 });
 
 describe("what a list is of", () => {
@@ -965,5 +1040,38 @@ describe("a list a link narrowed to the rows it named", () => {
       screen.getByText("1 of them is not in this list now.")
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show all" })).toBeVisible();
+  });
+
+  /**
+   * The banner says the rows are only the ones a link named; the shared
+   * file listed three of forty pods as "Pods 3". Fails if the list stops
+   * telling Share how its rows were narrowed.
+   */
+  it("says in what it hands Share that the rows are only the named ones", async () => {
+    let collect: (() => PlacedSection[]) | null = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <ResourceList<Item>
+          title="Pods"
+          kind="Pod"
+          columns={columns}
+          emptyStateLabel="Pods"
+          narrowed="Pods matching app=web in shop"
+          data={[
+            { name: "api-1", namespace: "shop" },
+            { name: "web-1", namespace: "shop" },
+          ]}
+        />
+        <Probe />
+      </ScreenShareProvider>,
+      { at: "/c/prod/pods?names=shop%2Fapi-1", route: "/c/$cluster/$" }
+    );
+    expect(collect!()[0].caption).toBe(
+      "Pods matching app=web in shop Showing only the 1 row the Overview listed as needing attention."
+    );
   });
 });

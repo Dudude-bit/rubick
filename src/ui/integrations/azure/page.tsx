@@ -96,7 +96,7 @@ export default function AksAddonsPage() {
         description={t("empty", "aksAddonsHint")}
         actions={
           <ShareScreenAction
-            screen={{ title: "AKS add-ons", icon: KeyRound }}
+            screen={{ scope: null, title: "AKS add-ons", icon: KeyRound }}
           />
         }
       />

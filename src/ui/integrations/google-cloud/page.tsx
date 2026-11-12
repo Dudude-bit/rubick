@@ -109,7 +109,9 @@ export default function GkeIngressPage() {
             : t("count", "hosts", { n: hosts.length })
         }
         description={t("empty", "gkeIngressHint")}
-        actions={<ShareScreenAction screen={{ title: "GKE Ingress" }} />}
+        actions={
+          <ShareScreenAction screen={{ scope: null, title: "GKE Ingress" }} />
+        }
       />
 
       {sources.data?.unread.map((kind) => (

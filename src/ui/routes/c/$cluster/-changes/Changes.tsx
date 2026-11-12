@@ -96,7 +96,11 @@ export function Changes() {
     watching && earlierRowsWords(ours, items, watching.from, t, moment);
 
   useShareSection("changes", () => [
-    changesScreenSection(items, t),
+    changesScreenSection(
+      items,
+      t,
+      window === "24h" ? formatTimeUnit(24, "hour") : formatTimeUnit(7, "day")
+    ),
     watchedSection(watching, ours, items, t),
   ]);
 
@@ -159,7 +163,9 @@ export function Changes() {
                 </button>
               ))}
             </div>
-            <ShareScreenAction screen={{ title: t("changes", "title") }} />
+            <ShareScreenAction
+              screen={{ title: t("changes", "title"), scope: scope.scope }}
+            />
           </>
         }
       />

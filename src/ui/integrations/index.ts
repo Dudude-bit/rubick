@@ -48,6 +48,7 @@ import {
   forwardsFor,
   useClusterForwardStore,
 } from "@/stores/clusterForwardStore";
+import { addressOf } from "./address";
 import { pageDecision } from "./page-state";
 import argocd from "./argocd";
 import cloudnativepg from "./cloudnativepg";
@@ -439,14 +440,14 @@ export function useCapabilityState<K extends CapabilityKey>(
       return {
         state: "unreachable",
         vendor: vendor.name,
-        endpoint: endpointOf(connection.saved.url),
+        endpoint: addressOf(connection.saved.url).shown,
         reason: connection.reason,
       };
     }
     return {
       state: "ready",
       vendor: vendor.name,
-      endpoint: endpointOf(connection.saved.url),
+      endpoint: addressOf(connection.saved.url).shown,
       use: implementation as Capabilities[K],
       page: answeredAt(vendor, key),
     };
@@ -480,11 +481,6 @@ function answeredAt(vendor: Vendor, key: CapabilityKey): AppLink | null {
   const suffix = vendor.page?.answers?.[key];
   if (suffix === undefined) return null;
   return vendorLink(vendor.id, Object.fromEntries(new URLSearchParams(suffix)));
-}
-
-/** The address as a chart label wants it — no scheme, no trailing slash. */
-function endpointOf(url: string): string {
-  return url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
 }
 
 /**

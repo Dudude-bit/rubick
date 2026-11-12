@@ -77,7 +77,9 @@ describe("the list header beside a peek", () => {
             count={89}
             dataUpdatedAt={Date.now()}
             live
-            actions={<ShareScreenAction screen={{ title: "Pods" }} />}
+            actions={
+              <ShareScreenAction screen={{ title: "Pods", scope: null }} />
+            }
           />
         </TooltipProvider>
       </ScreenShareProvider>,

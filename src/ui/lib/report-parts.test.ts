@@ -8,6 +8,7 @@ import {
   changesSection,
   conditionsSection,
   eventsSection,
+  narrowedWords,
   placed,
   refOf,
   slugOf,
@@ -958,5 +959,18 @@ describe("the rest of the parts", () => {
       stem: "payments",
       tail: "-7b6d9c5f4-x8k2p",
     });
+  });
+});
+
+describe("how a ladder was narrowed, for its section's caption", () => {
+  /** A group chip and a filter box narrow together; an untouched ladder says nothing. */
+  it("names the group and the search, either, or neither", () => {
+    expect(narrowedWords(t, "  payments ", "broken")).toBe(
+      "share.onlyGroup(group=broken) share.tableSearched(query=payments)"
+    );
+    expect(narrowedWords(t, "", "broken")).toBe(
+      "share.onlyGroup(group=broken)"
+    );
+    expect(narrowedWords(t, "  ", null)).toBeNull();
   });
 });

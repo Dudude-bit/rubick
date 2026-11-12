@@ -55,6 +55,8 @@ export interface TableShare {
   partial?: string | null;
   /** What the list's search box holds: the rows are only the ones matching it. */
   search?: string;
+  /** How else the screen narrowed the rows, in its own words. */
+  narrowed?: string | null;
 }
 
 function textOf(value: unknown): string {
@@ -226,6 +228,7 @@ export function tableSection(
 
   const search = share.search?.trim();
   const notes = [
+    share.narrowed || null,
     search ? t("share", "tableSearched", { query: search }) : null,
     leftOut.length > 0
       ? t("share", "columnsLeftOut", { names: leftOut.join(", ") })

@@ -391,6 +391,16 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
             )
         })
         .collect();
+    // A reload that failed keeps the earlier parse, and everything below
+    // describes that parse: without this the panel reports no problem with
+    // a file the app can no longer read.
+    if let Some(why) = &loaded.error {
+        let failed = loaded
+            .failed_source
+            .as_ref()
+            .map_or_else(|| path.clone(), |p| p.to_string_lossy().into_owned());
+        findings.push(super::kubeconfig_reload_failed_finding(&failed, &path, why));
+    }
     findings.extend(super::shell_env_finding(&shell));
     findings.extend(recovery_finding);
     findings.sort_by(|a, b| {
@@ -650,6 +660,55 @@ users:
         );
         assert_eq!(kc.parse_error, None);
         assert_eq!(kc.context_count, 1);
+    }
+
+    /// The Clusters pane said the file could not be read while this panel,
+    /// one click away, said "No problems found" and "1 context" about it,
+    /// and so did the report pasted to a maintainer. Fails if a reload that
+    /// failed over an earlier parse leaves no finding naming the file.
+    #[tokio::test]
+    async fn a_failed_reload_is_a_finding_though_the_earlier_read_still_stands() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("config");
+        std::fs::write(
+            &file,
+            "apiVersion: v1\nkind: Config\ncontexts:\n  - name: prod\n    context:\n      \
+             cluster: prod\n      user: prod\nclusters: []\nusers: []\n",
+        )
+        .expect("write");
+        let client = crate::client::K8sClientManager::new();
+        client
+            .load_kubeconfig_from_path(file.clone())
+            .await
+            .expect("good");
+        assert!(
+            !collect(&client)
+                .await
+                .findings
+                .iter()
+                .any(|f| f.title.contains("Kubeconfig")),
+            "a file that loads is no finding"
+        );
+
+        std::fs::write(&file, "clusters: [ this is not\n").expect("break it");
+        assert!(client
+            .load_kubeconfig_from_path(file.clone())
+            .await
+            .is_err());
+
+        let d = collect(&client).await;
+        let path = file.canonicalize().unwrap().to_string_lossy().into_owned();
+        let said = d
+            .findings
+            .iter()
+            .find(|f| f.subject.as_deref() == Some(path.as_str()))
+            .expect("the failed reload is named");
+        assert_eq!(said.severity, crate::diagnostics::Severity::Misconfigured);
+        assert!(
+            said.detail.contains("Failed to read kubeconfig"),
+            "{said:?}"
+        );
+        assert_eq!(d.kubeconfig.expect("the earlier read").context_count, 1);
     }
 
     /// The third state has to stay a third state: never having loaded is not

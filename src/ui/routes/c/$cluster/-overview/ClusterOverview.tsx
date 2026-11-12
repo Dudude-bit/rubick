@@ -195,6 +195,7 @@ export function ClusterOverview() {
   const screen = {
     title: t("nav", "overview"),
     icon: LayoutDashboard,
+    scope: namespaceScope,
     stats: () => (attention ? overviewStats(overview, attention, t) : []),
   };
 

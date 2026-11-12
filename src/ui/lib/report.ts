@@ -15,7 +15,7 @@
 
 import type { LogLevel } from "@/generated/types";
 import type { StatusRole } from "./status-role";
-import { redact } from "./hints";
+import { redact, withoutCredentials } from "./hints";
 import { dateFormat } from "./utils";
 
 export type ReportTone = "ok" | "warn" | "err";
@@ -415,7 +415,12 @@ footer svg { width:12px; height:12px; }
   h1 .name { font-size:17px; } h1 { font-size:18px; } }
 `;
 
-const e = escapeHtml;
+/**
+ * Everything the file prints, a message a controller wrote as much as a
+ * fact a page handed over: here rather than at each builder, because one
+ * that forgot would publish a repository token to a link anyone can open.
+ */
+const e = (value: string) => escapeHtml(withoutCredentials(value));
 
 interface Ctx {
   colouring: ReportColouring;
@@ -452,7 +457,8 @@ function kindGlyph(ref: ReportRef, colouring: ReportColouring): string {
 /**
  * The same rules as `ResourceName`: full spends the hue on identity and dims
  * the stem when the generated tail carries it; minimal keeps the kind's hue
- * on the icon and quietens the tail; off tints nothing.
+ * on the icon and quietens the tail; off tints nothing. A name is drawn
+ * exactly: it is an identity, and no credential is one.
  */
 function refHtml(
   ref: ReportRef,
@@ -463,19 +469,19 @@ function refHtml(
   const ident = hue(ref.identHue, "ident");
   const wholeTinted = colouring === "full" && ref.tail.length <= 2;
   const stem = wholeTinted
-    ? `<span style="${ident}">${e(ref.stem)}</span>`
-    : `<span class="${colouring === "full" ? "mut" : ""}">${e(ref.stem)}</span>`;
+    ? `<span style="${ident}">${escapeHtml(ref.stem)}</span>`
+    : `<span class="${colouring === "full" ? "mut" : ""}">${escapeHtml(ref.stem)}</span>`;
   const tail = !ref.tail
     ? ""
     : colouring === "full"
-      ? `<span style="${ident}">${e(ref.tail)}</span>`
-      : `<span class="${colouring === "minimal" ? "q" : ""}">${e(ref.tail)}</span>`;
+      ? `<span style="${ident}">${escapeHtml(ref.tail)}</span>`
+      : `<span class="${colouring === "minimal" ? "q" : ""}">${escapeHtml(ref.tail)}</span>`;
   const namespace =
     ref.namespace && ref.namespace !== ctx.namespace
-      ? `<span class="q">${e(ref.namespace)}/</span>`
+      ? `<span class="q">${escapeHtml(ref.namespace)}/</span>`
       : "";
   const glyph = icon ? kindGlyph(ref, colouring) : "";
-  const prefix = kind ? `<span class="q">${e(ref.kind)}/</span>` : "";
+  const prefix = kind ? `<span class="q">${escapeHtml(ref.kind)}/</span>` : "";
   return `<span class="ref">${glyph}<span class="name">${namespace}${prefix}${stem}${tail}</span></span>`;
 }
 
@@ -836,9 +842,9 @@ export function renderReport(report: Report): string {
       .map((chip) => `<span class="chip">${chip.icon}${e(chip.text)}</span>`)
       .join("")}</div></div></div>`,
     report.stats.length > 0 ? statsHtml(report, ctx) : "",
-    `<div class="open"><a class="btn" href="${e(report.link)}" target="_blank" rel="noopener">${icons.open}${e(w.openInRubick)}</a><span class="fallback">${e(
+    `<div class="open"><a class="btn" href="${escapeHtml(report.link)}" target="_blank" rel="noopener">${icons.open}${e(w.openInRubick)}</a><span class="fallback">${e(
       w.linkFallback
-    )} <code>${e(report.link)}</code></span></div>`,
+    )} <code>${escapeHtml(report.link)}</code></span></div>`,
     report.notRead.length > 0
       ? `<a class="notice" href="#not-read">${icons.notRead}${e(w.notReadCount)}</a>`
       : "",
@@ -861,7 +867,7 @@ export function renderReport(report: Report): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${e(title)}</title>
+<title>${escapeHtml(title)}</title>
 <style>${STYLE}</style>
 </head>
 <body><main>${body}</main></body>

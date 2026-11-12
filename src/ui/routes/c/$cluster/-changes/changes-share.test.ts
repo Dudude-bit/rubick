@@ -24,7 +24,8 @@ describe("the times a shared Changes report prints", () => {
   it("prints a gap's ends in UTC and says so", () => {
     const section = changesScreenSection(
       [{ kind: "gap", at: to, gap: { from, to } }],
-      t
+      t,
+      "24h"
     );
     if (section.body.type !== "changes") throw new Error("expected changes");
     const text = section.body.changes[0].parts[0].text;
@@ -44,7 +45,8 @@ describe("the times a shared Changes report prints", () => {
           refused: { unwatched: ["DaemonSet"] },
         },
       ],
-      t
+      t,
+      "24h"
     );
     if (section.body.type !== "changes") throw new Error("expected changes");
     expect(section.body.changes[0].parts.map((part) => part.text)).toEqual([
@@ -65,7 +67,8 @@ describe("the times a shared Changes report prints", () => {
           refused: { unwatched: ["DaemonSet"] },
         },
       ],
-      t
+      t,
+      "24h"
     );
     if (section.body.type !== "changes") throw new Error("expected changes");
     expect(section.body.changes[0].parts.map((part) => part.text)).toEqual([
@@ -94,5 +97,16 @@ describe("the times a shared Changes report prints", () => {
     const section = watchedSection(span, [span], [], t);
     if (section.body.type !== "text") throw new Error("expected text");
     expect(section.body.text).toMatch(/\b0?3:07\b.* UTC/);
+  });
+
+  /**
+   * The 24h / 7d toggle is the screen's own state, in neither the address
+   * nor the rows: the file listed changes with no word of how far back it
+   * looked. Fails if the section stops saying its window.
+   */
+  it("says how far back the screen was looking", () => {
+    expect(changesScreenSection([], t, "7d").caption).toBe(
+      "What changed in the last 7d."
+    );
   });
 });

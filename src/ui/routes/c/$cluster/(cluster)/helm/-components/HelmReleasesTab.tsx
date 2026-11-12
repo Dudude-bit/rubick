@@ -34,7 +34,7 @@ import { UnreadNamespaces } from "../../../-list/UnreadNamespaces";
 import { UnreadList } from "../../../-list/UnreadList";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { helmReleaseLink, hrefOf } from "@/lib/links";
-import { noneWhereAnswered } from "@/lib/namespace-scope";
+import { noneWhereAnswered, unreadNamespaceWords } from "@/lib/namespace-scope";
 import { getResourceRowId } from "@/lib/table-utils";
 import { formatDate, formatWhen } from "@/lib/utils";
 
@@ -286,6 +286,18 @@ export function HelmReleasesTab({
     ]
   );
 
+  // The file's reader sees no notice above the table: the section itself
+  // has to say which namespaces are not in it.
+  const share = useMemo(
+    () => ({
+      title: t("nav", "releases"),
+      partial:
+        unreadNamespaceWords(t, t("empty", "helmReleases"), unread).join(" ") ||
+        null,
+    }),
+    [t, unread]
+  );
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center">
@@ -333,7 +345,7 @@ export function HelmReleasesTab({
           getRowId={getHelmReleaseRowId}
           getRowHref={helmReleaseHref}
           pageKeys
-          share={{ title: t("nav", "releases") }}
+          share={share}
           partial={unread.length > 0}
           emptyMessage={
             unread.length > 0

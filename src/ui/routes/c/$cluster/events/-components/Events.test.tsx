@@ -65,6 +65,7 @@ vi.mock("@/lib/commands", () => ({
 
 import {
   ScreenShareProvider,
+  useScreenCaveats,
   useScreenSections,
 } from "@/components/share/screen-share";
 import { commands } from "@/lib/commands";
@@ -77,6 +78,10 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import type { EventFilters, EventInfo, Holder } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
+vi.mock("@/components/share/ShareAction", async (original) =>
+  (await import("@/test/shared-scope")).withSharedScope(original as never)
+);
+
 import { Events } from "./Events";
 
 const listEvents = vi.mocked(commands.listEvents);
@@ -130,6 +135,13 @@ function eventsAt(view: "list" | "stories") {
   };
 }
 
+/** What the page's notices tell Share of its read. */
+let caveats: (() => string[]) | null = null;
+function Caveats() {
+  caveats = useScreenCaveats();
+  return null;
+}
+
 async function mount(view: "list" | "stories" = "list") {
   let bump = () => {};
   // A fresh element every time: React bails out of re-rendering a component
@@ -138,7 +150,12 @@ async function mount(view: "list" | "stories" = "list") {
   function Host() {
     const [, setTick] = useState(0);
     bump = () => setTick((tick) => tick + 1);
-    return <Events />;
+    return (
+      <ScreenShareProvider>
+        <Events />
+        <Caveats />
+      </ScreenShareProvider>
+    );
   }
   const rendered = await renderWithRouter(<Host />, eventsAt(view));
   return {
@@ -1278,6 +1295,11 @@ describe("a feed a watch keeps", () => {
     useClusterStore.setState({ namespaceScope: ["prod", "staging"] });
     await watched();
     expect(subscribeEventWatch).toHaveBeenCalledWith(["prod", "staging"]);
+    // The file names the same namespaces: the header took the single
+    // legacy namespace, which several leave empty.
+    expect(screen.getByTestId("shared-scope")).toHaveTextContent(
+      '["prod","staging"]'
+    );
     burst([dated("prod", 1), dated("staging", 0)]);
     await waitFor(() =>
       expect(document.body.textContent).toContain("staging-pod-0")
@@ -1314,6 +1336,9 @@ describe("a feed a watch keeps", () => {
     expect(document.body.textContent).toContain("prod-pod-1");
     expect(screen.getByText("read failing")).toBeInTheDocument();
     expect(screen.queryByText("live")).not.toBeInTheDocument();
+    // The file's Events section says the read failed and holds no rows, so
+    // the notice has nothing in the file to call old.
+    expect(caveats!()).toEqual([]);
   });
 
   /**

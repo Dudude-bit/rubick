@@ -2128,6 +2128,12 @@ export const en = {
     kickerScreen: "Snapshot",
     created: "Created",
     stillReading: "Still being read when the report was made.",
+    rowsNotWhole: "Not everything that was asked for is in these rows.",
+    listDelivery: "Only the rows whose delivery is: {filter}.",
+    onlyGroup: "Only the group «{group}».",
+    changesWindow: "What changed in the last {window}.",
+    staleRead:
+      "Could not read {label} when this was made: what the file shows of it is from {time}, the last read that answered.",
     shareScreen: "Share this screen",
     rowsMore: {
       one: "{n} more row is in the app.",
@@ -2209,6 +2215,8 @@ export const en = {
     clSectionPodsOnNode: "Pods on this node",
     clPodsNotOpened:
       "The Pods tab was not open on this page when the report was made.",
+    clPodsReadEarlier:
+      "Read while the Pods tab was open, last at {time}, and not followed since.",
     clSectionKeys: "Keys",
     clKeyColumn: "Key",
     clSizeColumn: "Size",

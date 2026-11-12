@@ -86,6 +86,30 @@ describe("the pods-on-node table", () => {
     expect(section.body).toMatchObject({ type: "table", rows: [] });
   });
 
+  /**
+   * The rows are read only while the Pods tab is open, and a Share made
+   * later from another tab, after a drain from the same page, listed the
+   * evicted pods as Running beside a live "Pods 2/110". Fails if rows
+   * nothing follows any more go out as the node's pods now.
+   */
+  it("says rows read on an earlier visit to the tab are from then", () => {
+    const section = podsOnNodeSection(
+      [],
+      null,
+      null,
+      AT,
+      t,
+      Date.UTC(2026, 10, 12, 14, 5)
+    );
+    expect(section.partial).toBe(
+      "Read while the Pods tab was open, last at 2026-11-12 14:05 UTC, and not followed since."
+    );
+    expect(podsOnNodeSection([], null, null, AT, t).partial).toBeNull();
+    expect(
+      podsOnNodeSection(undefined, null, null, AT, t, Date.now()).partial
+    ).toBeNull();
+  });
+
   it("carries the pod as a reference once the tab has read it", () => {
     const pod = {
       name: "payments-abc",

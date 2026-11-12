@@ -181,6 +181,7 @@ export default function IstioPage() {
         actions={
           <ShareScreenAction
             screen={{
+              scope: null,
               title: `Istio · ${activeTab.label}`,
               icon:
                 activeTab.id === "routes"

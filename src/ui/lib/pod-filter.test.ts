@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { narrowPods, outsideScope, podFilterOf } from "./pod-filter";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import {
+  narrowPods,
+  outsideScope,
+  podFilterOf,
+  podFilterWords,
+} from "./pod-filter";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 interface Pod {
   name: string;
@@ -52,5 +61,20 @@ describe("the Pods list narrowed to a selector", () => {
     expect(outsideScope(podFilterOf({ selector: "a=b" })!, ["net"])).toEqual([
       "*",
     ]);
+  });
+});
+
+describe("a pod filter in words", () => {
+  /** The shared file's one line for what the banner above the list says. */
+  it("names the selector and the namespaces, or every pod and every namespace", () => {
+    expect(
+      podFilterWords(
+        { text: "app=web", selector: null, namespaces: ["shop", "web"] },
+        t
+      )
+    ).toBe("Pods matching app=web in shop, web");
+    expect(
+      podFilterWords({ text: "", selector: null, namespaces: null }, t)
+    ).toBe("Every pod in every namespace");
   });
 });

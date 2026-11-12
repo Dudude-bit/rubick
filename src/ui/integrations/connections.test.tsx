@@ -34,10 +34,13 @@ vi.mock("@/lib/commands", () => ({
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
+  useCapabilityState,
   useConnectionEditor,
   useIntegrationPages,
   useIntegrations,
 } from "./index";
+import loki from "./loki";
+import prometheus from "./prometheus";
 import { useSavedConnection } from "./prometheus/saved-connection";
 
 /**
@@ -206,5 +209,60 @@ describe("saving a connection while the window moves", () => {
       "",
       false
     );
+  });
+});
+
+/**
+ * `https://user:pass@host` is the only way to send basic credentials, and
+ * the saved address was drawn whole: "from admin:S3cret@prom…" in the Usage
+ * caption of every object page, on Nodes utilisation, in the log history
+ * bar and as the first fact of the Integrations row. Fails if any reader
+ * draws the saved address without cutting what stands before the host.
+ */
+describe("a basic-auth address where it is drawn", () => {
+  const saved = {
+    url: "https://admin:S3cret@prom.example.com",
+    authType: "none" as const,
+    hasToken: false,
+    insecureTls: false,
+  };
+
+  afterEach(() => {
+    useClusterStore.setState({ isConnected: false, currentContext: null });
+  });
+
+  it("names the host alone as where a chart's numbers come from", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    vi.mocked(commands.getPrometheusConnection).mockResolvedValue(saved);
+    useClusterStore.setState({ currentContext: "prod-eu", isConnected: true });
+    const power = renderHook(() => useCapabilityState("usage.history"), {
+      wrapper,
+    });
+    await waitFor(() => expect(power.result.current.state).toBe("ready"));
+    expect(power.result.current).toMatchObject({
+      endpoint: "prom.example.com",
+    });
+  });
+
+  it.each([
+    ["Prometheus", prometheus],
+    ["Loki", loki],
+  ])("names the host alone on the %s row, answered or not", (_, vendor) => {
+    const answered = { ok: true, at: 1, latencyMs: 5, version: null } as const;
+    const silent = {
+      ok: false,
+      at: 1,
+      reason: { key: "connDidNotSayWhy" },
+    } as const;
+    for (const probe of [answered, silent]) {
+      const facts = vendor.connect!.facts(saved, probe);
+      expect(facts[0]).toEqual({ text: "prom.example.com" });
+      expect(JSON.stringify(facts)).not.toContain("S3cret");
+    }
   });
 });

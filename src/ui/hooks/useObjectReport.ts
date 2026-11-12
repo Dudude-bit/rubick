@@ -1,3 +1,4 @@
+import { useScreenCaveats } from "@/components/share/screen-share";
 import { useMemo } from "react";
 
 import type {
@@ -171,6 +172,9 @@ export function useObjectReport(
     }
   );
 
+  // What the page's own notices say of its read: an object kept after a
+  // failed re-read is old under a new capture time.
+  const caveats = useScreenCaveats();
   const capturedAt = useMemo(() => {
     void subject?.name;
     void capturing;
@@ -259,6 +263,7 @@ export function useObjectReport(
     const notRead = [
       ...new Set([
         ...(own.notRead ?? []),
+        ...(caveats?.() ?? []),
         ...unreadLines(sections),
         ...notLookedAt,
       ]),
@@ -320,6 +325,7 @@ export function useObjectReport(
     colouring,
     locale,
     href,
+    caveats,
   ]);
 
   return { report, isPending: version.isPending };

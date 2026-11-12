@@ -5,6 +5,7 @@
  * pages read, so these are where its chart, version and source actually are.
  */
 
+import { withoutCredentials } from "@/lib/hints";
 import type { CrdColumn } from "../kit";
 import {
   conditionOf,
@@ -116,7 +117,7 @@ const helmRepositoryColumns: CrdColumn[] = [
     cell: (value) => {
       if (!value) return orNone(null);
       // Truncate long URLs
-      const url = String(value);
+      const url = withoutCredentials(String(value));
       if (url.length > 50) {
         return url.substring(0, 47) + "...";
       }
