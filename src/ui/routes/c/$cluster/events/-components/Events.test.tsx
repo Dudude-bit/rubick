@@ -48,6 +48,9 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     forgetDiscovery: vi.fn(async () => {}),
     listEvents: vi.fn(async () => []),
+    // The page reads through the walk that says where it stopped; the rows
+    // are whatever a test hands `listEvents`.
+    listLatestEvents: vi.fn(),
     listCrds: vi.fn(async () => []),
     getPod: vi.fn(async () => ({ containers: [] })),
     checkListAccess: vi.fn(async () => []),
@@ -169,9 +172,16 @@ async function mount(view: "list" | "stories" = "list") {
 const asked = () =>
   listEvents.mock.calls.map(([filters]) => filters as EventFilters);
 
+const walk = { short: false };
+
 beforeEach(() => {
   listEvents.mockReset();
   listEvents.mockResolvedValue([]);
+  walk.short = false;
+  vi.mocked(commands.listLatestEvents).mockImplementation(async (filters) => ({
+    events: await commands.listEvents(filters),
+    short: walk.short,
+  }));
   // The feed as it was read before the watch, and still is where none runs.
   subscribeEventWatch.mockReset();
   subscribeEventWatch.mockRejectedValue(WATCH_REFUSED);
@@ -2214,6 +2224,65 @@ describe("what the page offers Share", () => {
     expect(sections.some((section) => section.id === "events-filters")).toBe(
       true
     );
+  });
+});
+
+describe("a feed read by a walk that stopped before the end", () => {
+  /**
+   * The API server hands events over in etcd's order, and a limited read
+   * walks four pages of them: on a scope holding more, "the latest 500" were
+   * the newest of whichever part was read. Fails if the page, or the file
+   * shared from it, calls such a read's rows the latest without saying a
+   * newer one may be missing, or says so of a walk that reached the end.
+   */
+  it("says its rows are not known to be the latest, on screen and in the shared file", async () => {
+    listEvents.mockResolvedValue(feed("prod", 3));
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    const draw = () =>
+      renderWithRouter(
+        <ScreenShareProvider>
+          <Events />
+          <Probe />
+        </ScreenShareProvider>,
+        eventsAt("list")
+      );
+    const whole = await draw();
+    await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-0"));
+    expect(screen.queryByTestId("events-feed-short")).toBeNull();
+    whole.unmount();
+
+    walk.short = true;
+    await draw();
+    expect(await screen.findByTestId("events-feed-short")).toHaveTextContent(
+      "a newer one may be missing"
+    );
+    expect(
+      collect!().find((section) => section.id === "events")?.unread
+    ).toContain("a newer one may be missing");
+  });
+
+  /**
+   * One request per namespace of the scope, and one of them cut short is
+   * enough: the join's newest are then not the scope's. Fails if the page
+   * says so only where every walk, or the one walk of a single scope, did.
+   */
+  it("says so where one namespace of several was cut short", async () => {
+    useClusterStore.setState({ namespaceScope: ["prod", "staging"] });
+    listEvents.mockImplementation(async (filters) =>
+      feed(filters?.namespace ?? "", 2)
+    );
+    vi.mocked(commands.listLatestEvents).mockImplementation(
+      async (filters) => ({
+        events: await commands.listEvents(filters),
+        short: filters?.namespace === "staging",
+      })
+    );
+    await mount();
+    expect(await screen.findByTestId("events-feed-short")).toBeInTheDocument();
   });
 });
 

@@ -100,7 +100,7 @@ import {
   useDisplaySettingsStore,
   type EventsView,
 } from "@/stores/displaySettingsStore";
-import type { EventFilters, EventInfo } from "@/generated/types";
+import type { EventFilters, EventInfo, LatestEvents } from "@/generated/types";
 import { eventsUidIn } from "@/hooks/useReadUid";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -161,7 +161,7 @@ function isWindow(value: string | undefined): value is StoryWindow {
 
 async function read(filters: EventFilters) {
   try {
-    return await commands.listEvents(filters);
+    return await commands.listLatestEvents(filters);
   } catch (err) {
     throw new Error(normalizeTauriError(err), { cause: err });
   }
@@ -404,7 +404,7 @@ export function Events() {
   // would starve the noisy namespace and go unused in the quiet one; the
   // join is cut back to the limit below. It costs one request per selected
   // namespace, which is what `SCOPE_LIMIT` bounds.
-  const parts = useLiveQueries<EventInfo[]>({
+  const parts = useLiveQueries<LatestEvents>({
     refresh: "fast",
     // `placeholderData: keepPreviousData` is not missing from these: it does
     // nothing in a fan-out. `useQueries` matches observers by query hash, so
@@ -434,11 +434,16 @@ export function Events() {
           ? answers.some((part) => part !== undefined)
             ? // Newest first, the order each part arrived in and the one the
               // cut below depends on.
-              answers.flatMap((part) => part ?? []).sort(byNewest)
+              answers.flatMap((part) => part?.events ?? []).sort(byNewest)
             : undefined
-          : single.data,
+          : single.data?.events,
     [polling, several, answers, single.data]
   );
+  // A walk that stopped before the collection's end read the newest of an
+  // arbitrary part of it: the feed's "latest" is then not known to be.
+  const readShort = several
+    ? answers.some((part) => part?.short)
+    : (single.data?.short ?? false);
   // A watch that failed leaves its rows on screen until a poll answers after
   // them: the poll that drew the page ahead of the watch is older than they are.
   const polledAt = several
@@ -509,7 +514,7 @@ export function Events() {
     if (!windowFull) return null;
     return !fromWatch && several && limit !== null
       ? readFromOf(
-          answers.map((part) => part ?? NO_EVENTS),
+          answers.map((part) => part?.events ?? NO_EVENTS),
           limit
         )
       : readFromOf([pool]);
@@ -640,12 +645,15 @@ export function Events() {
   );
   const listed = view === "list" && !showSkeleton && !(failed && !stale);
 
+  const short = !fromWatch && readShort && !nothingRead;
   useShareSection("events", () => [
     eventsSection(
       counted,
       failed
         ? t("hints", "notReadEvents", { reason: errorToShow(failed) })
-        : null,
+        : short
+          ? t("empty", "eventsFeedReadShort")
+          : null,
       true
     ),
     eventsFiltersSection(
@@ -885,6 +893,14 @@ export function Events() {
                 several ? parts.refetch() : void single.refetch()
               }
             />
+          )}
+          {short && !showSkeleton && (
+            <p
+              className="px-1.5 py-1 text-xs text-warn"
+              data-testid="events-feed-short"
+            >
+              {t("empty", "eventsFeedReadShort")}
+            </p>
           )}
           {showSkeleton ? (
             <EventsSkeleton />
