@@ -101,6 +101,115 @@ describe("the claim is resolved, never trusted", () => {
   });
 });
 
+describe("an Application outside Argo's own namespace", () => {
+  const web = (namespace: string) =>
+    application({
+      name: "web",
+      namespace,
+      resources: [
+        { group: "apps", kind: "Deployment", namespace: "prod", name: "web" },
+      ],
+    });
+  const deployment = (over: Partial<DeliveryQuery>) =>
+    api({ name: "web", namespace: "prod", annotations: {}, ...over });
+
+  /**
+   * Argo names such an Application `<namespace>_<name>` on what it applies.
+   * Looked up whole, `team-a_web` matched nothing, so the Deployment read
+   * "no Application by that name exists" and "this apply stands" while
+   * self-heal reverted the edit. Fails if the namespace is not cut off the
+   * name, by either tracking method.
+   */
+  it.each([
+    [
+      "the tracking annotation",
+      {
+        annotations: {
+          "argocd.argoproj.io/tracking-id":
+            "team-a_web:apps/Deployment:prod/web",
+        },
+      },
+    ],
+    [
+      "the instance label",
+      { labels: { "argocd.argoproj.io/instance": "team-a_web" } },
+    ],
+  ])("is found from %s", async (_how, claim) => {
+    listCustomResources.mockResolvedValue([web("team-a")]);
+    const [answer] = await ownerOf([deployment(claim)]);
+    if (answer?.state !== "delivered") throw new Error("not delivered");
+    expect(answer.source.owner).toMatchObject({
+      name: "web",
+      namespace: "team-a",
+    });
+    expect(answer.source.drift).toBe("reverted");
+  });
+
+  /**
+   * The namespace in the claim is part of the name. Fails if a namesake in
+   * another namespace, listing an object of the same name, answers for it.
+   */
+  it("is not answered for by a namesake in another namespace", async () => {
+    listCustomResources.mockResolvedValue([web("team-b")]);
+    const [answer] = await ownerOf([
+      deployment({ labels: { "argocd.argoproj.io/instance": "team-a_web" } }),
+    ]);
+    expect(answer).toMatchObject({
+      state: "claimed",
+      claim: "team-a_web",
+      owner: null,
+    });
+  });
+});
+
+describe("the label Argo shares with every Helm chart", () => {
+  const labelled = (instance: string) =>
+    api({
+      annotations: {},
+      labels: { "app.kubernetes.io/instance": instance },
+    });
+
+  /**
+   * Argo CD 2.x from the plain manifests tracks by `app.kubernetes.io/instance`
+   * and writes neither the annotation nor its own label. Every object it
+   * managed read "not delivered" and no dialog warned. Fails if that key
+   * stops finding the Application that lists the object.
+   */
+  it("finds the Application that lists the object", async () => {
+    listCustomResources.mockResolvedValue([application()]);
+    const [answer] = await ownerOf([labelled("shop")]);
+    if (answer?.state !== "delivered") throw new Error("not delivered");
+    expect(answer.source.owner.name).toBe("shop");
+  });
+
+  /**
+   * A Helm release called `shop` carries the same label. Fails if that is
+   * called a claim on Argo: every chart-installed object would turn into
+   * "labelled, not listed".
+   */
+  it.each([
+    [
+      "an Application of that name does not list it",
+      [{ kind: "Deployment", name: "other" }],
+    ],
+    ["no Application has that name", null],
+  ])("says nothing where %s", async (_why, resources) => {
+    listCustomResources.mockResolvedValue(
+      resources ? [application({ resources })] : []
+    );
+    expect(await ownerOf([labelled("shop")])).toEqual([null]);
+  });
+
+  /** Fails if a chart's own label is read before the annotation Argo wrote. */
+  it("gives way to Argo's own annotation", async () => {
+    listCustomResources.mockResolvedValue([application()]);
+    const [answer] = await ownerOf([
+      api({ labels: { "app.kubernetes.io/instance": "some-release" } }),
+    ]);
+    expect(answer?.state).toBe("delivered");
+  });
+});
+
 describe("what a five-hundred-row page costs", () => {
   /**
    * One read for the whole page, whatever its length. A per-object entry

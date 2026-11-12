@@ -15,8 +15,9 @@
  * states it on its own row.
  */
 
+import { commands } from "@/lib/commands";
 import type { RelatedObject } from "../registry";
-import { fetchApplications, GROUP } from "./data";
+import { fetchApplications, GROUP, PROJECTS_CRD } from "./data";
 import { destinationCluster, type ArgoApp, type ArgoResource } from "./model";
 
 /**
@@ -79,13 +80,20 @@ function said(
  * so "why did this refuse to sync to that namespace" is answered there and
  * nowhere else.
  */
-function project(app: ArgoApp): RelatedObject {
+async function project(app: ArgoApp): Promise<RelatedObject> {
+  // An AppProject lives in Argo's own namespace. An Application may live in
+  // any other and does not say which that is, so the projects are asked.
+  const named = (
+    await commands.listCustomResources(PROJECTS_CRD, null, null, null)
+  ).filter((candidate) => candidate.name === app.project);
+  const found =
+    named.find((candidate) => candidate.namespace === app.namespace) ??
+    named[0];
   return {
     relation: "relGovernedBy",
     kind: "AppProject",
     name: app.project,
-    // An AppProject lives beside the Application, in Argo's own namespace.
-    namespace: app.namespace,
+    namespace: found?.namespace ?? app.namespace,
     group: GROUP,
   };
 }
@@ -112,7 +120,7 @@ export async function relatedTo(subject: {
 
   const where = destinationCluster(app);
   return [
-    project(app),
+    await project(app),
     ...app.resources.map((resource) => managed(resource, where)),
   ];
 }

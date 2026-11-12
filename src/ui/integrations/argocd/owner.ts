@@ -32,8 +32,14 @@ import {
 import { APPLICATIONS_CRD } from "./data";
 import { readApplication, type ArgoApp, type ArgoResource } from "./model";
 
-/** What Argo writes on every object it applies. */
+/** What Argo writes on every object it applies, where its Helm chart set the key. */
 export const INSTANCE_LABEL = "argocd.argoproj.io/instance";
+/**
+ * The key Argo itself defaults to with label tracking, as installed from its
+ * plain manifests. Every Helm chart writes its release name under it too, so
+ * alone it finds a candidate and is never a claim: see {@link Claim.own}.
+ */
+const SHARED_INSTANCE_LABEL = "app.kubernetes.io/instance";
 /**
  * The newer form, which carries the whole identity rather than just a name:
  * `<app>:<group>/<kind>:<namespace>/<name>`. Preferred where present, because
@@ -62,8 +68,8 @@ export async function ownerOf(
     await commands.listCustomResources(APPLICATIONS_CRD, null, null, null)
   ).map(readApplication);
 
-  // Argo may run its Applications in any namespace and an object never records
-  // which, so a claimed name is every Application answering to it.
+  // A claim names the namespace of an Application outside Argo's own, and
+  // only then: a bare name is every Application answering to it.
   const byName = new Map<string, ArgoApp[]>();
   for (const app of applications) {
     const found = byName.get(app.name);
@@ -87,7 +93,9 @@ export async function ownerOf(
     const claim = claims[position];
     if (!claim) return null;
 
-    const candidates = byName.get(claim) ?? [];
+    const candidates = (byName.get(claim.name) ?? []).filter(
+      (app) => claim.namespace === null || app.namespace === claim.namespace
+    );
     const wanted = deliveryKey({
       group: "",
       kind: object.kind,
@@ -100,11 +108,14 @@ export async function ownerOf(
         return { state: "delivered", source: sourceOf(app, resource) } as const;
       }
     }
+    // A chart's release label that no Application confirms says nothing
+    // about Argo, and calling it disowned would mark every Helm install.
+    if (!claim.own) return null;
     return {
       state: "claimed",
       vendor: VENDOR,
       vendorId: VENDOR_ID,
-      claim,
+      claim: claim.said,
       ownerKind: OWNER_KIND,
       owner: candidates[0] ? ownerRef(candidates[0]) : null,
     } as const;
@@ -188,12 +199,32 @@ function sourceOf(app: ArgoApp, resource: ArgoResource) {
   } as const;
 }
 
-/** The Application an object says applied it, from the newer form first. */
-function claimedApplication(object: DeliveryQuery): string | null {
-  const tracking = object.annotations[TRACKING_ANNOTATION];
-  if (tracking) {
-    const name = tracking.split(":")[0];
-    if (name) return name;
-  }
-  return object.labels[INSTANCE_LABEL] ?? null;
+interface Claim {
+  /** The instance name as the object spells it. */
+  said: string;
+  name: string;
+  /** Where the Application is, for one outside Argo's own namespace. */
+  namespace: string | null;
+  /** Written under a key only Argo uses, so unconfirmed it is still a claim. */
+  own: boolean;
+}
+
+/**
+ * The Application an object says applied it, from the newer form first.
+ *
+ * Argo names an Application outside its own namespace `<namespace>_<name>`,
+ * and no Kubernetes name holds an underscore, so the first one divides them.
+ */
+function claimedApplication(object: DeliveryQuery): Claim | null {
+  const tracking = object.annotations[TRACKING_ANNOTATION]?.split(":")[0];
+  const own = tracking || object.labels[INSTANCE_LABEL];
+  const said = own || object.labels[SHARED_INSTANCE_LABEL];
+  if (!said) return null;
+  const cut = said.indexOf("_");
+  return {
+    said,
+    name: said.slice(cut + 1),
+    namespace: cut === -1 ? null : said.slice(0, cut),
+    own: Boolean(own),
+  };
 }
