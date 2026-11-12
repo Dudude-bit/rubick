@@ -207,7 +207,7 @@ pub async fn list_service_backing(
     let context = state.get_current_context().unwrap_or_default();
     crate::client::clock::timed(&state.perf, "listServiceBacking", async {
         let read_at = chrono::Utc::now();
-        let (services, published) = published_in(&ctx, state.discovery(&context)).await?;
+        let (services, published, _) = published_in(&ctx, state.discovery(&context)).await?;
         Ok(ServiceBacking {
             services: services.iter().map(ServiceInfo::from).collect(),
             published,
@@ -225,7 +225,8 @@ pub struct ServiceHealthInputs {
     pub groups: Vec<ServiceHealthGroup>,
     /// The /24 (IPv4) or /64 (IPv6) of every endpoint address here: a
     /// superset of any one Service's, so an egress ipBlock that misses them
-    /// all misses its pods.
+    /// all misses its pods. Empty past [`NETWORKS_KEPT`], as where there is
+    /// no address: no block is then judged against it.
     pub networks: Vec<String>,
 }
 
@@ -299,8 +300,8 @@ async fn health_inputs_in(
         client,
         namespace: reach,
     };
-    let (services, published) = published_in(&ctx, discovery).await?;
-    Ok(health_inputs_of(&services, published))
+    let (services, published, networks) = published_in(&ctx, discovery).await?;
+    Ok(health_inputs_of(&services, published, &networks))
 }
 
 /// The slices say that no address of a Service is ready, or that it has
@@ -455,15 +456,10 @@ fn explained(
 fn health_inputs_of(
     services: &[Service],
     published: Vec<ServicePublished>,
+    networks: &Networks,
 ) -> Vec<ServiceHealthInputs> {
-    let mut by_namespace: BTreeMap<String, (Vec<ServiceHealthGroup>, BTreeSet<String>)> =
-        BTreeMap::new();
+    let mut by_namespace: BTreeMap<String, Vec<ServiceHealthGroup>> = BTreeMap::new();
     for (service, published) in services.iter().zip(published) {
-        let networks = published
-            .endpoints
-            .iter()
-            .filter_map(|endpoint| endpoint.address.as_deref()?.parse().ok().map(network_of))
-            .collect::<Vec<_>>();
         let spec = service.spec.as_ref();
         let read = ServiceHealthGroup {
             names: vec![service.name_any()],
@@ -490,10 +486,9 @@ fn health_inputs_of(
                 .door
                 .filter(|door| !matches!(door, PolicyDoor::Open)),
         };
-        let (groups, seen) = by_namespace
+        let groups = by_namespace
             .entry(service.namespace().unwrap_or_default())
             .or_default();
-        seen.extend(networks);
         match groups.iter_mut().find(|group| group.reads_like(&read)) {
             Some(group) => group.names.extend(read.names),
             None => groups.push(read),
@@ -501,10 +496,14 @@ fn health_inputs_of(
     }
     by_namespace
         .into_iter()
-        .map(|(namespace, (groups, networks))| ServiceHealthInputs {
+        .map(|(namespace, groups)| ServiceHealthInputs {
+            networks: networks
+                .get(&namespace)
+                .filter(|here| here.len() <= NETWORKS_KEPT)
+                .map(|here| here.iter().cloned().collect())
+                .unwrap_or_default(),
             namespace,
             groups,
-            networks: networks.into_iter().collect(),
         })
         .collect()
 }
@@ -525,7 +524,7 @@ fn network_of(address: std::net::IpAddr) -> String {
 async fn published_in(
     ctx: &ResourceContext,
     discovery: Discovery<'_>,
-) -> Result<(Vec<Service>, Vec<ServicePublished>)> {
+) -> Result<(Vec<Service>, Vec<ServicePublished>, Networks)> {
     let params = ListParams::default();
     let services_api = ctx.namespaced_or_cluster_api::<Service>();
     let slices_api = ctx.namespaced_or_cluster_api::<EndpointSlice>();
@@ -568,7 +567,7 @@ async fn published_in(
             })
             .collect();
         let published = with_unready_cause(&ctx.client, &services, published).await;
-        return Ok((services, published));
+        return Ok((services, published, legacy_networks(&legacy)));
     };
 
     let published = published_from_slices(&services, &slices.items)
@@ -579,7 +578,54 @@ async fn published_in(
         })
         .collect();
     let published = with_unready_cause(&ctx.client, &services, published).await;
-    Ok((services, published))
+    Ok((services, published, networks_of(&slices.items)))
+}
+
+/// The /24 (IPv4) or /64 (IPv6) of every address listed, by namespace.
+type Networks = BTreeMap<String, BTreeSet<String>>;
+
+/// The most networks one namespace's answer names. Pods on four hundred
+/// nodes sit in four hundred of them, and a hundred such namespaces would
+/// put 700 KiB of addresses into one answer; past this none are sent.
+const NETWORKS_KEPT: usize = 64;
+
+/// Every address the slices list, ready or not. Read off the slices and not
+/// off what each Service publishes: that is cut to one address apiece before
+/// it gets here, and one address is not where a Service's pods sit.
+fn networks_of(slices: &[EndpointSlice]) -> Networks {
+    let mut networks = Networks::new();
+    for slice in slices {
+        let addresses = slice
+            .endpoints
+            .iter()
+            .flat_map(|endpoint| &endpoint.addresses)
+            .filter_map(|address| address.parse().ok());
+        networks
+            .entry(slice.namespace().unwrap_or_default())
+            .or_default()
+            .extend(addresses.map(network_of));
+    }
+    networks
+}
+
+fn legacy_networks(endpoints: &[Endpoints]) -> Networks {
+    let mut networks = Networks::new();
+    for object in endpoints {
+        let addresses = object
+            .subsets
+            .iter()
+            .flatten()
+            .flat_map(|subset| {
+                let ready = subset.addresses.iter().flatten();
+                ready.chain(subset.not_ready_addresses.iter().flatten())
+            })
+            .filter_map(|address| address.ip.parse().ok());
+        networks
+            .entry(object.namespace().unwrap_or_default())
+            .or_default()
+            .extend(addresses.map(network_of));
+    }
+    networks
 }
 
 fn published_from_slices(services: &[Service], slices: &[EndpointSlice]) -> Vec<ServicePublished> {
@@ -918,7 +964,11 @@ mod tests {
             published: published.clone(),
             read_at: chrono::Utc::now(),
         });
-        let compact = wire_len(&Scoped::whole(health_inputs_of(&services, published)));
+        let compact = wire_len(&Scoped::whole(health_inputs_of(
+            &services,
+            published,
+            &networks_of(&slices),
+        )));
         eprintln!(
             "2000 Services: {} B per Service whole, {} B compact, {compact} B in one message",
             whole / 2000,
@@ -936,7 +986,11 @@ mod tests {
     fn two_thousand_services_with_nothing_ready_stay_under_the_ipc_limit() {
         let (services, slices) = synthetic(2000, |_| true);
         let published = published_from_slices(&services, &slices);
-        let compact = wire_len(&Scoped::whole(health_inputs_of(&services, published)));
+        let compact = wire_len(&Scoped::whole(health_inputs_of(
+            &services,
+            published,
+            &networks_of(&slices),
+        )));
         eprintln!("2000 Services, none ready: {compact} B in one message");
         assert!(compact < IPC_LIMIT_BYTES, "{compact} bytes");
     }
@@ -952,7 +1006,7 @@ mod tests {
         services[1].spec.as_mut().expect("a spec").selector = None;
         services[2].spec.as_mut().expect("a spec").type_ = None;
         let published = published_from_slices(&services, &slices);
-        let inputs = health_inputs_of(&services, published.clone());
+        let inputs = health_inputs_of(&services, published.clone(), &networks_of(&slices));
 
         assert_eq!(inputs.len(), 50);
         let named: usize = inputs
@@ -998,7 +1052,7 @@ mod tests {
         let (services, mut slices) = synthetic(1, |_| false);
         slices[0].ports = None;
         let published = published_from_slices(&services, &slices);
-        let inputs = health_inputs_of(&services, published);
+        let inputs = health_inputs_of(&services, published, &networks_of(&slices));
 
         let stop = serde_json::to_value(&inputs[0].groups[0].stop).expect("json");
         assert_eq!(stop["reason"], "publishesNothing");
@@ -1020,7 +1074,7 @@ mod tests {
         let team = |door: PolicyDoor| {
             let mut published = published.clone();
             published[0].door = Some(door);
-            health_inputs_of(&services, published)
+            health_inputs_of(&services, published, &networks_of(&slices))
                 .into_iter()
                 .find(|ns| ns.namespace == "team-00")
                 .expect("team-00")
@@ -1076,7 +1130,7 @@ mod tests {
             ],
             ..published[0].clone()
         };
-        let groups = health_inputs_of(&services, published)
+        let groups = health_inputs_of(&services, published, &networks_of(&slices))
             .into_iter()
             .find(|ns| ns.namespace == "team-00")
             .expect("team-00")
@@ -1087,26 +1141,44 @@ mod tests {
     }
 
     /// An egress ipBlock is judged against the networks a namespace's pods
-    /// sit in. Fails if an address is dropped, kept whole, or counted under
-    /// another namespace.
+    /// sit in, and they were read off what each Service publishes after it
+    /// was cut to its first address: a block letting the controller reach
+    /// the pods in a second subnet read as holding it back, in red. Fails if
+    /// an address past a Service's first is dropped, one is kept whole, or
+    /// counted under another namespace.
     #[test]
     fn the_compact_answer_keeps_the_networks_each_namespace_s_endpoints_sit_in() {
-        let (services, slices) = synthetic(51, |_| false);
-        let mut published = published_from_slices(&services, &slices);
-        let at = |address: &str| crate::resources::PublishedEndpoint {
-            address: Some(address.to_string()),
-            target: None,
-            ready: true,
-            serving: true,
-            terminating: false,
-            node_name: None,
-            zone: None,
-            hint_zones: vec![],
-            ports: vec![8080],
+        let slice = |namespace: &str, addresses: &[&str]| -> EndpointSlice {
+            serde_json::from_value(serde_json::json!({
+                "metadata": {
+                    "name": "web-x", "namespace": namespace,
+                    "labels": { "kubernetes.io/service-name": "web" },
+                },
+                "addressType": "IPv4",
+                "ports": [{ "port": 8080, "protocol": "TCP" }],
+                "endpoints": addresses
+                    .iter()
+                    .map(|address| serde_json::json!({
+                        "addresses": [address], "conditions": { "ready": true },
+                    }))
+                    .collect::<Vec<_>>(),
+            }))
+            .expect("a slice")
         };
-        published[0].endpoints = vec![at("10.42.1.7"), at("10.42.1.9")];
-        published[50].endpoints = vec![at("10.42.3.4"), at("fd00:10:42:3::5")];
-        let networks = health_inputs_of(&services, published)
+        let service: Service = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web", "namespace": "team-00" },
+            "spec": { "selector": { "app": "web" }, "ports": [{ "port": 8080 }] },
+        }))
+        .expect("a Service");
+        let services = vec![service];
+        let slices = vec![
+            slice("team-00", &["10.42.1.7", "10.42.1.9", "10.42.3.4"]),
+            slice("team-00", &["fd00:10:42:3::5"]),
+            slice("team-01", &["10.42.9.1"]),
+        ];
+        let published = published_from_slices(&services, &slices);
+        assert_eq!(published[0].endpoints.len(), 1, "cut to one address");
+        let networks = health_inputs_of(&services, published, &networks_of(&slices))
             .into_iter()
             .find(|ns| ns.namespace == "team-00")
             .expect("team-00")
@@ -1114,6 +1186,53 @@ mod tests {
         assert_eq!(
             networks,
             vec!["10.42.1.0/24", "10.42.3.0/24", "fd00:10:42:3::/64"]
+        );
+    }
+
+    /// One answer carries every namespace, and a namespace on every node
+    /// names a network per node. Fails if a namespace past the cap still
+    /// sends them, or sends some of them: a block is judged against all of a
+    /// namespace's networks or none.
+    #[test]
+    fn a_namespace_in_more_networks_than_one_answer_holds_sends_none() {
+        let service: Service = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web", "namespace": "team-00" },
+            "spec": { "selector": { "app": "web" } },
+        }))
+        .expect("a Service");
+        let spread = |count: usize| -> Networks {
+            let here = (0..count).map(|node| format!("10.{}.{}.0/24", node / 256, node % 256));
+            [("team-00".to_string(), here.collect())].into()
+        };
+        let sent = |networks: &Networks| {
+            let published = published_from_slices(std::slice::from_ref(&service), &[]);
+            health_inputs_of(std::slice::from_ref(&service), published, networks)
+                .remove(0)
+                .networks
+                .len()
+        };
+        assert_eq!(sent(&spread(NETWORKS_KEPT)), NETWORKS_KEPT);
+        assert_eq!(sent(&spread(NETWORKS_KEPT + 1)), 0);
+    }
+
+    /// A cluster below 1.21 answers from the legacy object, where the same
+    /// cut happens. Fails if its not-ready addresses or a second subset's
+    /// are left out of the networks.
+    #[test]
+    fn the_legacy_objects_addresses_are_all_counted_among_the_networks() {
+        let endpoints: Endpoints = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web", "namespace": "team-00" },
+            "subsets": [
+                { "addresses": [{ "ip": "10.42.1.7" }],
+                  "notReadyAddresses": [{ "ip": "10.42.2.7" }] },
+                { "addresses": [{ "ip": "10.42.3.7" }] },
+            ],
+        }))
+        .expect("an Endpoints");
+        let networks = legacy_networks(&[endpoints]);
+        assert_eq!(
+            networks["team-00"].iter().collect::<Vec<_>>(),
+            ["10.42.1.0/24", "10.42.2.0/24", "10.42.3.0/24"]
         );
     }
 
@@ -1738,7 +1857,7 @@ mod tests {
         })
         .await;
         let served = ServedIndex::default();
-        let (services, published) = published_in(
+        let (services, published, _) = published_in(
             &ResourceContext {
                 client,
                 namespace: Some("team-checkout".to_string()),

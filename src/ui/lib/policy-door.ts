@@ -109,7 +109,7 @@ export const policyNamesOf = (stop: PolicyStop): string[] =>
 
 /** What the verdict reads of a Service: its door, the ports and addresses its pods take connections on, and the stop already said about it. */
 export type DoorSubject = Pick<ServicePublished, "service" | "door" | "ports"> &
-  Partial<Pick<ServicePublished, "endpoints">> & {
+  Partial<Pick<ServicePublished, "endpoints" | "whole">> & {
     stop?: ChainStop | null;
     /** The networks its pods sit in, where those came instead of the addresses. */
     networks?: string[];
@@ -411,11 +411,13 @@ function clientVerdict(
   );
   if (refused) return unsure("egressUnread", [], refused.message);
 
+  // An answer cut to one address does not say where the other pods sit.
+  const addresses = published.whole ? published.endpoints : undefined;
   const to: Landing = {
     namespace: published.service.namespace ?? "",
     networks:
       published.networks ??
-      published.endpoints?.flatMap(({ address }) =>
+      addresses?.flatMap(({ address }) =>
         address === null
           ? []
           : [`${address}/${address.includes(":") ? 128 : 32}`]

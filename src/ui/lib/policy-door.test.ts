@@ -624,6 +624,25 @@ describe("whether a controller's own egress policies let it reach a Service's po
     ).toMatchObject({ state: "refused" });
   });
 
+  /**
+   * Every answer but the Service's own page carries one address of it, and
+   * a block was judged against that one: pods in two subnets and a block
+   * that lets the controller reach the second read red "holds back". Fails
+   * if a block that misses the one address an answer kept reads as missing
+   * every pod, or if an answer that kept them all stops being judged.
+   */
+  it("does not judge an ipBlock against the one address a cut answer kept", () => {
+    const elsewhere = [out([block("10.42.9.0/24")])];
+    expect(judged(elsewhere, { ...reached(), whole: false })).toMatchObject({
+      state: "unsure",
+      why: "egressIpBlock",
+    });
+    expect(judged(elsewhere, { ...reached(), whole: true })).toMatchObject({
+      state: "refused",
+      stop: { reason: "policyHoldsBack" },
+    });
+  });
+
   it("cannot say for a controller on the node's network, nor for a port the backend does not pick", () => {
     const shut = [holding([])];
     expect(
