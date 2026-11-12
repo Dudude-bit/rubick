@@ -234,7 +234,6 @@ impl From<&Ingress> for IngressInfo {
 
         // Extract labels and annotations
         let labels = ingress.metadata.labels.clone().unwrap_or_default();
-        let annotations = ingress.metadata.annotations.clone().unwrap_or_default();
         let (class_name, class_annotated) = ingress_class(ingress);
 
         Self {
@@ -250,7 +249,7 @@ impl From<&Ingress> for IngressInfo {
             tls_configs,
             has_catch_all_tls,
             labels,
-            annotations,
+            annotations: crate::resources::annotations_of(&ingress.metadata),
             created_at: ingress
                 .metadata
                 .creation_timestamp

@@ -81,7 +81,7 @@ impl From<&PersistentVolume> for PersistentVolumeInfo {
                 .unwrap_or_default(),
             reason: status.and_then(|s| s.reason.clone()),
             labels: pv.labels().clone(),
-            annotations: pv.annotations().clone(),
+            annotations: crate::resources::annotations_of(&pv.metadata),
             created_at: pv.metadata.creation_timestamp.to_rfc3339_opt(),
         }
     }
@@ -145,7 +145,7 @@ impl From<&PersistentVolumeClaim> for PersistentVolumeClaimInfo {
             access_modes,
             storage_class: spec.and_then(|s| s.storage_class_name.clone()),
             labels: pvc.labels().clone(),
-            annotations: pvc.annotations().clone(),
+            annotations: crate::resources::annotations_of(&pvc.metadata),
             created_at: pvc.metadata.creation_timestamp.to_rfc3339_opt(),
         }
     }
@@ -194,7 +194,7 @@ impl From<&StorageClass> for StorageClassInfo {
             is_default,
             parameters: sc.parameters.clone().unwrap_or_default(),
             labels: sc.labels().clone(),
-            annotations: sc.annotations().clone(),
+            annotations: crate::resources::annotations_of(&sc.metadata),
             created_at: sc.metadata.creation_timestamp.to_rfc3339_opt(),
         }
     }

@@ -28,4 +28,4 @@ pub use namespaced::{
 pub use params::{build_label_selector, build_list_params};
 pub(crate) use scope::list_in_scope;
 pub use scope::{across, api_in, gathered, infos_in, reaches, scope_of, Scoped, UnreadNamespace};
-pub use yaml::clean_yaml_for_editor;
+pub use yaml::editor_yaml;

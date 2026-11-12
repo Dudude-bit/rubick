@@ -1,5 +1,7 @@
 //! Conversions from kube types to the frontend-facing structs.
 
+use std::collections::BTreeMap;
+
 use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
 use kube::api::DynamicObject;
 use kube::ResourceExt;
@@ -131,12 +133,7 @@ impl From<&CustomResourceDefinition> for CrdDetailInfo {
             short_names: names.short_names.clone().unwrap_or_default(),
             categories: names.categories.clone().unwrap_or_default(),
             labels: crd.labels().clone(),
-            annotations: crd
-                .annotations()
-                .iter()
-                .filter(|(k, _)| !k.starts_with("kubectl.kubernetes.io"))
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
+            annotations: without_kubectl(crate::resources::annotations_of(&crd.metadata)),
             conditions,
             created_at: crd.creation_timestamp().map(|t| t.moment()),
             accepted_names: accepted,
@@ -155,10 +152,16 @@ struct CommonResourceFields {
     kind: String,
     spec: serde_json::Value,
     status: Option<serde_json::Value>,
-    labels: std::collections::BTreeMap<String, String>,
-    annotations: std::collections::BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
+    annotations: BTreeMap<String, String>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
     owner_references: Vec<OwnerReferenceInfo>,
+}
+
+/// Annotations without kubectl's own bookkeeping, which these pages leave out.
+fn without_kubectl(mut annotations: BTreeMap<String, String>) -> BTreeMap<String, String> {
+    annotations.retain(|key, _| !key.starts_with("kubectl.kubernetes.io"));
+    annotations
 }
 
 fn extract_common_fields(obj: &DynamicObject) -> CommonResourceFields {
@@ -200,12 +203,7 @@ fn extract_common_fields(obj: &DynamicObject) -> CommonResourceFields {
             .unwrap_or(serde_json::Value::Null),
         status: obj.data.get("status").cloned(),
         labels: obj.labels().clone(),
-        annotations: obj
-            .annotations()
-            .iter()
-            .filter(|(k, _)| !k.starts_with("kubectl.kubernetes.io"))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect(),
+        annotations: without_kubectl(crate::resources::annotations_of(&obj.metadata)),
         created_at: obj.creation_timestamp().map(|t| t.moment()),
         owner_references,
     }
@@ -232,6 +230,9 @@ pub fn dynamic_object_to_custom_resource_info(obj: &DynamicObject) -> CustomReso
 
 pub(super) fn dynamic_object_to_detail_info(obj: &DynamicObject) -> CustomResourceDetailInfo {
     let f = extract_common_fields(obj);
+    // A kind that keeps a key map at the top level is judged as a Secret is.
+    let mut rest = obj.data.clone();
+    crate::resources::redact_private_keys(&mut rest);
     CustomResourceDetailInfo {
         name: f.name,
         namespace: f.namespace,
@@ -247,8 +248,7 @@ pub(super) fn dynamic_object_to_detail_info(obj: &DynamicObject) -> CustomResour
         owner_references: f.owner_references,
         finalizers: obj.metadata.finalizers.clone().unwrap_or_default(),
         resource_version: obj.metadata.resource_version.clone(),
-        fields: obj
-            .data
+        fields: rest
             .as_object()
             .into_iter()
             .flatten()
@@ -301,5 +301,37 @@ mod tests {
         );
         assert_eq!(detail.fields["addressType"], json!("IPv4"));
         assert_eq!(detail.spec, serde_json::Value::Null);
+    }
+
+    /// A custom resource's page and peek are built from this, beside the
+    /// YAML tab that withholds the same key. Fails if the record a tool
+    /// keeps in an annotation, or a key map at the top level, carries it.
+    #[test]
+    fn a_custom_resource_is_handed_over_without_a_private_key() {
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let original = json!({ "kind": "Bundle", "data": { "client.key": KEY } });
+        let obj: DynamicObject = serde_json::from_value(json!({
+            "apiVersion": "demo.io/v1",
+            "kind": "Bundle",
+            "metadata": {
+                "name": "edge",
+                "annotations": { "kapp.k14s.io/original": original.to_string(), "team": "edge" },
+            },
+            "data": { "client.key": KEY, "ca.crt": "not a key" },
+        }))
+        .expect("an object this test wrote");
+
+        let row = dynamic_object_to_custom_resource_info(&obj);
+        let detail = dynamic_object_to_detail_info(&obj);
+        for annotations in [&row.annotations, &detail.annotations] {
+            assert_eq!(annotations["team"], "edge");
+            assert!(annotations["kapp.k14s.io/original"].contains("\"client.key\":\"<withheld"));
+            assert!(!annotations["kapp.k14s.io/original"].contains("PRIVATE KEY"));
+        }
+        assert_eq!(
+            detail.fields["data"]["client.key"],
+            crate::resources::WITHHELD_MARKER
+        );
+        assert_eq!(detail.fields["data"]["ca.crt"], "not a key");
     }
 }

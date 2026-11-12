@@ -1,5 +1,6 @@
 import { TextSkeleton } from "@/components/ui/skeleton";
 import { YamlEditor, YamlEditorAction } from "../-yaml";
+import { WithheldCopies } from "../-yaml/WithheldCopies";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { Copy } from "lucide-react";
 import { useCallback } from "react";
@@ -77,6 +78,7 @@ export function YamlTabContent({
           />
         </div>
       </div>
+      <WithheldCopies yaml={yaml} />
       {isYamlLoading ? (
         <div className="min-h-0 flex-1 overflow-hidden border-t border-hair p-4">
           <TextSkeleton lines={18} />

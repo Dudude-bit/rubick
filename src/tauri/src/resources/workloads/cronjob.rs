@@ -121,7 +121,7 @@ impl From<&CronJob> for CronJobDetailInfo {
             pod_resources: template.pod_resources,
             replica: template.replica,
             labels: cj.labels().clone(),
-            annotations: cj.annotations().clone(),
+            annotations: crate::resources::annotations_of(&cj.metadata),
             owner_references: extract_owner_references(cj.metadata.owner_references.as_ref()),
             created_at: cj.creation_timestamp().to_rfc3339_opt(),
         }

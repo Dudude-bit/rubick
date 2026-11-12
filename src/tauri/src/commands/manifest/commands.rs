@@ -1,6 +1,6 @@
 //! Tauri commands for manifest validate / apply / delete / get.
 
-use crate::commands::helpers::ResourceContext;
+use crate::commands::helpers::{editor_yaml, ResourceContext};
 use crate::error::{Error, Result};
 use crate::state::AppState;
 use kube::api::{Patch, PatchParams};
@@ -119,17 +119,6 @@ enum Live {
     /// "would be created" tells a person they are about to make something
     /// that already exists.
     Unread(String),
-}
-
-/// The YAML the editor would show for this object: private keys redacted,
-/// server bookkeeping stripped. The same path `get_manifest` takes, so the
-/// two sides of the diff are cleaned alike and a Secret stays a Secret.
-fn editor_yaml(object: &kube::core::DynamicObject) -> Result<String> {
-    let mut value =
-        serde_json::to_value(object).map_err(|e| Error::Serialization(e.to_string()))?;
-    crate::resources::redact_private_keys(&mut value);
-    let yaml = serde_yaml::to_string(&value).map_err(|e| Error::Serialization(e.to_string()))?;
-    crate::commands::helpers::clean_yaml_for_editor(&yaml)
 }
 
 /// How the dry run itself ended when it did not end in an object.
@@ -434,13 +423,7 @@ async fn manifest_of(
     // Every detail page's YAML tab comes through here, Secrets included, and
     // base64 is not a control: `tls.key` in a manifest is one `base64 -d`
     // from being the key.
-    let mut object =
-        serde_json::to_value(&resource).map_err(|e| Error::Serialization(e.to_string()))?;
-    crate::resources::redact_private_keys(&mut object);
-
-    let yaml = serde_yaml::to_string(&object).map_err(|e| Error::Serialization(e.to_string()))?;
-
-    crate::commands::helpers::clean_yaml_for_editor(&yaml)
+    editor_yaml(&resource)
 }
 
 /// An object's uid, labels and annotations.
@@ -470,9 +453,9 @@ pub async fn get_object_metadata(
             .answered(&state, served.api.get_metadata(&name).await)?
             .metadata;
         Ok(ObjectMetadata {
+            annotations: crate::resources::annotations_of(&meta),
             uid: meta.uid,
             labels: meta.labels.unwrap_or_default(),
-            annotations: meta.annotations.unwrap_or_default(),
         })
     })
     .await
@@ -594,6 +577,41 @@ mod dry_run_tests {
             "a rotated key is a change, whatever the screen shows"
         );
         assert!(unchanged(&before, &secret("b2xkLWtleQ==")));
+    }
+
+    /// Both sides of the preview are drawn, and Copy takes them: the object
+    /// there now and the one the server would store each carry the record
+    /// `kubectl apply` keeps, and with it the key in full.
+    #[test]
+    fn neither_side_of_the_preview_carries_the_key_kubectl_recorded() {
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let applied = serde_json::json!({ "kind": "ConfigMap", "data": { "server.key": KEY } });
+        let config = || {
+            let mut object = kube::core::DynamicObject::new(
+                "nginx",
+                &kube::core::ApiResource::erase::<k8s_openapi::api::core::v1::ConfigMap>(&()),
+            );
+            object.metadata.annotations = Some(
+                [(
+                    "kubectl.kubernetes.io/last-applied-configuration".to_string(),
+                    applied.to_string(),
+                )]
+                .into(),
+            );
+            object.data = serde_json::json!({ "data": { "server.key": KEY } });
+            object
+        };
+
+        let (live, _) = live_of(Ok(config())).expect("read");
+        let (would, _) = would_of(Ok(config())).expect("answered");
+        let Live::Present(live) = live else {
+            panic!("the object is there")
+        };
+        let would = would.ok().expect("the server answered with an object");
+        for yaml in [live, would] {
+            assert!(yaml.contains("server.key"), "{yaml}");
+            assert!(!yaml.contains("PRIVATE KEY"), "{yaml}");
+        }
     }
 
     /// And the noise the server rewrites on every write is not a change, or
@@ -906,6 +924,41 @@ mod tests {
         let asked = hits.lock().unwrap();
         assert_eq!(asked.get(&path("a")), Some(&1));
         assert_eq!(asked.get(&path("c")), None, "sent after the refusal");
+    }
+
+    /// The YAML tab of every kind with a page of its own, the peek's YAML and
+    /// the editor's buffer are this read. Found on a `ConfigMap` made with
+    /// `kubectl apply`: the key withheld under `data`, and whole three lines
+    /// lower in the annotation.
+    #[tokio::test]
+    async fn the_manifest_of_an_applied_configmap_carries_the_key_nowhere() {
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let applied = serde_json::json!({ "kind": "ConfigMap", "data": { "server.key": KEY } });
+        let stored = serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": "nginx",
+                "namespace": "team-a",
+                "annotations": {
+                    "kubectl.kubernetes.io/last-applied-configuration": applied.to_string(),
+                },
+            },
+            "data": { "nginx.conf": "worker_processes 2;", "server.key": KEY },
+        })
+        .to_string();
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/api/v1/namespaces/team-a/configmaps/nginx" => (200, stored.clone()),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+
+        let yaml = super::manifest_of(&state, "ConfigMap", "v1", "nginx", Some("team-a".into()))
+            .await
+            .expect("read");
+        assert!(yaml.contains("nginx.conf: worker_processes 2;"), "{yaml}");
+        assert!(yaml.contains("last-applied-configuration"), "{yaml}");
+        assert!(!yaml.contains("PRIVATE KEY"), "{yaml}");
     }
 
     /// Would keep the YAML tab of a route read at a version the cluster

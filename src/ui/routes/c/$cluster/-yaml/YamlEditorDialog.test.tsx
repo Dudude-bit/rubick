@@ -27,7 +27,7 @@ import { renderWithRouter } from "@/test/render";
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { marcoReview } from "@/test/marco";
-import { WITHHELD_MARKER } from "./manifest-reads";
+import { WITHHELD_MARKER } from "@/lib/withheld";
 
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();
@@ -988,6 +988,57 @@ describe("a manifest that holds a withheld private key", () => {
     act(() => useYamlEditorStore.getState().setEditedContent(CONFIG(false)));
     expect(screen.queryByRole("status")).toBeNull();
     await user.click(apply());
+    expect(await screen.findByText("Apply Changes?")).toBeInTheDocument();
+  });
+});
+
+describe("a manifest whose kubectl record holds a withheld private key", () => {
+  const RECORD = JSON.stringify({
+    kind: "ConfigMap",
+    data: {
+      "nginx.conf": "worker_processes 2;",
+      "server.key": WITHHELD_MARKER,
+    },
+  });
+  const APPLIED = [
+    "apiVersion: v1",
+    "kind: ConfigMap",
+    "metadata:",
+    "  name: nginx",
+    "  namespace: shop",
+    "  annotations:",
+    `    kubectl.kubernetes.io/last-applied-configuration: '${RECORD}'`,
+    "data:",
+    "  nginx.conf: worker_processes 2;",
+    "",
+  ].join("\n");
+
+  /**
+   * The record kubectl keeps reaches the editor with its key blanked, and
+   * nothing the reader can edit under `data` takes the placeholder out of
+   * it. Fails if that alone withholds Apply, or if the editor stops saying
+   * the annotation is not sent.
+   */
+  it("says the record is not sent and still offers apply", async () => {
+    dryRunManifest.mockResolvedValue({ documents: [] });
+    await renderWithRouter(<YamlEditorDialog />, {
+      at: "/c/test",
+      route: "/c/$cluster",
+    });
+    await useYamlEditorStore.getState().openEditor({
+      title: "Edit ConfigMap: nginx",
+      resourceKey: { kind: "ConfigMap", name: "nginx", namespace: "shop" },
+      fetchYaml: async () => APPLIED,
+    });
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      /^Withheld inside kubectl\.kubernetes\.io\/last-applied-configuration: server\.key\..*leaves it out of what Apply sends\.$/
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+    const apply = screen.getByRole("button", { name: /^Apply$/ });
+    expect(apply).not.toHaveAttribute("aria-disabled");
+    await user.click(apply);
     expect(await screen.findByText("Apply Changes?")).toBeInTheDocument();
   });
 });

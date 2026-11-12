@@ -9,6 +9,11 @@ import { load, loadAll } from "js-yaml";
 
 import type { DryRunDocument } from "@/generated/types";
 import type { DeliveryQuery } from "@/integrations";
+import {
+  WITHHELD_MARKER,
+  withheldCopyIn,
+  withheldKeysOf,
+} from "@/lib/withheld";
 
 /**
  * The same question, asked of a manifest rather than of a list row.
@@ -66,33 +71,37 @@ function stringsOf(value: unknown): Record<string, string> {
 }
 
 /**
- * What a manifest carries in place of a private key. The backend writes it
- * and refuses to send it back; `src/contracts/withheld-value.json` holds the
- * two to one text and one answer.
- */
-export const WITHHELD_MARKER = "<withheld: the app never shows a private key>";
-
-const KEY_MAPS = ["data", "binaryData", "stringData"] as const;
-
-/**
  * The keys of the buffer that still hold the placeholder: applied as it is,
  * the placeholder would be written over each of them.
  */
 export function withheldKeysIn(text: string): string[] {
   // Nearly every buffer has none, and is not parsed on every keystroke.
   if (!text.includes(WITHHELD_MARKER)) return [];
-  return (documentsIn(text) ?? []).flatMap((doc) =>
-    KEY_MAPS.flatMap((field) => {
-      const map = doc[field];
-      return isRecord(map)
-        ? Object.keys(map).filter(
-            (key) =>
-              typeof map[key] === "string" &&
-              map[key].trim() === WITHHELD_MARKER
-          )
-        : [];
-    })
-  );
+  return (documentsIn(text) ?? []).flatMap(withheldKeysOf);
+}
+
+/** An annotation holding a record the backend blanked, and the keys blanked. */
+export interface WithheldCopy {
+  annotation: string;
+  keys: string[];
+}
+
+/**
+ * The annotations of the buffer that hold a blanked record. The backend
+ * leaves each out of what Apply sends, so the placeholder is never stored
+ * over the record on the cluster; the corpus holds the two to one answer.
+ */
+export function withheldCopiesIn(text: string): WithheldCopy[] {
+  if (!text.includes(WITHHELD_MARKER)) return [];
+  return (documentsIn(text) ?? []).flatMap((doc) => {
+    const metadata = isRecord(doc.metadata) ? doc.metadata : {};
+    return Object.entries(stringsOf(metadata.annotations))
+      .map(([annotation, value]) => ({
+        annotation,
+        keys: withheldCopyIn(value),
+      }))
+      .filter((copy) => copy.keys.length > 0);
+  });
 }
 
 /**

@@ -8,7 +8,7 @@ use kube::api::Api;
 use tauri::State;
 
 use crate::commands::helpers::ResourceContext;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::state::AppState;
 
 use super::types::{CrdDetailInfo, CrdGroup, CrdInfo};
@@ -74,8 +74,7 @@ pub async fn get_crd_yaml(name: String, state: State<'_, AppState>) -> Result<St
     let api: Api<CustomResourceDefinition> = ctx.cluster_api();
     let crd = crate::client::clock::timed(&state.perf, "getCrdYaml", api.get(&name)).await?;
 
-    let yaml = serde_yaml::to_string(&crd).map_err(|e| Error::Serialization(e.to_string()))?;
-    crate::commands::helpers::clean_yaml_for_editor(&yaml)
+    crate::commands::helpers::editor_yaml(&crd)
 }
 
 /// Delete a CRD

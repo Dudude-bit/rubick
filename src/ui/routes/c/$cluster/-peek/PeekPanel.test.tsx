@@ -1616,6 +1616,25 @@ describe("PeekPanel tabs", () => {
     );
   });
 
+  /**
+   * The peek draws the same manifest as the page's YAML tab, and the record
+   * kubectl keeps arrives with its private key blanked. Fails if the peek
+   * leaves the placeholder there to read as what kubectl recorded.
+   */
+  it("says which annotation holds a record the app blanked a key in", async () => {
+    const marker = "<withheld: the app never shows a private key>";
+    const record = JSON.stringify({ data: { "server.key": marker } });
+    vi.mocked(commands.getManifest).mockResolvedValue(
+      `kind: Pod\nmetadata:\n  annotations:\n    kubectl.kubernetes.io/last-applied-configuration: '${record}'\n`
+    );
+    await wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    await openTab("YAML");
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      /^Withheld inside kubectl\.kubernetes\.io\/last-applied-configuration: server\.key\./
+    );
+  });
+
   it("says what failed on the YAML tab and offers a retry", async () => {
     vi.mocked(commands.getManifest).mockRejectedValue(
       new Error("manifest denied")
