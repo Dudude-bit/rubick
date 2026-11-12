@@ -28,6 +28,7 @@ import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import {
   backingOf,
   boundEntryPoints,
+  pathCount,
   type HostGroup,
   type TraefikSources,
 } from "./model";
@@ -123,7 +124,7 @@ export function routingMap(
       // Without it the column is a list of names somebody still has to go and
       // look up one at a time, which is the errand a map is supposed to end.
       sub: [
-        t("count", "paths", { n: group.routes.length }),
+        t("count", "paths", { n: pathCount(group) }),
         at.length > 0 ? at.join(", ") : null,
       ]
         .filter(Boolean)

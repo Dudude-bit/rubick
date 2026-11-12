@@ -98,6 +98,7 @@ import {
   hostState,
   middlewareType,
   middlewareUses,
+  pathCount,
   traefikClasses,
   type Finding,
   type HostGroup,
@@ -524,7 +525,7 @@ function HostRow({
       copy={group.host ?? undefined}
       meta={
         <>
-          {t("count", "paths", { n: group.routes.length })}
+          {t("count", "paths", { n: pathCount(group) })}
           {entryPoints.length > 0 &&
             ` · ${everywhere ? t("empty", "everyEntryPoint") : summariseNames(entryPoints)}`}
           {/* Where the certificate is, when it is not here: a reader who
@@ -624,6 +625,9 @@ function PathRow({
             )}
             {route.service.port !== "" && (
               <span className="text-fg-fnt">:{route.service.port}</span>
+            )}
+            {route.service.weight !== undefined && (
+              <span className="text-fg-fnt">weight {route.service.weight}</span>
             )}
           </>
         ) : route.resourceBackend ? (

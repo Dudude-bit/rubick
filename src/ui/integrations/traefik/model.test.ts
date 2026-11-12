@@ -21,6 +21,7 @@ import {
   hostGroups,
   hostState,
   middlewareUses,
+  pathCount,
   readEmptyServices,
   readEntryPoints,
   type TraefikSources,
@@ -301,6 +302,63 @@ describe("what a defaultBackend Ingress serves", () => {
 });
 
 describe("the findings", () => {
+  /**
+   * Traefik balances a route across every entry of `services`. Only the
+   * first was read, so a weighted second Service that does not exist left
+   * the host green. Fails if any entry goes unchecked or shares a row key.
+   */
+  it("checks every Service a route balances across, not only the first", () => {
+    const [group] = hostGroups(
+      sources({
+        ingressRoutes: [
+          ingressRoute("canary", {
+            routes: [
+              {
+                match: "Host(`app.example.com`)",
+                services: [
+                  { name: "app-v1", port: 80, weight: 3 },
+                  { name: "app-v2", port: 80 },
+                ],
+              },
+            ],
+          }),
+        ],
+        services: [service("app-v1", { app: "v1" })],
+        published: [published("app-v1", 2)],
+      })
+    );
+
+    expect(
+      group.routes.map((route) => [route.service?.name, route.service?.weight])
+    ).toEqual([
+      ["app-v1", 3],
+      ["app-v2", 1],
+    ]);
+    expect(new Set(group.routes.map((route) => route.key)).size).toBe(2);
+    // One router, however many Services share it.
+    expect(pathCount(group)).toBe(1);
+    const stop = group.findings.find((finding) => finding.kind === "stop");
+    expect(stop?.kind === "stop" && stop.route.service?.name).toBe("app-v2");
+    expect(hostState(group, null, t).tone).toBe("err");
+  });
+
+  /** A route naming one Service has no split to state. Fails if it wears a weight. */
+  it("gives a lone Service no weight", () => {
+    const [route] = allRoutes(
+      sources({
+        ingressRoutes: [
+          ingressRoute("solo", {
+            routes: [
+              { match: "Host(`a.example.com`)", services: [{ name: "a" }] },
+            ],
+          }),
+        ],
+      })
+    );
+
+    expect(route.service?.weight).toBeUndefined();
+  });
+
   /**
    * Would break if the page invented a second vocabulary for a stopped path.
    * `describeStop` is what the traffic chain already says, and "no pod

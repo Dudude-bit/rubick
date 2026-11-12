@@ -107,6 +107,11 @@ export interface RouteService {
    * use. Only an IngressRoute can state one.
    */
   scheme: string | null;
+  /**
+   * This Service's `weight` where the route balances across several, which
+   * Traefik does for every entry of `services`; absent where it names one.
+   */
+  weight?: number;
 }
 
 export interface TraefikRoute {
@@ -441,6 +446,7 @@ interface IngressRouteSpec {
       port?: unknown;
       kind?: string;
       scheme?: string;
+      weight?: number;
     }>;
     middlewares?: Array<{ name?: string; namespace?: string }>;
   }>;
@@ -458,7 +464,9 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
 
   return (spec.routes ?? []).flatMap((route, routeIndex) => {
     const reading = readRule(route.match ?? "");
-    const service = route.services?.[0];
+    // Every entry, not the first: Traefik balances a route across all of
+    // them, so each is a backend to check and a Service this host reaches.
+    const balanced = (route.services ?? []).filter((service) => service.name);
     const common = {
       source: {
         kind: "IngressRoute" as const,
@@ -478,18 +486,6 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
             ]
           : []
       ),
-      service: service?.name
-        ? {
-            name: service.name,
-            namespace: service.namespace ?? namespace,
-            port: service.port === undefined ? "" : String(service.port),
-            // `@` is Traefik's own provider qualifier and can never appear in
-            // a Kubernetes object name, so it is an unambiguous marker.
-            kubernetes:
-              service.kind !== "TraefikService" && !service.name.includes("@"),
-            scheme: service.scheme ?? null,
-          }
-        : null,
       // Only an Ingress can name one; an IngressRoute has no such field.
       resourceBackend: null,
       tlsSecret,
@@ -497,6 +493,20 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
       pathType: null,
       priority: route.priority ?? null,
     };
+    const backends: Array<RouteService | null> =
+      balanced.length === 0
+        ? [null]
+        : balanced.map((service) => ({
+            name: service.name!,
+            namespace: service.namespace ?? namespace,
+            port: service.port === undefined ? "" : String(service.port),
+            // `@` is Traefik's own provider qualifier and can never appear in
+            // a Kubernetes object name, so it is an unambiguous marker.
+            kubernetes:
+              service.kind !== "TraefikService" && !service.name!.includes("@"),
+            scheme: service.scheme ?? null,
+            ...(balanced.length > 1 && { weight: service.weight ?? 1 }),
+          }));
 
     // A rule that could not be read still gets a row: it is a route this
     // cluster is serving, and hiding it would be the page lying by omission.
@@ -507,13 +517,20 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
         ? reading.clauses
         : [{ host: null, path: null }];
 
-    return clauses.map((clause, clauseIndex) => ({
-      ...common,
-      key: `ingressroute/${namespace}/${object.name}/${routeIndex}/${clauseIndex}`,
-      clause,
-    }));
+    return clauses.flatMap((clause, clauseIndex) =>
+      backends.map((service, at) => ({
+        ...common,
+        key: `ingressroute/${namespace}/${object.name}/${routeIndex}/${clauseIndex}${at > 0 ? `#${at}` : ""}`,
+        clause,
+        service,
+      }))
+    );
   });
 }
+
+/** A host's routers: one balanced across Services is a row per Service and still one path. */
+export const pathCount = (group: Pick<HostGroup, "routes">): number =>
+  new Set(group.routes.map((route) => route.key.replace(/#\d+$/, ""))).size;
 
 // --- entry points, read off the controller's own arguments --------------
 //

@@ -262,3 +262,46 @@ describe("routes kept under the old API group", () => {
     expect(screen.queryByText(/kept under/)).not.toBeInTheDocument();
   });
 });
+
+describe("a route balanced across several Services", () => {
+  /** Two rows of one path read as two routers. Fails if the split is not said on each. */
+  it("names each Service's weight beside it", async () => {
+    answers.custom = (crd) =>
+      Promise.resolve(
+        crd === "ingressroutes.traefik.io"
+          ? [
+              {
+                name: "canary",
+                namespace: "web",
+                uid: "ir-2",
+                apiVersion: "traefik.io/v1alpha1",
+                kind: "IngressRoute",
+                spec: {
+                  routes: [
+                    {
+                      match: "Host(`app.example.com`)",
+                      services: [
+                        { name: "app-v1", weight: 3 },
+                        { name: "app-v2", weight: 1 },
+                      ],
+                    },
+                  ],
+                },
+                status: null,
+                labels: {},
+                annotations: {},
+                createdAt: null,
+                ownerReferences: [],
+                generation: null,
+              },
+            ]
+          : []
+      );
+    // Neither Service exists, so the row is broken and opens by itself.
+    answers.backing = () => Promise.resolve({ services: [], published: [] });
+    await openOn("routes");
+
+    expect(await screen.findByText("weight 3")).toBeInTheDocument();
+    expect(screen.getByText("weight 1")).toBeInTheDocument();
+  });
+});
