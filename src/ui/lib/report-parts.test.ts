@@ -819,6 +819,28 @@ describe("the rest of the parts", () => {
   });
 
   /**
+   * An event about a ClusterIssuer is filed in `default`, where the issuer
+   * is not. Fails if the shared row places a cluster-scoped object in the
+   * namespace of its event, or drops the namespace of one that has it.
+   */
+  it("places an event's object where it lives, not where the event is filed", () => {
+    const about = (namespace: string | null) =>
+      ({
+        type: "Warning",
+        reason: "ErrInitIssuer",
+        message: "",
+        lastTimestamp: "2026-09-21T17:00:00Z",
+        involvedObject: { kind: "ClusterIssuer", name: "ca", namespace },
+        namespace: "default",
+      }) as never;
+    const section = eventsSection([about(null), about("default")], null, true);
+    expect(
+      section.body.type === "events" &&
+        section.body.rows.map((row) => row.ref?.namespace)
+    ).toEqual([null, "default"]);
+  });
+
+  /**
    * A shared file of the 1 h stories listed "×696" at 03:46 as if the hour
    * held them. Fails if a repeated event stops carrying when its repeats began.
    */

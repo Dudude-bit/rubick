@@ -135,6 +135,21 @@ export const isBuiltInGroup = (kind: string, group: string): boolean =>
   builtInGroupOf(kind) === group;
 
 /**
+ * A kind as words tell it apart: with its group where it only shares a
+ * built-in's name, as kubectl says `service.serving.knative.dev`. Without
+ * it a namesake and the built-in read alike beside two different glyphs.
+ */
+export function kindWords(ref: KindRef & { group?: string | null }): string {
+  const builtIn = builtInGroupOf(ref.kind);
+  const crd = ref.crd ?? "";
+  const dot = crd.indexOf(".");
+  const group = ref.group ?? (dot === -1 ? null : crd.slice(dot + 1));
+  return builtIn !== null && group !== null && group !== builtIn
+    ? `${ref.kind}.${group}`
+    : ref.kind;
+}
+
+/**
  * Where one object opens, or `null` when it cannot be addressed: a kind
  * nothing knows the plural of, or a namespaced kind handed no namespace.
  */

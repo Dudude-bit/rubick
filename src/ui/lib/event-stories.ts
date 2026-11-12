@@ -11,6 +11,7 @@ import type { EventInfo } from "@/generated/types";
 import type { Saying } from "@/i18n/say";
 import {
   groupNamed,
+  involvedNamespace,
   involvedUid,
   nameKey,
   pastOf,
@@ -293,7 +294,7 @@ function evidenceOf(events: EventInfo[]): Map<string, Owner> {
   for (const event of events) {
     const { kind, name } = event.involvedObject;
     const group = groupNamed(kind, event.involvedObject.apiVersion);
-    const namespace = event.involvedObject.namespace ?? event.namespace;
+    const namespace = involvedNamespace(event);
     const message = event.message ?? "";
     const claim = (childKind: string, child: string | undefined) => {
       if (child)
@@ -326,7 +327,7 @@ function place(
   evidence: Map<string, Owner>,
   pastObjects: ReadonlyMap<string, Past>
 ): Placement {
-  const namespace = event.involvedObject.namespace ?? event.namespace;
+  const namespace = involvedNamespace(event);
   let kind = event.involvedObject.kind;
   let group = groupNamed(kind, event.involvedObject.apiVersion);
   let name = event.involvedObject.name;

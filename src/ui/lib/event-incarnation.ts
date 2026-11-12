@@ -7,6 +7,14 @@ export function involvedUid(event: EventInfo): string | null {
   return uid && uid !== name ? uid : null;
 }
 
+/**
+ * The namespace the object an event is about lives in: `null` for a
+ * cluster-scoped one. Never the event's own, which is `default` for an
+ * event about a Node or a ClusterIssuer; the Overview reads it the same way.
+ */
+export const involvedNamespace = (event: EventInfo): string | null =>
+  event.involvedObject.namespace || null;
+
 /** The API group of an `apiVersion`, "" for the core `v1`; `null` where there is none to read. */
 export function groupIn(apiVersion: string | null | undefined): string | null {
   if (!apiVersion) return null;
@@ -55,7 +63,7 @@ export const nameKey = (
 export const namedOf = (event: EventInfo): Named => ({
   kind: event.involvedObject.kind,
   group: groupNamed(event.involvedObject.kind, event.involvedObject.apiVersion),
-  namespace: event.involvedObject.namespace ?? event.namespace,
+  namespace: involvedNamespace(event),
   name: event.involvedObject.name,
 });
 

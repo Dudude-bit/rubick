@@ -360,4 +360,71 @@ describe("a story's clock for a static pod", () => {
       await screen.findByText("etcd exited with code 1")
     ).toBeInTheDocument();
   });
+
+  /**
+   * Seen on a cluster with a Knative-shaped Service beside the core one of
+   * its name: both cards were titled "team-a/Service/web". A ClusterIssuer's
+   * was titled "default/ClusterIssuer/ca", after where its events are filed.
+   * Fails if a namesake's card does not say its group, or a cluster-scoped
+   * object's card names a namespace.
+   */
+  it("titles a namesake with its group and a cluster-scoped object with no namespace", async () => {
+    const options: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const about = (
+      namespace: string,
+      involvedObject: EventInfo["involvedObject"]
+    ): EventInfo => ({ ...backOff, namespace, involvedObject });
+    const stories = storiesOf(
+      [
+        about("team-a", {
+          apiVersion: "v1",
+          kind: "Service",
+          name: "web",
+          namespace: "team-a",
+          uid: "a",
+        }),
+        about("team-a", {
+          apiVersion: "serving.knative.dev/v1",
+          kind: "Service",
+          name: "web",
+          namespace: "team-a",
+          uid: "b",
+        }),
+        about("default", {
+          apiVersion: "cert-manager.io/v1",
+          kind: "ClusterIssuer",
+          name: "ca",
+          namespace: null,
+          uid: "c",
+        }),
+      ],
+      options
+    );
+    await renderWithRouter(
+      <>
+        {stories.map((story) => (
+          <StoryCard
+            key={story.key}
+            crd={story.subject.group === "" ? undefined : null}
+            story={story}
+            options={options}
+            showNamespace
+          />
+        ))}
+      </>
+    );
+    const titles = screen
+      .getAllByTestId("resource-ref-name")
+      .map((name) => name.textContent);
+    expect(titles.sort()).toEqual([
+      "ClusterIssuer/ca",
+      "team-a/Service.serving.knative.dev/web",
+      "team-a/Service/web",
+    ]);
+  });
 });

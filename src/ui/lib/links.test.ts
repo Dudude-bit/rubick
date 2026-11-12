@@ -12,6 +12,7 @@ import {
   crdInstancesLink,
   helmReleaseLink,
   hrefOf,
+  kindWords,
   listLink,
   namespaceShownBy,
   objectLink,
@@ -360,6 +361,32 @@ describe("the registry's kind a reference is", () => {
     ).toBeNull();
     expect(builtInKindOf({ ...hello, crd: null })).toBeNull();
     expect(builtInKindOf({ ...hello, kind: "Rollout" })).toBeNull();
+  });
+});
+
+describe("a kind in words", () => {
+  /**
+   * Knative's `Service` and the core one of the same name read alike on
+   * two story cards, told apart by a glyph. Fails if a namesake of a
+   * built-in is not said with its group, by its CRD or by the group its
+   * caller knows, or if a built-in or a kind with no namesake gains one.
+   */
+  it("carries its group only where it shares a built-in's name", () => {
+    expect(kindWords({ kind: "Service" })).toBe("Service");
+    expect(kindWords({ kind: "Service", group: "" })).toBe("Service");
+    expect(
+      kindWords({ kind: "Service", crd: "services.serving.knative.dev" })
+    ).toBe("Service.serving.knative.dev");
+    expect(
+      kindWords({ kind: "Service", crd: null, group: "serving.knative.dev" })
+    ).toBe("Service.serving.knative.dev");
+    expect(kindWords({ kind: "Service", crd: null })).toBe("Service");
+    expect(
+      kindWords({ kind: "Ingress", crd: "ingresses.networking.k8s.io" })
+    ).toBe("Ingress");
+    expect(
+      kindWords({ kind: "Certificate", crd: "certificates.cert-manager.io" })
+    ).toBe("Certificate");
   });
 });
 

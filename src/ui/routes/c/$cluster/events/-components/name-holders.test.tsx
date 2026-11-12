@@ -209,12 +209,19 @@ describe("who holds the names the page speaks of", () => {
    * `apiVersion`, so nobody was asked and their card stayed "still
    * happening" beside a link to a page that answers not found. Fails if the
    * kubelet's Node warning is not asked at the Node's own address, or the
-   * answer is not held under the key its rows and its story read.
+   * answer is not held under the key its rows and its story read. The
+   * Overview files a node under no namespace and the page keyed it by
+   * `default`, where its events are: fails too if the Overview calling a
+   * cluster-scoped object gone does not have it read again at once.
    */
   it("asks who holds a Node whose kubelet warned with no apiVersion", async () => {
-    useClusterStore.setState({ isConnected: true });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "acme",
+      namespaceScope: ["lena-sandbox"],
+    });
     getObjectMetadata.mockReset();
-    getObjectMetadata.mockRejectedValue(NOT_FOUND);
+    getObjectMetadata.mockResolvedValue(there("5e1f"));
     nameHolder.mockReset();
     const kubelet: EventInfo = {
       name: "n1.17f",
@@ -234,15 +241,30 @@ describe("who holds the names the page speaks of", () => {
       firstTimestamp: null,
       lastTimestamp: null,
     };
-    const { result } = mount([], [kubelet]);
+    const { client, result } = mount([], [kubelet]);
     await waitFor(() =>
-      expect([...result.current]).toEqual([["default/Node/n1", null]])
+      expect([...result.current]).toEqual([["/Node/n1", "5e1f"]])
     );
     expect(result.current.has(nameKey(namedOf(kubelet)))).toBe(true);
-    expect(getObjectMetadata.mock.calls).toEqual([
-      ["Node", "v1", "n1", "default"],
-    ]);
+    expect(getObjectMetadata.mock.calls).toEqual([["Node", "v1", "n1", null]]);
     expect(nameHolder).not.toHaveBeenCalled();
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    getObjectMetadata.mockRejectedValue(NOT_FOUND);
+    client.setQueryData(queryKeys.clusterOverview("acme", ["lena-sandbox"]), {
+      warnings: [
+        {
+          reason: "EvictionThresholdMet",
+          objectKind: "Node",
+          objectApiVersion: null,
+          objectName: "n1",
+          namespace: null,
+          incarnation: "gone",
+        },
+      ],
+    });
+    await waitFor(() => expect(nobody(result.current)).toEqual(["/Node/n1"]));
+    expect(getObjectMetadata).toHaveBeenCalledTimes(2);
   });
 
   /**

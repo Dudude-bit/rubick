@@ -48,6 +48,22 @@ describe("finding events in a feed", () => {
     expect(eventMatches(event(), "Pod/api")).toBe(false);
   });
 
+  /**
+   * A Node lives in no namespace and its events are filed in `default`.
+   * Fails if the object is searched under a namespace its card does not
+   * draw, or the Namespace column's own word stops finding the row.
+   */
+  it("searches a cluster-scoped object as drawn, and its event by where it is filed", () => {
+    const node = event({
+      namespace: "default",
+      message: "",
+      involvedObject: { kind: "Node", name: "n1", namespace: null, uid: "n1" },
+    });
+    expect(eventMatches(node, "Node/n1")).toBe(true);
+    expect(eventMatches(node, "default/Node")).toBe(false);
+    expect(eventMatches(node, "default")).toBe(true);
+  });
+
   it("ignores case, the way the lists' search box does", () => {
     expect(eventMatches(event(), "WEB-7F9")).toBe(true);
   });

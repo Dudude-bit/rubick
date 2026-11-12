@@ -199,6 +199,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
             kind={subject.kind}
             name={subject.name}
             crd={crd}
+            group={subject.group}
             namespace={subject.namespace}
             showNamespace={showNamespace}
             past={past}
@@ -209,6 +210,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
             name={subject.name}
             namespace={subject.namespace ?? undefined}
             crd={crd}
+            group={subject.group}
             showNamespace={showNamespace}
             linkOptions={landing}
             opens={landing ? "page" : "peek"}

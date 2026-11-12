@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { None } from "@/components/ui/none";
 import { conditionRole } from "@/lib/condition-health";
+import { involvedNamespace } from "@/lib/event-incarnation";
 import { eventReasonMark } from "@/lib/event-reason";
 import { tallyOf } from "@/lib/event-stories";
 import { sayWords } from "@/i18n/say";
@@ -660,7 +661,7 @@ const EventRow = memo(function EventRow({
   const subject = {
     kind: event.involvedObject.kind,
     name: event.involvedObject.name,
-    namespace: event.involvedObject.namespace ?? event.namespace,
+    namespace: involvedNamespace(event),
   };
   // Two independent channels, one per column: the left mark is severity, the
   // mark on the reason is family. Where they meet severity takes the colour
