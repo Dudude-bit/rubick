@@ -1028,6 +1028,30 @@ describe("FilesTab", () => {
   });
 
   /**
+   * A key file opened here was on screen in full. The backend hands over no
+   * text for one; fails if the viewer then draws nothing, calls it text, or
+   * takes Download away: the file goes to disk, not to the screen.
+   */
+  it("says a key file is not shown, and still offers to download it", async () => {
+    listing.mockReturnValue(done([file("tls.key", { size: 1704 })]));
+    readContainerFile.mockResolvedValue({ state: "withheld" });
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        through={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    await userEvent.click(screen.getByText("tls.key"));
+    expect(
+      await screen.findByText(/this file holds a private key/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/· text/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+  });
+
+  /**
    * The line count sits beside the file's whole size, and the preview stopped
    * at the cap — so a bare "8 lines" claims a count of a file nobody read to
    * the end of.

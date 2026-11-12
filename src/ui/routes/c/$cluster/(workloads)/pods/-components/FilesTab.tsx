@@ -1355,6 +1355,8 @@ function Preview({
             {t("files", "readFailed", { code: read.exit_code ?? "?" })}{" "}
             {read.message}
           </span>
+        ) : read?.state === "withheld" ? (
+          <span className="text-fg-mut">{t("files", "previewWithheld")}</span>
         ) : read?.state === "preview" && read.preview.binary ? (
           <div className="text-fg-mut">
             <p>{t("files", "noPreviewBinary")}</p>

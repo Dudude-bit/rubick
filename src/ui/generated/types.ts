@@ -3347,6 +3347,7 @@ export type WithheldPart =
 
 export type FileRead =
   | { state: "preview"; preview: FilePreview }
+  | { state: "withheld" }
   | { state: "written"; bytes: number }
   | { state: "noTools" }
   | { state: "failed"; exit_code: number | null; message: string };
