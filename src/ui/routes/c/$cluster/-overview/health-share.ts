@@ -13,7 +13,12 @@ import { drawnCrd } from "@/lib/links";
 import { iconSvg } from "@/lib/icon-svg";
 import { allocatedPercent } from "@/lib/node-amount";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
-import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
+import {
+  ORDER,
+  refOf,
+  utcMoment,
+  type PlacedSection,
+} from "@/lib/report-parts";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import {
   isRolloutCode,
@@ -717,12 +722,20 @@ function warningSaid(warning: WarningGroup, t: T): string {
   return word ? `${t("readings", word)}: ${sample}` : sample;
 }
 
-/** The repeats of events first seen before the hour, which the panel cannot count inside it. */
-export function olderWords(warning: WarningGroup, t: T): string | null {
+/**
+ * The repeats of events first seen before the hour, which the panel cannot
+ * count inside it. `moment` is the screen's clock unless the caller writes a
+ * file, whose every other time is UTC and says so.
+ */
+export function olderWords(
+  warning: WarningGroup,
+  t: T,
+  moment: (ms: number) => string = (ms) => momentWords(ms)
+): string | null {
   if (!warning.older) return null;
   const values = {
     n: formatCount(warning.older.count),
-    since: momentWords(Date.parse(warning.older.since)),
+    since: moment(Date.parse(warning.older.since)),
   };
   return warning.count > 0
     ? t("cluster", "warningOlder", values)
@@ -756,7 +769,7 @@ export function warningsShare(
     reason: warning.reason,
     message: warningSaid(warning, t),
     count: warning.count,
-    older: olderWords(warning, t),
+    older: olderWords(warning, t, utcMoment),
     ref:
       warning.objectKind && warning.objectName
         ? refOf({
