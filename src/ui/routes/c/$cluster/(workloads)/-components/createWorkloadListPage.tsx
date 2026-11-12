@@ -43,6 +43,7 @@ import { useT } from "@/i18n/useT";
 import type { Rollout } from "@/generated/types";
 import { rowsWithStarts, startsOf } from "@/lib/workload-status";
 import {
+  PODS_UNREAD,
   rowCause,
   rowPods,
   rowRefusal,
@@ -119,6 +120,7 @@ export function createWorkloadListPage<T extends Workload>(
     const {
       data: pods,
       read: podsRead,
+      error: podsError,
       unread: podsUnread,
       podStatus,
       podUnread,
@@ -176,9 +178,11 @@ export function createWorkloadListPage<T extends Workload>(
         : read;
     }, [listQuery.data, starts, ranOut]);
 
+    const podsFailed = !podsRead && !!podsError;
     const causePods = useMemo(
-      () => (podsRead ? rowPods(pods, podsUnread) : null),
-      [pods, podsRead, podsUnread]
+      () =>
+        podsRead ? rowPods(pods, podsUnread) : podsFailed ? PODS_UNREAD : null,
+      [pods, podsRead, podsUnread, podsFailed]
     );
     const causeAt = useLastPassed(causePods?.deadlines ?? []);
     const refusalsIn = useScopeRefusals(

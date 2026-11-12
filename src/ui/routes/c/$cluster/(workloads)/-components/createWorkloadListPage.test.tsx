@@ -29,6 +29,7 @@ vi.mock("@/stores/clusterStore", () => ({
 const podRead = vi.hoisted(() => ({
   data: [] as unknown[],
   read: false,
+  error: null as Error | null,
   unread: [] as unknown[],
 }));
 vi.mock("@/hooks/usePodsWithMetrics", () => ({
@@ -98,6 +99,7 @@ beforeEach(() => {
   watch.live = true;
   podRead.data = [];
   podRead.read = false;
+  podRead.error = null;
   podRead.unread = [];
   store.state.namespaceScope = ["prod", "staging"];
 });
@@ -245,6 +247,50 @@ describe("the cause a workload list's row tells", () => {
     expect(
       screen.getByText("pods not read, so why is not known")
     ).toBeVisible();
+  });
+});
+
+describe("a workload list whose pod read failed", () => {
+  /**
+   * A token that may list Deployments and not pods: the read of one
+   * namespace fails whole, and every troubled row said "reading its pods"
+   * for as long as the page stayed open. Fails if a pod read that failed
+   * reads as one still on its way, or one still on its way as failed.
+   */
+  it("says the pods were not read, and reading only while they are", async () => {
+    watch.live = false;
+    const List = createWorkloadListPage<Item>({
+      resourceType: ResourceType.Deployment,
+      title: "Deployments",
+      fetchList: async () => ({
+        rows: [{ name: "api", namespace: "prod" }],
+        unread: [],
+      }),
+      matchPods: matchDeploymentPods,
+      deleter: async () => undefined,
+      columns: () => [
+        { accessorKey: "name", header: "Name" },
+        {
+          id: "cause",
+          header: "Cause",
+          cell: ({ row }) => (
+            <RowCauseText cause={row.original.podsCause} verdict="trouble" />
+          ),
+        },
+      ],
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const rerender = await mount(client, List);
+    expect(await screen.findByText("reading its pods")).toBeVisible();
+
+    podRead.error = new Error("pods is forbidden");
+    await rerender();
+    expect(
+      await screen.findByText("pods not read, so why is not known")
+    ).toBeVisible();
+    expect(screen.queryByText("reading its pods")).toBeNull();
   });
 });
 
