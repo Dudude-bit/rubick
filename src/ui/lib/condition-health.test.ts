@@ -174,6 +174,34 @@ describe("a condition its reason settles", () => {
   });
 
   /**
+   * Flux's Stalled=True and Reconciling=True, a CRD's NonStructuralSchema=True
+   * and an evicted pod's DisruptionTarget=True drew a green tick, and so did
+   * what a stuck namespace's deletion failed at. Fails if a condition that
+   * names trouble reads as satisfied when True, or as trouble when False.
+   */
+  it("reads a condition that names trouble as healthy when False", () => {
+    expect(said("Stalled", "True", "DependencyNotReady")).toBe("err");
+    expect(said("Stalled", "False")).toBe("ok");
+    expect(said("Reconciling", "True", "ProgressingWithRetry")).toBe("pending");
+    expect(said("Reconciling", "False")).toBe("ok");
+    expect(said("NonStructuralSchema", "True", "Violations")).toBe("warn");
+    expect(said("NonStructuralSchema", "False")).toBe("ok");
+    expect(said("DisruptionTarget", "True", "PreemptionByScheduler")).toBe(
+      "warn"
+    );
+    expect(said("NamespaceDeletionContentFailure", "True")).toBe("err");
+    expect(said("NamespaceDeletionDiscoveryFailure", "True")).toBe("err");
+    expect(said("NamespaceDeletionGroupVersionParsingFailure", "True")).toBe(
+      "err"
+    );
+    expect(said("NamespaceFinalizersRemaining", "True")).toBe("pending");
+    expect(said("NamespaceContentRemaining", "True")).toBe("pending");
+    expect(said("NamespaceContentRemaining", "False", "ContentRemoved")).toBe(
+      "ok"
+    );
+  });
+
+  /**
    * An autoscaler inside its range says ScalingLimited=False, which read as
    * a failure on every healthy one, and at its ceiling True, which read as
    * satisfied. Fails if a condition's row and the workload page's finding

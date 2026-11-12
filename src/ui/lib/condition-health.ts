@@ -27,6 +27,19 @@ const HEALTHY_WHEN_FALSE = new Set([
   "overlappingtlsconfig",
   // An HPA inside its range says False; True is the floor or the ceiling.
   "scalinglimited",
+  // kstatus, as Flux writes it: True is a reconcile under way, or one that gave up.
+  "reconciling",
+  "stalled",
+  // A CRD whose schema the API server cannot prune or default by.
+  "nonstructuralschema",
+  // A pod about to be evicted or preempted.
+  "disruptiontarget",
+  // A namespace being deleted: True is what the deletion waits on or failed at.
+  "namespacedeletiondiscoveryfailure",
+  "namespacedeletiongroupversionparsingfailure",
+  "namespacedeletioncontentfailure",
+  "namespacecontentremaining",
+  "namespacefinalizersremaining",
 ]);
 
 /**
@@ -75,6 +88,8 @@ const CAUTION = new Set([
   "overlappingtlsconfig",
   "scalinglimited",
   "scalingactive",
+  "nonstructuralschema",
+  "disruptiontarget",
 ]);
 
 /** The kubelet's reasons on a pod that has ended, which only some of its conditions carry. */
@@ -102,6 +117,10 @@ const SAID: Record<string, StatusRole> = {
   "disruptionallowed=false/SyncFailed": "err",
   // Somebody paused the rollout; the controller did not stop reporting.
   "progressing=unknown/DeploymentPaused": "neutral",
+  // Under way, and what a deletion is waiting for: neither is a fault yet.
+  "reconciling=true": "pending",
+  "namespacecontentremaining=true": "pending",
+  "namespacefinalizersremaining=true": "pending",
 };
 
 const normalize = (type: string) => type.toLowerCase().replace(/[\s_-]/g, "");
