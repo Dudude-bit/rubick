@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { beforeEach, describe, it, expect, vi } from "vite-plus/test";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { DaemonSetDetailInfo } from "@/generated/types";
 
 vi.mock("@/hooks", async (importOriginal) => ({
@@ -34,6 +34,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
 import { renderWithRouter } from "@/test/render";
 import { DaemonSetDetail } from "./DaemonSetDetail";
 
@@ -120,5 +121,64 @@ describe("DaemonSetDetail", () => {
     await renderPage();
     expect(await screen.findByText("2/2")).toBeInTheDocument();
     expect(screen.queryByText("1/2 ready")).toBeNull();
+  });
+});
+
+describe("the DaemonSet page's Restart and Delete", () => {
+  beforeEach(() => {
+    vi.mocked(commands.restartDaemonset).mockClear();
+    vi.mocked(commands.deleteDaemonset).mockClear();
+  });
+
+  /**
+   * Delete takes the same two arguments, so a Restart wired to it compiles
+   * and removes the set the reader asked to roll. Fails if the confirmed
+   * Restart calls anything but the restart, on the set the page is on.
+   */
+  it("restarts the set the page is on, and deletes nothing", async () => {
+    mockDetail(buildSet());
+    await renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Restart" }));
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Restart",
+      })
+    );
+
+    await waitFor(() =>
+      expect(commands.restartDaemonset).toHaveBeenCalledWith(
+        "node-agent",
+        "k8s-gui-test"
+      )
+    );
+    expect(commands.deleteDaemonset).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The other way round: a Delete wired to the restart rolls every node's
+   * pod and leaves the set the reader typed the name of. Fails if the
+   * confirmed Delete calls anything but the delete, on the set the page is on.
+   */
+  it("deletes the set the page is on, and restarts nothing", async () => {
+    const hooks = await vi.importActual<typeof import("@/hooks")>("@/hooks");
+    vi.mocked(useResourceDetail).mockImplementation(hooks.useResourceDetail);
+    vi.mocked(commands.getDaemonset).mockResolvedValue(buildSet());
+    await renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: "node-agent" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(commands.deleteDaemonset).toHaveBeenCalledWith(
+        "node-agent",
+        "k8s-gui-test"
+      )
+    );
+    expect(commands.restartDaemonset).not.toHaveBeenCalled();
   });
 });
