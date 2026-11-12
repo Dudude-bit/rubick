@@ -237,6 +237,43 @@ describe("a pod page whose pod is deleted while it is open", () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * Find replacement lists the namespace's pods, which a reader who may get
+   * this pod by name can be refused. The refusal was drawn as "No
+   * replacement found: no other running pods with matching labels". Fails
+   * if a list that could not be read is said to have found nothing.
+   */
+  it("says it could not look for a replacement when the list is refused, not that there is none", async () => {
+    const answer = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "list_pods")
+        throw { code: "PERMISSION_DENIED", message: "pods is forbidden" };
+      return answer(command, args);
+    });
+    await renderWithRouter(
+      <>
+        <PodDetail />
+        <Toaster />
+      </>,
+      {
+        at: `/c/prod/pods/shop/${NAME}`,
+        route: "/c/$cluster/pods/$namespace/$name",
+      }
+    );
+    await advance(0);
+    gone = true;
+    await advance(REFRESH_INTERVALS.resourceDetail);
+    await advance(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Find replacement" }));
+    await advance(0);
+
+    expect(
+      screen.getByText("Could not look for a replacement")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No replacement found")).toBeNull();
+  });
+
   /** Fails if the note claims a session on a page that never opened one, landing on Shell included. */
   it("says nothing about a shell nobody opened", async () => {
     await renderWithRouter(<PodDetail />, {
@@ -1278,6 +1315,52 @@ describe("a pod page runs nothing in the container until the reader asks on it",
   });
 
   /**
+   * Until the next pod's first read answered, the page went on drawing the
+   * pod before in full: a Delete opened there was titled with it, previewed
+   * what it owned and asked for its name, and confirming deleted the pod the
+   * address named. Fails if anything of the pod before, its open dialog
+   * included, is still on a page that has moved, or if Delete reaches a pod
+   * other than the one its dialog names.
+   */
+  it("drops the Delete it had open and names only the pod it deletes when the page moves to the next pod", async () => {
+    const answer = vi.mocked(invoke).getMockImplementation()!;
+    let arrived: (pod: PodInfo) => void = () => {};
+    vi.mocked(invoke).mockImplementation(async (command, args) =>
+      command === "get_pod" && (args as { name: string }).name === "cart-b"
+        ? new Promise<PodInfo>((resolve) => (arrived = resolve))
+        : answer(command, args)
+    );
+    const { router } = await arrive("/c/prod/pods/shop/cart-a");
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("cart-a");
+
+    await act(() => router.navigate({ href: "/c/prod/pods/shop/cart-b" }));
+    await advance(0);
+    await advance(0);
+
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+
+    await act(async () => arrived(running("cart-b")));
+    await advance(0);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("cart-b");
+    expect(dialog).not.toHaveTextContent("cart-a");
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "cart-b" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await advance(0);
+
+    const deleted = vi
+      .mocked(invoke)
+      .mock.calls.filter(([command]) => command === "delete_pod")
+      .map(([, args]) => (args as { name: string }).name);
+    expect(deleted).toEqual(["cart-b"]);
+  });
+
+  /**
    * The same move with Shell still the open tab: what was asked on one pod
    * is not asked on the next. Fails if the ask follows the page.
    */
@@ -1672,6 +1755,30 @@ describe("a pod page runs nothing in the container until the reader asks on it",
       expect(screen.getByText(offer)).toBeInTheDocument();
     }
   );
+
+  /**
+   * The Logs pane stays through a re-creation and has to be told which pod
+   * of the name it reads. Fails if the page hands it the new pod and the pane
+   * goes on holding the stream of the deleted one.
+   */
+  it("asks for the log of a pod re-created under the same name", async () => {
+    const answer = vi.mocked(invoke).getMockImplementation()!;
+    let streams = 0;
+    vi.mocked(invoke).mockImplementation(async (command, args) =>
+      command === "stream_pod_logs" ? `log-${++streams}` : answer(command, args)
+    );
+    await arrive("/c/prod/pods/shop/cart-a");
+    await clickTab(/^Logs/);
+    expect(streams).toBe(1);
+
+    served = { ...running("cart-a"), uid: "uid-recreated" } as PodInfo;
+    await nextRead();
+
+    expect(streams).toBe(2);
+    expect(invoke).toHaveBeenCalledWith("stop_log_stream", {
+      streamId: "log-1",
+    });
+  });
 
   /**
    * Shell in a peek is an ask about the pod the peek showed. Fails if it

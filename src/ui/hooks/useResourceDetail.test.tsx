@@ -46,8 +46,9 @@ import {
   useResourceDetail,
   type UseResourceDetailResult,
 } from "./useResourceDetail";
-import { useLastOwners, type Owner } from "./useLastOwners";
+import { useLastOwners, type KnownOwners, type Owner } from "./useLastOwners";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useWindowActivity } from "@/lib/window-activity";
 
 interface Pod {
   name: string;
@@ -67,7 +68,7 @@ async function detail(
 ) {
   const result = {} as {
     current: UseResourceDetailResult<Pod>;
-    owners: Owner[] | undefined;
+    owners: KnownOwners;
   };
   function Probe() {
     result.current = useResourceDetail<Pod>({
@@ -200,6 +201,103 @@ describe("a detail page whose object is deleted", () => {
     await waitFor(() => expect(result.current.error).toBe(NOT_FOUND));
     expect(result.current.name).toBe("web-0");
     expect(result.owners).toBeUndefined();
+  });
+});
+
+describe("a detail page moved to another object of its kind", () => {
+  /**
+   * The hook handed back the object before until the next one answered, and
+   * deleted by the address: every page drew one object in full over a Delete
+   * that reached another. A page is mounted anew for each object, which is
+   * the only thing that ends it. Fails if the page is told of any object
+   * while the one its address names is still being read.
+   */
+  it("holds nothing of the object before while the next one is read", async () => {
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockImplementation((name) =>
+        name === "api-7bcd"
+          ? Promise.resolve({ name })
+          : new Promise<Pod>(() => {})
+      );
+
+    const { result, router } = await detail(fetch);
+    await waitFor(() => expect(result.current.resource).toBeDefined());
+
+    await act(() =>
+      router.navigate({ to: "/c/prod/pods/default/web-0" as string })
+    );
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith("web-0"));
+
+    expect(result.current.name).toBe("web-0");
+    expect(result.current.resource).toBeUndefined();
+    expect(result.current.isLoading).toBe(true);
+  });
+});
+
+describe("a detail page whose object is gone, of a kind no watch follows by name", () => {
+  /** The page of `kind` at an address, and what it is told. */
+  async function page(kind: string, fetch: (name: string) => Promise<Pod>) {
+    const result = {} as { current: UseResourceDetailResult<Pod> };
+    function Probe() {
+      result.current = useResourceDetail<Pod>({
+        resourceKind: kind,
+        fetchResource: (name) => fetch(name),
+      });
+      return null;
+    }
+    await renderWithRouter(<Probe />, {
+      at: "/c/prod/things/default/app",
+      route: "/c/$cluster/things/$namespace/$name",
+    });
+    return result;
+  }
+  const comeBack = () => {
+    act(() => useWindowActivity.setState({ focused: false }));
+    act(() => useWindowActivity.setState({ focused: true }));
+  };
+  /** Gone at the first read, and made again after it. */
+  const madeAgain = () =>
+    vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockRejectedValueOnce(NOT_FOUND)
+      .mockResolvedValue({ name: "app" });
+
+  /**
+   * Fourteen kinds have no watch by name, and their page stopped reading at
+   * NotFound: a ConfigMap made again a second later stayed "no longer
+   * exists" for as long as the page was open, with only Go back to press.
+   * Fails if such a page does not read again when the reader returns to it.
+   */
+  it.each(["ConfigMap", "Secret", "Ingress", "Widget"])(
+    "reads a %s again when the reader comes back, and finds it",
+    async (kind) => {
+      const fetch = madeAgain();
+      const result = await page(kind, fetch);
+      await waitFor(() => expect(result.current.error).toBe(NOT_FOUND));
+
+      comeBack();
+
+      await waitFor(() =>
+        expect(result.current.resource).toEqual({ name: "app" })
+      );
+      expect(result.current.error).toBeNull();
+    }
+  );
+
+  /** A kind the watch follows by name hears of the object from the watch. Fails if its page is read again as well. */
+  it("leaves a gone Pod to the watch on its name", async () => {
+    const fetch = madeAgain();
+    const result = await page("Pod", fetch);
+    await waitFor(() => expect(result.current.error).toBe(NOT_FOUND));
+
+    comeBack();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBe(NOT_FOUND);
   });
 });
 

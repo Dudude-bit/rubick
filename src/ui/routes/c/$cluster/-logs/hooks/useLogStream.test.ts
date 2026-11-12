@@ -760,6 +760,152 @@ describe("useLogStream on a workload whose pods are replaced", () => {
     expect(streamConfigs).toHaveLength(2);
   });
 
+  const workloadPane = (first: object[]) =>
+    renderHook(
+      ({ sources }) =>
+        useLogStream({
+          namespace: "n",
+          sources: sources as never,
+          paneKey: "Deployment:api",
+          limit: DEFAULT_LOG_LIMIT,
+        }),
+      { initialProps: { sources: first } }
+    );
+  const waitingToStart = () =>
+    act(() => {
+      listeners["stream-failed"]!(
+        failureEvent("api-new-app", "broken", "is waiting to start")
+      );
+    });
+  const byPod = () =>
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.podName}-${config.container}-${streamConfigs.length}`;
+    });
+
+  /**
+   * The command opens the stream and the API server says "waiting to start"
+   * through it, so the lane is held as opened. Dropping its notice without
+   * opening it again left a lane that said nothing and looked attached.
+   */
+  it("opens a lane again once its container has started, when the stream said it was waiting", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.podName}-${config.container}`;
+    });
+    const waiting = {
+      pod: "api-new",
+      namespace: "n",
+      container: "app",
+      started: false,
+    };
+    const { result, rerender } = workloadPane([waiting]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    waitingToStart();
+    await waitFor(() => expect(result.current.failures).toHaveLength(1));
+
+    rerender({ sources: [{ ...waiting, started: true }] });
+
+    await waitFor(() => expect(streamConfigs).toHaveLength(2));
+    expect(result.current.failures).toHaveLength(0);
+    expect(streamConfigs[1].sinceTime).not.toBeNull();
+  });
+
+  /**
+   * A stream that broke under a running container is the reader's to
+   * reconnect. Fails if any change in the pod list takes its notice away,
+   * which left the lane silent with nothing saying so.
+   */
+  it("keeps a broken lane's notice when another pod joins", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.podName}-${config.container}`;
+    });
+    const running = {
+      pod: "api-new",
+      namespace: "n",
+      container: "app",
+      started: true,
+    };
+    const { result, rerender } = workloadPane([running]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    waitingToStart();
+    await waitFor(() => expect(result.current.failures).toHaveLength(1));
+
+    rerender({ sources: [running, { ...running, pod: "api-extra" }] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+
+    expect(result.current.failures).toHaveLength(1);
+    expect(
+      streamConfigs.filter((config) => config.podName === "api-new")
+    ).toHaveLength(1);
+  });
+
+  /**
+   * A StatefulSet's pod comes back under its name with another uid. The
+   * lane's key is the name, so nothing opened it again and the pane stayed
+   * on "is gone" beside a running pod. Fails if the lane is not read on in
+   * the new pod, or if the lines it holds are thrown away.
+   */
+  it("reads on in a pod made again under its name, and keeps the lines it holds", async () => {
+    byPod();
+    const db = { pod: "db-0", namespace: "n", container: "app", started: true };
+    const { result, rerender } = workloadPane([{ ...db, uid: "first" }]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    act(() => {
+      listeners["log-batch"]!({
+        payload: {
+          stream_id: "stream-db-0-app-1",
+          lines: [
+            {
+              message: "shutting down",
+              timestamp: "2026-11-12T10:00:00Z",
+              level: null,
+              format: null,
+              fields: null,
+              raw: "shutting down",
+            },
+          ],
+        },
+      });
+      listeners["stream-failed"]!({
+        payload: {
+          stream_id: "stream-db-0-app-1",
+          kind: "gone",
+          message: "n/db-0 stopped streaming",
+        },
+      });
+    });
+    await waitFor(() => expect(result.current.failures).toHaveLength(1));
+
+    rerender({ sources: [{ ...db, uid: "second" }] });
+
+    await waitFor(() => expect(streamConfigs).toHaveLength(2));
+    expect(result.current.failures).toHaveLength(0);
+    expect(streamConfigs[1].sinceTime).toBe("2026-11-12T10:00:00.000Z");
+    await waitFor(() =>
+      expect(result.current.logs.map((log) => log.message)).toEqual([
+        "shutting down",
+      ])
+    );
+  });
+
+  /** The same pod read again is the same lane. Fails if a poll of the pod reopens it. */
+  it("leaves a lane alone while its pod keeps its uid", async () => {
+    byPod();
+    const db = { pod: "db-0", namespace: "n", container: "app", uid: "first" };
+    const { rerender } = workloadPane([{ ...db, started: false }]);
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+
+    rerender({ sources: [{ ...db, started: true }] });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(streamConfigs).toHaveLength(1);
+    expect(commands.stopLogStream).not.toHaveBeenCalled();
+  });
+
   /**
    * Would put the loss back: a rollout that restarted the session would
    * drop the old pod's last words, which are the lines somebody reading

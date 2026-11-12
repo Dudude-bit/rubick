@@ -262,6 +262,7 @@ function PeekLogsTab({
     <LogViewer
       key={`${target.namespace}/${target.name}`}
       podName={pod.name}
+      podUid={pod.uid}
       namespace={pod.namespace}
       containers={podContainers(pod)}
     />

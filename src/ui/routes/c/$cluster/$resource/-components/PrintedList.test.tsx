@@ -28,8 +28,9 @@ const answers = vi.hoisted(() => ({
   catalog: (): Promise<ApiCatalog> =>
     Promise.resolve({ entries: [], unread: [] }),
   pages: [] as Array<string | null>,
-  table: (cursor: string | null): Promise<ResourceTable> => {
+  table: (cursor: string | null, group?: string): Promise<ResourceTable> => {
     void cursor;
+    void group;
     return Promise.reject(new Error("no table"));
   },
 }));
@@ -45,7 +46,7 @@ vi.mock("@/lib/commands", () => ({
       cursor: string | null
     ) => {
       answers.pages.push(cursor);
-      return answers.table(cursor);
+      return answers.table(cursor, _group);
     },
   },
 }));
@@ -111,6 +112,37 @@ afterEach(() => {
 
 const open = () =>
   renderWithRouter(<PrintedList resource="leases.coordination.k8s.io" />);
+
+describe("a printed list moved to another kind", () => {
+  /**
+   * The route keeps the list mounted between two kinds, and the table held
+   * the last answer while the next was read: the Leases stood under the
+   * Widgets' title, each one a link, a peek and a Delete for a Widget of
+   * its name. Fails if a row of the kind before is drawn while the next
+   * kind is read.
+   */
+  it("draws no row of the kind before while the next kind is read", async () => {
+    const widgets: CatalogEntry = {
+      ...LEASES,
+      group: "example.io",
+      kind: "Widget",
+      plural: "widgets",
+    };
+    answers.catalog = () =>
+      Promise.resolve({ entries: [LEASES, widgets], unread: [] });
+    answers.table = (_cursor, group) =>
+      group === LEASES.group
+        ? Promise.resolve(table([lease("node-1")]))
+        : new Promise(() => {});
+    const view = await open();
+    expect(await screen.findByText("holder-node-1")).toBeInTheDocument();
+
+    await view.rerender(<PrintedList resource="widgets.example.io" />);
+
+    expect(screen.queryByText("holder-node-1")).toBeNull();
+    expect(screen.queryByRole("link", { name: /node-1/ })).toBeNull();
+  });
+});
 
 describe("a kind listed as the API server prints it", () => {
   /** The server's columns are the list; the name column leads to the object. */

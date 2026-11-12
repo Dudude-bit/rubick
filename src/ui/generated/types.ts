@@ -905,6 +905,7 @@ export interface PortForwardSessionInfo {
 }
 
 export interface PortForwardRequest {
+  context: string;
   localPort: number;
   remotePort: number;
   autoReconnect: boolean;

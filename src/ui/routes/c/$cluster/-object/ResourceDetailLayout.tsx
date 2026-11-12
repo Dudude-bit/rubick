@@ -23,7 +23,7 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { CaptionScope, Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
-import { useLastOwners, type Owner } from "@/hooks/useLastOwners";
+import { useLastOwners, type KnownOwners } from "@/hooks/useLastOwners";
 import { GoneNotice } from "./gone";
 import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
 import { AlertBanner } from "../-alerts/AlertBanner";
@@ -62,7 +62,7 @@ interface DetailErrorProps {
   resourceKind: string;
   namespace?: string | null;
   /** What the object's last read named as its owners, when it was ever read. */
-  owners?: Owner[];
+  owners?: KnownOwners;
   onBack: () => void;
   /** Pods are replaced rather than restarted, so a 404 offers to follow. */
   onFindReplacement?: () => void;

@@ -118,6 +118,7 @@ vi.mock("../-peek/peek-sources", () => ({
 
 import { CommandPalette } from "./CommandPalette";
 import { commands } from "@/lib/commands";
+import { hrefOf, objectLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
@@ -734,6 +735,89 @@ describe("the command palette's object actions", () => {
     expect(
       await screen.findByRole("link", { name: "Deployment api" })
     ).toHaveAttribute("href", expect.stringMatching(/^\/c\/k3d-stage\//));
+  });
+
+  /**
+   * A hit opens on the page of its own group, and was then remembered by its
+   * kind's name alone. Knative makes a core Service beside every one of its
+   * own, so "web · Service" came back from Recent as the core one; a
+   * Certificate, which no built-in shares a name with, did not come back at
+   * all. Fails if what is remembered of a hit opens anywhere but where the
+   * hit opened, or if a built-in is remembered as anything but itself.
+   */
+  it.each([
+    {
+      of: "a custom namesake of a built-in",
+      found: {
+        kind: "Service",
+        group: "serving.knative.dev",
+        plural: "services",
+      },
+      crd: "services.serving.knative.dev",
+    },
+    {
+      of: "a custom kind no built-in is named like",
+      found: {
+        kind: "Certificate",
+        group: "cert-manager.io",
+        plural: "certificates",
+      },
+      crd: "certificates.cert-manager.io",
+    },
+    {
+      of: "a built-in kind",
+      found: { kind: "Deployment", group: "apps", plural: "deployments" },
+      crd: undefined,
+    },
+  ])(
+    "remembers $of with where it is served, so Recent reopens the same object",
+    async ({ found, crd }) => {
+      vi.mocked(commands.addRecentItem).mockClear();
+      search.hits = [hit({ ...found, name: "web", namespace: "shop" })];
+      await open("web");
+      const row = await screen.findByRole("link", {
+        name: `${found.kind} web`,
+      });
+      const opened = row.getAttribute("href");
+
+      await userEvent.keyboard("{Enter}");
+
+      const remembered = vi.mocked(commands.addRecentItem).mock.calls[0][0];
+      expect(remembered).toMatchObject({ name: "web", kind: found.kind });
+      expect(remembered.crd).toBe(crd);
+      const again = objectLink(remembered, { cluster: remembered.context });
+      expect(again && hrefOf(again)).toBe(opened);
+    }
+  );
+
+  /**
+   * The row's name is a link of its own, for a middle click and the row's
+   * menu, and it was built from the kind's name alone. Fails if a recent of
+   * a custom kind is drawn as a link to the built-in of that name.
+   */
+  it("draws a recent of a custom kind as a link to its own page", async () => {
+    vi.mocked(commands.getRecentItems).mockResolvedValueOnce([
+      {
+        name: "web",
+        namespace: "shop",
+        kind: "Service",
+        crd: "services.serving.knative.dev",
+        context: "k3d-dev",
+        timestamp: 1,
+      },
+    ]);
+    await renderWithRouter(<CommandPalette />, {
+      at: "/c/k3d-dev",
+      route: "/c/$cluster/$",
+    });
+    window.dispatchEvent(new Event("command-palette-open"));
+
+    expect(
+      await screen.findByRole("link", { name: "Service web" })
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("/services.serving.knative.dev/shop/web")
+    );
   });
 
   /** The same for a search hit, which carries its cluster too. */

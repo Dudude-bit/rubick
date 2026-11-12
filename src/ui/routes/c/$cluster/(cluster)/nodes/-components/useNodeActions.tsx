@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { DrainDialog } from "./drain-dialog";
@@ -6,7 +6,16 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { useAsk } from "../../../-object/useAsk";
 import { useCritical } from "@/hooks/useCritical";
-import { drainingNode, useNodeDrain } from "./useNodeDrain";
+import {
+  drainKey,
+  drainOf,
+  forgetDrain,
+  onDrainFinished,
+  startDrain,
+  stopDrain,
+  useDrainStore,
+} from "@/stores/drainStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { listQueryFor, ResourceType } from "@/lib/resource-registry";
@@ -19,8 +28,8 @@ export interface NodeActions {
   uncordon: (node: string) => void;
   /** Opens the drain dialog; the drain itself starts from there. */
   drain: (node: string) => void;
-  /** The node a drain is running on, if one is. */
-  draining: string | null;
+  /** Whether a drain this window started is still running on `node`. */
+  draining: (node: string) => boolean;
   /** Why the cluster will not let this user cordon, uncordon or drain `node`. */
   denied: (node: string) => string | undefined;
   /** Mount once beside the surface; the dialog outlives any row. */
@@ -103,32 +112,25 @@ export function useNodeActions(asked: string | null): NodeActions {
     node: string;
   } | null>(null);
 
-  // A drain is not a mutation: it outlives its own command call and reports
-  // as it goes. The hook owns that; this one only owns which node is open.
-  const drain = useNodeDrain({
-    onFinished: (result) => {
-      invalidate();
-      // A node that emptied has nothing left to read, so it says so in a
-      // toast and gets out of the way. Every other ending left a list of
-      // pods and a reason each, which is not a story a toast can hold, so
-      // it stays in the dialog unless nobody is looking at the dialog.
-      if (result.outcome === "drained") {
-        setOpen(null);
-        drain.reset();
-        toast({
-          title: t("action", "nodeDrained"),
-          description: t("action", "nodeDrainedDetail", { name: result.node }),
-        });
-        return;
-      }
-      if (open === null) {
-        toast({
-          title: t("action", "drainEnded", { name: result.node }),
-          description: t("action", "reopenTheNodeToRead"),
-        });
-      }
-    },
-  });
+  // A drain is not a mutation: it outlives its own command call, this
+  // dialog and this page. The store holds every one the window started; this
+  // hook only owns which node's dialog is open.
+  const context = useClusterStore((s) => s.currentContext) ?? "";
+  const drains = useDrainStore((s) => s.drains);
+  const state = drainOf(drains, context, open);
+  const shown = open ? drainKey(context, open) : null;
+  useEffect(() => {
+    useDrainStore.setState({ shown });
+    // A node that emptied has nothing left to read, so its dialog gets out
+    // of the way of the toast that says so.
+    const off = onDrainFinished((result) => {
+      if (result.outcome === "drained" && result.key === shown) setOpen(null);
+    });
+    return () => {
+      off();
+      useDrainStore.setState({ shown: null });
+    };
+  }, [shown]);
 
   const dialogs = (
     <>
@@ -162,24 +164,25 @@ export function useNodeActions(asked: string | null): NodeActions {
       />
       <DrainDialog
         node={open}
-        state={drain.state}
+        state={state}
         onOpenChange={(next) => {
           if (next) return;
           setOpen(null);
           // A running drain keeps running when its window is closed; the
           // panel says so. Only a finished one is cleared, so that reopening
           // the row does not reread an old report.
-          if (drain.state.phase === "done" || drain.state.phase === "failed") {
-            drain.reset();
-          }
+          if (shown) forgetDrain(shown);
         }}
         onConfirm={(node, { tellMeWhen, ...choices }) => {
           if (tellMeWhen) {
             asking.ask({ kind: "Node", namespace: null, name: node });
           }
-          void drain.start(node, { ignoreDaemonsets: true, ...choices });
+          void startDrain(context, node, {
+            ignoreDaemonsets: true,
+            ...choices,
+          });
         }}
-        onCancelDrain={drain.cancel}
+        onCancelDrain={() => open && stopDrain(context, open)}
       />
     </>
   );
@@ -193,13 +196,13 @@ export function useNodeActions(asked: string | null): NodeActions {
       criticalActive
         ? setPendingSchedulable({ action: "uncordon", node })
         : uncordonMutation.mutate(node),
-    // Reopening the node a drain is running on shows that drain. Any other
-    // node starts clean, so one node's report never appears over another's.
-    drain: (node) => {
-      if (drainingNode(drain.state) !== node) drain.reset();
-      setOpen(node);
+    // Each node has its own drain, so reopening one shows what is running
+    // on it and never another node's report.
+    drain: setOpen,
+    draining: (node) => {
+      const { phase } = drainOf(drains, context, node);
+      return phase === "starting" || phase === "running";
     },
-    draining: drainingNode(drain.state),
     denied: (node) => rowDenied({ name: node }),
     dialogs,
   };

@@ -50,9 +50,13 @@ import { T } from "@/i18n/T";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
+import { withheldWords } from "@/lib/certificates";
+import { formatBytes } from "@/lib/k8s-quantity";
 import {
+  heldOf,
   refObjectOf,
   verdictOf,
+  type Held,
   type RefObject,
   type RefVerdict,
 } from "./env-refs";
@@ -413,11 +417,16 @@ export function EnvironmentVariables({
     })),
   });
 
+  // A row's own eye asks for its Secret's values too: revealed with nothing
+  // read, the row had only "not found" to say about a key that is there.
+  const revealedFrom = new Set(
+    env.filter((e) => revealedSecrets.has(e.name)).map((e) => e.valueFrom?.name)
+  );
   const secretQueries = useQueries({
     queries: allSecretNames.map((name) => ({
       queryKey: queryKeys.secretData(namespace, name),
       queryFn: () => commands.getSecretData(name, namespace!),
-      enabled: !!namespace && showSecrets,
+      enabled: !!namespace && (showSecrets || revealedFrom.has(name)),
       staleTime: Infinity,
       retry: false,
     })),
@@ -594,6 +603,44 @@ export function EnvironmentVariables({
     return present;
   }, [expandedEnvVars]);
 
+  /** What the values read holds for a row that names a key; null for a row that names none. */
+  const heldFor = (ev: ExpandedEnvVar): Held | null => {
+    if (!ev.sourceName || !ev.sourceKey) return null;
+    const secret =
+      ev.sourceType === "secret" || ev.sourceType === "envFromSecret";
+    const names = secret ? allSecretNames : allConfigMapNames;
+    const queries = secret ? secretQueries : configMapQueries;
+    return heldOf(queries[names.indexOf(ev.sourceName)], ev.sourceKey);
+  };
+
+  /** A read that could not hand the value over says which way it could not. */
+  const heldWords = (ev: ExpandedEnvVar): string | null => {
+    const held = heldFor(ev);
+    switch (held?.is) {
+      case undefined:
+        return null;
+      case "value":
+        return held.value;
+      case "reading":
+        return t("settings", "loading");
+      case "withheld":
+        return withheldWords(held.reason, t);
+      case "binary":
+        return t("empty", "binaryNotText", {
+          size: formatBytes(held.bytes, { decimals: 0 }),
+        });
+      case "refused":
+        return t("empty", "notReadableWithAccess");
+      case "unread":
+        return held.error;
+      case "absent":
+        return t("empty", "notFoundRef", {
+          name: ev.sourceName!,
+          key: ev.sourceKey!,
+        });
+    }
+  };
+
   // Get the value to display for an env var
   const getDisplayValue = (ev: ExpandedEnvVar): string => {
     const isSecret =
@@ -618,34 +665,12 @@ export function EnvironmentVariables({
     // For secrets from secretKeyRef
     if (ev.sourceType === "secret") {
       if (!isRevealed) return ""; // MaskedValue will handle placeholder
-      if (ev.sourceName && ev.sourceKey) {
-        const secretData = secretCache[ev.sourceName];
-        if (secretData && ev.sourceKey in secretData) {
-          return secretData[ev.sourceKey];
-        }
-        if (loadingSecrets) return t("settings", "loading");
-        return t("empty", "notFoundRef", {
-          name: ev.sourceName,
-          key: ev.sourceKey,
-        });
-      }
-      return ev.value || "";
+      return heldWords(ev) ?? ev.value ?? "";
     }
 
     // For configmap refs
     if (ev.sourceType === "configmap" || ev.sourceType === "envFromConfigMap") {
-      if (ev.sourceName && ev.sourceKey) {
-        const cmData = configMapCache[ev.sourceName];
-        if (cmData && ev.sourceKey in cmData) {
-          return cmData[ev.sourceKey];
-        }
-        if (loadingConfigMaps) return t("settings", "loading");
-        return t("empty", "notFoundRef", {
-          name: ev.sourceName,
-          key: ev.sourceKey,
-        });
-      }
-      return ev.value || "";
+      return heldWords(ev) ?? ev.value ?? "";
     }
 
     // For field and resource refs
@@ -799,6 +824,7 @@ export function EnvironmentVariables({
                   const displayValue = getDisplayValue(ev);
                   const isPlaceholder = ev.name.endsWith("*");
                   const verdict = verdictFor(ev);
+                  const held = heldFor(ev);
                   const unresolved =
                     verdict &&
                     verdict.verdict !== "present" &&
@@ -859,8 +885,8 @@ export function EnvironmentVariables({
                             label={ev.name}
                             isRevealed={isRevealed}
                             onToggleReveal={() => toggleReveal(ev.name)}
-                            isLoading={loadingSecrets}
-                            showCopy={isRevealed}
+                            isLoading={isRevealed && held?.is === "reading"}
+                            showCopy={isRevealed && held?.is === "value"}
                             compact
                           />
                         ) : (

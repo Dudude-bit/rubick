@@ -110,8 +110,9 @@ export function normalisedSubpath(subpath: string | undefined): string {
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
-/** Point a local port at this Service, and say where. */
+/** Point a local port at this Service of `context`, and say where. */
 export async function forward(
+  context: string,
   service: ServiceInfo,
   preferredPorts: number[],
   /**
@@ -134,7 +135,7 @@ export async function forward(
   }
 
   const open = (localPort: number) =>
-    openForward(service, localPort, remotePort);
+    openForward(context, service, localPort, remotePort);
 
   // The kernel is the authority on whether a port is free: `portsInUse` knows
   // what *this app* is forwarding and nothing about the rest of the machine,
@@ -159,12 +160,14 @@ export async function forward(
 
 /** A forward says nothing, and takes no connection, until it is subscribed to. */
 async function openForward(
+  context: string,
   service: ServiceInfo,
   localPort: number,
   remotePort: number
 ): Promise<PortForwardSessionInfo> {
   const session = await commands
     .portForwardService(service.name, service.namespace, {
+      context,
       localPort,
       remotePort,
       autoReconnect: true,

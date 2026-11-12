@@ -28,7 +28,7 @@ import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
 import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { useRememberOwners } from "./useLastOwners";
-import { useObjectWatch } from "./useObjectWatch";
+import { useObjectWatch, watchedByName } from "./useObjectWatch";
 import { useStaleNotFound } from "./useStaleNotFound";
 import { backInTab } from "@/stores/scopeTabStore";
 
@@ -156,6 +156,9 @@ export function useResourceDetail<T>(
     placeholderData: placeholderData ? keepPreviousData : undefined,
     staleTime,
     refresh,
+    // A kind the watch does not follow by name has only its own read to say
+    // that an object made again under its name is back.
+    rereadsGone: !watchedByName(resourceKind),
   });
 
   // A failed re-read of the object already on screen is not a page.

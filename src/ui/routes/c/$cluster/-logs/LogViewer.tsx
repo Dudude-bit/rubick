@@ -143,6 +143,8 @@ function useSoloShortcuts(
 interface LogViewerProps {
   /** The pod a single-pod pane reads. Absent on a workload pane. */
   podName?: string;
+  /** That pod's uid: another one under the same name is the pod made again, and the pane reads on in it. */
+  podUid?: string;
   namespace: string;
   /**
    * Every container the pod ran, init first and in run order — see
@@ -190,6 +192,7 @@ interface LogViewerProps {
 
 export function LogViewer({
   podName: podNameProp,
+  podUid,
   namespace,
   containers: containersProp,
   pods,
@@ -223,6 +226,20 @@ export function LogViewer({
   const sources = useMemo(
     () => (lanes ? sourcesOf(pods) : undefined),
     [lanes, pods]
+  );
+  const podSources = useMemo(
+    () =>
+      sourcesOf([
+        {
+          name: podName,
+          namespace,
+          uid: podUid,
+          containers: containerInfos,
+          node: null,
+          run: null,
+        },
+      ]),
+    [podName, namespace, podUid, containerInfos]
   );
   const pane = lanes
     ? `${workload?.ownerKind ?? "pods"}:${workload?.owner ?? ""}`
@@ -332,8 +349,7 @@ export function LogViewer({
   } = useLogStream({
     podName: lanes ? undefined : podName,
     namespace,
-    containers: lanes ? undefined : containers,
-    sources,
+    sources: lanes ? sources : podSources,
     paneKey: lanes ? pane : undefined,
     limit,
     previous: previousRun,

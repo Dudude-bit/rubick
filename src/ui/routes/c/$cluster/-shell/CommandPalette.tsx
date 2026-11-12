@@ -82,6 +82,7 @@ import {
   english,
   hasAnswered,
   byKindName,
+  crdOfHit,
   hitKey,
   isCold,
   isSelectable,
@@ -601,6 +602,7 @@ export function CommandPalette() {
             kind: hit.kind,
             namespace: hit.namespace ?? undefined,
             context: hit.context,
+            crd: crdOfHit(hit),
           });
           return;
         }
@@ -1271,6 +1273,7 @@ function EntryRow({
           <span className="min-w-0">
             <ResourceRef
               kind={entry.hit.kind}
+              crd={crdOfHit(entry.hit)}
               name={entry.hit.name}
               namespace={entry.hit.namespace}
               linkOptions={{ cluster: entry.hit.context }}
@@ -1344,6 +1347,7 @@ function EntryRow({
           <span className="min-w-0">
             <ResourceRef
               kind={entry.resourceKind}
+              crd={entry.crd}
               name={entry.name}
               namespace={entry.namespace}
               linkOptions={{ cluster: entry.context }}

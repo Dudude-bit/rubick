@@ -826,6 +826,7 @@ export const en = {
     uncordonNamed: "Uncordon {name}?",
     drainAnyway: "Drain anyway",
     stopDraining: "Stop draining",
+    drainRunning: "Drain running",
     drainEnded: "The drain of {name} ended",
     reopenTheNodeToRead: "Open the node again to read what stayed.",
     drainingAttempt: "Asking again, try {n}",
@@ -1186,6 +1187,7 @@ export const en = {
     foundReplacementPod: "Found replacement pod",
     switchingTo: "Switching to {name}",
     noReplacementFound: "No replacement found",
+    replacementNotLookedFor: "Could not look for a replacement",
     seeContainers: "See containers",
     seeConditions: "See conditions",
     kindScaledTo: {
@@ -6070,6 +6072,8 @@ export const en = {
       "These move on their own as soon as the cluster allows it. Leaving the window does not stop the drain.",
     drainReportsMissed:
       "Some of this drain's reports were lost on the way to this window, so it may already have finished. What is shown is the last one that arrived.",
+    drainEndingMissed:
+      "This drain is over, and the report of how it ended was lost on the way to this window. What is shown is the last one that arrived.",
     stoppedExplained:
       "Nothing here changes by waiting. Each one needs an answer only you can give.",
     notNowExplained:

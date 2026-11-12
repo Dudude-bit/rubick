@@ -13,7 +13,7 @@ import userEvent from "@testing-library/user-event";
 import type { ObjectFacts, ResourceConnections } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
 import { DrainDialog } from "./drain-dialog";
-import type { DrainReport, DrainState, RefusedPod } from "./useNodeDrain";
+import type { DrainReport, DrainState, RefusedPod } from "@/stores/drainStore";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -553,5 +553,31 @@ describe("draining a node on critical infrastructure", () => {
       evictPodsWithEmptydir: false,
       tellMeWhen: false,
     });
+  });
+});
+
+describe("a drain whose ending never arrived", () => {
+  /**
+   * The backend no longer runs it and the window was never told how it
+   * ended. Fails if the dialog names an outcome nobody reported, or still
+   * offers to stop it.
+   */
+  it("says it is over and that the ending was lost, with the last report", async () => {
+    await wrap(
+      dialog({
+        phase: "done",
+        node: "node-7",
+        outcome: null,
+        report: report(),
+        message: null,
+      })
+    );
+
+    expect(
+      screen.getByText(/the report of how it ended was lost/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/api-7f9/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop draining" })).toBeNull();
+    expect(screen.queryByText(/The drain stopped|You stopped/)).toBeNull();
   });
 });

@@ -225,6 +225,27 @@ describe("PortForwardsTab", () => {
 
   describe("a forward whose pod was replaced", () => {
     /**
+     * The saved row found its running forward by the pod's name, so once the
+     * backend moved it the same forward was Running above and offered a
+     * Start below, which answered "port 8080 is in use". Fails if a saved
+     * forward whose tunnel moved is offered to be started again.
+     */
+    it("leaves its saved row on Stop, not Start", async () => {
+      vi.mocked(commands.stopPortForward).mockResolvedValue(undefined);
+      await mount();
+      act(() => usePortForwardStore.getState().moved("sess-1", "api-55f", 80));
+
+      expect(
+        screen.queryByRole("button", { name: "Start Auth API" })
+      ).toBeNull();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Stop Auth API" })
+      );
+      expect(commands.stopPortForward).toHaveBeenCalledWith("sess-1");
+      expect(commands.portForwardPod).not.toHaveBeenCalled();
+    });
+
+    /**
      * The reported bug: after a restart the row stayed green against a pod
      * that no longer existed. Fails if a move does not rename the row.
      */

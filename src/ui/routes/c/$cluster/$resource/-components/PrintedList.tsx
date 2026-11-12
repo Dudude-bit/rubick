@@ -139,7 +139,12 @@ export function PrintedList({
         body={t("empty", "notListableBody")}
       />
     );
-  return <PrintedTable resource={resource} entry={served.entry} />;
+  // Keyed by the kind: the table holds the last answer while the next is
+  // read, which is for a change of scope. Another kind's rows held under this
+  // one would each link, peek and delete as an object of this kind.
+  return (
+    <PrintedTable key={resource} resource={resource} entry={served.entry} />
+  );
 }
 
 const NO_PRINTED_COLUMNS: ColumnDef<PrintedRow>[] = [];

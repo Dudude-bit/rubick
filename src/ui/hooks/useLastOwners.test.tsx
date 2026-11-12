@@ -54,3 +54,22 @@ it("forgets them when the kubeconfig files change under the name", () => {
 
   expect(renderHook(() => useLastOwners(CORE)).result.current).toBeUndefined();
 });
+
+/**
+ * A Service's read has no owner references in it; a pod's has an empty list
+ * when nothing owns it, and a manifest leaves the field out. Only the last
+ * two looked. Fails if a read that carries no owners is remembered as one
+ * that found none, which the gone notice words as "Nothing owned it, so
+ * nothing replaces it".
+ */
+it("tells a read that named no owners from one that never carries them", () => {
+  const POD = { kind: "Pod", name: "bare", namespace: "storefront" };
+  const MANIFEST = { kind: "Widget", name: "w", namespace: "storefront" };
+  renderHook(() => useRememberOwners(CORE, { name: "frontend", ports: [] }));
+  renderHook(() => useRememberOwners(POD, { ownerReferences: [] }));
+  renderHook(() => useRememberOwners(MANIFEST, { metadata: { name: "w" } }));
+
+  expect(renderHook(() => useLastOwners(CORE)).result.current).toBeNull();
+  expect(renderHook(() => useLastOwners(POD)).result.current).toEqual([]);
+  expect(renderHook(() => useLastOwners(MANIFEST)).result.current).toEqual([]);
+});

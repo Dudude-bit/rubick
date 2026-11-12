@@ -46,6 +46,8 @@ const mount = (target: ForwardTarget = POD) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The forward is asked for on the cluster the dialog is on, by name.
+  useClusterStore.setState({ currentContext: "prod" });
   usePortForwardStore.setState({
     sessions: [],
     configs: [],
@@ -105,7 +107,7 @@ describe("the port-forward dialog", () => {
       expect(commands.portForwardPod).toHaveBeenCalledWith(
         "hello-web-0",
         "lena-sandbox",
-        { localPort: 0, remotePort: 80, autoReconnect: true }
+        { context: "prod", localPort: 0, remotePort: 80, autoReconnect: true }
       )
     );
   });
@@ -145,7 +147,12 @@ describe("the port-forward dialog", () => {
       expect(commands.portForwardService).toHaveBeenCalledWith(
         "hello-web",
         "lena-sandbox",
-        { localPort: 8080, remotePort: 80, autoReconnect: true }
+        {
+          context: "prod",
+          localPort: 8080,
+          remotePort: 80,
+          autoReconnect: true,
+        }
       )
     );
     expect(commands.portForwardPod).not.toHaveBeenCalled();

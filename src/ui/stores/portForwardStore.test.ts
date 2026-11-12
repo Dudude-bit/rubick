@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
 
 interface Request {
+  context: string;
   localPort: number;
   remotePort: number;
   autoReconnect: boolean;
@@ -49,7 +50,12 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-import { usePortForwardStore } from "./portForwardStore";
+import { useClusterStore } from "./clusterStore";
+import {
+  forwardKey,
+  usePortForwardStore,
+  type PortForwardConfig,
+} from "./portForwardStore";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -74,12 +80,14 @@ describe("a forward that was started is a forward the app can see", () => {
     const session = await usePortForwardStore
       .getState()
       .startPod("web", "default", {
+        context: "kind-nsname",
         localPort: 18080,
         remotePort: 80,
         autoReconnect: true,
       });
 
     expect(portForwardPod).toHaveBeenCalledWith("web", "default", {
+      context: "kind-nsname",
       localPort: 18080,
       remotePort: 80,
       autoReconnect: true,
@@ -90,6 +98,7 @@ describe("a forward that was started is a forward the app can see", () => {
   it("does not list the same session twice when a start is repeated", async () => {
     const start = () =>
       usePortForwardStore.getState().startPod("web", "default", {
+        context: "kind-nsname",
         localPort: 18080,
         remotePort: 80,
         autoReconnect: true,
@@ -103,6 +112,7 @@ describe("a forward that was started is a forward the app can see", () => {
     const session = await usePortForwardStore
       .getState()
       .startPod("web", "default", {
+        context: "kind-nsname",
         localPort: 18080,
         remotePort: 80,
         autoReconnect: true,
@@ -132,6 +142,7 @@ describe("a forward that was started is a forward the app can see", () => {
     await usePortForwardStore.getState().startConfig(config.id);
 
     expect(portForwardPod).toHaveBeenCalledWith("web", "default", {
+      context: "kind-nsname",
       localPort: 18080,
       remotePort: 80,
       autoReconnect: true,
@@ -150,6 +161,7 @@ describe("a forward the app started", () => {
     const session = await usePortForwardStore
       .getState()
       .startPod("web", "default", {
+        context: "kind-nsname",
         localPort: 18080,
         remotePort: 80,
         autoReconnect: true,
@@ -194,5 +206,174 @@ describe("a forward the backend moved or ended", () => {
     ]);
     usePortForwardStore.getState().dismiss("pf-1");
     expect(usePortForwardStore.getState().failed).toEqual([]);
+  });
+});
+
+/**
+ * A forward to a Deployment's pod follows it to the replacement, and the
+ * list then names the new pod. The saved forward that started it was matched
+ * to its session by the pod, so it read "not running" beside its own tunnel,
+ * its Start answered "port in use", and every landing tried it again.
+ */
+describe("a saved forward whose tunnel followed its pod to a replacement", () => {
+  const config: PortForwardConfig = {
+    id: "cfg-web",
+    context: "prod",
+    name: "web",
+    pod: "web-old",
+    namespace: "default",
+    localPort: 18080,
+    remotePort: 80,
+    autoReconnect: true,
+    autoStart: true,
+    createdAt: "now",
+  };
+  const started = {
+    id: "pf-1",
+    context: "prod",
+    pod: "web-old",
+    namespace: "default",
+    localPort: 18080,
+    remotePort: 80,
+    autoReconnect: true,
+    createdAt: "now",
+    via: { kind: "owner" as const, ownerKind: "Deployment", name: "web" },
+  };
+  const running = () => usePortForwardStore.getState().sessions[0];
+
+  beforeEach(() => {
+    useClusterStore.setState({ currentContext: "prod" });
+    usePortForwardStore.setState({ configs: [config], sessions: [started] });
+  });
+
+  /** Fails if a session the backend moved stops being its saved forward's, or is started a second time. */
+  it("is still that saved forward's, and is not started again", async () => {
+    usePortForwardStore.getState().moved("pf-1", "web-new", 8080);
+
+    expect(running()).toMatchObject({ pod: "web-new", remotePort: 8080 });
+    expect(forwardKey(running())).toBe(forwardKey(config));
+    const result = await usePortForwardStore
+      .getState()
+      .startAutoForContext("prod");
+    expect(result).toEqual({ started: 0, skipped: 1, failed: 0 });
+    expect(portForwardPod).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A lagging event bridge can drop the `moved`, and the list read after it
+   * names the new pod. Fails if the list replacing the sessions forgets
+   * where each was started, before or after the move was heard.
+   */
+  it("is still that saved forward's when the list is what says it moved", async () => {
+    listPortForwards.mockResolvedValue([
+      { ...started, pod: "web-new", remotePort: 8080 },
+    ] as never);
+
+    await usePortForwardStore.getState().refreshSessions();
+    expect(forwardKey(running())).toBe(forwardKey(config));
+
+    await usePortForwardStore.getState().refreshSessions();
+    expect(running().pod).toBe("web-new");
+    expect(forwardKey(running())).toBe(forwardKey(config));
+  });
+
+  /** Fails if a forward that never moved is keyed by anything but itself. */
+  it("is not confused with another forward on the same pod's other port", () => {
+    expect(forwardKey(started)).not.toBe(
+      forwardKey({ ...config, remotePort: 8080 })
+    );
+    expect(running().asked).toBeUndefined();
+  });
+});
+
+/**
+ * A saved forward is one cluster's. The start named no cluster and the
+ * backend took the window's, so a forward saved for prod and started as the
+ * window moved to staging tunnelled `localhost:5432` into staging's pod of
+ * the same name.
+ */
+describe("a cluster's saved forwards", () => {
+  const saved = (
+    id: string,
+    over: Partial<PortForwardConfig> = {}
+  ): PortForwardConfig => ({
+    id,
+    context: "prod",
+    name: id,
+    pod: `${id}-0`,
+    namespace: "db",
+    localPort: 15000 + Number(id.at(-1)),
+    remotePort: 5432,
+    autoReconnect: true,
+    autoStart: true,
+    createdAt: "now",
+    ...over,
+  });
+  const asked = () => portForwardPod.mock.calls.map(([pod]) => pod);
+  /** The window moves to staging while the first start is on its way. */
+  const leavingDuringTheFirstStart = () =>
+    portForwardPod.mockImplementationOnce(async (pod, namespace) => {
+      useClusterStore.setState({ currentContext: "staging" });
+      return {
+        id: "pf-1",
+        context: "prod",
+        pod,
+        namespace,
+        localPort: 15001,
+        remotePort: 5432,
+        autoReconnect: true,
+        createdAt: "now",
+        via: { kind: "pod" as const },
+      };
+    });
+
+  beforeEach(() => {
+    useClusterStore.setState({ currentContext: "prod" });
+    usePortForwardStore.setState({
+      configs: [saved("pg1"), saved("pg2"), saved("pg3")],
+    });
+  });
+
+  /** Fails if a start leaves the cluster to whatever the window is on when it arrives. */
+  it("are each started on the cluster they were saved for, by name", async () => {
+    useClusterStore.setState({ currentContext: "staging" });
+    await usePortForwardStore.getState().startConfig("pg1");
+
+    expect(portForwardPod).toHaveBeenCalledWith(
+      "pg1-0",
+      "db",
+      expect.objectContaining({ context: "prod" })
+    );
+  });
+
+  /**
+   * Auto-start runs on landing and Start all on a click; both start one
+   * forward per round trip, and Ctrl+Tab is quicker than that. Fails if
+   * either goes on starting forwards after the window has left the cluster.
+   */
+  it.each(["startAutoForContext", "startAllForContext"] as const)(
+    "stop being started by %s once the window has left their cluster",
+    async (starter) => {
+      leavingDuringTheFirstStart();
+
+      const result = await usePortForwardStore.getState()[starter]("prod");
+
+      expect(asked()).toEqual(["pg1-0"]);
+      expect(result).toEqual({ started: 1, skipped: 0, failed: 0 });
+    }
+  );
+
+  /** The whole set, while the window stays. Fails if the check on the window stops a start it should not. */
+  it("are all started while the window stays on their cluster, and no other cluster's", async () => {
+    usePortForwardStore.setState((state) => ({
+      configs: [...state.configs, saved("pg4", { context: "staging" })],
+    }));
+
+    const result = await usePortForwardStore
+      .getState()
+      .startAutoForContext("prod");
+
+    expect(asked()).toEqual(["pg1-0", "pg2-0", "pg3-0"]);
+    expect(result.started).toBe(3);
   });
 });

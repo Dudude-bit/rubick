@@ -92,7 +92,7 @@ import {
   ownersOf,
   useLastOwners,
   useRememberOwners,
-  type Owner,
+  type KnownOwners,
 } from "@/hooks/useLastOwners";
 import { attentionOf, rowsWithStarts, startsOf } from "@/lib/workload-status";
 import { useLastPassed } from "@/hooks/useNow";
@@ -128,6 +128,9 @@ export function PeekContent({
     refresh: "resourceDetail",
     refetchOnWindowFocus: false,
     retry: false,
+    // No watch follows a peeked object by name, so only this read can say
+    // that one made again under its name is back.
+    rereadsGone: true,
   });
 
   const { dataUpdatedAt } = read;
@@ -181,6 +184,7 @@ export function PeekContent({
   // died may never hold a read of it; the owners outlive that.
   useRememberOwners(target, data);
   const lastOwners = useLastOwners(target);
+  const owned = ownersOf(data);
 
   const age = useRealtimeAge(summary?.createdAt ?? null);
   // The badge says what the kubelet last wrote. When that kubelet stopped
@@ -405,7 +409,7 @@ export function PeekContent({
                 target={target}
                 summary={summary}
                 error={error}
-                gone={gone ? (ownersOf(data) ?? lastOwners) : false}
+                gone={gone ? (data === undefined ? lastOwners : owned) : false}
                 isLoading={isLoading}
                 readAt={dataUpdatedAt}
               />
@@ -510,7 +514,7 @@ function PeekOverview({
   summary: PeekSummary | null;
   error: Error | null;
   /** The owners its last read named, `undefined` when it was never read; `false` while it exists. */
-  gone: Owner[] | undefined | false;
+  gone: KnownOwners | false;
   isLoading: boolean;
   /** When the object on screen was read. */
   readAt: number;

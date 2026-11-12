@@ -11,6 +11,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PortForwardRequest {
+    /// The cluster the forward is for, named by whoever asks. Never the
+    /// window's: a start asked for on one cluster can arrive after the
+    /// window has moved to another, and would tunnel into that one.
+    pub context: String,
     pub local_port: u16,
     pub remote_port: u16,
     pub auto_reconnect: bool,

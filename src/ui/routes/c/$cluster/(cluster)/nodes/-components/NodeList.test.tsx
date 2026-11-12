@@ -31,7 +31,7 @@ vi.mock("@/hooks/useMetrics", () => ({
   useMetrics: () => ({ nodeMetrics: [], nodeStatus: null }),
 }));
 const nodeActions = vi.hoisted(() => ({
-  value: { dialogs: null } as Record<string, unknown>,
+  value: { dialogs: null, draining: () => false } as Record<string, unknown>,
 }));
 vi.mock("./useNodeActions", () => ({
   useNodeActions: () => nodeActions.value,
@@ -137,6 +137,66 @@ describe("NodeList", () => {
   });
 });
 
+function oneNode() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  const quantities = {
+    cpu: "2",
+    memory: "4Gi",
+    pods: "110",
+    ephemeralStorage: null,
+  };
+  client.setQueryData(queryKeys.resources(ResourceType.Node, null), {
+    rows: [
+      {
+        name: "node01",
+        uid: "n1",
+        status: { ready: true, conditions: [], addresses: [] },
+        roles: [],
+        version: "v1.33.0",
+        os: "linux",
+        arch: "amd64",
+        containerRuntime: "containerd://2.0.0",
+        labels: {},
+        taints: [],
+        unschedulable: false,
+        capacity: quantities,
+        allocatable: quantities,
+        providerId: null,
+        createdAt: "2026-10-01T00:00:00Z",
+      },
+    ],
+    unread: [],
+  });
+  return client;
+}
+
+describe("NodeList for a node this window is draining", () => {
+  /**
+   * A drain goes on after its dialog is closed, and the row offered "Drain"
+   * as if nothing were running. Fails if the row does not say a drain is
+   * running, or does not open it.
+   */
+  it("says a drain is running on the row, and opens it", async () => {
+    const drain = vi.fn();
+    nodeActions.value = {
+      dialogs: null,
+      drain,
+      draining: (name: string) => name === "node01",
+      denied: () => undefined,
+    };
+    await open(oneNode());
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Drain running" })
+    );
+    expect(drain).toHaveBeenCalledWith("node01");
+    expect(screen.queryByRole("button", { name: "Drain" })).toBeNull();
+    nodeActions.value = { dialogs: null, draining: () => false };
+  });
+});
+
 describe("NodeList for a reader who may not patch nodes", () => {
   /**
    * The row's Cordon, Uncordon and Drain were live for a reader the cluster
@@ -151,43 +211,13 @@ describe("NodeList for a reader who may not patch nodes", () => {
       cordon,
       uncordon,
       drain,
+      draining: () => false,
       denied: (name: string) =>
         name === "node01"
           ? "Your access does not allow this: the cluster answers no to kubectl auth can-i patch nodes/node01."
           : undefined,
     };
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
-    });
-    const quantities = {
-      cpu: "2",
-      memory: "4Gi",
-      pods: "110",
-      ephemeralStorage: null,
-    };
-    client.setQueryData(queryKeys.resources(ResourceType.Node, null), {
-      rows: [
-        {
-          name: "node01",
-          uid: "n1",
-          status: { ready: true, conditions: [], addresses: [] },
-          roles: [],
-          version: "v1.33.0",
-          os: "linux",
-          arch: "amd64",
-          containerRuntime: "containerd://2.0.0",
-          labels: {},
-          taints: [],
-          unschedulable: false,
-          capacity: quantities,
-          allocatable: quantities,
-          providerId: null,
-          createdAt: "2026-10-01T00:00:00Z",
-        },
-      ],
-      unread: [],
-    });
-    await open(client);
+    await open(oneNode());
     for (const name of ["Cordon", "Uncordon", "Drain"]) {
       const button = await screen.findByRole("button", { name });
       expect(button).toHaveAttribute("aria-disabled", "true");
@@ -196,6 +226,6 @@ describe("NodeList for a reader who may not patch nodes", () => {
     expect(cordon).not.toHaveBeenCalled();
     expect(uncordon).not.toHaveBeenCalled();
     expect(drain).not.toHaveBeenCalled();
-    nodeActions.value = { dialogs: null };
+    nodeActions.value = { dialogs: null, draining: () => false };
   });
 });

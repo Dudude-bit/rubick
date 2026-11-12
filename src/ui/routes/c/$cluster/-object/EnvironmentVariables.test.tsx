@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -170,5 +171,79 @@ describe("a variable read from a Secret", () => {
 
     expect(await screen.findByText("••••••••")).toBeInTheDocument();
     expect(screen.queryByText(/is not in|does not exist/)).toBeNull();
+  });
+});
+
+describe("the eye on one Secret-backed variable", () => {
+  const present = () =>
+    vi.mocked(commands.getSecret).mockResolvedValue({
+      name: "checkout-db",
+      namespace: "team-checkout",
+      uid: "u",
+      type: "Opaque",
+      dataKeys: ["DB_PASSWORD"],
+      labels: {},
+      annotations: {},
+      createdAt: null,
+    });
+  const reveal = async () => {
+    await screen.findByText("••••••••");
+    await userEvent.click(screen.getByRole("button", { name: "Reveal" }));
+  };
+
+  /** The values were read only under the switch, so the row's own eye had
+   *  nothing to show and said the key was not found. Fails if the eye does
+   *  not ask for the value. */
+  it("reads the value it is asked to show", async () => {
+    present();
+    vi.mocked(commands.getSecretData).mockResolvedValue({
+      values: { DB_PASSWORD: "hunter2" },
+      withheld: {},
+      binary: {},
+    });
+    await renderWithRouter(dbPassword(), POD);
+    expect(commands.getSecretData).not.toHaveBeenCalled();
+
+    await reveal();
+
+    expect(await screen.findByText("hunter2")).toBeInTheDocument();
+    expect(screen.queryByText(/not found/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+
+  /** A key the backend keeps back is in the Secret; "not found" with a Copy
+   *  button beside it put that sentence on the clipboard as the password. */
+  it("says a withheld key is withheld and offers nothing to copy", async () => {
+    present();
+    vi.mocked(commands.getSecretData).mockResolvedValue({
+      values: {},
+      withheld: { DB_PASSWORD: { says: "privateKey" } },
+      binary: {},
+    });
+    await renderWithRouter(dbPassword(), POD);
+    await reveal();
+
+    expect(
+      await screen.findByText("a private key, which the app never shows")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/not found/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
+  });
+
+  /** A values read that was refused has not looked. */
+  it("says a refused read was refused, never that the key is not found", async () => {
+    present();
+    vi.mocked(commands.getSecretData).mockRejectedValue({
+      code: "PERMISSION_DENIED",
+      message: "secrets is forbidden",
+    });
+    await renderWithRouter(dbPassword(), POD);
+    await reveal();
+
+    expect(
+      await screen.findByText("not readable with this access")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/not found/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
   });
 });

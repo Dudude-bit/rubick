@@ -39,6 +39,7 @@ import {
   RECORDED,
   REFRESH_INTERVALS,
   effectiveInterval,
+  longestInterval,
   type RefreshRate,
 } from "@/lib/refresh";
 import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
@@ -122,6 +123,13 @@ export type LiveQueryOptions<
    * read again at that moment, whatever the rate.
    */
   changesAt?: (data: TData) => string | null | undefined;
+  /**
+   * A NotFound ends the polling: the object is gone, and asking at the
+   * page's rate only says so again. Set where nothing else will say the
+   * object is back, and the read is asked again at the slowest rate a still
+   * page reads at, and when the reader returns to the window.
+   */
+  rereadsGone?: boolean;
 };
 
 export type LiveQueryResult<TData, TError> = UseQueryResult<TData, TError> & {
@@ -461,7 +469,12 @@ export function useLiveQuery<
 >(
   options: LiveQueryOptions<TQueryFnData, TError, TData, TQueryKey>
 ): LiveQueryResult<TData, TError> {
-  const { refresh = "resourceList", changesAt, ...queryOptions } = options;
+  const {
+    refresh = "resourceList",
+    changesAt,
+    rereadsGone = false,
+    ...queryOptions
+  } = options;
   const base = refresh === false ? false : REFRESH_INTERVALS[refresh];
   const enabled = queryOptions.enabled !== false;
 
@@ -479,14 +492,17 @@ export function useLiveQuery<
     goneRef.current = now;
     setGone(now);
   }, []);
-  const everyMs = gone
+  const stopped = gone && !rereadsGone;
+  const everyMs = stopped
     ? false
-    : effectiveInterval(base, {
-        visible,
-        focused,
-        steadyRuns,
-        recording,
-      });
+    : gone
+      ? visible && base !== false && longestInterval(base)
+      : effectiveInterval(base, {
+          visible,
+          focused,
+          steadyRuns,
+          recording,
+        });
 
   // Off screen is disabled, not only unpolled: an enabled observer is still
   // "active", so a reconnect's invalidation, a cluster switch's eviction and
@@ -563,10 +579,10 @@ export function useLiveQuery<
     // and the query's own mount fetch is already on its way. A query held back
     // by `enabled` has nothing to correct either, and `refetch` would go around
     // the gate that is holding it.
-    if (seenAt.current === 0 || !enabled || gone || refused) return;
+    if (seenAt.current === 0 || !enabled || stopped || refused) return;
     // Joins the read a re-enabled observer has already started.
     void refetch({ cancelRefetch: false });
-  }, [visible, focused, enabled, gone, refused, refetch, countRuns]);
+  }, [visible, focused, enabled, stopped, refused, refetch, countRuns]);
 
   // The reader touching the window retires whatever a still screen had
   // concluded. Subscribed imperatively rather than selected: an interaction

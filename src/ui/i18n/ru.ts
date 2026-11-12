@@ -803,6 +803,7 @@ export const ru: Catalogue = {
     uncordonNamed: "Разрешить планирование на {name}?",
     drainAnyway: "Всё равно освободить",
     stopDraining: "Остановить",
+    drainRunning: "Узел освобождается",
     drainEnded: "Освобождение {name} закончилось",
     reopenTheNodeToRead: "Откройте узел снова, чтобы прочитать, что осталось.",
     drainingAttempt: "Спрашиваем снова, попытка {n}",
@@ -1189,6 +1190,7 @@ export const ru: Catalogue = {
     foundReplacementPod: "Замена найдена",
     switchingTo: "Переходим к {name}",
     noReplacementFound: "Замена не найдена",
+    replacementNotLookedFor: "Не удалось поискать замену",
     seeContainers: "Перейти к контейнерам",
     seeConditions: "Перейти к условиям",
     kindScaledTo: {
@@ -6736,6 +6738,8 @@ export const ru: Catalogue = {
       "Они уедут сами, как только кластер позволит. Если закрыть окно, освобождение не прервётся.",
     drainReportsMissed:
       "Часть сообщений этого освобождения потерялась по дороге в окно, так что оно, возможно, уже закончилось. Здесь показано последнее, что дошло.",
+    drainEndingMissed:
+      "Освобождение закончилось, а сообщение о том, чем именно, потерялось по дороге в окно. Здесь показано последнее, что дошло.",
     stoppedExplained:
       "Здесь ожидание ничего не изменит: на каждого нужен ответ, который можете дать только вы.",
     notNowExplained:
