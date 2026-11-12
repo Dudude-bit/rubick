@@ -251,15 +251,13 @@ pub fn effective_container<'a>(container: &'a str, via: Option<&'a Via>) -> &'a 
 }
 
 /// GNU find, every entry one level down, tab-separated, one line each.
+/// `-H`: started on a symlink, find prints nothing below it and exits 0.
 #[must_use]
 pub fn gnu_find_command(path: &str, via: Option<&Via>) -> Vec<String> {
     let level = ["-mindepth", "1", "-maxdepth", "1"];
     let [min, one, max, _] = level;
-    reading(
-        path,
-        via,
-        &["find", AT, min, one, max, one, "-printf", parse::GNU_FORMAT],
-    )
+    let find = ["find", "-H", AT, min, one, max, one, "-printf"];
+    reading(path, via, &[find.as_slice(), &[parse::GNU_FORMAT]].concat())
 }
 
 /// A shell loop over busybox `stat`, for images without GNU find.
@@ -922,6 +920,26 @@ mod tests {
             assert_eq!(rung[..6], reading("/var/run", via, &[])[..], "{rung:?}");
             assert!(rung.contains(&AT.to_string()), "{rung:?}");
         }
+    }
+
+    /// `/var/run` is a link to `/run` on Debian, and find does not follow a
+    /// link it is started on: it printed nothing, exited 0, and the listing
+    /// said "This directory is empty" over the mounted secrets. Run without
+    /// `-printf`, which is GNU's alone; the start point is every find's.
+    #[cfg(unix)]
+    #[test]
+    fn a_directory_reached_through_a_symlink_is_listed_and_not_found_empty() {
+        let tree = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(tree.path().join("run/secrets")).expect("run");
+        std::os::unix::fs::symlink("run", tree.path().join("link")).expect("link");
+        let link = tree.path().join("link").display().to_string();
+
+        let mut command = gnu_find_command(&link, None);
+        command.truncate(command.len() - 2);
+        let (listed, said, code) = ran(&command);
+
+        assert_eq!(code, Some(0), "{said}");
+        assert_eq!(listed, format!("{link}/secrets\n"));
     }
 
     #[test]
