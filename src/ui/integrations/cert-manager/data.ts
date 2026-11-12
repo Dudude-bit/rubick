@@ -30,13 +30,14 @@ import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
-import { errorToShow } from "@/lib/error-utils";
+import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
 import {
   CERTIFICATES_CRD,
   CHALLENGES_CRD,
   CLUSTER_ISSUERS_CRD,
+  INGRESSES,
   ISSUERS_CRD,
   ORDERS_CRD,
   REQUESTS_CRD,
@@ -73,19 +74,11 @@ export interface KindRead {
 
 /**
  * A kind the API server does not serve, as against one it would not or could
- * not answer for.
- *
- * The message is the only signal there is: a Tauri command's rejection
- * crosses the IPC boundary as a string, so the 404 that
- * `list_custom_resources` gets while looking the CRD up arrives here as text.
- * A denial says "forbidden" and a dead connection says neither, which is
- * exactly the line that has to be drawn — and drawing it in the safe
- * direction is deliberate: a message this does not recognise counts as a
- * failed read, so the page says it could not read rather than that there was
- * nothing there.
+ * not answer for, told apart by the error's code and never by its words: a
+ * 403 may end in `clusterrole "x" not found`, and filing that as "not served"
+ * says a cluster has no Issuer because nobody was allowed to look. A code
+ * this does not recognise counts as a failed read.
  */
-const NOT_SERVED = /not ?found/i;
-
 async function readKind(kind: string, crd: string): Promise<KindRead> {
   try {
     return {
@@ -94,11 +87,14 @@ async function readKind(kind: string, crd: string): Promise<KindRead> {
       served: true,
     };
   } catch (error) {
-    const reason = errorToShow(error);
-    if (NOT_SERVED.test(reason)) {
+    if (errorCode(error) === ERROR_CODES.NOT_FOUND) {
       return { items: [], unread: null, served: false };
     }
-    return { items: [], unread: { kind, crd, reason }, served: true };
+    return {
+      items: [],
+      unread: { kind, crd, reason: errorToShow(error) },
+      served: true,
+    };
   }
 }
 
@@ -118,7 +114,23 @@ interface WalkSources {
    * reference runs the other way — and without this the page could say thirty
    * days were left and not which address would stop working.
    */
-  ingresses: IngressInfo[];
+  ingresses: { items: IngressInfo[] | null; unread: UnreadKind | null };
+}
+
+/** The Ingresses, or `null` and why: a failed list is not "none mounts it". */
+async function readIngresses(): Promise<WalkSources["ingresses"]> {
+  try {
+    return { items: await commands.listIngresses(null), unread: null };
+  } catch (error) {
+    return {
+      items: null,
+      unread: {
+        kind: "Ingress",
+        crd: INGRESSES,
+        reason: errorToShow(error),
+      },
+    };
+  }
 }
 
 async function fetchWalkSources(): Promise<WalkSources> {
@@ -131,7 +143,7 @@ async function fetchWalkSources(): Promise<WalkSources> {
       readKind("ClusterIssuer", CLUSTER_ISSUERS_CRD),
       // A failure here costs the page the hosts column and nothing else, so
       // it is not allowed to take the certificates down with it.
-      commands.listIngresses(null).catch((): IngressInfo[] => []),
+      readIngresses(),
     ]);
   return { requests, orders, challenges, issuers, clusterIssuers, ingresses };
 }
@@ -167,7 +179,7 @@ export function usePicture(): {
       orders.items,
       challenges.items,
       t,
-      walk.data.ingresses,
+      walk.data.ingresses.items,
       // Only a cluster with no routing CRDs at all may be told a certificate
       // is used by nothing: a Traefik `IngressRoute` mounts Secrets too, and
       // this page must not import Traefik to find out. Left false, the row
@@ -178,9 +190,14 @@ export function usePicture(): {
       certificates: rows,
       issuers: issuerRows(issuers.items, clusterIssuers.items, rows),
       acme: orders.served || challenges.served,
-      unread: [requests, orders, challenges, issuers, clusterIssuers].flatMap(
-        (read) => read.unread ?? []
-      ),
+      unread: [
+        requests,
+        orders,
+        challenges,
+        issuers,
+        clusterIssuers,
+        walk.data.ingresses,
+      ].flatMap((read) => read.unread ?? []),
     };
   }, [certificates.data, walk.data, t]);
 

@@ -40,6 +40,8 @@ export interface ServedHost {
 
 export interface CertificateUse {
   hosts: ServedHost[];
+  /** False where the Ingresses were not read: `hosts` is then empty and says nothing. */
+  checked: boolean;
   /**
    * Whether "nothing uses this" may be said out loud.
    *
@@ -79,11 +81,18 @@ export function certificateUse(
     namespace: string;
     dnsNames: string[];
   },
-  ingresses: IngressInfo[],
+  ingresses: IngressInfo[] | null,
   options: { unusedIsCertain: boolean }
 ): CertificateUse {
+  if (ingresses === null) {
+    return { hosts: [], checked: false, unusedIsCertain: false };
+  }
   if (certificate.secretName === null) {
-    return { hosts: [], unusedIsCertain: options.unusedIsCertain };
+    return {
+      hosts: [],
+      checked: true,
+      unusedIsCertain: options.unusedIsCertain,
+    };
   }
 
   const hosts: ServedHost[] = [];
@@ -102,6 +111,7 @@ export function certificateUse(
 
   return {
     hosts: hosts.sort((left, right) => left.host.localeCompare(right.host)),
+    checked: true,
     unusedIsCertain: options.unusedIsCertain,
   };
 }

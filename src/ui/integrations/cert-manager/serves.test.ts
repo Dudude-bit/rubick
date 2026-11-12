@@ -132,6 +132,22 @@ describe("what a certificate is serving", () => {
    * reads Ingresses only. A certificate mounted by a Traefik `IngressRoute`
    * would be deleted on the strength of it.
    */
+  /**
+   * `null` is an Ingress list that was not read. Fails if it is joined as an
+   * empty one, which says nothing mounts the Secret, certainly or not.
+   */
+  it("checks nothing against Ingresses that were not read", () => {
+    expect(
+      certificateUse(cert(["shop.example.com"]), null, {
+        unusedIsCertain: true,
+      })
+    ).toEqual({ hosts: [], checked: false, unusedIsCertain: false });
+    expect(
+      certificateUse(cert(["shop.example.com"]), [], { unusedIsCertain: true })
+        .checked
+    ).toBe(true);
+  });
+
   it("carries whether an absence may be stated at all", () => {
     expect(
       certificateUse(cert(["shop.example.com"]), [], { unusedIsCertain: false })

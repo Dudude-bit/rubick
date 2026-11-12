@@ -30,6 +30,8 @@ export const ORDERS_CRD = "orders.acme.cert-manager.io";
 export const CHALLENGES_CRD = "challenges.acme.cert-manager.io";
 export const ISSUERS_CRD = "issuers.cert-manager.io";
 export const CLUSTER_ISSUERS_CRD = "clusterissuers.cert-manager.io";
+/** Not a CRD: named beside them for the one read of a built-in the page makes. */
+export const INGRESSES = "ingresses.networking.k8s.io";
 
 /** One object on the way from "I want a certificate" to a certificate. */
 export interface CertStep {
@@ -396,8 +398,8 @@ export function certificateRows(
   // Ahead of the optional arguments because it has to be: a required
   // parameter cannot follow one with a default.
   t: T,
-  /** What mounts the Secrets, for the hosts each certificate serves. */
-  ingresses: IngressInfo[] = [],
+  /** What mounts the Secrets, for the hosts each certificate serves; `null` where they were not read. */
+  ingresses: IngressInfo[] | null = null,
   /** False where a routing CRD this file cannot read may also mount them. */
   unusedIsCertain = false
 ): CertRow[] {

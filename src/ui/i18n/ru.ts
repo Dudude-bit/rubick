@@ -6357,6 +6357,10 @@ export const ru: Catalogue = {
       "Ни в одном пространстве имён нет объекта Certificate, и ни у одного Ingress нет аннотации {annotation}, которая создала бы его.",
     noIngressMountsSecret:
       "Ни один Ingress в {namespace} не монтирует {secret}.",
+    servingNotChecked:
+      "Что отдаёт этот сертификат, не проверено: список Ingress получить не удалось.",
+    servingUnknownCost:
+      "Поэтому ни одна строка здесь не скажет, какие имена хостов отдаёт сертификат и отдаёт ли хоть одно.",
     itsSecret: "его Secret",
     nothingServingTlsFrom:
       "TLS из {secret} никто не отдаёт, поэтому каждый хост выше либо отклоняется, либо отдаётся открытым текстом.",

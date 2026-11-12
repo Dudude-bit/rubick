@@ -406,6 +406,20 @@ export interface RelatedObject {
   tone?: "warn" | "err";
 }
 
+/**
+ * Thrown by an `object.related` supplier that read part of its answer: the
+ * rows it has, and the failure that cost the rest. The panel draws the rows
+ * and says the list is short, where an empty remainder would read as "none".
+ */
+export class RelatedShort extends Error {
+  constructor(
+    readonly related: RelatedObject[],
+    cause: unknown
+  ) {
+    super("related objects read in part", { cause });
+  }
+}
+
 /** One way in to a Service, as the object that routes it states it. */
 export interface ServiceRoute {
   /** The hostname a client types. */

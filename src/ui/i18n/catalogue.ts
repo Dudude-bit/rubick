@@ -5728,6 +5728,10 @@ export const en = {
     noCertificateObjectAnywhere:
       "No Certificate object exists in any namespace, and no Ingress carries the {annotation} annotation that would make one.",
     noIngressMountsSecret: "No Ingress in {namespace} mounts {secret}.",
+    servingNotChecked:
+      "What serves this certificate was not checked: the Ingresses could not be listed.",
+    servingUnknownCost:
+      "So no row here can say which hostnames a certificate serves, or that none does.",
     itsSecret: "its Secret",
     nothingServingTlsFrom:
       "Nothing is serving TLS from {secret}, so every host above it is refused or served in the clear.",
