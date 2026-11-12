@@ -1,46 +1,106 @@
 {
-  "about": "The placeholder a rendered manifest carries in place of a private key, and which keys of a manifest still hold it. Such a manifest is never sent: a ConfigMap would store the placeholder as the key. Rust: `WITHHELD_MARKER` in src/tauri/src/resources/tls.rs and the guard in `parse_all_documents` (src/tauri/src/commands/manifest/parse.rs). TypeScript: `WITHHELD_MARKER` and `withheldKeysIn` in src/ui/routes/c/$cluster/-yaml/manifest-reads.ts, which name the keys before Apply is offered.",
+  "about": "The placeholder a rendered manifest carries in place of a private key, which keys of a manifest still hold it (`keys`), and which annotations hold a record blanked the same way, with the keys blanked in each (`copies`). A manifest with `keys` is never sent: a ConfigMap would store the placeholder as the key. An annotation in `copies` is left out of what is sent: stored, the placeholder would replace the record kubectl keeps. Rust: `WITHHELD_MARKER`, `still_withheld` and `withheld_copy` in src/tauri/src/resources/tls.rs and the guard in `parse_all_documents` (src/tauri/src/commands/manifest/parse.rs). TypeScript: `WITHHELD_MARKER` in src/ui/lib/withheld.ts, `withheldKeysIn` and `withheldCopiesIn` in src/ui/routes/c/$cluster/-yaml/manifest-reads.ts, which name both before Apply is offered.",
   "marker": "<withheld: the app never shows a private key>",
   "cases": [
     {
       "name": "a ConfigMap as the editor shows it",
       "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nginx\n  namespace: shop\ndata:\n  nginx.conf: worker_processes 2;\n  server.key: '<withheld: the app never shows a private key>'\n",
-      "keys": ["server.key"]
+      "keys": ["server.key"],
+      "copies": {}
     },
     {
       "name": "every map a key can sit in",
       "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: bundle\n  namespace: shop\nbinaryData:\n  bundle.p12: \"<withheld: the app never shows a private key>\"\nstringData:\n  id_rsa: '<withheld: the app never shows a private key>'\n",
-      "keys": ["bundle.p12", "id_rsa"]
+      "keys": ["bundle.p12", "id_rsa"],
+      "copies": {}
     },
     {
       "name": "a Secret, whose data the server would refuse anyway",
       "manifest": "apiVersion: v1\nkind: Secret\nmetadata:\n  name: tls\n  namespace: shop\ntype: kubernetes.io/tls\ndata:\n  tls.crt: Y2VydA==\n  tls.key: '<withheld: the app never shows a private key>'\n",
-      "keys": ["tls.key"]
+      "keys": ["tls.key"],
+      "copies": {}
     },
     {
       "name": "reflowed into a block scalar",
       "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nginx\n  namespace: shop\ndata:\n  server.key: |\n    <withheld: the app never shows a private key>\n",
-      "keys": ["server.key"]
+      "keys": ["server.key"],
+      "copies": {}
     },
     {
       "name": "in the second document of two",
       "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n  namespace: shop\ndata:\n  a: b\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n  namespace: shop\ndata:\n  client.key: '<withheld: the app never shows a private key>'\n",
-      "keys": ["client.key"]
+      "keys": ["client.key"],
+      "copies": {}
     },
     {
       "name": "the withheld key removed from the manifest",
       "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nginx\n  namespace: shop\ndata:\n  nginx.conf: worker_processes 2;\n",
-      "keys": []
+      "keys": [],
+      "copies": {}
     },
     {
       "name": "a value that only mentions the placeholder",
       "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: notes\n  namespace: shop\ndata:\n  readme: \"the app prints <withheld: the app never shows a private key> for a key\"\n",
-      "keys": []
+      "keys": [],
+      "copies": {}
     },
     {
       "name": "the placeholder outside the maps a key is read from",
       "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: notes\n  namespace: shop\n  annotations:\n    note: '<withheld: the app never shows a private key>'\ndata:\n  a: b\n",
-      "keys": []
+      "keys": [],
+      "copies": {}
+    },
+    {
+      "name": "the record kubectl keeps, blanked, with the key itself taken out of the manifest",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nginx\n  namespace: shop\n  annotations:\n    team: edge\n    kubectl.kubernetes.io/last-applied-configuration: |\n      {\"apiVersion\":\"v1\",\"data\":{\"nginx.conf\":\"worker_processes 2;\",\"server.key\":\"<withheld: the app never shows a private key>\"},\"kind\":\"ConfigMap\",\"metadata\":{\"annotations\":{},\"name\":\"nginx\",\"namespace\":\"shop\"}}\ndata:\n  nginx.conf: worker_processes 2;\n",
+      "keys": [],
+      "copies": {
+        "kubectl.kubernetes.io/last-applied-configuration": ["server.key"]
+      }
+    },
+    {
+      "name": "the blanked record beside the placeholder still under data",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nginx\n  namespace: shop\n  annotations:\n    kubectl.kubernetes.io/last-applied-configuration: |\n      {\"apiVersion\":\"v1\",\"data\":{\"nginx.conf\":\"worker_processes 2;\",\"server.key\":\"<withheld: the app never shows a private key>\"},\"kind\":\"ConfigMap\",\"metadata\":{\"annotations\":{},\"name\":\"nginx\",\"namespace\":\"shop\"}}\ndata:\n  nginx.conf: worker_processes 2;\n  server.key: '<withheld: the app never shows a private key>'\n",
+      "keys": ["server.key"],
+      "copies": {
+        "kubectl.kubernetes.io/last-applied-configuration": ["server.key"]
+      }
+    },
+    {
+      "name": "a Secret's record blanked under stringData, on one quoted line",
+      "manifest": "apiVersion: v1\nkind: Secret\nmetadata:\n  name: deploy\n  namespace: shop\n  annotations:\n    kubectl.kubernetes.io/last-applied-configuration: '{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"deploy\",\"namespace\":\"shop\"},\"stringData\":{\"id_rsa\":\"<withheld: the app never shows a private key>\",\"user\":\"git\"}}'\ndata:\n  user: Z2l0\n",
+      "keys": [],
+      "copies": {
+        "kubectl.kubernetes.io/last-applied-configuration": ["id_rsa"]
+      }
+    },
+    {
+      "name": "a record with no key in it",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nginx\n  namespace: shop\n  annotations:\n    kubectl.kubernetes.io/last-applied-configuration: |\n      {\"apiVersion\":\"v1\",\"data\":{\"nginx.conf\":\"worker_processes 2;\"},\"kind\":\"ConfigMap\",\"metadata\":{\"annotations\":{},\"name\":\"nginx\",\"namespace\":\"shop\"}}\ndata:\n  nginx.conf: worker_processes 2;\n",
+      "keys": [],
+      "copies": {}
+    },
+    {
+      "name": "another tool's record, blanked in two maps",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: bundle\n  namespace: shop\n  annotations:\n    kapp.k14s.io/original: '{\"apiVersion\":\"v1\",\"binaryData\":{\"bundle.p12\":\"<withheld: the app never shows a private key>\"},\"data\":{\"client.key\":\"<withheld: the app never shows a private key>\"},\"kind\":\"ConfigMap\",\"metadata\":{\"name\":\"bundle\"}}'\ndata:\n  a: b\n",
+      "keys": [],
+      "copies": {
+        "kapp.k14s.io/original": ["bundle.p12", "client.key"]
+      }
+    },
+    {
+      "name": "a record that holds another record",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: moved\n  namespace: shop\n  annotations:\n    kapp.k14s.io/original: '{\"kind\":\"ConfigMap\",\"metadata\":{\"annotations\":{\"kubectl.kubernetes.io/last-applied-configuration\":\"{\\\"kind\\\":\\\"ConfigMap\\\",\\\"data\\\":{\\\"tls.key\\\":\\\"<withheld: the app never shows a private key>\\\"}}\"},\"name\":\"moved\"}}'\ndata:\n  a: b\n",
+      "keys": [],
+      "copies": {
+        "kapp.k14s.io/original": ["tls.key"]
+      }
+    },
+    {
+      "name": "an annotation that is not an object and only quotes the placeholder",
+      "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: notes\n  namespace: shop\n  annotations:\n    list: '[{\"data\":{\"server.key\":\"<withheld: the app never shows a private key>\"}}]'\n    broken: '{\"data\":{\"server.key\":\"<withheld: the app never shows a private key>\"'\ndata:\n  a: b\n",
+      "keys": [],
+      "copies": {}
     }
   ]
 }

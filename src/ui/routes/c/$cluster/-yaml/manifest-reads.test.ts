@@ -6,9 +6,10 @@ import {
   changesReplicaCount,
   deliveryOfManifest,
   liveReplicaMove,
-  WITHHELD_MARKER,
+  withheldCopiesIn,
   withheldKeysIn,
 } from "./manifest-reads";
+import { WITHHELD_MARKER } from "@/lib/withheld";
 
 describe("the keys a manifest still withholds", () => {
   const corpus = JSON.parse(
@@ -18,7 +19,12 @@ describe("the keys a manifest still withholds", () => {
     )
   ) as {
     marker: string;
-    cases: { name: string; manifest: string; keys: string[] }[];
+    cases: {
+      name: string;
+      manifest: string;
+      keys: string[];
+      copies: Record<string, string[]>;
+    }[];
   };
 
   /**
@@ -33,6 +39,27 @@ describe("the keys a manifest still withholds", () => {
       expect([...withheldKeysIn(manifest)].sort(), name).toEqual(
         [...keys].sort()
       );
+    }
+  });
+
+  /**
+   * The backend leaves a blanked record out of what Apply sends, and the
+   * editor says which annotations those are. Fails when the two stop naming
+   * the same annotations, or the keys blanked in each.
+   */
+  it("names the blanked records the backend leaves out of an apply", () => {
+    const named = corpus.cases.filter(
+      ({ copies }) => Object.keys(copies).length > 0
+    );
+    expect(named.length).toBeGreaterThanOrEqual(4);
+    for (const { name, manifest, copies } of corpus.cases) {
+      const found = Object.fromEntries(
+        withheldCopiesIn(manifest).map(({ annotation, keys }) => [
+          annotation,
+          [...keys].sort(),
+        ])
+      );
+      expect(found, name).toEqual(copies);
     }
   });
 });

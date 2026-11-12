@@ -58,7 +58,7 @@ pub(super) fn parse_all_documents(manifest: &str) -> Result<Vec<ParsedManifest>>
         ));
     }
 
-    let parsed = documents
+    let mut parsed = documents
         .iter()
         .enumerate()
         .map(|(i, doc)| {
@@ -75,6 +75,16 @@ pub(super) fn parse_all_documents(manifest: &str) -> Result<Vec<ParsedManifest>>
         .collect();
     if !keys.is_empty() {
         return Err(Error::WithheldValue { keys });
+    }
+    // A record the screen showed with a key blanked is not the reader's to
+    // send: stored, the placeholder would stand where kubectl wrote the key.
+    // Left out, a server-side apply keeps what another manager owns.
+    for doc in &mut parsed {
+        let meta = &mut doc.object.metadata;
+        if let Some(annotations) = meta.annotations.as_mut() {
+            annotations.retain(|_, value| crate::resources::withheld_copy(value).is_empty());
+        }
+        meta.annotations = meta.annotations.take().filter(|kept| !kept.is_empty());
     }
     Ok(parsed)
 }
@@ -355,6 +365,66 @@ metadata:
             found.sort_unstable();
             assert_eq!(found, expected, "{name}");
         }
+    }
+
+    /// Would write the placeholder into the record `kubectl apply` keeps: the
+    /// editor's buffer holds that record with its keys blanked, and Apply and
+    /// the dry run send the buffer. Fails if a blanked record is sent, if any
+    /// other annotation is not, or if the editor would name other keys.
+    #[test]
+    fn a_record_blanked_for_the_screen_is_left_out_of_what_is_sent() {
+        use std::collections::{BTreeMap, BTreeSet};
+        const CORPUS: &str = include_str!("../../../../contracts/withheld-value.json");
+        let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
+
+        let mut left_out = 0;
+        for case in corpus["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let manifest = case["manifest"].as_str().unwrap();
+            let expected: BTreeMap<String, Vec<String>> =
+                serde_json::from_value(case["copies"].clone()).unwrap();
+
+            let mut written = BTreeSet::new();
+            let mut copies = BTreeMap::new();
+            for doc in yaml_documents(manifest).unwrap() {
+                let annotations = doc["metadata"]["annotations"].as_mapping();
+                for (key, value) in annotations.into_iter().flatten() {
+                    let (key, value) = (key.as_str().unwrap(), value.as_str().unwrap());
+                    written.insert(key.to_string());
+                    let mut keys = crate::resources::withheld_copy(value);
+                    keys.sort_unstable();
+                    if !keys.is_empty() {
+                        copies.insert(key.to_string(), keys);
+                    }
+                }
+            }
+            assert_eq!(copies, expected, "{name}");
+
+            // A manifest refused for its own keys sends nothing at all.
+            let Ok(parsed) = parse_all_documents(manifest) else {
+                continue;
+            };
+            let sent: BTreeSet<String> = parsed
+                .iter()
+                .flat_map(|doc| doc.object.metadata.annotations.iter().flatten())
+                .map(|(key, _)| key.clone())
+                .collect();
+            let kept: BTreeSet<String> = written
+                .into_iter()
+                .filter(|key| !expected.contains_key(key))
+                .collect();
+            assert_eq!(sent, kept, "{name}");
+            let empty_map = |doc: &ParsedManifest| {
+                let annotations = doc.object.metadata.annotations.as_ref();
+                annotations.is_some_and(BTreeMap::is_empty)
+            };
+            assert!(
+                !parsed.iter().any(empty_map),
+                "{name}: an empty map is sent"
+            );
+            left_out += expected.len();
+        }
+        assert!(left_out >= 4, "the corpus lost its blanked records");
     }
 
     #[test]

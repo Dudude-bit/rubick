@@ -27,7 +27,7 @@ import { renderWithRouter } from "@/test/render";
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { marcoReview } from "@/test/marco";
-import { WITHHELD_MARKER } from "./manifest-reads";
+import { WITHHELD_MARKER } from "@/lib/withheld";
 
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();

@@ -325,6 +325,28 @@ pub fn still_withheld(object: &serde_json::Value) -> Vec<String> {
         .collect()
 }
 
+/// The keys still blanked inside an annotation's value, where that value is
+/// a record [`redact_private_keys`] blanked for the screen. Sent back, the
+/// placeholder would replace what the tool that keeps the record wrote.
+#[must_use]
+pub fn withheld_copy(value: &str) -> Vec<String> {
+    let Some(object) = embedded_object(value) else {
+        return Vec::new();
+    };
+    let mut keys = still_withheld(&object);
+    let nested = object
+        .pointer("/metadata/annotations")
+        .and_then(serde_json::Value::as_object);
+    keys.extend(
+        nested
+            .into_iter()
+            .flat_map(|map| map.values())
+            .filter_map(serde_json::Value::as_str)
+            .flat_map(withheld_copy),
+    );
+    keys
+}
+
 /// Blank every private key in a rendered object, in place.
 ///
 /// Applied to the YAML paths as well as the decoded-values path, because
