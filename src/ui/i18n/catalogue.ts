@@ -1187,6 +1187,7 @@ export const en = {
     foundReplacementPod: "Found replacement pod",
     switchingTo: "Switching to {name}",
     noReplacementFound: "No replacement found",
+    replacementNotLookedFor: "Could not look for a replacement",
     seeContainers: "See containers",
     seeConditions: "See conditions",
     kindScaledTo: {

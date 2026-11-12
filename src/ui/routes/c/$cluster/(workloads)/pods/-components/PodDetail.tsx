@@ -755,18 +755,23 @@ export function PodDetail() {
   const handleFindReplacement = savedLabels
     ? () =>
         findReplacement().then((replacement) => {
-          if (replacement) {
+          if (replacement.is === "unread") {
+            toastError(
+              t("action", "replacementNotLookedFor"),
+              replacement.error
+            );
+          } else if (replacement.is === "found") {
             toast({
               title: t("action", "foundReplacementPod"),
               description: t("action", "switchingTo", {
-                name: replacement.name,
+                name: replacement.pod.name,
               }),
             });
             navigate({
               ...objectLink({
                 kind: ResourceType.Pod,
-                name: replacement.name,
-                namespace: replacement.namespace,
+                name: replacement.pod.name,
+                namespace: replacement.pod.namespace,
               })!,
               replace: true,
             });

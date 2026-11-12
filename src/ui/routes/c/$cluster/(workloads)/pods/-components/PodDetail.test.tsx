@@ -237,6 +237,43 @@ describe("a pod page whose pod is deleted while it is open", () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * Find replacement lists the namespace's pods, which a reader who may get
+   * this pod by name can be refused. The refusal was drawn as "No
+   * replacement found: no other running pods with matching labels". Fails
+   * if a list that could not be read is said to have found nothing.
+   */
+  it("says it could not look for a replacement when the list is refused, not that there is none", async () => {
+    const answer = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "list_pods")
+        throw { code: "PERMISSION_DENIED", message: "pods is forbidden" };
+      return answer(command, args);
+    });
+    await renderWithRouter(
+      <>
+        <PodDetail />
+        <Toaster />
+      </>,
+      {
+        at: `/c/prod/pods/shop/${NAME}`,
+        route: "/c/$cluster/pods/$namespace/$name",
+      }
+    );
+    await advance(0);
+    gone = true;
+    await advance(REFRESH_INTERVALS.resourceDetail);
+    await advance(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Find replacement" }));
+    await advance(0);
+
+    expect(
+      screen.getByText("Could not look for a replacement")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No replacement found")).toBeNull();
+  });
+
   /** Fails if the note claims a session on a page that never opened one, landing on Shell included. */
   it("says nothing about a shell nobody opened", async () => {
     await renderWithRouter(<PodDetail />, {

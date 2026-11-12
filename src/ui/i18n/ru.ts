@@ -1190,6 +1190,7 @@ export const ru: Catalogue = {
     foundReplacementPod: "Замена найдена",
     switchingTo: "Переходим к {name}",
     noReplacementFound: "Замена не найдена",
+    replacementNotLookedFor: "Не удалось поискать замену",
     seeContainers: "Перейти к контейнерам",
     seeConditions: "Перейти к условиям",
     kindScaledTo: {
