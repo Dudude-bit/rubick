@@ -391,3 +391,29 @@ describe("what a project allows, in words", () => {
     ).toContain("any cluster");
   });
 });
+
+/**
+ * A repository address may carry the token it is cloned with, and the page,
+ * the shared file, the Managed by line and the connections graph all draw
+ * what the model read. Fails if the model hands any of them the address as
+ * written, or loses the host and the path.
+ */
+describe("a repository address with a token in it", () => {
+  const remote =
+    "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git";
+
+  it("is read without what stands before the host", () => {
+    const app = readApplication(
+      application("shop", { source: { repoURL: remote, path: "apps" } }, {})
+    );
+    expect(app.sources.map((source) => source.repoUrl)).toEqual([
+      "https://…@gitlab.example.com/org/repo.git",
+    ]);
+  });
+
+  it("is named the same way among a project's allowed repositories", () => {
+    expect(projectReposWords([remote, "https://github.com/acme/*"], t)).toBe(
+      "https://…@gitlab.example.com/org/repo.git, https://github.com/acme/*"
+    );
+  });
+});

@@ -1,4 +1,5 @@
 import { commands } from "@/lib/commands";
+import { withoutCredentials } from "@/lib/hints";
 import { getValueByPath } from "../kit";
 import type { DeliveryOwner, DeliveryRevision } from "../gitops";
 import { APPLICATIONS_CRD } from "./data";
@@ -28,7 +29,11 @@ export async function historyOf(
       id: `${owner.namespace}/${owner.name}/${entry.id ?? index}`,
       at: entry.deployedAt ?? entry.deployStartedAt ?? null,
       revision: entry.revision ?? null,
-      from: entry.source?.path ?? entry.source?.repoURL ?? null,
+      from:
+        entry.source?.path ??
+        (entry.source?.repoURL
+          ? withoutCredentials(entry.source.repoURL)
+          : null),
       status: null,
       owner,
     }))

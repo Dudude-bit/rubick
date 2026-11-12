@@ -8,6 +8,7 @@
  * and not working — so both are columns and neither stands for the other.
  */
 
+import { withoutCredentials } from "@/lib/hints";
 import type { CrdColumn } from "../kit";
 import { getValueByPath, matchMultiple, orNone, orNotWritten } from "../kit";
 import type { CrdView } from "../registry";
@@ -38,7 +39,9 @@ const applicationColumns: CrdColumn[] = [
       getValueByPath(resource, "spec.source.repoURL") ??
       getValueByPath(resource, "spec.sources[0].repoURL"),
     cell: (value) =>
-      value ? String(value).replace(/^https:\/\//, "") : "several",
+      value
+        ? withoutCredentials(String(value)).replace(/^https:\/\//, "")
+        : "several",
   },
   {
     id: "destination",

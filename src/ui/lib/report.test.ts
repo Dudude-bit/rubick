@@ -539,6 +539,117 @@ describe("renderReport", () => {
   });
 
   /**
+   * An Argo CD or Flux source keeps its git token in the address, and the
+   * controller's failure message quotes the address whole; both were
+   * printed as written under "No Secret value is ever written into this
+   * file", then published to a link. Fails if any way a section draws
+   * text lets what stands before a host through, or loses the host.
+   */
+  it("prints an address without the credentials in it, wherever a section draws one", () => {
+    const remote =
+      "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git";
+    const said = `failed to clone '${remote}': authentication required`;
+    const html = renderReport(
+      report({
+        verdict: said,
+        stats: [{ label: "Source", value: remote, note: said }],
+        notRead: [`Sources: ${said}`],
+        sections: [
+          section("facts", {
+            type: "facts",
+            rows: [{ label: "URL", values: [{ text: remote, mono: true }] }],
+          }),
+          section("table", {
+            type: "table",
+            columns: ["Repository"],
+            rows: [{ cells: [{ text: remote }] }],
+            more: null,
+          }),
+          section("conditions", {
+            type: "conditions",
+            rows: [
+              {
+                type: "Ready",
+                status: "False",
+                role: "err",
+                reason: "GitOperationFailed",
+                message: said,
+                since: null,
+              },
+            ],
+          }),
+          section("events", {
+            type: "events",
+            rows: [
+              {
+                at: null,
+                role: "warn",
+                reason: "GitOperationFailed",
+                message: said,
+                count: 1,
+              },
+            ],
+          }),
+          section("findings", {
+            type: "findings",
+            items: [{ title: "infra", detail: said, role: "err" }],
+          }),
+          section("text", { type: "text", text: said }, { caption: said }),
+          section("unread", { type: "text", text: "" }, { unread: said }),
+          section(
+            "changes",
+            {
+              type: "changes",
+              changes: [
+                {
+                  at: "2026-09-09T18:00:00Z",
+                  ref: null,
+                  parts: [
+                    {
+                      text: `source ${VALUE_OPEN}${remote}${VALUE_CLOSE}`,
+                      quiet: false,
+                    },
+                  ],
+                },
+              ],
+            },
+            { partial: said }
+          ),
+        ],
+      })
+    );
+    expect(html).not.toContain("glpat-");
+    expect(html).not.toContain("oauth2:");
+    // Fourteen places drew it; each still names the host and the path.
+    expect(
+      html.split("https://…@gitlab.example.com/org/repo.git")
+    ).toHaveLength(15);
+  });
+
+  /**
+   * The file's own link back names the context, and an EKS context is
+   * `user@cluster`; an object's name is its identity. Fails if the cut
+   * that removes credentials reaches either.
+   */
+  it("keeps its own link and an object's name exactly as they are", () => {
+    const link = "rubick://admin@prod.eu-west-1.eksctl.io/c/pods";
+    const html = renderReport(
+      report({
+        link,
+        hero: {
+          ref: ref("Deployment", "sk-live-notifications"),
+          title: "",
+          icon: svg("Deployment"),
+          hue: 1,
+        },
+      })
+    );
+    expect(html).toContain(`href="${link}"`);
+    expect(html).toContain(`<code>${link}</code>`);
+    expect(html).toContain("sk-live-notifications");
+  });
+
+  /**
    * Two of three namespaces answered: the rows that came back are drawn,
    * with what did not above them, and no count that reads as the whole.
    */

@@ -9,6 +9,7 @@ import {
   hintFor,
   namespaceOf,
   redact,
+  withoutCredentials,
   requiredTopologyKeys,
   schedulingCauses,
   searchQuery,
@@ -1485,5 +1486,45 @@ describe("redact", () => {
   it("leaves an ordinary line alone", () => {
     const line = 'time=2026-09-28T23:14:09Z level=info msg="ok" port=8080';
     expect(redact(line)).toBe(line);
+  });
+});
+
+describe("withoutCredentials", () => {
+  /**
+   * A git remote carries its token before the host, as `user:token@` or as
+   * the token alone (Azure DevOps, a GitHub PAT), and a controller's
+   * failure message quotes the remote whole. Fails if either form reaches
+   * a screen or a file, or if the host and path are lost with it.
+   */
+  it("cuts what stands before the host of an address and keeps the rest", () => {
+    expect(
+      withoutCredentials(
+        "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git"
+      )
+    ).toBe("https://…@gitlab.example.com/org/repo.git");
+    expect(
+      withoutCredentials(
+        "failed to clone 'https://t0ken4azure@dev.azure.com/acme/_git/infra': 401"
+      )
+    ).toBe("failed to clone 'https://…@dev.azure.com/acme/_git/infra': 401");
+    expect(withoutCredentials("https://u:p@ss@charts.example.com")).toBe(
+      "https://…@charts.example.com"
+    );
+  });
+
+  /**
+   * This runs over names, images and addresses, not only sentences: the
+   * keyed pattern a log line gets would print `oauth2-proxy:…` for a tag.
+   * Fails if anything that is not a credential is taken out.
+   */
+  it("leaves an image, a digest and an address without credentials as written", () => {
+    for (const text of [
+      'Failed to pull image "quay.io/oauth2-proxy/oauth2-proxy:v7.5.1"',
+      "docker-pullable://nginx@sha256:4c0fdaa8b6341bfdeca5f18f7837462c80cff90527ee35ef185571e1c327beac",
+      "https://github.com/acme/infra",
+      "https://charts.example.com?owner=ops@example.com",
+      "automountServiceAccountToken: false",
+    ])
+      expect(withoutCredentials(text)).toBe(text);
   });
 });

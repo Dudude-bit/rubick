@@ -28,6 +28,7 @@
 import type { VendorVerdict } from "../kit";
 import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
+import { withoutCredentials } from "@/lib/hints";
 import {
   conditionOf,
   conditionSays,
@@ -269,6 +270,7 @@ export function fluxPicture(
 }
 
 function readSource(kind: string, object: CustomResourceInfo): FluxSource {
+  const url = getValueByPath(object, "spec.url");
   const ready = conditionOf(object, "Ready");
   const fetchFailed = conditionOf(object, "FetchFailed");
   const revision = readRevision(
@@ -278,7 +280,7 @@ function readSource(kind: string, object: CustomResourceInfo): FluxSource {
     kind,
     name: object.name,
     namespace: object.namespace ?? "",
-    url: (getValueByPath(object, "spec.url") as string) ?? null,
+    url: typeof url === "string" ? withoutCredentials(url) : null,
     ref: refOf(object),
     interval: (getValueByPath(object, "spec.interval") as string) ?? null,
     suspended: getValueByPath(object, "spec.suspend") === true,

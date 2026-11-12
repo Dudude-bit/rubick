@@ -50,3 +50,22 @@ describe("the Ready column of Flux's Helm lists", () => {
     );
   });
 });
+
+/**
+ * The generic list of HelmRepository objects draws `spec.url` in a column,
+ * a third reader of the address the page and the file already cut. Fails
+ * if the column prints what stands before the host.
+ */
+describe("the URL column of Flux's HelmRepository list", () => {
+  it("names the host and path and not the credentials before them", () => {
+    const column = crd
+      .columnsFor("HelmRepository")
+      .find((one) => one.id === "url")!;
+    const resource = {
+      spec: { url: "https://ci:S3cret@charts.example.com/stable" },
+    } as unknown as CustomResourceInfo;
+    expect(column.cell!(column.accessor(resource, en), en)).toBe(
+      "https://…@charts.example.com/stable"
+    );
+  });
+});

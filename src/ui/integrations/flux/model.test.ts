@@ -543,3 +543,22 @@ describe("revisions", () => {
     expect(revisionText(readRevision("6.5.4"), t)).toBe("6.5.4");
   });
 });
+
+/**
+ * A GitRepository or HelmRepository may keep its credentials in `spec.url`,
+ * and the page and the shared file both draw what the model read. Fails if
+ * the model hands them the address as written, or loses the host and path.
+ */
+describe("a source address with a token in it", () => {
+  it("is read without what stands before the host", () => {
+    const { sources } = picture(
+      [],
+      [
+        object("GitRepository", "infra", {
+          url: "https://oauth2:glpat-" + "AbCdEf0123456789xyzQ@gitlab.example.com/org/repo.git",
+        }),
+      ]
+    );
+    expect(sources[0].url).toBe("https://…@gitlab.example.com/org/repo.git");
+  });
+});

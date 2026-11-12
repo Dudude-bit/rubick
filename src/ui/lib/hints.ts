@@ -999,6 +999,28 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
   }
 }
 
+type Shape = [RegExp, string];
+
+// scheme://user:pass@host, and a token standing alone before the host; a
+// digest after the `@` is an image, not a host
+const URL_USERINFO: Shape = [
+  /\b([a-z][a-z0-9+.-]*:\/\/)(?:[^\s/?#@]+@)+(?!sha\d+:)/gi,
+  "$1…@",
+];
+const JWT: Shape = [/\beyJ[A-Za-z0-9._-]{16,}/g, "…"];
+// Access key ids and the tokens that announce themselves by prefix
+const PREFIXED: Shape = [
+  /\b(?:A[KS]IA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{30,}|glpat-[\w-]{20,}|xox[abprs]-[\w-]{10,}|[sr]k[-_]live[-_]\w{10,})\b/g,
+  "…",
+];
+
+/**
+ * The shapes that are a credential wherever they stand, in a name or an
+ * address as much as in a sentence. The keyed ones below are not among
+ * them: outside a log line they take `oauth2-proxy:v7.5` for a password.
+ */
+const CREDENTIAL_SHAPES: Shape[] = [URL_USERINFO, JWT, PREFIXED];
+
 /**
  * What a line may not carry off this machine.
  *
@@ -1008,18 +1030,13 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
  * rather than pretending to recognise secrets, and the copy beside it says
  * so instead of promising.
  */
-const SECRET_SHAPES: Array<[RegExp, string]> = [
-  // scheme://user:pass@host
-  [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1…:…@"],
+const SECRET_SHAPES: Shape[] = [
+  URL_USERINFO,
   // Authorization: Bearer …, and a bare JWT; before the keys below, which
   // would otherwise take "Bearer" for the value and leave the token
   [/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 …"],
-  [/\beyJ[A-Za-z0-9._-]{16,}/g, "…"],
-  // Access key ids and the tokens that announce themselves by prefix
-  [
-    /\b(?:A[KS]IA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{30,}|glpat-[\w-]{20,}|xox[abprs]-[\w-]{10,}|[sr]k[-_]live[-_]\w{10,})\b/g,
-    "…",
-  ],
+  JWT,
+  PREFIXED,
   // password=…, DB_PASSWORD=…, "apiKey": "…", in query strings, env, logfmt
   // and JSON; a prefix or a quote before the colon is how most of them look
   [
@@ -1028,15 +1045,25 @@ const SECRET_SHAPES: Array<[RegExp, string]> = [
   ],
 ];
 
+const without = (shapes: Shape[], text: string) =>
+  shapes.reduce((out, [pattern, to]) => out.replace(pattern, to), text);
+
 /**
  * A line with the shapes a secret takes taken out. Applied to everything
  * this app hands to somebody else — the search engine and the clipboard.
  */
 export function redact(line: string): string {
-  let out = line;
-  for (const [pattern, replacement] of SECRET_SHAPES)
-    out = out.replace(pattern, replacement);
-  return out;
+  return without(SECRET_SHAPES, line);
+}
+
+/**
+ * Any text the cluster wrote, without the credentials it carries: a
+ * repository address with a token before its host, a message quoting it.
+ * What a shared file prints and what a screen draws of an address both
+ * pass here, so the host and path stay and what unlocks them never shows.
+ */
+export function withoutCredentials(text: string): string {
+  return without(CREDENTIAL_SHAPES, text);
 }
 
 export type SearchEngine = "google" | "duckduckgo" | "custom";
