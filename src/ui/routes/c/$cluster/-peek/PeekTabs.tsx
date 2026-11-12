@@ -5,6 +5,7 @@ import { Copy } from "lucide-react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton, TextSkeleton } from "@/components/ui/skeleton";
 import { YamlEditor } from "../-yaml";
+import { WithheldCopies } from "../-yaml/WithheldCopies";
 import { LogViewer } from "../-logs/LogViewer";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -587,6 +588,7 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
           />
         </div>
       </div>
+      <WithheldCopies yaml={data} className="px-2" />
       <div className="min-h-0 flex-1 overflow-hidden border-t border-hair">
         <YamlEditor value={data} readOnly height="100%" showFoldGutter />
       </div>

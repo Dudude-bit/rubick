@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
+import { WITHHELD_MARKER } from "@/lib/withheld";
 import { useLocaleStore } from "@/stores/localeStore";
 import { KeyValueList } from "./detail-kv";
 
@@ -32,5 +33,36 @@ describe("a folded document", () => {
       <KeyValueList items={[{ label: "note", value: text, document: text }]} />
     );
     expect(screen.getByText(/^текст · 150 символов$/)).toBeInTheDocument();
+  });
+
+  /**
+   * The Metadata tab and the peek draw the record kubectl keeps with its
+   * private key blanked by the backend. Fails if the row stops saying the
+   * placeholder inside is the app's, or says so of a record with none.
+   */
+  it("says the app withheld a key inside the record, and which", () => {
+    const record = JSON.stringify({
+      kind: "ConfigMap",
+      data: {
+        "nginx.conf": "worker_processes 2;",
+        "server.key": WITHHELD_MARKER,
+      },
+    });
+    const { unmount } = render(
+      <KeyValueList
+        items={[{ label: "last-applied", value: record, document: record }]}
+      />
+    );
+    expect(
+      screen.getByText(/^JSON · \d+ chars · withheld by the app: server\.key$/)
+    ).toBeInTheDocument();
+    unmount();
+
+    render(
+      <KeyValueList
+        items={[{ label: "last-applied", value: manifest, document: manifest }]}
+      />
+    );
+    expect(screen.getByText(/^JSON · [\d,\s]+ chars$/)).toBeInTheDocument();
   });
 });

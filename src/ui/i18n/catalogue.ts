@@ -857,6 +857,8 @@ export const en = {
       "Read from {cluster}, and the window is on another cluster now. Go back to {cluster} to apply it.",
     yamlCarriesWithheld:
       "Withheld: {keys}. The app never shows a private key, so the manifest holds a placeholder there, and applying would write the placeholder as the value. Remove what is withheld from the manifest to apply the rest: the preview shows whether the cluster keeps it.",
+    yamlCopyWithheld:
+      "Withheld inside {annotation}: {keys}. The annotation on the cluster is untouched: the app blanks its copy for the screen and leaves it out of what Apply sends.",
     applyChangesQuestion: "Apply Changes?",
     applyManifestConfirm:
       "This will apply the manifest to your Kubernetes cluster. Make sure you have reviewed the changes.",
@@ -3681,6 +3683,7 @@ export const en = {
     withheldDeclared:
       "{type} declares this to be the private key, which the app never shows",
     withheldKeyName: "named like a private key, which the app never shows",
+    withheldInRecord: "withheld by the app: {keys}",
     unreadUnanswered:
       "the app asked for {version} and the cluster did not answer ({said}), so it cannot say whether one applies here",
     unreadNamespaceOnly:

@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { WITHHELD_MARKER } from "@/lib/withheld";
 import { renderWithProviders } from "@/test/render";
 import { YamlTabContent } from "./YamlTabContent";
 
@@ -20,7 +21,43 @@ spec:
   replicas: 2
 `;
 
+const RECORD = JSON.stringify({
+  kind: "ConfigMap",
+  data: { "nginx.conf": "worker_processes 2;", "server.key": WITHHELD_MARKER },
+});
+const APPLIED = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx
+  namespace: team-a
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: '${RECORD}'
+data:
+  nginx.conf: worker_processes 2;
+  server.key: '${WITHHELD_MARKER}'
+`;
+
 describe("the YAML tab", () => {
+  /**
+   * The record kubectl keeps of a ConfigMap is drawn with its private key
+   * blanked, and opened it read as though kubectl had recorded the
+   * placeholder. Fails if the tab stops saying the app blanked it and which
+   * annotation, or says it of a manifest with no blanked record.
+   */
+  it("says which annotation holds a record the app blanked a key in", async () => {
+    const { unmount } = renderWithProviders(
+      <YamlTabContent yaml={APPLIED} onCopy={() => {}} />
+    );
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      /^Withheld inside kubectl\.kubernetes\.io\/last-applied-configuration: server\.key\. The annotation on the cluster is untouched/
+    );
+    unmount();
+
+    renderWithProviders(<YamlTabContent yaml={APPLIABLE} onCopy={() => {}} />);
+    await screen.findByTestId("yaml-editor");
+    expect(screen.queryByRole("note")).toBeNull();
+  });
+
   /**
    * Sam read "the object as the API server has it" above a Deployment with no
    * status, uid or finalizers. Fails if the note claims the object as served.

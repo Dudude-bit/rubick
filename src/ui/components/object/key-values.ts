@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { T } from "@/i18n/useT";
 import { TONE_TEXT, type Tone } from "@/lib/tone";
 import type { StatusRole } from "@/lib/status-role";
+import { withheldCopyIn } from "@/lib/withheld";
 
 /**
  * The data behind a metadata block. Kept apart from the components that
@@ -121,11 +122,19 @@ export function expandDocument(text: string): string {
   return parsed === undefined ? text : JSON.stringify(parsed, null, 2);
 }
 
-/** What the reader is being offered before they open it. */
+/**
+ * What the reader is being offered before they open it. A record the app
+ * blanked a private key in says so: opened, the placeholder would otherwise
+ * read as what the tool that keeps the record wrote.
+ */
 export function describeDocument(text: string, t: T): string {
   const shape =
     parseJsonDocument(text) === undefined ? t("files", "text") : "JSON";
-  return `${shape} · ${t("count", "chars", { n: text.length })}`;
+  const size = `${shape} · ${t("count", "chars", { n: text.length })}`;
+  const keys = withheldCopyIn(text).join(", ");
+  return keys
+    ? `${size} · ${t("readings", "withheldInRecord", { keys })}`
+    : size;
 }
 
 /**

@@ -66,6 +66,7 @@ import { ReasonTip } from "@/components/object/detail-blocks";
 import { cn } from "@/lib/utils";
 import { YamlDiffViewer } from "./YamlDiffViewer";
 import { YamlResultDisplay } from "./YamlResultDisplay";
+import { WithheldCopies } from "./WithheldCopies";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT, type T } from "@/i18n/useT";
 
@@ -509,6 +510,7 @@ export function YamlEditorDialog() {
               {carriesWithheld}
             </p>
           )}
+          <WithheldCopies yaml={editedContent} className="pt-2" />
 
           {/* Main Content */}
           <div className="flex-1 min-h-0 overflow-hidden">
