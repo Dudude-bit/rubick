@@ -17,6 +17,7 @@ import { isRefusal } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { groupIn, involvedUid } from "@/lib/event-incarnation";
 import { cronJobRunsKey, readCronJobRuns } from "@/lib/cron-runs";
+import { useClusterStore } from "@/stores/clusterStore";
 
 /** Enough of one object's events that a short list shown from them has a true total behind it. */
 export const OBJECT_EVENTS_READ = 200;
@@ -134,6 +135,8 @@ export function useObjectEvents(
     uid?: string | null;
   }
 ) {
+  // A tab restored at launch is drawn before the window has its cluster.
+  const reads = useClusterStore((state) => state.isConnected) && enabled;
   const builtIn = typeof of === "string" ? of : null;
   const kind = typeof of === "string" ? of : of.custom;
   // A Namespace's events are those of every object in it, of every group,
@@ -176,14 +179,14 @@ export function useObjectEvents(
         ? commands.listLatestEvents(filters)
         : { events: await commands.listEvents(filters), short: false };
     },
-    enabled: enabled && !!name,
+    enabled: reads && !!name,
     select,
     refresh,
     retry: false,
   });
   const client = useQueryClient();
   const from = builtIn && !everyObject ? WARNINGS_OF_OWNED[builtIn] : undefined;
-  const readsOwned = enabled && !!name && !!namespace && !!from;
+  const readsOwned = reads && !!name && !!namespace && !!from;
   const owned = useLiveQuery({
     queryKey: [
       ...queryKeys.events(namespace ?? null),

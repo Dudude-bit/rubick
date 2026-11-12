@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vite-plus/test";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -39,6 +39,7 @@ vi.mock("@/lib/commands", () => ({
 import type { EventInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { useWindowActivity } from "@/lib/window-activity";
+import { useClusterStore } from "@/stores/clusterStore";
 import { testQueryClient } from "@/test/render";
 import {
   eventsKindOf,
@@ -69,6 +70,7 @@ const event = (reason: string, uid: string | null): EventInfo => ({
 
 beforeEach(() => {
   useWindowActivity.setState({ visible: true });
+  useClusterStore.setState({ isConnected: true });
   answer.events = [
     event("Started", "current"),
     event("Killing", "earlier"),
@@ -97,6 +99,32 @@ function mount(
   );
   return result;
 }
+
+/**
+ * A tab restored at launch is drawn before the window has connected, and
+ * the read answered "No cluster connected" in the log. Fails if an object's
+ * events, or the warnings of what it owns, are asked before the window has
+ * its cluster, or are not asked once it does.
+ */
+it("asks nothing until the window has its cluster", async () => {
+  useClusterStore.setState({ isConnected: false });
+  answer.asked = [];
+  const client = testQueryClient();
+  const { result } = renderHook(
+    () =>
+      useObjectEvents("Deployment", "web", "lena-sandbox", { refresh: "slow" }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(answer.asked).toEqual([]);
+  act(() => useClusterStore.setState({ isConnected: true }));
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(answer.asked).toHaveLength(2);
+});
 
 /**
  * Lena's wd-demo, deleted and created twice, listed fifteen events on its

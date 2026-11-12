@@ -1,5 +1,5 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import type {
@@ -44,6 +44,11 @@ const { ServiceHealthView, IngressHealthView } =
 const { renderWithRouter } = await import("@/test/render");
 const { translate } = await import("@/i18n");
 const { ROLE_TEXT } = await import("@/lib/status-role");
+const { useClusterStore } = await import("@/stores/clusterStore");
+
+beforeEach(() => {
+  useClusterStore.setState({ isConnected: true });
+});
 
 const t = ((section: never, key: never, values: never) =>
   translate("en", section, key, values)) as never;

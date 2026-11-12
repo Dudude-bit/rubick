@@ -95,3 +95,23 @@ describe("a neighbourhood asked again under a new key", () => {
     expect(result.current.data).toBeUndefined();
   });
 });
+
+describe("a neighbourhood on a tab restored at launch", () => {
+  /**
+   * The page is drawn before the window has connected, and the read went
+   * out to answer "No cluster connected" in the log. Fails if it is asked
+   * before the window has its cluster, or not asked once it does.
+   */
+  it("is not asked until the window has its cluster", async () => {
+    useClusterStore.setState({ isConnected: false });
+    getResourceConnections.mockResolvedValue(answer("web"));
+    const { result } = renderHook(
+      () => useConnections("Deployment", "web", "shop"),
+      { wrapper }
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(getResourceConnections).not.toHaveBeenCalled();
+    act(() => useClusterStore.setState({ isConnected: true }));
+    await waitFor(() => expect(result.current.data).toEqual(answer("web")));
+  });
+});

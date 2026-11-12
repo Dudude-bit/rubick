@@ -97,7 +97,7 @@ describe("the report of any object", () => {
     listNodes.mockResolvedValue([]);
     vendorReport.mockReset();
     vendorReport.mockReturnValue(null);
-    useClusterStore.setState({ currentContext: "prod-eu" });
+    useClusterStore.setState({ currentContext: "prod-eu", isConnected: true });
     useDisplaySettingsStore.setState({ resourceColouring: "full" });
   });
 

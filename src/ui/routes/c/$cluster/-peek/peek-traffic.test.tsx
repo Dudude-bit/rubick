@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import type {
@@ -22,6 +22,11 @@ vi.mock("@/lib/commands", () => ({
 
 const { PeekTraffic } = await import("./peek-traffic");
 const { renderWithRouter } = await import("@/test/render");
+const { useClusterStore } = await import("@/stores/clusterStore");
+
+beforeEach(() => {
+  useClusterStore.setState({ isConnected: true });
+});
 
 const at = (kind: string, name: string): ObjectRef => ({
   kind,

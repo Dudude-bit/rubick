@@ -172,6 +172,7 @@ describe("StatefulSetDetail", () => {
   beforeEach(() => {
     connections = governed;
     mockDetail(buildSet());
+    useClusterStore.setState({ isConnected: true });
   });
 
   /**
