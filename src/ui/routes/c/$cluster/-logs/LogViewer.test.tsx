@@ -1592,6 +1592,43 @@ describe("a workload pane", () => {
   });
 
   /**
+   * A DaemonSet's lanes are its nodes, and two EKS nodes end in the same
+   * octet. Fails if their chips read alike under Short prefix: hiding one
+   * then takes away lines with nothing saying which node's.
+   */
+  it("gives no two lanes the same short label", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => `stream-${config.podName}`
+    );
+    const on = (name: string, node: string) => ({ ...pod(name), node });
+    renderWithProviders(
+      <LogViewer
+        namespace="default"
+        pods={[
+          on("agent-a", "ip-10-0-12-34.eu-west-1.compute.internal"),
+          on("agent-b", "ip-10-0-13-34.eu-west-1.compute.internal"),
+          on("agent-c", "ip-10-0-12-77.eu-west-1.compute.internal"),
+        ]}
+        laneRule="node"
+        workload={{ owner: "agent", ownerKind: "DaemonSet" }}
+      />
+    );
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(3)
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Short prefix" }));
+
+    const legend = screen.getByTestId("log-legend");
+    expect(
+      within(legend).getByText("ip-10-0-12-34.eu-west-1.compute.internal")
+    ).toBeInTheDocument();
+    expect(
+      within(legend).getByText("ip-10-0-13-34.eu-west-1.compute.internal")
+    ).toBeInTheDocument();
+    expect(within(legend).getByText("77")).toBeInTheDocument();
+  });
+
+  /**
    * One replica crash-looping beside a healthy one, the shape a bad rollout
    * leaves. Fails if Previous run is read off the first pod's containers alone.
    */

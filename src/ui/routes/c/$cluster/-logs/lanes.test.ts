@@ -5,8 +5,9 @@ import type { ContainerInfo } from "@/generated/types";
 import {
   GONE_LANE_COLOR,
   laneColors,
-  laneLabel,
+  laneLabels,
   laneName,
+  shortLane,
   laneNameCounts,
   laneOrderWith,
   type LanePod,
@@ -53,6 +54,59 @@ describe("lane colours", () => {
   });
 });
 
+const labelsOf = (
+  pods: LanePod[],
+  rule: Parameters<typeof laneLabels>[2],
+  mode: Parameters<typeof laneLabels>[3]
+) =>
+  laneLabels(
+    pods.map((each) => each.name),
+    (key) => pods.find((each) => each.name === key) ?? null,
+    rule,
+    mode,
+    laneNameCounts(pods, rule)
+  );
+
+describe("short lane labels", () => {
+  /**
+   * An EKS node is `ip-10-0-12-34.eu-west-1.compute.internal`: the last dash
+   * of the whole name is the region's, so every lane of a DaemonSet read
+   * `1.compute.internal`. Fails if a host name is cut anywhere but in its
+   * own label.
+   */
+  it("cuts a node's host name in its own label, not in its domain", () => {
+    expect(shortLane("ip-10-0-12-34.eu-west-1.compute.internal")).toBe("34");
+    expect(shortLane("ip-10-0-12-34.ec2.internal")).toBe("34");
+    expect(shortLane("node1.example.com")).toBe("node1");
+    expect(shortLane("api-7d9f8c-x2kq9")).toBe("x2kq9");
+  });
+
+  /**
+   * Two nodes in different subnets end in the same octet. Fails if lanes
+   * share a chip and a row label: hiding one then takes away lines with
+   * nothing on screen saying which node's.
+   */
+  it("keeps the whole name on the lanes whose short label is not theirs alone", () => {
+    const pods = [
+      pod("agent-a", { node: "ip-10-0-12-34.ec2.internal" }),
+      pod("agent-b", { node: "ip-10-0-13-34.ec2.internal" }),
+      pod("agent-c", { node: "ip-10-0-12-77.ec2.internal" }),
+    ];
+    const short = labelsOf(pods, "node", "short")!;
+    expect([...short.values()]).toEqual([
+      "ip-10-0-12-34.ec2.internal",
+      "ip-10-0-13-34.ec2.internal",
+      "77",
+    ]);
+    expect(new Set(short.values()).size).toBe(pods.length);
+  });
+
+  /** Fails if the colour-only mode starts labelling rows. */
+  it("labels nothing where the colour alone tells the lanes apart", () => {
+    expect(labelsOf([pod("api-a")], "pod", "colour")).toBeNull();
+  });
+});
+
 describe("lane names", () => {
   /**
    * A Job with `parallelism: 3` owns all three pods, and a retried CronJob
@@ -81,9 +135,7 @@ describe("lane names", () => {
     ];
     const taken = laneNameCounts(pods, "node");
     expect(laneName(pods[0], pods[0].name, "node", taken)).toBe("node-1");
-    expect(laneLabel(pods[0], pods[0].name, "node", "full", taken)).toBe(
-      "node-1"
-    );
+    expect(labelsOf(pods, "node", "full")?.get("api-a")).toBe("node-1");
   });
 
   it("is the pod's name where the rule has nothing to say", () => {

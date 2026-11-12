@@ -48,10 +48,15 @@ export function lanePodOf(pod: PodInfo): LanePod {
 
 export const GONE_LANE_COLOR = "hsl(var(--fg-fnt))";
 
-/** The last characters of a generated name: what a colleague reads off a line pasted into a chat. */
+/**
+ * The last characters of a generated name: what a colleague reads off a line
+ * pasted into a chat. Of a host name, its own label: every EKS node is
+ * `ip-10-0-12-34.eu-west-1.compute.internal`, whose last dash is the region's.
+ */
 export function shortLane(name: string): string {
-  const dash = name.lastIndexOf("-");
-  return dash === -1 ? name.slice(-5) : name.slice(dash + 1);
+  const [host] = name.split(".");
+  const dash = host.lastIndexOf("-");
+  return dash === -1 ? host.slice(-5) : host.slice(dash + 1);
 }
 
 /**
@@ -92,16 +97,37 @@ export function laneNameCounts(
   return counts;
 }
 
-export function laneLabel(
-  pod: LanePod | null,
-  key: string,
+/**
+ * What every lane is labelled by, or `null` where the colour alone says it.
+ *
+ * A short label is used only where it is that lane's alone: two nodes whose
+ * addresses end alike, or two pods whose suffixes do, would otherwise share a
+ * chip, and hiding one takes away lines with nothing saying whose. Those
+ * lanes keep their whole names.
+ */
+export function laneLabels(
+  keys: readonly string[],
+  podOf: (key: string) => LanePod | null,
   rule: LaneRule,
   mode: LaneLabelMode,
   taken?: ReadonlyMap<string, number>
-): string | null {
+): Map<string, string> | null {
   if (mode === "colour") return null;
-  const name = laneName(pod, key, rule, taken);
-  return mode === "short" ? shortLane(name) : name;
+  const names = new Map(
+    keys.map((key) => [key, laneName(podOf(key), key, rule, taken)])
+  );
+  if (mode === "full") return names;
+  const shared = new Map<string, number>();
+  for (const name of names.values()) {
+    const short = shortLane(name);
+    shared.set(short, (shared.get(short) ?? 0) + 1);
+  }
+  return new Map(
+    [...names].map(([key, name]) => {
+      const short = shortLane(name);
+      return [key, shared.get(short) === 1 ? short : name];
+    })
+  );
 }
 
 /** Every stream a set of pods needs, app containers first within each pod. */

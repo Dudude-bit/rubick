@@ -21,8 +21,7 @@ import {
   laneColors,
   laneNameCounts,
   laneOrderWith,
-  laneLabel,
-  laneName,
+  laneLabels,
   sourcesOf,
   type LaneLabelMode,
   type LanePod,
@@ -428,18 +427,24 @@ export function LogViewer({
     () => new Map((pods ?? []).map((pod) => [pod.name, pod])),
     [pods]
   );
-  const laneLabelOf = useCallback(
-    (log: StreamedLogLine) =>
+  // One reading for the rows and the chips: a chip names the lane its rows do.
+  const labelsIn = useCallback(
+    (mode: LaneLabelMode) =>
       lanes
-        ? laneLabel(
-            podByName.get(log.pod) ?? null,
-            log.pod,
+        ? laneLabels(
+            laneKeys,
+            (key) => podByName.get(key) ?? null,
             laneRule,
-            labelMode,
+            mode,
             laneNames
           )
         : null,
-    [lanes, podByName, laneRule, labelMode, laneNames]
+    [lanes, laneKeys, podByName, laneRule, laneNames]
+  );
+  const rowLabels = useMemo(() => labelsIn(labelMode), [labelsIn, labelMode]);
+  const laneLabelOf = useCallback(
+    (log: StreamedLogLine) => rowLabels?.get(log.pod) ?? null,
+    [rowLabels]
   );
 
   // A pod's own lines outlive the pod only if somebody shipped them
@@ -1042,41 +1047,22 @@ export function LogViewer({
     [readSources, failures, previousRun, restartsAlways]
   );
 
+  // A chip is named even where the rows carry the colour alone.
+  const chipLabels = useMemo(
+    () => labelsIn(labelMode === "short" ? "short" : "full"),
+    [labelsIn, labelMode]
+  );
   const legendEntries = useMemo<LegendEntry[]>(
     () =>
       lanes
         ? laneKeys.map((key) => ({
             key,
-            label:
-              labelMode === "short"
-                ? (laneLabel(
-                    podByName.get(key) ?? null,
-                    key,
-                    laneRule,
-                    "short",
-                    laneNames
-                  ) ?? key)
-                : laneName(
-                    podByName.get(key) ?? null,
-                    key,
-                    laneRule,
-                    laneNames
-                  ),
+            label: chipLabels?.get(key) ?? key,
             gone: gone.has(key),
             reading: readings.get(key),
           }))
         : containerEntries(containerInfos, readings),
-    [
-      lanes,
-      laneKeys,
-      labelMode,
-      podByName,
-      laneRule,
-      laneNames,
-      gone,
-      containerInfos,
-      readings,
-    ]
+    [lanes, laneKeys, chipLabels, gone, containerInfos, readings]
   );
   const coverage = useMemo(
     () =>
