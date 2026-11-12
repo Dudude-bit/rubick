@@ -4347,6 +4347,11 @@ export const en = {
       one: "{n} endpoint no policy restricts in either direction",
       other: "{n} endpoints no policy restricts in either direction",
     },
+    ciliumOpenElsewhere: {
+      one: "{n} more endpoint that no policy restricts is in a namespace this window does not look at. The sidebar counts it too.",
+      other:
+        "{n} more endpoints that no policy restricts are in namespaces this window does not look at. The sidebar counts them too.",
+    },
     ciliumNotOnTheWire: "written where this window cannot read it",
     ciliumAndExpressions: {
       one: "and {n} expression",
@@ -6494,6 +6499,11 @@ export const en = {
     readingCilium: "Reading endpoints and policies…",
     ciliumNoEndpoints:
       "No CiliumEndpoint in this cluster. Cilium writes one per pod it manages, so it is managing none here.",
+    ciliumNoEndpointsInScope: {
+      one: "No CiliumEndpoint in the namespaces this window looks at. The cluster has {n}, in another namespace.",
+      other:
+        "No CiliumEndpoint in the namespaces this window looks at. The cluster has {n}, in other namespaces.",
+    },
     crdCouldNotBeListed: "{crd} could not be listed",
     albUnreadNote:
       "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",

@@ -233,4 +233,33 @@ describe("the Cilium page", () => {
     expect(screen.queryByText("checkout-api-1")).not.toBeInTheDocument();
     useClusterStore.setState({ namespaceScope: [] });
   });
+
+  /**
+   * Under a picker on a namespace with no endpoint the page said "No
+   * CiliumEndpoint in this cluster", beside a sidebar row counting the
+   * cluster's. Fails if an empty selection is worded as an empty cluster,
+   * or the endpoints the sidebar counts and the page leaves out go unsaid.
+   */
+  it("says an empty selection is not an empty cluster, and what the sidebar counts beyond it", async () => {
+    useClusterStore.setState({ namespaceScope: ["quiet"] });
+    answers.set(KINDS.endpoints, () =>
+      Promise.resolve([
+        API_ENDPOINT,
+        { ...API_ENDPOINT, name: "checkout-api-1", namespace: "team-checkout" },
+      ])
+    );
+
+    await renderPage();
+
+    expect(
+      await screen.findByText(/The cluster has 2, in other namespaces/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No CiliumEndpoint in this cluster/)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/^2 more endpoints that no policy restricts/)
+    ).toBeInTheDocument();
+    useClusterStore.setState({ namespaceScope: [] });
+  });
 });
