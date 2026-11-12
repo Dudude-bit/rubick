@@ -103,9 +103,9 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     subject.name,
   ];
   const revisionsRead = useLiveQuery({
-    // A rollout is a deploy, not the cluster's own work: the same rate the
-    // Helm history and the delivery owners are read at.
-    refresh: "steady",
+    // The rate the page's header and Revisions read the same fact at: which
+    // revision is current decides what Roll back offers and compares with.
+    refresh: "resourceList",
     queryKey: revisionsKey,
     queryFn: async (): Promise<Revision[]> => {
       try {
