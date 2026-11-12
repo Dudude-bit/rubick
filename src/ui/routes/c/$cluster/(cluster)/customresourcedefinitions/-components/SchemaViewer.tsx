@@ -120,7 +120,10 @@ function SchemaNode({
       (schema.type === "array" && schema.items?.properties) ||
       schema.oneOf ||
       schema.anyOf ||
-      schema.allOf
+      schema.allOf ||
+      // A map, or an object left open: what it holds is said inside it.
+      schema.additionalProperties ||
+      schema["x-kubernetes-preserve-unknown-fields"]
     );
   }, [schema]);
 
@@ -313,6 +316,11 @@ export function SchemaViewer({ schema, title }: SchemaViewerProps) {
   const statusSchema = parsedSchema.properties?.status as
     | SchemaProperty
     | undefined;
+  // Argo CD's Application keeps `operation` beside its spec, and a
+  // CiliumNetworkPolicy its `specs`: the schema is every root property.
+  const beside = Object.entries(parsedSchema.properties ?? {}).filter(
+    ([name]) => name !== "spec" && name !== "status"
+  );
 
   return (
     <div className="flex flex-col gap-2">
@@ -378,14 +386,13 @@ export function SchemaViewer({ schema, title }: SchemaViewerProps) {
         </section>
       )}
 
-      {/* If no spec/status, show root properties */}
-      {!specSchema && !statusSchema && parsedSchema.properties && (
+      {beside.length > 0 && (
         <div className="py-1">
-          {Object.entries(parsedSchema.properties).map(([name, propSchema]) => (
+          {beside.map(([name, propSchema]) => (
             <SchemaNode
               key={name}
               name={name}
-              schema={propSchema as SchemaProperty}
+              schema={propSchema}
               required={parsedSchema.required?.includes(name)}
               level={0}
               defaultExpanded={true}
