@@ -368,9 +368,10 @@ export const OBJECT_LABEL: Record<string, string> = {
 };
 
 /**
- * The labels Prometheus stamps on a series from its scrape target. A metric
- * about another object keeps the exporter's own here wherever it has none:
- * every `kube_deployment_*` series carries the kube-state-metrics pod.
+ * The kinds whose label Prometheus stamps on a series from its scrape
+ * target. A metric about another object keeps the exporter's own there
+ * wherever it has none: every `kube_deployment_*` series carries the
+ * kube-state-metrics pod.
  */
 const STAMPED = new Set(["Pod", "Service", "Node", "Namespace"]);
 const CLUSTER_WIDE = new Set(["Node", "PersistentVolume"]);
