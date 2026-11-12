@@ -12,46 +12,6 @@ use crate::error::{AuthError, Error, Result};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-/// The files `$KUBECONFIG` names, in the order it names them.
-///
-/// A merged kubeconfig has no single home, which is the whole reason this
-/// exists: the parsed document does not say which file any one user came from.
-#[must_use]
-pub fn kubeconfig_files(override_path: Option<PathBuf>) -> Vec<PathBuf> {
-    let named: Vec<PathBuf> = if let Some(path) = override_path {
-        vec![path]
-    } else {
-        let separator = if cfg!(windows) { ';' } else { ':' };
-        match std::env::var("KUBECONFIG") {
-            Ok(value) if !value.is_empty() => value
-                .split(separator)
-                .filter(|entry| !entry.is_empty())
-                .map(PathBuf::from)
-                .collect(),
-            _ => dirs::home_dir()
-                .map(|home| vec![home.join(".kube").join("config")])
-                .unwrap_or_default(),
-        }
-    };
-
-    // Through the loader's own resolution, for three separate reasons. A `~`
-    // in a stored override is a path no `read_to_string` accepts. A symlinked
-    // `~/.kube/config` has to become the file it points at, or the rename that
-    // installs the replacement would put a regular file where the link was and
-    // leave the real one holding the token just spent. And one file named
-    // twice in `$KUBECONFIG` would otherwise read as two files claiming the
-    // same user, which is the one shape that cancels the refresh.
-    let mut resolved: Vec<PathBuf> = Vec::with_capacity(named.len());
-    for path in named {
-        if let Ok(real) = crate::client::canonicalize_kubeconfig_path(&path) {
-            if !resolved.contains(&real) {
-                resolved.push(real);
-            }
-        }
-    }
-    resolved
-}
-
 /// The single file that defines `user`, or `None` when that is not a single
 /// answer.
 ///
@@ -646,36 +606,6 @@ users:
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700))
             .expect("chmod");
         assert!(!answer);
-    }
-
-    #[test]
-    fn an_override_is_the_only_file_considered() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = write(dir.path(), "config", CONFIG);
-
-        assert_eq!(
-            kubeconfig_files(Some(path.clone())),
-            vec![path.canonicalize().expect("canonicalize")],
-            "an explicit choice is not merged with anything"
-        );
-    }
-
-    /// A `~/.kube/config` that is a symlink into a dotfiles repo is an
-    /// ordinary setup. The replacement arrives by rename, which would put a
-    /// regular file where the link was and leave the real file holding the
-    /// refresh token just spent — so the link has to be resolved first.
-    #[cfg(unix)]
-    #[test]
-    fn a_symlinked_kubeconfig_resolves_to_what_it_points_at() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let real = write(dir.path(), "real-config", CONFIG);
-        let link = dir.path().join("config");
-        std::os::unix::fs::symlink(&real, &link).expect("symlink");
-
-        assert_eq!(
-            kubeconfig_files(Some(link)),
-            vec![real.canonicalize().expect("canonicalize")]
-        );
     }
 
     /// And the write must survive being handed the link directly.

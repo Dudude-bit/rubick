@@ -4,7 +4,7 @@
 
 use super::AuthMode;
 use crate::auth::kubeconfig_tokens::{
-    can_replace, can_write_tokens, file_defining_user, kubeconfig_files, write_tokens,
+    can_replace, can_write_tokens, file_defining_user, write_tokens,
 };
 use crate::auth::{AuthProvider as _, AuthResult, OidcAuth};
 use crate::error::{AuthError, Error, Result};
@@ -171,10 +171,10 @@ pub(super) async fn run_oidc_auth(
     // moment it is spent, so refreshing without being able to write the
     // replacement back would leave the file holding a dead token and break the
     // `kubectl` beside us. No single file to write means no refresh.
-    let override_path = crate::config::AppConfig::load()
-        .ok()
-        .and_then(|c| c.kubernetes.kubeconfig_path);
-    if let Some(result) = refreshed(config, user, &kubeconfig_files(override_path)).await {
+    // The files this session read the user from, every one of them: asked of
+    // the settings again, only the first pinned file was looked in.
+    let files = state.client_manager.loaded().await.files;
+    if let Some(result) = refreshed(config, user, &files).await {
         return Ok(result);
     }
 
@@ -467,6 +467,15 @@ mod tests {
 
     /// A provider that answers discovery and refuses every code.
     async fn refusing_provider() -> String {
+        provider_answering(
+            "400 Bad Request",
+            r#"{"error":"invalid_grant"}"#.to_string(),
+        )
+        .await
+    }
+
+    /// A provider that answers discovery, and its token endpoint with `body`.
+    async fn provider_answering(status: &'static str, body: String) -> String {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind");
         let issuer = format!("http://{}", listener.local_addr().expect("addr"));
         let base = issuer.clone();
@@ -480,10 +489,7 @@ mod tests {
                     );
                     ("200 OK", endpoints)
                 } else {
-                    (
-                        "400 Bad Request",
-                        r#"{"error":"invalid_grant"}"#.to_string(),
-                    )
+                    (status, body.clone())
                 };
                 let answer = format!(
                     "HTTP/1.1 {status}\r\ncontent-type: application/json\r\n\
@@ -558,6 +564,69 @@ mod tests {
             "{ended:?}"
         );
         assert!(state.auth_sessions.is_empty(), "no session is left behind");
+    }
+
+    /// Two pinned files, the user in the second: `KUBECONFIG=a:b kubectl`
+    /// refreshes that user without a word. Looked for in the first file
+    /// only, the refresh token was never spent and every token lifetime
+    /// ended at the sign-in screen.
+    #[tokio::test]
+    async fn a_user_from_the_second_pinned_file_is_refreshed_in_that_file() {
+        let fresh = token_expiring_in(3600);
+        let issuer = provider_answering(
+            "200 OK",
+            format!(
+                r#"{{"access_token":"a","token_type":"Bearer","id_token":"{fresh}","refresh_token":"next"}}"#
+            ),
+        )
+        .await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let first = dir.path().join("a");
+        let second = dir.path().join("b");
+        let other = "apiVersion: v1\nkind: Config\nusers:\n- name: somebody-else\n  user: {}\n";
+        std::fs::write(&first, other).expect("write");
+        std::fs::write(
+            &second,
+            format!(
+                "apiVersion: v1\nkind: Config\nusers:\n- name: second-file-user\n  user:\n    \
+                 auth-provider:\n      name: oidc\n      config:\n        \
+                 client-id: kubernetes\n        id-token: spent\n        \
+                 idp-issuer-url: {issuer}\n        refresh-token: once\n"
+            ),
+        )
+        .expect("write");
+        let state = AppState::new().expect("state");
+        state
+            .client_manager
+            .load_kubeconfig_resolved(vec![first.clone(), second.clone()])
+            .await
+            .expect("both files load");
+        let provider = AuthProviderConfig {
+            name: "oidc".to_string(),
+            config: HashMap::from([
+                ("idp-issuer-url".to_string(), issuer),
+                ("client-id".to_string(), "kubernetes".to_string()),
+                ("id-token".to_string(), "spent".to_string()),
+                ("refresh-token".to_string(), "once".to_string()),
+            ]),
+            other: std::collections::BTreeMap::default(),
+        };
+
+        let result = run_oidc_auth(
+            &state,
+            "ctx",
+            "second-file-user",
+            &provider,
+            AuthMode::Silent,
+        )
+        .await
+        .expect("refreshed without a person");
+
+        assert_eq!(result.token, fresh);
+        let written = std::fs::read_to_string(&second).expect("read");
+        assert!(written.contains(&format!("id-token: {fresh}")), "{written}");
+        assert!(written.contains("refresh-token: next"), "{written}");
+        assert_eq!(std::fs::read_to_string(&first).expect("read"), other);
     }
 
     /// The whole loop against a real provider, because the part that matters
