@@ -34,7 +34,7 @@ import type {
 } from "../gitops";
 import type { CustomResourceInfo } from "@/generated/types";
 import { HELM_RELEASES_CRD, KUSTOMIZATIONS_CRD } from "./data";
-import { readRevision, revisionText } from "./model";
+import { installedChart, readRevision, revisionText } from "./model";
 
 export const KUSTOMIZE_NAME_LABEL = "kustomize.toolkit.fluxcd.io/name";
 export const KUSTOMIZE_NAMESPACE_LABEL =
@@ -229,9 +229,7 @@ function releaseSource(owner: CustomResourceInfo): DeliverySource {
     vendor: VENDOR,
     vendorId: VENDOR_ID,
     owner: ownerRef("HelmRelease", owner),
-    revision:
-      (getValueByPath(owner, "status.history[0].chartVersion") as string) ??
-      null,
+    revision: installedChart(owner),
     repoUrl: null,
     path: null,
     drift: stalled ? "unmanaged" : "reverted",

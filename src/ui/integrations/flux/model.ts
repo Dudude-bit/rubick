@@ -335,6 +335,15 @@ function readKustomization(object: CustomResourceInfo): FluxReconciler {
   });
 }
 
+/** The chart version a HelmRelease has installed, or null where it has installed none. */
+export function installedChart(object: CustomResourceInfo): string | null {
+  return (
+    (getValueByPath(object, "status.history[0].chartVersion") as string) ??
+    (getValueByPath(object, "status.lastAppliedRevision") as string) ??
+    null
+  );
+}
+
 function readHelmRelease(object: CustomResourceInfo): FluxReconciler {
   const chart =
     (getValueByPath(object, "spec.chart.spec.chart") as string) ??
@@ -343,8 +352,9 @@ function readHelmRelease(object: CustomResourceInfo): FluxReconciler {
   // What is installed, then what was asked for. A release pinned to `>=6.0.0`
   // has a range in its spec and a version in its history, and the version is
   // the answer to "what is running".
+  const installed = installedChart(object);
   const version =
-    (getValueByPath(object, "status.history[0].chartVersion") as string) ??
+    installed ??
     (getValueByPath(object, "status.lastAttemptedRevision") as string) ??
     (getValueByPath(object, "spec.chart.spec.version") as string) ??
     null;
@@ -355,7 +365,9 @@ function readHelmRelease(object: CustomResourceInfo): FluxReconciler {
       "spec.chart.spec.sourceRef",
       "HelmRepository"
     ),
-    applied: readRevision(version),
+    // Only what was installed: the CRD defaults the asked version to `*`, and
+    // a release that never installed read as frozen at it, "installed and healthy".
+    applied: readRevision(installed),
     // A HelmRelease keeps no inventory: what it owns is Helm's, in the
     // release's own storage, and claiming a number here would be a guess.
     objects: null,

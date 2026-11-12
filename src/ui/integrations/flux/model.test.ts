@@ -470,6 +470,69 @@ describe("a HelmRelease is a reconciler with a chart for a unit", () => {
   });
 });
 
+describe("a HelmRelease whose source is failing", () => {
+  const release = (status: Record<string, unknown>) =>
+    object(
+      "HelmRelease",
+      "podinfo",
+      {
+        chart: {
+          spec: {
+            chart: "podinfo",
+            version: "*",
+            sourceRef: { kind: "HelmRepository", name: "podinfo" },
+          },
+        },
+      },
+      status
+    );
+  const failing = object(
+    "HelmRepository",
+    "podinfo",
+    { url: "https://charts.example" },
+    { conditions: [notReady("Failed", "failed to fetch index")] }
+  );
+  const read = (status: Record<string, unknown>) =>
+    fluxPicture(
+      [],
+      [release(status)],
+      [{ kind: "HelmRepository", objects: [failing] }],
+      []
+    ).reconcilers[0];
+
+  /**
+   * A new release whose HelmRepository cannot fetch has no history, and the
+   * CRD defaults the version it asks for to `*`. Read as applied, the page
+   * said "frozen at *" and "The release is installed and healthy" of a
+   * release that never installed. Fails if a version asked for or attempted
+   * counts as one installed.
+   */
+  it("has applied nothing until it installs, whatever version it asks for", () => {
+    const waiting = [notReady("HelmChartNotReady", "HelmChart is not ready")];
+    const never = read({ conditions: waiting });
+    expect(never.applied).toBeNull();
+    expect(never.findings.map((finding) => finding.kind)).toEqual([
+      "noSource",
+      "notReady",
+    ]);
+    expect(
+      read({ conditions: waiting, lastAttemptedRevision: "6.5.4" }).applied
+    ).toBeNull();
+  });
+
+  /** The case the frozen finding is for: installed, and its source stopped fetching since. */
+  it("is frozen at the version its history says it installed", () => {
+    const installed = read({
+      conditions: [ready("Helm install succeeded")],
+      history: [{ chartVersion: "6.5.4" }],
+    });
+    expect(installed.findings.map((finding) => finding.kind)).toEqual([
+      "frozen",
+    ]);
+    expect(installed.applied?.raw).toBe("6.5.4");
+  });
+});
+
 describe("a source nobody applies", () => {
   it("is a finding, because nowhere else in the app could say so", () => {
     const { sources } = picture(
