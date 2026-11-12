@@ -225,6 +225,27 @@ describe("the routes page opened from a link to one kind's rows", () => {
   });
 });
 
+describe("the routes page a link narrowed to named routes, with a kind unread", () => {
+  /**
+   * A named route may be of the kind that was refused. Fails if it is said
+   * to be "not in this list now", which reads as fixed or deleted.
+   */
+  it("does not call a named route gone while a kind could not be read", async () => {
+    page.refused = true;
+    page.backingError = null;
+    page.routes = [web];
+    await renderRoutes("?names=shop/web,shop/stream");
+
+    expect(
+      await screen.findByText(
+        "1 of them is not among the rows that could be read."
+      )
+    ).toBeVisible();
+    expect(screen.queryByText(/not in this list now/)).toBeNull();
+    page.refused = false;
+  });
+});
+
 describe("the kind filter on a page a link narrowed to one kind", () => {
   /**
    * `listOf` stands in for `kind` until the reader picks one. Fails if

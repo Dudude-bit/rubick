@@ -551,7 +551,11 @@ export function GatewayRoutesList() {
 
       {named && !isLoading && (
         <div className="mt-3">
-          <NamedRowsBanner named={named} found={narrowed.length} />
+          <NamedRowsBanner
+            named={named}
+            found={narrowed.length}
+            whole={!error && unread.length === 0 && refusedKinds.length === 0}
+          />
         </div>
       )}
 

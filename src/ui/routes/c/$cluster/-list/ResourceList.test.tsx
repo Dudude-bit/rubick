@@ -7,7 +7,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { type ReactElement } from "react";
+import { type ComponentProps, type ReactElement } from "react";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
@@ -1040,6 +1040,54 @@ describe("a list a link narrowed to the rows it named", () => {
       screen.getByText("1 of them is not in this list now.")
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show all" })).toBeVisible();
+  });
+
+  const NAMED = "/c/prod/pods?names=shop%2Fapi-1,shop%2Fapi-2,shop%2Fgone-1";
+  const pods = (props: Partial<ComponentProps<typeof ResourceList<Item>>>) =>
+    renderWithRouter(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        {...props}
+      />,
+      { at: NAMED, route: "/c/$cluster/$" }
+    );
+  const GONE = /not in this list now/;
+
+  /**
+   * "Not in this list now" reads as fixed or deleted, and a list nobody was
+   * allowed to read holds no evidence of either. Fails if a refused read
+   * counts every named row as gone.
+   */
+  it("does not call the named rows gone from a list that was refused", async () => {
+    await pods({ data: [], error: new Error("pods is forbidden: RBAC") });
+    expect(
+      screen.getByText("3 of them are not among the rows that could be read.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(GONE)).toBeNull();
+  });
+
+  /** A named row may be in the namespace that was not read, or past the cap. Fails if either is counted as gone. */
+  it.each([
+    [
+      "one namespace unread",
+      { unread: [{ namespace: "pay", code: "READ_DEADLINE", message: "" }] },
+    ],
+    ["cut at the server's cap", { more: true }],
+  ])("does not call a named row gone from a list with %s", async (_, part) => {
+    await pods({
+      data: [
+        { name: "api-1", namespace: "shop" },
+        { name: "api-2", namespace: "shop" },
+      ],
+      ...part,
+    });
+    expect(
+      screen.getByText("1 of them is not among the rows that could be read.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(GONE)).toBeNull();
   });
 
   /**

@@ -3307,6 +3307,10 @@ export const en = {
       one: "{n} of them is not in this list now.",
       other: "{n} of them are not in this list now.",
     },
+    namedRowsUnread: {
+      one: "{n} of them is not among the rows that could be read.",
+      other: "{n} of them are not among the rows that could be read.",
+    },
     namedRowsShowAll: "Show all",
     earlierObject: "earlier object",
     earlierObjectHint:
