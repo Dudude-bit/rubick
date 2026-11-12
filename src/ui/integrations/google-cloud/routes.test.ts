@@ -131,13 +131,62 @@ describe("which Ingresses GKE serves", () => {
    * it, and is served by nothing at all.
    */
   it("claims by annotation and not by ingressClassName", () => {
-    expect(gceClassOf({ "kubernetes.io/ingress.class": "gce" })).toBe("gce");
-    expect(gceClassOf({ "kubernetes.io/ingress.class": "nginx" })).toBeNull();
-    expect(gceClassOf({})).toBeNull();
+    const annotated = (value: string) =>
+      ingress({
+        className: value,
+        classAnnotated: true,
+        annotations: { "kubernetes.io/ingress.class": value },
+      });
+    expect(gceClassOf(annotated("gce-internal"))).toBe("gce-internal");
+    expect(gceClassOf(annotated("nginx"))).toBeNull();
 
     const written = ingress({ className: "gce", annotations: {} });
+    expect(gceClassOf(written)).toBeNull();
     expect(claimed([written])).toEqual([]);
     expect(ignoredByClassName([written])).toHaveLength(1);
+  });
+
+  /**
+   * GKE's documented default: neither the annotation nor
+   * `spec.ingressClassName`, and it builds an external load balancer. Read
+   * as somebody else's, the host was on no row, its certificate stuck on
+   * FailedNotVisible was nowhere, and with only such Ingresses the page said
+   * GKE serves nothing here. Fails if a classless Ingress is refused again,
+   * or one naming another controller's class is taken.
+   */
+  it("takes an Ingress that names no class at all, with the certificate it names", () => {
+    const classless = ingress({
+      annotations: { "networking.gke.io/managed-certificates": "shop-cert" },
+    });
+    expect(gceClassOf(classless)).toBe("gce");
+    expect(countHosts([classless])).toBe(1);
+    expect(ignoredByClassName([classless])).toEqual([]);
+
+    const [host] = hostsOf(
+      sources({
+        ingresses: [classless],
+        managedCertificates: [
+          custom(
+            "ManagedCertificate",
+            "shop-cert",
+            { domains: ["shop.example.com"] },
+            {
+              certificateStatus: "Provisioning",
+              domainStatus: [
+                { domain: "shop.example.com", status: "FailedNotVisible" },
+              ],
+            }
+          ),
+        ],
+      })
+    );
+    expect(host.fronts[0].class).toBe("gce");
+    expect(host.fronts[0].certificates[0].domains).toEqual([
+      { domain: "shop.example.com", status: "FailedNotVisible" },
+    ]);
+
+    const elsewhere = ingress({ className: "nginx", annotations: {} });
+    expect(countHosts([elsewhere])).toBe(0);
   });
 
   /** An Ingress with the annotation is not "ignored" whatever the field says. */

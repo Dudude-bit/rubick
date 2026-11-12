@@ -65,6 +65,34 @@ beforeEach(() => {
 
 describe("whether GKE terminates TLS in front of a Service", () => {
   /**
+   * A classless Ingress is GKE's by default; skipped, the proxy behind it
+   * was told nothing in front of it holds the certificate. Fails if the
+   * route is left out, or one another class names is brought in.
+   */
+  it("names the host of an Ingress with no class, and not of one another class names", async () => {
+    const rest = {
+      "networking.gke.io/managed-certificates": "shop-cert",
+    };
+    answers.crds = () =>
+      Promise.resolve([
+        {
+          name: "shop-cert",
+          namespace: "web",
+          spec: { domains: ["shop.example.com"] },
+          status: { certificateStatus: "Active" },
+        } as unknown as CustomResourceInfo,
+      ]);
+
+    answers.ingresses = [{ ...shop, annotations: rest }];
+    expect(await tlsOfShop()).toBe(true);
+
+    answers.ingresses = [{ ...shop, className: "nginx", annotations: rest }];
+    expect(await serviceRoutes({ namespace: "web", name: "traefik" })).toEqual(
+      []
+    );
+  });
+
+  /**
    * With `managedcertificates` refused the certificate the Ingress names
    * could not be found, and the proxy behind it was told its host is served
    * in the clear.

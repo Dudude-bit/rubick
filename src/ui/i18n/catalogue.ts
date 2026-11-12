@@ -6442,7 +6442,7 @@ export const en = {
     noIngressCarries: "No Ingress in this cluster carries",
     orInline: "or",
     gkeControllerServesNothing:
-      ", so GKE’s controller is serving nothing here. The CRDs it owns may still be installed, which is what put this page in the sidebar.",
+      ", and none is left without a class, which GKE takes too, so GKE’s controller is serving nothing here. The CRDs it owns may still be installed, which is what put this page in the sidebar.",
     nothingBehindIt: "nothing behind it",
     pathDropped: "a path is dropped",
     certificateFailed: "certificate failed",

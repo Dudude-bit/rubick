@@ -38,7 +38,7 @@ function answerFor(
   );
   // Not GKE's Ingress, so GKE has no opinion about it — which is different
   // from saying it is served in the clear.
-  if (!ingress || gceClassOf(ingress.annotations) === null) return [];
+  if (!ingress || gceClassOf(ingress) === null) return [];
 
   const named = managedCertificateRefs(ingress.annotations);
   const preShared = preSharedCerts(ingress.annotations);
