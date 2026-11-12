@@ -215,6 +215,20 @@ pub struct OidcAuthorizationUrl {
 }
 
 impl OidcAuth {
+    /// What a sign-in asks for. A kubeconfig's `extra-scopes` are extra:
+    /// `openid` is what makes the provider answer with an `id_token` at all,
+    /// and kubelogin sends it ahead of whatever the file adds.
+    fn requested_scopes(&self) -> String {
+        if self.scopes.is_empty() {
+            return "openid email profile".to_string();
+        }
+        let extra = self.scopes.iter().map(String::as_str);
+        std::iter::once("openid")
+            .chain(extra.filter(|scope| *scope != "openid"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
     /// Generate authorization URL for browser-based flow
     ///
     /// # Errors
@@ -228,11 +242,7 @@ impl OidcAuth {
         let code_verifier = generate_code_verifier();
         let code_challenge = generate_code_challenge(&code_verifier);
 
-        let scopes = if self.scopes.is_empty() {
-            "openid email profile".to_string()
-        } else {
-            self.scopes.join(" ")
-        };
+        let scopes = self.requested_scopes();
 
         let url = format!(
             "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&state={}&code_challenge={}&code_challenge_method=S256",
@@ -352,6 +362,26 @@ mod tests {
 
         assert_eq!(auth.name(), "oidc");
         assert!(auth.supports_refresh());
+    }
+
+    fn asking_for(extra: &[&str]) -> String {
+        OidcAuth::new(
+            "https://auth.example.com".to_string(),
+            "client-id".to_string(),
+            None,
+            extra.iter().map(ToString::to_string).collect(),
+        )
+        .requested_scopes()
+    }
+
+    /// `extra-scopes: groups`, as the Dex and Keycloak guides write it. Sent
+    /// as the whole scope, Dex refuses the request for want of `openid`, and
+    /// a provider that lets it through answers with no `id_token`.
+    #[test]
+    fn extra_scopes_are_asked_for_on_top_of_openid() {
+        assert_eq!(asking_for(&["groups"]), "openid groups");
+        assert_eq!(asking_for(&["groups", "openid"]), "openid groups");
+        assert_eq!(asking_for(&[]), "openid email profile");
     }
 
     #[test]
