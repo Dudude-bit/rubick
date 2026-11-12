@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useRereadWith } from "@/hooks/useRereadWith";
 import {
   Boxes,
   ExternalLink,
@@ -128,20 +130,28 @@ export function HelmDetail() {
   const helmCliAvailable = helm?.available ?? false;
   const goBack = () => navigate(pageLink("helm"));
 
+  // Nothing watches a release by name, and this page has no timer: one
+  // installed again under its name is only found by asking for it again.
   const {
     data: release,
     isLoading,
     isFetching,
     refetch,
     error,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey: queryKeys.helm.release(namespace, name),
     queryFn: async () => {
       if (!namespace || !name) throw new Error("Missing parameters");
       return await commands.getHelmReleaseDetail(name, namespace, null);
     },
     enabled: isConnected && !!namespace && !!name && isNative,
+    refresh: false,
+    rereadsGone: true,
   });
+  useRereadWith(
+    queryKeys.helm.release(namespace, name),
+    queryKeys.helm.history(namespace, name)
+  );
 
   const {
     data: historyRead,
