@@ -25,8 +25,10 @@ import {
   parseBang,
   rankContexts,
 } from "@/lib/cluster-search";
+import { segmentOf } from "@/lib/access-kinds";
 import {
   clusterLink,
+  crdFor,
   listLink,
   objectLink,
   pageLink,
@@ -319,6 +321,15 @@ function isNamespaceHit(hit: SearchHit): boolean {
     toKind(hit.kind) === ResourceType.Namespace
   );
 }
+
+/**
+ * Where a hit's kind is served, for everything that names the hit by more
+ * than its link: none for the registry's own kind, the segment for any
+ * other. By kind alone a Knative Service is the core Service of its name,
+ * and a kind with no namesake is nothing at all.
+ */
+export const crdOfHit = (hit: SearchHit): string | undefined =>
+  crdFor({ kind: hit.kind, crd: segmentOf(hit) });
 
 /** One object among a cluster's hits; two groups may name a kind alike. */
 export function hitKey(hit: SearchHit): string {
