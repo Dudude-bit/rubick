@@ -440,6 +440,12 @@ function sourceRefOf(
  * What is wrong with one reconciler, and — the part no list gives you — what
  * that means for the rest.
  */
+/** Flux resolves `dependsOn` among its own kind: a HelmRelease's are HelmReleases. */
+const names = (dependency: SourceRef, candidate: FluxReconciler) =>
+  candidate.kind === dependency.kind &&
+  candidate.name === dependency.name &&
+  candidate.namespace === dependency.namespace;
+
 function findingsFor(
   reconciler: FluxReconciler,
   all: FluxReconciler[]
@@ -468,11 +474,7 @@ function findingsFor(
     !reconciler.suspended && reconciler.ready === false
       ? reconciler.dependsOn
           .map((dependency) =>
-            all.find(
-              (candidate) =>
-                candidate.name === dependency.name &&
-                candidate.namespace === dependency.namespace
-            )
+            all.find((candidate) => names(dependency, candidate))
           )
           .find(
             (candidate) => candidate !== undefined && candidate.ready !== true
@@ -538,11 +540,7 @@ function findingsFor(
 
   const blocked = all
     .filter((candidate) =>
-      candidate.dependsOn.some(
-        (dependency) =>
-          dependency.name === reconciler.name &&
-          dependency.namespace === reconciler.namespace
-      )
+      candidate.dependsOn.some((dependency) => names(dependency, reconciler))
     )
     .map((candidate) => candidate.name);
   // Only worth saying when this one is actually stuck: everything declaring a

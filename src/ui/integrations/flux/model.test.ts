@@ -419,6 +419,44 @@ describe("dependsOn is an ordering, and its consequence is named", () => {
   });
 });
 
+describe("a dependency is one of the dependant's own kind", () => {
+  const helmRelease = (
+    name: string,
+    spec: Record<string, unknown>,
+    conditions: Condition[]
+  ) => object("HelmRelease", name, spec, { conditions });
+
+  /**
+   * A Kustomization `redis` that applies the HelmRelease `redis`, and a
+   * release `app` depending on `redis`, which Flux resolves to the release.
+   * Looked up by name alone the Kustomization came first: `app`, failing for
+   * its own reason, was drawn waiting on it, and it was blamed for blocking.
+   */
+  it("does not wait on, or blame, a namesake of another kind", () => {
+    const { reconcilers } = picture(
+      [
+        kustomization("redis", {}, [
+          notReady("BuildFailed", "kustomize build failed"),
+        ]),
+      ],
+      [gitRepository("podinfo", [ready("stored artifact")], REVISION)],
+      [
+        helmRelease("redis", {}, [ready("Helm install succeeded")]),
+        helmRelease("app", { dependsOn: [{ name: "redis" }] }, [
+          notReady("InstallFailed", "install retries exhausted"),
+        ]),
+      ]
+    );
+    const kinds = (kind: string, name: string) =>
+      reconcilers
+        .find((entry) => entry.kind === kind && entry.name === name)!
+        .findings.map((finding) => finding.kind);
+
+    expect(kinds("HelmRelease", "app")).toEqual(["notReady"]);
+    expect(kinds("Kustomization", "redis")).not.toContain("blocking");
+  });
+});
+
 describe("a HelmRelease is a reconciler with a chart for a unit", () => {
   it("reads its chart, its version and its Helm source", () => {
     const release = object(
