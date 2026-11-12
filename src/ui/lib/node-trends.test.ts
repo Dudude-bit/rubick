@@ -104,6 +104,50 @@ describe("nodeTrends", () => {
   });
 });
 
+describe("nodes whose names share their first label", () => {
+  const lane = (cpu: number) => ({
+    cpuMillicores: [{ t: T0, v: cpu }],
+    memoryBytes: [{ t: T0, v: GI }],
+  });
+
+  /**
+   * Nodes named by address (`10.0.1.5`) or by region and address all share
+   * their first dot-separated label, which is what series were keyed by:
+   * the map held one entry and every row drew that node's history against
+   * its own allocatable. Fails if two nodes read one series.
+   */
+  it("gives each address-named node its own series", () => {
+    for (const prefix of ["", "cn-hangzhou."]) {
+      const [busy, idle] = [`${prefix}10.0.1.5`, `${prefix}10.0.1.6`];
+      const trends = nodeTrends(
+        {
+          ...window,
+          nodes: { [busy]: lane(3000), [idle]: lane(400) },
+          newestAt: { [idle]: T0 - 60_000 },
+        },
+        [node(busy), node(idle)],
+        T0
+      );
+      expect(trends.map((t) => [t.node.name, t.cpu?.peak])).toEqual([
+        [busy, 75],
+        [idle, 10],
+      ]);
+      expect(trends.map((t) => t.newestAgoMs)).toEqual([null, 60_000]);
+    }
+  });
+
+  /** A series for another cluster's node is nobody's here, not the nearest name's. */
+  it("leaves a node without a lane when the only series is another node's", () => {
+    const [trend] = nodeTrends(
+      { ...window, nodes: { "10.9.9.9": lane(3000) }, newestAt: {} },
+      [node("10.0.1.5")],
+      T0
+    );
+    expect(trend.cpu).toBeNull();
+    expect(trend.blind).toBe("noSeries");
+  });
+});
+
 describe("why a row has no lane", () => {
   /**
    * "Still reading" and "refused" are not "Prometheus has no series for this

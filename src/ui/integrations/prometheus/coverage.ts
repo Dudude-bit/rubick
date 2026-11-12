@@ -32,6 +32,7 @@ import type { en } from "@/i18n/catalogue";
  */
 type Reading = keyof (typeof en)["readings"];
 import { commands } from "@/lib/commands";
+import { nodeMatcher } from "@/lib/node-names";
 import type { PromSeries } from "@/generated/types";
 
 // The label a node's name lands in, per exporter, most specific first. The
@@ -119,17 +120,6 @@ const nameFrom = (series: PromSeries): string | null => {
   return null;
 };
 
-/**
- * A name Prometheus and Kubernetes may spell differently.
- *
- * A node is `ip-10-0-1-4.eu-west-1.compute.internal` to Kubernetes and
- * frequently `ip-10-0-1-4` to a scrape target, so the comparison is on the
- * first label. Wrong in the lenient direction only — two nodes in one cluster
- * never share a first label — and being lenient is right here, because the
- * finding this produces sends somebody to change a connection.
- */
-const shortName = (name: string) => name.split(".")[0].toLowerCase();
-
 export async function coverage(): Promise<Coverage> {
   const empty: Coverage = {
     unseen: [],
@@ -174,12 +164,14 @@ export async function coverage(): Promise<Coverage> {
     FAMILIES.map((family, index) => [family.metric, counts[index]])
   );
 
-  const ours = new Set(nodes.map((node) => shortName(node.name)));
+  // Prometheus and Kubernetes may spell one node differently; `nodeMatcher`
+  // is the reading the Nodes utilisation view shares.
+  const nodeOf = nodeMatcher(nodes.map((node) => node.name));
   const namesIn = (answer: PromSeries[] | null) =>
     new Set(
       (answer ?? []).flatMap((series) => {
         const name = nameFrom(series);
-        return name ? [shortName(name)] : [];
+        return name ? [name] : [];
       })
     );
 
@@ -190,8 +182,8 @@ export async function coverage(): Promise<Coverage> {
   // one carries the name is the scrape config's choice.
   //
   // Read one way only, and that asymmetry is the point. `instance` is
-  // routinely `10.0.0.4:10250`, which `shortName` reduces to "10" — a name no
-  // cluster has. From this source a match is evidence that this cluster is
+  // routinely `10.0.0.4:10250`, an address where the cluster has a name.
+  // From this source a match is evidence that this cluster is
   // being scraped; a non-match is evidence of nothing at all, and must never
   // become a foreign node. `kube_node_info` is the only source trusted in
   // both directions, because there the label *is* the node's name.
@@ -208,7 +200,7 @@ export async function coverage(): Promise<Coverage> {
                 )
                 .catch(() => null)
             ),
-          ].filter((name) => ours.has(name))
+          ].filter((name) => nodeOf(name) !== null)
         );
   if (known.size === 0) {
     return {
@@ -219,10 +211,11 @@ export async function coverage(): Promise<Coverage> {
       problem: "promNoNodeLabel",
     };
   }
+  const scraped = new Set([...known].map(nodeOf));
   const unseen = nodes
-    .filter((node) => !known.has(shortName(node.name)))
+    .filter((node) => !scraped.has(node.name))
     .map((node) => node.name);
-  const foreign = [...known].filter((name) => !ours.has(name));
+  const foreign = [...known].filter((name) => nodeOf(name) === null);
 
   return {
     unseen,
