@@ -25,6 +25,7 @@ impl OptionTimeExt for Option<&Time> {
 
 mod connections;
 mod gateway;
+mod helm;
 mod kinds;
 mod network;
 pub mod node_budget;
@@ -39,6 +40,7 @@ mod workloads;
 
 pub use connections::*;
 pub use gateway::*;
+pub use helm::*;
 #[cfg(test)]
 pub(crate) use kinds::every_kind;
 pub use kinds::{facts_of, KindFacts, KindScope};

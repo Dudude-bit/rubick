@@ -1177,6 +1177,33 @@ mod tests {
         );
     }
 
+    /// What a Helm release stores that can hold a private key is named
+    /// twice in the tree: where the stored release declares it, and where
+    /// `HelmSecretRelease::shown` puts it through the rule that withholds
+    /// one. A command that reads it a third time hands it out as stored.
+    #[test]
+    fn what_a_helm_release_stores_is_read_only_through_the_rule_that_withholds_a_key() {
+        // In pieces, so that this file is not what the scan finds.
+        let stored = [
+            concat!("stored_", "values"),
+            concat!("stored_", "manifest"),
+            concat!("stored_", "notes"),
+        ];
+        let (_, sources) = command_sources();
+        for field in stored {
+            let named = sources
+                .iter()
+                .flat_map(|source| source.lines())
+                .filter(|line| line.contains(field))
+                .count();
+            assert_eq!(
+                named, 2,
+                "{field} is read outside commands::helm::HelmSecretRelease::shown, \
+                 or the scan lost it"
+            );
+        }
+    }
+
     /// A manifest reaches the screen as YAML only through `editor_yaml`,
     /// which withholds private keys. Four commands wrote theirs beside it,
     /// so a custom resource and any kind on the generic page showed a key

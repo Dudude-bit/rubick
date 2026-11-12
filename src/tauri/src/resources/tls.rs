@@ -259,7 +259,7 @@ pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<Wit
     // The PEM label says which flavour it is — RSA, EC, encrypted — and
     // none of that changes what the reader can do, so the row does not
     // carry it.
-    if has_pem_private_key_label(value) || decodes_as_private_key(value) {
+    if says_private_key(value) {
         return Some(Withheld::PrivateKey);
     }
     if key_declared_private(secret_type, key) {
@@ -271,6 +271,24 @@ pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<Wit
         return Some(Withheld::KeyName);
     }
     None
+}
+
+/// The first net on its own: what the bytes say they are.
+fn says_private_key(value: &[u8]) -> bool {
+    has_pem_private_key_label(value) || decodes_as_private_key(value)
+}
+
+/// The first net for a string no map names: a private key as text, or as
+/// the base64 of one, wrapped the way `base64` prints it or not.
+pub(super) fn is_private_key_text(text: &str) -> bool {
+    use base64::Engine;
+    if says_private_key(text.as_bytes()) {
+        return true;
+    }
+    let packed: String = text.split_whitespace().collect();
+    base64::engine::general_purpose::STANDARD
+        .decode(packed)
+        .is_ok_and(|bytes| says_private_key(&bytes))
 }
 
 /// Whether the value carries a PEM block whose own label says private key.
@@ -310,7 +328,8 @@ fn decodes_as_private_key(value: &[u8]) -> bool {
 pub const WITHHELD_MARKER: &str = "<withheld: the app never shows a private key>";
 
 /// The maps a private key can sit in, and whether each is base64.
-const KEY_MAPS: [(&str, bool); 3] = [("data", true), ("binaryData", true), ("stringData", false)];
+pub(super) const KEY_MAPS: [(&str, bool); 3] =
+    [("data", true), ("binaryData", true), ("stringData", false)];
 
 /// The keys of a manifest that still hold [`WITHHELD_MARKER`]: applied as it
 /// is, the placeholder would be written over each of them.

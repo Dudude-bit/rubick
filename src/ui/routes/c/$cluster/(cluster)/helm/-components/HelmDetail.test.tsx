@@ -21,6 +21,7 @@ const web: HelmReleaseDetail = {
   values: {},
   manifest: "",
   notes: null,
+  withheld: { values: [], manifest: [], notes: false },
 };
 
 /** How the cluster answers for the release's history, per test. */

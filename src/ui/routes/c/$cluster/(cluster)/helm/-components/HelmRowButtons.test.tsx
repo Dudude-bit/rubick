@@ -128,6 +128,7 @@ describe("the last button of a hand-built Helm table", () => {
       values: {},
       manifest: "",
       notes: null,
+      withheld: { values: [], manifest: [], notes: false },
     } satisfies HelmReleaseDetail);
     getHelmHistory.mockResolvedValue([revision(1), revision(2)]);
     await renderWithRouter(<HelmDetail />, {
@@ -189,6 +190,7 @@ describe("a revision whose secret would not read", () => {
       values: {},
       manifest: "",
       notes: null,
+      withheld: { values: [], manifest: [], notes: false },
     } satisfies HelmReleaseDetail);
     getHelmHistory.mockResolvedValue([unread, revision(2)]);
     await renderWithRouter(<HelmDetail />, {
