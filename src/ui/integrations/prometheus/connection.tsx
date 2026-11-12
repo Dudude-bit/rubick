@@ -19,7 +19,7 @@ import { Link } from "@tanstack/react-router";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { pageLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
-import { addressOf } from "./address";
+import { addressOf } from "../address";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER } from "@/lib/report-parts";
@@ -145,7 +145,7 @@ export default function Connection() {
       {saved.data && (
         <p className="text-xs text-fg-mut">
           <span className="font-mono text-fg">
-            {saved.data.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
+            {addressOf(saved.data.url).shown}
           </span>
           {saved.data.authType === "bearer" &&
             ` · ${t("monitors", "bearerToken")}`}{" "}
