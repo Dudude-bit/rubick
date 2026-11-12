@@ -82,3 +82,40 @@ it("draws an address not ready amber once the Service's pods were read", async (
   expect(screen.queryByRole("img", { name: "pods not read" })).toBeNull();
   expect(screen.getByText("not ready").closest("td")).toHaveClass("text-warn");
 });
+
+/**
+ * Slices, Endpoints and pods all refused: the tab printed "0 pods the
+ * selector matches" over "publishes no address at all, so nothing reaches
+ * it" about a Service nobody could look behind. Fails if an answer holding
+ * nothing this Service publishes says it publishes nothing, or drops the
+ * cluster's words.
+ */
+it("says what the Service publishes could not be read, in the cluster's words", async () => {
+  const refused = {
+    data: {
+      subject,
+      edges: [],
+      stops: [],
+      published: [],
+      notLookedAt: [
+        {
+          kind: "EndpointSlice",
+          why: {
+            says: "unanswered",
+            version: "discovery.k8s.io/v1",
+            said: "endpointslices.discovery.k8s.io is forbidden",
+          },
+        },
+      ],
+    },
+    error: null,
+    isPending: false,
+  } as unknown as ConnectionsRead;
+  await renderWithRouter(<PublishedEndpoints query={refused} />);
+  expect(
+    screen.getByText(
+      "Could not read what this Service publishes: endpointslices.discovery.k8s.io is forbidden"
+    )
+  ).toBeVisible();
+  expect(screen.queryByText(/publishes no address at all/)).toBeNull();
+});

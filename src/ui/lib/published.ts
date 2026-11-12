@@ -40,6 +40,20 @@ export function publishedFor(
   );
 }
 
+/** The kind a neighbourhood names where nothing says what a Service publishes: `PUBLISHED_UNREAD` in Rust. */
+const PUBLISHED_UNREAD = "EndpointSlice";
+
+/**
+ * Why a neighbourhood that answered holds nothing a Service publishes: the
+ * cluster's words refusing its slices, where the legacy object and the pods
+ * went unread with them. `null` where it names no such refusal.
+ */
+export function publishedUnread(conns: ResourceConnections): string | null {
+  for (const { kind, why } of conns.notLookedAt)
+    if (kind === PUBLISHED_UNREAD && why.says === "unanswered") return why.said;
+  return null;
+}
+
 /**
  * The state of one address, in the slice's own vocabulary.
  *

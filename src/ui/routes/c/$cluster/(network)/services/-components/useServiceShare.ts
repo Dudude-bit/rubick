@@ -11,6 +11,7 @@ import {
   endpointCount,
   endpointState,
   publishedFor,
+  publishedUnread,
   sourceNote,
 } from "@/lib/published";
 import type { ReportStat } from "@/lib/report";
@@ -159,14 +160,18 @@ export function servicePublishedSection(
   connections: ConnectionsRead,
   t: T
 ): PlacedSection {
+  const published = connections.data
+    ? publishedFor(connections.data, connections.data.subject)
+    : undefined;
+  const refused =
+    connections.data && !published ? publishedUnread(connections.data) : null;
   const unread = connections.error
     ? t("empty", "couldNotReadWhatServicePublishes")
     : connections.isPending || connections.data === undefined
       ? t("share", "stillReading")
-      : null;
-  const published = connections.data
-    ? publishedFor(connections.data, connections.data.subject)
-    : undefined;
+      : refused === null
+        ? null
+        : `${t("empty", "couldNotReadWhatServicePublishes")} ${refused}`;
   const all = published?.endpoints ?? [];
   const rows = all.slice(0, MAX_ROWS);
   const podsUnread = podsUnreadOf(published);

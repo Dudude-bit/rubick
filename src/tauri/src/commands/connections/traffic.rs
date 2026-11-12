@@ -355,8 +355,11 @@ pub(super) fn note_reach(
     // `None` and says what the endpoints alone can.
     let pods = snapshot.pods.is_ok().then_some(selected.as_slice());
     let makers = snapshot.makers();
-    let published = snapshot
-        .published_of(svc, svc_ref.clone(), &selected)
+    // Nothing read of it leaves no answer here; `unanswered` names why.
+    let Some(published) = snapshot.published_of(svc, svc_ref.clone(), &selected) else {
+        return;
+    };
+    let published = published
         .with_stop(svc, pods)
         .with_policies(
             svc,

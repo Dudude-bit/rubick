@@ -7,6 +7,7 @@ import type {
   ChainStop,
   NotServing,
   ObjectRef,
+  ResourceConnections,
   ServicePublished,
   SharedCause,
 } from "@/generated/types";
@@ -666,6 +667,54 @@ describe("one verdict for a Service on every surface", () => {
     expect(healthFromConnections(undefined, null)).toEqual({
       state: "unknown",
       why: null,
+    });
+  });
+
+  /**
+   * A reader who may list Services and not pods, endpoints or
+   * endpointslices opened a healthy Service and saw red "No endpoints": the
+   * neighbourhood answered, and what the Service publishes was read from
+   * nothing. Fails if such an answer reads as no endpoints or as still
+   * reading, or loses the cluster's words.
+   */
+  it("says not checked, with the refusal, where nothing the Service publishes was read", () => {
+    const service: ObjectRef = {
+      ...SERVICE,
+      facts: {
+        kind: "service",
+        type: "ClusterIP",
+        selector: "app=ledger",
+      } as ObjectRef["facts"],
+    };
+    const answered = (notLookedAt: ResourceConnections["notLookedAt"]) =>
+      healthFromConnections(
+        {
+          subject: service,
+          edges: [],
+          stops: [],
+          published: [],
+          notLookedAt,
+        } as unknown as ResourceConnections,
+        null
+      );
+    const refused = answered([
+      {
+        kind: "EndpointSlice",
+        why: {
+          says: "unanswered",
+          version: "discovery.k8s.io/v1",
+          said: "endpointslices.discovery.k8s.io is forbidden",
+        },
+      },
+    ]);
+    expect(refused).toEqual({
+      state: "unknown",
+      why: "endpointslices.discovery.k8s.io is forbidden",
+    });
+    expect(serviceHealthWords(refused, t)).toMatchObject({
+      label: "not checked",
+      role: "neutral",
+      reason: "endpointslices.discovery.k8s.io is forbidden",
     });
   });
 });

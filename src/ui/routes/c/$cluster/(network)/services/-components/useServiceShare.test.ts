@@ -252,6 +252,41 @@ describe("what the Service actually publishes", () => {
     expect(section.unread).toBeTruthy();
   });
 
+  /**
+   * Slices, Endpoints and pods all refused: the read answered and holds
+   * nothing this Service publishes, and the shared file drew an empty table
+   * under no mark. Fails if such an answer is shared as read.
+   */
+  it("says what it publishes could not be read where the answer names the refusal", () => {
+    const section = servicePublishedSection(
+      {
+        data: {
+          subject: published().service,
+          edges: [],
+          stops: [],
+          published: [],
+          notLookedAt: [
+            {
+              kind: "EndpointSlice",
+              why: {
+                says: "unanswered",
+                version: "discovery.k8s.io/v1",
+                said: "endpointslices is forbidden",
+              },
+            },
+          ],
+        } as unknown as ResourceConnections,
+        error: null,
+        isPending: false,
+      } as unknown as ConnectionsQuery,
+      t
+    );
+    expect(section.unread).toBe(
+      "Could not read what this Service publishes: endpointslices is forbidden"
+    );
+    expect(section.count).toBeUndefined();
+  });
+
   it("lists ready and not-ready addresses with a pod reference once known", () => {
     const connections = connectionsOf({
       subject: {

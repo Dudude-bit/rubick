@@ -32,7 +32,12 @@ import { makersUnread } from "@/lib/stop-mood";
 import { isPolicyStop, type PolicyStop } from "@/lib/policy-door";
 import { sharedAfterCount } from "@/lib/pod-cause";
 import { errorToShow } from "@/lib/error-utils";
-import { endpointCount, publishedFor, servingCount } from "@/lib/published";
+import {
+  endpointCount,
+  publishedFor,
+  publishedUnread,
+  servingCount,
+} from "@/lib/published";
 import type { StatusRole } from "@/lib/status-role";
 
 export type ServiceHealth =
@@ -550,5 +555,10 @@ export function healthFromConnections(
     facts?.kind === "service"
       ? { type: facts.type, selectorless: facts.selector === null }
       : { type: "", selectorless: false };
-  return serviceHealthOf(shape, publishedFor(data, data.subject), null);
+  const published = publishedFor(data, data.subject);
+  return serviceHealthOf(
+    shape,
+    published,
+    published ? null : publishedUnread(data)
+  );
 }
