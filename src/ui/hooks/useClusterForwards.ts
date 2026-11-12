@@ -160,6 +160,7 @@ export async function wake(
   }
 
   const found = await forward(
+    context,
     service,
     [preference.remotePort],
     preference.localPort,

@@ -10,6 +10,7 @@
 
 import { create } from "zustand";
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "./clusterStore";
 import type {
   ForwardNote,
   ForwardVia,
@@ -209,7 +210,14 @@ function sessionKey(item: {
   return `${item.context}:${item.pod}:${item.namespace}:${item.localPort}:${item.remotePort}`;
 }
 
+/**
+ * Starts a cluster's saved forwards one by one, for as long as the window
+ * stays on that cluster. Each start is a round trip, and the reader can be
+ * on another cluster before the second: what is left is then left for the
+ * next landing, rather than opened behind a window that has moved on.
+ */
 async function startConfigsWithFilter(
+  context: string,
   configs: PortForwardConfig[],
   sessions: PortForwardSession[],
   filter: (config: PortForwardConfig) => boolean,
@@ -221,7 +229,10 @@ async function startConfigsWithFilter(
   let skipped = 0;
   let failed = 0;
 
-  for (const config of configs.filter(filter)) {
+  for (const config of configs.filter(
+    (each) => each.context === context && filter(each)
+  )) {
+    if (useClusterStore.getState().currentContext !== context) break;
     const key = sessionKey(config);
     if (activeKey.has(key)) {
       skipped += 1;
@@ -303,6 +314,7 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
     }
 
     return get().startPod(config.pod, config.namespace, {
+      context: config.context,
       localPort: config.localPort,
       remotePort: config.remotePort,
       autoReconnect: config.autoReconnect,
@@ -319,9 +331,10 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
   startAllForContext: async (context) => {
     const { configs, sessions, startConfig } = get();
     return startConfigsWithFilter(
+      context,
       configs,
       sessions,
-      (config) => config.context === context,
+      () => true,
       startConfig
     );
   },
@@ -329,9 +342,10 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
   startAutoForContext: async (context) => {
     const { configs, sessions, startConfig } = get();
     return startConfigsWithFilter(
+      context,
       configs,
       sessions,
-      (config) => config.context === context && config.autoStart,
+      (config) => config.autoStart,
       startConfig
     );
   },

@@ -155,7 +155,7 @@ describe("where a forward lands", () => {
   it("hands the Service and its own port to the backend, whatever its targetPort", async () => {
     for (const targetPort of ["http-web", "9090"]) {
       vi.mocked(commands.portForwardService).mockClear();
-      const found = await forward(withTarget(targetPort), [80]);
+      const found = await forward("prod", withTarget(targetPort), [80]);
       expect(commands.portForwardService).toHaveBeenCalledWith(
         "prom",
         "mon",
@@ -167,9 +167,23 @@ describe("where a forward lands", () => {
     expect(commands.listPods).not.toHaveBeenCalled();
   });
 
+  /**
+   * The backend opens a tunnel on the cluster it is told, and used to take
+   * the window's. Fails if the tunnel is asked for without the name of the
+   * cluster the caller meant, or with another's.
+   */
+  it("asks for the tunnel on the cluster it was called for, by name", async () => {
+    await forward("staging", service("prom", "mon", [9090]), [9090]);
+    expect(commands.portForwardService).toHaveBeenCalledWith(
+      "prom",
+      "mon",
+      expect.objectContaining({ context: "staging" })
+    );
+  });
+
   /** Tauri events have no replay: an unsubscribed forward never starts. */
   it("releases the session's subscribe gate once it is up", async () => {
-    const found = await forward(service("prom", "mon", [9090]), [9090]);
+    const found = await forward("prod", service("prom", "mon", [9090]), [9090]);
     expect(commands.portForwardSubscribed).toHaveBeenCalledWith(
       `pf-${found.localPort}`
     );
@@ -181,7 +195,12 @@ describe("where a forward lands", () => {
       code: "NO_READY_POD",
       message: "No ready pod is behind Service prom",
     });
-    const failure = await forward(service("prom", "mon", [9090]), [9090], 20500)
+    const failure = await forward(
+      "prod",
+      service("prom", "mon", [9090]),
+      [9090],
+      20500
+    )
       .then(() => null)
       .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(SaidError);
@@ -314,7 +333,7 @@ describe("keeping the address a connection was saved under", () => {
 
   /** The saved address is `http://localhost:<port>`, so the port is tried first. */
   it("keeps the wanted port when the machine will give it", async () => {
-    const found = await forward(svc(), [9090], 20500);
+    const found = await forward("prod", svc(), [9090], 20500);
     expect(found.localPort).toBe(20500);
     expect(commands.portForwardService).toHaveBeenCalledWith(
       "prom",
@@ -333,7 +352,7 @@ describe("keeping the address a connection was saved under", () => {
       new Error("address already in use")
     );
 
-    const found = await forward(svc(), [9090], 20500);
+    const found = await forward("prod", svc(), [9090], 20500);
     expect(found.localPort).not.toBe(20500);
     expect(found.localPort).toBeGreaterThanOrEqual(20000);
     expect(found.url).toBe(`http://localhost:${found.localPort}`);
@@ -344,7 +363,7 @@ describe("keeping the address a connection was saved under", () => {
     vi.mocked(commands.portForwardService).mockRejectedValueOnce(
       new Error("address already in use")
     );
-    const found = await forward(svc(), [9090], 20000);
+    const found = await forward("prod", svc(), [9090], 20000);
     expect(found.localPort).not.toBe(20000);
   });
 });
@@ -375,7 +394,7 @@ describe("a port for a new forward", () => {
         ({ id: "s", localPort: request.localPort }) as never
     );
 
-    const found = await forward(service("prom", "mon", [9090]), [9090]);
+    const found = await forward("prod", service("prom", "mon", [9090]), [9090]);
 
     expect(found.localPort).toBe(20001);
     useClusterForwardStore.setState({ forwards: {} });
@@ -428,6 +447,7 @@ describe("forwarding to something that only speaks the API", () => {
    */
   it("builds the address with the subpath, not just the port", async () => {
     const found = await forward(
+      "prod",
       service("vmsingle-victoria-metrics-k8s-stack", "monitoring", [8428]),
       [8428],
       undefined,
@@ -439,7 +459,7 @@ describe("forwarding to something that only speaks the API", () => {
 
   /** A plain Prometheus is unchanged: no subpath, no trailing anything. */
   it("leaves an API at the root exactly where it was", async () => {
-    const found = await forward(service("prom", "mon", [9090]), [9090]);
+    const found = await forward("prod", service("prom", "mon", [9090]), [9090]);
     expect(found.url).toBe(`http://localhost:${found.localPort}`);
     expect(found.subpath).toBe("");
   });
@@ -451,6 +471,7 @@ describe("forwarding to something that only speaks the API", () => {
    */
   it("forwards the port it was given rather than one it recognises", async () => {
     const found = await forward(
+      "prod",
       service("vmselect", "monitoring", [8481, 8482]),
       [8481],
       undefined,

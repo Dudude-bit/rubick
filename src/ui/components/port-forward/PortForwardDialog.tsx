@@ -157,7 +157,12 @@ function ForwardForm({
     setBusy(true);
     setProblem(null);
     setNoPod(false);
-    const request = { localPort, remotePort, autoReconnect };
+    const request = {
+      context: currentContext ?? "",
+      localPort,
+      remotePort,
+      autoReconnect,
+    };
     try {
       const session =
         target.kind === "Service"

@@ -48,6 +48,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { InCluster } = await import("./ConnectIntegration");
+const { useClusterStore } = await import("@/stores/clusterStore");
 
 // Radix's Select asks the DOM two things jsdom does not implement. Without
 // them the listbox never opens and the test fails on the widget rather than
@@ -77,6 +78,7 @@ const vmsingle = {
 beforeEach(() => {
   vi.clearAllMocks();
   listServices.mockResolvedValue([vmsingle]);
+  useClusterStore.setState({ currentContext: "prod" });
 });
 
 const hint = { names: ["prometheus"], ports: [9090] };
@@ -89,6 +91,34 @@ describe("pointing at a Service the search cannot find", () => {
     expect(
       screen.getByRole("button", { name: "Point at a Service yourself" })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * A Service the search did find is one click, and the tunnel that click
+   * opens is this cluster's. Fails if it is asked for with no cluster named,
+   * which the backend used to read as "wherever the window is by then".
+   */
+  it("forwards a Service the search found on the cluster the dialog is on", async () => {
+    const user = userEvent.setup();
+    const prometheus = {
+      ...vmsingle,
+      name: "prometheus",
+      ports: [{ name: "http", port: 9090, targetPort: 9090, protocol: "TCP" }],
+    };
+    listServices.mockResolvedValue([prometheus]);
+    render(
+      <InCluster hint={hint} vendorName="Prometheus" onPicked={vi.fn()} />
+    );
+
+    await user.click(screen.getByRole("button", { name: /Prometheus/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /monitoring\/prometheus/ })
+    );
+
+    await waitFor(() => expect(portForwardService).toHaveBeenCalled());
+    expect(portForwardService.mock.calls[0][2]).toMatchObject({
+      context: "prod",
+    });
   });
 
   /**
@@ -118,6 +148,10 @@ describe("pointing at a Service the search cannot find", () => {
     await user.click(screen.getByRole("button", { name: "Forward it" }));
 
     await waitFor(() => expect(picked).toHaveBeenCalled());
+    // Asked for on the cluster the dialog is on, by name.
+    expect(portForwardService.mock.calls[0][2]).toMatchObject({
+      context: "prod",
+    });
     const forwarded = picked.mock.calls[0][0];
     expect(forwarded.remotePort).toBe(8428);
     expect(forwarded.subpath).toBe("/prometheus");

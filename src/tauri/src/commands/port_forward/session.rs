@@ -360,14 +360,6 @@ fn start(state: &AppState, listener: TcpListener, plan: Start) -> Result<PortFor
     Ok(info_of(&session))
 }
 
-fn connected_context(state: &AppState) -> Result<(String, kube::Client)> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-    let client = current_client(&state.client_manager, &context)?;
-    Ok((context, client))
-}
-
 /// Start port forwarding to a pod. A local port of 0 takes a free one.
 #[tauri::command]
 pub async fn port_forward_pod(
@@ -376,21 +368,30 @@ pub async fn port_forward_pod(
     config: PortForwardRequest,
     state: State<'_, AppState>,
 ) -> Result<PortForwardSessionInfo> {
+    forward_to_pod(&state, pod, namespace, config).await
+}
+
+async fn forward_to_pod(
+    state: &AppState,
+    pod: String,
+    namespace: Option<String>,
+    config: PortForwardRequest,
+) -> Result<PortForwardSessionInfo> {
     if config.remote_port == 0 {
         return Err(Error::InvalidInput(
             "The remote port must be greater than 0".to_string(),
         ));
     }
     crate::validation::validate_dns_subdomain(&pod)?;
-    let (context, client) = connected_context(&state)?;
+    let client = current_client(&state.client_manager, &config.context)?;
     let namespace = require_namespace(namespace, String::new())?;
     let listener = bind(config.local_port).await?;
     let via = owner_of(&client, &namespace, &pod).await;
     start(
-        &state,
+        state,
         listener,
         Start {
-            context,
+            context: config.context,
             namespace,
             target: Target {
                 pod,
@@ -412,13 +413,22 @@ pub async fn port_forward_service(
     config: PortForwardRequest,
     state: State<'_, AppState>,
 ) -> Result<PortForwardSessionInfo> {
+    forward_to_service(&state, service, namespace, config).await
+}
+
+async fn forward_to_service(
+    state: &AppState,
+    service: String,
+    namespace: Option<String>,
+    config: PortForwardRequest,
+) -> Result<PortForwardSessionInfo> {
     if config.remote_port == 0 {
         return Err(Error::InvalidInput(
             "The Service port must be greater than 0".to_string(),
         ));
     }
     crate::validation::validate_dns_label(&service)?;
-    let (context, client) = connected_context(&state)?;
+    let client = current_client(&state.client_manager, &config.context)?;
     let namespace = require_namespace(namespace, String::new())?;
     let via = ForwardVia::Service {
         name: service.clone(),
@@ -435,10 +445,10 @@ pub async fn port_forward_service(
     .ok_or(Error::NoReadyPod { service })?;
     let listener = bind(config.local_port).await?;
     start(
-        &state,
+        state,
         listener,
         Start {
-            context,
+            context: config.context,
             namespace,
             target,
             via,
@@ -713,6 +723,71 @@ mod tests {
                 return (status, note);
             }
         }
+    }
+
+    fn asked_for(context: &str) -> PortForwardRequest {
+        PortForwardRequest {
+            context: context.into(),
+            local_port: 0,
+            remote_port: 5432,
+            auto_reconnect: true,
+        }
+    }
+
+    /// Auto-start asks for prod's saved forwards one by one, and the window
+    /// is on another cluster by the time the second ask arrives. The start
+    /// took the window's cluster, so prod's `localhost:5432` tunnelled into
+    /// the namesake pod there. Fails if a forward asked for one cluster is
+    /// opened on, or so much as asks, the cluster the window is on.
+    #[tokio::test]
+    async fn a_forward_asked_for_another_cluster_is_not_opened_on_the_windows() {
+        let (state, hits) =
+            connected(ServedIndex::default(), |_, _| failure(404, "NotFound")).await;
+
+        let pod = forward_to_pod(
+            &state,
+            "db-0".into(),
+            Some("shop".into()),
+            asked_for("prod"),
+        );
+        let service =
+            forward_to_service(&state, "db".into(), Some("shop".into()), asked_for("prod"));
+
+        for refused in [pod.await, service.await] {
+            assert!(matches!(
+                refused,
+                Err(Error::NotConnected(context)) if context == "prod"
+            ));
+        }
+        assert!(state.port_forward_sessions.is_empty());
+        assert!(hits.lock().unwrap().is_empty());
+    }
+
+    /// The other half: the cluster asked for is where it opens, wherever the
+    /// window has got to. Fails if the window's cluster decides anything.
+    #[tokio::test]
+    async fn a_forward_is_opened_on_the_cluster_it_was_asked_for() {
+        let (state, hits) =
+            connected(ServedIndex::default(), |_, _| failure(404, "NotFound")).await;
+        state.set_current_context(Some("elsewhere".into()));
+
+        let session = forward_to_pod(
+            &state,
+            "db-0".into(),
+            Some("shop".into()),
+            asked_for("fake"),
+        )
+        .await
+        .expect("the cluster it names is held");
+
+        assert_eq!(session.context, "fake");
+        assert_eq!(
+            hits.lock()
+                .unwrap()
+                .get("/api/v1/namespaces/shop/pods/db-0"),
+            Some(&1)
+        );
+        let _ = state.port_forwards.stop(&session.id);
     }
 
     /// The reported bug: after a restart the forward stayed green against a

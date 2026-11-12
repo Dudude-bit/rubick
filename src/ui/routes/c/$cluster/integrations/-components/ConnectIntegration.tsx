@@ -49,6 +49,9 @@ import {
 } from "@/components/ui/select";
 import { parts } from "@/i18n/parts";
 
+/** The cluster the dialog is on at the click: the tunnel is asked for on it by name. */
+const here = () => useClusterStore.getState().currentContext ?? "";
+
 export function ConnectIntegration({
   vendorId,
   vendorName,
@@ -359,7 +362,7 @@ export function InCluster({
     setBusy(key);
     setFailed(null);
     try {
-      onPicked(await forward(candidate.service, hint.ports));
+      onPicked(await forward(here(), candidate.service, hint.ports));
     } catch (error) {
       setFailed(errorWords(error, t));
     } finally {
@@ -468,7 +471,9 @@ function ByHand({
     setBusy(true);
     onFailed(null);
     try {
-      onPicked(await forward(service, [Number(port)], undefined, subpath));
+      onPicked(
+        await forward(here(), service, [Number(port)], undefined, subpath)
+      );
     } catch (error) {
       onFailed(errorWords(error, t));
     } finally {

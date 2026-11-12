@@ -8,7 +8,12 @@ const tunnels = vi.hoisted(() => ({
   sessions: [] as unknown[],
   save: vi.fn(async () => undefined),
   forward: vi.fn(
-    async (_service: unknown, _ports: number[], keep?: number) => ({
+    async (
+      _context: string,
+      _service: unknown,
+      _ports: number[],
+      keep?: number
+    ) => ({
       namespace: "mon",
       service: "prom",
       remotePort: 80,
@@ -121,7 +126,8 @@ describe("a saved address another cluster's tunnel is answering", () => {
       localPort: 20000,
     });
 
-    expect(tunnels.forward).toHaveBeenCalled();
+    // By name: the window can be on another cluster when the start arrives.
+    expect(tunnels.forward.mock.calls[0][0]).toBe("staging");
     expect(found.localPort).toBe(20001);
     expect(tunnels.save).toHaveBeenCalledWith(
       "staging",
