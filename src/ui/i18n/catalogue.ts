@@ -8501,6 +8501,11 @@ export const en = {
       one: "{n} host across every namespace",
       other: "{n} hosts across every namespace",
     },
+    traefikLegacyUnconfirmed: {
+      one: "{n} IngressRoute here is kept under traefik.containo.us. Traefik 2.10 and 2.11 read that group and v3 does not; this proxy's version could not be read, so it is drawn as served.",
+      other:
+        "{n} IngressRoutes here are kept under traefik.containo.us. Traefik 2.10 and 2.11 read that group and v3 does not; this proxy's version could not be read, so they are drawn as served.",
+    },
     hostsNoneWithProblem: {
       one: "{n} host, none with a problem",
       other: "{n} hosts, none with a problem",

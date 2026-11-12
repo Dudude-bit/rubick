@@ -175,6 +175,34 @@ function sources(over: Partial<TraefikSources> = {}): TraefikSources {
 
 describe("which objects are this Traefik's", () => {
   /**
+   * The group was one remembered answer for the whole cluster. Fails if a
+   * route kept under `traefik.containo.us` on a cluster serving both groups
+   * links to a `traefik.io` object that does not exist.
+   */
+  it("names the group each IngressRoute is kept under, for its link", () => {
+    const kept = (group: string, name: string) => ({
+      ...ingressRoute(name, {
+        routes: [{ match: `Host(\`${name}.example.com\`)` }],
+      }),
+      apiVersion: `${group}/v1alpha1`,
+    });
+
+    const routes = allRoutes(
+      sources({
+        ingressRoutes: [
+          kept("traefik.io", "new"),
+          kept("traefik.containo.us", "old"),
+        ],
+      })
+    );
+
+    expect(routes.map((route) => route.source.crd)).toEqual([
+      "ingressroutes.traefik.io",
+      "ingressroutes.traefik.containo.us",
+    ]);
+  });
+
+  /**
    * The correction the whole page rests on. Would break if the routing table
    * went back to reading CRDs only: k3d ships Traefik as *the* ingress
    * controller, so a page that ignored plain Ingresses would be empty on the

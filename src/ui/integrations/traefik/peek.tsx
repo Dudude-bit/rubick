@@ -14,7 +14,7 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { None } from "@/components/ui/none";
 import type { KeyValue } from "@/components/object/key-values";
 import type { CustomResourceDetailInfo } from "@/generated/types";
-import { servedGroupName } from "./data";
+import { crdOf } from "./model";
 import { readRule } from "./rule";
 
 export interface VendorPeekGroup {
@@ -67,7 +67,7 @@ function routeGroup(
   route: RouteSpec,
   index: number,
   total: number,
-  namespace: string | null,
+  { namespace, apiVersion }: CustomResourceDetailInfo,
   t: T
 ) {
   const raw = route.match ?? "";
@@ -156,7 +156,7 @@ function routeGroup(
                 kind="Middleware"
                 name={middleware.name}
                 namespace={middleware.namespace ?? namespace}
-                crd={`middlewares.${servedGroupName()}`}
+                crd={crdOf("middlewares", { apiVersion })}
                 showKind={false}
               />
             </span>
@@ -200,7 +200,7 @@ export function peekIngressRoute(
         ],
       },
       ...routes.map((route, index) =>
-        routeGroup(route, index, routes.length, resource.namespace, t)
+        routeGroup(route, index, routes.length, resource, t)
       ),
     ],
   };

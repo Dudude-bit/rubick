@@ -8,12 +8,13 @@ const answers = vi.hoisted(() => ({
   ingresses: (): Promise<unknown> => Promise.resolve([shop]),
   backing: (): Promise<unknown> => Promise.resolve({}),
   deployments: (): Promise<unknown> => Promise.resolve([]),
+  custom: (_crd: string): Promise<unknown> => Promise.resolve([]),
 }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     listIngresses: () => answers.ingresses(),
-    listCustomResources: () => Promise.resolve([]),
+    listCustomResources: (crd: string) => answers.custom(crd),
     resolveIngressClass: () =>
       Promise.resolve({
         requested: null,
@@ -101,6 +102,7 @@ async function openOn(tab: string) {
 beforeEach(() => {
   answers.ingresses = () => Promise.resolve([shop]);
   answers.deployments = () => Promise.resolve([]);
+  answers.custom = () => Promise.resolve([]);
   answers.backing = () =>
     Promise.reject(
       new Error("Tauri command 'listServiceBacking' failed: forbidden", {
@@ -198,5 +200,65 @@ describe("the Middlewares tab", () => {
     expect(
       screen.getByRole("tab", { name: /Middlewares/ }).textContent
     ).not.toMatch(/\d/);
+  });
+});
+
+describe("routes kept under the old API group", () => {
+  const legacy = {
+    name: "storefront",
+    namespace: "web",
+    uid: "ir-1",
+    apiVersion: "traefik.containo.us/v1alpha1",
+    kind: "IngressRoute",
+    spec: {
+      routes: [{ match: "Host(`old.example.com`)", services: [{ name: "a" }] }],
+    },
+    status: null,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+    ownerReferences: [],
+    generation: null,
+  };
+  const proxy = (image: string) => () =>
+    Promise.resolve([
+      {
+        name: "traefik",
+        namespace: "traefik",
+        containers: [{ image }],
+        replicas: { ready: 1, desired: 1 },
+      },
+    ]);
+
+  beforeEach(() => {
+    answers.custom = (crd) =>
+      Promise.resolve(
+        crd === "ingressroutes.traefik.containo.us" ? [legacy] : []
+      );
+  });
+
+  /**
+   * v3 does not read that group and 2.11 does; with no proxy found to tell
+   * which, the route is drawn. Fails if it is drawn as served with nothing
+   * on the page saying that was not checked.
+   */
+  it("says they are drawn without knowing this proxy reads them", async () => {
+    await openOn("routes");
+
+    expect(await screen.findByText("old.example.com")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /1 IngressRoute here is kept under traefik\.containo\.us/
+      )
+    ).toBeInTheDocument();
+  });
+
+  /** A 2.11 proxy reads both groups, so there is no doubt to print. */
+  it("says nothing of the group on a proxy known to read it", async () => {
+    answers.deployments = proxy("traefik:v2.11.10");
+    await openOn("routes");
+
+    expect(await screen.findByText("old.example.com")).toBeInTheDocument();
+    expect(screen.queryByText(/kept under/)).not.toBeInTheDocument();
   });
 });

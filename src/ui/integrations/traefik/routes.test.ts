@@ -32,7 +32,6 @@ import { commands } from "@/lib/commands";
 import { settleFrontedRoutes } from "@/lib/fronted-tls";
 import type { IngressInfo, ServiceInfo } from "@/generated/types";
 import type { IngressTls } from "../registry";
-import { servedGroupName } from "./data";
 import { routeIsSecure } from "./model";
 import { serviceRoutes } from "./routes";
 
@@ -179,7 +178,7 @@ describe("which hosts reach a Service", () => {
       kind: "IngressRoute",
       name: "argocd-server",
       namespace: "argocd",
-      crd: `ingressroutes.${servedGroupName()}`,
+      crd: "ingressroutes.traefik.io",
     });
     // The proxy's flags were not read here, so the scheme is unsettled — and
     // saying so is the point.

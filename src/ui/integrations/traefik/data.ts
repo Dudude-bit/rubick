@@ -20,7 +20,7 @@ import type { Saying } from "@/i18n/say";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
-import { errorToShow } from "@/lib/error-utils";
+import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   CustomResourceInfo,
@@ -51,9 +51,9 @@ import {
 } from "./model";
 
 /**
- * `traefik.containo.us` is the whole of what a cluster still on v2 serves, so
- * asking for the v3 group there fails rather than returning nothing. The
- * rename is vendor knowledge and this is the only place it is handled.
+ * Traefik 2.10 and 2.11 serve their kinds under both groups and read both;
+ * v3 reads `traefik.io` alone, 2.9 and older `traefik.containo.us` alone.
+ * The rename is vendor knowledge and this is the only place it is handled.
  */
 export const GROUPS: readonly string[] = ["traefik.io", "traefik.containo.us"];
 
@@ -65,68 +65,84 @@ export const ingressClients = (controller: string) =>
     ? controllerClients("Traefik", CONTROLLER_SELECTOR)
     : null;
 
+/** The groups the Traefik of this image reads; `null` where its tag is not a version. */
+export function groupsReadBy(image: string | null): readonly string[] | null {
+  const tag = image?.split("@")[0].split("/").pop()?.split(":")[1];
+  const version = tag?.match(/^v?(\d{1,2})\.(\d+)/);
+  if (!version) return null;
+  const major = Number(version[1]);
+  if (major >= 3) return [GROUPS[0]];
+  if (major < 2) return null;
+  return Number(version[2]) >= 10 ? GROUPS : [GROUPS[1]];
+}
+
+interface GroupRead {
+  group: string;
+  objects: CustomResourceInfo[];
+  /** Why this group's list did not come back; `objects` is then not its answer. */
+  failed?: unknown;
+}
+
 /**
- * The API group each cluster answers for, remembered by context.
- *
- * A cluster does not migrate from v2 to v3 while the app is open, and the
- * fallback costs a failed request every time it is not remembered. The app
- * does move between clusters, and the next one may be on the other group.
+ * One kind in every group that serves it. A group the cluster does not serve
+ * is left out, by the error's code; one that could not be read is carried,
+ * because whether that matters depends on which groups this Traefik reads.
  */
-const servedGroups = new Map<string, string>();
-
-const contextNow = () => useClusterStore.getState().currentContext ?? "";
-
-export async function listTraefik(
-  kindPlural: string
-): Promise<CustomResourceInfo[]> {
-  const context = contextNow();
-  const served = servedGroups.get(context);
-  if (served) {
-    return commands.listCustomResources(
-      `${kindPlural}.${served}`,
-      null,
-      null,
-      null
-    );
-  }
-  try {
-    const objects = await commands.listCustomResources(
-      `${kindPlural}.${GROUPS[0]}`,
-      null,
-      null,
-      null
-    );
-    servedGroups.set(context, GROUPS[0]);
-    return objects;
-  } catch (error) {
-    try {
-      const objects = await commands.listCustomResources(
-        `${kindPlural}.${GROUPS[1]}`,
-        null,
-        null,
-        null
-      );
-      servedGroups.set(context, GROUPS[1]);
-      return objects;
-    } catch {
-      // Only the group rename is recovered from. If the fallback fails too
-      // the page says it could not read them, which is the honest answer and
-      // not an empty routing table.
-      throw error;
+async function readGroups(kindPlural: string): Promise<GroupRead[]> {
+  const answers = await Promise.allSettled(
+    GROUPS.map((group) =>
+      commands.listCustomResources(`${kindPlural}.${group}`, null, null, null)
+    )
+  );
+  const reads = answers.flatMap((answer, at): GroupRead[] => {
+    if (answer.status === "fulfilled") {
+      return [{ group: GROUPS[at], objects: answer.value }];
     }
-  }
+    return errorCode(answer.reason) === ERROR_CODES.NOT_FOUND
+      ? []
+      : [{ group: GROUPS[at], objects: [], failed: answer.reason }];
+  });
+  if (reads.length === 0) throw (answers[0] as PromiseRejectedResult).reason;
+  return reads;
 }
 
-/** The group this cluster answered on, once anything has been read. */
-export function servedGroupName(): string {
-  return servedGroups.get(contextNow()) ?? GROUPS[0];
+/**
+ * What this Traefik reads of one kind. A group it reads that failed is the
+ * whole read failing, never fewer objects. Under both groups one name is one
+ * object to Traefik, the `traefik.io` one, so the other is dropped as it is
+ * there.
+ */
+function settle(
+  reads: GroupRead[],
+  reading: readonly string[] | null
+): CustomResourceInfo[] {
+  const counted = reads.filter(
+    (read) => !reading || reading.includes(read.group)
+  );
+  const failed = counted.find((read) => read.failed !== undefined);
+  if (failed) throw failed.failed;
+  const kept = new Map<string, CustomResourceInfo>();
+  for (const object of counted.flatMap((read) => read.objects)) {
+    const key = `${object.namespace ?? ""}/${object.name}`;
+    if (!kept.has(key)) kept.set(key, object);
+  }
+  return [...kept.values()];
 }
+
+const isLegacy = (object: CustomResourceInfo) =>
+  !object.apiVersion.startsWith(`${GROUPS[0]}/`);
 
 export interface RouteSources {
   ingresses: IngressInfo[];
   ingressRoutes: CustomResourceInfo[];
   middlewares: CustomResourceInfo[];
   classes: IngressClassSummary[];
+  /**
+   * IngressRoutes above kept under `traefik.containo.us` on a cluster serving
+   * both groups, where the proxy's version, and so whether it reads them,
+   * could not be told. Zero where that is known or there are none.
+   */
+  legacyUnconfirmed: number;
 }
 
 export const ROUTE_SOURCES = ["traefik", "route-sources"] as const;
@@ -136,13 +152,39 @@ const CONTROLLER = ["traefik", "controller"];
 export const ROUTE_STALE = 60_000;
 
 export async function fetchRouteSources(): Promise<RouteSources> {
-  const [ingresses, ingressRoutes, middlewares, binding] = await Promise.all([
+  const [ingresses, routeReads, middlewareReads, binding] = await Promise.all([
     commands.listIngresses(null),
-    listTraefik("ingressroutes"),
-    listTraefik("middlewares"),
+    readGroups("ingressroutes"),
+    readGroups("middlewares"),
     commands.resolveIngressClass(null),
   ]);
-  return { ingresses, ingressRoutes, middlewares, classes: binding.available };
+  const reads = [...routeReads, ...middlewareReads];
+  // The proxy's version changes the answer only where both groups are served
+  // and the second one failed or holds something; elsewhere it is not asked.
+  const versionDecides =
+    new Set(reads.map((read) => read.group)).size > 1 &&
+    reads.some(
+      (read) =>
+        read.failed !== undefined ||
+        (read.group !== GROUPS[0] && read.objects.length > 0)
+    );
+  const reading = versionDecides
+    ? groupsReadBy(
+        (await findControllerWorkload(CONTROLLER_SELECTOR)).workload?.image ??
+          null
+      )
+    : null;
+  const ingressRoutes = settle(routeReads, reading);
+  return {
+    ingresses,
+    ingressRoutes,
+    middlewares: settle(middlewareReads, reading),
+    classes: binding.available,
+    legacyUnconfirmed:
+      versionDecides && reading === null
+        ? ingressRoutes.filter(isLegacy).length
+        : 0,
+  };
 }
 
 /**

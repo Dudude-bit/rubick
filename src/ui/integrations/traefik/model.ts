@@ -115,6 +115,8 @@ export interface TraefikRoute {
     kind: "Ingress" | "IngressRoute";
     name: string;
     namespace: string;
+    /** An IngressRoute's `<plural>.<group>`: the group it is kept under. */
+    crd?: string;
   };
   rule: RuleReading;
   /** This row's own alternative of the rule. */
@@ -264,6 +266,12 @@ export interface TraefikSources extends BackingSources {
    */
   upstreamTls?: (host: string | null) => boolean | "unknown";
 }
+
+/** `<plural>.<group>` of an object, from the group it was read under. */
+export const crdOf = (
+  plural: string,
+  object: Pick<CustomResourceInfo, "apiVersion">
+): string => `${plural}.${object.apiVersion.split("/")[0]}`;
 
 // --- which Ingresses are this Traefik's ---------------------------------
 
@@ -456,6 +464,7 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
         kind: "IngressRoute" as const,
         name: object.name,
         namespace,
+        crd: crdOf("ingressroutes", object),
       },
       rule: reading,
       entryPoints,

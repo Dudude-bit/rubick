@@ -78,7 +78,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf } from "@/lib/report-parts";
 import { mapSummary, routingMap } from "./map";
 import {
-  servedGroupName,
+  GROUPS,
   useBacking,
   useController,
   useRouteSources,
@@ -91,6 +91,7 @@ import {
   PROXY_LABEL,
   backingOf,
   boundEntryPoints,
+  crdOf,
   servedUnder,
   duplicatedServiceNames,
   hostGroups,
@@ -100,6 +101,7 @@ import {
   traefikClasses,
   type Finding,
   type HostGroup,
+  type MiddlewareRef,
   type TraefikRoute,
   type TraefikSources,
   UNNAMED_TARGET,
@@ -268,6 +270,7 @@ export default function TraefikPage() {
   ];
 
   const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
+  const legacyUnconfirmed = routeSources.data?.legacyUnconfirmed ?? 0;
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -280,6 +283,11 @@ export default function TraefikPage() {
         }
         description={t("empty", "traefikPageDescription")}
       />
+      {legacyUnconfirmed > 0 && (
+        <p className="max-w-[88ch] text-[11px] text-warn">
+          {t("count", "traefikLegacyUnconfirmed", { n: legacyUnconfirmed })}
+        </p>
+      )}
       <DetailTabs
         tabs={tabs}
         activeTab={tab}
@@ -671,7 +679,7 @@ function SourceRef({ route }: { route: TraefikRoute }) {
         kind="IngressRoute"
         name={route.source.name}
         namespace={route.source.namespace}
-        crd={`ingressroutes.${servedGroupName()}`}
+        crd={route.source.crd}
         showKind={false}
         showNamespace
       />
@@ -758,18 +766,13 @@ function HostChain({
             route.middlewares.map((middleware) => (
               <Cell
                 key={`${middleware.namespace}/${middleware.name}`}
-                under={middlewareDetail(
-                  sources,
-                  middleware.name,
-                  middleware.namespace,
-                  t
-                )}
+                under={middlewareDetail(sources, middleware, t)}
               >
                 <ResourceRef
                   kind="Middleware"
                   name={middleware.name}
                   namespace={middleware.namespace}
-                  crd={`middlewares.${servedGroupName()}`}
+                  crd={middlewareCrd(sources, middleware, route)}
                   showKind={false}
                 />
               </Cell>
@@ -899,18 +902,35 @@ function RawRule({ route }: { route: TraefikRoute }) {
   );
 }
 
-function middlewareDetail(
+const middlewareNamed = (
   sources: TraefikSources,
-  name: string,
-  namespace: string,
-  t: ReturnType<typeof useT>
-): string | undefined {
-  const found = sources.middlewares.find(
+  { name, namespace }: MiddlewareRef
+) =>
+  sources.middlewares.find(
     (middleware) =>
       middleware.name === name && (middleware.namespace ?? "") === namespace
   );
+
+function middlewareDetail(
+  sources: TraefikSources,
+  named: MiddlewareRef,
+  t: ReturnType<typeof useT>
+): string | undefined {
+  const found = middlewareNamed(sources, named);
   if (!found) return t("empty", "notFoundInThisCluster");
   return middlewareType(found) ?? undefined;
+}
+
+/** The group the Middleware is kept under; one nobody found is looked for beside the route that names it. */
+function middlewareCrd(
+  sources: TraefikSources,
+  named: MiddlewareRef,
+  route: TraefikRoute
+): string {
+  const found = middlewareNamed(sources, named);
+  if (found) return crdOf("middlewares", found);
+  const group = route.source.crd?.split(".").slice(1).join(".");
+  return `middlewares.${group ?? GROUPS[0]}`;
 }
 
 // --- findings -----------------------------------------------------------
@@ -984,11 +1004,7 @@ function objectRef(route: TraefikRoute): ReactNode {
         kind={route.source.kind}
         name={route.source.name}
         namespace={route.source.namespace}
-        crd={
-          route.source.kind === "IngressRoute"
-            ? `ingressroutes.${servedGroupName()}`
-            : undefined
-        }
+        crd={route.source.crd}
         showKind={false}
         showNamespace
       />
@@ -1075,7 +1091,7 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
                 kind: "Middleware",
                 name: use.middleware.name,
                 namespace: use.middleware.namespace,
-                crd: `middlewares.${servedGroupName()}`,
+                crd: crdOf("middlewares", use.middleware),
               })!}
               className="truncate font-mono text-info hover:underline"
             >
