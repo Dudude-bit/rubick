@@ -40,24 +40,32 @@ export function escapeRegex(value: string): string {
  * pods writing at once, which is what happened, and why the lines carry their
  * pod name.
  *
- * The segments are `[^-]+` rather than `.+` so a Deployment `foo` cannot
- * claim the pods of a Deployment `foo-bar`: `foo-bar-<hash>-<suffix>` has
- * three segments after `foo-`, and the pattern admits exactly two. The one
- * collision left is a bare Pod a human named `foo-a-b` — not worth a second
- * API call to rule out, and visible on a log anyway.
+ * Neither store knows who owns a pod, so the name is all there is, and it is
+ * read exactly as a controller writes it: the generated segments are drawn
+ * from `rand.String`'s alphabet, five characters for a pod's suffix and up
+ * to ten for a ReplicaSet's hash. Two segments of anything let a Deployment
+ * `myapp` claim `myapp-postgresql-0` and `myapp-migrate-x8k2j`, and its
+ * history was the app's and its database's summed. What is still shared is
+ * a sibling DaemonSet or Job whose own name ends in a segment spelled from
+ * that alphabet alone (`myapp-db`).
  */
+const GENERATED = "[bcdfghjklmnpqrstvwxz2456789]";
+
 export function podPattern(ownerKind: string, name: string): string {
   const stem = escapeRegex(name);
+  const suffix = `${GENERATED}{5}`;
   switch (ownerKind) {
     // The ordinal is stable across rollouts — a StatefulSet's whole promise.
     case "StatefulSet":
       return `^${stem}-[0-9]+$`;
-    // One indirection: the Deployment's ReplicaSet, or the CronJob's Job.
+    // Through its ReplicaSet, named by the pod template's hash.
     case "Deployment":
+      return `^${stem}-${GENERATED}{1,10}-${suffix}$`;
+    // Through its Job, named by the minute it was scheduled for.
     case "CronJob":
-      return `^${stem}-[^-]+-[^-]+$`;
+      return `^${stem}-[0-9]+-${suffix}$`;
     // Named directly by their controller.
     default:
-      return `^${stem}-[^-]+$`;
+      return `^${stem}-${suffix}$`;
   }
 }

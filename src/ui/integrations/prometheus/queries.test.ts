@@ -223,7 +223,25 @@ describe("scope across a rollout", () => {
     const pattern = new RegExp(podPattern("Deployment", "busy-demo"));
     expect(pattern.test("busy-demo-cb8d8b486-4r2jl")).toBe(true);
     // The previous ReplicaSet, whose pods are what "an hour ago" is made of.
-    expect(pattern.test("busy-demo-7f9c4d5b21-x2ktp")).toBe(true);
+    expect(pattern.test("busy-demo-7f9c4d5b6c-x2ktp")).toBe(true);
+  });
+
+  /**
+   * Deployment `myapp` beside StatefulSet `myapp-postgresql` and Job
+   * `myapp-migrate` is the usual Helm release. With two open segments the
+   * ranged CPU and memory of the app were the app's and its database's
+   * summed, and jumped against the live line read by owner.
+   */
+  it("keeps a sibling workload's pods out of a workload's history", () => {
+    const deployment = new RegExp(podPattern("Deployment", "myapp"));
+    expect(deployment.test("myapp-postgresql-0")).toBe(false);
+    expect(deployment.test("myapp-migrate-x8k2j")).toBe(false);
+    const cron = new RegExp(podPattern("CronJob", "backup"));
+    expect(cron.test("backup-db-x8k2j")).toBe(false);
+    const job = new RegExp(podPattern("Job", "import"));
+    expect(job.test("import-0")).toBe(false);
+    expect(job.test("import-users")).toBe(false);
+    expect(job.test("import-x8k2j")).toBe(true);
   });
 
   /**
@@ -262,8 +280,8 @@ describe("scope across a rollout", () => {
   it("escapes the one regex metacharacter a Kubernetes name may contain", () => {
     expect(escapeRegex("a.b")).toBe("a\\.b");
     const pattern = new RegExp(podPattern("Deployment", "a.b"));
-    expect(pattern.test("axb-hash-suffix")).toBe(false);
-    expect(pattern.test("a.b-hash-suffix")).toBe(true);
+    expect(pattern.test("axb-5d4f8c7b9-x2ktp")).toBe(false);
+    expect(pattern.test("a.b-5d4f8c7b9-x2ktp")).toBe(true);
   });
 
   /** A label value ends at a quote, so one in a value must not end it. */
@@ -274,7 +292,7 @@ describe("scope across a rollout", () => {
 
   it("selects a workload by shape and a pod by name", () => {
     expect(cpuQuery(workload, HOUR)).toContain(
-      'pod=~"^busy-demo-[^-]+-[^-]+$"'
+      `pod=~"${podPattern("Deployment", "busy-demo")}"`
     );
     expect(cpuQuery(pod, HOUR)).toContain('pod="busy-demo-cb8d8b486-4r2jl"');
   });
