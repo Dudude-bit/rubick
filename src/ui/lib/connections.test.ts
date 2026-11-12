@@ -1611,7 +1611,7 @@ describe("the traffic chain", () => {
         null,
         [],
         {},
-        { state: "unread", reason }
+        { state: "unread", reason, code: "PERMISSION_DENIED" }
       );
       expect(path.broken).toBe(false);
       expect(path.hops.at(-1)).toMatchObject({

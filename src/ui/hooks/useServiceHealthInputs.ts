@@ -4,7 +4,7 @@ import type { ServiceHealthInputs } from "@/generated/types";
 import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
 import { failedWhole, type Unread } from "@/lib/attention";
 import { commands } from "@/lib/commands";
-import { errorToShow } from "@/lib/error-utils";
+import { errorCode, errorToShow } from "@/lib/error-utils";
 import type { NamespaceBacking } from "@/lib/ingress-health";
 import type { Known } from "@/lib/known";
 import { queryKeys } from "@/lib/query-keys";
@@ -62,10 +62,12 @@ export function useServiceHealthInputs(
       freshness: { dataUpdatedAt, everyMs, slowRead },
       in: (namespace) => {
         if (!data || !covers(namespace)) {
-          return { known: false, why: error ? errorToShow(error) : null };
+          return error
+            ? { known: false, why: errorToShow(error), code: errorCode(error) }
+            : { known: false, why: null };
         }
         const lost = data.unread.find((entry) => entry.namespace === namespace);
-        if (lost) return { known: false, why: lost.message };
+        if (lost) return { known: false, why: lost.message, code: lost.code };
         return { known: true, value: byNamespace.get(namespace) ?? NONE };
       },
     };

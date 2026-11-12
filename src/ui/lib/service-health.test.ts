@@ -430,14 +430,22 @@ describe("one verdict for a Service on every surface", () => {
       SELECTING,
       published({
         ready: 2,
-        door: { state: "unread", reason: "networkpolicies is forbidden" },
+        door: {
+          state: "unread",
+          reason: "networkpolicies is forbidden",
+          code: "PERMISSION_DENIED",
+        },
       }),
       null
     );
     expect(unread).toEqual({
       state: "policiesUnread",
       ready: 2,
-      why: { why: "unread", said: "networkpolicies is forbidden" },
+      why: {
+        why: "unread",
+        said: "networkpolicies is forbidden",
+        code: "PERMISSION_DENIED",
+      },
     });
     const words = serviceHealthWords(unread, t);
     expect(words).toMatchObject({ label: "2 ready", role: "neutral" });
@@ -505,6 +513,7 @@ describe("one verdict for a Service on every surface", () => {
     const door = {
       state: "unread" as const,
       reason: "networkpolicies is forbidden",
+      code: "PERMISSION_DENIED",
     };
     const partly = serviceHealthOf(
       SELECTING,

@@ -34,8 +34,13 @@ import { namespacesWhere } from "@/lib/namespace-scope";
 import { sameCause } from "@/lib/pod-cause";
 import { policyNamesOf } from "@/lib/policy-door";
 import { parseRefusal } from "@/lib/refusal";
+import { kindFacts } from "@/lib/resource-registry";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
-import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
+import {
+  ingressHealthWords,
+  unreadCode,
+  type IngressHealth,
+} from "@/lib/ingress-health";
 import {
   STEP_WORD,
   type GatewayPulse,
@@ -141,10 +146,22 @@ export const checkRefused = (check: AttentionCheck): boolean =>
   check.unread.length > 0 &&
   check.unread.every((entry) => entry.code === ERROR_CODES.PERMISSION);
 
-/** The API verb a refused check was refused, out of the server's own sentence. */
+/**
+ * What a refused check was refused, out of the server's own sentences: the
+ * API verb, and the resource where it is not the check's own kind. A Service
+ * row whose NetworkPolicies were refused does not say its list was.
+ */
 export const refusedVerb = (check: AttentionCheck): string | undefined => {
-  const said = check.unread.find((entry) => entry.message)?.message;
-  return checkRefused(check) && said ? parseRefusal(said)?.verb : undefined;
+  if (!checkRefused(check)) return undefined;
+  const refusals = check.unread.flatMap(
+    (entry) => parseRefusal(entry.message) ?? []
+  );
+  if (refusals.length === 0) return undefined;
+  const own = kindFacts(check.kind)?.plural;
+  const resources = [...new Set(refusals.map((refusal) => refusal.resource))];
+  return resources.every((resource) => resource === own)
+    ? refusals[0].verb
+    : `${refusals[0].verb} ${resources.join(", ")}`;
 };
 
 /** What a check not read says of itself, as Not checked words it: still reading, refused and where, or failed. */
@@ -371,8 +388,9 @@ function shutUncheckedIn(answered: ServiceHealthInputs[], t: T): Unread[] {
   return answered.flatMap(({ namespace, groups }) => {
     const why = groups.map(shutUnchecked).find((reason) => reason !== null);
     if (!why) return [];
-    const message = why.why === "unread" ? why.said : shutUncheckedText(why, t);
-    return [{ namespace, code: "", message }];
+    return why.why === "unread"
+      ? [{ namespace, code: why.code, message: why.said }]
+      : [{ namespace, code: "", message: shutUncheckedText(why, t) }];
   });
 }
 
@@ -418,7 +436,7 @@ const ingressItems = remember(
       if (words.code === "unknown") {
         judged.unknown.push({
           namespace: ingress.namespace,
-          code: "",
+          code: unreadCode(health),
           message: words.reason ?? "",
         });
         continue;

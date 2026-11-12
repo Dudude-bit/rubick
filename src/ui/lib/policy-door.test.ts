@@ -351,7 +351,7 @@ describe("a controller's way in nobody could settle", () => {
     const reason =
       'networkpolicies.networking.k8s.io is forbidden: User "dev" cannot list resource "networkpolicies"';
     const doubt = doorDoubt(
-      behind({ state: "unread", reason }),
+      behind({ state: "unread", reason, code: "PERMISSION_DENIED" }),
       "80",
       readOf(),
       "traefik.io"

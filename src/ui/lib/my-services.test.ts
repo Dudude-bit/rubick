@@ -602,7 +602,11 @@ describe("more ways in", () => {
       chain([
         publishedHop({
           ready: 3,
-          door: { state: "unread", reason: "forbidden" },
+          door: {
+            state: "unread",
+            reason: "forbidden",
+            code: "PERMISSION_DENIED",
+          },
         }),
       ])
     );

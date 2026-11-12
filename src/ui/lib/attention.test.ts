@@ -1044,7 +1044,14 @@ describe("what Needs attention could not look at", () => {
           {
             ...read.answered[0],
             groups: [
-              { ...group, door: { state: "unread", reason: "forbidden" } },
+              {
+                ...group,
+                door: {
+                  state: "unread",
+                  reason: "timed out",
+                  code: "TIMEOUT_ERROR",
+                },
+              },
             ],
           },
         ],
@@ -1055,9 +1062,77 @@ describe("what Needs attention could not look at", () => {
     expect(unchecked.checks.find((check) => check.kind === "Service")).toEqual({
       kind: "Service",
       state: "unread",
-      unread: [{ namespace: "net", code: "", message: "forbidden" }],
+      unread: [
+        { namespace: "net", code: "TIMEOUT_ERROR", message: "timed out" },
+      ],
     });
     expect(attention({ services: read }).complete).toBe(true);
+  });
+
+  /**
+   * Under a Role with no `networkpolicies` and no `ingressclasses` the
+   * Services and Ingresses rows of Not checked drew a triangle and "could
+   * not be read" beside kinds under a lock. Fails if a refused input of a
+   * Service's or an Ingress's verdict is filed as a failed read, if a failed
+   * one is filed as refused, or if the row says its own list was forbidden.
+   */
+  it("files a verdict whose input was refused as refused, naming what was", () => {
+    const read = services([["web"], 2]);
+    const group = read.answered[0].groups[0];
+    const refusal = (resource: string) =>
+      `${resource} is forbidden: User "dev" cannot list resource "${resource}" in API group "networking.k8s.io"`;
+    const checksWith = (code: string) => {
+      const backing: NamespaceBacking = new Map([["web", group]]);
+      return attention({
+        services: {
+          unread: [],
+          answered: [
+            {
+              ...read.answered[0],
+              groups: [
+                {
+                  ...group,
+                  door: {
+                    state: "unread",
+                    reason: refusal("networkpolicies"),
+                    code,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        ingresses: {
+          data: { rows: [ingress("shop", "web")], unread: [] },
+          error: null,
+        },
+        ingressHealth: (row) =>
+          ingressHealthOf({
+            ingress: row,
+            binding: {
+              known: false,
+              why: refusal("ingressclasses"),
+              code,
+            },
+            backing: { known: true, value: backing },
+            certificates: new Map(),
+          }),
+      }).checks.filter(
+        (check) => check.kind === "Service" || check.kind === "Ingress"
+      );
+    };
+    const refused = checksWith("PERMISSION_DENIED");
+    expect(refused.map(checkRefused)).toEqual([true, true]);
+    expect(refused.map((check) => checkSaid(check, t))).toEqual([
+      "list networkpolicies is forbidden in net",
+      "list ingressclasses is forbidden in net",
+    ]);
+    const failed = checksWith("KUBE_API_ERROR");
+    expect(failed.map(checkRefused)).toEqual([false, false]);
+    expect(failed.map((check) => checkSaid(check, t))).toEqual([
+      "could not be read in net",
+      "could not be read in net",
+    ]);
   });
 
   /**

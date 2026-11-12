@@ -361,11 +361,7 @@ pub(super) fn note_reach(
     };
     let published = published
         .with_stop(svc, pods)
-        .with_policies(
-            svc,
-            snapshot.policies.as_deref().map_err(String::as_str),
-            &snapshot.others,
-        )
+        .with_policies(svc, snapshot.policies.as_deref(), &snapshot.others)
         .with_makers(svc, &makers, snapshot.makers_read())
         .with_workloads(svc, &makers, pods, chrono::Utc::now())
         .with_near_miss(svc, snapshot.pods());
@@ -1241,7 +1237,7 @@ mod tests {
         let alone = crate::resources::OtherPolicies::none();
         let mut cilium = crate::resources::OtherPolicies::none();
         cilium.within("team-checkout", "CiliumNetworkPolicy");
-        let stops = |policies: Read<k8s_openapi::api::networking::v1::NetworkPolicy>,
+        let stops = |policies: CodedRead<k8s_openapi::api::networking::v1::NetworkPolicy>,
                      others: &crate::resources::OtherPolicies| {
             let snapshot = Snapshot {
                 pods: Ok(vec![pod.clone()]),
@@ -1261,7 +1257,11 @@ mod tests {
             ),
             "the pods are shut to every client"
         );
-        assert!(stops(Err("forbidden".to_string()), &alone).is_empty());
+        let refused = crate::resources::ListUnread {
+            code: "PERMISSION_DENIED",
+            said: "forbidden".to_string(),
+        };
+        assert!(stops(Err(refused), &alone).is_empty());
         // The graph and the lists read one door: beside another engine's
         // policy the chain must not end in a shut one either.
         assert!(stops(Ok(vec![deny]), &cilium).is_empty());

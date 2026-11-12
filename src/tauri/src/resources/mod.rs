@@ -46,8 +46,8 @@ pub(crate) use kinds::every_kind;
 pub use kinds::{facts_of, KindFacts, KindScope};
 pub use network::*;
 pub use published::{
-    EndpointSource, OtherPolicies, PolicyDoor, PublishedEndpoint, PublishedPort, ServicePublished,
-    UnpublishedPod,
+    EndpointSource, ListUnread, OtherPolicies, PolicyDoor, PublishedEndpoint, PublishedPort,
+    ServicePublished, UnpublishedPod,
 };
 pub use selector::Selector;
 pub use serialization::*;

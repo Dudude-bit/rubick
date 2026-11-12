@@ -104,8 +104,8 @@ export type ServiceHealthInput = ServiceShape &
 
 /** Why nobody settled whether a policy shuts what a Service serves. */
 export type ShutUnchecked =
-  /** The cluster refused the NetworkPolicies, in its words. */
-  | { why: "unread"; said: string }
+  /** The NetworkPolicies went unread, in the cluster's words, with the code that says whether it refused. */
+  | { why: "unread"; said: string; code: string }
   /** The NetworkPolicies alone admit nobody, and another engine's policies, which may, are in force over the same pods. */
   | { why: "others"; policies: string[]; kinds: string[] };
 
@@ -120,7 +120,8 @@ export function shutUnchecked(
   if (servingCount(published) === 0 || isPolicyStop(published.stop))
     return null;
   const door = published.door;
-  if (door?.state === "unread") return { why: "unread", said: door.reason };
+  if (door?.state === "unread")
+    return { why: "unread", said: door.reason, code: door.code };
   return door?.state === "overlaid" && door.shut
     ? {
         why: "others",
