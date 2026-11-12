@@ -135,14 +135,14 @@ describe("useCrdView", () => {
   });
 
   /**
-   * Would break if a kind the vendor has not been taught fell through to no
-   * columns at all — an empty list page instead of a slightly generic one.
+   * The list draws the CRD's own printer columns where the vendor gives
+   * none. Fails if a kind the vendor was not taught is drawn with another
+   * kind's columns: this asked for a Certificate's over a Challenge.
    */
-  it("falls back to the vendor's default columns for a kind it does not know", () => {
-    const columns = view("cert-manager.io", "Challenge")?.columnsFor(
-      "Challenge"
-    );
-    expect(columns?.length).toBeGreaterThan(0);
+  it("gives no columns for a kind the vendor does not describe", () => {
+    expect(
+      view("cert-manager.io", "Challenge")?.columnsFor("Challenge")
+    ).toEqual([]);
   });
 
   /**

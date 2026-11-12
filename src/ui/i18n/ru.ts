@@ -2717,7 +2717,9 @@ export const ru: Catalogue = {
       "Перечитывает postgresql.conf и pg_hba без перезапуска, через отметку cnpg.io/reloadedAt на Cluster.",
     actionBackup: "Бэкап сейчас",
     actionBackupExplained:
-      "Создаёт объект Backup для этого кластера; метод тот, что объявлен в настройке бэкапов кластера. Оператор выполняет его и пишет результат на этом объекте.",
+      "Создаёт объект Backup для этого кластера с методом {method}: он настроен в спецификации кластера. Оператор выполняет его и пишет результат на этом объекте.",
+    noBackupMethod:
+      "в спецификации кластера бэкап не настроен: нет ни spec.backup.barmanObjectStore, ни spec.backup.volumeSnapshot, ни плагина, так что Backup завершился бы ошибкой",
     actionFence: "Изолировать",
     actionFenceExplained:
       "Останавливает Postgres в этом инстансе, оставляя под, добавив его в cnpg.io/fencedInstances. Изоляция primary забирает с собой путь записи кластера.",
@@ -6365,6 +6367,10 @@ export const ru: Catalogue = {
       "Ни в одном пространстве имён нет объекта Certificate, и ни у одного Ingress нет аннотации {annotation}, которая создала бы его.",
     noIngressMountsSecret:
       "Ни один Ingress в {namespace} не монтирует {secret}.",
+    servingNotChecked:
+      "Что отдаёт этот сертификат, не проверено: список Ingress получить не удалось.",
+    servingUnknownCost:
+      "Поэтому ни одна строка здесь не скажет, какие имена хостов отдаёт сертификат и отдаёт ли хоть одно.",
     itsSecret: "его Secret",
     nothingServingTlsFrom:
       "TLS из {secret} никто не отдаёт, поэтому каждый хост выше либо отклоняется, либо отдаётся открытым текстом.",
@@ -6706,7 +6712,9 @@ export const ru: Catalogue = {
     middlewaresDescription:
       "Все они и кто их использует. Middleware, на который никто не ссылается, не делает ничего, и больше нигде в приложении этого не увидеть.",
     middlewareUnreferenced:
-      "на него никто не ссылается, так что эта конфигурация ничего не делает",
+      "его не называет ни один маршрут, chain, точка входа или HTTPRoute, так что эта конфигурация ничего не делает",
+    middlewareNamersUnread:
+      "его не называет ни один маршрут и ни один chain; называет ли его точка входа или HTTPRoute, прочитать не удалось",
     readingTheProxy: "Читаем прокси…",
     cannotSayWhatTraefikListensOn:
       "Этот кластер не может сказать, что слушает Traefik.",
@@ -7432,6 +7440,8 @@ export const ru: Catalogue = {
     servedUnder: "сертификат из",
     servedUnderDefault:
       "сертификат контроллера по умолчанию: {secret} не существует",
+    servedUnderPicked:
+      "сертификат выбирает nginx (свой по умолчанию, если хост не покрыт ни одним из перечисленных Secret): ни один блок tls не называет Secret для этого хоста",
     rawNginxConfig: "Сырая конфигурация nginx, вставляется как есть",
     shownAsWritten: "Показано как написано",
     andMoreOpenRow: "и ещё {n}: откройте строку",
@@ -9846,6 +9856,13 @@ export const ru: Catalogue = {
       few: "{n} хоста во всех пространствах имён",
       many: "{n} хостов во всех пространствах имён",
       other: "{n} хоста во всех пространствах имён",
+    },
+    traefikLegacyUnconfirmed: {
+      one: "{n} IngressRoute здесь хранится в группе traefik.containo.us. Traefik 2.10 и 2.11 читают эту группу, а v3 нет; версию этого прокси прочитать не удалось, поэтому он показан как обслуживаемый.",
+      few: "{n} IngressRoute здесь хранятся в группе traefik.containo.us. Traefik 2.10 и 2.11 читают эту группу, а v3 нет; версию этого прокси прочитать не удалось, поэтому они показаны как обслуживаемые.",
+      many: "{n} IngressRoute здесь хранятся в группе traefik.containo.us. Traefik 2.10 и 2.11 читают эту группу, а v3 нет; версию этого прокси прочитать не удалось, поэтому они показаны как обслуживаемые.",
+      other:
+        "{n} IngressRoute здесь хранятся в группе traefik.containo.us. Traefik 2.10 и 2.11 читают эту группу, а v3 нет; версию этого прокси прочитать не удалось, поэтому они показаны как обслуживаемые.",
     },
     hostsNoneWithProblem: {
       one: "{n} хост, проблем нет",

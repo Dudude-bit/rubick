@@ -32,7 +32,6 @@ import { commands } from "@/lib/commands";
 import { settleFrontedRoutes } from "@/lib/fronted-tls";
 import type { IngressInfo, ServiceInfo } from "@/generated/types";
 import type { IngressTls } from "../registry";
-import { servedGroupName } from "./data";
 import { routeIsSecure } from "./model";
 import { serviceRoutes } from "./routes";
 
@@ -179,11 +178,38 @@ describe("which hosts reach a Service", () => {
       kind: "IngressRoute",
       name: "argocd-server",
       namespace: "argocd",
-      crd: `ingressroutes.${servedGroupName()}`,
+      crd: "ingressroutes.traefik.io",
     });
     // The proxy's flags were not read here, so the scheme is unsettled — and
     // saying so is the point.
     expect(found[0].tls).toBeNull();
+  });
+
+  /**
+   * The second Service of a weighted route takes its share of the host's
+   * requests. Fails if its own page is told no hostname reaches it.
+   */
+  it("finds the host for a Service that is not the route's first", async () => {
+    vi.mocked(commands.listCustomResources).mockResolvedValue([
+      ingressRoute({
+        routes: [
+          {
+            match: "Host(`argocd.example.com`)",
+            services: [
+              { name: "argocd-server", port: 80, weight: 3 },
+              { name: "argocd-canary", port: 80, weight: 1 },
+            ],
+          },
+        ],
+      }),
+    ]);
+
+    const found = await serviceRoutes({
+      namespace: "argocd",
+      name: "argocd-canary",
+    });
+
+    expect(found.map((route) => route.host)).toEqual(["argocd.example.com"]);
   });
 
   /** A route that pins `scheme: h2c` is a gRPC way in, and is marked so. */

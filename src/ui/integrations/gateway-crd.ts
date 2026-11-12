@@ -198,8 +198,14 @@ export const gatewayCrd: CrdView = {
         return referenceGrantColumns;
       case "backendtlspolicy":
         return backendTlsPolicyColumns;
-      default:
+      case "httproute":
+      case "grpcroute":
+      case "tlsroute":
+      case "tcproute":
+      case "udproute":
         return routeColumns;
+      default:
+        return [];
     }
   },
   // Every kind in the group writes Accepted — for a GatewayClass it is the

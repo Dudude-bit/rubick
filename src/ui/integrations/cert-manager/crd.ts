@@ -190,7 +190,7 @@ export const crd: CrdView = {
       case "certificaterequest":
         return certificateRequestColumns;
       default:
-        return certificateColumns;
+        return [];
     }
   },
 };

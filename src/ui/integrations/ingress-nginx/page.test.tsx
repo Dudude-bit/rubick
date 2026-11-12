@@ -6,11 +6,12 @@ import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   backing: (): Promise<unknown> => Promise.resolve({}),
+  ingresses: (): Promise<unknown> => Promise.resolve([]),
 }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listIngresses: () => Promise.resolve([shop]),
+    listIngresses: () => answers.ingresses(),
     listCustomResources: () => Promise.resolve([]),
     resolveIngressClass: () =>
       Promise.resolve({
@@ -72,6 +73,7 @@ function openOn(tab: string) {
 }
 
 beforeEach(() => {
+  answers.ingresses = () => Promise.resolve([shop]);
   answers.backing = () =>
     Promise.reject(
       new Error("Tauri command 'listServiceBacking' failed: forbidden", {
@@ -104,5 +106,39 @@ describe("a host with no certificate of its own when the edge could not be read"
 
     expect((await screen.findAllByText(/no TLS/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/TLS not checked/)).not.toBeInTheDocument();
+  });
+});
+
+describe("a host whose TLS block names no Secret", () => {
+  /**
+   * nginx serves it on :443 under its default certificate. The chain drew
+   * ":80 / no TLS here" and the row said "no TLS". Fails if the listener or
+   * the row reads the missing Secret as no TLS, or names no certificate.
+   */
+  it("is drawn on :443 under the controller's default certificate", async () => {
+    answers.ingresses = () =>
+      Promise.resolve([
+        {
+          ...shop,
+          tlsHosts: ["shop.example.com"],
+          tlsConfigs: [
+            {
+              hosts: ["shop.example.com"],
+              secretName: null,
+              isCatchAll: false,
+            },
+          ],
+        },
+      ]);
+    // No Service behind it, so the row is broken and opens its chain.
+    answers.backing = () => Promise.resolve({ services: [], published: [] });
+    await openOn("routes");
+
+    expect(await screen.findByText(":443")).toBeInTheDocument();
+    expect(screen.getByText("TLS terminated here")).toBeInTheDocument();
+    expect(
+      screen.getByText(/served under a certificate nginx picks/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/no TLS/)).not.toBeInTheDocument();
   });
 });

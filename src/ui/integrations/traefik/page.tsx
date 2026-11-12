@@ -78,9 +78,10 @@ import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf } from "@/lib/report-parts";
 import { mapSummary, routingMap } from "./map";
 import {
-  servedGroupName,
+  GROUPS,
   useBacking,
   useController,
+  useOtherNamers,
   useRouteSources,
   sourcesFrom,
   type ControllerInfo,
@@ -91,15 +92,18 @@ import {
   PROXY_LABEL,
   backingOf,
   boundEntryPoints,
+  crdOf,
   servedUnder,
   duplicatedServiceNames,
   hostGroups,
   hostState,
   middlewareType,
   middlewareUses,
+  pathCount,
   traefikClasses,
   type Finding,
   type HostGroup,
+  type MiddlewareRef,
   type TraefikRoute,
   type TraefikSources,
   UNNAMED_TARGET,
@@ -182,6 +186,7 @@ export default function TraefikPage() {
   );
 
   const groups = useMemo(() => (sources ? hostGroups(sources) : []), [sources]);
+  const namers = useOtherNamers(controller.data);
 
   if (routeSources.error) {
     return (
@@ -195,9 +200,10 @@ export default function TraefikPage() {
   }
 
   const uses = sources
-    ? middlewareUses(sources.middlewares, allRoutesOf(groups))
+    ? middlewareUses(sources.middlewares, allRoutesOf(groups), namers)
     : [];
-  const unused = uses.filter((use) => use.usedBy.length === 0).length;
+  const unused = uses.filter((use) => use.idle).length;
+  const unchecked = uses.filter((use) => use.idle === null).length;
 
   const tabs: DetailTab[] = [
     {
@@ -246,7 +252,15 @@ export default function TraefikPage() {
       mark:
         unused > 0
           ? severityMark("warn", t("count", "middlewaresUnused", { n: unused }))
-          : readCountMark(sources ? uses.length : null, null),
+          : unchecked > 0
+            ? {
+                shows: "unchecked",
+                says: t("count", "notCheckedOfTotal", {
+                  n: unchecked,
+                  total: uses.length,
+                }),
+              }
+            : readCountMark(sources ? uses.length : null, null),
       content: <MiddlewaresTab uses={uses} />,
     },
     {
@@ -268,6 +282,7 @@ export default function TraefikPage() {
   ];
 
   const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
+  const legacyUnconfirmed = routeSources.data?.legacyUnconfirmed ?? 0;
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -280,6 +295,11 @@ export default function TraefikPage() {
         }
         description={t("empty", "traefikPageDescription")}
       />
+      {legacyUnconfirmed > 0 && (
+        <p className="max-w-[88ch] text-[11px] text-warn">
+          {t("count", "traefikLegacyUnconfirmed", { n: legacyUnconfirmed })}
+        </p>
+      )}
       <DetailTabs
         tabs={tabs}
         activeTab={tab}
@@ -516,7 +536,7 @@ function HostRow({
       copy={group.host ?? undefined}
       meta={
         <>
-          {t("count", "paths", { n: group.routes.length })}
+          {t("count", "paths", { n: pathCount(group) })}
           {entryPoints.length > 0 &&
             ` · ${everywhere ? t("empty", "everyEntryPoint") : summariseNames(entryPoints)}`}
           {/* Where the certificate is, when it is not here: a reader who
@@ -617,6 +637,9 @@ function PathRow({
             {route.service.port !== "" && (
               <span className="text-fg-fnt">:{route.service.port}</span>
             )}
+            {route.service.weight !== undefined && (
+              <span className="text-fg-fnt">weight {route.service.weight}</span>
+            )}
           </>
         ) : route.resourceBackend ? (
           <span className="font-mono text-fg-mid">{route.resourceBackend}</span>
@@ -671,7 +694,7 @@ function SourceRef({ route }: { route: TraefikRoute }) {
         kind="IngressRoute"
         name={route.source.name}
         namespace={route.source.namespace}
-        crd={`ingressroutes.${servedGroupName()}`}
+        crd={route.source.crd}
         showKind={false}
         showNamespace
       />
@@ -758,18 +781,13 @@ function HostChain({
             route.middlewares.map((middleware) => (
               <Cell
                 key={`${middleware.namespace}/${middleware.name}`}
-                under={middlewareDetail(
-                  sources,
-                  middleware.name,
-                  middleware.namespace,
-                  t
-                )}
+                under={middlewareDetail(sources, middleware, t)}
               >
                 <ResourceRef
                   kind="Middleware"
                   name={middleware.name}
                   namespace={middleware.namespace}
-                  crd={`middlewares.${servedGroupName()}`}
+                  crd={middlewareCrd(sources, middleware, route)}
                   showKind={false}
                 />
               </Cell>
@@ -899,18 +917,35 @@ function RawRule({ route }: { route: TraefikRoute }) {
   );
 }
 
-function middlewareDetail(
+const middlewareNamed = (
   sources: TraefikSources,
-  name: string,
-  namespace: string,
-  t: ReturnType<typeof useT>
-): string | undefined {
-  const found = sources.middlewares.find(
+  { name, namespace }: MiddlewareRef
+) =>
+  sources.middlewares.find(
     (middleware) =>
       middleware.name === name && (middleware.namespace ?? "") === namespace
   );
+
+function middlewareDetail(
+  sources: TraefikSources,
+  named: MiddlewareRef,
+  t: ReturnType<typeof useT>
+): string | undefined {
+  const found = middlewareNamed(sources, named);
   if (!found) return t("empty", "notFoundInThisCluster");
   return middlewareType(found) ?? undefined;
+}
+
+/** The group the Middleware is kept under; one nobody found is looked for beside the route that names it. */
+function middlewareCrd(
+  sources: TraefikSources,
+  named: MiddlewareRef,
+  route: TraefikRoute
+): string {
+  const found = middlewareNamed(sources, named);
+  if (found) return crdOf("middlewares", found);
+  const group = route.source.crd?.split(".").slice(1).join(".");
+  return `middlewares.${group ?? GROUPS[0]}`;
 }
 
 // --- findings -----------------------------------------------------------
@@ -984,11 +1019,7 @@ function objectRef(route: TraefikRoute): ReactNode {
         kind={route.source.kind}
         name={route.source.name}
         namespace={route.source.namespace}
-        crd={
-          route.source.kind === "IngressRoute"
-            ? `ingressroutes.${servedGroupName()}`
-            : undefined
-        }
+        crd={route.source.crd}
         showKind={false}
         showNamespace
       />
@@ -1024,7 +1055,7 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
   const t = useT();
   useShareSection("traefik-middlewares", () => {
     const found = uses.flatMap((use) =>
-      use.usedBy.length === 0
+      use.idle
         ? [
             {
               title: use.middleware.name,
@@ -1039,13 +1070,15 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
           ]
         : []
     );
-    if (found.length === 0) return null;
+    const unchecked = uses.some((use) => use.idle === null);
+    if (found.length === 0 && !unchecked) return null;
     return {
       id: "traefik-middlewares",
       order: ORDER.own,
       title: "Middlewares",
       icon: iconSvg(Filter),
       count: found.length,
+      ...(unchecked && { unread: t("empty", "middlewareNamersUnread") }),
       body: { type: "findings" as const, items: found },
     };
   });
@@ -1075,7 +1108,7 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
                 kind: "Middleware",
                 name: use.middleware.name,
                 namespace: use.middleware.namespace,
-                crd: `middlewares.${servedGroupName()}`,
+                crd: crdOf("middlewares", use.middleware),
               })!}
               className="truncate font-mono text-info hover:underline"
             >
@@ -1084,18 +1117,23 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
             <span className="truncate font-mono text-fg-mid">
               {use.type ?? <None />}
             </span>
-            {use.usedBy.length === 0 ? (
+            {use.idle ? (
               <span className="text-warn">
                 {t("empty", "middlewareUnreferenced")}
+              </span>
+            ) : use.idle === null ? (
+              <span className="text-fg-mut">
+                {t("empty", "middlewareNamersUnread")}
               </span>
             ) : (
               <span className="truncate text-fg-mut">
                 {[
-                  ...new Set(
-                    use.usedBy.map(
+                  ...new Set([
+                    ...use.usedBy.map(
                       (route) => `${route.source.kind} ${route.source.name}`
-                    )
-                  ),
+                    ),
+                    ...use.alsoBy,
+                  ]),
                 ].join(", ")}
               </span>
             )}

@@ -362,3 +362,35 @@ describe("versions off an image reference", () => {
     expect(postgresVersionOf("postgresql:latest")).toBe(null);
   });
 });
+
+describe("the ways a cluster's spec lets a Backup run", () => {
+  const methods = (spec: Record<string, unknown>) =>
+    readCluster(cluster("shop-db", HEALTHY, {}, spec)).backupMethods;
+
+  /**
+   * CNPG fails a Backup whose method the cluster does not configure. Fails
+   * if a section that is there is missed, or one that is not is offered: a
+   * `backup` block holding only a retention policy configures nothing.
+   */
+  it("reads the two sections of spec.backup and every enabled plugin", () => {
+    expect(methods({})).toEqual([]);
+    expect(methods({ backup: { retentionPolicy: "30d" } })).toEqual([]);
+    expect(
+      methods({
+        backup: { barmanObjectStore: { destinationPath: "s3://b" } },
+      })
+    ).toEqual([{ method: "barmanObjectStore" }]);
+    expect(
+      methods({
+        backup: { volumeSnapshot: { className: "csi" } },
+        plugins: [
+          { name: "barman-cloud.cloudnative-pg.io", isWALArchiver: true },
+          { name: "off.example.com", enabled: false },
+        ],
+      })
+    ).toEqual([
+      { method: "volumeSnapshot" },
+      { method: "plugin", plugin: "barman-cloud.cloudnative-pg.io" },
+    ]);
+  });
+});

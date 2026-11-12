@@ -10,6 +10,9 @@ import { renderWithRouter, testQueryClient } from "@/test/render";
 const answers = vi.hoisted(
   () => new Map<string, () => Promise<CustomResourceInfo[]>>()
 );
+const ingresses = vi.hoisted(() => ({
+  list: (): Promise<unknown[]> => Promise.resolve([]),
+}));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -18,11 +21,18 @@ vi.mock("@/lib/commands", () => ({
     // Read for the hosts each certificate serves. Nothing here is about
     // Ingresses, but the page reads them, and a mock that omits it makes
     // every one of these look like an unread-CRD bug.
-    listIngresses: () => Promise.resolve([]),
+    listIngresses: () => ingresses.list(),
   },
 }));
 
-import { CLUSTER_ISSUERS_CRD, CHALLENGES_CRD, ORDERS_CRD } from "./model";
+import {
+  CERTIFICATES_CRD,
+  CLUSTER_ISSUERS_CRD,
+  CHALLENGES_CRD,
+  INGRESSES,
+  ISSUERS_CRD,
+  ORDERS_CRD,
+} from "./model";
 
 const { usePicture } = await import("./data");
 const { default: CertManagerPage } = await import("./page");
@@ -46,16 +56,26 @@ function wrapper() {
   );
 }
 
-function renderPage() {
+function renderPage(tab = "issuers") {
   return renderWithRouter(<CertManagerPage />, {
-    at: "/c/test/integrations/cert-manager?tab=issuers",
+    at: `/c/test/integrations/cert-manager?tab=${tab}`,
     route: "/c/$cluster/integrations/$vendor",
   });
 }
 
 beforeEach(() => {
   answers.clear();
+  ingresses.list = () => Promise.resolve([]);
 });
+
+/** A refusal as the command wrapper throws it: the backend's code one level down. */
+const refused = (said: string) =>
+  new Error(`Tauri command 'list' failed: Kubernetes API error: ${said}`, {
+    cause: { code: "PERMISSION_DENIED", message: said, said },
+  });
+
+/** The API server's 403 where one of the reader's bindings names a role that is gone. */
+const DENIED_BY_GONE_ROLE = `issuers.cert-manager.io is forbidden: User "dev" cannot list resource "issuers" in API group "cert-manager.io" at the cluster scope: RBAC: clusterrole.rbac.authorization.k8s.io "viewer" not found`;
 
 describe("a kind the cluster does not serve", () => {
   /**
@@ -132,5 +152,109 @@ describe("what the issuers tab is allowed to claim", () => {
         screen.getByText("This cluster has no Issuer and no ClusterIssuer.")
       ).toBeInTheDocument()
     );
+  });
+});
+
+describe("a refusal whose sentence says not found", () => {
+  /**
+   * "Not served" was read off the words, and this 403 ends in `"viewer" not
+   * found`. Fails if a refused Issuer list is filed as a kind the cluster
+   * does not have, with no unread note.
+   */
+  it("is a failed read by its code, not a kind the cluster does not serve", async () => {
+    answers.set(ISSUERS_CRD, () =>
+      Promise.reject(refused(DENIED_BY_GONE_ROLE))
+    );
+
+    const { result } = renderHook(() => usePicture(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.unread.map((kind) => kind.kind)).toEqual([
+      "Issuer",
+    ]);
+  });
+
+  /** The same on the screen: the strongest claim on the page is not made. */
+  it("does not let the Issuers tab say the cluster has none", async () => {
+    answers.set(ISSUERS_CRD, () =>
+      Promise.reject(refused(DENIED_BY_GONE_ROLE))
+    );
+
+    await renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText(/"viewer" not found/)).toBeInTheDocument()
+    );
+    expect(
+      screen.queryByText("This cluster has no Issuer and no ClusterIssuer.")
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("an Ingress list that could not be read", () => {
+  const stuck = {
+    name: "web",
+    namespace: "shop",
+    uid: "c-1",
+    apiVersion: "cert-manager.io/v1",
+    kind: "Certificate",
+    spec: {
+      secretName: "web-tls",
+      dnsNames: ["shop.example.com"],
+      issuerRef: { name: "ca" },
+    },
+    status: {
+      conditions: [{ type: "Ready", status: "False", reason: "Pending" }],
+    },
+    labels: {},
+    annotations: {},
+    createdAt: null,
+    ownerReferences: [],
+    generation: 1,
+  } as CustomResourceInfo;
+  const FORBIDDEN_INGRESSES = "ingresses.networking.k8s.io is forbidden";
+
+  beforeEach(() => {
+    answers.set(CERTIFICATES_CRD, () => Promise.resolve([stuck]));
+    ingresses.list = () => Promise.reject(refused(FORBIDDEN_INGRESSES));
+  });
+
+  /**
+   * The list came back through `.catch(() => [])`. Fails if a certificate
+   * whose users were never read is filed as mounted by no Ingress.
+   */
+  it("leaves each certificate's users unchecked and says which read failed", async () => {
+    const { result } = renderHook(() => usePicture(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.certificates[0].use).toEqual({
+      hosts: [],
+      checked: false,
+      unusedIsCertain: false,
+    });
+    expect(result.current.data?.unread).toEqual([
+      { kind: "Ingress", crd: INGRESSES, reason: FORBIDDEN_INGRESSES },
+    ]);
+  });
+
+  /** The row said "No Ingress in shop mounts web-tls" as what was checked, when nothing was. */
+  it("says on the row that what serves it was not checked", async () => {
+    await renderPage("certificates");
+
+    expect(
+      await screen.findByText(/What serves this certificate was not checked/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(FORBIDDEN_INGRESSES)).toBeInTheDocument();
+    expect(screen.queryByText(/No Ingress in/)).not.toBeInTheDocument();
+  });
+
+  /** The other half: read and empty, "no Ingress mounts it" is what was checked. */
+  it("says no Ingress mounts it once the list was read", async () => {
+    ingresses.list = () => Promise.resolve([]);
+
+    await renderPage("certificates");
+
+    expect(await screen.findByText(/No Ingress in/)).toBeInTheDocument();
+    expect(screen.queryByText(/was not checked/)).not.toBeInTheDocument();
   });
 });

@@ -246,7 +246,7 @@ export const crd: CrdView = {
       case "helmchart":
         return helmChartColumns;
       default:
-        return helmReleaseColumns;
+        return [];
     }
   },
 };

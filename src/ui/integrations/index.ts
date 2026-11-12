@@ -109,7 +109,7 @@ import type {
   VolumeFullness,
 } from "./registry";
 
-export { RANGE_WINDOW_MS, USAGE_RANGES } from "./registry";
+export { RANGE_WINDOW_MS, RelatedShort, USAGE_RANGES } from "./registry";
 export type {
   CapabilityKey,
   CapabilityState,

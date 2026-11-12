@@ -18,7 +18,12 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { useCapabilities, type RelatedObject } from "@/integrations";
+import {
+  RelatedShort,
+  useCapabilities,
+  type Capabilities,
+  type RelatedObject,
+} from "@/integrations";
 import { groupOf, useCrdIndex } from "@/hooks/useCrdIndex";
 import { crdInGroup } from "@/lib/links";
 import type { CustomResourceDetailInfo } from "@/generated/types";
@@ -70,6 +75,36 @@ function owners(
   }));
 }
 
+/**
+ * Every supplier's answer for one object. One that read part of its own
+ * hands over what it has: the failure is kept beside the rows, not thrown
+ * past them, so the panel draws them and says the list is short.
+ */
+export async function gatherRelated(
+  suppliers: ReadonlyArray<Capabilities["object.related"]>,
+  subject: Parameters<Capabilities["object.related"]>[0]
+): Promise<{ claimed: boolean; stated: RelatedObject[]; short: Error | null }> {
+  let short: unknown = null;
+  const answers = await Promise.all(
+    suppliers.map((ask) =>
+      ask(subject).catch((error: unknown) => {
+        if (!(error instanceof RelatedShort)) throw error;
+        short = error.cause;
+        return error.related;
+      })
+    )
+  );
+  const claimed = answers.filter((answer) => answer !== null);
+  // `null` from every supplier is "nobody here owns this kind", which the
+  // surface has to be able to say. Flattening first would turn it into an
+  // empty list, and an empty list is a claim about the object.
+  return {
+    claimed: claimed.length > 0,
+    stated: claimed.flat(),
+    short: short as Error | null,
+  };
+}
+
 export function useRelatedObjects(
   subject: {
     group: string;
@@ -93,17 +128,7 @@ export function useRelatedObjects(
       subject?.name ?? "",
       suppliers.length,
     ],
-    queryFn: async () => {
-      const answers = await Promise.all(suppliers.map((ask) => ask(subject!)));
-      const claimed = answers.filter((answer) => answer !== null);
-      // `null` from every supplier is "nobody here owns this kind", which the
-      // surface has to be able to say. Flattening first would turn it into an
-      // empty list, and an empty list is a claim about the object.
-      return {
-        claimed: claimed.length > 0,
-        stated: claimed.flat(),
-      };
-    },
+    queryFn: () => gatherRelated(suppliers, subject!),
     enabled,
     // An operator writes its inventory on reconcile, which is minutes apart —
     // and this tab is read, not watched.
@@ -128,7 +153,7 @@ export function useRelatedObjects(
     claimed: query.data?.claimed ?? false,
     related,
     isPending: enabled && query.isPending,
-    error: (query.error as Error) ?? null,
+    error: (query.error as Error) ?? query.data?.short ?? null,
   };
 }
 

@@ -11,8 +11,7 @@
  */
 
 import { commands } from "@/lib/commands";
-import type { IngressInfo } from "@/generated/types";
-import type { RelatedObject } from "../registry";
+import { RelatedShort, type RelatedObject } from "../registry";
 import { certificateUse } from "./serves";
 
 const GROUP = "cert-manager.io";
@@ -94,10 +93,12 @@ export async function relatedTo(subject: {
     });
 
     // The backwards edge. A failure here costs these rows and nothing else:
-    // the two above are in the object already.
+    // the two above are in the object already, and are handed over with it.
     const ingresses = await commands
       .listIngresses(null)
-      .catch((): IngressInfo[] => []);
+      .catch((error: unknown): never => {
+        throw new RelatedShort(related, error);
+      });
     const use = certificateUse(
       { secretName, namespace, dnsNames: list(spec, "dnsNames") },
       ingresses,

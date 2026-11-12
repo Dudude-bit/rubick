@@ -486,6 +486,51 @@ describe("a host no Gateway serves", () => {
     // `ns/host` is about which VirtualServices may bind, not the hostname.
     expect(gatewayCovers("mesh/shop.test", "shop.test")).toBe(true);
   });
+
+  /**
+   * Istio binds a server and a VirtualService whose hosts overlap in either
+   * direction. Only the Gateway side could be the wildcard, so a working
+   * `*.example.com` route on a server listing `shop.example.com` was an
+   * outage on five surfaces. Fails if the VirtualService's wildcard is not
+   * matched, or matches a name it does not cover.
+   */
+  it("binds a VirtualService host wider than the Gateway's", () => {
+    expect(gatewayCovers("shop.example.com", "*.example.com")).toBe(true);
+    expect(gatewayCovers("shop.example.com", "*")).toBe(true);
+    expect(gatewayCovers("mesh/shop.example.com", "*.example.com")).toBe(true);
+    expect(gatewayCovers("*.example.com", "*.shop.example.com")).toBe(true);
+    expect(gatewayCovers("*.shop.example.com", "*.example.com")).toBe(true);
+    // A wildcard does not cover its own apex, nor another domain.
+    expect(gatewayCovers("example.com", "*.example.com")).toBe(false);
+    expect(gatewayCovers("shop.other.com", "*.example.com")).toBe(false);
+    expect(gatewayCovers("*.other.com", "*.example.com")).toBe(false);
+  });
+
+  /** The same on the page's own verdict: the host is served, with no finding. */
+  it("draws no outage for a wildcard VirtualService on a Gateway naming one host", () => {
+    const wide = custom("VirtualService", "all", {
+      hosts: ["*.example.com"],
+      gateways: ["edge"],
+      http: [{ route: [{ destination: { host: "shop" } }] }],
+    });
+    const edge = custom("Gateway", "edge", {
+      servers: [
+        {
+          hosts: ["shop.example.com", "api.example.com"],
+          port: { number: 443, protocol: "HTTPS" },
+        },
+      ],
+    });
+
+    const [group] = hostGroups(
+      sources({ virtualServices: [wide], gateways: [edge] }),
+      t
+    );
+
+    expect(group.findings.map((finding) => finding.kind)).not.toContain(
+      "noGateway"
+    );
+  });
 });
 
 describe("a subset nothing defines", () => {

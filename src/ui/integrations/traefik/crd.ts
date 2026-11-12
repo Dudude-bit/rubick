@@ -279,6 +279,7 @@ export const crd: CrdView = {
     if (kindLower.includes("ingressroute")) return ingressRouteColumns;
     if (kindLower.includes("middleware")) return middlewareColumns;
     if (kindLower.includes("tlsoption")) return tlsOptionColumns;
-    return ingressRouteColumns;
+    // TLSStore, ServersTransport, TraefikService: none of these routes.
+    return [];
   },
 };

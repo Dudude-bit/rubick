@@ -13,7 +13,7 @@ import type {
   ServicePublished,
 } from "@/generated/types";
 import { findingTone } from "../ingress";
-import { backingFrom, hostSeverity } from "../ingress";
+import { backingFrom, hostSeverity, hostTlsWords } from "../ingress";
 import { PREFIX } from "./annotations";
 import {
   hostGroups,
@@ -352,6 +352,69 @@ describe("the findings", () => {
       (finding) => finding.kind === "clear"
     );
     expect(clear?.kind === "clear" && clear.redirectAnyway).toBe(true);
+  });
+
+  /**
+   * `tls: [{hosts: [app]}]` with no secretName is the documented way to use
+   * the controller's default certificate: nginx serves the host on :443 and
+   * applies ssl-redirect. It read "Served in the clear" with a note that the
+   * redirect does nothing. Fails if a covering block with no Secret is read
+   * as no TLS on any surface the model feeds.
+   */
+  it("serves a host whose TLS block names no Secret over TLS", () => {
+    const wildcard = {
+      ...ingress("app", "app.test", {
+        annotations: { [`${PREFIX}ssl-redirect`]: "true" },
+      }),
+      tlsHosts: ["app.test"],
+      tlsConfigs: [
+        { hosts: ["app.test"], secretName: null, isCatchAll: false },
+      ],
+    };
+
+    const [group] = hostGroups(sources([wildcard]), t);
+
+    expect(group.routes[0].tls).toBe(true);
+    expect(group.routes[0].tlsSecret).toBeNull();
+    expect(group.findings.map((finding) => finding.kind)).not.toContain(
+      "clear"
+    );
+    expect(group.tls).toEqual({ at: "own", secret: null, missing: false });
+    expect(hostTlsWords(group.tls, t)).toBe(
+      "TLS, certificate picked by the controller"
+    );
+    expect(hostState(group, null, t).text).toBe("serving");
+  });
+
+  /**
+   * nginx gives every host of an Ingress that has a tls section a
+   * certificate, its default one where no block lists the host. Fails if a
+   * host beside a block for another name is called served in the clear.
+   */
+  it("serves a host its Ingress's TLS section does not list over TLS too", () => {
+    const other = {
+      ...ingress("app", "app.test"),
+      tlsConfigs: [
+        { hosts: ["other.test"], secretName: "other-tls", isCatchAll: false },
+      ],
+    };
+
+    const [group] = hostGroups(sources([other]), t);
+
+    expect(group.routes[0].tls).toBe(true);
+    expect(group.routes[0].tlsSecret).toBeNull();
+    expect(group.findings.map((finding) => finding.kind)).not.toContain(
+      "clear"
+    );
+  });
+
+  /** The other half: with no tls section at all, the host has no TLS and says so. */
+  it("still calls a host whose Ingress has no TLS section served in the clear", () => {
+    const [group] = hostGroups(sources([ingress("app", "app.test")]), t);
+
+    expect(group.routes[0].tls).toBe(false);
+    expect(group.findings.map((finding) => finding.kind)).toContain("clear");
+    expect(group.tls).toEqual({ at: "none" });
   });
 
   /** Would break if a host with a certificate were called clear. */

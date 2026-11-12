@@ -16,7 +16,7 @@
 import { commands } from "@/lib/commands";
 import { objectLink, vendorLink } from "@/lib/links";
 import type { ProxyBehind, ServiceRoute } from "../registry";
-import { fetchController, fetchRouteSources, servedGroupName } from "./data";
+import { fetchController, fetchRouteSources } from "./data";
 import {
   allRoutes,
   frontingIngresses,
@@ -88,14 +88,10 @@ export async function serviceRoutes(input: {
           ? null
           : own;
     const h2c = service.scheme === "h2c";
-    // Only this file knows which API group serves the CRD; a core kind
-    // names itself. On the source so a consumer can draw a real reference,
-    // and in `to` for the ones that only want a path.
-    const crd =
-      route.source.kind === "IngressRoute"
-        ? `ingressroutes.${servedGroupName()}`
-        : undefined;
-    const source = crd ? { ...route.source, crd } : route.source;
+    // The route knows which API group its object is kept under; a core kind
+    // names itself. In `to` for the consumers that only want a path.
+    const { source } = route;
+    const { crd } = source;
     const already = found.get(key);
     if (already) {
       // Two objects disagreeing about the scheme means one of them serves it

@@ -18,15 +18,20 @@ import { describeFinding } from "./finding-words";
 import {
   allRoutes,
   duplicatedServiceNames,
+  flagsAreWhole,
   hostGroups,
   hostState,
   middlewareUses,
+  pathCount,
   readEmptyServices,
   readEntryPoints,
+  readsHttpRoutes,
   type TraefikSources,
 } from "./model";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
+
+const EVERYTHING_READ = { args: ["--api"], httpRoutes: [] };
 
 const TRAEFIK_CLASS: IngressClassSummary = {
   name: "traefik",
@@ -175,6 +180,34 @@ function sources(over: Partial<TraefikSources> = {}): TraefikSources {
 
 describe("which objects are this Traefik's", () => {
   /**
+   * The group was one remembered answer for the whole cluster. Fails if a
+   * route kept under `traefik.containo.us` on a cluster serving both groups
+   * links to a `traefik.io` object that does not exist.
+   */
+  it("names the group each IngressRoute is kept under, for its link", () => {
+    const kept = (group: string, name: string) => ({
+      ...ingressRoute(name, {
+        routes: [{ match: `Host(\`${name}.example.com\`)` }],
+      }),
+      apiVersion: `${group}/v1alpha1`,
+    });
+
+    const routes = allRoutes(
+      sources({
+        ingressRoutes: [
+          kept("traefik.io", "new"),
+          kept("traefik.containo.us", "old"),
+        ],
+      })
+    );
+
+    expect(routes.map((route) => route.source.crd)).toEqual([
+      "ingressroutes.traefik.io",
+      "ingressroutes.traefik.containo.us",
+    ]);
+  });
+
+  /**
    * The correction the whole page rests on. Would break if the routing table
    * went back to reading CRDs only: k3d ships Traefik as *the* ingress
    * controller, so a page that ignored plain Ingresses would be empty on the
@@ -273,6 +306,63 @@ describe("what a defaultBackend Ingress serves", () => {
 });
 
 describe("the findings", () => {
+  /**
+   * Traefik balances a route across every entry of `services`. Only the
+   * first was read, so a weighted second Service that does not exist left
+   * the host green. Fails if any entry goes unchecked or shares a row key.
+   */
+  it("checks every Service a route balances across, not only the first", () => {
+    const [group] = hostGroups(
+      sources({
+        ingressRoutes: [
+          ingressRoute("canary", {
+            routes: [
+              {
+                match: "Host(`app.example.com`)",
+                services: [
+                  { name: "app-v1", port: 80, weight: 3 },
+                  { name: "app-v2", port: 80 },
+                ],
+              },
+            ],
+          }),
+        ],
+        services: [service("app-v1", { app: "v1" })],
+        published: [published("app-v1", 2)],
+      })
+    );
+
+    expect(
+      group.routes.map((route) => [route.service?.name, route.service?.weight])
+    ).toEqual([
+      ["app-v1", 3],
+      ["app-v2", 1],
+    ]);
+    expect(new Set(group.routes.map((route) => route.key)).size).toBe(2);
+    // One router, however many Services share it.
+    expect(pathCount(group)).toBe(1);
+    const stop = group.findings.find((finding) => finding.kind === "stop");
+    expect(stop?.kind === "stop" && stop.route.service?.name).toBe("app-v2");
+    expect(hostState(group, null, t).tone).toBe("err");
+  });
+
+  /** A route naming one Service has no split to state. Fails if it wears a weight. */
+  it("gives a lone Service no weight", () => {
+    const [route] = allRoutes(
+      sources({
+        ingressRoutes: [
+          ingressRoute("solo", {
+            routes: [
+              { match: "Host(`a.example.com`)", services: [{ name: "a" }] },
+            ],
+          }),
+        ],
+      })
+    );
+
+    expect(route.service?.weight).toBeUndefined();
+  });
+
   /**
    * Would break if the page invented a second vocabulary for a stopped path.
    * `describeStop` is what the traffic chain already says, and "no pod
@@ -1216,12 +1306,138 @@ describe("ordering and middlewares", () => {
         middleware("used", { stripPrefix: { prefixes: ["/api"] } }),
         middleware("orphan", { rateLimit: { average: 100 } }),
       ],
-      routes
+      routes,
+      EVERYTHING_READ
     );
 
     expect(uses[0].middleware.name).toBe("orphan");
     expect(uses[0].usedBy).toEqual([]);
+    expect(uses[0].idle).toBe(true);
     expect(uses[1].usedBy).toHaveLength(1);
+    expect(uses[1].idle).toBe(false);
+  });
+
+  /**
+   * A `chain` runs its members and an entry point's flag puts a middleware
+   * on every router; both read "configuration that does nothing". Traefik
+   * drops a router whose middleware is gone, so deleting one on that advice
+   * is an outage. Fails if either way of being used is not counted.
+   */
+  it("counts a middleware a chain or an entry point flag names as used", () => {
+    const uses = middlewareUses(
+      [
+        middleware("default-chain", {
+          chain: { middlewares: [{ name: "headers" }, { name: "compress" }] },
+        }),
+        middleware("headers", { headers: {} }),
+        middleware("compress", { compress: {} }),
+        middleware("auth", { basicAuth: {} }),
+        middleware("orphan", { rateLimit: {} }),
+      ],
+      [],
+      {
+        args: [
+          "--entrypoints.websecure.address=:8443",
+          "--entryPoints.websecure.http.middlewares=shop-auth@kubernetescrd,gzip@file",
+        ],
+        httpRoutes: [],
+      }
+    );
+
+    const said = Object.fromEntries(
+      uses.map((use) => [use.middleware.name, [use.idle, use.alsoBy]])
+    );
+    expect(said.headers).toEqual([false, ["Middleware default-chain"]]);
+    expect(said.compress).toEqual([false, ["Middleware default-chain"]]);
+    expect(said.auth).toEqual([false, ["entryPoints.websecure"]]);
+    expect(said.orphan).toEqual([true, []]);
+    expect(said["default-chain"]).toEqual([true, []]);
+  });
+
+  /**
+   * Traefik's Gateway API provider takes a Middleware from an HTTPRoute's
+   * ExtensionRef filter, in the route's own namespace. Fails if that use is
+   * missed, or if another namespace's or another vendor's filter counts.
+   */
+  it("counts a middleware an HTTPRoute names in a filter as used", () => {
+    const httpRoute = (
+      namespace: string,
+      group: string
+    ): Parameters<typeof middlewareUses>[2]["httpRoutes"] => [
+      {
+        kind: "HTTPRoute",
+        name: "storefront",
+        namespace,
+        rules: [
+          { extensionRefs: [{ group, kind: "Middleware", name: "auth" }] },
+        ],
+      } as never,
+    ];
+    const idle = (routes: ReturnType<typeof httpRoute>) =>
+      middlewareUses([middleware("auth", {})], [], {
+        args: ["--providers.kubernetesgateway"],
+        httpRoutes: routes,
+      })[0];
+
+    expect(idle(httpRoute("shop", "traefik.io")).alsoBy).toEqual([
+      "HTTPRoute storefront",
+    ]);
+    expect(idle(httpRoute("shop", "traefik.io")).idle).toBe(false);
+    expect(idle(httpRoute("other", "traefik.io")).idle).toBe(true);
+    expect(idle(httpRoute("shop", "gateway.envoyproxy.io")).idle).toBe(true);
+  });
+
+  /**
+   * With the proxy's flags or the HTTPRoutes unread, something that can name
+   * a middleware was not looked at. Fails if "unused" is said anyway, or if
+   * a use that was seen is doubted.
+   */
+  it("does not call a middleware unused while a way to name it is unread", () => {
+    const of = (others: Parameters<typeof middlewareUses>[2]) =>
+      middlewareUses(
+        [
+          middleware("default-chain", {
+            chain: { middlewares: [{ name: "headers" }] },
+          }),
+          middleware("headers", {}),
+        ],
+        [],
+        others
+      ).map((use) => [use.middleware.name, use.idle]);
+
+    expect(of({ args: null, httpRoutes: null })).toEqual([
+      ["default-chain", null],
+      ["headers", false],
+    ]);
+    expect(of({ args: ["--api"], httpRoutes: null })).toEqual([
+      ["default-chain", null],
+      ["headers", false],
+    ]);
+  });
+
+  /**
+   * Flags beside a configuration file are not the whole configuration, and
+   * only the Gateway API provider reads HTTPRoutes. Fails if a file's entry
+   * points are taken as none, or HTTPRoutes are listed for a proxy that
+   * never reads them.
+   */
+  it("knows when the flags are the whole configuration and when HTTPRoutes are read", () => {
+    expect(flagsAreWhole([])).toBe(false);
+    expect(flagsAreWhole(["--api", "--configFile=/etc/traefik.yml"])).toBe(
+      false
+    );
+    expect(flagsAreWhole(["--api"])).toBe(true);
+
+    expect(readsHttpRoutes(["--providers.kubernetescrd"])).toBe(false);
+    expect(readsHttpRoutes(["--providers.kubernetesGateway=false"])).toBe(
+      false
+    );
+    expect(readsHttpRoutes(["--providers.kubernetesGateway"])).toBe(true);
+    expect(
+      readsHttpRoutes([
+        "--providers.kubernetesgateway.experimentalchannel=true",
+      ])
+    ).toBe(true);
   });
 
   /**
@@ -1601,6 +1817,35 @@ describe("a path whose backend is an API object", () => {
     const [group] = hostGroups(
       sources({
         ingresses: [ingress("ghost", "ghost.example.com", { service: "gone" })],
+        entryPoints: [
+          { name: "web", address: ":8000", tls: false, redirectTo: null },
+        ],
+      })
+    );
+
+    expect(group.findings.map((finding) => finding.kind)).toEqual(["stop"]);
+  });
+
+  /**
+   * Traefik builds a route's Services as one weighted balancer and skips
+   * the router when any of them fails to build. Fails if the Service that
+   * does exist keeps the host "served in the clear" beside a router gone.
+   */
+  it("drops a balanced route whole when one of its Services is missing", () => {
+    const [group] = hostGroups(
+      sources({
+        ingressRoutes: [
+          ingressRoute("canary", {
+            routes: [
+              {
+                match: "Host(`app.example.com`)",
+                services: [{ name: "app-v1" }, { name: "gone" }],
+              },
+            ],
+          }),
+        ],
+        services: [service("app-v1", { app: "v1" })],
+        published: [published("app-v1", 2)],
         entryPoints: [
           { name: "web", address: ":8000", tls: false, redirectTo: null },
         ],

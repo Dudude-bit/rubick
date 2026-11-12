@@ -54,6 +54,7 @@ import { uncovered } from "./serves";
 import {
   CERTIFICATES_CRD,
   CLUSTER_ISSUERS_CRD,
+  INGRESSES,
   ISSUERS_CRD,
   type CertRow,
   type CertStep,
@@ -93,8 +94,14 @@ export default function CertManagerPage() {
   const unreadIssuers = (data?.unread ?? []).filter(
     (kind) => kind.crd === ISSUERS_CRD || kind.crd === CLUSTER_ISSUERS_CRD
   );
+  const unreadServing = (data?.unread ?? []).filter(
+    (kind) => kind.crd === INGRESSES
+  );
   const unreadWalk = (data?.unread ?? []).filter(
-    (kind) => kind.crd !== ISSUERS_CRD && kind.crd !== CLUSTER_ISSUERS_CRD
+    (kind) =>
+      kind.crd !== ISSUERS_CRD &&
+      kind.crd !== CLUSTER_ISSUERS_CRD &&
+      kind.crd !== INGRESSES
   );
 
   const tabs: DetailTab[] = [
@@ -110,6 +117,7 @@ export default function CertManagerPage() {
           rows={certificates}
           loading={isPending}
           unread={unreadWalk}
+          unreadServing={unreadServing}
         />
       ),
     },
@@ -226,11 +234,14 @@ function CertificatesTab({
   rows,
   loading,
   unread,
+  unreadServing,
 }: {
   rows: CertRow[];
   loading: boolean;
   /** Kinds the walk needs and did not get. */
   unread: UnreadKind[];
+  /** The Ingress list, where it failed: no row can then say what it serves. */
+  unreadServing: UnreadKind[];
 }) {
   const t = useT();
 
@@ -260,6 +271,7 @@ function CertificatesTab({
   return (
     <div className="flex flex-col">
       <Unread kinds={unread} cost={t("empty", "certWalkCost")} />
+      <Unread kinds={unreadServing} cost={t("empty", "servingUnknownCost")} />
       <TroubleList
         items={rows}
         severityOf={severityOfRow}
@@ -368,6 +380,13 @@ function ServingLine({ row }: { row: CertRow }) {
   const t = useT();
   const wrong = uncovered(row.use);
 
+  if (!row.use.checked) {
+    return (
+      <p className="max-w-[68ch] text-[11px] text-fg-fnt">
+        {t("empty", "servingNotChecked")}
+      </p>
+    );
+  }
   if (row.use.hosts.length === 0) {
     return (
       <p className="max-w-[68ch] text-[11px] text-fg-fnt">

@@ -116,6 +116,22 @@ const ownedBy = (uid: string, over: Partial<CustomResourceInfo> = {}) =>
 
 describe("ordering by trouble", () => {
   /**
+   * The Ingresses defaulted to an empty list, so a caller that passed none
+   * said "no Ingress mounts it". Fails if forgetting them reads as checked.
+   */
+  it("leaves a certificate's users unchecked where no Ingress list was given", () => {
+    const [row] = certificateRows(
+      [certificate({ name: "web", secretName: "web-tls", ready: true })],
+      [],
+      [],
+      [],
+      t
+    );
+
+    expect(row.use.checked).toBe(false);
+  });
+
+  /**
    * The whole reason this page is not alphabetical. A reader with one
    * certificate that never issued and thirty that are fine does not want to
    * scroll to `w`.

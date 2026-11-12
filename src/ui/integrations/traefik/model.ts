@@ -25,6 +25,7 @@ import type {
   IngressClassSummary,
   IngressInfo,
   ChainStop,
+  RouteInfo,
   ServiceInfo,
   TlsCertificate,
 } from "@/generated/types";
@@ -107,6 +108,11 @@ export interface RouteService {
    * use. Only an IngressRoute can state one.
    */
   scheme: string | null;
+  /**
+   * This Service's `weight` where the route balances across several, which
+   * Traefik does for every entry of `services`; absent where it names one.
+   */
+  weight?: number;
 }
 
 export interface TraefikRoute {
@@ -115,6 +121,8 @@ export interface TraefikRoute {
     kind: "Ingress" | "IngressRoute";
     name: string;
     namespace: string;
+    /** An IngressRoute's `<plural>.<group>`: the group it is kept under. */
+    crd?: string;
   };
   rule: RuleReading;
   /** This row's own alternative of the rule. */
@@ -264,6 +272,12 @@ export interface TraefikSources extends BackingSources {
    */
   upstreamTls?: (host: string | null) => boolean | "unknown";
 }
+
+/** `<plural>.<group>` of an object, from the group it was read under. */
+export const crdOf = (
+  plural: string,
+  object: Pick<CustomResourceInfo, "apiVersion">
+): string => `${plural}.${object.apiVersion.split("/")[0]}`;
 
 // --- which Ingresses are this Traefik's ---------------------------------
 
@@ -433,6 +447,7 @@ interface IngressRouteSpec {
       port?: unknown;
       kind?: string;
       scheme?: string;
+      weight?: number;
     }>;
     middlewares?: Array<{ name?: string; namespace?: string }>;
   }>;
@@ -450,12 +465,15 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
 
   return (spec.routes ?? []).flatMap((route, routeIndex) => {
     const reading = readRule(route.match ?? "");
-    const service = route.services?.[0];
+    // Every entry, not the first: Traefik balances a route across all of
+    // them, so each is a backend to check and a Service this host reaches.
+    const balanced = (route.services ?? []).filter((service) => service.name);
     const common = {
       source: {
         kind: "IngressRoute" as const,
         name: object.name,
         namespace,
+        crd: crdOf("ingressroutes", object),
       },
       rule: reading,
       entryPoints,
@@ -469,18 +487,6 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
             ]
           : []
       ),
-      service: service?.name
-        ? {
-            name: service.name,
-            namespace: service.namespace ?? namespace,
-            port: service.port === undefined ? "" : String(service.port),
-            // `@` is Traefik's own provider qualifier and can never appear in
-            // a Kubernetes object name, so it is an unambiguous marker.
-            kubernetes:
-              service.kind !== "TraefikService" && !service.name.includes("@"),
-            scheme: service.scheme ?? null,
-          }
-        : null,
       // Only an Ingress can name one; an IngressRoute has no such field.
       resourceBackend: null,
       tlsSecret,
@@ -488,6 +494,20 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
       pathType: null,
       priority: route.priority ?? null,
     };
+    const backends: Array<RouteService | null> =
+      balanced.length === 0
+        ? [null]
+        : balanced.map((service) => ({
+            name: service.name!,
+            namespace: service.namespace ?? namespace,
+            port: service.port === undefined ? "" : String(service.port),
+            // `@` is Traefik's own provider qualifier and can never appear in
+            // a Kubernetes object name, so it is an unambiguous marker.
+            kubernetes:
+              service.kind !== "TraefikService" && !service.name!.includes("@"),
+            scheme: service.scheme ?? null,
+            ...(balanced.length > 1 && { weight: service.weight ?? 1 }),
+          }));
 
     // A rule that could not be read still gets a row: it is a route this
     // cluster is serving, and hiding it would be the page lying by omission.
@@ -498,13 +518,24 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
         ? reading.clauses
         : [{ host: null, path: null }];
 
-    return clauses.map((clause, clauseIndex) => ({
-      ...common,
-      key: `ingressroute/${namespace}/${object.name}/${routeIndex}/${clauseIndex}`,
-      clause,
-    }));
+    return clauses.flatMap((clause, clauseIndex) =>
+      backends.map((service, at) => ({
+        ...common,
+        key: `ingressroute/${namespace}/${object.name}/${routeIndex}/${clauseIndex}${at > 0 ? `#${at}` : ""}`,
+        clause,
+        service,
+      }))
+    );
   });
 }
+
+/** The router a row belongs to: one balanced across Services is a row per Service. */
+const routerOf = (route: TraefikRoute): string =>
+  route.key.replace(/#\d+$/, "");
+
+/** A host's routers, where a balanced one is still one path. */
+export const pathCount = (group: Pick<HostGroup, "routes">): number =>
+  new Set(group.routes.map(routerOf)).size;
 
 // --- entry points, read off the controller's own arguments --------------
 //
@@ -682,33 +713,118 @@ export function middlewareType(middleware: CustomResourceInfo): string | null {
 export interface MiddlewareUse {
   middleware: CustomResourceInfo;
   type: string | null;
-  /** Every route that names it. Empty is the finding. */
+  /** Every route that names it. */
   usedBy: TraefikRoute[];
+  /** What else names it: `Kind name`, or the entry point whose flag does. */
+  alsoBy: string[];
+  /** Nothing read names it; `null` where something that can was not read. */
+  idle: boolean | null;
 }
 
+const flagOf = (arg: string): [string, string] => {
+  const [key, value = "true"] = arg.replace(/^-+/, "").split("=", 2);
+  return [key.toLowerCase(), value];
+};
+
+/** Whether the flags are the proxy's whole static configuration: some, and no file beside them. */
+export const flagsAreWhole = (args: string[]): boolean =>
+  args.length > 0 && !args.some((arg) => flagOf(arg)[0] === "configfile");
+
+/** Whether the Gateway API provider runs, which is what reads an HTTPRoute's filters. */
+export const readsHttpRoutes = (args: string[]): boolean =>
+  args
+    .map(flagOf)
+    .some(([key, value]) =>
+      key === "providers.kubernetesgateway"
+        ? value.toLowerCase() !== "false"
+        : key.startsWith("providers.kubernetesgateway.")
+    );
+
+/** What can name a Middleware besides a route, each `null` where it was not read. */
+export interface OtherNamers {
+  /** The proxy's flags, where they are its whole configuration. */
+  args: string[] | null;
+  /** Every HTTPRoute; empty where no Gateway API provider reads them. */
+  httpRoutes: RouteInfo[] | null;
+}
+
+const NAMED_FROM_FLAG = /^entrypoints\.([^.]+)\.http\.middlewares(\[\d+\])?$/;
+
+/**
+ * Who uses each Middleware. A route is one way to: a `chain` runs its
+ * members, an entry point's flag puts one on every router, and an HTTPRoute
+ * names one in an ExtensionRef filter. Traefik drops a router whose
+ * middleware is gone, so "unused" is only said with all four read.
+ */
 export function middlewareUses(
   middlewares: CustomResourceInfo[],
-  routes: TraefikRoute[]
+  routes: TraefikRoute[],
+  others: OtherNamers
 ): MiddlewareUse[] {
-  const uses = middlewares.map((middleware) => ({
-    middleware,
-    type: middlewareType(middleware),
-    usedBy: routes.filter((route) =>
-      route.middlewares.some(
-        (named) =>
-          named.name === middleware.name &&
-          named.namespace === (middleware.namespace ?? "")
-      )
-    ),
-  }));
+  const fromFlags = (others.args ?? []).flatMap((arg) => {
+    const [key, value] = flagOf(arg);
+    const entryPoint = NAMED_FROM_FLAG.exec(key)?.[1];
+    return entryPoint
+      ? value.split(",").map((named) => ({
+          bare: named.trim().split("@")[0],
+          by: `entryPoints.${entryPoint}`,
+        }))
+      : [];
+  });
+  const uses = middlewares.map((middleware) => {
+    const namespace = middleware.namespace ?? "";
+    const names = (ref: { name?: string; namespace?: string }, home: string) =>
+      ref.name === middleware.name && (ref.namespace ?? home) === namespace;
+    const usedBy = routes.filter((route) =>
+      route.middlewares.some((named) => names(named, ""))
+    );
+    const alsoBy = [
+      ...middlewares
+        .filter((chain) =>
+          (
+            (chain.spec as { chain?: { middlewares?: MiddlewareRef[] } } | null)
+              ?.chain?.middlewares ?? []
+          ).some((member) => names(member, chain.namespace ?? ""))
+        )
+        .map((chain) => `Middleware ${chain.name}`),
+      ...fromFlags
+        .filter((flag) => flag.bare === `${namespace}-${middleware.name}`)
+        .map((flag) => flag.by),
+      ...(others.httpRoutes ?? [])
+        .filter(
+          (route) =>
+            route.namespace === namespace &&
+            route.rules.some((rule) =>
+              rule.extensionRefs.some(
+                (ref) =>
+                  ref.kind === "Middleware" &&
+                  ref.group.startsWith("traefik.") &&
+                  ref.name === middleware.name
+              )
+            )
+        )
+        .map((route) => `${route.kind} ${route.name}`),
+    ];
+    const used = usedBy.length + alsoBy.length > 0;
+    return {
+      middleware,
+      type: middlewareType(middleware),
+      usedBy,
+      alsoBy,
+      idle:
+        used || (others.args !== null && others.httpRoutes !== null)
+          ? !used
+          : null,
+    };
+  });
   // Unused first: it is the only row on the tab that is a finding rather
   // than inventory.
-  return uses.sort((a, b) => {
-    if (a.usedBy.length !== b.usedBy.length) {
-      return a.usedBy.length - b.usedBy.length;
-    }
-    return a.middleware.name.localeCompare(b.middleware.name);
-  });
+  const rank = (use: MiddlewareUse) =>
+    use.idle ? 0 : use.idle === null ? 1 : 2;
+  return uses.sort(
+    (a, b) =>
+      rank(a) - rank(b) || a.middleware.name.localeCompare(b.middleware.name)
+  );
 }
 
 // --- the hosts ----------------------------------------------------------
@@ -983,14 +1099,21 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
     const stopOf = new Map(
       own.map((route) => [route.key, backings.get(route.key)!.stop])
     );
-    const dropped = new Set(
+    // By router: one Service that fails to build takes the Services it is
+    // balanced with along, because Traefik skips the whole router.
+    const droppedRouters = new Set(
       own.flatMap((route) => {
         const stop = stopOf.get(route.key);
         return route.resourceBackend ||
           (stop && stopAnswer(stop, route, sources.emptyServices) === "dropped")
-          ? [route.key]
+          ? [routerOf(route)]
           : [];
       })
+    );
+    const dropped = new Set(
+      own
+        .filter((route) => droppedRouters.has(routerOf(route)))
+        .map((route) => route.key)
     );
     const stops = own.flatMap((route): Finding[] => {
       const stop = stopOf.get(route.key);

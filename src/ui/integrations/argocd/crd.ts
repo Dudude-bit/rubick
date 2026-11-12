@@ -123,8 +123,10 @@ export const crd: CrdView = {
         return applicationSetColumns;
       case "appproject":
         return projectColumns;
-      default:
+      case "application":
         return applicationColumns;
+      default:
+        return [];
     }
   },
 };

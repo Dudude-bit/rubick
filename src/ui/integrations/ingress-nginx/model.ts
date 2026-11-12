@@ -92,6 +92,13 @@ export interface NginxRoute {
   /** `Kind/name` where this path routes to an API object rather than a Service. */
   resourceBackend: string | null;
   tlsSecret: string | null;
+  /**
+   * The Ingress has a `spec.tls` section. nginx then gives every host of its
+   * rules a certificate and the redirect to it: the Secret a block names for
+   * the host, else one it picks, its default where no listed Secret covers
+   * the host. So this is not {@link tlsSecret} being set.
+   */
+  tls: boolean;
   annotations: AnnotationReading[];
   /** Set only on an Ingress that declares itself one. */
   canary: Canary | null;
@@ -274,6 +281,7 @@ function routesFrom(ingress: IngressInfo, index: number, t: T): NginxRoute[] {
           : null,
         resourceBackend: path.resourceBackend,
         tlsSecret: tlsSecretFor(ingress, host),
+        tls: ingress.tlsConfigs.length > 0,
         annotations,
         canary,
         createdAt: ingress.createdAt,
@@ -302,6 +310,7 @@ function routesFrom(ingress: IngressInfo, index: number, t: T): NginxRoute[] {
       },
       resourceBackend: fallback.resourceBackend,
       tlsSecret: tlsSecretFor(ingress, null),
+      tls: ingress.tlsConfigs.length > 0,
       annotations,
       canary,
       createdAt: ingress.createdAt,
@@ -388,7 +397,7 @@ function clearFinding(
   sources: NginxSources,
   host: string | null
 ): Finding | "tlsUnknown" | null {
-  if (routes.some((route) => route.tlsSecret)) return null;
+  if (routes.some((route) => route.tls)) return null;
   // Something in front holds the certificate, and the hop into the cluster is
   // plaintext by design; or what is in front could not be read.
   const edge = edgeTls(host, sources).at;
@@ -554,7 +563,7 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
           route.service !== null &&
           !backingReadIn(sources, route.service.namespace)
       ),
-      tls: tlsSecrets[0]
+      tls: own.some((route) => route.tls)
         ? ownTls(tlsSecrets, sources.certificates)
         : clear === "tlsUnknown"
           ? { at: "unknown" as const }

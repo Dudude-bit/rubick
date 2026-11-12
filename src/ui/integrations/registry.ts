@@ -412,6 +412,20 @@ export interface RelatedObject {
   cluster?: string | null;
 }
 
+/**
+ * Thrown by an `object.related` supplier that read part of its answer: the
+ * rows it has, and the failure that cost the rest. The panel draws the rows
+ * and says the list is short, where an empty remainder would read as "none".
+ */
+export class RelatedShort extends Error {
+  constructor(
+    readonly related: RelatedObject[],
+    cause: unknown
+  ) {
+    super("related objects read in part", { cause });
+  }
+}
+
 /** One way in to a Service, as the object that routes it states it. */
 export interface ServiceRoute {
   /** The hostname a client types. */
@@ -1123,8 +1137,11 @@ export interface CrdView {
   // No `status` here on purpose: there was one, and no surface read it. A
   // verdict belongs in a column, which without a `cell` is drawn as a badge.
   /**
-   * The columns for one of its kinds. Every vendor has a default for a kind
-   * it does not recognise, because a CRD group grows faster than this file.
+   * The columns for one of its kinds, and none for a kind it does not
+   * describe: the list then draws the printer columns the CRD declares.
+   * Another kind's columns as the default drew a PeerAuthentication with an
+   * AuthorizationPolicy's action. `crd-columns.test.ts` holds every vendor
+   * to it.
    */
   columnsFor: (kind: string) => CrdColumn[];
 }

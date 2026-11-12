@@ -101,15 +101,6 @@ const poolerColumns: CrdColumn[] = [
   },
 ];
 
-const defaultColumns: CrdColumn[] = [
-  {
-    id: "phase",
-    header: "phase",
-    accessor: (resource) => getValueByPath(resource, "status.phase"),
-    cell: orNotWritten,
-  },
-];
-
 export const crd: CrdView = {
   matches: matchByGroup(GROUP),
   columnsFor: (kind) => {
@@ -122,8 +113,10 @@ export const crd: CrdView = {
         return scheduledColumns;
       case "Pooler":
         return poolerColumns;
+      // An ImageCatalog has no phase and a Database declares its own
+      // columns: "phase: not written" over either said the wrong thing.
       default:
-        return defaultColumns;
+        return [];
     }
   },
 };
