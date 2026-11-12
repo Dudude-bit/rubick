@@ -132,7 +132,10 @@ export function useResourceWatch<
   const [dropped, setDropped] = useState(0);
   // Outlives the stream: a renewal or re-enable subscribes again under the
   // same key, and only an answer may end the failure the consumer was told of.
-  const failedFor = useRef<QueryKey | null>(null);
+  // By what the key says, not by which array says it: a scope left and come
+  // back to is a new array naming the same stream, and by identity its
+  // failure was never this stream's to end.
+  const failedFor = useRef<string | null>(null);
   // Latest callbacks captured via refs so flipping a useState in
   // either callback doesn't tear down the subscription.
   const onErrorRef = useRef(onError);
@@ -181,10 +184,11 @@ export function useResourceWatch<
     let again: ReturnType<typeof setTimeout> | null = null;
     // Tracks whether the last stream state was a failure, so `onRecovered`
     // fires once per failure→recovery transition and not on every event.
-    let inFailedState = failedFor.current === queryKey;
+    const subscription = JSON.stringify(queryKey);
+    let inFailedState = failedFor.current === subscription;
     const fail = () => {
       inFailedState = true;
-      failedFor.current = queryKey;
+      failedFor.current = subscription;
     };
     // The rows a resync has delivered so far, held here rather than in
     // the cache until the backend says the burst is complete: by key as

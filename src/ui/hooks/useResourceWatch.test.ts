@@ -57,6 +57,7 @@ import {
   type Keep,
   type Kept,
 } from "./useResourceWatch";
+import { useWatchedList } from "./useWatchedList";
 import { testQueryClient } from "@/test/render";
 import { credentialsRenewed } from "@/lib/credentials";
 import { LAG_WAIT_MS } from "@/lib/events";
@@ -902,6 +903,92 @@ describe("useResourceWatch", () => {
 
     // Cache reflects both applied events.
     expect(rowsIn(client)!.map((i) => i.name)).toEqual(["x", "y"]);
+  });
+
+  /**
+   * A list's key is built again each time its scope changes, so the scope a
+   * reader left and came back to is the same stream under a new array. Its
+   * failure was remembered by the array, the new stream never counted as
+   * failing, and the list that was told "failed" was never told "recovered":
+   * it polled beside a healthy watch for as long as the page stayed open.
+   * Fails if the stream of a scope come back to does not end the failure
+   * that scope's last stream reported.
+   */
+  it("ends the failure of a scope the reader left and came back to", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    const onError = vi.fn();
+    const onRecovered = vi.fn();
+    subscribeMock
+      .mockResolvedValueOnce("stream-a")
+      .mockResolvedValueOnce("stream-b")
+      .mockResolvedValueOnce("stream-a-again");
+    const { rerender } = renderHook(
+      ({ queryKey }) =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey,
+          onError,
+          onRecovered,
+        }),
+      {
+        wrapper: makeWrapper(client),
+        initialProps: { queryKey: ["configmaps", "default"] as QueryKey },
+      }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    emitFailed("stream-a", "connection reset");
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+
+    rerender({ queryKey: ["configmaps", "other"] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    rerender({ queryKey: ["configmaps", "default"] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(3));
+    expect(onRecovered).not.toHaveBeenCalled();
+
+    emit("stream-a-again", "applied", { name: "x", namespace: "default" });
+
+    await waitFor(() => expect(onRecovered).toHaveBeenCalledTimes(1));
+  });
+
+  /** The same round trip as the list sees it: polling, then live again. Fails if the list stays on the timer beside a watch that answers. */
+  it("puts a list back on its watch once the scope it came back to answers", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    subscribeMock
+      .mockResolvedValueOnce("stream-a")
+      .mockResolvedValueOnce("stream-b")
+      .mockResolvedValueOnce("stream-a-again");
+    const { result, rerender } = renderHook(
+      ({ queryKey }) =>
+        useWatchedList<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey,
+          detail: () => [],
+          reportFailure: () => {},
+        }),
+      {
+        wrapper: makeWrapper(client),
+        initialProps: { queryKey: ["configmaps", "default"] as QueryKey },
+      }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    emitFailed("stream-a", "connection reset");
+    await waitFor(() => expect(result.current.live).toBe(false));
+
+    rerender({ queryKey: ["configmaps", "other"] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    rerender({ queryKey: ["configmaps", "default"] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(3));
+    expect(result.current).toMatchObject({ live: false, watchFailed: true });
+
+    emit("stream-a-again", "applied", { name: "x", namespace: "default" });
+
+    await waitFor(() =>
+      expect(result.current).toMatchObject({ live: true, refresh: false })
+    );
   });
 
   /**
