@@ -54,10 +54,10 @@ where
     let here = state.here()?;
     let served = here.served(group, plural).await?.ok_or_else(not_served)?;
 
-    let ctx = if !served.namespaced {
-        ResourceContext::held(&here.client, None, false)?
-    } else {
+    let ctx = if served.namespaced {
         ResourceContext::held(&here.client, namespace, !listing)?
+    } else {
+        ResourceContext::held(&here.client, None, false)?
     };
 
     let answer = request(ctx.dynamic_api_for_resource(&served.resource, !served.namespaced)).await;

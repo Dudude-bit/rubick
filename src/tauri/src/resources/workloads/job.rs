@@ -249,9 +249,9 @@ mod tests {
     use super::*;
     use k8s_openapi::api::batch::v1::{JobSpec, JobStatus};
 
-    /// The list carried no owner, so a CronJob's page took every Job whose
+    /// The list carried no owner, so a `CronJob`'s page took every Job whose
     /// name began with its own: `backup` claimed the runs of
-    /// `backup-nightly`. Fails if a Job does not name the CronJob that
+    /// `backup-nightly`. Fails if a Job does not name the `CronJob` that
     /// controls it, or names an owner that is not one.
     #[test]
     fn a_job_names_the_cronjob_that_controls_it_and_no_other_owner() {
