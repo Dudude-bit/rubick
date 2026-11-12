@@ -2225,6 +2225,7 @@ export const ru: Catalogue = {
     kickerScreen: "Снимок экрана",
     created: "Создан",
     stillReading: "На момент отчёта ещё читалось.",
+    rowsNotWhole: "В этих строках не всё, что запрашивалось.",
     shareScreen: "Поделиться этим экраном",
     rowsMore: {
       one: "Ещё {n} строка есть в приложении.",

@@ -52,6 +52,7 @@ import {
   keepWatched,
   namespaceOfList,
   noneWhereAnswered,
+  unreadNamespaceWords,
   whole,
 } from "@/lib/namespace-scope";
 import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
@@ -529,13 +530,7 @@ export function ResourceList<
   const listPartial = !partial
     ? null
     : [
-        ...unread.map(
-          (missing) =>
-            `${t("empty", "couldNotReadInNamespace", {
-              label,
-              namespace: missing.namespace,
-            })} (${verbatim(missing.message)})`
-        ),
+        ...unreadNamespaceWords(t, label, unread),
         ...(more
           ? [t("empty", "printedMore", { count: resources.length })]
           : []),

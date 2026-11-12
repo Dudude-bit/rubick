@@ -1052,9 +1052,23 @@ function DataTableInner<TData extends RowData>({
           t
         )
       : "";
+  // What the table is told of its own read stands in where the screen that
+  // owns it said no more: a skeleton or a partial footer on screen is never
+  // a whole, empty list in the file.
   useShareSection(share ? `table:${tableId}` : null, () =>
     share
-      ? tableSection(table as never, { ...share, search: globalFilter }, t)
+      ? tableSection(
+          table as never,
+          {
+            ...share,
+            unread:
+              share.unread ?? (isLoading ? t("share", "stillReading") : null),
+            partial:
+              share.partial ?? (partial ? t("share", "rowsNotWhole") : null),
+            search: globalFilter,
+          },
+          t
+        )
       : null
   );
   const isClickable = !!(getRowHref || onRowClick);

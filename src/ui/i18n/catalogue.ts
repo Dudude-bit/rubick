@@ -2128,6 +2128,7 @@ export const en = {
     kickerScreen: "Snapshot",
     created: "Created",
     stillReading: "Still being read when the report was made.",
+    rowsNotWhole: "Not everything that was asked for is in these rows.",
     shareScreen: "Share this screen",
     rowsMore: {
       one: "{n} more row is in the app.",

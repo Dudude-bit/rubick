@@ -9,7 +9,13 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 import type { HelmRelease } from "@/generated/types";
+import type { PlacedSection } from "@/lib/report-parts";
+import { unreadLines } from "@/lib/report-parts";
 import { renderWithRouter } from "@/test/render";
 import { HelmReleasesTab } from "./HelmReleasesTab";
 
@@ -27,20 +33,29 @@ const release = (name: string): HelmRelease => ({
   unreadable: null,
 });
 
+let collect: (() => PlacedSection[]) | null = null;
+function Probe() {
+  collect = useScreenSections();
+  return null;
+}
+
 function mount(props: Partial<Parameters<typeof HelmReleasesTab>[0]> = {}) {
   return renderWithRouter(
-    <HelmReleasesTab
-      releases={[]}
-      isLoading={false}
-      error={null}
-      helmCliAvailable={true}
-      onRefetch={vi.fn()}
-      onShowHistory={vi.fn()}
-      onUpgrade={vi.fn()}
-      onRollback={vi.fn()}
-      onUninstall={vi.fn()}
-      {...props}
-    />,
+    <ScreenShareProvider>
+      <HelmReleasesTab
+        releases={[]}
+        isLoading={false}
+        error={null}
+        helmCliAvailable={true}
+        onRefetch={vi.fn()}
+        onShowHistory={vi.fn()}
+        onUpgrade={vi.fn()}
+        onRollback={vi.fn()}
+        onUninstall={vi.fn()}
+        {...props}
+      />
+      <Probe />
+    </ScreenShareProvider>,
     { at: "/c/test/helm", route: "/c/$cluster/helm" }
   );
 }
@@ -109,6 +124,42 @@ describe("the releases tab beside a namespace it could not read", () => {
       screen.getByText("1 row, from the namespaces that answered")
     ).toBeInTheDocument();
     expect(screen.queryByText("1 row")).toBeNull();
+  });
+});
+
+/**
+ * The notice above the table named the namespace that refused its Secrets,
+ * and the shared file wrote "Releases 1" and "Everything this report names
+ * was read": the table registered a title and nothing of its read. Fails if
+ * the file's section does not carry what the screen says of the same rows.
+ */
+describe("what the releases tab hands to Share", () => {
+  it("names the namespace that did not answer and gives no count", async () => {
+    await mount({
+      releases: [release("api")],
+      unread: [
+        { namespace: "shared", code: "FORBIDDEN", message: "secrets denied" },
+      ],
+    });
+    const [section] = collect!();
+    expect(section.partial).toBe(
+      "Could not read Helm releases in shared. (secrets denied)"
+    );
+    expect(section.count).toBeNull();
+    expect(unreadLines([section])).toHaveLength(1);
+  });
+
+  it("says a first read still in flight is not an empty list", async () => {
+    await mount({ isLoading: true });
+    const [section] = collect!();
+    expect(section.unread).toBe("Still being read when the report was made.");
+  });
+
+  it("gives the whole count when every namespace answered", async () => {
+    await mount({ releases: [release("api")] });
+    const [section] = collect!();
+    expect(section.count).toBe(1);
+    expect(unreadLines([section])).toEqual([]);
   });
 });
 

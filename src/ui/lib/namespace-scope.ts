@@ -28,6 +28,7 @@
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { listWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
+import { verbatim } from "@/lib/error-utils";
 import { narrowingHelps, type ResourceKind } from "@/lib/resource-registry";
 
 /**
@@ -160,6 +161,24 @@ export function answeredIn(
   unread: readonly UnreadNamespace[]
 ): string[] {
   return scope.filter((name) => !unread.some((u) => u.namespace === name));
+}
+
+/**
+ * The unread-namespace notices as one sentence each, for the file a screen
+ * shares: its reader sees no notice, only what the table says of itself.
+ */
+export function unreadNamespaceWords(
+  t: T,
+  label: string,
+  unread: readonly UnreadNamespace[]
+): string[] {
+  return unread.map(
+    (missing) =>
+      `${t("empty", "couldNotReadInNamespace", {
+        label,
+        namespace: missing.namespace,
+      })} (${verbatim(missing.message)})`
+  );
 }
 
 /**

@@ -3066,4 +3066,49 @@ describe("a table offered to the screen's Share", () => {
     fireEvent.click(probe);
     expect(probe.textContent).toBe("2,1");
   });
+
+  /**
+   * A screen told its table the rows were partial, or still loading, and
+   * registered it for Share with a title alone: the footer said "from the
+   * namespaces that answered" and the file said the whole count, or
+   * "Nothing here", with everything read. Fails if what the table is told
+   * of its read stops reaching the file when the screen gives no words.
+   */
+  it("says in the file what it is told of its read, with or without the screen's words", async () => {
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    await wrap(
+      <ScreenShareProvider>
+        <DataTable
+          columns={columns}
+          data={DATA}
+          share={{ title: "A" }}
+          partial
+        />
+        <DataTable
+          columns={columns}
+          data={[]}
+          share={{ title: "B" }}
+          isLoading
+        />
+        <DataTable
+          columns={columns}
+          data={DATA}
+          share={{ title: "C", partial: "Could not read pods in team-c." }}
+          partial
+        />
+        <Probe />
+      </ScreenShareProvider>
+    );
+    const [a, b, c] = collect!();
+    expect(a.partial).toBe(
+      "Not everything that was asked for is in these rows."
+    );
+    expect(a.count).toBeNull();
+    expect(b.unread).toBe("Still being read when the report was made.");
+    expect(c.partial).toBe("Could not read pods in team-c.");
+  });
 });
