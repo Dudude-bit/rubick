@@ -50,6 +50,8 @@ export interface LogSource {
    * it has already read the status of.
    */
   started?: boolean;
+  /** The pod's uid. Another one under the same name is the pod made again. */
+  uid?: string;
 }
 
 export const sourceKey = (source: LogSource) =>
@@ -130,9 +132,6 @@ interface UseLogStreamOptions {
    */
   onWiped?: () => void;
 }
-
-/** Not a character any pod, namespace or container name may carry. */
-const SOURCE_SEP = "\u0000";
 
 interface UseLogStreamResult {
   logs: StreamedLogLine[];
@@ -289,7 +288,23 @@ interface Session {
    * `retry` is what empties it.
    */
   refused: Set<string>;
+  /** Sources seen before their container started. */
+  unstarted: Set<string>;
+  /** source key -> the uid of the pod its lane reads. */
+  uidOf: Map<string, string>;
   unlistens: Array<() => void>;
+}
+
+/** Stops a lane's stream so that `sync` opens it again, reading on from its last line. */
+function letGo(s: Session, key: string, id: string) {
+  s.opened.delete(key);
+  s.again.add(key);
+  s.sourceOf.delete(id);
+  s.live.delete(id);
+  s.lastEpoch.delete(id);
+  s.after.delete(id);
+  s.catching.delete(id);
+  void commands.stopLogStream(id).catch(() => {});
 }
 
 export function useLogStream({
@@ -334,43 +349,42 @@ export function useLogStream({
   // Callers build these arrays inline (`pod.containers.map(c => c.name)`),
   // so their identity changes every render. Serialised, the effects below
   // move on a real change and on nothing else.
-  const sourcesKey = (
-    givenSources ??
-    (containers ?? []).map<LogSource>((container) => ({
-      pod: podName ?? "",
-      namespace,
-      container,
-    }))
-  )
-    // The started flag is in the change key and not in `sourceKey`: it is
-    // not part of a stream's identity, it is the reason to try again.
-    .map(
-      (source) =>
-        `${sourceKey(source)}${
-          source.started === undefined ? "" : source.started ? "+" : "!"
-        }`
-    )
-    .join(SOURCE_SEP);
+  // The started flag and the uid are in the change key and not in
+  // `sourceKey`: they are not part of a stream's identity, they are the
+  // reasons to try it again.
+  const sourcesKey = JSON.stringify(
+    (
+      givenSources ??
+      (containers ?? []).map<LogSource>((container) => ({
+        pod: podName ?? "",
+        namespace,
+        container,
+      }))
+    ).map((source) => [
+      source.namespace,
+      source.pod,
+      source.container,
+      source.started ?? null,
+      source.uid ?? null,
+    ])
+  );
   const sources = useMemo<LogSource[]>(
     () =>
-      sourcesKey === ""
-        ? []
-        : sourcesKey.split(SOURCE_SEP).map((key) => {
-            const mark = key.endsWith("+")
-              ? true
-              : key.endsWith("!")
-                ? false
-                : undefined;
-            const [ns, pod, ...rest] = (
-              mark === undefined ? key : key.slice(0, -1)
-            ).split("/");
-            return {
-              namespace: ns,
-              pod,
-              container: rest.join("/"),
-              started: mark,
-            };
-          }),
+      (
+        JSON.parse(sourcesKey) as [
+          string,
+          string,
+          string,
+          boolean | null,
+          string | null,
+        ][]
+      ).map(([ns, pod, container, started, uid]) => ({
+        namespace: ns,
+        pod,
+        container,
+        started: started ?? undefined,
+        uid: uid ?? undefined,
+      })),
     [sourcesKey]
   );
   const sourcesRef = useRef(sources);
@@ -446,27 +460,54 @@ export function useLogStream({
           )
         );
       }
-      for (const key of [...s.refused]) {
-        if (!wantedKeys.has(key)) s.refused.delete(key);
+      for (const kept of [s.refused, s.unstarted, s.uidOf]) {
+        for (const key of [...kept.keys()]) {
+          if (!wantedKeys.has(key)) kept.delete(key);
+        }
       }
-      // A container that was still starting when the pane opened is worth
-      // asking again now that it is not. Nothing else about the source has
-      // changed, so only this releases it.
-      for (const source of wanted) {
-        if (source.started === true) s.refused.delete(sourceKey(source));
+      // Two things make a lane worth asking again with nothing else about
+      // it changed: its container has started since it was asked, which the
+      // API server answers through the stream, so the lane is still held as
+      // opened; and its pod was made again under the same name.
+      const again = wanted.filter((source) => {
+        const key = sourceKey(source);
+        // An open in flight is answered first; the next pass sees the change.
+        if (s.opened.get(key) === "") return false;
+        const before = s.uidOf.get(key);
+        if (source.uid !== undefined) s.uidOf.set(key, source.uid);
+        if (source.started === false) s.unstarted.add(key);
+        const started = source.started === true && s.unstarted.delete(key);
+        if (before !== undefined && before !== (source.uid ?? before)) {
+          return true;
+        }
+        return (
+          started &&
+          (s.refused.has(key) ||
+            failuresRef.current.some(
+              (failure) =>
+                failure.kind === "broken" && sameSource(failure, source)
+            ))
+        );
+      });
+      for (const source of again) {
+        const key = sourceKey(source);
+        const id = s.opened.get(key);
+        s.refused.delete(key);
+        if (id === undefined) s.again.add(key);
+        else letGo(s, key, id);
       }
-      setFailures((prev) =>
-        prev.filter(
-          (failure) =>
-            !wanted.some(
-              (source) =>
-                source.started === true &&
-                source.pod === failure.pod &&
-                source.container === failure.container &&
-                failure.kind === "broken"
-            )
-        )
-      );
+      if (again.length > 0) {
+        setFailures((prev) =>
+          prev.filter(
+            (failure) => !again.some((source) => sameSource(failure, source))
+          )
+        );
+        setReads((prev) => {
+          const next = new Map(prev);
+          for (const source of again) next.delete(sourceKey(source));
+          return next;
+        });
+      }
       const added = wanted.filter((src) => {
         const key = sourceKey(src);
         return !s.opened.has(key) && !s.refused.has(key);
@@ -624,6 +665,8 @@ export function useLogStream({
       high: -Infinity,
       catching: new Set(),
       refused: new Set(),
+      unstarted: new Set(),
+      uidOf: new Map(),
       unlistens: [],
     };
     session.current = s;
@@ -756,16 +799,7 @@ export function useLogStream({
             ([key, id]) => id !== "" && !stopped.has(key)
           );
           if (lanes.length === 0) return;
-          for (const [key, id] of lanes) {
-            s.opened.delete(key);
-            s.again.add(key);
-            s.sourceOf.delete(id);
-            s.live.delete(id);
-            s.lastEpoch.delete(id);
-            s.after.delete(id);
-            s.catching.delete(id);
-            void commands.stopLogStream(id).catch(() => {});
-          }
+          for (const [key, id] of lanes) letGo(s, key, id);
           setReads((prev) => {
             const next = new Map(prev);
             for (const [key] of lanes) next.delete(key);

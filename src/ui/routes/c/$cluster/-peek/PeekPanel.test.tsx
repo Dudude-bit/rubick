@@ -1640,6 +1640,29 @@ describe("PeekPanel tabs", () => {
     });
   });
 
+  /**
+   * The peek draws the same pane as the pod's page, and stays open while a
+   * StatefulSet puts the pod back under its name. Fails if the peek's pane is
+   * not told which pod of the name it reads.
+   */
+  it("asks for the log of a pod re-created under the same name", async () => {
+    await wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    await openTab("Logs");
+    await waitFor(() =>
+      expect(commands.streamPodLogs).toHaveBeenCalledTimes(1)
+    );
+
+    vi.mocked(commands.getPod).mockResolvedValue(
+      buildPod({ uid: "uid-recreated" })
+    );
+    await act(() => wrap.client.invalidateQueries());
+
+    await waitFor(() =>
+      expect(commands.streamPodLogs).toHaveBeenCalledTimes(2)
+    );
+  });
+
   // An empty black pane is indistinguishable from a broken one; a pod whose
   // containers never started has to say so instead.
   it("explains the silence rather than opening an empty log pane", async () => {

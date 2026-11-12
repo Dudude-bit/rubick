@@ -620,6 +620,66 @@ function fireBatch(
 
 const START = Date.parse("2026-08-06T12:00:00.000Z");
 
+describe("a pod's own pane when the pod is made again under its name", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  const waiting = container("app", {
+    state: { type: "waiting", reason: "ContainerCreating", message: null },
+    started: false,
+    ready: false,
+  });
+
+  /**
+   * A StatefulSet restart, or the page's own Restart: the page stays and is
+   * handed the new pod. The pane was keyed by the name alone, so it stayed on
+   * "is gone, nothing left to reconnect to" beside a Running header. Fails if
+   * the pane does not ask for the new pod's log.
+   */
+  it("reads the new pod's log and takes back that the pod is gone", async () => {
+    const { rerender } = await mount(<LogViewer {...props} podUid="first" />);
+    await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
+    act(() => fireFailure("gone", "default/log-demo-7f9 stopped streaming."));
+    await screen.findByText(/Stream ended: log-demo-7f9\/app is gone/);
+    expect(commands.streamPodLogs).toHaveBeenCalledTimes(1);
+
+    await rerender(<LogViewer {...props} podUid="second" />);
+
+    await waitFor(() =>
+      expect(commands.streamPodLogs).toHaveBeenCalledTimes(2)
+    );
+    expect(screen.queryByTestId("log-stream-failure")).toBeNull();
+  });
+
+  /**
+   * The new pod is usually still creating its container when the page first
+   * sees it. Fails if the pane then waits for a click that the workload
+   * pane never needed.
+   */
+  it("asks again by itself once the new pod's container has started", async () => {
+    const { rerender } = await mount(
+      <LogViewer {...props} podUid="second" containers={[waiting]} />
+    );
+    await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
+    act(() =>
+      fireFailure(
+        "broken",
+        'container "app" is waiting to start: ContainerCreating'
+      )
+    );
+    await screen.findByTestId("log-stream-failure");
+
+    await rerender(<LogViewer {...props} podUid="second" />);
+
+    await waitFor(() =>
+      expect(commands.streamPodLogs).toHaveBeenCalledTimes(2)
+    );
+    expect(screen.queryByTestId("log-stream-failure")).toBeNull();
+  });
+});
+
 describe("a text query", () => {
   beforeEach(() => {
     for (const k of Object.keys(listeners)) delete listeners[k];

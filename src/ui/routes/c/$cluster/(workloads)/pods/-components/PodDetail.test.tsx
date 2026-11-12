@@ -1674,6 +1674,30 @@ describe("a pod page runs nothing in the container until the reader asks on it",
   );
 
   /**
+   * The Logs pane stays through a re-creation and has to be told which pod
+   * of the name it reads. Fails if the page hands it the new pod and the pane
+   * goes on holding the stream of the deleted one.
+   */
+  it("asks for the log of a pod re-created under the same name", async () => {
+    const answer = vi.mocked(invoke).getMockImplementation()!;
+    let streams = 0;
+    vi.mocked(invoke).mockImplementation(async (command, args) =>
+      command === "stream_pod_logs" ? `log-${++streams}` : answer(command, args)
+    );
+    await arrive("/c/prod/pods/shop/cart-a");
+    await clickTab(/^Logs/);
+    expect(streams).toBe(1);
+
+    served = { ...running("cart-a"), uid: "uid-recreated" } as PodInfo;
+    await nextRead();
+
+    expect(streams).toBe(2);
+    expect(invoke).toHaveBeenCalledWith("stop_log_stream", {
+      streamId: "log-1",
+    });
+  });
+
+  /**
    * Shell in a peek is an ask about the pod the peek showed. Fails if it
    * opens a shell in a pod re-created under the name before the page read it.
    */

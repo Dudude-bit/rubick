@@ -27,6 +27,7 @@ export type LaneLabelMode = "colour" | "short" | "full";
 export interface LanePod {
   name: string;
   namespace: string;
+  uid?: string;
   containers: ContainerInfo[];
   node: string | null;
   /** The Job that ran it, for a CronJob's lanes. */
@@ -37,6 +38,7 @@ export function lanePodOf(pod: PodInfo): LanePod {
   return {
     name: pod.name,
     namespace: pod.namespace,
+    uid: pod.uid,
     containers: podContainers(pod),
     node: pod.nodeName,
     run:
@@ -114,6 +116,7 @@ export function sourcesOf(pods: LanePod[]): LogSource[] {
       // this the refusal is permanent for the life of the pane, sitting
       // beside a pod list that has been showing it Running for ten minutes.
       started: hasStarted(container),
+      uid: pod.uid,
     }))
   );
 }

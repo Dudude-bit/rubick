@@ -1144,6 +1144,7 @@ export function PodDetail() {
               <LogViewer
                 key={`logs:${logContainer ?? ""}`}
                 podName={pod.name}
+                podUid={pod.uid}
                 namespace={pod.namespace}
                 containers={podContainers(pod)}
                 soloContainer={logContainer}
