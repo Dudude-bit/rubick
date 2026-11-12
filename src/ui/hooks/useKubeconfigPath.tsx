@@ -76,9 +76,7 @@ export function useKubeconfigPath() {
    * without asking for confirmation, so both owe the reader a way back
    * that does not require having memorised the old value.
    */
-  const restore = async (previous: string[] | string | null) => {
-    const list =
-      previous === null ? [] : Array.isArray(previous) ? previous : [previous];
+  const restore = async (list: string[]) => {
     try {
       if (list.length > 0) await commands.setKubeconfigPaths(list);
       else await commands.clearKubeconfigPath();
@@ -95,7 +93,7 @@ export function useKubeconfigPath() {
     }
   };
 
-  const undo = (previous: string[] | string | null) => (
+  const undo = (previous: string[]) => (
     <ToastAction
       altText={t("settings", "undoKubeconfigChange")}
       onClick={() => void restore(previous)}
@@ -104,18 +102,26 @@ export function useKubeconfigPath() {
     </ToastAction>
   );
 
+  /**
+   * Every file in force before a change, which is what Undo owes back: the
+   * single-path field holds only the first of several. Captured before the
+   * write, because the query it comes from is invalidated by `reload`
+   * before the toast is built.
+   */
+  const before = () => ({ previous: pinned.data ?? [] });
+  const was = (previous: string[]) =>
+    previous.length > 0
+      ? t("settings", "wasPath", { path: shownPath(previous.join(", ")) })
+      : t("settings", "wasDefaultLookup");
+
   const setPath = useMutation({
     mutationFn: (path: string) => commands.setKubeconfigPath(path),
-    // Captured before the write, because the query it comes from is
-    // invalidated by `reload` before the toast is built.
-    onMutate: () => ({ previous: override.data ?? null }),
+    onMutate: before,
     onSuccess: async (_result, _path, context) => {
       await changed();
       toast({
         title: t("settings", "kubeconfigUpdated"),
-        description: context.previous
-          ? t("settings", "wasPath", { path: shownPath(context.previous) })
-          : t("settings", "wasDefaultLookup"),
+        description: was(context.previous),
         action: undo(context.previous),
       });
     },
@@ -128,18 +134,13 @@ export function useKubeconfigPath() {
    */
   const setPaths = useMutation({
     mutationFn: (paths: string[]) => commands.setKubeconfigPaths(paths),
-    onMutate: () => ({ previous: pinned.data ?? [] }),
-    onSuccess: async (_result, paths, context) => {
+    onMutate: before,
+    onSuccess: async (_result, _paths, context) => {
       await changed();
       toast({
         title: t("settings", "kubeconfigUpdated"),
-        description:
-          context.previous.length > 0
-            ? t("settings", "wasPath", {
-                path: shownPath(context.previous.join(", ")),
-              })
-            : t("settings", "wasDefaultLookup"),
-        action: undo(paths.length === 0 ? null : context.previous),
+        description: was(context.previous),
+        action: undo(context.previous),
       });
     },
     onError: failed(t("settings", "setKubeconfigFailed")),
@@ -147,13 +148,14 @@ export function useKubeconfigPath() {
 
   const clearPath = useMutation({
     mutationFn: () => commands.clearKubeconfigPath(),
-    onMutate: () => ({ previous: override.data ?? null }),
+    onMutate: before,
     onSuccess: async (_result, _vars, context) => {
       await changed();
       toast({
         title: t("settings", "kubeconfigUpdated"),
         description: t("settings", "revertedToDefault"),
-        action: context.previous ? undo(context.previous) : undefined,
+        action:
+          context.previous.length > 0 ? undo(context.previous) : undefined,
       });
     },
     onError: failed(t("settings", "clearKubeconfigFailed")),

@@ -8,6 +8,7 @@ vi.mock("@/lib/commands", () => ({
     getKubeconfigPath: vi.fn(async () => null),
     getKubeconfigPaths: vi.fn(async () => []),
     getKubeconfigSource: vi.fn(async () => ({ candidates: [] })),
+    setKubeconfigPath: vi.fn(async () => undefined),
     setKubeconfigPaths: vi.fn(async () => undefined),
     clearKubeconfigPath: vi.fn(async () => undefined),
     listContexts: vi.fn(async () => [{ name: "acme-staging" }]),
@@ -27,9 +28,8 @@ vi.mock("@/lib/commands", () => ({
 
 vi.mock("@/lib/host", () => ({ pickPath: vi.fn(async () => null) }));
 
-vi.mock("@/components/ui/use-toast", () => ({
-  useToast: () => ({ toast: vi.fn() }),
-}));
+const toast = vi.hoisted(() => vi.fn());
+vi.mock("@/components/ui/use-toast", () => ({ useToast: () => ({ toast }) }));
 
 import { commands } from "@/lib/commands";
 import { testQueryClient } from "@/test/render";
@@ -108,5 +108,59 @@ describe("changing the kubeconfig files while connected", () => {
     expect(commands.listContexts).toHaveBeenCalled();
     expect(commands.connectCluster).not.toHaveBeenCalled();
     expect(cluster().isConnected).toBe(true);
+  });
+});
+
+/**
+ * Undo read the single-path field, which holds only the first of several
+ * pinned files, and for the last file removed it asked for the default
+ * lookup: "Kubeconfig restored" over two of three files gone, or over the
+ * removed file still missing. Fails if Undo puts back anything but every
+ * file that was pinned before the change.
+ */
+describe("Undo after a kubeconfig change", () => {
+  const pinned = ["/home/dana/work", "/home/dana/home", "/home/dana/lab"];
+
+  /** Presses Undo on the toast the change raised. */
+  async function undoAfter(
+    files: string[],
+    change: (hook: ReturnType<typeof useKubeconfigPath>) => void
+  ) {
+    vi.clearAllMocks();
+    vi.mocked(commands.getKubeconfigPath).mockResolvedValue(files[0]);
+    vi.mocked(commands.getKubeconfigPaths).mockResolvedValue(files);
+    const { result } = mount();
+    await waitFor(() => expect(result.current.paths).toEqual(files));
+
+    act(() => change(result.current));
+    await waitFor(() => expect(toast).toHaveBeenCalled());
+    const raised = toast.mock.calls[0][0];
+    vi.mocked(commands.setKubeconfigPaths).mockClear();
+    vi.mocked(commands.clearKubeconfigPath).mockClear();
+    await act(() => raised.action.props.onClick());
+    return raised;
+  }
+
+  it("pins every file again after going back to the default lookup", async () => {
+    await undoAfter(pinned, (hook) => hook.clearPath());
+    expect(commands.setKubeconfigPaths).toHaveBeenCalledWith(pinned);
+  });
+
+  it("pins every file again after another file replaced them, and says which they were", async () => {
+    const raised = await undoAfter(pinned, (hook) =>
+      hook.setPath("/home/dana/other")
+    );
+    expect(raised.description).toContain("/home/dana/lab");
+    expect(commands.setKubeconfigPaths).toHaveBeenCalledWith(pinned);
+  });
+
+  it("pins the last file again after it was removed", async () => {
+    await undoAfter(["/home/dana/work"], (hook) =>
+      hook.remove("/home/dana/work")
+    );
+    expect(commands.setKubeconfigPaths).toHaveBeenCalledWith([
+      "/home/dana/work",
+    ]);
+    expect(commands.clearKubeconfigPath).not.toHaveBeenCalled();
   });
 });
