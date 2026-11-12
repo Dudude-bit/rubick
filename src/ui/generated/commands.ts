@@ -664,6 +664,7 @@ export async function getPodLogs(
 }
 
 export async function savePodLog(
+  context: string,
   podName: string,
   namespace: string | null,
   container: string,
@@ -671,6 +672,7 @@ export async function savePodLog(
   previous: boolean
 ): Promise<string> {
   return invoke<string>("save_pod_log", {
+    context,
     podName,
     namespace,
     container,
@@ -1585,10 +1587,11 @@ export async function uncordonNode(name: string): Promise<void> {
 }
 
 export async function startNodeDrain(
+  context: string,
   name: string,
   options: DrainOptions
 ): Promise<DrainHandle> {
-  return invoke<DrainHandle>("start_node_drain", { name, options });
+  return invoke<DrainHandle>("start_node_drain", { context, name, options });
 }
 
 export async function nodeDrainSubscribed(drainId: string): Promise<void> {

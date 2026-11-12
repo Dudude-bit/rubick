@@ -71,7 +71,7 @@ import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate, formatTimeUnit } from "@/lib/utils";
-import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
+import type { CronJobDetailInfo, JobInfo, PodInfo } from "@/generated/types";
 import type { CompositionTone } from "@/components/object/detail-blocks";
 import { useRefusals } from "@/hooks/useRefusals";
 import { toldRuns } from "@/lib/create-refusal";
@@ -270,6 +270,7 @@ function idleOf(
 }
 
 const NO_JOBS: JobInfo[] = [];
+const NO_PODS: PodInfo[] = [];
 
 /**
  * The namespace's Jobs, watched while the page is shown: a change to one of
@@ -300,7 +301,7 @@ function useRunsWatch(namespace: string | undefined, name: string | undefined) {
     enabled: connected && visible && !!namespace && !!name,
     subscribe,
     queryKey,
-    detail: (job) => (name && isRunOf(name, job.name) ? reads : []),
+    detail: (job) => (name && isRunOf(name, job) ? reads : []),
     recount: false,
     behind: true,
   });
@@ -436,8 +437,8 @@ export function CronJobDetail() {
   // reads as "this CronJob has run nothing", which is the one thing the pane
   // may not say on a read that did not happen.
   const {
-    data: pods = [],
-    error: podsError,
+    data: jobPods = NO_PODS,
+    error: listError,
     isPending: podsPending,
   } = useLiveQuery({
     queryKey: ["cronjob-pods", namespace, name],
@@ -452,13 +453,20 @@ export function CronJobDetail() {
         selector: null,
         nodeName: null,
       });
-      return all.filter((pod) => isPodOfRun(name, pod));
+      return all.filter((pod) => pod.workload?.kind === "Job");
     },
     enabled: !!namespace && !!name && inFlight,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  // Which Job is this CronJob's is said by the runs. Where they were not
+  // read, neither are its pods: "none" would be an answer nobody gave.
+  const pods = useMemo(
+    () => jobPods.filter((pod) => isPodOfRun(jobs, pod)),
+    [jobPods, jobs]
+  );
+  const podsError = listError ?? jobsError;
 
   const deliveryQuery = deliveryOfKind(ResourceType.CronJob, cronJob);
   const intercept = useDeliveryIntercept(deliveryQuery);

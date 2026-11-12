@@ -1288,6 +1288,7 @@ export interface JobInfo {
   status: string;
   failure: JobFailure | null;
   createdAt: string | null;
+  cronJob: string | null;
 }
 
 export interface DaemonSetDetailInfo {

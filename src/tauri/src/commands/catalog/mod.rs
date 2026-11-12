@@ -22,7 +22,7 @@ use crate::client::served::Served;
 use crate::client::ASKS_AT_ONCE;
 use crate::commands::helpers::{editor_yaml, scope_of, ResourceContext};
 use crate::error::{Error, Result};
-use crate::state::AppState;
+use crate::state::{AppState, Here};
 
 pub use table::{ResourceTable, TableColumn, TableRow};
 
@@ -90,33 +90,37 @@ fn forget(state: &AppState) {
 const GROUP_DEADLINE: Duration = Duration::from_secs(10);
 
 pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
-    catalog_within(state, GROUP_DEADLINE).await
+    catalog_on(&state.here()?).await
+}
+
+/// The catalogue of one cluster, groups and kinds alike: the groups are a
+/// wait, and the window may be on another cluster when the kinds are asked.
+pub(crate) async fn catalog_on(here: &Here<'_>) -> Result<ApiCatalog> {
+    catalog_within(here, GROUP_DEADLINE).await
 }
 
 /// The kinds of the groups `wanted` picks and nothing else, short names
 /// left out: for a reader that holds the rest and asks about what is new.
 pub(crate) async fn catalog_of(
-    state: &AppState,
+    here: &Here<'_>,
     wanted: impl Fn(&str) -> bool,
 ) -> Result<ApiCatalog> {
-    let client = ResourceContext::for_list(state, None)?.client;
-    let listed = timeout(GROUP_DEADLINE, client.list_api_groups())
+    let listed = timeout(GROUP_DEADLINE, here.client.list_api_groups())
         .await
         .map_err(|_| Error::ReadDeadline {
             after_secs: GROUP_DEADLINE.as_secs(),
         })??;
     let names = group_names(listed).filter(|group| wanted(group)).collect();
-    Ok(read_groups(state, names, &HashMap::new(), GROUP_DEADLINE).await)
+    Ok(read_groups(here, names, &HashMap::new(), GROUP_DEADLINE).await)
 }
 
-async fn catalog_within(state: &AppState, deadline: Duration) -> Result<ApiCatalog> {
-    let client = ResourceContext::for_list(state, None)?.client;
+async fn catalog_within(here: &Here<'_>, deadline: Duration) -> Result<ApiCatalog> {
     let (groups, short) = futures::join!(
-        client.list_api_groups(),
-        timeout(deadline, short_names(&client))
+        here.client.list_api_groups(),
+        timeout(deadline, short_names(&here.client))
     );
     let names = group_names(groups?).collect();
-    Ok(read_groups(state, names, &short.unwrap_or_default(), deadline).await)
+    Ok(read_groups(here, names, &short.unwrap_or_default(), deadline).await)
 }
 
 /// The core group, then every group the cluster lists.
@@ -126,7 +130,7 @@ fn group_names(listed: APIGroupList) -> impl Iterator<Item = String> {
 
 /// Each group read on its turn; one that fails is named in `unread`.
 async fn read_groups(
-    state: &AppState,
+    here: &Here<'_>,
     names: Vec<String>,
     short: &HashMap<(String, String), Vec<String>>,
     deadline: Duration,
@@ -137,7 +141,7 @@ async fn read_groups(
     let turns = &Semaphore::new(ASKS_AT_ONCE);
     let answers = join_all(names.iter().map(|group| async move {
         let _turn = turns.acquire().await;
-        timeout(deadline, state.served_recommended(group))
+        timeout(deadline, here.served_recommended(group))
             .await
             .unwrap_or(Err(Error::ReadDeadline {
                 after_secs: deadline.as_secs(),
@@ -467,7 +471,7 @@ mod tests {
         })
         .await;
         let started = std::time::Instant::now();
-        let found = catalog_within(&state, Duration::from_secs(1))
+        let found = catalog_within(&state.here().expect("connected"), Duration::from_secs(1))
             .await
             .expect("catalog");
         assert!(
@@ -519,9 +523,12 @@ mod tests {
         .await;
 
         // Five rounds of eight: the last starts after the deadline has run.
-        let found = catalog_within(&state, Duration::from_millis(600))
-            .await
-            .expect("catalog");
+        let found = catalog_within(
+            &state.here().expect("connected"),
+            Duration::from_millis(600),
+        )
+        .await
+        .expect("catalog");
 
         assert_eq!(found.unread, []);
         assert_eq!(found.entries.len(), 40);

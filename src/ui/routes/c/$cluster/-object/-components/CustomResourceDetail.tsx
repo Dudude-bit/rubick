@@ -195,6 +195,8 @@ export function CustomResourceDetail({
     enabled: isConnected && !!crdName && !!name,
     staleTime: STALE_TIMES.resourceDetail,
     refresh: "resourceDetail",
+    // No watch follows a custom resource by name.
+    rereadsGone: true,
   });
 
   useRereadWith(

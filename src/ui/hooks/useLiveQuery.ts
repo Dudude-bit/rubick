@@ -127,7 +127,8 @@ export type LiveQueryOptions<
    * A NotFound ends the polling: the object is gone, and asking at the
    * page's rate only says so again. Set where nothing else will say the
    * object is back, and the read is asked again at the slowest rate a still
-   * page reads at, and when the reader returns to the window.
+   * page reads at, and when the reader returns to the window. A page with no
+   * timer of its own (`refresh: false`) is asked again at that rate too.
    */
   rereadsGone?: boolean;
 };
@@ -496,7 +497,7 @@ export function useLiveQuery<
   const everyMs = stopped
     ? false
     : gone
-      ? visible && base !== false && longestInterval(base)
+      ? visible && longestInterval(base === false ? 0 : base)
       : effectiveInterval(base, {
           visible,
           focused,

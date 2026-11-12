@@ -30,6 +30,70 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
+/// The cluster a command began on: its name, its client and its discovery,
+/// read together and once. A command that waits and then asks again goes
+/// through this: the window's cluster is another one after a tab change, and
+/// a second read of it sends the rest of the command there.
+pub struct Here<'a> {
+    pub context: String,
+    pub client: Arc<kube::Client>,
+    index: &'a crate::client::served::ServedIndex,
+}
+
+impl Here<'_> {
+    /// See [`AppState::served`].
+    pub async fn served(
+        &self,
+        group: &str,
+        plural: &str,
+    ) -> Result<Option<crate::client::served::Served>> {
+        self.index
+            .resource(&self.context, &self.client, group, plural)
+            .await
+    }
+
+    /// See [`AppState::served_kind`].
+    pub async fn served_kind(
+        &self,
+        group: &str,
+        plural: &str,
+    ) -> Result<Option<crate::client::served::ServedKind>> {
+        self.index
+            .kind(&self.context, &self.client, group, plural)
+            .await
+    }
+
+    /// See [`AppState::served_kinds`].
+    pub async fn served_kinds(
+        &self,
+        group: &str,
+    ) -> Result<Option<Vec<crate::client::served::ServedKind>>> {
+        self.index.kinds(&self.context, &self.client, group).await
+    }
+
+    /// See [`AppState::served_recommended`].
+    pub async fn served_recommended(
+        &self,
+        group: &str,
+    ) -> Result<
+        Option<
+            Vec<(
+                kube::discovery::ApiResource,
+                kube::discovery::ApiCapabilities,
+            )>,
+        >,
+    > {
+        self.index
+            .recommended(&self.context, &self.client, group)
+            .await
+    }
+
+    /// See [`AppState::served_answer`].
+    pub fn served_answer<T>(&self, group: &str, answer: kube::Result<T>) -> kube::Result<T> {
+        self.index.answered(&self.context, group, answer)
+    }
+}
+
 /// Global application state
 pub struct AppState {
     /// Application configuration
@@ -179,13 +243,22 @@ impl AppState {
         let _ = self.event_tx.send(event);
     }
 
-    /// Create a new auth session
+    /// Create a new auth session. `None` for a sign-in somebody would be
+    /// shown when the window does not point at `context`: the connect it is
+    /// for was let go of before it got this far, when there was no session
+    /// yet to cancel, and its terminal or browser tab would open for nobody.
     pub fn create_auth_session(
         &self,
         context: &str,
         flow: &str,
         seen: bool,
-    ) -> (String, tokio::sync::oneshot::Receiver<()>) {
+    ) -> Option<(String, tokio::sync::oneshot::Receiver<()>)> {
+        // With a disconnect, which cancels what is here and then moves the
+        // window: one that began between the two would be missed by both.
+        let _lifecycle = self.cluster_lifecycle.lock();
+        if seen && self.get_current_context().as_deref() != Some(context) {
+            return None;
+        }
         let session_id = Uuid::new_v4().to_string();
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
         let session = AuthSessionControl {
@@ -195,7 +268,7 @@ impl AppState {
             cancel_tx,
         };
         self.auth_sessions.insert(session_id.clone(), session);
-        (session_id, cancel_rx)
+        Some((session_id, cancel_rx))
     }
 
     /// Remove an auth session
@@ -239,12 +312,16 @@ impl AppState {
 
     /// The current context's client, or why there is none.
     pub fn current_client(&self) -> Result<Arc<kube::Client>> {
-        let context = self.get_current_context().ok_or_else(|| {
-            crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
-        })?;
+        Ok(self.here()?.client)
+    }
+
+    /// The client held for `context`, wherever the window is. What runs
+    /// longer than one call asks by the name it was started on: the window's
+    /// cluster is another one after a tab change.
+    pub fn client_of(&self, context: &str) -> Result<Arc<kube::Client>> {
         self.client_manager
-            .get_client(&context)
-            .ok_or(crate::error::Error::NotConnected(context))
+            .get_client(context)
+            .ok_or_else(|| crate::error::Error::NotConnected(context.to_string()))
     }
 
     /// Where `plural` in `group` is served on the current cluster; `None`
@@ -258,11 +335,7 @@ impl AppState {
         group: &str,
         plural: &str,
     ) -> Result<Option<crate::client::served::Served>> {
-        let (context, client) = self.current()?;
-        self.client_manager
-            .served()
-            .resource(&context, &client, group, plural)
-            .await
+        self.here()?.served(group, plural).await
     }
 
     /// `plural` in `group` on the current cluster, with every version that
@@ -276,11 +349,7 @@ impl AppState {
         group: &str,
         plural: &str,
     ) -> Result<Option<crate::client::served::ServedKind>> {
-        let (context, client) = self.current()?;
-        self.client_manager
-            .served()
-            .kind(&context, &client, group, plural)
-            .await
+        self.here()?.served_kind(group, plural).await
     }
 
     /// Every kind `group` serves on the current cluster, with each version
@@ -293,11 +362,7 @@ impl AppState {
         &self,
         group: &str,
     ) -> Result<Option<Vec<crate::client::served::ServedKind>>> {
-        let (context, client) = self.current()?;
-        self.client_manager
-            .served()
-            .kinds(&context, &client, group)
-            .await
+        self.here()?.served_kinds(group).await
     }
 
     /// Every kind `group` serves on the current cluster, at the version
@@ -317,11 +382,7 @@ impl AppState {
             )>,
         >,
     > {
-        let (context, client) = self.current()?;
-        self.client_manager
-            .served()
-            .recommended(&context, &client, group)
-            .await
+        self.here()?.served_recommended(group).await
     }
 
     /// Discovery as read for `context`, for a reader that asks it of a
@@ -350,15 +411,16 @@ impl AppState {
         }
     }
 
-    fn current(&self) -> Result<(String, Arc<kube::Client>)> {
+    /// The window's cluster as it is now, to go on asking after a wait.
+    pub fn here(&self) -> Result<Here<'_>> {
         let context = self.get_current_context().ok_or_else(|| {
             crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
         })?;
-        let client = self
-            .client_manager
-            .get_client(&context)
-            .ok_or_else(|| crate::error::Error::NotConnected(context.clone()))?;
-        Ok((context, client))
+        Ok(Here {
+            client: self.client_of(&context)?,
+            context,
+            index: self.client_manager.served(),
+        })
     }
 
     /// A context's client was replaced or let go: a connect, a disconnect,

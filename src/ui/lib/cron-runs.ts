@@ -7,16 +7,21 @@ export const cronJobRunsKey = (
 ) => ["cronjob-jobs", namespace, name] as const;
 
 /**
- * Whether a Job is one of a CronJob's runs. The list command carries no
- * owner references, so the name is the only link there is: the controller's
- * `<cronjob>-<minute>`, or whatever Run now was given after the same stem.
+ * Whether a Job is one of a CronJob's runs: the CronJob controls it. Its
+ * name does not say: `backup-nightly-28901234` begins with `backup-` too,
+ * and is another CronJob's.
  */
-export const isRunOf = (cronJob: string, job: string) =>
-  job.startsWith(`${cronJob}-`);
+export const isRunOf = (cronJob: string, job: Pick<JobInfo, "cronJob">) =>
+  job.cronJob === cronJob;
 
 /** Whether a pod is one of a CronJob's runs', by the Job that owns it. */
-export const isPodOfRun = (cronJob: string, pod: Pick<PodInfo, "workload">) =>
-  pod.workload?.kind === "Job" && isRunOf(cronJob, pod.workload.name);
+export const isPodOfRun = (
+  runs: readonly Pick<JobInfo, "name">[],
+  pod: Pick<PodInfo, "workload">
+) => {
+  const owner = pod.workload;
+  return owner?.kind === "Job" && runs.some((run) => run.name === owner.name);
+};
 
 /** The Jobs a CronJob still holds, as its page, its peek and its events read them. */
 export async function readCronJobRuns(
@@ -29,5 +34,5 @@ export async function readCronJobRuns(
     fieldSelector: null,
     limit: null,
   });
-  return all.filter((job) => isRunOf(name, job.name));
+  return all.filter((job) => isRunOf(name, job));
 }

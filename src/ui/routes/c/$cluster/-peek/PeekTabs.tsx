@@ -409,7 +409,7 @@ function PeekJobsTab({ target }: { target: PeekTarget }) {
         fieldSelector: null,
         limit: null,
       });
-      return jobs.filter((job: JobInfo) => isRunOf(target.name, job.name));
+      return jobs.filter((job: JobInfo) => isRunOf(target.name, job));
     },
     enabled: !!namespace,
     staleTime: STALE_TIMES.resourceList,

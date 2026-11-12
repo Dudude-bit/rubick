@@ -1,8 +1,9 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { HelmReleaseDetail } from "@/generated/types";
+import { useWindowActivity } from "@/lib/window-activity";
 import { WITHHELD_MARKER } from "@/lib/withheld";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
@@ -55,6 +56,38 @@ const open = (tab = "history") =>
     at: `/c/prod/helm/native/team-a/web?tab=${tab}`,
     route: "/c/$cluster/helm/$source/$namespace/$name",
   });
+
+describe("a release its page found gone", () => {
+  /**
+   * The page read its release once and never again: uninstalled and
+   * installed again under its name, it stayed "no longer exists" until the
+   * page was opened anew. Fails if a release the page found gone is not
+   * asked for again when the reader comes back.
+   */
+  it("is found once it is installed again under its name", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_helm_release_detail") {
+        if (detail.answer) return detail.answer;
+        throw { code: "NOT_FOUND", message: "release: not found" };
+      }
+      if (command === "get_helm_history") return [];
+      if (command.startsWith("list_")) return [];
+      return undefined;
+    });
+    detail.answer = null;
+    await open("overview");
+    await screen.findByRole("button", { name: "Go back" });
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+
+    detail.answer = web;
+    act(() => useWindowActivity.setState({ focused: false }));
+    act(() => useWindowActivity.setState({ focused: true }));
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "web"
+    );
+  });
+});
 
 /** The release as the backend hands it over with a private key withheld. */
 const keyed: HelmReleaseDetail = {

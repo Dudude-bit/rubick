@@ -52,8 +52,12 @@ pub(crate) fn is_cluster_scoped(kind: &str) -> bool {
 /// kind is not installed — the sidebar should have kept the caller away,
 /// but a stale window may still ask.
 pub(crate) async fn served_api_resource(kind: &str, state: &AppState) -> Result<ApiResource> {
+    served_on(kind, &state.here()?).await
+}
+
+async fn served_on(kind: &str, here: &crate::state::Here<'_>) -> Result<ApiResource> {
     let plural = plural_of(kind)?;
-    let mine: Vec<_> = state
+    let mine: Vec<_> = here
         .served_kind(GATEWAY_API_GROUP, plural)
         .await?
         .into_iter()
@@ -91,19 +95,19 @@ async fn on_served<T, Fut>(
 where
     Fut: Future<Output = kube::Result<T>>,
 {
-    let api_resource = served_api_resource(kind, state).await?;
+    // Discovery is a wait, and a delete follows it.
+    let here = state.here()?;
+    let api_resource = served_on(kind, &here).await?;
 
     let cluster_scoped = is_cluster_scoped(kind);
     let ctx = if cluster_scoped {
-        ResourceContext::for_list(state, None)?
-    } else if listing {
-        ResourceContext::for_list(state, namespace)?
+        ResourceContext::held(&here.client, None, false)?
     } else {
-        ResourceContext::for_command(state, namespace)?
+        ResourceContext::held(&here.client, namespace, !listing)?
     };
 
     let answer = request(ctx.dynamic_api_for_resource(&api_resource, cluster_scoped)).await;
-    Ok((answered(state, answer)?, api_resource))
+    Ok((here.served_answer(GATEWAY_API_GROUP, answer)?, api_resource))
 }
 
 /// List responses strip apiVersion/kind off every item; the readers report
@@ -708,5 +712,45 @@ mod tests {
         assert_eq!(asked(), Some(2));
         assert!(get().await.is_err());
         assert_eq!(asked(), Some(3), "a namespace's 404 sent it back too");
+    }
+
+    /// Discovery is a wait, and the window was on another cluster when it
+    /// answered: the client was read after it, so a route's delete went to
+    /// the namesake route there. Fails if what follows discovery asks any
+    /// cluster but the one the command began on.
+    #[tokio::test]
+    async fn a_delete_goes_to_the_cluster_it_began_on_though_the_window_moved_meanwhile() {
+        use std::sync::{Arc, OnceLock};
+        const ROUTE: &str = "/apis/gateway.networking.k8s.io/v1/namespaces/default/httproutes/web";
+        let window = Arc::new(OnceLock::new());
+        let moved = window.clone();
+        let (state, hits) = connected(ServedIndex::default(), move |path, _| match path {
+            "/apis" => {
+                let current: &Arc<parking_lot::RwLock<Option<String>>> =
+                    moved.get().expect("the window");
+                *current.write() = Some("elsewhere".to_string());
+                (200, groups("v1", &["v1"]))
+            }
+            V1 => (200, resources("v1", &[("httproutes", "HTTPRoute", true)])),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        window.set(state.current_context.clone()).expect("unset");
+
+        let gone = super::on_served(
+            &state,
+            "HTTPRoute",
+            Some("default".to_string()),
+            false,
+            |api| async move { api.delete("web", &kube::api::DeleteParams::default()).await },
+        )
+        .await;
+
+        assert!(
+            matches!(gone, Err(ref error) if error.code() == "NOT_FOUND"),
+            "{:?}",
+            gone.err()
+        );
+        assert_eq!(hits.lock().unwrap().get(ROUTE), Some(&1));
     }
 }

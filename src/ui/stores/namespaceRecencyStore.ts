@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { persistedByName } from "@/lib/kept-by-name";
+
 const KEEP = 6;
 
 interface NamespaceRecencyState {
@@ -43,4 +45,13 @@ export const useNamespaceRecencyStore = create<NamespaceRecencyState>()(
       },
     }
   )
+);
+
+// The namespaces offered first are the last cluster's under this name.
+persistedByName((context) =>
+  useNamespaceRecencyStore.setState((state) => ({
+    recent: Object.fromEntries(
+      Object.entries(state.recent).filter(([name]) => name !== context)
+    ),
+  }))
 );

@@ -113,7 +113,13 @@ pub(super) async fn run_exec_auth(
     // credentials, then `MetadataServiceAccount`) — long enough for the
     // user to switch contexts first, and `AuthTerminalSessionCreated` then
     // lands as an orphan modal over whatever cluster they landed on.
-    let (session_id, mut cancel_rx) = state.create_auth_session(context, "exec", mode.is_seen());
+    let Some((session_id, mut cancel_rx)) =
+        state.create_auth_session(context, "exec", mode.is_seen())
+    else {
+        return Err(Error::Auth(AuthError::Kubeconfig(
+            "Authentication cancelled".to_string(),
+        )));
+    };
 
     // Race native cloud auth against the cancel signal. Dropping the
     // native_auth future at the select branch aborts gcp_auth's HTTP

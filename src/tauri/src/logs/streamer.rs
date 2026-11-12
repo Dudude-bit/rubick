@@ -149,6 +149,7 @@ impl LogStreamer {
         // wrote without a timestamp inherit it — kept or discarded, they
         // all move it — which is how the viewer places them too.
         let mut epoch_ms = Utc::now().timestamp_millis();
+        let opened_ms = epoch_ms;
 
         // After this the held client is a body being read, and the API
         // server does not re-check an admitted request's token, which is why
@@ -314,7 +315,11 @@ impl LogStreamer {
         if follow_ended {
             // The node's stamp on the last line heard, the clock `startedAt`
             // is written on; this machine's at the open only where none came.
-            let heard = DateTime::from_timestamp_millis(epoch_ms).unwrap_or_else(Utc::now);
+            let heard = Heard {
+                at: DateTime::from_timestamp_millis(epoch_ms).unwrap_or_else(Utc::now),
+                // Only a line's stamp moves it.
+                by_node: epoch_ms != opened_ms,
+            };
             let run = self
                 .run_after_follow(&namespace, &pod, &container, heard, said.is_none(), &cancel)
                 .await;
@@ -339,7 +344,7 @@ impl LogStreamer {
         namespace: &str,
         pod: &str,
         container: &str,
-        heard: DateTime<Utc>,
+        heard: Heard,
         settle: bool,
         cancel: &tokio_util::sync::CancellationToken,
     ) -> Option<Run> {
@@ -373,6 +378,14 @@ impl LogStreamer {
     }
 }
 
+/// When the follow was last heard, and on whose clock: the node's, off a
+/// line's stamp, or this machine's at the open where no stamped line came.
+#[derive(Debug, Clone, Copy)]
+struct Heard {
+    at: DateTime<Utc>,
+    by_node: bool,
+}
+
 /// The followed container's run, as the pod's status tells it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Run {
@@ -386,7 +399,7 @@ enum Run {
     Unread(String),
 }
 
-fn run_of(pod: &Pod, container: &str, heard: DateTime<Utc>) -> Run {
+fn run_of(pod: &Pod, container: &str, heard: Heard) -> Run {
     let found = pod.status.as_ref().and_then(|status| {
         status
             .container_statuses
@@ -396,12 +409,17 @@ fn run_of(pod: &Pod, container: &str, heard: DateTime<Utc>) -> Run {
             .flatten()
             .find(|entry| entry.name == container)
     });
-    let Some(state) = found.and_then(|entry| entry.state.as_ref()) else {
+    let Some((entry, state)) = found.and_then(|entry| Some((entry, entry.state.as_ref()?))) else {
         return Run::Unread(format!("the pod's status says nothing of {container}"));
     };
     match &state.running {
         Some(running) => match &running.started_at {
-            Some(at) if at.moment() > heard => Run::Over,
+            // `startedAt` is on the node's clock. Against this machine's, a
+            // clock behind the cluster's puts a run after its own follow: a
+            // container that never restarted has had this run and no other.
+            Some(at) if at.moment() > heard.at && (heard.by_node || entry.restart_count > 0) => {
+                Run::Over
+            }
             _ => Run::Same,
         },
         None if state.terminated.is_some() || state.waiting.is_some() => Run::Over,
@@ -957,6 +975,13 @@ mod follow_end_tests {
         pod_with(&serde_json::json!({ "running": { "startedAt": at } }))
     }
 
+    /// The same after `restarts` earlier runs.
+    fn running_again_since(at: &str, restarts: u32) -> (u16, String) {
+        let (code, pod) = running_since(at);
+        let counted = format!("\"restartCount\":{restarts}");
+        (code, pod.replace("\"restartCount\":0", &counted))
+    }
+
     fn running_long() -> (u16, String) {
         running_since("2026-10-07T06:21:00Z")
     }
@@ -1136,6 +1161,27 @@ mod follow_end_tests {
             failure,
             Some((StreamFailureKind::FollowStopped, String::new()))
         );
+    }
+
+    /// The same skew over a container that wrote nothing while followed: no
+    /// line gave the node's clock, so the run was dated by this machine's
+    /// and read as a later one, "gone, nothing to reconnect to" over a
+    /// container that never restarted. Fails if a first run is called over
+    /// on this machine's clock alone, or a later run is not called over.
+    #[tokio::test]
+    async fn a_quiet_follow_of_a_container_that_never_restarted_is_its_only_run() {
+        use chrono::SecondsFormat::Secs;
+        let started = (Utc::now() + chrono::Duration::seconds(30)).to_rfc3339_opts(Secs, true);
+
+        let (lines, failure) = follow(cluster("", running_since(&started))).await;
+        assert!(lines.is_empty());
+        assert_eq!(
+            failure,
+            Some((StreamFailureKind::FollowStopped, String::new()))
+        );
+
+        let (_, failure) = follow(cluster("", running_again_since(&started, 2))).await;
+        assert_eq!(failure.unwrap().0, StreamFailureKind::Gone);
     }
 
     #[tokio::test]

@@ -1,6 +1,8 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useRereadWith } from "@/hooks/useRereadWith";
 import { BadgeCheck, GitBranch, Info, ListTree, Tag } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
@@ -85,11 +87,13 @@ export function CrdDetail() {
   const goBack = () =>
     navigate(listLink(ResourceType.CustomResourceDefinition));
 
+  // No watch follows a definition by name, and this page has no timer: one
+  // made again under its name is only found by asking for it again.
   const {
     data: crd,
     isLoading,
     error,
-  } = useQuery({
+  } = useLiveQuery({
     queryKey: queryKeys.crd(name),
     queryFn: async () => {
       if (!name) throw new Error("CRD name is required");
@@ -100,7 +104,10 @@ export function CrdDetail() {
       }
     },
     enabled: !!name,
+    refresh: false,
+    rereadsGone: true,
   });
+  useRereadWith(queryKeys.crd(name), ["crd-yaml", name]);
 
   const { data: yaml } = useQuery({
     queryKey: ["crd-yaml", name],

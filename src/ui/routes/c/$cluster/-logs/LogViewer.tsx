@@ -7,6 +7,8 @@ import type { LogScope, UsageRange } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { shownPath } from "@/lib/hide-paths";
+import { useSurfaceVisible } from "@/lib/surface-visibility";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 import { initialFocus, type FocusReason } from "./focus";
@@ -102,7 +104,9 @@ const COLLAPSED_LINES = 50;
  * focus is in the query box or nowhere at all, and a shortcut that
  * needs the legend focused first is not a shortcut. Two guards keep it
  * honest: a digit typed into the query is a digit, and a viewer parked
- * behind a hidden tab must not answer for the one on screen.
+ * behind another tab must not answer for the one on screen. A parked pane
+ * is kept mounted and hidden by a class, so nothing in the DOM says it is
+ * off screen: the surface it is on does.
  */
 function useSoloShortcuts(
   root: React.RefObject<HTMLElement | null>,
@@ -110,7 +114,9 @@ function useSoloShortcuts(
   onSolo: (index: number) => void,
   onShowAll: () => void
 ) {
+  const onScreen = useSurfaceVisible();
   useEffect(() => {
+    if (!onScreen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (!/^[0-9]$/.test(event.key)) return;
@@ -137,7 +143,7 @@ function useSoloShortcuts(
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [root, count, onSolo, onShowAll]);
+  }, [root, count, onSolo, onShowAll, onScreen]);
 }
 
 interface LogViewerProps {
@@ -204,6 +210,9 @@ export function LogViewer({
 }: LogViewerProps) {
   const t = useT();
   const { toast } = useToast();
+  // The cluster the pane is drawn for: a Download outlasts the page, and the
+  // window's own is another one after a tab change.
+  const cluster = useClusterStore((s) => s.currentContext) ?? "";
   // Two panes in one: a pod's containers, or a workload's pods. `lanes`
   // is the switch, and every "which lane is this line in" question below
   // asks it once through `laneOf`.
@@ -802,6 +811,7 @@ export function LogViewer({
         // crosses IPC as ten thousand parsed lines just to become a file.
         saved.push(
           await commands.savePodLog(
+            cluster,
             target.pod,
             target.namespace,
             target.container,
@@ -821,6 +831,7 @@ export function LogViewer({
     if (notice)
       toast({ ...notice, description: shownPath(notice.description) });
   }, [
+    cluster,
     containers,
     lanes,
     namespace,

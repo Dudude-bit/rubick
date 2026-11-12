@@ -38,6 +38,7 @@ const job: JobInfo = {
   status: "Failed",
   failure: { reason: "BackoffLimitExceeded", message: null },
   createdAt: null,
+  cronJob: null,
 };
 
 describe("the rows a workload's own objects get, in the reader's language", () => {

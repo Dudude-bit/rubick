@@ -50,18 +50,18 @@ where
         namespace: String::new(),
     };
     let (plural, group) = plural_and_group(crd_name);
-    let served = state.served(group, plural).await?.ok_or_else(not_served)?;
+    // Discovery is a wait, and a delete or a patch follows it.
+    let here = state.here()?;
+    let served = here.served(group, plural).await?.ok_or_else(not_served)?;
 
-    let ctx = if !served.namespaced {
-        ResourceContext::for_list(state, None)?
-    } else if listing {
-        ResourceContext::for_list(state, namespace)?
+    let ctx = if served.namespaced {
+        ResourceContext::held(&here.client, namespace, !listing)?
     } else {
-        ResourceContext::for_command(state, namespace)?
+        ResourceContext::held(&here.client, None, false)?
     };
 
     let answer = request(ctx.dynamic_api_for_resource(&served.resource, !served.namespaced)).await;
-    state.served_answer(group, answer).map_err(Error::from)
+    here.served_answer(group, answer).map_err(Error::from)
 }
 
 /// `<plural>.<group>`, or a bare plural in the core group, as kubectl reads it.
@@ -404,5 +404,48 @@ mod tests {
         assert_eq!(asked(), Some(1));
         assert!(get(&state, "gone").await.is_err());
         assert_eq!(asked(), Some(2), "the 404 sent discovery back");
+    }
+
+    /// Discovery is a wait, and the window was on another cluster when it
+    /// answered: the client was read after it, so the delete went to the
+    /// namesake object there. Fails if what follows discovery asks any
+    /// cluster but the one the command began on.
+    #[tokio::test]
+    async fn a_delete_goes_to_the_cluster_it_began_on_though_the_window_moved_meanwhile() {
+        use crate::client::served::test_server::{connected, failure, groups, resources};
+        use crate::client::served::ServedIndex;
+        use std::sync::{Arc, OnceLock};
+        const ROUTE: &str = "/apis/gateway.networking.k8s.io/v1/namespaces/default/httproutes/web";
+        let window = Arc::new(OnceLock::new());
+        let moved = window.clone();
+        let (state, hits) = connected(ServedIndex::default(), move |path, _| match path {
+            "/apis" => {
+                let current: &Arc<parking_lot::RwLock<Option<String>>> =
+                    moved.get().expect("the window");
+                *current.write() = Some("elsewhere".to_string());
+                (200, groups("v1", &["v1"]))
+            }
+            "/apis/gateway.networking.k8s.io/v1" => {
+                (200, resources("v1", &[("httproutes", "HTTPRoute", true)]))
+            }
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        window.set(state.current_context.clone()).expect("unset");
+
+        let gone = super::on_served(
+            &state,
+            "httproutes.gateway.networking.k8s.io",
+            Some("default".to_string()),
+            false,
+            |api| async move { api.delete("web", &kube::api::DeleteParams::default()).await },
+        )
+        .await;
+
+        assert!(
+            matches!(gone, Err(ref error) if error.code() == "NOT_FOUND"),
+            "{gone:?}"
+        );
+        assert_eq!(hits.lock().unwrap().get(ROUTE), Some(&1));
     }
 }

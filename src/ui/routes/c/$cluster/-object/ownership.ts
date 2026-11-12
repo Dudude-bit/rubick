@@ -74,7 +74,15 @@ export function useLineage(
   const generic = useReadUidAt(
     queryKeys.servedObject(group, plural, namespace, name)
   );
-  const read = typed ?? generic;
+  // A custom resource's own page keeps its read under the CRD's name.
+  const custom = useReadUidAt(
+    queryKeys.customResource(
+      group ? `${plural}.${group}` : plural,
+      namespace,
+      name
+    )
+  );
+  const read = typed ?? generic ?? custom;
   const uid = query.data?.uid;
   const replaced = !!read && !!uid && read !== uid;
   useEffect(() => {

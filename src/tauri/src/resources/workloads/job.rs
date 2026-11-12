@@ -118,6 +118,9 @@ pub struct JobInfo {
     pub status: String,
     pub failure: Option<JobFailure>,
     pub created_at: Option<String>,
+    /// The `CronJob` whose run it is, by its controller reference. A name
+    /// says less: `backup-nightly-1` begins with `backup-` too.
+    pub cron_job: Option<String>,
 }
 
 impl From<&Job> for JobInfo {
@@ -138,6 +141,13 @@ impl From<&Job> for JobInfo {
             status: state.code().to_string(),
             failure: state.failure(),
             created_at: meta.creation_timestamp.as_ref().to_rfc3339_opt(),
+            cron_job: meta
+                .owner_references
+                .iter()
+                .flatten()
+                .find(|owner| owner.controller == Some(true))
+                .filter(|owner| owner.kind == "CronJob" && owner.api_version.starts_with("batch/"))
+                .map(|owner| owner.name.clone()),
         }
     }
 }
@@ -238,6 +248,36 @@ impl From<&JobCondition> for ConditionInfo {
 mod tests {
     use super::*;
     use k8s_openapi::api::batch::v1::{JobSpec, JobStatus};
+
+    /// The list carried no owner, so a `CronJob`'s page took every Job whose
+    /// name began with its own: `backup` claimed the runs of
+    /// `backup-nightly`. Fails if a Job does not name the `CronJob` that
+    /// controls it, or names an owner that is not one.
+    #[test]
+    fn a_job_names_the_cronjob_that_controls_it_and_no_other_owner() {
+        use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
+        let owned_by = |api_version: &str, kind: &str, controller: bool| {
+            let mut job = job(0, 0, Vec::new(), false);
+            job.metadata.owner_references = Some(vec![OwnerReference {
+                api_version: api_version.to_string(),
+                kind: kind.to_string(),
+                name: "backup-nightly".to_string(),
+                uid: "c".to_string(),
+                controller: Some(controller),
+                ..OwnerReference::default()
+            }]);
+            JobInfo::from(&job).cron_job
+        };
+
+        assert_eq!(
+            owned_by("batch/v1", "CronJob", true).as_deref(),
+            Some("backup-nightly")
+        );
+        assert_eq!(owned_by("batch/v1", "CronJob", false), None);
+        assert_eq!(owned_by("example.com/v1", "CronJob", true), None);
+        assert_eq!(owned_by("argoproj.io/v1alpha1", "Workflow", true), None);
+        assert_eq!(JobInfo::from(&job(0, 0, Vec::new(), false)).cron_job, None);
+    }
 
     fn job(failed: i32, active: i32, conditions: Vec<(&str, &str)>, suspend: bool) -> Job {
         Job {

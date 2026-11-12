@@ -191,16 +191,28 @@ pub async fn uncordon_node(name: String, state: State<'_, AppState>) -> Result<(
 ///
 /// Everything after this arrives as `drain-progress` / `drain-finished`
 /// events, including a cordon that was refused.
+///
+/// `context` is the cluster the dialog was opened on. The window's own may
+/// be another by the time this arrives, and a drain evicts.
 #[tauri::command]
 pub async fn start_node_drain(
+    context: String,
     name: String,
     options: DrainOptions,
     state: State<'_, AppState>,
 ) -> Result<DrainHandle> {
+    drain_on(&state, context, name, options)
+}
+
+fn drain_on(
+    state: &AppState,
+    context: String,
+    name: String,
+    options: DrainOptions,
+) -> Result<DrainHandle> {
     crate::validation::validate_dns_subdomain(&name)?;
-    let client = ResourceContext::for_list(&state, None)?.client;
+    let client = (*state.client_of(&context)?).clone();
     let clients = state.client_manager.clone();
-    let context = state.get_current_context().unwrap_or_default();
     let renewed = move || clients.get_client(&context).map(|held| (*held).clone());
     Ok(state.drain_manager.start(client, renewed, name, options))
 }
@@ -221,4 +233,72 @@ pub fn node_drain_subscribed(drain_id: String, state: State<'_, AppState>) -> Re
 #[tauri::command]
 pub fn cancel_node_drain(drain_id: String, state: State<'_, AppState>) {
     state.drain_manager.cancel(&drain_id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::served::test_server::{connected, failure};
+    use crate::client::served::ServedIndex;
+    use crate::state::AppEvent;
+    use std::time::Duration;
+
+    fn options() -> DrainOptions {
+        DrainOptions {
+            ignore_daemonsets: true,
+            evict_unmanaged_pods: false,
+            evict_pods_with_emptydir: false,
+        }
+    }
+
+    /// The dialog was opened on prod and the window is on another cluster by
+    /// the time the start arrives. The start took the window's cluster, so
+    /// the namesake node there was cordoned and its pods evicted. Fails if a
+    /// drain asked for one cluster starts on, or so much as asks, another.
+    #[tokio::test]
+    async fn a_drain_asked_for_another_cluster_is_not_started_on_the_windows() {
+        let (state, hits) =
+            connected(ServedIndex::default(), |_, _| failure(404, "NotFound")).await;
+
+        let refused = drain_on(&state, "prod".into(), "node-1".into(), options());
+
+        assert!(matches!(
+            refused,
+            Err(Error::NotConnected(context)) if context == "prod"
+        ));
+        assert_eq!(state.drain_manager.active_drains(), 0);
+        assert!(hits.lock().unwrap().is_empty());
+    }
+
+    /// The other half: the cluster asked for is the one cordoned, wherever
+    /// the window has got to. Fails if the window's cluster decides anything.
+    #[tokio::test]
+    async fn a_drain_runs_on_the_cluster_it_was_asked_for() {
+        let (state, hits) =
+            connected(ServedIndex::default(), |_, _| failure(404, "NotFound")).await;
+        state.set_current_context(Some("elsewhere".into()));
+        let mut events = state.event_tx.subscribe();
+
+        let handle = drain_on(&state, "fake".into(), "node-1".into(), options())
+            .expect("the cluster it names is held");
+        state
+            .drain_manager
+            .mark_subscribed(&handle.drain_id)
+            .expect("known");
+
+        loop {
+            let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+                .await
+                .expect("an ending within five seconds")
+                .expect("the channel is open");
+            if matches!(event, AppEvent::DrainFinished { .. }) {
+                break;
+            }
+        }
+        assert_eq!(
+            hits.lock().unwrap().get("/api/v1/nodes/node-1"),
+            Some(&1),
+            "the cordon went to the cluster the drain names"
+        );
+    }
 }

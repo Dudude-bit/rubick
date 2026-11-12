@@ -101,6 +101,21 @@ beforeEach(() => {
   });
 });
 
+describe("a drain started for one cluster", () => {
+  /** The backend ran every command on the window's cluster, and the window can be on another by the time the start arrives: the namesake node there was the one drained. Fails if the start does not name the cluster the dialog was opened on. */
+  it("names that cluster to the backend", async () => {
+    const { commands, startDrain } = await fresh();
+
+    await startDrain("prod", "node-7", OPTIONS);
+
+    expect(commands.startNodeDrain).toHaveBeenCalledWith(
+      "prod",
+      "node-7",
+      OPTIONS
+    );
+  });
+});
+
 describe("stopping a drain before anyone listened", () => {
   /** Stop pressed while the start was in flight: the cancel went out before the listeners, its ending was lost, and the subscribe that followed turned a cancelled drain into a red "Drain d1 not found". */
   it("says the drain was cancelled when Stop came before the handle", async () => {

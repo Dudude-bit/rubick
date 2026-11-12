@@ -37,6 +37,7 @@ vi.mock("@/lib/commands", () => ({
     stopLogStream: vi.fn(async () => undefined),
     logStreamSubscribed: vi.fn(async () => undefined),
     getPodLogs: vi.fn(async () => []),
+    savePodLog: vi.fn(async () => "/Users/me/Downloads/saved.log"),
     // The viewer asks the registry for `logs.history`, which reads what is
     // detected and what is configured. A cluster with neither is the
     // majority case and the one every test here but the history ones runs
@@ -56,6 +57,8 @@ import type {
   TerminationInfo,
 } from "@/generated/types";
 import type { StreamFailureKind } from "@/lib/stream-failure";
+import { SurfaceVisibility } from "@/lib/surface-visibility";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { renderWithProviders, renderWithRouter } from "@/test/render";
 import { LogViewer } from "./LogViewer";
@@ -1112,6 +1115,85 @@ describe("what the pane shows on open", () => {
       screen.getByRole("button", { name: "Show every line" })
     );
     expect(screen.queryByTestId("log-grouped-notice")).not.toBeInTheDocument();
+  });
+});
+
+describe("the digits that solo a container", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+  const pressed = () =>
+    within(screen.getByTestId("log-legend"))
+      .getAllByRole("button")
+      .map((chip) => chip.getAttribute("aria-pressed"))
+      .filter((state) => state !== null);
+  const pane = (onScreen: boolean) => (
+    <SurfaceVisibility.Provider value={onScreen}>
+      <LogViewer {...props} containers={[container("app"), container("db")]} />
+    </SurfaceVisibility.Provider>
+  );
+
+  /**
+   * A Logs tab once opened stays mounted behind the others, hidden by a
+   * class. Its guard looked for a `hidden` attribute that such a panel does
+   * not get, so a digit pressed on the Overview soloed a container in a pane
+   * nobody was looking at. Fails if a parked pane answers the shortcut, or
+   * the one on screen stops answering it.
+   */
+  it("are answered by the pane on screen and not by one parked behind a tab", async () => {
+    const { rerender } = await mount(pane(false));
+    await waitFor(() => {
+      expect(screen.getByTestId("log-legend")).toBeInTheDocument();
+    });
+    fireEvent.keyDown(window, { key: "1" });
+    expect(pressed()).toEqual(["true", "true"]);
+
+    rerender(pane(true));
+    fireEvent.keyDown(window, { key: "1" });
+    await waitFor(() => expect(pressed()).toEqual(["true", "false"]));
+  });
+});
+
+describe("Download on a pane with several containers", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+    useClusterStore.setState({ currentContext: "prod" });
+  });
+
+  /**
+   * One read per container, each on the backend's cluster of that moment:
+   * a tab change after the first read the rest from the namesake pod on the
+   * other cluster and saved them under this pod's name.
+   */
+  it("asks every container's log of the cluster the pane was on, though the window has moved", async () => {
+    const user = userEvent.setup();
+    vi.mocked(commands.savePodLog).mockImplementationOnce(async () => {
+      useClusterStore.setState({ currentContext: "staging" });
+      return "/Users/me/Downloads/first.log";
+    });
+    await mount(
+      <LogViewer {...props} containers={[container("app"), container("db")]} />
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("log-legend")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "More log actions" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Download the full log" })
+    );
+
+    await waitFor(() => expect(commands.savePodLog).toHaveBeenCalledTimes(2));
+    expect(
+      vi
+        .mocked(commands.savePodLog)
+        .mock.calls.map(([cluster, , , name]) => [cluster, name])
+    ).toEqual([
+      ["prod", "app"],
+      ["prod", "db"],
+    ]);
   });
 });
 

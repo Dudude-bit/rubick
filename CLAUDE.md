@@ -149,7 +149,10 @@ Claims here are settled by running things, not by reasoning about them.
   store, a ref or an open editor, is named with `keptByName` from
   `@/lib/kept-by-name`. A kubeconfig change can put another cluster behind
   the name (k3s calls every one `default`), and a holder not named there goes
-  on answering for the cluster before.
+  on answering for the cluster before. What is **persisted** under a context
+  name (pins, tell-me-when, recent namespaces) is named with
+  `persistedByName` instead: it is let go only for the one name the change
+  journal sees turn into another cluster, by its `kube-system` uid.
 - **The peek panel renders the same objects as the detail pages.** A fix on one
   leaves the other wrong; check both.
 - **A scroller sized in per cent does not scroll here.** `height: 100%`

@@ -8,6 +8,9 @@ import {
   MAX_JOURNAL_ENTRIES,
   useChangeJournalStore,
 } from "./changeJournalStore";
+import { useNamespaceRecencyStore } from "./namespaceRecencyStore";
+import { usePinnedServicesStore } from "./pinnedServicesStore";
+import { useTellMeWhenStore } from "./tellMeWhenStore";
 
 const T0 = Date.parse("2026-09-08T00:00:00Z");
 const MINUTE = 60_000;
@@ -27,6 +30,9 @@ const entry = (at: number, name = "api") => ({
 
 beforeEach(() => {
   useChangeJournalStore.setState({ entries: [], spans: {}, identities: {} });
+  usePinnedServicesStore.setState({ pins: [] });
+  useTellMeWhenStore.setState({ watches: [] });
+  useNamespaceRecencyStore.setState({ recent: {} });
 });
 
 describe("which cluster a context name turned out to be", () => {
@@ -59,6 +65,63 @@ describe("which cluster a context name turned out to be", () => {
     const state = useChangeJournalStore.getState();
     expect(state.entries).toHaveLength(1);
     expect(state.identities.dev).toBe("uid-1");
+  });
+
+  /**
+   * k3s names every cluster `default`. A kubeconfig swapped under the name
+   * left the pins, the things being watched for and the recent namespaces
+   * of the cluster before: its pinned Services were drawn as this cluster's
+   * namesakes, and a watch answered "rolled out" about another cluster's
+   * Deployment. Fails if anything persisted under the name outlives it, if
+   * another name's is taken with it, or if "could not tell" drops any.
+   */
+  it("lets go of what is persisted under a name once it is another cluster", () => {
+    const kept = () => ({
+      pins: usePinnedServicesStore.getState().pins.map((pin) => pin.context),
+      watches: useTellMeWhenStore.getState().watches.map((w) => w.context),
+      recent: Object.keys(useNamespaceRecencyStore.getState().recent),
+    });
+    const both = {
+      pins: ["default", "prod"],
+      watches: ["default", "prod"],
+      recent: ["default", "prod"],
+    };
+    for (const context of both.pins) {
+      usePinnedServicesStore.getState().pin({
+        context,
+        kind: "Deployment",
+        namespace: "shop",
+        name: "api",
+        pinnedAt: 1,
+      });
+      useTellMeWhenStore.getState().add({
+        id: context,
+        context,
+        kind: "Deployment",
+        namespace: "shop",
+        name: "api",
+        ask: "rollout",
+        startedAt: T0,
+        status: { state: "watching" },
+        baseline: null,
+      });
+      useNamespaceRecencyStore.getState().record(context, ["shop"]);
+    }
+    const store = useChangeJournalStore.getState();
+
+    store.seenCluster("default", "uid-1");
+    expect(kept()).toEqual(both);
+    store.seenCluster("default", null);
+    expect(kept()).toEqual(both);
+    store.seenCluster("default", "uid-1");
+    expect(kept()).toEqual(both);
+
+    useChangeJournalStore.getState().seenCluster("default", "uid-2");
+    expect(kept()).toEqual({
+      pins: ["prod"],
+      watches: ["prod"],
+      recent: ["prod"],
+    });
   });
 
   it("keeps what it has the first time it learns the cluster", () => {

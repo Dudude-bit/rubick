@@ -289,7 +289,13 @@ describe("a surface off screen, whatever else happens", () => {
 describe("an object its read found gone", () => {
   /** A read that answers NotFound until the object is made again. */
   const cluster = { there: false };
-  function Gone({ rereadsGone }: { rereadsGone?: boolean }) {
+  function Gone({
+    rereadsGone,
+    refresh = "resourceDetail",
+  }: {
+    rereadsGone?: boolean;
+    refresh?: "resourceDetail" | false;
+  }) {
     const { data, error } = useLiveQuery<string>({
       queryKey: ["gone"],
       queryFn: async () => {
@@ -299,7 +305,7 @@ describe("an object its read found gone", () => {
           code: "NOT_FOUND",
         });
       },
-      refresh: "resourceDetail",
+      refresh,
       staleTime: 0,
       rereadsGone,
     });
@@ -346,6 +352,27 @@ describe("an object its read found gone", () => {
     await advance(BACKOFF.cap);
     expect(reads).toBe(2);
     expect(screen.getByTestId("data")).toHaveTextContent("back");
+  });
+
+  /**
+   * A CRD's page and a Helm release's read once and have no timer: made
+   * again under its name, the object stayed "no longer exists" until the
+   * page was opened anew. Fails if a page that never polls is not asked
+   * again for an object it found gone, or goes on asking once it is back.
+   */
+  it("is asked for again on a page that has no timer of its own", async () => {
+    wrap(<Gone rereadsGone refresh={false} />);
+    await settle();
+    await advance(BACKOFF.cap);
+    expect(reads).toBe(2);
+
+    cluster.there = true;
+    await advance(BACKOFF.cap);
+    expect(reads).toBe(3);
+    expect(screen.getByTestId("data")).toHaveTextContent("back");
+
+    await advance(BACKOFF.cap * 3);
+    expect(reads).toBe(3);
   });
 
   /** The reader made it again in a terminal and came back. Fails if the page waits for its timer. */
