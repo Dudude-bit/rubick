@@ -311,6 +311,12 @@ impl DeploymentContainerInfo {
             .unwrap_or_default();
 
         let resources = DeploymentContainerResources::of(container);
+        let shown = |words: Option<&Vec<String>>| {
+            let words = words.into_iter().flatten();
+            words
+                .map(|word| crate::resources::shown_text(word))
+                .collect()
+        };
 
         Self {
             name: container.name.clone(),
@@ -320,8 +326,8 @@ impl DeploymentContainerInfo {
             resources,
             env: extract_env_vars(container),
             env_from: extract_env_from(container),
-            command: container.command.clone().unwrap_or_default(),
-            args: container.args.clone().unwrap_or_default(),
+            command: shown(container.command.as_ref()),
+            args: shown(container.args.as_ref()),
             probes: super::probe::ContainerProbes::of(container),
         }
     }
@@ -350,6 +356,34 @@ mod tests {
             restart_policy: restart_policy.map(str::to_string),
             ..Default::default()
         }
+    }
+
+    /// The Containers section of every workload and pod draws these three,
+    /// on the page, the peek and the list row. Fails if a private key
+    /// written as an `env` literal, in `command` or in `args` is handed out,
+    /// or an ordinary one is not.
+    #[test]
+    fn a_container_is_handed_out_without_a_key_written_into_its_env_or_its_command() {
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let env = |name: &str, value: &str| k8s_openapi::api::core::v1::EnvVar {
+            name: name.to_string(),
+            value: Some(value.to_string()),
+            value_from: None,
+        };
+        let written = Container {
+            env: Some(vec![env("SIGNING_KEY", KEY), env("MODE", "fast")]),
+            command: Some(vec!["sh".to_string(), format!("echo '{KEY}' > /k")]),
+            args: Some(vec!["--v=2".to_string(), KEY.to_string()]),
+            ..container("app", None)
+        };
+
+        let shown = DeploymentContainerInfo::declared(&written, ContainerPhase::App);
+
+        let marker = crate::resources::WITHHELD_MARKER;
+        let values: Vec<_> = shown.env.iter().map(|e| e.value.as_deref()).collect();
+        assert_eq!(values, [Some(marker), Some("fast")]);
+        assert_eq!(shown.command, ["sh", marker]);
+        assert_eq!(shown.args, ["--v=2", marker]);
     }
 
     /// A template declaring a mesh proxy in `initContainers`, which is how

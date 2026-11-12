@@ -97,14 +97,18 @@ pub fn withhold_strings(value: &mut Value) -> Vec<String> {
 /// text that does not read as YAML: its caller refuses it by the text.
 #[must_use]
 pub fn placeholders_in(values: &str) -> Vec<String> {
+    let tree = serde_yaml::from_str::<Value>(values);
+    tree.map_or_else(|_| Vec::new(), |mut tree| placeholders(&mut tree))
+}
+
+/// Where a tree still holds [`WITHHELD_MARKER`].
+pub(super) fn placeholders(tree: &mut Value) -> Vec<String> {
     let mut held = Vec::new();
-    if let Ok(mut tree) = serde_yaml::from_str::<Value>(values) {
-        strings(&mut tree, &mut String::new(), &mut |path, text| {
-            if text.trim() == WITHHELD_MARKER {
-                held.push(path.to_string());
-            }
-        });
-    }
+    strings(tree, &mut String::new(), &mut |path, text| {
+        if text.trim() == WITHHELD_MARKER {
+            held.push(path.to_string());
+        }
+    });
     held
 }
 
@@ -231,11 +235,13 @@ fn withhold_in_document(document: &mut Value) -> Vec<String> {
     if !(names("apiVersion") && names("kind")) {
         return withhold_strings(document);
     }
-    let mut keys = redact_private_keys(document);
+    // Items first: each has key maps of its own, named as an object names them.
+    let mut keys = Vec::new();
     let items = document.get_mut("items").and_then(Value::as_array_mut);
     for item in items.into_iter().flatten() {
         keys.extend(withhold_in_document(item));
     }
+    keys.extend(redact_private_keys(document));
     keys
 }
 

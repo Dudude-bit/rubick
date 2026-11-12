@@ -115,7 +115,9 @@ async fn controller_revisions(
                 containers: containers.containers,
                 init_containers: containers.init_containers,
                 template_annotations: annotations,
-                template: recorded_template(cr).map(bare),
+                template: recorded_template(cr)
+                    .map(bare)
+                    .map(crate::resources::shown_value),
                 created_at: cr.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
             }
         })
@@ -713,6 +715,33 @@ mod tests {
             "k"
         );
         assert_eq!(shown.get("$patch"), None);
+    }
+
+    /// The same comparison draws a `StatefulSet`'s recorded templates. Fails
+    /// if a key written as an `env` literal is in the one handed out.
+    #[tokio::test]
+    async fn a_recorded_template_reaches_the_page_without_a_private_key() {
+        const KEY: &str = include_str!("../../tests/fixtures/leaf.key.pem");
+        let mut recorded = template("db:5", "main", None);
+        recorded["spec"]["containers"][0]["env"][0] =
+            serde_json::json!({"name": "SIGNING_KEY", "value": KEY});
+        let state = a_set(template("db:6", "main", None), recorded).await;
+        let revisions = controller_revisions(
+            &state,
+            "StatefulSet".into(),
+            "db".into(),
+            Some("shop".into()),
+        )
+        .await
+        .expect("revisions");
+        let shown = revisions[0].template.as_ref().expect("a template");
+        let app = &shown["spec"]["containers"][0];
+        assert_eq!(app["env"][0]["value"], crate::resources::WITHHELD_MARKER);
+        assert_eq!(app["image"], "db:5");
+        assert_eq!(
+            revisions[0].containers[0].env[0].value.as_deref(),
+            Some(crate::resources::WITHHELD_MARKER)
+        );
     }
 
     #[test]

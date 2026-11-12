@@ -139,7 +139,8 @@ impl ReplicaSetInfo {
                 .data
                 .pointer("/spec/template")
                 .filter(|template| template.is_object())
-                .map(deployment_template_of),
+                .map(deployment_template_of)
+                .map(crate::resources::shown_value),
             conditions,
             pods_refused: status
                 .and_then(|s| s.conditions.as_deref())
@@ -222,6 +223,32 @@ mod tests {
         assert_eq!(app["lifecycle"]["stopSignal"], "SIGUSR1");
         assert_eq!(app["restartPolicyRules"][0]["action"], "Restart");
         assert_eq!(template["metadata"]["labels"].get(POD_TEMPLATE_HASH), None);
+    }
+
+    /// The Changes tab compares these templates leaf by leaf and draws both
+    /// sides. Fails if a key written as an `env` literal is in one.
+    #[test]
+    fn a_revisions_template_leaves_without_a_private_key() {
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let raw: DynamicObject = serde_json::from_value(serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "ReplicaSet",
+            "metadata": {"name": "api-7d4", "namespace": "shop"},
+            "spec": {
+                "selector": {"matchLabels": {"app": "api"}},
+                "template": {"spec": {"containers": [{
+                    "name": "app", "image": "api:4",
+                    "env": [{"name": "SIGNING_KEY", "value": KEY}],
+                }]}},
+            },
+        }))
+        .expect("an object");
+        let template = ReplicaSetInfo::of(&raw, None)
+            .expect("a ReplicaSet")
+            .template
+            .expect("a template");
+        let app = &template["spec"]["containers"][0];
+        assert_eq!(app["env"][0]["value"], crate::resources::WITHHELD_MARKER);
+        assert_eq!(app["image"], "api:4");
     }
 
     fn replica_set(revision: Option<&str>, desired: i32) -> ReplicaSet {

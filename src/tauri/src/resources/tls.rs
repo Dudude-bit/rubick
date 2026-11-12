@@ -261,7 +261,8 @@ pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<Wit
     // The PEM label says which flavour it is — RSA, EC, encrypted — and
     // none of that changes what the reader can do, so the row does not
     // carry it.
-    if says_private_key(value) {
+    // Or the base64 of one, kept as a value: one `base64 -d` from the key.
+    if says_private_key(value) || std::str::from_utf8(value).is_ok_and(packs_a_private_key) {
         return Some(Withheld::PrivateKey);
     }
     // Helm keeps a release whole in a Secret of this type: the key its page
@@ -290,15 +291,44 @@ fn says_private_key(value: &[u8]) -> bool {
 
 /// The first net for a string no map names: a private key as text, or as
 /// the base64 of one, wrapped the way `base64` prints it or not.
+///
+/// Asked of every string of every object, so it reads nothing it need not:
+/// both readers of [`says_private_key`] want a PEM label, and base64 spells
+/// the dashes of one `LS0t`.
 pub(super) fn is_private_key_text(text: &str) -> bool {
+    (text.contains("-----BEGIN ") && says_private_key(text.as_bytes())) || packs_a_private_key(text)
+}
+
+/// Whether text is the base64 of a private key.
+fn packs_a_private_key(text: &str) -> bool {
     use base64::Engine;
-    if says_private_key(text.as_bytes()) {
-        return true;
+    if !spells_dashes(text) {
+        return false;
     }
     let packed: String = text.split_whitespace().collect();
     base64::engine::general_purpose::STANDARD
         .decode(packed)
         .is_ok_and(|bytes| says_private_key(&bytes))
+}
+
+/// Whether base64 text, wrapped at any width, holds three dashes in a row.
+fn spells_dashes(text: &str) -> bool {
+    text.match_indices('L').any(|(at, _)| {
+        let mut rest = text[at + 1..].chars().filter(|c| !c.is_whitespace());
+        "S0t".chars().all(|c| rest.next() == Some(c))
+    })
+}
+
+/// One string as it may leave this process: itself, or the placeholder
+/// where it is a private key. For a field a wire type carries as text.
+#[must_use]
+pub fn shown_text(text: &str) -> String {
+    let shown = if is_private_key_text(text) {
+        WITHHELD_MARKER
+    } else {
+        text
+    };
+    shown.to_string()
 }
 
 /// Whether the value carries a PEM block whose own label says private key.
@@ -346,17 +376,28 @@ pub const WITHHELD_MARKER: &str = "<withheld: the app never shows a private key>
 pub(super) const KEY_MAPS: [(&str, bool); 3] =
     [("data", true), ("binaryData", true), ("stringData", false)];
 
-/// The keys of a manifest that still hold [`WITHHELD_MARKER`]: applied as it
-/// is, the placeholder would be written over each of them.
+/// Where a manifest still holds [`WITHHELD_MARKER`]: applied as it is, the
+/// placeholder would be written over each. A key of a key map by its name,
+/// any other string by its path, as `spec.containers[0].env[1].value`.
 #[must_use]
 pub fn still_withheld(object: &serde_json::Value) -> Vec<String> {
-    KEY_MAPS
-        .iter()
-        .filter_map(|(field, _)| object.get(field)?.as_object())
-        .flatten()
-        .filter(|(_, value)| value.as_str().is_some_and(|v| v.trim() == WITHHELD_MARKER))
-        .map(|(key, _)| key.clone())
-        .collect()
+    let mut rest = object.clone();
+    let mut held = Vec::new();
+    for (field, _) in KEY_MAPS {
+        let map = rest.get_mut(field);
+        let Some(map) = map.and_then(serde_json::Value::as_object_mut) else {
+            continue;
+        };
+        map.retain(|key, value| {
+            let named = value.as_str().is_some_and(|v| v.trim() == WITHHELD_MARKER);
+            if named {
+                held.push(key.clone());
+            }
+            !named
+        });
+    }
+    held.extend(super::helm::placeholders(&mut rest));
+    held
 }
 
 /// The keys still blanked inside an annotation's value, where that value is
@@ -397,8 +438,13 @@ pub fn withheld_copy(value: &str) -> Vec<String> {
 /// `kubectl apply` records the manifest it sent under one, and with it a
 /// second copy of every key these maps hold.
 ///
-/// Returns the keys it blanked, each once, so the surface can say what is
-/// missing rather than leaving the reader to notice.
+/// Every other string is judged by what it is, as a Helm release's values
+/// are: a key is no less a key as a container's `env` literal or in a custom
+/// resource's `spec`.
+///
+/// Returns what it blanked, each once, so the surface can say what is
+/// missing rather than leaving the reader to notice: a key of a key map by
+/// its name, any other string by its path.
 pub fn redact_private_keys(object: &mut serde_json::Value) -> Vec<String> {
     let mut blanked = redact_key_maps(object);
     let annotations = object
@@ -410,6 +456,7 @@ pub fn redact_private_keys(object: &mut serde_json::Value) -> Vec<String> {
             blanked.extend(keys);
         }
     }
+    blanked.extend(super::helm::withhold_strings(object));
     let mut seen = std::collections::HashSet::new();
     blanked.retain(|key| seen.insert(key.clone()));
     blanked
@@ -422,9 +469,16 @@ pub fn redact_private_keys(object: &mut serde_json::Value) -> Vec<String> {
 const SPELLS_A_KEY_MAP: [&str; 3] = ["\"data", "Data", "\\u"];
 
 /// The object an annotation's value is, where it is one written as JSON
-/// that could hold a key map.
+/// that could hold a key map, a key in any other string, or the placeholder
+/// for one.
 fn embedded_object(text: &str) -> Option<serde_json::Value> {
-    (text.trim_start().starts_with('{') && SPELLS_A_KEY_MAP.iter().any(|sign| text.contains(sign)))
+    let worth_reading = || {
+        SPELLS_A_KEY_MAP.iter().any(|sign| text.contains(sign))
+            || text.contains("-----BEGIN ")
+            || spells_dashes(text)
+            || text.contains(WITHHELD_MARKER)
+    };
+    (text.trim_start().starts_with('{') && worth_reading())
         .then(|| serde_json::from_str(text).ok())
         .flatten()
 }
@@ -448,8 +502,9 @@ fn redact_embedded(text: &str) -> Option<(String, Vec<String>)> {
 /// holds.
 #[must_use]
 pub fn annotations_of(meta: &ObjectMeta) -> BTreeMap<String, String> {
-    let shown =
-        |value: &String| redact_embedded(value).map_or_else(|| value.clone(), |(shown, _)| shown);
+    let shown = |value: &String| {
+        redact_embedded(value).map_or_else(|| shown_text(value), |(shown, _)| shown)
+    };
     meta.annotations
         .iter()
         .flatten()
@@ -463,9 +518,15 @@ pub fn annotations_of(meta: &ObjectMeta) -> BTreeMap<String, String> {
 ///
 /// If the object does not serialise.
 pub fn shown<T: Serialize>(object: &T) -> serde_json::Result<serde_json::Value> {
-    let mut value = serde_json::to_value(object)?;
+    serde_json::to_value(object).map(shown_value)
+}
+
+/// A part of an object a wire type carries as it was read, a pod template
+/// or a `spec`, as it may leave this process.
+#[must_use]
+pub fn shown_value(mut value: serde_json::Value) -> serde_json::Value {
     redact_private_keys(&mut value);
-    Ok(value)
+    value
 }
 
 fn redact_key_maps(object: &mut serde_json::Value) -> Vec<String> {
@@ -879,6 +940,161 @@ mod tests {
             WITHHELD_MARKER
         );
         assert!(!object.to_string().contains("PRIVATE KEY"));
+    }
+
+    /// A Secret that keeps its key as base64 text, for a program that wants
+    /// it so, showed that text once revealed. Fails if it is handed over
+    /// under a name that says nothing, or a certificate kept so is not.
+    #[test]
+    fn a_value_that_is_the_base64_of_a_key_is_withheld_too() {
+        let packed = encoded(KEY_PEM);
+        assert_eq!(
+            withhold_reason("Opaque", "blob", packed.as_bytes()),
+            Some(Withheld::PrivateKey)
+        );
+        assert_eq!(
+            withhold_reason("Opaque", "blob", encoded(LEAF_PEM).as_bytes()),
+            None
+        );
+    }
+
+    const ENV: &str = "spec.template.spec.containers[0].env";
+
+    fn deployment(env: &serde_json::Value) -> serde_json::Value {
+        let containers = serde_json::json!([{ "name": "web", "env": env }]);
+        serde_json::json!({
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": { "name": "web" },
+            "spec": { "template": { "spec": { "containers": containers } } },
+        })
+    }
+
+    /// Only the three key maps were judged, so a key kept as a container's
+    /// `env` literal, in a Flux `HelmRelease`'s values or an Argo CD
+    /// Application's was on the YAML tab and the object's page in full.
+    /// Fails if one leaves as text or base64, if where it stood is not
+    /// named, or if a certificate or a path to a key is blanked with it.
+    #[test]
+    fn a_key_in_any_other_string_of_an_object_is_withheld_and_named_by_its_path() {
+        let mut object = deployment(&serde_json::json!([
+            { "name": "CA", "value": LEAF_PEM },
+            { "name": "SIGNING_KEY", "value": KEY_PEM },
+            { "name": "PACKED", "value": encoded(KEY_PEM) },
+            { "name": "KEY_FILE", "value": "/etc/tls/tls.key" },
+        ]));
+        object["metadata"]["annotations"] =
+            serde_json::json!({ "signing": KEY_PEM, "team": "edge" });
+
+        let mut blanked = redact_private_keys(&mut object);
+        blanked.sort();
+        assert_eq!(
+            blanked,
+            [
+                "metadata.annotations.signing".to_string(),
+                format!("{ENV}[1].value"),
+                format!("{ENV}[2].value"),
+            ]
+        );
+        let env = &object["spec"]["template"]["spec"]["containers"][0]["env"];
+        assert_eq!(env[0]["value"], LEAF_PEM);
+        assert_eq!(env[1]["value"], WITHHELD_MARKER);
+        assert_eq!(env[2]["value"], WITHHELD_MARKER);
+        assert_eq!(env[3]["value"], "/etc/tls/tls.key");
+        assert_eq!(object["metadata"]["annotations"]["team"], "edge");
+
+        let mut release = serde_json::json!({
+            "kind": "HelmRelease",
+            "spec": { "values": { "tls": { "key": KEY_PEM, "crt": LEAF_PEM } } },
+        });
+        assert_eq!(redact_private_keys(&mut release), ["spec.values.tls.key"]);
+        assert_eq!(release["spec"]["values"]["tls"]["crt"], LEAF_PEM);
+
+        // Argo CD keeps a chart's values as one string of YAML.
+        let values = format!("replicas: 2\ntls:\n  key: {}\n", serde_json::json!(KEY_PEM));
+        let mut application = serde_json::json!({
+            "kind": "Application",
+            "spec": { "source": { "helm": { "values": values, "releaseName": "web" } } },
+        });
+        assert_eq!(
+            redact_private_keys(&mut application),
+            ["spec.source.helm.values"]
+        );
+        assert_eq!(application["spec"]["source"]["helm"]["releaseName"], "web");
+    }
+
+    /// The record `kubectl apply` keeps of that Deployment is a second copy
+    /// of the key, in a text that names no key map. Fails if the record is
+    /// not read, stops being JSON, or is not found again once blanked: sent
+    /// back, the placeholder would stand where kubectl wrote the key.
+    #[test]
+    fn the_record_of_a_deployment_does_not_carry_the_key_in_its_env() {
+        for key in [KEY_PEM.to_string(), encoded(KEY_PEM)] {
+            let manifest = deployment(&serde_json::json!([{ "name": "KEY", "value": key }]));
+            let mut object = applied(manifest.clone(), &manifest);
+
+            assert_eq!(
+                redact_private_keys(&mut object),
+                [format!("{ENV}[0].value")]
+            );
+            let record = record_of(&object);
+            assert_eq!(
+                record["spec"]["template"]["spec"]["containers"][0]["env"][0]["value"],
+                WITHHELD_MARKER
+            );
+            let kept = object["metadata"]["annotations"][LAST_APPLIED]
+                .as_str()
+                .expect("the annotation");
+            assert_eq!(withheld_copy(kept), [format!("{ENV}[0].value")]);
+        }
+    }
+
+    /// The rule is asked of every string of every object, and reads on only
+    /// where base64 could spell a PEM label. Fails if that gate misses a key
+    /// at some offset in its text or some width `base64 -w` wraps at, or
+    /// lets an ordinary string through to the decoder.
+    #[test]
+    fn a_key_in_base64_is_found_at_any_offset_and_any_wrap() {
+        for lead in ["", "#", "# ", "# the key\n"] {
+            let packed = encoded(&format!("{lead}{KEY_PEM}"));
+            for width in [1, 3, 5, 64, 76, packed.len()] {
+                let lines: Vec<&str> = packed
+                    .as_bytes()
+                    .chunks(width)
+                    .map(|line| std::str::from_utf8(line).expect("base64"))
+                    .collect();
+                assert!(
+                    is_private_key_text(&lines.join("\n")),
+                    "{lead:?} at {width}"
+                );
+            }
+        }
+        assert!(!is_private_key_text(&encoded(LEAF_PEM)));
+        for ordinary in [
+            "registry.k8s.io/ingress-nginx/controller:v1.11.2",
+            "4afe41e6-9c1d-4f0b-8a5e-2f6d3b1c7e90",
+            "LoadBalancer",
+            "kubernetes.io/TLS 0-RTT",
+            "Readiness probe failed: Get \"http://10.0.0.5:8080/healthz\": dial tcp",
+        ] {
+            assert!(!spells_dashes(ordinary), "{ordinary}");
+        }
+    }
+
+    /// An annotation that is a key itself, not a record that holds one.
+    #[test]
+    fn an_annotation_that_is_a_key_is_not_handed_out() {
+        let meta = ObjectMeta {
+            annotations: Some(BTreeMap::from([
+                ("signing".to_string(), KEY_PEM.to_string()),
+                ("ca".to_string(), LEAF_PEM.to_string()),
+            ])),
+            ..ObjectMeta::default()
+        };
+
+        let handed = annotations_of(&meta);
+        assert_eq!(handed["signing"], WITHHELD_MARKER);
+        assert_eq!(handed["ca"], LEAF_PEM);
     }
 
     /// The typed builders hand annotations out as a map and never see the
