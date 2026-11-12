@@ -65,10 +65,40 @@ export interface PgCluster {
   pvcCount: number | null;
   archiving: Archiving;
   readyCondition: { status: string | null; message: string | null };
+  /** The ways this cluster's spec lets a Backup run; empty where it configures none. */
+  backupMethods: BackupMethod[];
   /** CNPG writes no observedGeneration, so this is always unknown, and said so. */
   specSeen: "unknown";
   worst: "err" | "warn" | null;
   findings: PgFinding[];
+}
+
+/** A Backup's `spec.method` as this cluster can run it, with the plugin that takes it. */
+export interface BackupMethod {
+  method: "barmanObjectStore" | "volumeSnapshot" | "plugin";
+  plugin?: string;
+}
+
+/**
+ * A Backup that names no method runs as `barmanObjectStore`, and one whose
+ * method the cluster does not configure fails. So the methods are read off
+ * the cluster: the two sections of `spec.backup`, and every enabled plugin.
+ */
+export function backupMethodsOf(resource: CustomResourceInfo): BackupMethod[] {
+  const methods: BackupMethod[] = [];
+  for (const method of ["barmanObjectStore", "volumeSnapshot"] as const) {
+    if (getValueByPath(resource, `spec.backup.${method}`) != null) {
+      methods.push({ method });
+    }
+  }
+  const plugins = getValueByPath(resource, "spec.plugins");
+  for (const plugin of Array.isArray(plugins) ? plugins : []) {
+    const name = text((plugin as { name?: unknown } | null)?.name);
+    if (name && (plugin as { enabled?: unknown }).enabled !== false) {
+      methods.push({ method: "plugin", plugin: name });
+    }
+  }
+  return methods;
 }
 
 export type PgFinding =
@@ -315,6 +345,7 @@ export function readCluster(resource: CustomResourceInfo): PgCluster {
       status: readyCondition?.status ?? null,
       message: readyCondition?.message ?? null,
     },
+    backupMethods: backupMethodsOf(resource),
     specSeen: "unknown",
     worst: findings.some((f) => f.severity === "err")
       ? "err"

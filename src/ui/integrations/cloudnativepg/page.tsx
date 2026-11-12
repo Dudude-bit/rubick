@@ -25,7 +25,15 @@ import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf } from "@/lib/report-parts";
 import { getValueByPath, troubleMark, reachWord } from "../kit";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
-import { BACKUP_REFUSED, actionsFor, perform, type PgAction } from "./actions";
+import {
+  BACKUP_REFUSED,
+  actionsFor,
+  explain,
+  labelOf,
+  methodName,
+  perform,
+  type PgAction,
+} from "./actions";
 import { backupsSection } from "./share";
 import {
   BACKUPS_CRD,
@@ -50,7 +58,7 @@ import {
 } from "./model";
 import { useNow } from "@/hooks/useNow";
 import { useSearchParam } from "@/hooks/useSearchParam";
-import { useT, type T } from "@/i18n/useT";
+import { useT } from "@/i18n/useT";
 import { ControllerLine, Fact, OperatorActionButton } from "../operator-kit";
 import { None } from "@/components/ui/none";
 
@@ -543,9 +551,10 @@ function ClusterRow({
               .filter((a) => a.id !== "fence" && a.id !== "unfence")
               .map((action) => (
                 <OperatorActionButton
-                  key={action.id}
+                  key={`${action.id}:${action.method ? methodName(action.method) : ""}`}
                   action={action}
-                  label={pgActionLabel(action, t)}
+                  label={labelOf(action, cluster.backupMethods.length > 1, t)}
+                  explained={explain(action, t)}
                   busy={busy}
                   onPick={setPending}
                 />
@@ -556,7 +565,7 @@ function ClusterRow({
                 <OperatorActionButton
                   key={`${action.id}:${action.instance}`}
                   action={action}
-                  label={pgActionLabel(action, t)}
+                  label={labelOf(action, false, t)}
                   busy={busy}
                   onPick={setPending}
                 />
@@ -574,7 +583,7 @@ function ClusterRow({
               })
             : ""
         }
-        description={pending ? t("operators", pending.explains) : undefined}
+        description={pending ? explain(pending, t) : undefined}
         confirmLabel={pending ? t("operators", pending.label) : undefined}
         confirmVariant={pending?.danger ? "destructive" : "default"}
         confirmDisabled={busy}
@@ -966,10 +975,4 @@ function OperatorTab({
       )}
     </div>
   );
-}
-
-function pgActionLabel(action: PgAction, t: T): string {
-  return action.instance
-    ? `${t("operators", action.label)} ${action.instance}`
-    : t("operators", action.label);
 }

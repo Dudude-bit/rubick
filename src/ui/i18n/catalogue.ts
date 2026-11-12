@@ -2567,7 +2567,9 @@ export const en = {
       "Re-reads postgresql.conf and pg_hba without restarting, by stamping cnpg.io/reloadedAt on the Cluster.",
     actionBackup: "Backup now",
     actionBackupExplained:
-      "Creates a Backup object for this cluster; the method is whatever the cluster's backup configuration declares. The operator runs it and writes the outcome on that object.",
+      "Creates a Backup object for this cluster with method {method}, which the cluster's spec configures. The operator runs it and writes the outcome on that object.",
+    noBackupMethod:
+      "the cluster's spec configures no backup: no spec.backup.barmanObjectStore, no spec.backup.volumeSnapshot and no plugin, so a Backup would only fail",
     actionFence: "Fence",
     actionFenceExplained:
       "Stops Postgres in this instance and keeps its pod, by adding it to cnpg.io/fencedInstances. Fencing the primary takes the cluster's write path with it.",

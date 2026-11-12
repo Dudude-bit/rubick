@@ -97,11 +97,14 @@ export function OperatorActionButton<
 >({
   action,
   label,
+  explained,
   busy,
   onPick,
 }: {
   action: A;
   label: string;
+  /** The explanation in full, where `explains` has a placeholder to fill. */
+  explained?: string;
   busy: boolean;
   onPick: (action: A) => void;
 }) {
@@ -115,7 +118,7 @@ export function OperatorActionButton<
       title={
         action.reason
           ? t("operators", action.reason)
-          : t("operators", action.explains)
+          : (explained ?? t("operators", action.explains))
       }
       className={cn(
         "rounded border border-hair px-1.5 py-0.5 transition-colors",

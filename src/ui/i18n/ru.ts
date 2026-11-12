@@ -2717,7 +2717,9 @@ export const ru: Catalogue = {
       "Перечитывает postgresql.conf и pg_hba без перезапуска, через отметку cnpg.io/reloadedAt на Cluster.",
     actionBackup: "Бэкап сейчас",
     actionBackupExplained:
-      "Создаёт объект Backup для этого кластера; метод тот, что объявлен в настройке бэкапов кластера. Оператор выполняет его и пишет результат на этом объекте.",
+      "Создаёт объект Backup для этого кластера с методом {method}: он настроен в спецификации кластера. Оператор выполняет его и пишет результат на этом объекте.",
+    noBackupMethod:
+      "в спецификации кластера бэкап не настроен: нет ни spec.backup.barmanObjectStore, ни spec.backup.volumeSnapshot, ни плагина, так что Backup завершился бы ошибкой",
     actionFence: "Изолировать",
     actionFenceExplained:
       "Останавливает Postgres в этом инстансе, оставляя под, добавив его в cnpg.io/fencedInstances. Изоляция primary забирает с собой путь записи кластера.",

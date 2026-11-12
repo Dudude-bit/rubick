@@ -173,4 +173,28 @@ describe("an operator action that cannot run", () => {
     fireEvent.click(button);
     expect(pick).not.toHaveBeenCalled();
   });
+
+  /**
+   * A sentence with a placeholder cannot be said from its key alone. Fails
+   * if the tooltip of Backup now prints `{method}` instead of the method.
+   */
+  it("says on hover the explanation it was handed, placeholders filled", () => {
+    render(
+      <OperatorActionButton
+        action={{
+          explains: "actionBackupExplained",
+          reason: null,
+          danger: false,
+        }}
+        label="Backup now"
+        explained="with method volumeSnapshot"
+        busy={false}
+        onPick={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Backup now" })).toHaveAttribute(
+      "title",
+      "with method volumeSnapshot"
+    );
+  });
 });

@@ -1,12 +1,14 @@
 import { commands } from "@/lib/commands";
 import { ERROR_CODES } from "@/lib/error-utils";
 import type { en } from "@/i18n/catalogue";
+import type { T } from "@/i18n/useT";
 import { CLUSTERS_CRD } from "./data";
 import {
   FENCED,
   HIBERNATION,
   RELOADED_AT,
   RESTARTED_AT,
+  type BackupMethod,
   type PgCluster,
 } from "./model";
 
@@ -33,7 +35,30 @@ export interface PgAction {
   danger: boolean;
   /** For fence: the instance to stop. */
   instance?: string;
+  /** For backup: the method the Backup is created with. */
+  method?: BackupMethod;
 }
+
+/** A method as CNPG spells it, with the plugin where it is one. */
+export const methodName = ({ method, plugin }: BackupMethod): string =>
+  plugin ? `${method} ${plugin}` : method;
+
+/** The button's words; a backup names its method where the cluster has several. */
+export function labelOf(action: PgAction, several: boolean, t: T): string {
+  const label = t("operators", action.label);
+  if (action.instance) return `${label} ${action.instance}`;
+  return action.method && several
+    ? `${label} (${methodName(action.method)})`
+    : label;
+}
+
+/** What the confirmation says will happen; a backup says which method it sends. */
+export const explain = (action: PgAction, t: T): string =>
+  action.method
+    ? t("operators", "actionBackupExplained", {
+        method: methodName(action.method),
+      })
+    : t("operators", action.explains);
 
 export interface Allowed {
   patchClusters: boolean | null;
@@ -82,13 +107,19 @@ export function actionsFor(cluster: PgCluster, allowed: Allowed): PgAction[] {
       reason: noPatch,
       danger: false,
     },
-    {
+    // One per method the spec configures: which one a reader means is
+    // theirs to say, and with none configured a Backup could only fail.
+    ...(cluster.backupMethods.length > 0
+      ? cluster.backupMethods
+      : [undefined]
+    ).map((method): PgAction => ({
       id: "backup",
       label: "actionBackup",
       explains: "actionBackupExplained",
-      reason: noCreate,
+      reason: noCreate ?? (method ? null : "noBackupMethod"),
       danger: false,
-    },
+      method,
+    })),
   ];
   for (const instance of cluster.instances) {
     list.push(
@@ -151,6 +182,8 @@ function annotate(
 const WOULD_OVERWRITE =
   "the fenced-instances annotation was not read, so it must not be rewritten";
 
+const NO_METHOD = "no backup method was chosen, so none may be sent";
+
 /** Matched by the caller, which turns it into a catalogue sentence. */
 export const BACKUP_REFUSED = "cnpg:backup-not-created";
 
@@ -190,6 +223,9 @@ export async function perform(
       });
     }
     case "backup": {
+      // Left out, CNPG fills in `barmanObjectStore` whatever the cluster has.
+      if (!action.method) throw new Error(NO_METHOD);
+      const { method, plugin } = action.method;
       const name = `${cluster.name}-${stamp.replace(/[-:]/g, "").slice(0, 15).toLowerCase()}`;
       const manifest = [
         "apiVersion: postgresql.cnpg.io/v1",
@@ -200,6 +236,11 @@ export async function perform(
         "spec:",
         "  cluster:",
         `    name: ${cluster.name}`,
+        `  method: ${method}`,
+        // Quoted: the name is whatever the cluster's spec holds.
+        ...(plugin
+          ? ["  pluginConfiguration:", `    name: ${JSON.stringify(plugin)}`]
+          : []),
       ].join("\n");
       const applied = await commands.applyManifest(manifest, cluster.namespace);
       const outcome = applied.documents[0]?.outcome;
