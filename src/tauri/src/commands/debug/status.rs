@@ -1,6 +1,6 @@
 //! Pod / container status inspection helpers used by `get_debug_status`.
 
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{ContainerStateWaiting, Pod};
 
 use super::types::{DebugResult, DebugStatus};
 
@@ -106,10 +106,6 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
                 error: "Pod completed".to_string(),
             };
         }
-        "Pending" => {
-            let reason = get_pending_reason(pod);
-            return DebugStatus::Pending { reason };
-        }
         _ => {}
     }
 
@@ -120,6 +116,21 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
         .and_then(|s| s.container_statuses.as_ref());
 
     let container_status = statuses.and_then(|list| list.iter().find(|c| c.name == container_name));
+
+    if phase == "Pending" {
+        // A container that never started keeps its pod Pending, so what the
+        // kubelet said of it is read before the pod's conditions: an image
+        // that cannot be pulled waited two minutes as `ContainersNotReady`.
+        let waiting = container_status
+            .and_then(|cs| cs.state.as_ref())
+            .and_then(|state| state.waiting.as_ref());
+        return match waiting.map(waiting_status) {
+            Some(failed @ DebugStatus::Failed { .. }) => failed,
+            _ => DebugStatus::Pending {
+                reason: get_pending_reason(pod),
+            },
+        };
+    }
 
     match container_status {
         None => DebugStatus::Pending {
@@ -141,21 +152,7 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
                     };
                 }
                 if let Some(ref waiting) = state.waiting {
-                    let reason = waiting
-                        .reason
-                        .clone()
-                        .unwrap_or_else(|| "Waiting".to_string());
-                    if reason.contains("ImagePull") && reason.contains("Back") {
-                        return DebugStatus::Failed {
-                            error: format!("Image pull failed: {reason}"),
-                        };
-                    }
-                    if reason.contains("Err") || reason.contains("CrashLoop") {
-                        return DebugStatus::Failed {
-                            error: waiting.message.clone().unwrap_or(reason),
-                        };
-                    }
-                    return DebugStatus::Pending { reason };
+                    return waiting_status(waiting);
                 }
                 if let Some(ref terminated) = state.terminated {
                     let reason = terminated
@@ -172,6 +169,26 @@ pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugSt
             }
         }
     }
+}
+
+/// A waiting container of a pod this app made: still coming, or stopped by
+/// something that waiting longer does not fix.
+fn waiting_status(waiting: &ContainerStateWaiting) -> DebugStatus {
+    let reason = waiting
+        .reason
+        .clone()
+        .unwrap_or_else(|| "Waiting".to_string());
+    if reason.contains("ImagePull") && reason.contains("Back") {
+        return DebugStatus::Failed {
+            error: format!("Image pull failed: {reason}"),
+        };
+    }
+    if reason.contains("Err") || reason.contains("CrashLoop") {
+        return DebugStatus::Failed {
+            error: waiting.message.clone().unwrap_or(reason),
+        };
+    }
+    DebugStatus::Pending { reason }
 }
 
 /// Get reason for pending pod
@@ -233,6 +250,57 @@ mod tests {
             DebugStatus::Ready { result } => result.sees_root_of,
             other => panic!("not ready: {other:?}"),
         }
+    }
+
+    fn made(phase: &str, waiting: Option<(&str, &str)>) -> Pod {
+        let state = waiting.map_or_else(
+            || serde_json::json!({ "running": {} }),
+            |(reason, message)| serde_json::json!({ "waiting": { "reason": reason, "message": message } }),
+        );
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "cart-debug-1", "namespace": "shop" },
+            "spec": { "containers": [{ "name": "debugger" }] },
+            "status": {
+                "phase": phase,
+                "conditions": [{
+                    "type": "ContainersReady", "status": "False",
+                    "reason": "ContainersNotReady",
+                }],
+                "containerStatuses": [{
+                    "name": "debugger",
+                    "state": state,
+                    "ready": false, "restartCount": 0, "image": "", "imageID": "",
+                }],
+            },
+        }))
+        .expect("a pod")
+    }
+
+    /// A container that never started leaves its pod Pending, which is
+    /// where an image that cannot be pulled always is: read by phase first,
+    /// the dialog waited out its two minutes under `ContainersNotReady`.
+    #[test]
+    fn an_image_that_cannot_be_pulled_fails_a_pending_debug_pod_at_once() {
+        for (reason, said) in [
+            ("ErrImagePull", "pull access denied for nope"),
+            ("ImagePullBackOff", "Image pull failed: ImagePullBackOff"),
+        ] {
+            let pod = made("Pending", Some((reason, "pull access denied for nope")));
+            match check_container_status(&pod, "debugger") {
+                DebugStatus::Failed { error, .. } => assert_eq!(error, said),
+                other => panic!("{reason} kept waiting: {other:?}"),
+            }
+        }
+    }
+
+    /// The other side: a pod still pulling is waiting, not failed.
+    #[test]
+    fn a_pending_debug_pod_still_creating_its_container_keeps_waiting() {
+        let pod = made("Pending", Some(("ContainerCreating", "")));
+        assert!(matches!(
+            check_container_status(&pod, "debugger"),
+            DebugStatus::Pending { reason } if reason == "ContainersNotReady"
+        ));
     }
 
     /// The Files tab labels what it reads through a debug container with this
