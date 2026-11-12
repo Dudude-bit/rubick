@@ -305,7 +305,13 @@ export function groupOf(findings: RuleFinding[], loaded: Loaded): RuleGroup {
     findings.some((f) => ["pickedUpUnknown", "notEvaluated"].includes(f.kind))
   )
     return "unchecked";
-  return loaded.state === "read" ? "quiet" : "unchecked";
+  // Alerting rules, not one file of them in the connected Prometheus, and no
+  // finding above: pick-up was not judged, so "loaded and quiet" is not ours
+  // to say about them.
+  return loaded.state === "read" &&
+    (loaded.files.length > 0 || loaded.rules.length === 0)
+    ? "quiet"
+    : "unchecked";
 }
 
 export function rowsOf(

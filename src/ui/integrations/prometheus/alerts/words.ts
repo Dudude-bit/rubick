@@ -31,7 +31,7 @@ export function rowWords(row: RuleRow, t: T): string {
     case "pickedUpUnknown":
       return t("monitors", "rowUnknown");
   }
-  if (row.loaded.state !== "read") return t("monitors", "rowNotChecked");
+  if (row.group === "unchecked") return t("monitors", "rowNotChecked");
   if (row.object.rules.length === 0) return t("alerts", "rowRecordingOnly");
   return t("alerts", "rowQuiet", { n: row.object.rules.length });
 }

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { T } from "@/i18n/useT";
 import type { MonitorRow } from "./model";
 import { selectorWords } from "./model";
-import { unknowableWords } from "./words";
+import { NOT_JUDGED, unknowableWords } from "./words";
 import { hourMinute } from "../../kit";
 
 /**
@@ -13,7 +13,6 @@ import { hourMinute } from "../../kit";
  */
 export function verdictOf(
   row: MonitorRow,
-  instanceCount: number,
   since: number | null,
   lastScrapeAgo: string | null,
   t: T,
@@ -44,12 +43,10 @@ export function verdictOf(
         }),
       };
     case "notPickedUp":
-      return instanceCount === 0
-        ? { head: t("monitors", "verdictNoInstances"), body: null }
-        : {
-            head: t("monitors", "verdictNotPickedUp"),
-            body: t("monitors", "notPickedUp"),
-          };
+      return {
+        head: t("monitors", "verdictNotPickedUp"),
+        body: t("monitors", "notPickedUp"),
+      };
     case "pickedUpUnknown":
       return {
         head: t("monitors", "verdictPickedUpUnknown"),
@@ -82,7 +79,11 @@ export function verdictOf(
       };
     case "noTargets":
       return {
-        head: t("monitors", "verdictNoTargets"),
+        // "Picked up" is not ours to say where pick-up was not judged.
+        head:
+          row.pickedUp.state === "notJudged"
+            ? t("monitors", NOT_JUDGED[row.pickedUp.lacks].verdict)
+            : t("monitors", "verdictNoTargets"),
         body: t("monitors", "noTargets"),
       };
     // The arm that was missing. Without it a monitor whose targets are all
@@ -99,8 +100,11 @@ export function verdictOf(
         body: t("monitors", "unscrapedSettles"),
       };
   }
-  if (row.pickedUp.state === "noKind")
-    return { head: t("monitors", "verdictNoKind"), body: null };
+  if (row.pickedUp.state === "notJudged")
+    return {
+      head: t("monitors", NOT_JUDGED[row.pickedUp.lacks].verdict),
+      body: null,
+    };
   if (scrape.state === "notConnected")
     return {
       head: t("monitors", "verdictNotChecked"),

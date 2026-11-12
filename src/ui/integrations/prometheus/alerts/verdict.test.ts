@@ -75,14 +75,13 @@ describe("the sentence the Alerts card leads with", () => {
    * here" would be printed about rules nobody has read.
    */
   it("does not give the quiet verdict to a Prometheus that was never asked", () => {
-    const notConnected = verdictOf(row({ state: "notConnected" }), 1, t);
+    const notConnected = verdictOf(row({ state: "notConnected" }), t);
     expect(notConnected.head).not.toBe(
       translate("en", "alerts", "verdictQuiet", { n: 1 })
     );
 
     const unanswered = verdictOf(
       row({ state: "unanswered", reason: "connection refused" }),
-      1,
       t
     );
     expect(unanswered.body).toContain("connection refused");
@@ -112,7 +111,6 @@ describe("the sentence the Alerts card leads with", () => {
           },
         ],
       }),
-      1,
       t
     );
     expect(quiet.body).toBe(translate("en", "monitors", "nothingToDo"));
@@ -130,8 +128,29 @@ describe("the sentence the Alerts card leads with", () => {
       { state: "read", rules: [] }
     )[0];
 
-    expect(verdictOf(unknown, 1, t).head).not.toBe(
+    expect(verdictOf(unknown, t).head).not.toBe(
       translate("en", "alerts", "verdictQuiet", { n: 1 })
+    );
+  });
+});
+
+describe("a rule object on a cluster with no Prometheus object", () => {
+  /**
+   * The card said "No Prometheus object in the cluster, so nothing picks it
+   * up" and the row "not picked up", both in red, on a cluster whose rules
+   * another ruler evaluates. Fails if the card or the row asserts either
+   * that or "quiet" about a pick-up nobody judged.
+   */
+  it("says pick-up is not judged, and the row that it was not checked", () => {
+    const unjudged = rowsOf([object], instances([]), namespaces, {
+      state: "read",
+      rules: [],
+    })[0];
+    expect(verdictOf(unjudged, t).head).toBe(
+      translate("en", "monitors", "verdictNoInstances")
+    );
+    expect(rowWords(unjudged, t)).toBe(
+      translate("en", "monitors", "rowNotChecked")
     );
   });
 });

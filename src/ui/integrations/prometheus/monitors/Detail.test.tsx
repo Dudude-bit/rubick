@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { CustomResourceInfo } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
+import { en } from "@/i18n/catalogue";
 import type { Picture } from "./data";
 import type { MonitorRow } from "./model";
 
@@ -114,4 +115,24 @@ describe("what the Monitors page says a Prometheus picks up", () => {
       expect(screen.getByText(words)).toBeInTheDocument();
     }
   );
+});
+
+/**
+ * The step under "Picked up by" said "No Prometheus object in the cluster,
+ * so nothing picks it up" in red. Fails if a cluster with no Prometheus
+ * object gets the missing-CRD sentence, or a verdict about who reads it.
+ */
+describe("the pick-up step where no Prometheus object exists", () => {
+  it("says pick-up is not judged, in the words for that reason", async () => {
+    await renderWithRouter(
+      <Detail
+        row={{ ...row, pickedUp: { state: "notJudged", lacks: "object" } }}
+        picture={{ prometheuses: { state: "read", items: [] } } as never}
+      />,
+      { at: "/c/prod", route: "/c/$cluster" }
+    );
+    expect(screen.getByText(en.monitors.notJudged)).toBeInTheDocument();
+    expect(screen.getByText(en.monitors.noInstances)).toBeInTheDocument();
+    expect(screen.queryByText(en.monitors.prometheusKindAbsent)).toBeNull();
+  });
 });

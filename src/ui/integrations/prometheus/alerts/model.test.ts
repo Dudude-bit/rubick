@@ -385,6 +385,40 @@ describe("rowsOf", () => {
     ).toBe("unchecked");
   });
   /**
+   * The operator's CRDs with no Prometheus object: rules are evaluated by
+   * vmalert or another ruler. An empty list was "picked up by nobody", so
+   * every rule object was red. Not judged, an object the connected
+   * Prometheus has no file of is not checked, and one it has loaded keeps
+   * what Prometheus says. Fails if either reads as broken or as quiet.
+   */
+  it("does not judge a rule object where no Prometheus object exists", () => {
+    const of = (rules: AlertRule[]) =>
+      rowsOf([object], kind([]), namespaces, { state: "read", rules })[0];
+
+    const unloaded = of([]);
+    expect(unloaded.pickedUp).toEqual({ state: "notJudged", lacks: "object" });
+    expect(unloaded.findings).toEqual([]);
+    expect(unloaded.group).toBe("unchecked");
+
+    const firing = of([
+      apiRule({ file: "/rules/monitoring-apps.yaml", state: "firing" }),
+      apiRule({
+        file: "/rules/monitoring-apps.yaml",
+        name: "KubeDeploymentReplicasMismatch",
+      }),
+    ]);
+    expect(firing.group).toBe("firing");
+    const quiet = of([
+      apiRule({ file: "/rules/monitoring-apps.yaml" }),
+      apiRule({
+        file: "/rules/monitoring-apps.yaml",
+        name: "KubeDeploymentReplicasMismatch",
+      }),
+    ]);
+    expect(quiet.group).toBe("quiet");
+  });
+
+  /**
    * Prometheus writes three healths and the app read one. A rule it has
    * loaded and never evaluated answers `unknown`, which fell through to the
    * green "loaded and evaluating" — a claim about a rule that has never run.

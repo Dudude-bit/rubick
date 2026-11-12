@@ -37,10 +37,10 @@ describe("the alerts verdict", () => {
 
   /** "4 алерта горят из 1 правил." — the rule count took the alerts' plural. */
   it("declines the rule count by its own number", () => {
-    expect(verdictOf(row("firing"), 1, inLanguage("ru")).head).toBe(
+    expect(verdictOf(row("firing"), inLanguage("ru")).head).toBe(
       "4 алерта горят из 1 правила."
     );
-    expect(verdictOf(row("pending"), 1, inLanguage("en")).head).toBe(
+    expect(verdictOf(row("pending"), inLanguage("en")).head).toBe(
       "4 alerts pending from 1 rule, not yet past their for clauses."
     );
   });
@@ -63,13 +63,13 @@ describe("the monitors verdict", () => {
   /** "1 из 1 target'ов down." — the total's noun ignored the total. */
   it("declines the target total by its own number", () => {
     expect(
-      verdictOfMonitor(down(1, 1), 1, null, null, inLanguage("ru")).head
+      verdictOfMonitor(down(1, 1), null, null, inLanguage("ru")).head
     ).toBe("1 из 1 цели down.");
     expect(
-      verdictOfMonitor(down(1, 3), 1, null, null, inLanguage("ru")).head
+      verdictOfMonitor(down(1, 3), null, null, inLanguage("ru")).head
     ).toBe("1 из 3 целей down.");
     expect(
-      verdictOfMonitor(down(1, 1), 1, null, null, inLanguage("en")).head
+      verdictOfMonitor(down(1, 1), null, null, inLanguage("en")).head
     ).toBe("1 of 1 target down.");
   });
 });

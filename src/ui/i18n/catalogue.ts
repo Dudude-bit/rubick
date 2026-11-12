@@ -2766,7 +2766,7 @@ export const en = {
     prometheusKindAbsent:
       "The operator's Prometheus CRD is not installed, so nothing here can pick a monitor up. Pick-up is not judged.",
     noInstances:
-      "No Prometheus object in the cluster: nothing picks the monitors up. Was the operator uninstalled with its CRDs left behind?",
+      "No Prometheus object in the cluster, so pick-up is not judged. Something this page does not look at may still read these: a PrometheusAgent, the VictoriaMetrics operator, Grafana Alloy or an OpenTelemetry collector.",
     instancesUnread:
       "The Prometheus objects could not be read, so which instance picks a monitor up is unknown.",
     readyOf: "{ready} of {wanted} ready",
@@ -2833,7 +2833,7 @@ export const en = {
     verdictSelectorUnevaluable: "Its selector cannot be evaluated.",
     verdictNotPickedUp: "No Prometheus picks it up, so nothing scrapes it.",
     verdictNoInstances:
-      "No Prometheus object in the cluster, so nothing picks it up.",
+      "Selected. No Prometheus object is in the cluster to pick it up; whether something else reads it is not judged.",
     verdictPickedUpUnknown: "Whether a Prometheus picks it up is unknown.",
     verdictDown: "{down} {of} down.",
     verdictDownSince: "{down} {of} down since {since}.",

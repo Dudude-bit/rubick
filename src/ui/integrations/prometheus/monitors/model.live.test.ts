@@ -166,7 +166,7 @@ describe("the same objects with a piece of the install missing", () => {
       namespaces,
       targets
     );
-    expect(rows.every((r) => r.pickedUp.state === "noKind")).toBe(true);
+    expect(rows.every((r) => r.pickedUp.state === "notJudged")).toBe(true);
     expect(
       rows.some((r) => r.findings.some((f) => f.kind === "notPickedUp"))
     ).toBe(false);

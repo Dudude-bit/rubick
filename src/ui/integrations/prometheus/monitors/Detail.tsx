@@ -45,6 +45,7 @@ import {
   picksUpWords,
   rowTone,
   rowWords,
+  NOT_JUDGED,
   unknowableWords,
   type RowTone,
 } from "./words";
@@ -104,13 +105,13 @@ export function Detail({
       ? formatSince(Date.parse(scrape.lastScrape), now)
       : null;
 
-  const verdict = verdictOf(row, instances.length, since, lastScrapeAgo, t);
+  const verdict = verdictOf(row, since, lastScrapeAgo, t);
   const Icon = ICON[tone];
 
   useShareSection("prometheus-monitor-detail", () =>
     monitorDetailSections(
       row,
-      verdictOf(row, instances.length, since, lastScrapeAgo, t, utcMoment),
+      verdictOf(row, since, lastScrapeAgo, t, utcMoment),
       t
     )
   );
@@ -461,11 +462,11 @@ function PickedUpStep({
 }) {
   const { pickedUp, monitor } = row;
   const by =
-    pickedUp.state === "noKind"
+    pickedUp.state === "notJudged"
       ? []
       : instances.filter((instance) => pickedUp.by.includes(instance.name));
   const tone: RowTone =
-    pickedUp.state === "noKind"
+    pickedUp.state === "notJudged"
       ? "mut"
       : pickedUp.by.length > 0
         ? "ok"
@@ -477,7 +478,7 @@ function PickedUpStep({
       tone={tone}
       title={t("monitors", "pickedUpBy")}
       count={
-        pickedUp.state === "noKind"
+        pickedUp.state === "notJudged"
           ? t("monitors", "notJudged")
           : pickedUp.by.length > 0
             ? t("monitors", "pickedUpCount", { n: pickedUp.by.length })
@@ -549,18 +550,14 @@ function PickedUpStep({
         );
       })}
       {pickedUp.state === "judged" && pickedUp.by.length === 0 && (
-        <p className="text-xs text-err">
-          {instances.length === 0
-            ? t("monitors", "verdictNoInstances")
-            : t("monitors", "notPickedUp")}
-        </p>
+        <p className="text-xs text-err">{t("monitors", "notPickedUp")}</p>
       )}
       {pickedUp.state === "unknown" && pickedUp.by.length === 0 && (
         <p className="text-xs text-warn">{unknowableWords(pickedUp.why, t)}</p>
       )}
-      {pickedUp.state === "noKind" && (
+      {pickedUp.state === "notJudged" && (
         <p className="text-xs text-fg-mut">
-          {t("monitors", "prometheusKindAbsent")}
+          {t("monitors", NOT_JUDGED[pickedUp.lacks].line)}
         </p>
       )}
     </Step>

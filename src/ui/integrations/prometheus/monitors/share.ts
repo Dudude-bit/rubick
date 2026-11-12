@@ -8,7 +8,13 @@ import type { T } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
 import type { Picture } from "./data";
 import { selectorWords, type MonitorRow } from "./model";
-import { rowTone, rowWords, unknowableWords, type RowTone } from "./words";
+import {
+  NOT_JUDGED,
+  rowTone,
+  rowWords,
+  unknowableWords,
+  type RowTone,
+} from "./words";
 
 const LADDER_ROLE_OF_ROW_TONE: Record<RowTone, StatusRole> = {
   err: "err",
@@ -132,20 +138,23 @@ function factsSection(
     {
       label: t("monitors", "pickedUpBy"),
       values:
-        row.pickedUp.state !== "noKind" && row.pickedUp.by.length > 0
+        row.pickedUp.state !== "notJudged" && row.pickedUp.by.length > 0
           ? row.pickedUp.by.map((name) => ({ text: name, mono: true }))
           : [
               {
                 text:
-                  row.pickedUp.state === "noKind"
-                    ? t("monitors", "prometheusKindAbsent")
+                  row.pickedUp.state === "notJudged"
+                    ? t("monitors", NOT_JUDGED[row.pickedUp.lacks].line)
                     : row.pickedUp.state === "unknown"
                       ? unknowableWords(row.pickedUp.why, t)
                       : t("monitors", "notPickedUp"),
+                // Not judged is nobody's fault: no role, as on the screen.
                 role:
                   row.pickedUp.state === "judged"
                     ? ("err" as const)
-                    : ("warn" as const),
+                    : row.pickedUp.state === "unknown"
+                      ? ("warn" as const)
+                      : undefined,
               },
             ],
     },

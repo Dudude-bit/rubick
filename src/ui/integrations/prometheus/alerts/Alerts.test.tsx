@@ -201,3 +201,30 @@ describe("two rules of one name on the Alerts tab", () => {
     expect(screen.queryByText(/kps-kube-state-metrics/)).toBeNull();
   });
 });
+
+/**
+ * Every rule object was red "not picked up" on a cluster with the
+ * operator's CRDs and no Prometheus object, where another ruler evaluates
+ * them. Fails if the Alerts tab words no Prometheus object as a fault, or
+ * as the missing-CRD case.
+ */
+describe("the Alerts tab where no Prometheus object exists", () => {
+  const before = PICTURE;
+  afterEach(() => {
+    PICTURE = before;
+  });
+
+  it("says pick-up is not judged and files no rule object under broken", async () => {
+    PICTURE = {
+      ...before,
+      prometheuses: { state: "read", items: [] },
+    } as unknown as Picture;
+    await renderWithRouter(<Alerts />, {
+      at: "/c/prod/integrations/prometheus?tab=alerts",
+    });
+
+    expect(await screen.findByText(en.monitors.noInstances)).toBeTruthy();
+    expect(screen.queryByText(en.monitors.rowNotPickedUp)).toBeNull();
+    expect(screen.queryByText(en.monitors.prometheusKindAbsent)).toBeNull();
+  });
+});

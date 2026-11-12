@@ -302,11 +302,14 @@ export function selectedServices(
  * rather than drawn as "not picked up". A refused list of Prometheus
  * objects is unknown for every monitor; a cluster without the kind at all
  * is not judged, because nothing of the operator's can pick anything up.
+ * Nor is one with the kind and no object of it: a PrometheusAgent, the
+ * VictoriaMetrics operator, Grafana Alloy and an OpenTelemetry collector
+ * all read the operator's kinds with no Prometheus object in the cluster.
  */
 export type PickedUp =
   | { state: "judged"; by: string[] }
   | { state: "unknown"; by: string[]; why: Unknowable }
-  | { state: "noKind" };
+  | { state: "notJudged"; lacks: "kind" | "object" };
 
 /** Why whether a Prometheus picks something up cannot be said. */
 export type Unknowable =
@@ -348,13 +351,16 @@ export function selectedBy(
     instance: PrometheusInstance
   ) => [objects: LabelSelector | null, scope: LabelSelector | null]
 ): PickedUp {
-  if (instances.state === "absent") return { state: "noKind" };
+  if (instances.state === "absent")
+    return { state: "notJudged", lacks: "kind" };
   if (instances.state === "unread")
     return {
       state: "unknown",
       by: [],
       why: { kind: "unread", reason: instances.reason },
     };
+  if (instances.items.length === 0)
+    return { state: "notJudged", lacks: "object" };
   const by: string[] = [];
   let unknown: Unknowable | null = null;
   for (const instance of instances.items) {

@@ -2914,7 +2914,7 @@ export const ru: Catalogue = {
     prometheusKindAbsent:
       "CRD Prometheus оператора не установлен, поэтому здесь некому подхватывать мониторы. Подхват не оценивается.",
     noInstances:
-      "В кластере нет объекта Prometheus: мониторы некому подхватывать. Оператор удалили, а CRD остались?",
+      "В кластере нет объекта Prometheus, поэтому подхват не оценивается. Их может читать то, на что эта страница не смотрит: PrometheusAgent, оператор VictoriaMetrics, Grafana Alloy или коллектор OpenTelemetry.",
     instancesUnread:
       "Объекты Prometheus не удалось прочитать, поэтому неизвестно, какой экземпляр подхватывает монитор.",
     readyOf: "{ready} из {wanted} готово",
@@ -2995,7 +2995,7 @@ export const ru: Catalogue = {
     verdictNotPickedUp:
       "Ни один Prometheus его не подхватывает, поэтому метрики по нему никто не собирает.",
     verdictNoInstances:
-      "В кластере нет объекта Prometheus, поэтому его некому подхватить.",
+      "Выбран. В кластере нет объекта Prometheus, который бы его подхватил; читает ли его что-то другое, не оценивается.",
     verdictPickedUpUnknown: "Подхватывает ли его Prometheus, неизвестно.",
     verdictDown: "{down} {of} down.",
     verdictDownSince: "{down} {of} down с {since}.",
