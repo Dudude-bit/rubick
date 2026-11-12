@@ -320,6 +320,14 @@ export function useLogStream({
   onWiped,
 }: UseLogStreamOptions): UseLogStreamResult {
   const [buffer, setBuffer] = useState<LogBuffer>(emptyBuffer);
+  // The buffer's index is advanced in place, so each change is worked out
+  // once, here, and never in a state updater: React runs those twice under
+  // StrictMode and again when it replays a render, counting a batch again.
+  const held = useRef(buffer);
+  const writeBuffer = useCallback((next: (prev: LogBuffer) => LogBuffer) => {
+    held.current = next(held.current);
+    setBuffer(held.current);
+  }, []);
   // Read by the release closure below, which the stream effect owns: a
   // freeze must reach the next batch without restarting the stream.
   const frozenRef = useRef(frozen);
@@ -328,8 +336,8 @@ export function useLogStream({
   const frozenKey = frozen ? `${frozen.from}-${frozen.to}` : "";
   useEffect(() => {
     const interval = frozenRef.current;
-    setBuffer((prev) => appendCapped(prev, [], limit, interval));
-  }, [frozenKey, limit]);
+    writeBuffer((prev) => appendCapped(prev, [], limit, interval));
+  }, [frozenKey, limit, writeBuffer]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [failures, setFailures] = useState<ContainerFailure[]>([]);
@@ -414,9 +422,9 @@ export function useLogStream({
   wiped.current = onWiped;
 
   const clearLogs = useCallback(() => {
-    setBuffer(emptyBuffer());
+    writeBuffer(emptyBuffer);
     wiped.current?.();
-  }, []);
+  }, [writeBuffer]);
 
   const togglePause = useCallback(() => {
     setIsPaused((prev) => !prev);
@@ -686,7 +694,7 @@ export function useLogStream({
       const among = readBack;
       pending = [];
       readBack = false;
-      setBuffer((prev) =>
+      writeBuffer((prev) =>
         appendCapped(prev, window, limit, frozenRef.current, among)
       );
       setLastBatchAt(Date.now());
@@ -749,7 +757,7 @@ export function useLogStream({
       setFailures([]);
       setReads(NO_READS);
       if (!resuming) {
-        setBuffer(emptyBuffer());
+        writeBuffer(emptyBuffer);
         wiped.current?.();
       }
       // The next line to arrive is the first one under whatever this
@@ -963,6 +971,7 @@ export function useLogStream({
     // to the end, so the client it was built from is never used again. A
     // watch is restarted because `watcher` re-lists with the old token.
     sync,
+    writeBuffer,
   ]);
 
   // The pane is the same and its pods moved: a rollout, a scale, a pod the

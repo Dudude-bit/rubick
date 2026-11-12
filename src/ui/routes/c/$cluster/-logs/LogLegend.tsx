@@ -17,7 +17,7 @@ export interface LegendEntry {
 interface LogLegendProps {
   entries: LegendEntry[];
   colors: Map<string, string>;
-  /** Lines received per entry, by key. */
+  /** Lines held per entry, by key. */
   counts: Map<string, number>;
   hidden: ReadonlySet<string>;
   onToggle: (key: string) => void;
@@ -100,9 +100,16 @@ export function LogLegend({
                   {PHASE_LABEL[phase]}
                 </span>
               )}
-              {/* What has arrived, not what the container wrote — a
-                  stream still backfilling counts up. */}
-              <span className="font-mono text-[10px] text-fg-fnt">
+              {/* What is held, not what the container wrote — a stream
+                  still backfilling counts up, and the cap takes it down. */}
+              <span
+                className="font-mono text-[10px] text-fg-fnt"
+                title={t("count", "legendLinesHeld", {
+                  n: count,
+                  count: formatCount(count),
+                  name: label,
+                })}
+              >
                 {formatCount(count)}
               </span>
               {gone && !word && (

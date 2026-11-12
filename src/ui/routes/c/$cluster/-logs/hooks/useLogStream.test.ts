@@ -8,6 +8,7 @@ import {
   vi,
 } from "vite-plus/test";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import type { StreamLogConfig } from "@/generated/types";
 
 // ----- Mocks -----
@@ -241,6 +242,39 @@ describe("useLogStream streams every container at once", () => {
       "web",
       "sidecar",
     ]);
+  });
+
+  /**
+   * Seen in a development build: a lane's chip read 626 beside a footer
+   * holding 313 lines. The index the chips count from is advanced in place,
+   * and React runs a state updater twice under StrictMode and again when it
+   * replays a render. Fails if a second run counts a batch again, or takes
+   * an evicted line off the tally twice.
+   */
+  it("counts each held line once, however often React runs its updates", async () => {
+    const { result } = renderHook(
+      () => useLogStream({ ...baseProps, containers: ["web"], limit: 3 }),
+      { wrapper: StrictMode }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls.length).toBeGreaterThan(0);
+    });
+    holdTheClock();
+
+    act(() => {
+      listeners["log-batch"]!(logEvent("web", "one", "two"));
+    });
+    await pastTheWindow();
+    expect(result.current.logs).toHaveLength(2);
+    expect(result.current.fields.values.get("container")?.get("web")).toBe(2);
+
+    act(() => {
+      listeners["log-batch"]!(logEvent("web", "three", "four"));
+    });
+    await pastTheWindow();
+    expect(result.current.logs).toHaveLength(3);
+    expect(result.current.fields.values.get("container")?.get("web")).toBe(3);
   });
 
   it("orders one reorder window by timestamp, not by arrival", async () => {
