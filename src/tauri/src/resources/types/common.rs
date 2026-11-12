@@ -81,7 +81,7 @@ impl From<&EnvVar> for EnvVarInfo {
     fn from(env: &EnvVar) -> Self {
         Self {
             name: env.name.clone(),
-            value: env.value.clone(),
+            value: env.value.as_deref().map(crate::resources::shown_text),
             value_from: env.value_from.as_ref().map(EnvVarSourceInfo::from),
         }
     }

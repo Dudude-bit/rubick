@@ -42,6 +42,7 @@ export const ERROR_CODES = {
   LIST_UNREAD: "LIST_UNREAD",
   LOG_NOT_KEPT: "LOG_NOT_KEPT",
   READ_DEADLINE: "READ_DEADLINE",
+  NO_ANSWER: "NO_ANSWER",
   NOT_CONNECTED: "NOT_CONNECTED",
   LOCAL_PORT_PRIVILEGED: "LOCAL_PORT_PRIVILEGED",
   LOCAL_PORT_IN_USE: "LOCAL_PORT_IN_USE",
@@ -161,6 +162,17 @@ export function errorCode(error: unknown): ErrorCode {
  */
 export function isRefusal(error: unknown): boolean {
   return errorCode(error) === ERROR_CODES.PERMISSION;
+}
+
+/**
+ * Whether nobody answered: the read deadline, a 5xx, a dropped connection.
+ *
+ * Asked of a write. The request left, so the cluster may have done it all
+ * the same, and "failed" is a verdict on something nobody saw.
+ */
+export function isUnanswered(error: unknown): boolean {
+  const code = errorCode(error);
+  return code === ERROR_CODES.NO_ANSWER || code === ERROR_CODES.READ_DEADLINE;
 }
 
 /**

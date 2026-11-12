@@ -1,5 +1,5 @@
 {
-  "about": "The placeholder a rendered manifest carries in place of a private key, which keys of a manifest still hold it (`keys`), and which annotations hold a record blanked the same way, with the keys blanked in each (`copies`). A manifest with `keys` is never sent: a ConfigMap would store the placeholder as the key. An annotation in `copies` is left out of what is sent: stored, the placeholder would replace the record kubectl keeps. Rust: `WITHHELD_MARKER`, `still_withheld` and `withheld_copy` in src/tauri/src/resources/tls.rs and the guard in `parse_all_documents` (src/tauri/src/commands/manifest/parse.rs). TypeScript: `WITHHELD_MARKER` in src/ui/lib/withheld.ts, `withheldKeysIn` and `withheldCopiesIn` in src/ui/routes/c/$cluster/-yaml/manifest-reads.ts, which name both before Apply is offered. Values for helm are refused whole where their text holds the marker at all, since a chart would store it as the key: `values_to_send` in src/tauri/src/commands/helm/cli.rs, and the Upgrade and Install dialogs before the reader confirms.",
+  "about": "The placeholder a rendered manifest carries in place of a private key, where a manifest still holds it (`keys`: a key of `data`, `binaryData` or `stringData` by its name, any other string by its path, as `spec.containers[0].env[1].value`), and which annotations hold a record blanked the same way, with what is blanked in each (`copies`). A manifest with `keys` is never sent: a ConfigMap would store the placeholder as the key, and a Deployment as its container's env. An annotation in `copies` is left out of what is sent: stored, the placeholder would replace the record kubectl keeps. Rust: `WITHHELD_MARKER`, `still_withheld` and `withheld_copy` in src/tauri/src/resources/tls.rs and the guard in `parse_all_documents` (src/tauri/src/commands/manifest/parse.rs). TypeScript: `WITHHELD_MARKER` and `withheldKeysOf` in src/ui/lib/withheld.ts, `withheldKeysIn` and `withheldCopiesIn` in src/ui/routes/c/$cluster/-yaml/manifest-reads.ts, which name both before Apply is offered. Values for helm are refused whole where their text holds the marker at all, since a chart would store it as the key: `values_to_send` in src/tauri/src/commands/helm/cli.rs, and the Upgrade and Install dialogs before the reader confirms.",
   "marker": "<withheld: the app never shows a private key>",
   "cases": [
     {
@@ -45,10 +45,38 @@
       "copies": {}
     },
     {
-      "name": "the placeholder outside the maps a key is read from",
+      "name": "an annotation that was a key itself",
       "manifest": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: notes\n  namespace: shop\n  annotations:\n    note: '<withheld: the app never shows a private key>'\ndata:\n  a: b\n",
-      "keys": [],
+      "keys": ["metadata.annotations.note"],
       "copies": {}
+    },
+    {
+      "name": "a container's env literal that was a key",
+      "manifest": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n  namespace: shop\nspec:\n  template:\n    spec:\n      containers:\n        - name: web\n          env:\n            - name: MODE\n              value: fast\n            - name: SIGNING_KEY\n              value: '<withheld: the app never shows a private key>'\n",
+      "keys": ["spec.template.spec.containers[0].env[1].value"],
+      "copies": {}
+    },
+    {
+      "name": "a custom resource's values, beside one that only mentions the placeholder",
+      "manifest": "apiVersion: helm.toolkit.fluxcd.io/v2\nkind: HelmRelease\nmetadata:\n  name: web\n  namespace: shop\nspec:\n  values:\n    tls:\n      key: |\n        <withheld: the app never shows a private key>\n    readme: \"the app prints <withheld: the app never shows a private key> for a key\"\n",
+      "keys": ["spec.values.tls.key"],
+      "copies": {}
+    },
+    {
+      "name": "under a key map, deeper than a key of it",
+      "manifest": "apiVersion: demo.io/v1\nkind: Bundle\nmetadata:\n  name: edge\n  namespace: shop\ndata:\n  client.key: '<withheld: the app never shows a private key>'\n  servers:\n    - key: '<withheld: the app never shows a private key>'\n",
+      "keys": ["client.key", "data.servers[0].key"],
+      "copies": {}
+    },
+    {
+      "name": "the record of a Deployment, blanked in a container's env",
+      "manifest": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n  namespace: shop\n  annotations:\n    kubectl.kubernetes.io/last-applied-configuration: '{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"name\":\"web\",\"namespace\":\"shop\"},\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"env\":[{\"name\":\"SIGNING_KEY\",\"value\":\"<withheld: the app never shows a private key>\"}],\"name\":\"web\"}]}}}}'\nspec:\n  replicas: 2\n",
+      "keys": [],
+      "copies": {
+        "kubectl.kubernetes.io/last-applied-configuration": [
+          "spec.template.spec.containers[0].env[0].value"
+        ]
+      }
     },
     {
       "name": "the record kubectl keeps, blanked, with the key itself taken out of the manifest",

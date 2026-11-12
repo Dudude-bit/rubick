@@ -628,6 +628,56 @@ describe("renderReport", () => {
   });
 
   /**
+   * The same message with the token after the `?` instead of before the
+   * host went into the file whole: the pattern keyed by `token=` ran over
+   * log lines only. Fails if a condition, an event or a printed cell of a
+   * shared file carries the value.
+   */
+  it("prints a controller's message without the credential in an address's query string", () => {
+    const said =
+      "failed to clone 'https://git.example.com/acme/infra.git?access_token=s3cr3t-value&ref=main': 401";
+    const html = renderReport(
+      report({
+        sections: [
+          section("conditions", {
+            type: "conditions",
+            rows: [
+              {
+                type: "Ready",
+                status: "False",
+                role: "err",
+                reason: "GitOperationFailed",
+                message: said,
+                since: null,
+              },
+            ],
+          }),
+          section("events", {
+            type: "events",
+            rows: [
+              {
+                at: null,
+                role: "warn",
+                reason: "GitOperationFailed",
+                message: said,
+                count: 1,
+              },
+            ],
+          }),
+          section("table", {
+            type: "table",
+            columns: ["Message"],
+            rows: [{ cells: [{ text: said }] }],
+            more: null,
+          }),
+        ],
+      })
+    );
+    expect(html).not.toContain("s3cr3t-value");
+    expect(html.split("infra.git?access_token=…&amp;ref=main")).toHaveLength(4);
+  });
+
+  /**
    * The file's own link back names the context, and an EKS context is
    * `user@cluster`; an object's name is its identity. Fails if the cut
    * that removes credentials reaches either.

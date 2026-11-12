@@ -23,6 +23,21 @@ const visible = (container: HTMLElement) => {
 
 describe("ResourceMessage", () => {
   /**
+   * Every condition and every event is drawn through here, and a
+   * controller's failure quotes the address it failed on, token and all:
+   * the shared file cut it and the screen did not. Fails if the token is
+   * drawn, before the host or in the query string, or the address is lost.
+   */
+  it("draws a controller's message without the credentials in an address", async () => {
+    const { container } = await wrap(
+      <ResourceMessage message="failed to clone 'https://ci:hunter2@git.example.com/acme/infra.git?access_token=s3cr3t-value&ref=main': 401" />
+    );
+    expect(visible(container)).toBe(
+      "failed to clone 'https://…@git.example.com/acme/infra.git?access_token=…&ref=main': 401"
+    );
+  });
+
+  /**
    * The event from the screenshot. If the name stops being an anchor there is
    * no way from the event that scaled a revision to the revision it scaled.
    */

@@ -17,6 +17,7 @@ import type { PlacedSection } from "@/lib/report-parts";
 import { renderWithRouter } from "@/test/render";
 
 import {
+  Finding,
   FindingList,
   TroubleList,
   TroubleRow,
@@ -631,6 +632,28 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
     expect(
       screen.getByText(
         translate("en", "count", "notCheckedOfTotal", { n: 1, total: 2 })
+      )
+    ).toBeInTheDocument();
+  });
+});
+
+describe("a finding's own words", () => {
+  /**
+   * A vendor page draws the controller's message as written, and a source
+   * that could not be cloned quotes its remote. Fails if the token in it is
+   * drawn, or anything else of the message is changed.
+   */
+  it("draws the controller's message without the credentials in an address", () => {
+    render(
+      <Finding
+        tone="err"
+        title="infra could not be fetched"
+        verbatim="failed to clone 'https://ci:hunter2@git.example.com/acme/infra.git?access_token=s3cr3t-value': 401"
+      />
+    );
+    expect(
+      screen.getByText(
+        "failed to clone 'https://…@git.example.com/acme/infra.git?access_token=…': 401"
       )
     ).toBeInTheDocument();
   });

@@ -156,6 +156,8 @@ struct CommonResourceFields {
     annotations: BTreeMap<String, String>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
     owner_references: Vec<OwnerReferenceInfo>,
+    /// Every other top-level field, judged with the two above.
+    rest: serde_json::Value,
 }
 
 /// Annotations without kubectl's own bookkeeping, which these pages leave out.
@@ -182,6 +184,13 @@ fn extract_common_fields(obj: &DynamicObject) -> CommonResourceFields {
         })
         .unwrap_or_default();
 
+    // What the object says, judged once by the rule that withholds a private
+    // key: a key map at the top level, and every string of `spec` and `status`.
+    let mut rest = obj.data.clone();
+    crate::resources::redact_private_keys(&mut rest);
+    let mut take = |field: &str| rest.as_object_mut().and_then(|fields| fields.remove(field));
+    let (spec, status) = (take("spec"), take("status"));
+
     CommonResourceFields {
         name: obj.name_any(),
         namespace: obj.namespace(),
@@ -196,16 +205,13 @@ fn extract_common_fields(obj: &DynamicObject) -> CommonResourceFields {
             .as_ref()
             .map(|t| t.kind.clone())
             .unwrap_or_default(),
-        spec: obj
-            .data
-            .get("spec")
-            .cloned()
-            .unwrap_or(serde_json::Value::Null),
-        status: obj.data.get("status").cloned(),
+        spec: spec.unwrap_or(serde_json::Value::Null),
+        status,
         labels: obj.labels().clone(),
         annotations: without_kubectl(crate::resources::annotations_of(&obj.metadata)),
         created_at: obj.creation_timestamp().map(|t| t.moment()),
         owner_references,
+        rest,
     }
 }
 
@@ -230,9 +236,6 @@ pub fn dynamic_object_to_custom_resource_info(obj: &DynamicObject) -> CustomReso
 
 pub(super) fn dynamic_object_to_detail_info(obj: &DynamicObject) -> CustomResourceDetailInfo {
     let f = extract_common_fields(obj);
-    // A kind that keeps a key map at the top level is judged as a Secret is.
-    let mut rest = obj.data.clone();
-    crate::resources::redact_private_keys(&mut rest);
     CustomResourceDetailInfo {
         name: f.name,
         namespace: f.namespace,
@@ -248,13 +251,10 @@ pub(super) fn dynamic_object_to_detail_info(obj: &DynamicObject) -> CustomResour
         owner_references: f.owner_references,
         finalizers: obj.metadata.finalizers.clone().unwrap_or_default(),
         resource_version: obj.metadata.resource_version.clone(),
-        fields: rest
-            .as_object()
-            .into_iter()
-            .flatten()
-            .filter(|(key, _)| key.as_str() != "spec" && key.as_str() != "status")
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect(),
+        fields: match f.rest {
+            serde_json::Value::Object(fields) => fields.into_iter().collect(),
+            _ => BTreeMap::new(),
+        },
     }
 }
 
@@ -301,6 +301,37 @@ mod tests {
         );
         assert_eq!(detail.fields["addressType"], json!("IPv4"));
         assert_eq!(detail.spec, serde_json::Value::Null);
+    }
+
+    /// A Flux `HelmRelease` keeps its chart's values in `spec`, and the list
+    /// row, the watch, the page and the peek carried `spec` and `status` as
+    /// read. Fails if a key in either leaves on the row or the detail, or if
+    /// what stood beside it does not.
+    #[test]
+    fn a_custom_resources_spec_and_status_leave_without_a_private_key() {
+        const KEY: &str = include_str!("../../../tests/fixtures/leaf.key.pem");
+        let obj: DynamicObject = serde_json::from_value(json!({
+            "apiVersion": "helm.toolkit.fluxcd.io/v2",
+            "kind": "HelmRelease",
+            "metadata": { "name": "web", "namespace": "shop" },
+            "spec": { "chart": "web", "values": { "tls": { "key": KEY } } },
+            "status": { "lastAttemptedValues": KEY, "observedGeneration": 3 },
+            "signing": [KEY],
+        }))
+        .expect("an object this test wrote");
+
+        let row = dynamic_object_to_custom_resource_info(&obj);
+        let detail = dynamic_object_to_detail_info(&obj);
+        let marker = crate::resources::WITHHELD_MARKER;
+        for (spec, status) in [(&row.spec, &row.status), (&detail.spec, &detail.status)] {
+            assert_eq!(spec["values"]["tls"]["key"], marker);
+            assert_eq!(spec["chart"], "web");
+            let status = status.as_ref().expect("a status");
+            assert_eq!(status["lastAttemptedValues"], marker);
+            assert_eq!(status["observedGeneration"], 3);
+        }
+        assert_eq!(detail.fields["signing"], json!([marker]));
+        assert_eq!(detail.fields.len(), 1, "spec and status are not repeated");
     }
 
     /// A custom resource's page and peek are built from this, beside the

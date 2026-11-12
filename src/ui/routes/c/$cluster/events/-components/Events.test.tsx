@@ -436,6 +436,19 @@ describe("a feed a watch keeps", () => {
     expect(message).toHaveAttribute("title", "Synthetic event about cart");
   });
 
+  /** The row truncates and its tooltip is the whole message: fails if the tooltip carries the token the row does not draw. */
+  it("holds a message's tooltip without the credentials in an address", async () => {
+    await watched();
+    const said =
+      "failed to clone 'https://git.example.com/acme/infra.git?access_token=s3cr3t-value': 401";
+    burst([{ ...dated("shop", 0), message: said }]);
+    await waitFor(() => expect(drawnRows()).toBe(1));
+    expect(within(rowAt(0)!).queryByTitle(/s3cr3t-value/)).toBeNull();
+    expect(
+      within(rowAt(0)!).getByTitle(/infra\.git\?access_token=…': 401/)
+    ).toBeInTheDocument();
+  });
+
   /**
    * Dana clicked the link "Deployment/cart" on an Event row and got the peek,
    * though the link is the way to the page. Fails if a plain click on the

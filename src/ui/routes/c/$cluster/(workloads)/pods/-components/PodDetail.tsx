@@ -139,7 +139,11 @@ import type {
   PodInfo,
 } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import {
+  toastedUnanswered,
+  toastError,
+  toastWriteError,
+} from "@/lib/toast-error";
 import { errorToShow } from "@/lib/error-utils";
 import { TONE_TEXT } from "@/lib/tone";
 
@@ -559,6 +563,7 @@ export function PodDetail() {
       refetch();
     },
     onError: (err) => {
+      if (toastedUnanswered(err)) return;
       toast({
         title: t("action", "error"),
         description: t("action", "failedToRestartPod", {
@@ -740,7 +745,7 @@ export function PodDetail() {
                 });
                 router.history.back();
               } catch (err) {
-                toastError(t("action", "failedToDelete"), err);
+                toastWriteError(t("action", "failedToDelete"), err);
               }
             }}
           >

@@ -49,6 +49,7 @@ import {
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
+import { toastedUnanswered } from "@/lib/toast-error";
 import {
   keepWatched,
   scopeOfList,
@@ -437,15 +438,16 @@ export function ResourceList<
       setDeleteTarget(null);
     },
     onError: (error, item) => {
-      toast({
-        title: t("action", "error"),
-        description: t("action", "deleteFailed", {
-          kind: deleteConfig?.resourceType ?? t("action", "resourceNoun"),
-          name: item.name,
-          error: errorToShow(error),
-        }),
-        variant: "destructive",
-      });
+      if (!toastedUnanswered(error))
+        toast({
+          title: t("action", "error"),
+          description: t("action", "deleteFailed", {
+            kind: deleteConfig?.resourceType ?? t("action", "resourceNoun"),
+            name: item.name,
+            error: errorToShow(error),
+          }),
+          variant: "destructive",
+        });
       setDeleteTarget(null);
     },
   });

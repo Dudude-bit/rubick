@@ -7,6 +7,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { BACKUP_REFUSED, perform, type PgAction } from "./actions";
 import type { PgCluster } from "./model";
+import { isUnanswered } from "@/lib/error-utils";
 
 const backup = { id: "backup" } as PgAction;
 const cluster = { name: "pg", namespace: "shop" } as PgCluster;
@@ -37,6 +38,26 @@ describe("taking a backup", () => {
     await expect(perform(backup, cluster)).rejects.toThrow(
       "did not answer within 60 s"
     );
+  });
+
+  /**
+   * The page calls a thrown action failed unless the error says nobody
+   * answered. Fails if a Backup the cluster may have created reads as a
+   * failed one, or a refused one as unanswered.
+   */
+  it("tells a Backup nobody answered for from one the cluster refused", async () => {
+    const thrownFor = (outcome: unknown) => {
+      applyManifest.mockResolvedValue(answered(outcome));
+      return perform(backup, cluster).catch((error: unknown) => error);
+    };
+    expect(
+      isUnanswered(await thrownFor({ says: "unanswered", said: "502" }))
+    ).toBe(true);
+    expect(
+      isUnanswered(
+        await thrownFor({ says: "refused", code: "NOT_FOUND", said: "no" })
+      )
+    ).toBe(false);
   });
 
   /** With no words from the cluster the caller says it in the reader's language. */

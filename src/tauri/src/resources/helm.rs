@@ -97,14 +97,18 @@ pub fn withhold_strings(value: &mut Value) -> Vec<String> {
 /// text that does not read as YAML: its caller refuses it by the text.
 #[must_use]
 pub fn placeholders_in(values: &str) -> Vec<String> {
+    let tree = serde_yaml::from_str::<Value>(values);
+    tree.map_or_else(|_| Vec::new(), |mut tree| placeholders(&mut tree))
+}
+
+/// Where a tree still holds [`WITHHELD_MARKER`].
+pub(super) fn placeholders(tree: &mut Value) -> Vec<String> {
     let mut held = Vec::new();
-    if let Ok(mut tree) = serde_yaml::from_str::<Value>(values) {
-        strings(&mut tree, &mut String::new(), &mut |path, text| {
-            if text.trim() == WITHHELD_MARKER {
-                held.push(path.to_string());
-            }
-        });
-    }
+    strings(tree, &mut String::new(), &mut |path, text| {
+        if text.trim() == WITHHELD_MARKER {
+            held.push(path.to_string());
+        }
+    });
     held
 }
 
@@ -231,11 +235,13 @@ fn withhold_in_document(document: &mut Value) -> Vec<String> {
     if !(names("apiVersion") && names("kind")) {
         return withhold_strings(document);
     }
-    let mut keys = redact_private_keys(document);
+    // Items first: each has key maps of its own, named as an object names them.
+    let mut keys = Vec::new();
     let items = document.get_mut("items").and_then(Value::as_array_mut);
     for item in items.into_iter().flatten() {
         keys.extend(withhold_in_document(item));
     }
+    keys.extend(redact_private_keys(document));
     keys
 }
 
@@ -306,7 +312,13 @@ pub fn stored_release_json(stored: &[u8]) -> Result<Vec<u8>, String> {
     let packed = base64::engine::general_purpose::STANDARD
         .decode(stored)
         .map_err(|e| format!("base64: {e}"))?;
-    if !packed.starts_with(&[0x1f, 0x8b]) {
+    unzipped(packed)
+}
+
+const GZIP: [u8; 2] = [0x1f, 0x8b];
+
+fn unzipped(packed: Vec<u8>) -> Result<Vec<u8>, String> {
+    if !packed.starts_with(&GZIP) {
         return Ok(packed);
     }
     let mut json = Vec::new();
@@ -316,14 +328,28 @@ pub fn stored_release_json(stored: &[u8]) -> Result<Vec<u8>, String> {
     Ok(json)
 }
 
-/// Whether the release a Secret stores has anything in it the release's own
+/// Whether the release a value stores has anything in it the release's own
 /// page withholds: in its values, a manifest, its notes or the chart's files.
 /// A value that is no release is not this rule's to judge.
-pub(super) fn stored_release_withholds(stored: &[u8]) -> bool {
-    let release = stored_release_json(stored)
+///
+/// `typed` is a Secret of Helm's own type saying so. Helm's `ConfigMap`
+/// driver keeps the same value in a `ConfigMap`, where only the value says
+/// what it is: gzip, as stored or under base64, around a release.
+pub(super) fn stored_release_withholds(stored: &[u8], typed: bool) -> bool {
+    let json = if stored.starts_with(&GZIP) {
+        unzipped(stored.to_vec())
+    } else if typed || stored.starts_with(b"H4sI") {
+        stored_release_json(stored)
+    } else {
+        return false;
+    };
+    let release = json
         .ok()
         .and_then(|json| serde_json::from_slice::<Value>(&json).ok());
-    release.as_ref().is_some_and(withholds)
+    let is_release = |value: &Value| value.get("chart").is_some() && value.get("info").is_some();
+    release
+        .as_ref()
+        .is_some_and(|release| (typed || is_release(release)) && withholds(release))
 }
 
 fn withholds(value: &Value) -> bool {

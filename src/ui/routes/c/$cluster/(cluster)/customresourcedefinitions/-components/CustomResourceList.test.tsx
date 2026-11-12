@@ -159,6 +159,29 @@ describe("a status column on an object with no status", () => {
   });
 });
 
+describe("a printer column that prints an address", () => {
+  /** A source's URL column is its git remote, token and all. Fails if the list draws the token the shared file leaves out. */
+  it("draws it without the credentials in it", async () => {
+    const source = node("controlplane", "172.30.1.2", "192.168.0.69");
+    await draw(
+      [
+        {
+          ...source,
+          spec: {
+            ...(source.spec as object),
+            url: "https://ci:hunter2@git.example.com/acme/infra.git?access_token=s3cr3t-value",
+          },
+        },
+      ],
+      [column("URL", ".spec.url")]
+    );
+    const row = within(await rowOf("controlplane"));
+    expect(
+      row.getByText("https://…@git.example.com/acme/infra.git?access_token=…")
+    ).toBeInTheDocument();
+  });
+});
+
 /** The `widgets.demo.k8s-gui.io` specimen, one instance. */
 const widget: CustomResourceInfo = {
   name: "blue",

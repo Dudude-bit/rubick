@@ -157,6 +157,30 @@ describe("a kind listed as the API server prints it", () => {
   });
 
   /**
+   * A printed column is a path into the object, and a source's address is
+   * one: the shared file cut the token out of the cell and the list drew
+   * it. Fails if the cell or its tooltip carries it.
+   */
+  it("draws a printed address without the credentials in it", async () => {
+    const source = {
+      ...lease("infra"),
+      cells: [
+        "infra",
+        "https://ci:hunter2@git.example.com/acme/infra.git?access_token=s3cr3t-value",
+      ],
+    };
+    answers.table = () => Promise.resolve(table([source]));
+    await open();
+    const cell = await screen.findByText(
+      "https://…@git.example.com/acme/infra.git?access_token=…"
+    );
+    expect(cell).toHaveAttribute(
+      "title",
+      "https://…@git.example.com/acme/infra.git?access_token=…"
+    );
+  });
+
+  /**
    * A wedged API group holds the catalogue for ten seconds, and the pane was
    * blank for all of them. Fails if a list whose kind discovery has not
    * named yet draws nothing, or never says what it is waiting for.

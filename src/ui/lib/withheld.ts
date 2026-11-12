@@ -11,17 +11,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** The keys of one object that hold the placeholder. */
+/**
+ * Where one object holds the placeholder: a key of a key map by its name,
+ * any other string by its path, as `spec.containers[0].env[1].value`.
+ */
 export function withheldKeysOf(object: Record<string, unknown>): string[] {
-  return KEY_MAPS.flatMap((field) => {
-    const map = object[field];
-    return isRecord(map)
-      ? Object.keys(map).filter(
-          (key) =>
-            typeof map[key] === "string" && map[key].trim() === WITHHELD_MARKER
-        )
-      : [];
-  });
+  const held: string[] = [];
+  const walk = (value: unknown, path: string) => {
+    if (typeof value === "string") {
+      if (value.trim() === WITHHELD_MARKER) held.push(path);
+    } else if (Array.isArray(value)) {
+      value.forEach((item, at) => walk(item, `${path}[${at}]`));
+    } else if (isRecord(value)) {
+      for (const [key, item] of Object.entries(value))
+        walk(item, path ? `${path}.${key}` : key);
+    }
+  };
+  for (const [field, value] of Object.entries(object)) {
+    const map = KEY_MAPS.some((name) => name === field) && isRecord(value);
+    if (!map) walk(value, field);
+    else
+      for (const [key, item] of Object.entries(value))
+        walk(item, typeof item === "string" ? key : `${field}.${key}`);
+  }
+  return held;
 }
 
 /**

@@ -9,6 +9,7 @@ import type { QuickAction } from "@/components/ui/quick-actions";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import type { PeekTarget } from "@/hooks/usePeek";
 import { scopeCacheKey } from "@/lib/namespace-scope";
+import { withoutCredentials } from "@/lib/hints";
 import { createAgeColumn, createNamespaceColumn } from "../../../-list/columns";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { hrefOf, objectLink } from "@/lib/links";
@@ -175,7 +176,12 @@ export function CustomResourceList({
             return cell.unreported ? (
               <NotReported column={pc.name} />
             ) : (
-              formatColumnValue(cell.value, pc.columnType)
+              formatColumnValue(
+                typeof cell.value === "string"
+                  ? withoutCredentials(cell.value)
+                  : cell.value,
+                pc.columnType
+              )
             );
           },
         });

@@ -18,6 +18,7 @@ import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useObjectConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
+import { toastedUnanswered } from "@/lib/toast-error";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
@@ -88,6 +89,7 @@ export function ConfigMapDetail() {
       toast({ title: t("action", "keyUpdated", { key }) });
     } catch (error) {
       noteDenied("patch", guarded, error);
+      if (toastedUnanswered(error)) return;
       toast({
         title: t("action", "keyUpdateFailed", { key }),
         description: errorWords(error, t),

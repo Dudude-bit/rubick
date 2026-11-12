@@ -30,6 +30,7 @@ export { OutLink } from "@/components/ui/out-link";
 import { Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
 import { cn } from "@/lib/utils";
+import { withoutCredentials } from "@/lib/hints";
 import { CopyableValue } from "@/components/ui/copyable-value";
 import { ObjectLink, ResourceRef } from "@/components/object/ResourceRef";
 import { useShareSection } from "@/components/share/screen-share";
@@ -576,7 +577,7 @@ export function Finding({
       <p className={cn("text-[11.5px]", toneText(tone))}>{title}</p>
       {verbatim && (
         <p className="mt-0.5 select-text wrap-break-word font-mono text-[11px] text-fg-mut">
-          {verbatim}
+          {withoutCredentials(verbatim)}
         </p>
       )}
       {children != null && (

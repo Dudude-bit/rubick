@@ -39,7 +39,7 @@ import { cn, isK8sVersionAtLeast, formatTimeUnit } from "@/lib/utils";
 import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastError, toastWriteError } from "@/lib/toast-error";
 import { ReasonTip } from "@/components/object/detail-blocks";
 import { usePodDenied } from "@/lib/access";
 
@@ -236,7 +236,7 @@ export function DebugPodDialog({
           }),
         });
       } catch (err) {
-        toastError(t("action", "failedToDeletePod"), err);
+        toastWriteError(t("action", "failedToDeletePod"), err);
       }
     }
     setShowTimeoutDialog(false);

@@ -1383,6 +1383,9 @@ export const en = {
     applyDocUnanswered:
       "{id} got no answer ({said}). It may have been applied: check the object before applying again.",
     applyDocNotSent: "{id} not sent",
+    writeUnanswered: "The cluster did not answer",
+    writeUnansweredDetail:
+      "No answer came back ({said}). The cluster may have done it all the same: check before doing it again.",
 
     custom: "Custom",
     stripFull: "Full",
@@ -2461,6 +2464,8 @@ export const en = {
       "The preview stops at {cap}; the file goes on. Download it for the rest.",
     previewRepaired:
       "These bytes are not valid UTF-8. What is below is a repair, with every byte we could not read replaced by \uFFFD. It is not the file; download it for the bytes.",
+    previewWithheld:
+      "Not shown: this file holds a private key, and the app never shows one. Download saves the file to disk as it is.",
     downloaded: "Downloaded {name}",
     downloadFailed: "Could not download {name}",
     noCatInImage: "No cat in this image to copy the file with.",

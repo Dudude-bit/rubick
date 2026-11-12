@@ -10,6 +10,7 @@ import { ReasonText } from "@/components/object/ReasonText";
 import type { EventInfo } from "@/generated/types";
 import { columnHeader } from "@/i18n/column-header";
 import { eventReasonMark } from "@/lib/event-reason";
+import { withoutCredentials } from "@/lib/hints";
 import { cn, formatDate } from "@/lib/utils";
 import { widestText } from "@/lib/text-width";
 import { crdFor, hrefOf, objectLink } from "@/lib/links";
@@ -117,7 +118,10 @@ function NamespaceCell({ row }: { row: { original: EventInfo } }) {
 function MessageCell({ row }: { row: { original: EventInfo } }) {
   const event = row.original;
   return (
-    <span className="text-fg-fnt" title={event.message ?? undefined}>
+    <span
+      className="text-fg-fnt"
+      title={event.message ? withoutCredentials(event.message) : undefined}
+    >
       {event.message ? (
         <ResourceMessage
           message={event.message}

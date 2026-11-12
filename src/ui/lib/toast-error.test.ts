@@ -4,7 +4,7 @@ const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 vi.mock("@/components/ui/use-toast", () => ({ toast }));
 
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { toastError } from "./toast-error";
+import { toastError, toastWriteError } from "./toast-error";
 
 const SOURCES = import.meta.glob<string>(
   [
@@ -151,5 +151,143 @@ describe("a failure shown to the reader", () => {
             )
     );
     expect(shown).toEqual([]);
+  });
+});
+
+/** A command that changes the cluster, as a screen calls it. */
+const WRITE = new RegExp(
+  String.raw`\bcommands\.(?:` +
+    [
+      "delete(?!AzureProfile|GcpProfile|ContextBinding|PortForwardConfig)[A-Z]\\w*",
+      "scale[A-Z]\\w*",
+      "restart[A-Z]\\w*",
+      "rollbackWorkload",
+      "cordonNode",
+      "uncordonNode",
+      "patchCustomResource\\w*",
+      "triggerCronjob",
+      "setAutoscalerBounds",
+      "setConfigmapKey",
+      "updateDeploymentImage",
+    ].join("|") +
+    String.raw`)\(`
+);
+
+/** Where the failure of a write is worded, and in how many places there. */
+const WORDS_A_WRITE = new Map([
+  ["/src/ui/hooks/useResource.ts", 1],
+  ["/src/ui/hooks/useResourceDetail.ts", 1],
+  ["/src/ui/routes/c/$cluster/-list/ResourceList.tsx", 1],
+  ["/src/ui/routes/c/$cluster/-object/useObjectActions.tsx", 1],
+  ["/src/ui/routes/c/$cluster/-object/-components/CustomResourceDetail.tsx", 1],
+  ["/src/ui/routes/c/$cluster/-debug/DebugPodDialog.tsx", 1],
+  ["/src/ui/routes/c/$cluster/-debug/DebugNodeDialog.tsx", 1],
+  [
+    "/src/ui/routes/c/$cluster/(cluster)/nodes/-components/useNodeActions.tsx",
+    2,
+  ],
+  [
+    "/src/ui/routes/c/$cluster/(cluster)/customresourcedefinitions/-components/Crds.tsx",
+    1,
+  ],
+  [
+    "/src/ui/routes/c/$cluster/(cluster)/customresourcedefinitions/-components/CrdDetail.tsx",
+    1,
+  ],
+  ["/src/ui/routes/c/$cluster/(workloads)/pods/-components/PodDetail.tsx", 2],
+  [
+    "/src/ui/routes/c/$cluster/(workloads)/cronjobs/-components/CronJobDetail.tsx",
+    1,
+  ],
+  [
+    "/src/ui/routes/c/$cluster/(config)/configmaps/-components/ConfigMapDetail.tsx",
+    1,
+  ],
+  ["/src/ui/integrations/cloudnativepg/page.tsx", 1],
+  ["/src/ui/integrations/scylla/page.tsx", 1],
+]);
+
+/** What a screen hands a write to, to have its failure worded there. */
+const HANDS_IT_ON =
+  /\b(?:useResourceMutation|useResourceDetail|createResourceListPage|createWorkloadListPage|ResourceList)\b/;
+
+/** Writes whose failure the caller of the file words. */
+const WORDED_BY_ITS_CALLER = new Map([
+  ["/src/ui/routes/c/$cluster/-peek/peek-actions.ts", "useObjectActions"],
+  ["/src/ui/integrations/cloudnativepg/actions.ts", "its page"],
+  ["/src/ui/integrations/scylla/actions.ts", "its page"],
+]);
+
+describe("a write nobody answered", () => {
+  beforeEach(() => toast.mockClear());
+
+  /** What the wrapper every command goes through throws for a backend error. */
+  const thrown = (code: string, said: string) =>
+    new Error(
+      `Tauri command 'scaleDeployment' failed: Kubernetes API error: ${said}`,
+      {
+        cause: { code, message: `Kubernetes API error: ${said}`, said },
+      }
+    );
+
+  /**
+   * Scale, restart, delete, rollback and cordon called a deadline, a 502 and
+   * a dropped connection "failed", and the reader did it again over a write
+   * that had landed. Fails if either code is drawn as a failure, or the
+   * cluster's own words are left out.
+   */
+  it("is not called failed: the cluster may have done it", () => {
+    for (const code of ["NO_ANSWER", "READ_DEADLINE"]) {
+      toast.mockClear();
+      toastWriteError("Could not scale api", thrown(code, "502 Bad Gateway"));
+      expect(toast).toHaveBeenCalledTimes(1);
+      expect(toast).toHaveBeenCalledWith({
+        title: "The cluster did not answer",
+        description:
+          "No answer came back (502 Bad Gateway). The cluster may have done it all the same: check before doing it again.",
+      });
+    }
+  });
+
+  /** The cost of the one above: the server's own no is still a failure. */
+  it("leaves a refusal and a conflict a failure, under the screen's own title", () => {
+    for (const code of ["PERMISSION_DENIED", "KUBE_API_ERROR", "NOT_FOUND"]) {
+      toast.mockClear();
+      toastWriteError(
+        "Could not scale api",
+        thrown(code, "the server said no")
+      );
+      expect(toast).toHaveBeenCalledWith({
+        title: "Could not scale api",
+        description: "the server said no",
+        variant: "destructive",
+      });
+    }
+  });
+
+  /**
+   * The third answer is one line at each place a write's failure is worded.
+   * Fails when one of them goes back to calling every error a failure, and
+   * when a screen sends a write and words its failure somewhere not listed.
+   */
+  it("is said wherever a write's failure is worded", () => {
+    const said = (source: string) =>
+      source.match(/\btoast(?:edUnanswered|WriteError)\(/g)?.length ?? 0;
+    for (const [path, places] of WORDS_A_WRITE)
+      expect(said(SOURCES[path] ?? ""), path).toBe(places);
+
+    const sending = Object.entries(SOURCES).filter(([, source]) =>
+      WRITE.test(source)
+    );
+    expect(sending.length).toBeGreaterThan(40);
+    const strays = sending
+      .filter(
+        ([path, source]) =>
+          !WORDS_A_WRITE.has(path) &&
+          !WORDED_BY_ITS_CALLER.has(path) &&
+          !HANDS_IT_ON.test(source)
+      )
+      .map(([path]) => path);
+    expect(strays).toEqual([]);
   });
 });

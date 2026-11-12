@@ -10,6 +10,7 @@ use crate::error::{Error, Result};
 /// node never ends on its own.
 const PREVIEW_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 use crate::files::{self, Exit, FilePreview, Listing, ListingFailure, Via};
+use crate::resources::withhold_text;
 use crate::state::streams::SUBSCRIBE_TIMEOUT;
 use crate::state::{AppEvent, AppState};
 use crate::utils::normalize_optional_namespace;
@@ -223,6 +224,9 @@ pub enum FileRead {
     Preview {
         preview: FilePreview,
     },
+    /// The file is text and holds a private key: its text is not handed
+    /// over. A download still writes it, to disk and not to the screen.
+    Withheld,
     /// A download landed. Its own variant because a download reads no
     /// bytes into memory: reporting it as a `Preview` meant answering
     /// "is it binary" and "how much of it is not text" about a file
@@ -241,7 +245,12 @@ pub enum FileRead {
 
 fn read_outcome(result: std::result::Result<FilePreview, Exit>) -> FileRead {
     match result {
-        Ok(preview) => FileRead::Preview { preview },
+        Ok(mut preview) => {
+            if preview.text.as_mut().is_some_and(withhold_text) {
+                return FileRead::Withheld;
+            }
+            FileRead::Preview { preview }
+        }
         Err(exit) if exit.tool_missing() => FileRead::NoTools,
         Err(exit) => FileRead::Failed {
             exit_code: exit.code,
@@ -395,6 +404,35 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    fn preview_of(text: &str) -> FilePreview {
+        FilePreview {
+            bytes_read: text.len(),
+            truncated: false,
+            binary: false,
+            non_text_share: 0.0,
+            lossy: false,
+            text: Some(text.to_string()),
+        }
+    }
+
+    /// The Files tab drew `/etc/tls/tls.key` in full, from the container or
+    /// through a debug container: both reads end here. Fails if the text of
+    /// a key file, alone or in a bundle after its certificate, is handed
+    /// over, or the text of a certificate is not.
+    #[test]
+    fn a_file_that_holds_a_private_key_is_not_handed_over_as_text() {
+        const KEY: &str = include_str!("../../tests/fixtures/leaf.key.pem");
+        const LEAF: &str = include_str!("../../tests/fixtures/leaf.crt.pem");
+        for held in [KEY.to_string(), format!("{LEAF}{KEY}")] {
+            let read = read_outcome(Ok(preview_of(&held)));
+            assert!(matches!(read, FileRead::Withheld), "{read:?}");
+        }
+        match read_outcome(Ok(preview_of(LEAF))) {
+            FileRead::Preview { preview } => assert_eq!(preview.text.as_deref(), Some(LEAF)),
+            other => panic!("a certificate is not a key: {other:?}"),
+        }
     }
 
     /// A listing stopped before its listener was up still ends: listeners

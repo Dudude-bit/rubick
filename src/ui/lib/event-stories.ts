@@ -17,6 +17,7 @@ import {
   refOfNamed,
   type Past,
 } from "./event-incarnation";
+import { withoutCredentials } from "./hints";
 import { isBuiltInGroup } from "./links";
 
 export type Activity =
@@ -500,10 +501,12 @@ function occurrencesOf(event: EventInfo): number {
   return Math.max(1, event.count ?? 1);
 }
 
+/** An event's message as a story prints it: on one line, without the credentials in an address it quotes. */
+const said = (message: string) =>
+  withoutCredentials(message).replace(/\s+/g, " ").trim();
+
 function detailOf(event: EventInfo | undefined): string {
-  const text = (event?.message ?? event?.reason ?? "")
-    .replace(/\s+/g, " ")
-    .trim();
+  const text = said(event?.message ?? event?.reason ?? "");
   return text.length > DETAIL_LIMIT
     ? `${text.slice(0, DETAIL_LIMIT - 1)}…`
     : text;
@@ -1076,7 +1079,7 @@ export function timelineOf(story: Story): TimelineEntry[] {
         until: last !== null && first !== null && last > first ? last : null,
         warning: event.type === "Warning",
         reason: event.reason ?? "?",
-        message: (event.message ?? "").replace(/\s+/g, " ").trim(),
+        message: said(event.message ?? ""),
         count: occurrencesOf(event),
         about: {
           kind: event.involvedObject.kind,

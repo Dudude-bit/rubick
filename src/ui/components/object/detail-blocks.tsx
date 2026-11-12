@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { None } from "@/components/ui/none";
 import { conditionRole } from "@/lib/condition-health";
+import { withoutCredentials } from "@/lib/hints";
 import { eventReasonMark } from "@/lib/event-reason";
 import { tallyOf } from "@/lib/event-stories";
 import { sayWords } from "@/i18n/say";
@@ -702,7 +703,10 @@ const EventRow = memo(function EventRow({
       </span>
       {/* The row truncates, and an Event has no detail page to open, so the
        *  controller's own sentence is otherwise unreachable. */}
-      <span className="truncate text-fg-mid" title={event.message ?? undefined}>
+      <span
+        className="truncate text-fg-mid"
+        title={event.message ? withoutCredentials(event.message) : undefined}
+      >
         {showObject && (
           <ResourceRef
             kind={subject.kind}

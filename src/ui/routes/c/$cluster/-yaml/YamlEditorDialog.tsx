@@ -57,7 +57,9 @@ import {
 import { useAsk } from "../-object/useAsk";
 import { askableKind } from "@/lib/tell-me-when";
 import { AlertTriangle, Play, FileCheck } from "lucide-react";
-import { errorToShow } from "@/lib/error-utils";
+import { ERROR_CODES, errorToShow } from "@/lib/error-utils";
+import { credentialsExpired } from "@/lib/credentials";
+import { currentConnection } from "@/lib/refusals";
 
 import { YamlEditor } from "./YamlEditor";
 import { YamlEditorToolbar } from "./YamlEditorToolbar";
@@ -256,6 +258,11 @@ export function YamlEditorDialog() {
   const refused =
     dryRun.data?.documents.find((doc) => doc.outcome.says === "refused") ??
     null;
+  // The warnings above are built from the dry run's answer, and the
+  // autoscaler's from a read that answer can start: confirmed before both,
+  // the apply is of a confirmation that had not yet said what it confirms.
+  const stillAsking =
+    dryRun.isPending || (replicasMoved !== false && governance.isPending);
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(editedContent);
@@ -315,6 +322,7 @@ export function YamlEditorDialog() {
     setShowApplyConfirm(false);
     setIsApplying(true);
     setApplyResult(null);
+    const connection = currentConnection();
 
     try {
       const applied = await commands.applyManifest(
@@ -344,6 +352,13 @@ export function YamlEditorDialog() {
         const refusal = applied.documents.find(
           (doc) => doc.outcome.says === "refused"
         )?.outcome;
+        // A session that ended after a document went in is that document's
+        // answer, not a failed command, so the sign-in screen is told here.
+        if (
+          refusal?.says === "refused" &&
+          refusal.code === ERROR_CODES.CREDENTIALS_EXPIRED
+        )
+          credentialsExpired(refusal.said, connection);
         if (resourceKey && refusal?.says === "refused")
           noteDenied(
             "patch",
@@ -654,7 +669,7 @@ export function YamlEditorDialog() {
             </Button>
             <Button
               onClick={handleApply}
-              disabled={gate.blocked || refused !== null}
+              disabled={gate.blocked || refused !== null || stillAsking}
             >
               <Play className="mr-2 h-4 w-4" />
               {/* The intercept decides its own word where it has one — a

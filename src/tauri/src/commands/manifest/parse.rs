@@ -68,11 +68,14 @@ pub(super) fn parse_all_documents(manifest: &str) -> Result<Vec<ParsedManifest>>
         .collect::<Result<Vec<_>>>()?;
 
     // Every command that sends a manifest gets its documents here, so this
-    // is the one door: a `ConfigMap` would store the placeholder as the key.
-    let keys: Vec<String> = parsed
-        .iter()
-        .flat_map(|doc| crate::resources::still_withheld(&doc.object.data))
-        .collect();
+    // is the one door: a `ConfigMap` would store the placeholder as the key,
+    // and a Deployment as its container's `env`.
+    let mut keys = Vec::new();
+    for doc in &parsed {
+        let whole =
+            serde_json::to_value(&doc.object).map_err(|e| Error::Serialization(e.to_string()))?;
+        keys.extend(crate::resources::still_withheld(&whole));
+    }
     if !keys.is_empty() {
         return Err(Error::WithheldValue { keys });
     }
