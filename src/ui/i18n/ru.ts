@@ -1389,6 +1389,8 @@ export const ru: Catalogue = {
       "Ваши права этого не позволяют: на kubectl auth can-i {check} кластер отвечает no.",
     notPermittedEither:
       "Ваши права этого не позволяют: на kubectl auth can-i {check} и на kubectl auth can-i {other} кластер отвечает no.",
+    notThroughKubectlProxy:
+      "Недоступно в этой сессии: она идёт в кластер через kubectl proxy, а он отклоняет любой запрос exec и attach, что бы ни разрешали ваши права.",
     validationPassed: "Проверка пройдена",
     applySucceeded: "Применение выполнено",
     applyFailed: "Не удалось применить",

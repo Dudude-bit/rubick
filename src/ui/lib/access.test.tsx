@@ -9,7 +9,8 @@ vi.mock("@/lib/commands", () => ({
   commands: { checkAccess: (...args: unknown[]) => checkAccess(...args) },
 }));
 
-const { useDenied } = await import("@/lib/access");
+const { useDenied, useNodeDebugDenied, usePodDenied } =
+  await import("@/lib/access");
 const { credentialsRenewed } = await import("@/lib/credentials");
 const { forgetRefusals } = await import("@/lib/refusals");
 const { useClusterStore } = await import("@/stores/clusterStore");
@@ -134,5 +135,62 @@ describe("how often the access review is asked", () => {
     await settled();
 
     expect(checkAccess).not.toHaveBeenCalled();
+  });
+});
+
+describe("a session that reaches the cluster through kubectl proxy", () => {
+  function Ways() {
+    const pod = usePodDenied("shop", "web-1");
+    const node = useNodeDebugDenied("shop");
+    return (
+      <ul>
+        {Object.entries({ ...pod, portForward: pod.portForward, node }).map(
+          ([way, why]) => (
+            <li key={way}>{`${way}: ${why ?? "open"}`}</li>
+          )
+        )}
+      </ul>
+    );
+  }
+  const allowsAll = () =>
+    checkAccess.mockImplementation(async (asked: unknown[]) =>
+      asked.map(() => ({ allowed: true }))
+    );
+
+  /**
+   * kubectl proxy answers every exec and attach with a bare 403 by its
+   * default filter, so Shell, Files, Checks and Debug all failed there as
+   * if RBAC had refused them, with the authorizer saying yes. Fails if a
+   * way that needs an exec reads as open in such a session, or a port
+   * forward, which the proxy passes, reads as shut.
+   */
+  it("says every way into a container is shut, and why, though the authorizer allows them", async () => {
+    checkAccess.mockReset();
+    allowsAll();
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      connectedThrough: "kubectl_proxy",
+    });
+    renderWithProviders(<Ways />);
+    for (const way of ["shell", "ephemeral", "copy", "debug", "node"])
+      expect(
+        screen.getByText(new RegExp(`^${way}: Not available in this session`))
+      ).toHaveTextContent("kubectl proxy, which refuses every exec and attach");
+    expect(screen.getByText("portForward: open")).toBeVisible();
+  });
+
+  /** The other side: a direct session says nothing of a proxy. */
+  it("leaves a direct session's ways open", async () => {
+    checkAccess.mockReset();
+    allowsAll();
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      connectedThrough: "direct",
+    });
+    renderWithProviders(<Ways />);
+    for (const way of ["shell", "ephemeral", "copy", "debug", "node"])
+      expect(screen.getByText(`${way}: open`)).toBeVisible();
   });
 });

@@ -1381,6 +1381,8 @@ export const en = {
       "Your access does not allow this: the cluster answers no to kubectl auth can-i {check}.",
     notPermittedEither:
       "Your access does not allow this: the cluster answers no to kubectl auth can-i {check} and to kubectl auth can-i {other}.",
+    notThroughKubectlProxy:
+      "Not available in this session: it reaches the cluster through kubectl proxy, which refuses every exec and attach request whatever your access allows.",
     validationPassed: "Validation passed",
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
