@@ -7,7 +7,11 @@ import {
 } from "@/lib/workload-status";
 import type { Rollout } from "@/generated/types";
 import { WithProblem } from "../../-object/ProblemTone";
-import { PROBLEM_MARK_PX, type Problem } from "../../-object/problem";
+import {
+  PROBLEM_MARK_COMPACT_PX,
+  PROBLEM_MARK_PX,
+  type Problem,
+} from "../../-object/problem";
 import { RolloutBadge } from "../../-object/RolloutSummary";
 import { statusCellPx } from "../../-list/columns";
 import {
@@ -48,7 +52,7 @@ export function createRolloutColumn<Row extends RolloutRow>(): ColumnDef<Row> {
     meta: {
       floor: (_t: unknown, rows: readonly Row[]) =>
         rows.some((row) => row.problem)
-          ? Math.max(FLOOR, WORD_FLOOR + PROBLEM_MARK_PX)
+          ? Math.max(FLOOR, WORD_FLOOR + PROBLEM_MARK_COMPACT_PX)
           : FLOOR,
       sort: (row: Row) =>
         SEVERITY[verdictOf(row.rollout)] * 10 +
@@ -73,17 +77,19 @@ export function createRolloutColumn<Row extends RolloutRow>(): ColumnDef<Row> {
       },
     },
     cell: ({ row }) => (
-      <VerdictWithCause
-        cause={row.original.podsCause}
-        verdict={verdictOf(row.original.rollout)}
-      >
-        <WithProblem
-          problem={row.original.problem ?? null}
-          role={workloadRole(row.original.rollout)}
+      <div className="@container min-w-0">
+        <VerdictWithCause
+          cause={row.original.podsCause}
+          verdict={verdictOf(row.original.rollout)}
         >
-          <RolloutBadge rollout={row.original.rollout} />
-        </WithProblem>
-      </VerdictWithCause>
+          <WithProblem
+            problem={row.original.problem ?? null}
+            role={workloadRole(row.original.rollout)}
+          >
+            <RolloutBadge rollout={row.original.rollout} />
+          </WithProblem>
+        </VerdictWithCause>
+      </div>
     ),
   };
 }

@@ -47,7 +47,11 @@ export function WithProblem({
         )}
       >
         <Glyph className="h-2.5 w-2.5" aria-hidden="true" />
-        {t("cluster", "problemCount", { n: problem.n })}
+        {/* In a narrow cell (an `@container`) the count alone; whole on hover. */}
+        <span className="@max-[11rem]:hidden">
+          {t("cluster", "problemCount", { n: problem.n })}
+        </span>
+        <span className="hidden @max-[11rem]:inline">{problem.n}</span>
         <span aria-hidden="true">·</span>
       </span>
       <span

@@ -45,7 +45,11 @@ import { PodStatusBadge } from "./PodStatusBadge";
 import { useShellAskStore } from "@/stores/shellAskStore";
 import { NodeRef } from "../../../-object/NodeRef";
 import { WithProblem } from "../../../-object/ProblemTone";
-import { PROBLEM_MARK_PX, type Problem } from "../../../-object/problem";
+import {
+  PROBLEM_MARK_COMPACT_PX,
+  PROBLEM_MARK_PX,
+  type Problem,
+} from "../../../-object/problem";
 import { problemOfRow, rowProblems } from "../../-components/row-cause";
 import { useAttention } from "@/hooks/useAttention";
 import { statusRole } from "@/lib/status-role";
@@ -127,7 +131,8 @@ export const columns: ColumnDef<PodRow>[] = [
     accessorFn: (pod) => pod.status.display,
     enableSorting: true,
     meta: {
-      // The widest status its rows say, and a problem's mark beside it; "CreateContainerConfigError" before any row is read.
+      // The widest status its rows say, with a problem's mark at its
+      // narrowest; "CreateContainerConfigError" before any row is read.
       floor: (_t, rows: readonly PodRow[]) =>
         rows.length === 0
           ? 224
@@ -137,21 +142,29 @@ export const columns: ColumnDef<PodRow>[] = [
                 .filter((pod) => pod.problem)
                 .map(
                   (pod) =>
-                    badgeCellPx([pod.status.display]) + 6 + PROBLEM_MARK_PX
+                    badgeCellPx([pod.status.display]) + PROBLEM_MARK_COMPACT_PX
                 )
             ),
-      // Room for "already replaced" beside the badge while the port has it.
+      // The mark's words and "already replaced" beside the badge while the port has room.
       ideal: (t, rows: readonly PodRow[]) => {
         const replaced = rows.filter((pod) => pod.status.gone === "replaced");
-        return replaced.length === 0
-          ? 0
-          : badgeCellPx(replaced.map((pod) => pod.status.display)) +
-              6 +
-              widestText(
-                [t("cluster", "attentionReplacedPod")],
-                "caption",
-                6.2
-              );
+        const troubled = rows.filter((pod) => pod.problem);
+        return Math.max(
+          replaced.length === 0
+            ? 0
+            : badgeCellPx(replaced.map((pod) => pod.status.display)) +
+                6 +
+                widestText(
+                  [t("cluster", "attentionReplacedPod")],
+                  "caption",
+                  6.2
+                ),
+          troubled.length === 0
+            ? 0
+            : badgeCellPx(troubled.map((pod) => pod.status.display)) +
+                6 +
+                PROBLEM_MARK_PX
+        );
       },
       label: { section: "columns", key: "status" },
       share: (pod: PodRow, t) =>
@@ -162,7 +175,7 @@ export const columns: ColumnDef<PodRow>[] = [
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
     cell: ({ row }) => (
-      <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
+      <span className="@container flex min-w-0 max-w-full items-baseline gap-1.5">
         <span className="flex-none">
           <WithProblem
             problem={row.original.problem ?? null}

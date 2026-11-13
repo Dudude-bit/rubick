@@ -18,6 +18,9 @@ export interface Problem {
 /** The room a row's "✕ 2 problems ·" mark takes beside its status word. */
 export const PROBLEM_MARK_PX = Math.ceil(13 * 6.6);
 
+/** The mark in a cell narrower than `PROBLEM_MARK_ROOM`: glyph, count and dot. */
+export const PROBLEM_MARK_COMPACT_PX = 36;
+
 /** The loudest finding's tone and how many there are; `neutral` ones are facts, not trouble. */
 export function problemOf(findings: readonly Finding[]): Problem | null {
   const trouble = findings.filter(({ tone }) => tone !== "neutral");

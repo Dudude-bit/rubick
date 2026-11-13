@@ -284,16 +284,26 @@ describe("the Pods status column", () => {
     );
   });
 
-  /** Fails if a Running pod with a failing probe draws its problem mark past the column's edge. */
-  it("makes room for a problem's mark beside the status it sits with", () => {
+  /**
+   * A Running pod with a failing probe drew its mark past the column's edge;
+   * then the whole mark in the floor pushed Node and IP off a 1280 window.
+   * Fails if the floor stops holding the mark at its narrowest, grows to the
+   * mark's words, or the ideal stops asking for them.
+   */
+  it("holds a problem's mark at its narrowest and asks for its words while there is room", () => {
     const status = pods.find((c) => c.id === "status") ?? {};
-    const troubled = columnFloor(status, en, [
+    const troubled = [
       {
         status: { display: "Running" },
         problem: { tone: "err", n: 1, title: "probe" },
       },
-    ]);
-    expect(troubled).toBeGreaterThanOrEqual(
+    ];
+    const floor = columnFloor(status, en, troubled);
+    expect(floor).toBeGreaterThanOrEqual(badgeCellPx(["Running"]) + 36);
+    expect(floor).toBeLessThan(
+      badgeCellPx(["Running"]) + 6 + Math.ceil(13 * 6.6)
+    );
+    expect(columnIdeal(status, en, troubled)).toBeGreaterThanOrEqual(
       badgeCellPx(["Running"]) + 6 + Math.ceil(13 * 6.6)
     );
   });

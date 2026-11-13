@@ -885,7 +885,8 @@ describe("DetailError says a read it could not do the way every unread is said",
         />
       );
       const chip = document.querySelector('[data-problem="warn"]');
-      expect(chip).toHaveTextContent(/^1 problem·Ready$/);
+      // The lone "1" is the mark a narrow cell shows instead, hidden here by CSS.
+      expect(chip).toHaveTextContent(/^1 problem1·Ready$/);
       expect(chip).toHaveAttribute("title", "TooManyReplicas");
     } finally {
       shellItems.items = [];
@@ -1177,7 +1178,8 @@ describe("ResourceDetailLayout leads with the cause", () => {
       />
     );
     const chip = document.querySelector('[data-problem="warn"]');
-    expect(chip).toHaveTextContent(/^1 problem·Ready$/);
+    // The lone "1" is the mark a narrow cell shows instead, hidden here by CSS.
+    expect(chip).toHaveTextContent(/^1 problem1·Ready$/);
     expect(chip?.firstElementChild).toHaveAttribute("data-problem-mark");
     expect(chip?.firstElementChild?.className).toContain("text-warn");
     const word = chip?.querySelector("[data-problem-word]");
