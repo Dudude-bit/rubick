@@ -75,6 +75,11 @@ export function useRowMenu<Row extends Listed>({
           peek={peekOfRow(row, getRowHref, getRowPeek)}
           actions={actions}
           quickActions={quickActions}
+          read={{
+            pending: detail.isPending && detail.fetchStatus !== "idle",
+            error: detail.error,
+            onRetry: () => void detail.refetch(),
+          }}
           at={at}
           onClose={() => setAt(null)}
         />

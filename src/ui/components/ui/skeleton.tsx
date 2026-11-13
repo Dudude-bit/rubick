@@ -46,7 +46,7 @@ const BAR_FRACTIONS = [0.72, 0.45, 0.6, 0.38, 0.52];
 function TableSkeleton({
   widths,
   columns = widths?.length || 4,
-  rows = 14,
+  rows = 8,
   showSearch = true,
   compact = false,
   grouped = false,
@@ -136,7 +136,8 @@ function BlockSkeleton({ showHeader = true, lines = 3 }: BlockSkeletonProps) {
 }
 
 /**
- * Skeleton for detail pages: title, tab strip, then blocks of rows.
+ * Skeleton for detail pages: title, tab strip, then the overview's single
+ * column of sections, as narrow as the real ones.
  */
 interface DetailSkeletonProps {
   tabCount?: number;
@@ -153,13 +154,15 @@ function DetailSkeleton({
     <div data-testid="detail-skeleton" className="space-y-4" aria-hidden>
       {showHeader && <Skeleton className="h-3.5 w-64" />}
 
-      <div className="flex gap-1">
-        {Array.from({ length: tabCount }).map((_, i) => (
-          <Skeleton key={i} className="h-6 w-20" />
-        ))}
-      </div>
+      {tabCount > 0 && (
+        <div className="flex gap-1">
+          {Array.from({ length: tabCount }).map((_, i) => (
+            <Skeleton key={i} className="h-6 w-20" />
+          ))}
+        </div>
+      )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="flex max-w-lg flex-col gap-[22px]">
         {Array.from({ length: rows }).map((_, i) => (
           <BlockSkeleton key={i} />
         ))}

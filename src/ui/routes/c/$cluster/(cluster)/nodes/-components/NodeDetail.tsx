@@ -540,6 +540,7 @@ export function NodeDetail() {
                 icon={Shield}
                 onClick={() => node && actions.uncordon(node.name)}
                 disabled={!node}
+                busy={actions.pending(name ?? "")}
                 reason={actions.denied(name ?? "")}
               />
             ) : (
@@ -548,6 +549,7 @@ export function NodeDetail() {
                 icon={ShieldOff}
                 onClick={() => node && actions.cordon(node.name)}
                 disabled={!node}
+                busy={actions.pending(name ?? "")}
                 reason={actions.denied(name ?? "")}
               />
             )}

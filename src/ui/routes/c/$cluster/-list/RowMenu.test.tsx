@@ -138,9 +138,11 @@ afterEach(() => {
 describe("a list row's right-click menu", () => {
   /** Lens offers these on a row; the webview offered Back and Reload. */
   it("opens the row, copies what a terminal needs, and offers the row's actions", async () => {
+    getDeployment.mockRejectedValue(new Error("boom"));
     await draw();
     openMenu();
     expect(screen.getByRole("menu")).toBeInTheDocument();
+    await screen.findByRole("menuitem", { name: /Read again/ });
     expect(items()).toEqual([
       "Open",
       "Open in side panelEnter",
@@ -149,11 +151,41 @@ describe("a list row's right-click menu", () => {
       "Copy name with namespace",
       "Copy kubectl get command",
       "Copy link",
+      "Could not read this object, so some actions are missing. Read again",
       "Scale",
       "Restart",
       "Tell me when the rollout finishes",
       "Delete",
     ]);
+  });
+
+  /** Actions planned before the object's read lands know less than the peek's; a menu that says nothing passes them off as the whole set. */
+  it("says the actions are still being read while the object's read is on its way", async () => {
+    getDeployment.mockReturnValue(new Promise(() => {}));
+    await draw();
+    openMenu();
+    expect(
+      await screen.findByRole("menuitem", {
+        name: "Reading what this object allows…",
+      })
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.queryByRole("menuitem", { name: /Read again/ })
+    ).not.toBeInTheDocument();
+  });
+
+  /** A failed read of the object is not "no more actions": the menu offers to read again, and the offer asks the cluster again. */
+  it("offers to read the object again when the read failed", async () => {
+    const user = userEvent.setup();
+    getDeployment.mockRejectedValue(new Error("boom"));
+    await draw();
+    openMenu();
+    const again = await screen.findByRole("menuitem", { name: /Read again/ });
+    const before = getDeployment.mock.calls.length;
+    await user.click(again);
+    await vi.waitFor(() =>
+      expect(getDeployment.mock.calls.length).toBeGreaterThan(before)
+    );
   });
 
   /**

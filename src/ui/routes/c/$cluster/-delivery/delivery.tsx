@@ -11,6 +11,7 @@
  * file changing.
  */
 
+import { Alert } from "@/components/ui/alert";
 import { Link } from "@tanstack/react-router";
 import { ExternalLink, Package } from "lucide-react";
 
@@ -113,25 +114,15 @@ export function DeliveryBanner({ deliveries }: { deliveries: Delivery[] }) {
 
 function DeliveryLineBody({ line }: { line: DeliveryLine }) {
   return (
-    <div
-      className={cn(
-        "border-l-2 pl-3",
-        line.tone === "warn" ? "border-warn" : "border-info"
-      )}
-    >
-      <p
-        className={cn(
-          "text-xs",
-          line.tone === "warn" ? "text-warn" : "text-info"
-        )}
-      >
+    <Alert variant={line.tone === "warn" ? "warn" : "info"}>
+      <p className={line.tone === "warn" ? "text-warn" : "text-info"}>
         {line.title}
       </p>
-      <p className="mt-0.5 text-xs text-fg-mut">
+      <p className="mt-0.5 text-fg-mut">
         {line.detail}
         {line.where && <DeliveryWhere where={line.where} />}
       </p>
-    </div>
+    </Alert>
   );
 }
 

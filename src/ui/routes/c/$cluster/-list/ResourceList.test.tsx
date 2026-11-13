@@ -744,7 +744,9 @@ describe("a read on a large cluster", () => {
     expect(document.body.textContent).not.toContain("READ_DEADLINE:");
     expect(screen.queryByText("0")).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
     expect(retried).toHaveBeenCalledTimes(1);
   });
 

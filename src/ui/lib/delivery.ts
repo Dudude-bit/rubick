@@ -361,7 +361,7 @@ export type DeliveryFilter = "all" | "notDelivered" | "trouble";
 export const DELIVERY_FILTER_LABEL = {
   all: "all",
   notDelivered: "notDelivered",
-  trouble: "needsAttention",
+  trouble: "outOfSync",
 } as const satisfies Record<DeliveryFilter, string>;
 
 export function matchesDeliveryFilter(

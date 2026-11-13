@@ -14,10 +14,15 @@ import { DetailAction } from "@/components/object/detail-blocks";
 import type { HelmRepository } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { withoutCredentials } from "@/lib/hints";
+import { EmptyState } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export interface HelmRepositoriesTabProps {
-  repositories: HelmRepository[];
+  repositories: HelmRepository[] | undefined;
   isLoading: boolean;
+  error?: unknown;
+  onRetry?: () => unknown;
   isUpdating: boolean;
   onUpdateAll: () => void;
   onAddRepoClick: () => void;
@@ -27,6 +32,8 @@ export interface HelmRepositoriesTabProps {
 export function HelmRepositoriesTab({
   repositories,
   isLoading,
+  error,
+  onRetry,
   isUpdating,
   onUpdateAll,
   onAddRepoClick,
@@ -50,13 +57,19 @@ export function HelmRepositoriesTab({
       </div>
 
       {isLoading ? (
-        <p className="py-8 text-center text-xs text-fg-fnt">
-          {t("empty", "readingRepositories")}
-        </p>
-      ) : repositories.length === 0 ? (
-        <p className="py-8 text-center text-xs text-fg-fnt">
-          {t("empty", "noRepositoriesConfigured")}
-        </p>
+        <div role="status" aria-busy="true" className="space-y-2">
+          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-3 w-64" />
+          <Skeleton className="h-3 w-40" />
+        </div>
+      ) : error && !repositories ? (
+        <Unknown
+          question={t("empty", "couldNotReadRepositories")}
+          error={error}
+          onRetry={onRetry}
+        />
+      ) : !repositories || repositories.length === 0 ? (
+        <EmptyState>{t("empty", "noRepositoriesConfigured")}</EmptyState>
       ) : (
         <Table>
           <TableHeader>

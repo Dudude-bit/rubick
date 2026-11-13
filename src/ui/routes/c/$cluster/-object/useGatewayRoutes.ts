@@ -200,5 +200,11 @@ export function useGatewayRoutes(scope: string[]) {
     ),
     live: active.length > 0 && active.every((entry) => entry.live),
     resyncing: active.some((entry) => entry.resyncing),
+    /** A kind whose re-read failed over the rows it had: those rows are older than the others. */
+    failedRefresh:
+      active.find((entry) => entry.query.isError && entry.query.data)?.query
+        .error ?? null,
+    refetch: () => Promise.all(active.map((entry) => entry.query.refetch())),
+    refetchScan: () => scan.refetch(),
   };
 }

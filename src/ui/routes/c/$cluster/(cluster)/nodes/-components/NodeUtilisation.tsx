@@ -33,6 +33,10 @@ import { parts } from "@/i18n/parts";
 import { sayWords } from "@/i18n/say";
 import type { en } from "@/i18n/catalogue";
 import { None } from "@/components/ui/none";
+import { Alert } from "@/components/ui/alert";
+import { Reading, SegmentedControl } from "@/components/ui/states";
+import { TextSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 
 /** The ranges worth a sparkline: a quarter hour is what the table already shows. */
 const TREND_RANGES = USAGE_RANGES.filter((range) => range !== "15m");
@@ -47,6 +51,7 @@ interface NodeUtilisationProps {
   nodesKnown?: boolean;
   /** Why the node list could not be read, where that is known. */
   nodesReason?: string | null;
+  onRetryNodes?: () => void;
   range: UsageRange;
   onRange: (range: UsageRange) => void;
 }
@@ -62,6 +67,7 @@ export function NodeUtilisation({
   nodes,
   nodesKnown = true,
   nodesReason = null,
+  onRetryNodes,
   range,
   onRange,
 }: NodeUtilisationProps) {
@@ -131,12 +137,17 @@ export function NodeUtilisation({
   // put a lane against, and an empty table here reads as "this cluster has
   // no nodes" — which is the node list's failure wearing the cluster's face.
   if (!nodesKnown) {
-    return (
-      <p className="px-1 py-6 text-xs text-warn" role="status">
-        {nodesReason
-          ? t("empty", "nodesDidNotList", { reason: nodesReason })
-          : t("action", "reading")}
-      </p>
+    return nodesReason ? (
+      <Unknown
+        question={t("empty", "nodesNotListedForTrends")}
+        error={nodesReason}
+        onRetry={onRetryNodes}
+      />
+    ) : (
+      <div className="space-y-3 px-1 py-2">
+        <Reading>{t("action", "reading")}</Reading>
+        <TextSkeleton lines={6} />
+      </div>
     );
   }
 
@@ -167,44 +178,39 @@ export function NodeUtilisation({
             {query.data ? ` · ${sayWords(query.data.resolution, t)}` : ""}
           </span>
         )}
-        <span className="ml-auto flex items-center gap-0.5">
+        <span className="ml-auto flex items-center gap-2">
           {query.isFetching && (
-            <span className="mr-1 text-micro">
+            <Reading className="text-micro">
               {t("action", "readingInline")}
-            </span>
+            </Reading>
           )}
-          {TREND_RANGES.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              aria-pressed={candidate === range}
-              onClick={() => onRange(candidate)}
-              className={
-                candidate === range
-                  ? "rounded bg-sel px-1.5 py-0.5 text-caption text-fg"
-                  : "rounded px-1.5 py-0.5 text-caption text-fg-mut hover:bg-hover hover:text-fg"
-              }
-            >
-              {candidate}
-            </button>
-          ))}
+          <SegmentedControl
+            label={t("columns", "usage")}
+            value={range}
+            onChange={onRange}
+            mono
+            segments={TREND_RANGES.map((candidate) => ({
+              value: candidate,
+              label: candidate,
+            }))}
+          />
         </span>
       </div>
       {power.state === "unreachable" && (
-        <p className="px-1 pb-2 text-caption text-warn" role="status">
+        <Alert variant="warn" role="status" className="mb-2">
           {t("empty", "vendorDidNotAnswer", {
             vendor: power.vendor,
             reason: power.reason,
           })}
-        </p>
+        </Alert>
       )}
       {query.error && (
-        <p className="px-1 pb-2 text-caption text-warn" role="status">
+        <Alert variant="warn" role="status" className="mb-2">
           {t("empty", "vendorDidNotAnswer", {
             vendor: power.state === "ready" ? power.vendor : "",
             reason: errorToShow(query.error),
           })}
-        </p>
+        </Alert>
       )}
       {power.state === "ready" && fromPods && (
         <p className="px-1 pb-2 text-caption text-fg-mut" role="note">

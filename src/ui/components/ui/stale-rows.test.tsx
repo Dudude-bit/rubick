@@ -5,7 +5,7 @@ import {
   ScreenShareProvider,
   useScreenCaveats,
 } from "@/components/share/screen-share";
-import { StaleRows } from "./StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
 
 let said: (() => string[]) | null = null;
 function Probe() {

@@ -94,10 +94,12 @@ describe("a CRD's page", () => {
     act(() => useWindowActivity.setState({ focused: false }));
     act(() => useWindowActivity.setState({ focused: true }));
 
-    expect(
-      await within(await screen.findByRole("heading", { level: 1 })).findByText(
-        NAME
-      )
-    ).toBeInTheDocument();
+    // The header stays up while the page reads, so the heading is drawn
+    // again when the definition lands; ask for it once the page settles.
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("heading", { level: 1 })).getByText(NAME)
+      ).toBeInTheDocument()
+    );
   });
 });

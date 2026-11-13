@@ -1,12 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  Ban,
-  FolderOpen,
-  Globe,
-  Search,
-  XCircle,
-} from "lucide-react";
+import { AlertTriangle, Ban, FolderOpen, Globe, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { catalogQuery } from "../../-object/served";
@@ -15,11 +8,15 @@ import { KindIcon } from "@/components/object/KindIcon";
 import { segmentOf } from "@/lib/access-kinds";
 import { ReadAgain } from "@/components/ui/read-again";
 import { RouteLink } from "@/components/ui/route-link";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { Section } from "@/components/ui/section";
+import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
+import { EmptyState } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
+import { ResourceListHeader } from "../../-list/ResourceListHeader";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { TextSkeleton } from "@/components/ui/skeleton";
 import type { CatalogEntry, UnreadGroup } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-import { errorToShow } from "@/lib/error-utils";
 import { servedListLink } from "@/lib/links";
 import { textWidth, type TextFace } from "@/lib/text-width";
 import { cn } from "@/lib/utils";
@@ -51,8 +48,8 @@ export function ApiResources() {
   );
 
   return (
-    <div className="flex max-w-6xl flex-col gap-[18px]">
-      <SectionHeader
+    <div className="flex max-w-6xl flex-col gap-4">
+      <ResourceListHeader
         title={t("nav", "apiResources")}
         count={
           shown
@@ -60,8 +57,10 @@ export function ApiResources() {
             : undefined
         }
         description={t("apiResources", "description")}
+        dataUpdatedAt={catalog.dataUpdatedAt}
+        stale={catalog.isError && !!catalog.data}
         actions={
-          <div className="flex h-6 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
+          <div className="flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
             <Search className="h-3 w-3 shrink-0" aria-hidden="true" />
             <input
               type="text"
@@ -73,30 +72,37 @@ export function ApiResources() {
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
-              className="w-44 bg-transparent text-caption text-fg outline-hidden placeholder:text-fg-fnt"
+              className="w-44 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
             />
           </div>
         }
       />
       {!isConnected ? (
-        <p className="text-xs text-fg-mut">
-          {t("apiResources", "notConnected")}
-        </p>
+        <ConnectClusterEmptyState resourceLabel={t("nav", "apiResources")} />
       ) : catalog.isError && !catalog.data ? (
-        <div className="flex flex-col items-start gap-1.5">
-          <p className="flex items-center gap-2 text-xs font-medium text-err">
-            <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
-            {t("apiResources", "unreadTitle")}
-          </p>
-          <p className="text-caption text-fg-fnt">
-            {errorToShow(catalog.error)}
-          </p>
-          <ReadAgain error={catalog.error} onRetry={again} />
-        </div>
+        <Unknown
+          question={t("apiResources", "unreadTitle")}
+          error={catalog.error}
+          onRetry={again}
+        />
       ) : !shown ? (
         <TextSkeleton lines={8} />
       ) : (
         <>
+          {catalog.isError && (
+            <StaleRows
+              label={t("nav", "apiResources").toLowerCase()}
+              since={catalog.dataUpdatedAt}
+              error={catalog.error}
+              onRetry={again}
+              className=""
+            />
+          )}
+          {shown.kinds === 0 &&
+            filter.trim() === "" &&
+            shown.unread.length === 0 && (
+              <EmptyState>{t("apiResources", "servesNothing")}</EmptyState>
+            )}
           {shown.kinds === 0 && filter.trim() !== "" && (
             <div className="flex flex-col items-start gap-2">
               <p className="text-xs text-fg-mut">

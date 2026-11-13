@@ -150,7 +150,7 @@ export function CustomResourceList({
               return pc.cell(value, t);
             }
             // Default formatting with the status config the vendor supplied
-            if (crdView && typeof value === "string") {
+            if (typeof value === "string" && isKnownStatus(value)) {
               return <StatusBadge status={value} />;
             }
             if (value === null || value === undefined) {

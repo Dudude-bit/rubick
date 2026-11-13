@@ -29,7 +29,9 @@ import {
   SLOW_READ_MS,
 } from "@/lib/read-deadline";
 import { useNowSeconds } from "@/hooks/useNow";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ReadAgain } from "@/components/ui/read-again";
 import { TriangleAlert } from "lucide-react";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
@@ -62,13 +64,15 @@ import { UnreadNamespaces } from "./UnreadNamespaces";
 import { ListedHere } from "./ListedHere";
 import { NamedRowsBanner } from "./NamedRows";
 import { useNamedRows } from "./useNamedRows";
+import { useSetSearch } from "@/hooks/useSearchParam";
 import { rowName } from "@/lib/links";
-import { StaleRows } from "./StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
 import { useListRefusal } from "./useListRefusal";
 import { useRowDenial } from "@/lib/access";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
+import { useRecheckRefusal } from "./useRecheckRefusal";
 import { deleteCommandFor } from "../-peek/peek-actions";
 import type { PeekTarget } from "@/hooks/usePeek";
 
@@ -354,6 +358,9 @@ export function ResourceList<
   // A refusal is about who asks now, so rows an earlier read showed go with it.
   const refused = failed !== null && isRefusal(failed);
   const refusedAt = useRefusedAt(refused ? failed : null);
+  useRecheckRefusal(refusedAt, () =>
+    onRetry ? onRetry() : data === undefined && queryResult.refetch()
+  );
 
   // The answer is already the selection's; narrowing guards a caller whose
   // `data` is wider than it.
@@ -408,6 +415,7 @@ export function ResourceList<
       )
     : resources;
   const named = useNamedRows();
+  const setSearch = useSetSearch();
   const rows = useMemo(
     () =>
       named ? delivered.filter((row) => named.has(rowName(row))) : delivered,
@@ -419,6 +427,11 @@ export function ResourceList<
       named ? resources.filter((row) => named.has(rowName(row))).length : 0,
     [named, resources]
   );
+
+  const filteredToNone =
+    resources.length > 0 &&
+    rows.length === 0 &&
+    (!!named || (showDelivery && deliveryFilter !== "all"));
 
   const deleteMutation = useMutation({
     mutationFn: async (item: Row) => {
@@ -454,9 +467,9 @@ export function ResourceList<
           }),
           variant: "destructive",
         });
-      setDeleteTarget(null);
     },
   });
+  const deleting = deleteMutation.isPending ? deleteMutation.variables : null;
 
   // Both memoised, and both had to be: a fresh array on every render rebuilds
   // TanStack's whole column model on every watch tick, and the table re-reads
@@ -483,10 +496,14 @@ export function ResourceList<
         : quickActions
       )?.map((action) =>
         action.variant === "destructive" && action.label === deleteLabel
-          ? { ...action, reason: deleteDenial }
+          ? {
+              ...action,
+              reason: deleteDenial,
+              pending: (item: Row) => item === deleting,
+            }
           : action
       ),
-    [quickActions, requestDelete, deleteLabel, deleteDenial]
+    [quickActions, requestDelete, deleteLabel, deleteDenial, deleting]
   );
 
   // A resync with nothing to show is still loading; a resync with rows keeps
@@ -653,10 +670,11 @@ export function ResourceList<
         />
       )}
       {slow && (
-        <div
+        <Alert
+          variant="warn"
           role="status"
           data-testid="slow-read"
-          className="mb-2 rounded border border-hair border-l-2 border-l-warn px-3 py-2 text-xs"
+          className="mb-2"
         >
           <p className="flex items-baseline gap-2 text-fg">
             <span>
@@ -687,19 +705,17 @@ export function ResourceList<
               </div>
             </>
           )}
-        </div>
+        </Alert>
       )}
       {failed && resources.length === 0 && ranOutOfTime ? (
-        <div
+        <Alert
+          variant="warn"
           role="status"
           data-testid="read-deadline"
-          className="max-w-[68ch] py-6"
+          className="max-w-[68ch]"
         >
-          <p className="flex items-start gap-2 text-xs text-fg">
-            <TriangleAlert
-              className="mt-0.5 h-3.5 w-3.5 flex-none text-warn"
-              aria-hidden="true"
-            />
+          <TriangleAlert aria-hidden="true" />
+          <p className="text-fg">
             <span>
               {t("empty", "readDeadline", {
                 label: emptyStateLabel.toLowerCase(),
@@ -710,31 +726,26 @@ export function ResourceList<
           </p>
           {/* Not a fault to retry into: a deadline on a big cluster is the
               cluster being big, so the narrower question comes first. */}
-          <p className="mt-1 pl-[22px] text-xs text-fg-mut">
-            {t("empty", "readDeadlineHint")}
-          </p>
+          <p className="mt-1 text-fg-mut">{t("empty", "readDeadlineHint")}</p>
           {/* No mono line here. In the branch below it carries the
               cluster's own words, which is why it is there; this message is
               ours, already said above in the reader's language, and the
               `READ_DEADLINE:` marker in front of it is a wire format. */}
-          <div className="mt-2 flex gap-2 pl-[22px]">
+          <div className="mt-2 flex gap-2">
             {narrowingHelps && (scope.isAll || scope.several) && (
               <Button size="sm" variant="outline" onClick={openNamespacePicker}>
                 {t("action", "pickOneNamespace")}
               </Button>
             )}
-            <Button
-              size="sm"
-              variant="ghost"
+            <ReadAgain
+              error={failed}
               // The caller's, where it owns the read: refetching the
               // placeholder query here would write `[]` under a key the
               // page never reads and leave the real list exactly as it was.
-              onClick={() => (onRetry ? onRetry() : void queryResult.refetch())}
-            >
-              {t("action", "retry")}
-            </Button>
+              onRetry={() => (onRetry ? onRetry() : queryResult.refetch())}
+            />
           </div>
-        </div>
+        </Alert>
       ) : failed && resources.length === 0 ? (
         <UnreadList
           error={failed}
@@ -772,20 +783,50 @@ export function ResourceList<
           rowLabel={emptyStateLabel.toLowerCase()}
           rowNoun={counted}
           partial={partial}
+          partialWhy={
+            unread.length > 0 || more
+              ? undefined
+              : placeholder
+                ? "previousScope"
+                : ranOutOfTime
+                  ? "deadline"
+                  : undefined
+          }
           more={more}
           widthsKey={widthsKey}
           share={embedded ? undefined : share}
           // "None in the scope" is a claim about the namespaces that did not
           // answer too; with any unread, it names the ones that did.
           emptyMessage={
-            unread.length > 0
-              ? noneWhereAnswered(
-                  t,
-                  emptyStateLabel.toLowerCase(),
-                  scope.scope,
-                  unread
-                )
-              : emptyMessage
+            filteredToNone
+              ? !named && showDelivery
+                ? t("empty", "deliveryFilterMatchesNothing", {
+                    filter: t("action", DELIVERY_FILTER_LABEL[deliveryFilter]),
+                  })
+                : t("empty", "filtersMatchNothing")
+              : unread.length > 0
+                ? noneWhereAnswered(
+                    t,
+                    emptyStateLabel.toLowerCase(),
+                    scope.scope,
+                    unread
+                  )
+                : emptyMessage
+          }
+          emptyAction={
+            filteredToNone && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setDeliveryFilter("all");
+                  if (named) setSearch({ names: undefined });
+                }}
+              >
+                {t("empty", "clearFilters")}
+              </Button>
+            )
           }
         />
       )}
@@ -813,12 +854,9 @@ export function ResourceList<
           }
           confirmLabel={t("action", "delete")}
           confirmVariant="destructive"
-          confirmDisabled={deleteMutation.isPending}
-          onConfirm={() => {
-            if (deleteTarget) {
-              deleteMutation.mutate(deleteTarget);
-            }
-          }}
+          onConfirm={() =>
+            deleteTarget && deleteMutation.mutateAsync(deleteTarget)
+          }
         />
       )}
     </>

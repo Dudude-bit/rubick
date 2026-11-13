@@ -130,6 +130,8 @@ interface DataTableProps<TData extends RowData> {
   /** Shown when the cluster genuinely has none of this resource. The
    *  "no search matches" case is handled separately. */
   emptyMessage?: string;
+  /** The next step beside `emptyMessage`: clearing what narrowed the rows to none. */
+  emptyAction?: React.ReactNode;
   /** Opt in to caption rows above runs of related rows. */
   grouping?: RowGrouping<TData> | null;
   /** Plural noun for the group caption count, e.g. "pods". */
@@ -140,6 +142,8 @@ interface DataTableProps<TData extends RowData> {
   widthsKey?: string;
   /** The rows are not the whole of what was asked for, so no total. */
   partial?: boolean;
+  /** Why they are not, where it is not an unread namespace: the footer says so. */
+  partialWhy?: "previousScope" | "deadline";
   /** The read stopped at this many objects, so older ones are not among the rows. */
   cutAt?: number;
   /** The rows are the first of a longer list: no total, and a search has not seen the rest. */
@@ -339,7 +343,8 @@ function BodyRowView<TData extends RowData>({
       tabIndex={keyboard ? (tabStop ? 0 : -1) : undefined}
       className={cn(
         clickable && "cursor-pointer",
-        selected && "bg-hover ring-1 ring-inset ring-info",
+        selected &&
+          "bg-hover after:pointer-events-none after:absolute after:inset-0 after:z-10 after:ring-1 after:ring-inset after:ring-info after:content-['']",
         "relative group"
       )}
       onFocus={
@@ -685,11 +690,13 @@ function DataTableInner<TData extends RowData>({
   enableKeyboardNav,
   getRowId,
   emptyMessage,
+  emptyAction,
   grouping = null,
   rowLabel,
   rowNoun,
   widthsKey,
   partial = false,
+  partialWhy,
   cutAt,
   more = false,
   share,
@@ -729,6 +736,7 @@ function DataTableInner<TData extends RowData>({
   // Narrowed in the deferred render itself, not in one more render at full
   // priority that an effect copying it into state used to cost per keystroke.
   const globalFilter = React.useDeferredValue(searchValue);
+  const settling = searchValue !== globalFilter;
 
   // Compact rows stay strictly single-line — a pod name like
   // `cron-demo-29765030-v9vcv` otherwise wraps to three lines and the row
@@ -1079,7 +1087,9 @@ function DataTableInner<TData extends RowData>({
   useRowControlsParked(containerRef, keyboardNavEnabled);
   const filterRef = React.useRef<HTMLInputElement>(null);
 
-  const filteredRows = table.getFilteredRowModel().rows.length;
+  const matched = table.getFilteredRowModel().rows.length;
+  const filteredRows =
+    settling && matched === 0 ? table.getCoreRowModel().rows.length : matched;
   const totalRows = data.length;
   const nounsOf = (n: number) =>
     rowNoun ? { n, ...rowNoun } : rowNouns(rowLabel ?? "", n);
@@ -1540,7 +1550,7 @@ function DataTableInner<TData extends RowData>({
   if (isLoading) {
     return (
       <TableSkeleton
-        widths={columns.map((column) => column.size ?? 100)}
+        widths={table.getVisibleFlatColumns().map((column) => column.getSize())}
         compact={isCompact}
         grouped={grouping !== null}
       />
@@ -1794,7 +1804,7 @@ function DataTableInner<TData extends RowData>({
                        * none of these" are different problems with different
                        * fixes; saying "No results." for both leaves the user
                        * guessing which one they're looking at. */}
-                      {searchValue ? (
+                      {settling ? null : searchValue ? (
                         <div className="flex flex-col items-center gap-2">
                           <SearchX
                             className="h-5 w-5 text-fg-mut"
@@ -1841,6 +1851,7 @@ function DataTableInner<TData extends RowData>({
                               <T section="empty" k="noResourcesInScope" />
                             )}
                           </p>
+                          {emptyAction}
                         </div>
                       )}
                     </div>
@@ -1884,7 +1895,15 @@ function DataTableInner<TData extends RowData>({
               : more
                 ? t("readings", "rowsSoFar", nounsOf(filteredRows))
                 : partial
-                  ? t("readings", "rowsWhereAnswered", nounsOf(filteredRows))
+                  ? t(
+                      "readings",
+                      partialWhy === "previousScope"
+                        ? "rowsPreviousScope"
+                        : partialWhy === "deadline"
+                          ? "rowsBeforeDeadline"
+                          : "rowsWhereAnswered",
+                      nounsOf(filteredRows)
+                    )
                   : filteredRows === totalRows
                     ? t("readings", "objectCount", nounsOf(totalRows))
                     : t("readings", "rowsOfTotal", {

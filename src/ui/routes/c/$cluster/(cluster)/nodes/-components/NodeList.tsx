@@ -18,6 +18,8 @@ import { MetricValue } from "@/components/ui/metric-value";
 import { CopyableAddress, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import { widestText } from "@/lib/text-width";
 import { useCallback, useMemo } from "react";
+import { SegmentedControl } from "@/components/ui/states";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -308,28 +310,15 @@ export function NodeList() {
   });
 
   const viewToggle = (
-    <span
-      role="tablist"
-      aria-label={t("columns", "view")}
-      className="flex items-center gap-0.5"
-    >
-      {(["table", "utilisation"] as const).map((candidate) => (
-        <button
-          key={candidate}
-          type="button"
-          role="tab"
-          aria-selected={view === candidate}
-          onClick={() => setView(candidate)}
-          className={
-            view === candidate
-              ? "rounded bg-sel px-1.5 py-0.5 text-caption text-fg"
-              : "rounded px-1.5 py-0.5 text-caption text-fg-mut hover:bg-hover hover:text-fg"
-          }
-        >
-          {t("columns", candidate === "table" ? "tableView" : "utilisation")}
-        </button>
-      ))}
-    </span>
+    <SegmentedControl
+      label={t("columns", "view")}
+      value={view}
+      onChange={setView}
+      segments={[
+        { value: "table", label: t("columns", "tableView") },
+        { value: "utilisation", label: t("columns", "utilisation") },
+      ]}
+    />
   );
 
   const nodeColumns = useMemo(
@@ -348,12 +337,16 @@ export function NodeList() {
         icon: ShieldOff,
         label: t("action", "cordon"),
         onClick: (item) => actions.cordon(item.name),
+        hidden: (item) => item.unschedulable,
+        pending: (item) => actions.pending(item.name),
         reason: (item) => actions.denied(item.name),
       },
       {
         icon: Shield,
         label: t("action", "uncordon"),
         onClick: (item) => actions.uncordon(item.name),
+        hidden: (item) => !item.unschedulable,
+        pending: (item) => actions.pending(item.name),
         reason: (item) => actions.denied(item.name),
       },
       {
@@ -388,7 +381,11 @@ export function NodeList() {
         <div className="flex h-full min-h-0 flex-col gap-4">
           <ResourceListHeader
             title={NODES_TITLE}
-            count={nodesForTrends.data?.rows.length}
+            count={
+              nodesForTrends.isError
+                ? undefined
+                : nodesForTrends.data?.rows.length
+            }
             actions={
               <>
                 {viewToggle}
@@ -397,14 +394,24 @@ export function NodeList() {
             }
             dataUpdatedAt={nodesForTrends.dataUpdatedAt}
             live={live && !resyncing}
+            stale={nodesForTrends.isError && nodesForTrends.data !== undefined}
           />
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-lane">
+            {nodesForTrends.isError && nodesForTrends.data !== undefined && (
+              <StaleRows
+                label={toPlural(ResourceType.Node)}
+                since={nodesForTrends.dataUpdatedAt}
+                error={nodesForTrends.error}
+                onRetry={() => void nodesForTrends.refetch()}
+              />
+            )}
             <NodeUtilisation
               nodes={nodesForTrends.data?.rows ?? []}
               nodesKnown={nodesForTrends.data !== undefined}
               nodesReason={
                 nodesForTrends.error ? errorToShow(nodesForTrends.error) : null
               }
+              onRetryNodes={() => void nodesForTrends.refetch()}
               range={range}
               onRange={setRange}
             />

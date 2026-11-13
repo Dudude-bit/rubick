@@ -31,7 +31,15 @@ import { Unknown } from "@/components/ui/unknown";
 import { inScope, noneWhereAnswered } from "@/lib/namespace-scope";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { controlAt } from "@/lib/row-control";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SectionHeader } from "@/components/ui/section";
+import { EmptyState, Eyebrow, Reading } from "@/components/ui/states";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { StaleRows } from "@/components/ui/stale-rows";
+import { UnreadList } from "../../../../-list/UnreadList";
+import { useRefusedAt } from "@/lib/refusals";
 import {
   Select,
   SelectContent,
@@ -71,7 +79,7 @@ import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { cn } from "@/lib/utils";
-import { errorToShow } from "@/lib/error-utils";
+import { isRefusal } from "@/lib/error-utils";
 import type { RouteInfo } from "@/generated/types";
 
 const EVERY_POD = queryKeys.podRows(null);
@@ -278,22 +286,35 @@ function GroupCap({
   tone?: "err";
 }) {
   return (
-    <div
+    <Eyebrow
+      as="h3"
       className={cn(
-        "flex items-baseline gap-1.5 px-0.5 pb-1.5 pt-4 text-caption font-semibold uppercase tracking-wide",
-        tone === "err" ? "text-err" : "text-fg-fnt"
+        "flex items-baseline gap-1.5 px-0.5 pb-1.5 pt-4",
+        tone === "err" && "text-err"
       )}
     >
       {label} <span className="font-normal text-fg-mut">{count}</span>
-    </div>
+    </Eyebrow>
   );
 }
 
-function UnsettledRows({ rows, why }: { rows: RouteRow[]; why: string }) {
+function UnsettledRows({
+  rows,
+  why,
+  reading,
+}: {
+  rows: RouteRow[];
+  why: string;
+  reading: boolean;
+}) {
   if (rows.length === 0) return null;
   return (
     <>
-      <p className="px-0.5 pb-1.5 pt-4 text-caption text-fg-fnt">{why}</p>
+      {reading ? (
+        <Reading className="px-0.5 pb-1.5 pt-4">{why}</Reading>
+      ) : (
+        <p className="px-0.5 pb-1.5 pt-4 text-caption text-fg-fnt">{why}</p>
+      )}
       <div className="border-t border-hair">
         {rows.map((row) => (
           <Row
@@ -324,7 +345,12 @@ export function GatewayRoutesList() {
     dataUpdatedAt,
     live,
     resyncing,
+    failedRefresh,
+    refetch,
+    refetchScan,
   } = useGatewayRoutes(scope.scope);
+  const refused = !!error && isRefusal(error);
+  const refusedAt = useRefusedAt(refused ? error : null);
 
   const [query, setQuery] = useState("");
   // `listOf` is how a link to one route kind's list arrives: the same ask as `kind`.
@@ -442,13 +468,9 @@ export function GatewayRoutesList() {
 
   if (detection && !detection.installed) {
     return (
-      <div className="p-6">
-        <h1 className="text-title font-semibold text-fg">
-          {t("nav", "routes")}
-        </h1>
-        <p className="mt-2 max-w-[64ch] text-xs text-fg-fnt">
-          {t("empty", "gwNoCrdsPage")}
-        </p>
+      <div className="flex flex-col gap-2">
+        <SectionHeader title={t("nav", "routes")} />
+        <EmptyState>{t("empty", "gwNoCrdsPage")}</EmptyState>
       </div>
     );
   }
@@ -459,7 +481,7 @@ export function GatewayRoutesList() {
   const shown = brokenOnly ? [] : board.serving;
 
   return (
-    <div className="flex h-full flex-col p-6">
+    <div className="flex h-full min-h-0 flex-col">
       <ResourceListHeader
         title={t("nav", "routes")}
         count={
@@ -497,19 +519,17 @@ export function GatewayRoutesList() {
           )
         }
         dataUpdatedAt={dataUpdatedAt}
-        live={live && !resyncing}
+        live={live && !resyncing && !refused}
+        stale={failedRefresh !== null}
+        refusedAt={refused ? refusedAt : undefined}
         actions={
           <div className="flex items-center gap-2">
-            <input
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
+            <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("action", "gwFilterPlaceholder")}
               aria-label={t("action", "filterRoutes")}
-              className="h-7 w-52 rounded-md border border-hair bg-transparent px-2.5 text-xs text-fg placeholder:text-fg-fnt focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+              className="w-52"
             />
             <Select
               value={kind === "" ? ALL_KINDS : kind}
@@ -540,7 +560,6 @@ export function GatewayRoutesList() {
             </Select>
             <Button
               variant="outline"
-              size="sm"
               aria-pressed={showMap}
               onClick={() => setShowMap((on) => !on)}
             >
@@ -577,13 +596,23 @@ export function GatewayRoutesList() {
           ))}
       </div>
 
+      {failedRefresh !== null && routes.length > 0 && (
+        <StaleRows
+          className="mt-3"
+          label={t("nav", "routes").toLowerCase()}
+          since={dataUpdatedAt}
+          error={failedRefresh}
+          onRetry={() => void refetch()}
+        />
+      )}
+
       {/* Every pulse is a break upstream of the routes: the sidebar's dot says err. */}
       {pulse.map((entry) => (
-        <div
+        <Alert
           key={`${entry.namespace}/${entry.gateway}`}
-          className="mt-3 flex items-baseline gap-2 rounded-lg border border-err/45 bg-err/7 px-3 py-1.5 text-xs"
+          variant="destructive"
+          className="mt-3 flex items-baseline gap-2"
         >
-          <span className="text-micro text-err">●</span>
           <span className="text-fg-mid">
             {parts(t("empty", "gwPulseLine", { say: entry.say }), {
               name: <span className="font-mono text-fg">{entry.gateway}</span>,
@@ -595,7 +624,7 @@ export function GatewayRoutesList() {
           >
             {t("action", "openGateways")}
           </Link>
-        </div>
+        </Alert>
       ))}
 
       {showMap && (
@@ -615,37 +644,58 @@ export function GatewayRoutesList() {
       {/* A floor: whatever is above it, the list stays a list. */}
       <div className="min-h-[8rem] flex-1 overflow-y-auto scrollbar-lane">
         {error && routes.length === 0 ? (
-          <div className="max-w-[68ch] py-8">
-            <p className="text-xs text-err">
-              {t("empty", "gwCouldNotReadRoutes")}
-            </p>
-            <p className="mt-1.5 select-text wrap-break-word font-mono text-caption text-fg-fnt">
-              {errorToShow(error)}
-            </p>
-          </div>
+          <UnreadList
+            error={error}
+            words={
+              refused
+                ? t("nav", "noListAccess")
+                : t("empty", "gwCouldNotReadRoutes")
+            }
+            onRetry={() => void refetch()}
+          />
         ) : isLoading && routes.length === 0 ? (
-          <p className="py-8 text-xs text-fg-fnt">
-            {t("empty", "readingRoutes")}
-          </p>
+          <div role="status" aria-busy="true">
+            <TableSkeleton
+              widths={[28, 255, 320, 84, 170, 105, 50]}
+              rows={8}
+              showSearch={false}
+              compact
+            />
+          </div>
         ) : detectionError ? (
           // Every kind query is gated on the CRD scan, so a scan that failed
           // leaves this page with an empty list and nothing to say about it.
           // "No routes in the current scope" would be a claim about a cluster
           // nobody managed to ask.
-          <div className="max-w-[68ch] py-8">
-            <p className="text-xs text-err">
-              {t("empty", "gwCouldNotCheckInstall")}
-            </p>
-            <p className="mt-1.5 select-text wrap-break-word font-mono text-caption text-fg-fnt">
-              {errorToShow(detectionError)}
-            </p>
-          </div>
+          <UnreadList
+            error={detectionError}
+            words={t("empty", "gwCouldNotCheckInstall")}
+            onRetry={() => void refetchScan()}
+          />
         ) : detectionLoading ? (
-          <p className="py-8 text-xs text-fg-fnt">
-            {t("empty", "gwCheckingInstall")}
-          </p>
+          <Reading className="py-8">{t("empty", "gwCheckingInstall")}</Reading>
         ) : total + board.mesh.length === 0 ? (
-          <p className="py-8 text-xs text-fg-fnt">
+          <EmptyState
+            action={
+              routes.length > 0 ? (
+                <Button
+                  variant="ghost"
+                  className="text-xs"
+                  onClick={() => {
+                    setQuery("");
+                    setBrokenOnly(false);
+                    setSearch({
+                      kind: undefined,
+                      listOf: undefined,
+                      names: undefined,
+                    });
+                  }}
+                >
+                  {t("empty", "clearFilters")}
+                </Button>
+              ) : undefined
+            }
+          >
             {routes.length > 0
               ? t("empty", "nothingMatchesFilter")
               : unread.length > 0
@@ -658,7 +708,7 @@ export function GatewayRoutesList() {
                 : refusedKinds.length > 0
                   ? t("empty", "gwNoRoutesOfKindsRead")
                   : t("empty", "gwNoRoutesInScope")}
-          </p>
+          </EmptyState>
         ) : !board.verdictsKnown ? (
           <>
             {board.notServing.length > 0 && (
@@ -691,6 +741,7 @@ export function GatewayRoutesList() {
                       ? t("empty", "gwCouldNotReadBacking")
                       : t("empty", "gwReadingVerdicts")
                 }
+                reading={!gateways.error && !classes.error && !backing.error}
               />
             )}
           </>

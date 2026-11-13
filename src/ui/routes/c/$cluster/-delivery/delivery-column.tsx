@@ -9,6 +9,7 @@
  * it is used.
  */
 
+import { Eyebrow, SegmentedControl } from "@/components/ui/states";
 import { createContext, useContext, type ReactNode } from "react";
 
 import type { Delivery } from "@/integrations";
@@ -17,7 +18,6 @@ import {
   DELIVERY_FILTER_LABEL,
   type DeliveryFilter,
 } from "@/lib/delivery";
-import { cn } from "@/lib/utils";
 import { DeliveryCell } from "./delivery";
 import { useT } from "@/i18n/useT";
 
@@ -78,22 +78,16 @@ export function DeliveryFilterControl({
 
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="text-micro uppercase tracking-[0.08em] text-fg-fnt">
-        {t("columns", "delivery")}
-      </span>
-      {OPTIONS.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          onClick={() => onChange(option.id)}
-          className={cn(
-            "text-caption transition-colors",
-            option.id === value ? "text-fg" : "text-fg-fnt hover:text-fg-mut"
-          )}
-        >
-          {t("action", option.label)}
-        </button>
-      ))}
+      <Eyebrow as="span">{t("columns", "delivery")}</Eyebrow>
+      <SegmentedControl
+        label={t("columns", "delivery")}
+        value={value}
+        onChange={onChange}
+        segments={OPTIONS.map((option) => ({
+          value: option.id,
+          label: t("action", option.label),
+        }))}
+      />
       {value === "trouble" && blind.length > 0 && (
         <span className="text-caption text-fg-fnt">
           {t("empty", "blindReconcilers", {

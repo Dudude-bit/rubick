@@ -31,7 +31,11 @@ vi.mock("@/hooks/useMetrics", () => ({
   useMetrics: () => ({ nodeMetrics: [], nodeStatus: null }),
 }));
 const nodeActions = vi.hoisted(() => ({
-  value: { dialogs: null, draining: () => false } as Record<string, unknown>,
+  value: {
+    dialogs: null,
+    draining: () => false,
+    pending: () => false,
+  } as Record<string, unknown>,
 }));
 vi.mock("./useNodeActions", () => ({
   useNodeActions: () => nodeActions.value,
@@ -106,8 +110,10 @@ describe("NodeList", () => {
       const view = await open(client, search);
       const heading = await screen.findByRole("heading", { name: "Nodes" });
       const row = heading.parentElement!;
-      expect(within(row).getByRole("tablist")).toBeInTheDocument();
-      expect(screen.getAllByRole("tablist")).toHaveLength(1);
+      expect(
+        within(row).getByRole("group", { name: "View" })
+      ).toBeInTheDocument();
+      expect(screen.getAllByRole("group", { name: "View" })).toHaveLength(1);
       view.unmount();
     }
   });
@@ -127,12 +133,12 @@ describe("NodeList", () => {
     });
     const { router } = await open(client);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "Utilisation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Utilisation" }));
     await waitFor(() =>
       expect(router.state.location.search).toEqual({ view: "utilisation" })
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "Table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Table" }));
     await waitFor(() => expect(router.state.location.search).toEqual({}));
   });
 });
@@ -184,6 +190,7 @@ describe("NodeList for a node this window is draining", () => {
       dialogs: null,
       drain,
       draining: (name: string) => name === "node01",
+      pending: () => false,
       denied: () => undefined,
     };
     await open(oneNode());
@@ -193,7 +200,11 @@ describe("NodeList for a node this window is draining", () => {
     );
     expect(drain).toHaveBeenCalledWith("node01");
     expect(screen.queryByRole("button", { name: "Drain" })).toBeNull();
-    nodeActions.value = { dialogs: null, draining: () => false };
+    nodeActions.value = {
+      dialogs: null,
+      draining: () => false,
+      pending: () => false,
+    };
   });
 });
 
@@ -212,13 +223,14 @@ describe("NodeList for a reader who may not patch nodes", () => {
       uncordon,
       drain,
       draining: () => false,
+      pending: () => false,
       denied: (name: string) =>
         name === "node01"
           ? "Your access does not allow this: the cluster answers no to kubectl auth can-i patch nodes/node01."
           : undefined,
     };
     await open(oneNode());
-    for (const name of ["Cordon", "Uncordon", "Drain"]) {
+    for (const name of ["Cordon", "Drain"]) {
       const button = await screen.findByRole("button", { name });
       expect(button).toHaveAttribute("aria-disabled", "true");
       fireEvent.click(button);
@@ -226,6 +238,49 @@ describe("NodeList for a reader who may not patch nodes", () => {
     expect(cordon).not.toHaveBeenCalled();
     expect(uncordon).not.toHaveBeenCalled();
     expect(drain).not.toHaveBeenCalled();
-    nodeActions.value = { dialogs: null, draining: () => false };
+    nodeActions.value = {
+      dialogs: null,
+      draining: () => false,
+      pending: () => false,
+    };
+  });
+});
+
+describe("NodeList row buttons by the node's state", () => {
+  /** Both Cordon and Uncordon on every row left the reader guessing which one applies; only the one that does may show. */
+  it("offers Cordon on a schedulable node and no Uncordon", async () => {
+    nodeActions.value = {
+      dialogs: null,
+      draining: () => false,
+      pending: () => false,
+      denied: () => undefined,
+    };
+    await open(oneNode());
+    await screen.findByRole("button", { name: "Cordon" });
+    expect(screen.queryByRole("button", { name: "Uncordon" })).toBeNull();
+    nodeActions.value = {
+      dialogs: null,
+      draining: () => false,
+      pending: () => false,
+    };
+  });
+
+  /** A cordon that is still unanswered must show on the row and take no second press, or two mutations and two toasts follow. */
+  it("turns the row's button into a spinner while its cordon is unanswered", async () => {
+    nodeActions.value = {
+      dialogs: null,
+      draining: () => false,
+      pending: (name: string) => name === "node01",
+      denied: () => undefined,
+    };
+    await open(oneNode());
+    const button = await screen.findByRole("button", { name: "Cordon" });
+    expect(button).toBeDisabled();
+    expect(button.querySelector("svg.animate-spin")).not.toBeNull();
+    nodeActions.value = {
+      dialogs: null,
+      draining: () => false,
+      pending: () => false,
+    };
   });
 });

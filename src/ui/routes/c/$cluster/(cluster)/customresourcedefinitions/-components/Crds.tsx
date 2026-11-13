@@ -18,8 +18,9 @@ import { describeDeletion } from "../../../-peek/peek-actions";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ResourceListHeader } from "../../../-list/ResourceListHeader";
-import { StaleRows } from "../../../-list/StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { UnreadList } from "../../../-list/UnreadList";
+import { useHeldOpen } from "../../../-list/useHeldOpen";
 import { KindAbout } from "@/components/object/KindAbout";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { createAgeColumn } from "../../../-list/columns";
@@ -110,11 +111,14 @@ export function Crds() {
         }),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.crds() });
+      setDeleteTarget(null);
     },
     onError: (error: Error) => {
       toastWriteError(t("action", "deleteKindFailed", { kind: "CRD" }), error);
     },
   });
+
+  const heldOpen = useHeldOpen(() => setDeleteTarget(null));
 
   const crds = useMemo<CrdListItem[]>(
     () =>
@@ -302,7 +306,7 @@ export function Crds() {
 
       <DangerousConfirmDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        onOpenChange={heldOpen.onOpenChange}
         title={deletion?.title ?? ""}
         description={deletion?.description}
         details={
@@ -318,8 +322,9 @@ export function Crds() {
         isLoading={deleteMutation.isPending}
         onConfirm={() => {
           if (deleteTarget) {
-            deleteMutation.mutate(deleteTarget);
-            setDeleteTarget(null);
+            heldOpen
+              .hold(deleteMutation.mutateAsync(deleteTarget))
+              .catch(() => undefined);
           }
         }}
       />

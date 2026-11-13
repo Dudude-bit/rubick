@@ -15,6 +15,7 @@ import { withoutCredentials } from "@/lib/hints";
 import { ResourceList } from "../../-list/ResourceList";
 import { servedOf, useServed } from "../../-object/served";
 import { Unserved } from "../../-object/Unserved";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { ObjectLink } from "@/components/object/ResourceRef";
@@ -286,19 +287,19 @@ function PrintedTable({
       getRowPeek={targetOf}
       headerContent={
         printed.data?.more ? (
-          <div className="flex items-center gap-3 text-xs text-fg-mut">
+          <Alert variant="warn" className="flex items-center gap-3">
             <span>
               {t("empty", "printedMore", { count: rows?.length ?? 0 })}
             </span>
             <Button
               variant="outline"
               size="sm"
-              disabled={printed.isPlaceholderData}
+              pending={printed.isPlaceholderData}
               onClick={() => setPages((n) => n + PAGES_PER_STEP)}
             >
               {t("empty", "showMore")}
             </Button>
-          </div>
+          </Alert>
         ) : null
       }
     />

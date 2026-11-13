@@ -3,7 +3,14 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useRereadWith } from "@/hooks/useRereadWith";
-import { BadgeCheck, GitBranch, Info, ListTree, Tag } from "lucide-react";
+import {
+  BadgeCheck,
+  GitBranch,
+  Info,
+  ListTree,
+  RefreshCw,
+  Tag,
+} from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import {
@@ -33,7 +40,8 @@ import {
   viewGlyph,
   type DetailTab,
 } from "@/components/object/detail-tab";
-import { ConditionRows } from "@/components/object/detail-blocks";
+import { ConditionRows, DetailAction } from "@/components/object/detail-blocks";
+import { SegmentedControl } from "@/components/ui/states";
 import { KindIcon } from "@/components/object/KindIcon";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
@@ -47,7 +55,6 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { listLink } from "@/lib/links";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
-import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 import { scopeKey } from "./crd-scope";
 import { toastWriteError } from "@/lib/toast-error";
@@ -92,7 +99,10 @@ export function CrdDetail() {
   const {
     data: crd,
     isLoading,
+    isFetching,
     error,
+    freshness,
+    refetch,
   } = useLiveQuery({
     queryKey: queryKeys.crd(name),
     queryFn: async () => {
@@ -109,7 +119,11 @@ export function CrdDetail() {
   });
   useRereadWith(queryKeys.crd(name), ["crd-yaml", name]);
 
-  const { data: yaml } = useQuery({
+  const {
+    data: yaml,
+    error: yamlError,
+    refetch: refetchYaml,
+  } = useQuery({
     queryKey: ["crd-yaml", name],
     queryFn: async () => {
       if (!name) throw new Error("CRD name is required");
@@ -304,24 +318,16 @@ export function CrdDetail() {
             actions={
               crd &&
               crd.versions.length > 1 && (
-                <div className="flex items-center gap-0.5">
-                  {crd.versions.map((v) => (
-                    <button
-                      key={v.name}
-                      type="button"
-                      onClick={() => setSelectedVersion(v.name)}
-                      aria-pressed={activeVersionName === v.name}
-                      className={cn(
-                        "h-6 rounded px-1.5 font-mono text-caption transition-colors hover:bg-hover",
-                        activeVersionName === v.name
-                          ? "bg-sel text-fg"
-                          : "text-fg-mut hover:text-fg"
-                      )}
-                    >
-                      {v.name}
-                    </button>
-                  ))}
-                </div>
+                <SegmentedControl
+                  label={t("nav", "versions")}
+                  value={activeVersionName}
+                  onChange={setSelectedVersion}
+                  mono
+                  segments={crd.versions.map((v) => ({
+                    value: v.name,
+                    label: v.name,
+                  }))}
+                />
               )
             }
           />
@@ -404,6 +410,8 @@ export function CrdDetail() {
     yamlTab({
       title: t("action", "kindYaml", { kind: "CustomResourceDefinition" }),
       yaml,
+      error: yamlError,
+      onRetry: () => refetchYaml(),
       onCopy: () => yaml && copyToClipboard(yaml),
       resourceKind: ResourceType.CustomResourceDefinition,
       resourceName: name,
@@ -417,7 +425,8 @@ export function CrdDetail() {
         share={share}
         delivery={deliveryQuery}
         isLoading={isLoading}
-        error={error}
+        error={crd ? null : error}
+        freshness={freshness}
         resourceKind={ResourceType.CustomResourceDefinition}
         title={crd?.name || name || ""}
         createdAt={crd?.createdAt}
@@ -448,12 +457,20 @@ export function CrdDetail() {
         }
         onBack={goBack}
         actions={
-          <DeleteAction
-            kind={ResourceType.CustomResourceDefinition}
-            name={name ?? ""}
-            intercept={intercept("Delete")}
-            mutation={name ? deleteMutation : null}
-          />
+          <>
+            <DetailAction
+              label={t("action", "refresh")}
+              icon={RefreshCw}
+              onClick={() => void refetch()}
+              busy={isFetching}
+            />
+            <DeleteAction
+              kind={ResourceType.CustomResourceDefinition}
+              name={name ?? ""}
+              intercept={intercept("Delete")}
+              mutation={name ? deleteMutation : null}
+            />
+          </>
         }
         tabs={tabs}
         activeTab={activeTab}

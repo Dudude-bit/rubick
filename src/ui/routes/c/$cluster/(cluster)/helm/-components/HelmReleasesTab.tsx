@@ -2,13 +2,10 @@ import { useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import {
-  RefreshCw,
   Trash2,
   History,
   FileCode,
   RotateCcw,
-  PauseCircle,
-  PlayCircle,
   ExternalLink,
   ArrowUpCircle,
 } from "lucide-react";
@@ -27,9 +24,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DetailAction } from "@/components/object/detail-blocks";
 import type { HelmRelease, UnreadNamespace } from "@/generated/types";
-import { StaleRows } from "../../../-list/StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { UnreadNamespaces } from "../../../-list/UnreadNamespaces";
 import { UnreadList } from "../../../-list/UnreadList";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -61,6 +57,8 @@ export interface HelmReleasesTabProps {
   /** When the releases on screen were read, where a later read failed over them. */
   readAt?: number | null;
   helmCliAvailable: boolean;
+  /** The CLI check has not answered yet: "not installed" is not yet known. */
+  helmCliChecking?: boolean;
   onRefetch: () => void;
   onShowHistory: (release: HelmRelease) => void;
   onUpgrade: (release: HelmRelease) => void;
@@ -75,6 +73,7 @@ export function HelmReleasesTab({
   error,
   readAt = null,
   helmCliAvailable,
+  helmCliChecking = false,
   onRefetch,
   onShowHistory,
   onUpgrade,
@@ -194,7 +193,11 @@ export function HelmReleasesTab({
                     </TooltipTrigger>
                     {!helmCliAvailable && (
                       <TooltipContent>
-                        <T section="action" k="helmCliRequired" />
+                        {helmCliChecking ? (
+                          <T section="empty" k="helmCliChecking" />
+                        ) : (
+                          <T section="action" k="helmCliRequired" />
+                        )}
                       </TooltipContent>
                     )}
                   </Tooltip>
@@ -211,7 +214,11 @@ export function HelmReleasesTab({
                     </TooltipTrigger>
                     {!helmCliAvailable && (
                       <TooltipContent>
-                        <T section="action" k="helmCliRequired" />
+                        {helmCliChecking ? (
+                          <T section="empty" k="helmCliChecking" />
+                        ) : (
+                          <T section="action" k="helmCliRequired" />
+                        )}
                       </TooltipContent>
                     )}
                   </Tooltip>
@@ -231,7 +238,11 @@ export function HelmReleasesTab({
                     </TooltipTrigger>
                     {!helmCliAvailable && (
                       <TooltipContent>
-                        <T section="action" k="helmCliRequired" />
+                        {helmCliChecking ? (
+                          <T section="empty" k="helmCliChecking" />
+                        ) : (
+                          <T section="action" k="helmCliRequired" />
+                        )}
                       </TooltipContent>
                     )}
                   </Tooltip>
@@ -239,36 +250,16 @@ export function HelmReleasesTab({
               )}
 
               {isFlux && (
-                <>
-                  <DropdownMenuItem disabled>
-                    {release.suspended ? (
-                      <>
-                        <PlayCircle className="mr-2 h-4 w-4" />
-                        <T section="action" k="resume" />
-                      </>
-                    ) : (
-                      <>
-                        <PauseCircle className="mr-2 h-4 w-4" />
-                        <T section="action" k="suspend" />
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    <T section="action" k="reconcile" />
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() =>
-                      navigate(
-                        fluxHelmReleaseLink(release.namespace, release.name)
-                      )
-                    }
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    <T section="action" k="viewCrd" />
-                  </DropdownMenuItem>
-                </>
+                <DropdownMenuItem
+                  onClick={() =>
+                    navigate(
+                      fluxHelmReleaseLink(release.namespace, release.name)
+                    )
+                  }
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  <T section="action" k="viewCrd" />
+                </DropdownMenuItem>
               )}
             </ActionMenu>
           );
@@ -279,6 +270,7 @@ export function HelmReleasesTab({
       t,
       navigate,
       helmCliAvailable,
+      helmCliChecking,
       onShowHistory,
       onUpgrade,
       onRollback,
@@ -300,17 +292,6 @@ export function HelmReleasesTab({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center">
-        <div className="ml-auto">
-          <DetailAction
-            label={t("action", "refresh")}
-            icon={RefreshCw}
-            onClick={onRefetch}
-            busy={isLoading}
-          />
-        </div>
-      </div>
-
       {readAt !== null && releases.length > 0 && (
         <StaleRows
           label={t("empty", "helmReleases")}

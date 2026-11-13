@@ -83,7 +83,7 @@ describe("a list a link narrowed to named rows, under its delivery filter", () =
     );
     expect(screen.getByText("web")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Needs attention" }));
+    fireEvent.click(screen.getByRole("button", { name: "Out of sync" }));
     expect(screen.queryByText("web")).toBeNull();
     expect(screen.queryByText(/not in this list now/)).toBeNull();
     expect(screen.queryByText(/not among the rows/)).toBeNull();
