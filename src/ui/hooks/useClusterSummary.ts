@@ -35,6 +35,8 @@ export interface ClusterSummary {
    *  shows "—", not "0", so a token without cluster read rights is never told
    *  its cluster is empty and healthy. */
   podCount: number | null;
+  /** The whole cluster's Needs attention, as the Overview counts it; `null` where it was not asked or not read. */
+  problems: NamespaceAttention | null;
   namespaces: NamespaceScope[];
   /** A refused list is not an empty cluster: the picker then takes a name. */
   namespaceList: NamespaceListState;
@@ -200,6 +202,14 @@ export function useClusterSummary({
 
     return {
       podCount: overview ? overview.counts.pods : null,
+      problems:
+        known && wholeAttention
+          ? {
+              total: wholeAttention.total,
+              complete: wholeAttention.complete,
+              worst: wholeAttention.worst,
+            }
+          : null,
       namespaces,
       namespaceList,
       refused,

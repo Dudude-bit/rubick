@@ -124,7 +124,11 @@ function Chevron() {
 const MANY_MISSING = 4;
 const MANY_KEYS = 6;
 
-const keysFolded = (row: ConnRow) => (row.keysReferenced ?? 0) > MANY_KEYS;
+const keysFolded = (row: ConnRow) =>
+  Math.max(
+    row.keysReferenced ?? 0,
+    row.ways.length + (row.missingKeys?.length ?? 0)
+  ) > MANY_KEYS;
 
 function missingLines(row: ConnRow, t: ReturnType<typeof useT>) {
   return (row.missingKeys ?? []).map((key) => (

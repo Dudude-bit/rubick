@@ -145,6 +145,7 @@ export function CommandPalette() {
   const [scope, setScope] = useState<Scope>({ kind: "current" });
   const [wake, setWake] = useState<Wake | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [enterTried, setEnterTried] = useState(false);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [opening, setOpening] = useState("");
   const [everything, setEverything] = useState(false);
@@ -737,7 +738,11 @@ export function CommandPalette() {
         return;
       }
       if (event.key === "Enter") {
-        if (!entry) return;
+        if (!entry) {
+          event.preventDefault();
+          setEnterTried(true);
+          return;
+        }
         event.preventDefault();
         activate(entry, event.metaKey || event.ctrlKey);
         return;
@@ -802,6 +807,7 @@ export function CommandPalette() {
         .catch(() => setRecentItems([]));
     } else {
       pointer.current = null;
+      setEnterTried(false);
       setText("");
       setScope({ kind: "current" });
       setWake(null);
@@ -902,11 +908,11 @@ export function CommandPalette() {
                     : t("action", "searchOrBang")
               }
               value={actionsOf ? actionText : text}
-              onChange={(event) =>
-                actionsOf
-                  ? setActionText(event.target.value)
-                  : setText(event.target.value)
-              }
+              onChange={(event) => {
+                setEnterTried(false);
+                if (actionsOf) setActionText(event.target.value);
+                else setText(event.target.value);
+              }}
               onPaste={(event) => {
                 const pasted = event.clipboardData.getData("text");
                 if (!looksLikeAlert(pasted)) return;
@@ -957,6 +963,7 @@ export function CommandPalette() {
                   entry={entry}
                   selected={entry.id === activeId}
                   actionable={actionable && entry.id === activeId}
+                  enterTried={enterTried}
                   onHover={(event) => {
                     // A row that slid under a resting pointer, as results
                     // arrive, is not one the reader pointed at.
@@ -1119,6 +1126,7 @@ function EntryRow({
   entry,
   selected,
   actionable,
+  enterTried,
   onHover,
   onPick,
 }: {
@@ -1127,6 +1135,8 @@ function EntryRow({
   selected: boolean;
   /** Tab opens this row's actions. */
   actionable: boolean;
+  /** Enter was pressed with nothing yet to open. */
+  enterTried: boolean;
   onHover: (event: ReactPointerEvent) => void;
   onPick: (event: ReactMouseEvent) => void;
 }) {
@@ -1153,7 +1163,11 @@ function EntryRow({
             {HINT_MARK[entry.tone]}
           </span>
         )}
-        <span>{entry.text}</span>
+        <span>
+          {enterTried && entry.tone === "loading"
+            ? t("empty", "nothingToOpenYet")
+            : entry.text}
+        </span>
       </p>
     );
   }
@@ -1168,7 +1182,7 @@ function EntryRow({
         role="presentation"
         className="flex items-center gap-2 px-2 pb-1 pt-1.5 text-caption text-fg-fnt"
       >
-        <span className="min-w-0">
+        <span className="flex min-w-0 items-center gap-1">
           <ResourceName
             kind={entry.target.kind}
             name={entry.target.name}
@@ -1340,9 +1354,6 @@ function EntryRow({
             )}
           >
             {entry.action.label}
-          </span>
-          <span className="ml-auto min-w-0 truncate text-caption text-fg-fnt">
-            {entry.target.name}
           </span>
         </Row>
       );

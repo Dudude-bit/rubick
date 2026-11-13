@@ -16,6 +16,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { WriteFailure } from "@/components/ui/write-failure";
 import { holdWriteToasts } from "@/lib/write-hold";
+import { recordWriteFailure } from "@/stores/writeLogStore";
 import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 
@@ -88,6 +89,7 @@ export function DangerousConfirmDialog({
       .then(
         () => onOpenChange(false),
         (error: unknown) => {
+          recordWriteFailure(title, error);
           setFailure(error ?? "");
           setFailedOn(inputValue);
         }

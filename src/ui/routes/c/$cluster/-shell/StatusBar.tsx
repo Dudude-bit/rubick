@@ -269,7 +269,7 @@ export function StatusBar({
                     {here.pods && !here.pods.complete && <span>·</span>}
                     {!here.pods?.complete && (
                       <span className="text-fg-fnt">
-                        {podsUnreadIn(here.unread, t)}
+                        {podsUnreadIn(here.unread, scope, t)}
                       </span>
                     )}
                     <span>·</span>
@@ -348,8 +348,12 @@ function HeldAt({ at }: { at: number }) {
   );
 }
 
-/** Where the pods went unread, in the strip's own short words. */
-function podsUnreadIn(unread: readonly OverviewUnread[], t: T): string {
+/** Where the pods went unread, in the strip's own short words; the strip's own scope is said once, at its end. */
+function podsUnreadIn(
+  unread: readonly OverviewUnread[],
+  scope: readonly string[],
+  t: T
+): string {
   const named = [
     ...new Set(
       unread.flatMap((entry) =>
@@ -357,7 +361,9 @@ function podsUnreadIn(unread: readonly OverviewUnread[], t: T): string {
       )
     ),
   ];
-  return named.length === 0
+  const asScope =
+    named.length === scope.length && named.every((n) => scope.includes(n));
+  return named.length === 0 || asScope
     ? t("cluster", "podsNotCountedBare")
     : t("cluster", "podsNotCounted", {
         where: t("cluster", "countsIn", { scope: scopeLabel(named, t) }),

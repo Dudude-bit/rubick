@@ -187,6 +187,16 @@ describe("WorkloadUsage whose pods were not read", () => {
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
   });
 
+  /**
+   * The chart arrives with a note under it where no history supplier
+   * answers, and the block grew about 38 px when it landed. Fails if the
+   * wait does not hold a line for it.
+   */
+  it("holds the line the chart's note will take while the pods have not answered", () => {
+    const { container } = view({ podsPending: true });
+    expect(container.querySelector("[data-held-note]")).not.toBeNull();
+  });
+
   /** Fails if a failed re-read hides pods the last read found. */
   it("keeps the pods a read found before the next one failed", () => {
     view({

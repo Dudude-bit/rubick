@@ -51,6 +51,11 @@ const summary = vi.hoisted(() => ({
     } | null;
   }>,
   podCount: 0 as number | null,
+  problems: null as {
+    total: number;
+    complete: boolean;
+    worst: "err" | "warn" | null;
+  } | null,
   namespaceList: "listed" as "listed" | "refused" | "failed" | "pending",
 }));
 
@@ -140,6 +145,7 @@ beforeEach(() => {
   localStorage.clear();
   summary.namespaces = [];
   summary.podCount = 0;
+  summary.problems = null;
   summary.namespaceList = "listed";
   useNamespaceRecencyStore.setState({ recent: {} });
   nsAccess.answers = [];
@@ -1419,6 +1425,19 @@ describe("the count beside a namespace", () => {
 
     expect(within(list).getByText("14 · 10 problems")).toHaveClass("text-err");
     expect(within(list).queryByText(/bad/)).toBeNull();
+  });
+
+  /**
+   * The All row said 98 and nothing else while the cluster had 9 problems
+   * and each namespace row beside it carried its own. Fails if the row for
+   * the whole cluster stops stating the Overview's count in the same words.
+   */
+  it("gives the All namespaces row the cluster's own problem count", async () => {
+    summary.podCount = 98;
+    summary.problems = { total: 9, complete: true, worst: "err" };
+    const list = await open();
+
+    expect(within(list).getByText("98 · 9 problems")).toHaveClass("text-err");
   });
 
   /**

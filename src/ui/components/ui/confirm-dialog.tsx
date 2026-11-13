@@ -13,6 +13,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { WriteFailure } from "@/components/ui/write-failure";
 import { holdWriteToasts } from "@/lib/write-hold";
+import { recordWriteFailure } from "@/stores/writeLogStore";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 
@@ -94,7 +95,10 @@ export function ConfirmDialog({
               result
                 .then(
                   () => onOpenChange(false),
-                  (error: unknown) => setFailure(error ?? "")
+                  (error: unknown) => {
+                    recordWriteFailure(title, error);
+                    setFailure(error ?? "");
+                  }
                 )
                 .finally(() => {
                   release();

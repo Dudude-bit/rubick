@@ -11,11 +11,35 @@ const MOST_PORTS = 32;
  * share a path, so a page's own ports are named here: a new address opens
  * them at the top, and going back still restores them.
  */
+let pathChanged = true;
+
+/** Tells the shell's scroller whether the navigation in flight left its page. */
+export function followPathChange(router: {
+  subscribe: (
+    type: "onBeforeLoad",
+    listener: (event: { pathChanged: boolean }) => void
+  ) => unknown;
+}) {
+  router.subscribe("onBeforeLoad", (event) => {
+    pathChanged = event.pathChanged;
+  });
+}
+
+/**
+ * The shell's own scroller is one box under every page: a new page opens at
+ * its top, while a search-param change on the same page keeps the place.
+ */
+const shellScroller = () =>
+  pathChanged ? document.getElementById("main-content") : null;
+
 export const pageScroll = {
   scrollRestoration: true,
-  scrollToTopSelectors: Array.from(
-    { length: MOST_PORTS },
-    (_, index) => () =>
-      document.querySelectorAll(`[${PAGE_SCROLLER}]`).item(index)
-  ),
+  scrollToTopSelectors: [
+    shellScroller,
+    ...Array.from(
+      { length: MOST_PORTS },
+      (_, index) => () =>
+        document.querySelectorAll(`[${PAGE_SCROLLER}]`).item(index)
+    ),
+  ],
 };

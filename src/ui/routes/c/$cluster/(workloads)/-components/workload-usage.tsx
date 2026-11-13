@@ -19,7 +19,7 @@ import { isRefusal } from "@/lib/error-utils";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
-import { UsageRowsSkeleton } from "../../-usage/usage-chart";
+import { UsageNote, UsageRowsSkeleton } from "../../-usage/usage-chart";
 import { UsageBlock } from "../../-usage/usage-block";
 import { useCapabilityState } from "@/integrations";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -230,6 +230,7 @@ function PodsUnknownUsage({
   onRetry?: () => unknown;
 }) {
   const t = useT();
+  const history = useCapabilityState("usage.history");
   return (
     <Section>
       <SectionHeader
@@ -260,7 +261,16 @@ function PodsUnknownUsage({
           onRetry={onRetry}
         />
       ) : (
-        <UsageRowsSkeleton />
+        <>
+          <UsageRowsSkeleton />
+          {history.state !== "ready" && (
+            // The chart lands with a line under it where no history supplier
+            // answers; held here, the block does not grow when it arrives.
+            <div data-held-note aria-hidden="true" className="invisible">
+              <UsageNote>.</UsageNote>
+            </div>
+          )}
+        </>
       )}
     </Section>
   );

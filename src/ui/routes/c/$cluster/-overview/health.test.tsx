@@ -980,6 +980,54 @@ describe("the Needs attention rows by keyboard", () => {
     await user.keyboard("{ArrowUp}");
     expect(document.activeElement).toBe(rows[0]);
   });
+
+  /**
+   * A click on the canvas leaves focus on the main scroller, not the body.
+   * Fails if Down from there scrolls the page instead of entering row one.
+   */
+  it("enters the first row from the main scroller too", async () => {
+    const main = document.createElement("main");
+    main.id = "main-content";
+    main.tabIndex = -1;
+    document.body.append(main);
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([problem, { ...problem, name: "cart" }])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    main.focus();
+    expect(document.activeElement).toBe(main);
+    const user = userEvent.setup();
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(
+      document.querySelector("div[role=link]")
+    );
+    main.remove();
+  });
+
+  /** Fails if Down typed into a field steals the focus to a row. */
+  it("leaves Down alone while a control holds the focus", async () => {
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([problem])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+    const user = userEvent.setup();
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(input);
+    input.remove();
+  });
 });
 
 describe("the healthy line when the node read was refused", () => {

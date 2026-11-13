@@ -33,6 +33,8 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const search = vi.hoisted(() => ({
+  searching: false,
+  status: "done",
   options: {} as { everything?: boolean },
   searched: [] as { kind: string; group: string; plural: string }[],
   loading: [] as { kind: string; group: string; plural: string }[],
@@ -64,7 +66,7 @@ vi.mock("./useResourceSearch", async (importOriginal) => ({
         ...new Set(["k3d-dev", ...search.hits.map((h) => h.context)]),
       ].map((context) => ({
         context,
-        status: "done",
+        status: search.status,
         reason: null,
         message: null,
         matched: search.hits.filter((h) => h.context === context).length,
@@ -73,7 +75,7 @@ vi.mock("./useResourceSearch", async (importOriginal) => ({
         unreadable: search.unreadable,
         loading: search.loading,
       })),
-      isSearching: false,
+      isSearching: search.searching,
       error: null,
     };
   },
@@ -155,6 +157,8 @@ describe("the command palette's hits", () => {
     search.unreadable = [];
     search.searched = [{ kind: "Pod", group: "", plural: "pods" }];
     search.loading = [];
+    search.searching = false;
+    search.status = "done";
     useClusterStore.setState({
       currentContext: "k3d-dev",
       currentNamespace: "",
@@ -563,6 +567,24 @@ describe("the command palette's hits", () => {
     expect(await screen.findByText("lena-sandbox")).toBeInTheDocument();
     expect(screen.getByText("All namespaces")).toBeInTheDocument();
     expect(screen.queryByText("Search all namespaces")).toBeNull();
+  });
+
+  /**
+   * Enter with no name read yet did nothing, silently. Fails if the press
+   * leaves the hint saying only that it is still searching, so the reader
+   * cannot tell a dead key from a slow cluster.
+   */
+  it("says nothing is there to open yet when Enter lands before any name", async () => {
+    search.searching = true;
+    search.status = "searching";
+    await open("marco");
+    await screen.findByText(/Still reading names for/);
+
+    await userEvent.keyboard("{Enter}");
+
+    expect(await screen.findByText(/Nothing to open yet/)).toBeInTheDocument();
+    await userEvent.keyboard("x");
+    expect(screen.queryByText(/Nothing to open yet/)).toBeNull();
   });
 
   it("still opens the kinds it does have a page for", async () => {

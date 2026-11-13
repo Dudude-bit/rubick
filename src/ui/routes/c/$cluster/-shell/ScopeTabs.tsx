@@ -1166,7 +1166,12 @@ function NamespacePopover({
     () => [...seedScope(contextNamespace), ...recent],
     [contextNamespace, recent]
   );
-  const { namespaces, podCount, namespaceList } = useClusterSummary({
+  const {
+    namespaces,
+    podCount,
+    problems: clusterProblems,
+    namespaceList,
+  } = useClusterSummary({
     enabled: open,
     problems: true,
     alsoCount: seeds,
@@ -1268,7 +1273,7 @@ function NamespacePopover({
       label: t("cluster", "allNamespaces"),
       mono: false,
       podCount,
-      problems: null,
+      problems: clusterProblems ?? null,
       selected: scope.length === 0,
       closed: false,
     },

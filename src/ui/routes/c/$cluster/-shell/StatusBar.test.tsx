@@ -576,6 +576,31 @@ describe("what the problem count counts", () => {
   });
 
   /**
+   * Vercel's seat: "pods not counted in argocd" and "in argocd" a few words
+   * later on one strip. Fails if the namespace the whole strip is scoped to
+   * is said again beside the refusal.
+   */
+  it("says the scope once when the refusal is the whole scope", () => {
+    scoped.data = overviewOf(null, 0, [
+      {
+        kind: "Pod",
+        namespace: "argocd",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ]);
+    attentions.here = attentionOf(1, false);
+    useClusterStore.setState({ namespaceScope: ["argocd"] });
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent(
+      /^pods not counted·1 problem · not all checkedin argocd$/
+    );
+    expect(counts.textContent?.match(/argocd/g)).toHaveLength(1);
+  });
+
+  /**
    * A kind the list could not read makes a zero a partial answer. Fails if
    * the bar prints a bare "0 problems" over a scope it did not finish reading.
    */

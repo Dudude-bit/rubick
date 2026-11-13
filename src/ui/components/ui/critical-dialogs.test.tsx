@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useWriteLog } from "@/stores/writeLogStore";
 
 const PROD = "prod-eu-1";
 
@@ -135,5 +136,34 @@ describe("a typed confirmation on critical infrastructure", () => {
       target: { value: "payments" },
     });
     expect(confirmButton()).toBeEnabled();
+  });
+});
+
+describe("a typed-name delete the cluster refused", () => {
+  /** Fails if a refused delete leaves no trace in Activity once its dialog is closed, as the plain confirmation's does. */
+  it("is kept with the writes that did not go through", async () => {
+    useWriteLog.setState({ records: [] });
+    const refusal = Object.assign(new Error("deployments is forbidden"), {
+      code: "FORBIDDEN",
+    });
+    render(
+      <DangerousConfirmDialog
+        open
+        title="Delete payments?"
+        confirmationText="payments"
+        confirmLabel="Delete"
+        onOpenChange={() => {}}
+        onConfirm={() => Promise.reject(refusal)}
+      />
+    );
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "payments" },
+    });
+    fireEvent.click(confirmButton());
+    await waitFor(() =>
+      expect(useWriteLog.getState().records).toMatchObject([
+        { title: "Delete payments?", context: PROD },
+      ])
+    );
   });
 });

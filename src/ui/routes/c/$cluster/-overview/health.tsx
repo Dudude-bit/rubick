@@ -706,6 +706,11 @@ function useHeldRoom() {
   return [box, content, room] as const;
 }
 
+/** Focus on nothing in particular: the page itself, or the scroller a click on its canvas lands in. */
+function holdsNoControl(active: Element | null) {
+  return active === document.body || active?.id === "main-content";
+}
+
 export function AttentionPanel({
   attention,
   pods,
@@ -767,7 +772,7 @@ export function AttentionPanel({
         event.metaKey ||
         event.ctrlKey ||
         event.shiftKey ||
-        document.activeElement !== document.body
+        !holdsNoControl(document.activeElement)
       )
         return;
       const first = openRows(rowsRef.current)[0];

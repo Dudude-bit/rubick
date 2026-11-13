@@ -5,7 +5,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Activity, Bell, Network, SquareTerminal } from "lucide-react";
+import { Activity, Bell, Network, PenLine, SquareTerminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import {
@@ -21,6 +21,8 @@ import { useLocale } from "@/stores/localeStore";
 import { PortForwardsTab } from "./activity/PortForwardsTab";
 import { TerminalsTab } from "./activity/TerminalsTab";
 import { WatchingTab } from "./activity/WatchingTab";
+import { WritesTab } from "./activity/WritesTab";
+import { useWriteLog } from "@/stores/writeLogStore";
 import { isOpen } from "@/lib/tell-me-when";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useWatchesFor } from "@/stores/tellMeWhenStore";
@@ -37,6 +39,7 @@ const TABS: Array<{
   { id: "ports", label: "ports", icon: Network },
   { id: "terminals", label: "terminals", icon: SquareTerminal },
   { id: "watching", label: "watching", icon: Bell },
+  { id: "writes", label: "writes", icon: PenLine },
 ];
 
 export function ActivityPanel() {
@@ -61,6 +64,7 @@ export function ActivityPanel() {
   const terminalSessions = useTerminalSessionStore(heardSessions);
   const currentContext = useClusterStore((state) => state.currentContext);
   const watches = useWatchesFor(currentContext);
+  const writeRecords = useWriteLog((state) => state.records);
 
   const counts: Record<TabId, number> = {
     ports: portForwardSessions.length,
@@ -68,6 +72,8 @@ export function ActivityPanel() {
     // is a process in somebody's container.
     terminals: terminalSessions.length,
     watching: watches.filter(isOpen).length,
+    writes: writeRecords.filter((record) => record.context === currentContext)
+      .length,
   };
 
   const totalActive = counts.ports + counts.terminals + counts.watching;
@@ -141,6 +147,7 @@ export function ActivityPanel() {
           {tab === "ports" && <PortForwardsTab />}
           {tab === "terminals" && <TerminalsTab onClose={handleClose} />}
           {tab === "watching" && <WatchingTab />}
+          {tab === "writes" && <WritesTab />}
         </div>
       </SheetContent>
     </Sheet>

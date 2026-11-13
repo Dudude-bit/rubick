@@ -15,7 +15,7 @@
 
 import { create } from "zustand";
 
-export type ActivityTab = "ports" | "terminals" | "watching";
+export type ActivityTab = "ports" | "terminals" | "watching" | "writes";
 
 interface ActivityPanelState {
   open: boolean;

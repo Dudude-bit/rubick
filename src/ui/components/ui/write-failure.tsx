@@ -1,4 +1,4 @@
-import { CircleX, Hourglass } from "lucide-react";
+import { CircleX, Hourglass, Lock } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { useT } from "@/i18n/useT";
@@ -27,7 +27,11 @@ export function WriteFailure({
     );
   return (
     <Alert variant="destructive" className={className}>
-      <CircleX aria-hidden="true" />
+      {isRefusal(error) ? (
+        <Lock aria-hidden="true" />
+      ) : (
+        <CircleX aria-hidden="true" />
+      )}
       <p className="font-medium">
         {t("action", isRefusal(error) ? "writeRefusedLead" : "writeFailedLead")}
       </p>

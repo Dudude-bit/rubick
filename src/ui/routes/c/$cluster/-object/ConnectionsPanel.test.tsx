@@ -279,6 +279,49 @@ describe("ConnectionsPanel", () => {
   });
 
   /**
+   * argocd-redis listed four keys and the three optional ones it lacked row
+   * by row, where a ConfigMap of the same size folds. Fails if the lines a
+   * row would draw, and not only the keys it reads, decide whether it folds.
+   */
+  it("folds a Secret's few keys and its absent optional ones the way a ConfigMap folds", async () => {
+    const secret: ObjectRef = {
+      kind: "Secret",
+      name: "redis",
+      namespace: "k8s-gui-test",
+      existence: "present",
+      facts: null,
+    };
+    const env = (n: number) => ({
+      how: "env" as const,
+      container: "server",
+      name: `KEY_${n}`,
+      key: `key.${n}`,
+      optional: n > 0,
+      keyPresent: n === 0,
+    });
+    await wrap(
+      <ConnectionsPanel
+        query={query({
+          data: answered({
+            edges: [
+              {
+                from: subject,
+                to: secret,
+                relation: {
+                  verb: "uses" as const,
+                  usages: [0, 1, 2, 3].map(env),
+                },
+              },
+            ],
+          }),
+        })}
+      />
+    );
+    const summary = screen.getByText("4 keys referenced, 3 absent");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+  });
+
+  /**
    * An owner reference names a group. Read by the kind alone, a pod made by
    * a namesake of a built-in controller linked to the built-in's page.
    */
