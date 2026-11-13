@@ -1,6 +1,6 @@
-import { LayoutDashboard, Lock } from "lucide-react";
+import { LayoutDashboard, Lock, TriangleAlert } from "lucide-react";
 
-import { isRefusal } from "@/lib/error-utils";
+import { ERROR_CODES, isRefusal } from "@/lib/error-utils";
 import { getDisplayPlural } from "@/lib/resource-registry";
 import { scopeIn, scopeLabel } from "@/lib/namespace-scope";
 import { openNamespacePicker } from "@/lib/read-deadline";
@@ -13,6 +13,7 @@ import {
 import { DataFreshness } from "@/components/ui/realtime/data-freshness";
 import { useAttention } from "@/hooks/useAttention";
 import { attentionFigure, unreadWhere, type Attention } from "@/lib/attention";
+import { PartlyUnread } from "../-object/ResourceDetailHeader";
 import { ClusterFrontDoor } from "../../../-components/ClusterFrontDoor";
 import { MyServices } from "./MyServices";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -42,6 +43,22 @@ const PODS: ListQuery = { group: "", resource: "pods", namespaced: true };
 
 const holdsScroll = (page: HTMLDivElement | null) =>
   page ? holdScroll(page) : undefined;
+
+/** The kinds the page could not check, by the plural Not checked names them in. */
+function uncheckedReads(
+  overview: ClusterOverviewData,
+  attention: Attention | null
+): string[] {
+  const kinds = [
+    ...overview.unread.map((entry) => entry.kind),
+    ...(overview.nodePodsUnread ? [overview.nodePodsUnread.kind] : []),
+    ...(attention?.checks ?? [])
+      .filter((check) => check.state === "unread")
+      .map((check) => check.kind),
+    ...(attention && attention.unconfirmed.length > 0 ? ["Pod"] : []),
+  ];
+  return [...new Set(kinds)].map(getDisplayPlural);
+}
 
 /** The headline numbers for Share: what is broken, and what is serving. */
 function overviewStats(
@@ -169,8 +186,10 @@ export function ClusterOverview() {
 
   const scope = scopeLabel(namespaceScope, t);
   const refreshFailing = freshness.stale || !!error;
-  const unreadKinds = [...new Set(overview.unread.map((entry) => entry.kind))];
-  const nodesUnread = unreadKinds.includes("Node");
+  const unchecked = uncheckedReads(overview, attention);
+  const nodePods = overview.nodePodsUnread;
+  const NodePodsIcon =
+    nodePods?.code === ERROR_CODES.PERMISSION ? Lock : TriangleAlert;
   const screen = {
     title: t("nav", "overview"),
     icon: LayoutDashboard,
@@ -184,13 +203,20 @@ export function ClusterOverview() {
         title={t("nav", "overview")}
         actions={
           <div className="flex items-center gap-3">
-            <DataFreshness
-              dataUpdatedAt={freshness.dataUpdatedAt}
-              live={following}
-              slowed={freshness.slowed}
-              stale={refreshFailing}
-              slowRead={freshness.slowRead}
-            />
+            {unchecked.length > 0 && !refreshFailing ? (
+              <PartlyUnread
+                reads={unchecked}
+                note="freshPartlyUnreadChecksNote"
+              />
+            ) : (
+              <DataFreshness
+                dataUpdatedAt={freshness.dataUpdatedAt}
+                live={following}
+                slowed={freshness.slowed}
+                stale={refreshFailing}
+                slowRead={freshness.slowRead}
+              />
+            )}
             <ShareScreenAction screen={screen} />
           </div>
         }
@@ -221,11 +247,34 @@ export function ClusterOverview() {
       <WorkloadsPanel overview={overview} scope={scope} />
       {overview.nodesKnown ? (
         <>
-          <SchedulerPanel
-            scheduler={overview.scheduler}
-            metricsAvailable={overview.metricsAvailable}
-            scoped={namespaceScope.length > 0}
-          />
+          {nodePods ? (
+            // The nodes were read and the pods they hold were not: the
+            // headroom is a sum over those pods, so it is unknown, not zero.
+            <Section>
+              <SectionHeader title={t("cluster", "schedulerHeadroom")} />
+              <div
+                className="flex items-center gap-2 py-1"
+                data-testid="headroom-unread"
+                title={nodePods.message}
+              >
+                <NodePodsIcon
+                  className="h-4 w-4 text-fg-mut"
+                  aria-hidden="true"
+                />
+                <p className="text-xs text-fg-mut">
+                  {t("empty", "headroomNeedsReads", {
+                    kinds: getDisplayPlural(nodePods.kind),
+                  })}
+                </p>
+              </div>
+            </Section>
+          ) : (
+            <SchedulerPanel
+              scheduler={overview.scheduler}
+              metricsAvailable={overview.metricsAvailable}
+              scoped={namespaceScope.length > 0}
+            />
+          )}
           <NodesPanel
             nodes={overview.nodes}
             version={clusterInfo?.server_version}
@@ -239,16 +288,7 @@ export function ClusterOverview() {
           <SectionHeader title="Nodes" />
           <div className="flex items-center gap-2 py-1">
             <Lock className="h-4 w-4 text-fg-mut" aria-hidden="true" />
-            <p className="text-xs text-fg-mut">
-              {nodesUnread
-                ? t("empty", "noNodeAccess")
-                : t("empty", "headroomNeedsReads", {
-                    kinds:
-                      unreadKinds.length > 0
-                        ? unreadKinds.map(getDisplayPlural).join(", ")
-                        : t("empty", "someReads"),
-                  })}
-            </p>
+            <p className="text-xs text-fg-mut">{t("empty", "noNodeAccess")}</p>
           </div>
         </Section>
       )}

@@ -485,6 +485,7 @@ describe("the count beside a namespace and the count on its Overview", () => {
       {
         namespace: "team-checkout",
         networks: [],
+        unread: [],
         groups: [
           {
             names: ["checkout-api"],

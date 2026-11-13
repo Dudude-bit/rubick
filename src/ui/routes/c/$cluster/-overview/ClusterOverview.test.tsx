@@ -7,7 +7,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 
 vi.mock("@/lib/commands", () => ({
@@ -210,6 +211,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
     },
   ],
   nodesKnown: true,
+  nodePodsUnread: null,
   warnings: [],
   warningsShort: [],
   namespaces: [],
@@ -406,11 +408,13 @@ describe("an overview whose refresh fails over data it has", () => {
 
 describe("the gap where the nodes are not shown", () => {
   /**
-   * With pods refused the page said the nodes were forbidden while the Nodes
-   * page read all of them. Fails if the gap is worded from a node refusal
-   * when the read that failed was another kind.
+   * With pods refused the page said the nodes were forbidden and hid their
+   * readiness, while the Nodes page read all of them. Fails if the nodes and
+   * their readiness are hidden when only the pods they hold went unread, if
+   * a node's pod count is drawn from no pods, or if the headroom is drawn
+   * at all.
    */
-  it("names the kind that was not read, not the nodes", async () => {
+  it("keeps the nodes and says only what the pods add up is unknown", async () => {
     useClusterStore.setState({
       isConnected: true,
       currentContext: "prod",
@@ -418,22 +422,103 @@ describe("the gap where the nodes are not shown", () => {
     });
     getClusterOverview.mockResolvedValue({
       ...FULL_OVERVIEW,
-      nodesKnown: false,
+      nodes: [{ ...FULL_OVERVIEW.nodes[0], podCount: null }],
+      nodePodsUnread: {
+        kind: "Pod",
+        namespace: null,
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    });
+    await mount();
+    expect(await screen.findByText("node-a")).toBeInTheDocument();
+    expect(screen.getByTestId("headroom-unread")).toHaveTextContent(
+      "Pods could not be read across the cluster"
+    );
+    const row = screen.getByText("node-a").closest("[role=link]")!;
+    expect(row).toHaveTextContent("not read/110 pods");
+    expect(screen.queryByText("CPU")).toBeNull();
+    expect(
+      screen.queryByText(/permission to read the cluster's nodes/)
+    ).toBeNull();
+  });
+});
+
+describe("the header pill beside what was not checked", () => {
+  /**
+   * The pill said a green "live" beside "not all checked". Fails if the
+   * Overview's pill does not say "partly unread", as a detail page does,
+   * while any of its checks went unread.
+   */
+  it("says partly unread while a check went unread", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    getClusterOverview.mockResolvedValue({
+      ...FULL_OVERVIEW,
+      servedFrom: "watch",
       unread: [
         {
-          kind: "Pod",
+          kind: "Deployment",
           namespace: null,
-          code: "PERMISSION_DENIED",
-          message: "x",
+          code: "NO_ANSWER",
+          message: "etcdserver: request timed out",
         },
       ],
     });
     await mount();
-    expect(
-      await screen.findByText(/Pods could not be read/)
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(/permission to read the cluster's nodes/)
-    ).toBeNull();
+    expect(await screen.findByTestId("partly-unread")).toHaveTextContent(
+      "partly unread"
+    );
+  });
+});
+
+describe("a Needs attention row on the page", () => {
+  /**
+   * The rows lit on hover and a click, a double-click and Enter did nothing
+   * on the page, while the panel alone opened them. Fails if anything the
+   * page puts around the panel keeps a row's click or Enter from opening
+   * the object's page.
+   */
+  it("opens its object's page on a click and on Enter", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    getClusterOverview.mockResolvedValue({
+      ...FULL_OVERVIEW,
+      problems: [
+        {
+          severity: "critical",
+          kind: "Pod",
+          name: "api-7d9f",
+          namespace: "shop",
+          reason: "CrashLoopBackOff",
+          detail: null,
+          since: null,
+          restarts: 4,
+          foldedPods: null,
+          replaced: false,
+        },
+      ],
+    });
+    const at = "/c/prod/pods/shop/api-7d9f";
+    const clicked = await mount();
+    await userEvent.click(await screen.findByText("CrashLoopBackOff"));
+    await waitFor(() =>
+      expect(clicked.router.state.location.pathname).toBe(at)
+    );
+    cleanup();
+
+    const typed = await mount();
+    const row = (await screen.findByText("CrashLoopBackOff")).closest(
+      "[role=link]"
+    ) as HTMLElement;
+    row.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(typed.router.state.location.pathname).toBe(at));
   });
 });

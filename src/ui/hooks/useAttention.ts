@@ -9,11 +9,11 @@ import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
 import { useClaimReads } from "@/hooks/useStorageClasses";
 import { useT } from "@/i18n/useT";
-import { attentionOf, type Attention } from "@/lib/attention";
+import { attentionOf, servicesKept, type Attention } from "@/lib/attention";
 import { claimNeeds } from "@/lib/claim-cause";
 import { commands } from "@/lib/commands";
 import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
-import { queryKeys } from "@/lib/query-keys";
+import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { overdue, REFRESH_INTERVALS, type RefreshRate } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -61,6 +61,7 @@ export function useAttention({
   const t = useT();
   const windowScope = useClusterStore((s) => s.namespaceScope);
   const isConnected = useClusterStore((s) => s.isConnected);
+  const context = useClusterStore((s) => s.currentContext);
   const asked = scope ?? windowScope;
   const wire = useMemo(() => wireScope(asked), [asked]);
   const cacheKey = scopeCacheKey(asked);
@@ -176,6 +177,10 @@ export function useAttention({
             answered: services.answered,
             unread: services.unread,
             overdue: servicesLate,
+            kept: servicesKept(
+              `${context}\n${cacheKey ?? EVERY_NAMESPACE}`,
+              services.answered
+            ),
           },
           ingresses: {
             data: ingressData,
@@ -198,6 +203,8 @@ export function useAttention({
     [
       answered,
       wire,
+      context,
+      cacheKey,
       services,
       servicesLate,
       ingressData,

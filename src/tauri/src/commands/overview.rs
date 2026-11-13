@@ -281,7 +281,8 @@ pub struct NodeSummary {
     pub ready: bool,
     pub schedulable: bool,
     pub roles: Vec<String>,
-    pub pod_count: usize,
+    /// `None` where the pods across the cluster went unread.
+    pub pod_count: Option<usize>,
     pub pod_capacity: Option<i64>,
     pub cpu: ResourcePressure,
     pub memory: ResourcePressure,
@@ -721,11 +722,14 @@ pub struct ClusterOverview {
     /// unlike pods they do not multiply per workload), and a truncated node
     /// list would hide exactly the node someone is looking for.
     pub nodes: Vec<NodeSummary>,
-    /// False when the cluster-wide node/pod reads the capacity view needs were
-    /// refused — a namespace-scoped token has no cluster read rights. `nodes`
-    /// and `scheduler` are then empty and mean "unknown", not "no capacity":
-    /// the panels say so rather than drawing a cluster with zero headroom.
+    /// False when the node list was refused or failed: a namespace-scoped
+    /// token has no cluster read rights. `nodes` and `scheduler` are then
+    /// empty and mean "unknown", not "no capacity".
     pub nodes_known: bool,
+    /// The pod read across the cluster that failed, where it did: each node's
+    /// pod count and every request `scheduler` adds up come from it, so those
+    /// are unknown while the nodes themselves were read.
+    pub node_pods_unread: Option<OverviewUnread>,
     pub warnings: Vec<WarningGroup>,
     /// Where an events list failed or was cut at the page cap, and which:
     /// `warnings` then holds only what was read, and an empty one is not
@@ -821,7 +825,7 @@ pub struct OverviewUnread {
 }
 
 impl OverviewUnread {
-    fn of(kind: &str, namespace: Option<&str>, error: &Error) -> Self {
+    pub(crate) fn of(kind: &str, namespace: Option<&str>, error: &Error) -> Self {
         Self {
             kind: kind.to_string(),
             namespace: namespace.map(str::to_string),
@@ -1781,7 +1785,7 @@ struct NodeAggregate {
 fn summarize_nodes<'a>(
     nodes: impl IntoIterator<Item = &'a Node>,
     requests_by_node: &BTreeMap<String, (f64, u64)>,
-    pods_by_node: &BTreeMap<String, usize>,
+    pods_by_node: Option<&BTreeMap<String, usize>>,
     usage_by_node: Option<&BTreeMap<String, (f64, u64)>>,
 ) -> NodeAggregate {
     let metrics_available = usage_by_node.is_some();
@@ -1837,7 +1841,7 @@ fn summarize_nodes<'a>(
                 .and_then(|s| s.unschedulable)
                 .unwrap_or(false),
             roles: node_roles(node),
-            pod_count: pods_by_node.get(&name).copied().unwrap_or(0),
+            pod_count: pods_by_node.map(|pods| pods.get(&name).copied().unwrap_or(0)),
             pod_capacity,
             cpu: ResourcePressure {
                 requested: cpu_requested,
@@ -2324,9 +2328,10 @@ struct OverviewInputs<'a> {
     /// allocatable. Same slice as `scoped_pods` when nothing is selected.
     accounting_pods: &'a [Arc<Pod>],
     nodes: &'a [Arc<Node>],
-    /// False when the node list (or the cluster-wide accounting pods) was
-    /// refused: the capacity view is unknown, not empty.
+    /// False when the node list was refused: the capacity view is unknown, not empty.
     nodes_known: bool,
+    /// Why `accounting_pods` is not the cluster's pods, where it is not.
+    node_pods_unread: Option<&'a OverviewUnread>,
     /// Every workload the scope handed over. Their problems stand whether or
     /// not another namespace refused its list; the counts do not.
     deployments: &'a [Arc<Deployment>],
@@ -2363,7 +2368,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     let aggregate = summarize_nodes(
         refs(nodes),
         &accounting.requests,
-        &accounting.pods,
+        input.node_pods_unread.is_none().then_some(&accounting.pods),
         input.usage_by_node.as_ref(),
     );
 
@@ -2472,6 +2477,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         scheduler: aggregate.scheduler,
         nodes: aggregate.summaries,
         nodes_known: input.nodes_known,
+        node_pods_unread: input.node_pods_unread.cloned(),
         warnings: {
             let holders = Holders::of(input);
             recent_warnings(refs(input.events), |event| holders.incarnation(event))
@@ -2819,9 +2825,11 @@ pub async fn cluster_overview(
                 .overview_cache
                 .snapshot(&context, || client.clone())
                 .await?;
-            let looked =
-                look_up_holders(&here, &memo, refs(&snapshot.events), scope.as_deref()).await;
-            Some((snapshot, looked))
+            let (looked, lost) = tokio::join!(
+                look_up_holders(&here, &memo, refs(&snapshot.events), scope.as_deref()),
+                unlistable(&client, scope.as_deref()),
+            );
+            lost.is_empty().then_some((snapshot, looked))
         },
     );
     let (counts, partial) = counts;
@@ -2843,6 +2851,40 @@ pub async fn cluster_overview(
         return Ok(overview);
     };
     Ok(followed(&snapshot, scope, &beside, &looked))
+}
+
+/// The watched kinds that no longer list where `scope` reaches. An open watch
+/// streams on after its kind's reads start failing, until it reconnects into
+/// the failure, minutes later; the stores alone would answer for a read the
+/// reader can no longer make, and the scope's lists say why instead.
+async fn unlistable(client: &Client, scope: Option<&[String]>) -> Vec<OverviewUnread> {
+    async fn probe<K>(client: &Client, kind: &str, reach: Option<&str>) -> Option<OverviewUnread>
+    where
+        K: Resource<Scope = k8s_openapi::NamespaceResourceScope> + Clone + Debug + DeserializeOwned,
+        K::DynamicType: Default,
+    {
+        let probe = ListParams::default().limit(1);
+        let answer = api_in::<K>(client, reach).list_metadata(&probe).await;
+        answer
+            .err()
+            .map(|error| OverviewUnread::of(kind, reach, &Error::from(error)))
+    }
+    let reads = reaches(scope).into_iter().map(|reach| async move {
+        let (pods, deployments, sets, daemons, jobs) = tokio::join!(
+            probe::<Pod>(client, "Pod", reach),
+            probe::<Deployment>(client, "Deployment", reach),
+            probe::<StatefulSet>(client, "StatefulSet", reach),
+            probe::<DaemonSet>(client, "DaemonSet", reach),
+            probe::<Job>(client, "Job", reach),
+        );
+        [pods, deployments, sets, daemons, jobs]
+    });
+    join_all(reads)
+        .await
+        .into_iter()
+        .flatten()
+        .flatten()
+        .collect()
 }
 
 /// See [`follow_cluster_overview`]. The stores announce up to a change a
@@ -3114,6 +3156,7 @@ fn from_snapshot(
         // A store only serves while every watch it holds is allowed and
         // healthy, so the capacity view is known here by construction.
         nodes_known: true,
+        node_pods_unread: None,
         deployments: &scoped.deployments,
         stateful_sets: &scoped.stateful_sets,
         daemon_sets: &scoped.daemon_sets,
@@ -3314,37 +3357,27 @@ async fn by_listing(
     // rather than failing the whole overview, so a scoped user still sees the
     // workloads they CAN read with the capacity view marked no-access.
     let mut unread = listed.unread;
-    let cluster_pods = match cluster_pods_result.transpose() {
-        Ok(listed) => listed.map(|list| arcs(list.items)),
-        Err(error) => {
-            unread.push(OverviewUnread::of("Node", None, &Error::from(error)));
-            None
-        }
+    let (cluster_pods, cluster_pods_unread) = match cluster_pods_result.transpose() {
+        Ok(listed) => (listed.map(|list| arcs(list.items)), None),
+        Err(error) => (
+            None,
+            Some(OverviewUnread::of("Pod", None, &Error::from(error))),
+        ),
     };
     let nodes = match nodes_result {
         Ok(list) => Some(arcs(list.items)),
         Err(error) => {
-            unread.retain(|kind| kind.kind != "Node");
             unread.push(OverviewUnread::of("Node", None, &Error::from(error)));
             None
         }
     };
-    // Unscoped, the accounting pods are the scoped ones, refused with them.
-    let pods_refused = unread.iter().find(|entry| entry.kind == "Pod").cloned();
-    let accounting_known = match (scope, pods_refused) {
-        (Some(_), _) => cluster_pods.is_some(),
-        (None, None) => true,
-        (None, Some(refused)) => {
-            if nodes.is_some() {
-                unread.push(OverviewUnread {
-                    kind: "Node".to_string(),
-                    ..refused
-                });
-            }
-            false
-        }
+    // Unscoped, the accounting pods are the scoped ones, refused with them;
+    // the nodes themselves were still read.
+    let node_pods_unread = match scope {
+        Some(_) => cluster_pods_unread,
+        None => unread.iter().find(|entry| entry.kind == "Pod").cloned(),
     };
-    let nodes_known = nodes.is_some() && accounting_known;
+    let nodes_known = nodes.is_some();
     let looked = match holders {
         Some((here, memo)) => look_up_holders(here, memo, refs(&listed.events), scope).await,
         None => Looked::new(),
@@ -3355,6 +3388,7 @@ async fn by_listing(
         accounting_pods: cluster_pods.as_deref().unwrap_or(&listed.pods),
         nodes: nodes.as_deref().unwrap_or_default(),
         nodes_known,
+        node_pods_unread: node_pods_unread.as_ref(),
         deployments: &listed.deployments,
         stateful_sets: &listed.stateful_sets,
         daemon_sets: &listed.daemon_sets,
@@ -3486,6 +3520,7 @@ mod tests {
             accounting_pods: &arcs(accounting_pods.to_vec()),
             nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -3529,6 +3564,7 @@ mod tests {
             accounting_pods: &arcs(pods.to_vec()),
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -3649,6 +3685,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &arcs(stateful_sets.to_vec()),
             daemon_sets: &[],
@@ -3802,6 +3839,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -3887,6 +3925,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4296,6 +4335,7 @@ mod tests {
             // they must be ignored, not drawn and not counted.
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: false,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4350,7 +4390,7 @@ mod tests {
                     ..Default::default()
                 }],
                 &BTreeMap::new(),
-                &BTreeMap::new(),
+                Some(&BTreeMap::new()),
                 usage.as_ref(),
             );
             assert!(aggregate.scheduler.cpu.usage.is_none());
@@ -4376,6 +4416,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4414,8 +4455,8 @@ mod tests {
 
         assert_eq!(result.scheduler.cpu.allocatable, 8000.0);
         assert_eq!(result.scheduler.cpu.requested, 1750.0);
-        assert_eq!(result.nodes[0].pod_count, 2);
-        assert_eq!(result.nodes[1].pod_count, 1);
+        assert_eq!(result.nodes[0].pod_count, Some(2));
+        assert_eq!(result.nodes[1].pod_count, Some(1));
         assert_eq!(result.nodes[0].cpu.requested, 1500.0);
         // The scoped list still owns the counts that are about the selection.
         assert_eq!(result.counts.pods, Some(1));
@@ -4487,6 +4528,7 @@ mod tests {
             accounting_pods: &arcs(pods),
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4713,6 +4755,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -4767,6 +4810,7 @@ mod tests {
                 accounting_pods: &[],
                 nodes: &[],
                 nodes_known: true,
+                node_pods_unread: None,
                 deployments: &[],
                 stateful_sets: &arcs(vec![set.clone()]),
                 daemon_sets: &[],
@@ -6280,7 +6324,7 @@ mod tests {
         // both sides have in common.
         let seen = |n: &Node| {
             serde_json::to_value(
-                summarize_nodes([n], &BTreeMap::new(), &BTreeMap::new(), None).summaries,
+                summarize_nodes([n], &BTreeMap::new(), Some(&BTreeMap::new()), None).summaries,
             )
             .expect("a node summary serialises")
         };
@@ -6307,6 +6351,7 @@ mod tests {
             accounting_pods: &arcs(pods),
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -6361,6 +6406,7 @@ mod tests {
             accounting_pods: &arcs(cluster),
             nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &arcs(deployments),
             stateful_sets: &[],
             daemon_sets: &[],
@@ -6714,6 +6760,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &arcs(stateful_sets.to_vec()),
             daemon_sets: &arcs(daemon_sets.to_vec()),
@@ -6922,6 +6969,7 @@ mod tests {
                 accounting_pods: &[],
                 nodes: &[],
                 nodes_known: true,
+                node_pods_unread: None,
                 deployments: &arcs(vec![cart.clone()]),
                 stateful_sets: &[],
                 daemon_sets: &[],
@@ -7033,6 +7081,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -7137,6 +7186,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -7271,6 +7321,7 @@ mod tests {
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
+            node_pods_unread: None,
             deployments: &[],
             stateful_sets: &[],
             daemon_sets: &[],
@@ -7688,6 +7739,33 @@ mod across_namespaces {
 
     fn asked(hits: &Hits, path: &str) -> usize {
         hits.lock().unwrap().get(path).copied().unwrap_or(0)
+    }
+
+    /// A warm store answered "0 problems in backend" beside a Deployments
+    /// list failing there: its watch had not reconnected into the failure.
+    /// Fails if a watched kind that no longer lists in a namespace of the
+    /// scope goes unnamed, or one that does is named.
+    #[tokio::test]
+    async fn a_watched_kind_that_no_longer_lists_in_scope_is_named() {
+        let fault = r#"{"kind":"Status","apiVersion":"v1","status":"Failure","message":"etcdserver: request timed out","reason":"InternalError","code":500}"#;
+        let healthy = Cluster::new();
+        let failing = Cluster::new().answer(
+            "/apis/apps/v1/namespaces/staging/deployments",
+            500,
+            fault.to_string(),
+        );
+        let scope = [PROD.to_string(), STAGING.to_string()];
+        let (client, _) = server(healthy.0).await;
+        assert_eq!(unlistable(&client, Some(&scope)).await, []);
+        let (client, _) = server(failing.0).await;
+        let lost = unlistable(&client, Some(&scope)).await;
+        assert_eq!(
+            lost.iter()
+                .map(|entry| (entry.kind.as_str(), entry.namespace.as_deref()))
+                .collect::<Vec<_>>(),
+            [("Deployment", Some(STAGING))],
+            "{lost:?}"
+        );
     }
 
     /// The reason this moved to Rust. Asked once per namespace, every part
@@ -8201,10 +8279,11 @@ mod across_namespaces {
     }
 
     /// Unscoped, the pods that are refused are the ones the capacity view
-    /// adds up. Fails if that view is drawn from no pods as a cluster with
-    /// nothing requested, or if the node half is not named as unread.
+    /// adds up, and the nodes were still read. Fails if a node's pod count is
+    /// drawn from no pods, if the refusal is not named beside them, or if the
+    /// nodes it did read are called unread.
     #[tokio::test]
-    async fn an_unscoped_overview_whose_pods_were_refused_claims_no_capacity() {
+    async fn an_unscoped_overview_whose_pods_were_refused_keeps_its_nodes() {
         let (client, _) = server(vec![
             ("/api/v1/nodes", 200, list(vec![node("n1", true)])),
             ("/api/v1/pods", 403, refused("/api/v1/pods")),
@@ -8223,8 +8302,16 @@ mod across_namespaces {
             .await
             .expect("the Deployments answered");
 
-        assert!(!overview.nodes_known);
-        assert!(overview.unread.iter().any(|entry| entry.kind == "Node"));
+        assert!(overview.nodes_known);
+        assert!(overview.unread.iter().all(|entry| entry.kind != "Node"));
+        assert_eq!(overview.counts.nodes, Some(1));
+        assert!(overview.nodes[0].ready);
+        assert_eq!(overview.nodes[0].pod_count, None);
+        let why = overview.node_pods_unread.expect("the pods' refusal");
+        assert_eq!(
+            (why.kind.as_str(), why.code.as_str()),
+            ("Pod", "PERMISSION_DENIED")
+        );
         assert_eq!(overview.counts.pods, None);
         assert!(overview.namespaces.is_empty());
     }
@@ -8442,22 +8529,30 @@ mod across_namespaces {
     }
 
     /// The node list and the cluster-wide pods behind the capacity view are
-    /// one read each. Either refused leaves the whole scope's capacity view
-    /// unknown — no node rows, and no node count beside the "no node access"
-    /// note the page shows.
+    /// one read each. The nodes refused leaves no node rows and no node
+    /// count; the pods refused leaves the nodes and their readiness, and only
+    /// what the pods add up unknown. Fails if either answers for the other.
     #[tokio::test]
-    async fn the_capacity_view_is_unknown_when_a_cluster_read_was_refused() {
-        for refused in ["/api/v1/nodes", "/api/v1/pods"] {
-            let overview = Cluster::new()
-                .items("/api/v1/nodes", vec![node("n1", true)])
-                .refuse(refused)
-                .listed()
-                .await;
+    async fn a_refused_cluster_read_leaves_unknown_only_what_it_holds() {
+        let overview = Cluster::new()
+            .items("/api/v1/nodes", vec![node("n1", true)])
+            .refuse("/api/v1/nodes")
+            .listed()
+            .await;
+        assert!(!overview.nodes_known);
+        assert!(overview.nodes.is_empty());
+        assert_eq!(overview.counts.nodes, None);
 
-            assert!(!overview.nodes_known, "{refused}");
-            assert!(overview.nodes.is_empty(), "{refused}");
-            assert_eq!(overview.counts.nodes, None, "{refused}");
-        }
+        let overview = Cluster::new()
+            .items("/api/v1/nodes", vec![node("n1", true)])
+            .refuse("/api/v1/pods")
+            .listed()
+            .await;
+        assert!(overview.nodes_known);
+        assert_eq!(overview.counts.nodes, Some(1));
+        assert_eq!(overview.nodes[0].pod_count, None);
+        assert!(overview.node_pods_unread.is_some());
+        assert!(overview.unread.iter().all(|entry| entry.kind != "Node"));
     }
 
     /// Marco checked team-blind beside team-checkout and team-checkout's

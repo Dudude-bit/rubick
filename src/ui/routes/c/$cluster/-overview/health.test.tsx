@@ -588,7 +588,14 @@ describe("a Service row whose pods share a cause", () => {
   it("draws the cause in red like the rows of its pods, and Share says it", async () => {
     const attention = attentionFrom([], {
       services: {
-        answered: [{ namespace: "create-demo", networks: [], groups: [group] }],
+        answered: [
+          {
+            namespace: "create-demo",
+            networks: [],
+            unread: [],
+            groups: [group],
+          },
+        ],
         unread: [],
       },
     });
@@ -1054,7 +1061,8 @@ describe("a scope one namespace of which refused its pods", () => {
     expect(segment).toHaveTextContent("1 Unavailable pods not read");
     expect(segment).toHaveClass("text-fg-fnt");
     expect(segment).not.toHaveClass("text-err");
-    expect(segment.querySelector("svg")).toHaveClass("lucide-eye-off");
+    // The pods were refused, so the mark is the lock every refusal wears.
+    expect(segment.querySelector("svg")).toHaveClass("lucide-lock");
 
     const rows = workloadsShare(overview, t).body;
     const deployments =
@@ -2522,12 +2530,12 @@ describe("what Needs attention says it checked", () => {
   /**
    * Sam's `web`: the age column said "Unknown" on every Service and Ingress
    * row, and its label was capitalised unlike every verdict beside it. Lena
-   * then read the dots that replaced it as columns squeezed to nothing. A row
-   * nothing dates says "no date", so no row of the column is
-   * blank beside its dated neighbours. Fails if "Unknown" or a dot comes
-   * back, or the cell goes blank again.
+   * then read the dots that replaced it as columns squeezed to nothing, and
+   * "no date" after them as a date missing. A standing condition says
+   * "ongoing". Fails if "Unknown", a dot or "no date" comes back, or the
+   * cell goes blank again.
    */
-  it("leaves an undated row's age empty, in the verdicts' own case", async () => {
+  it("says an undated row is ongoing, in the verdicts' own case", async () => {
     await panel(
       attentionFrom([], {
         services: {
@@ -2535,6 +2543,7 @@ describe("what Needs attention says it checked", () => {
             {
               namespace: "net",
               networks: [],
+              unread: [],
               groups: [
                 {
                   names: ["web"],
@@ -2556,7 +2565,7 @@ describe("what Needs attention says it checked", () => {
 
     const row = screen.getByText("no endpoints").closest('[role="link"]')!;
     expect(row).not.toHaveTextContent("Unknown");
-    expect(row.lastElementChild).toHaveTextContent(/^no date$/);
+    expect(row.lastElementChild).toHaveTextContent(/^ongoing$/);
     expect(row.lastElementChild?.previousElementSibling).toHaveTextContent(
       /^$/
     );
@@ -2954,6 +2963,7 @@ describe("Services one NetworkPolicy shuts", () => {
           {
             namespace: "k8s-gui-test",
             networks: [],
+            unread: [],
             groups: [
               shut("draining-demo", "k8s-gui-test"),
               shut("headless-demo", "k8s-gui-test"),
@@ -2961,7 +2971,12 @@ describe("Services one NetworkPolicy shuts", () => {
               shut("api", "k8s-gui-test", ["api-only"]),
             ],
           },
-          { namespace: "net", networks: [], groups: [shut("web", "net")] },
+          {
+            namespace: "net",
+            networks: [],
+            unread: [],
+            groups: [shut("web", "net")],
+          },
         ],
         unread: [],
       },
@@ -3226,5 +3241,73 @@ describe("the scheduler headroom", () => {
       <SchedulerPanel scheduler={scheduler} metricsAvailable={true} />
     );
     expect(screen.queryByText(/cluster-wide/)).toBeNull();
+  });
+});
+
+describe("a Needs attention row", () => {
+  const crashing: ClusterProblem = {
+    ...problem,
+    kind: "Pod",
+    name: "api-7d9f",
+    severity: "critical",
+    reason: "CrashLoopBackOff",
+  };
+  const shown = (attention: Attention) =>
+    wrap(
+      <AttentionPanel
+        attention={attention}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+
+  /**
+   * Rows lit on hover and the status bar said "↵ open", and a click, a
+   * double-click and Enter all did nothing. Fails if a click on a row, away
+   * from the name inside it, or Enter on the focused row stops opening the
+   * object's page.
+   */
+  it("opens its object's page on a click and on Enter", async () => {
+    const at = "/c/prod/pods/k8s-gui-test/api-7d9f";
+    const clicked = await shown(attentionFrom([crashing]));
+    const row = () =>
+      screen.getByTestId("attention-said").closest("[role=link]")!;
+    await userEvent.click(screen.getByText("CrashLoopBackOff"));
+    expect(clicked.router.state.location.pathname).toBe(at);
+    cleanup();
+
+    const typed = await shown(attentionFrom([crashing]));
+    (row() as HTMLElement).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(typed.router.state.location.pathname).toBe(at);
+  });
+});
+
+describe("a Needs attention row with no date", () => {
+  /**
+   * Four Service rows said "no date" in the age column, as if a date were
+   * missing. Fails if a standing condition reads as a missing date rather
+   * than as ongoing, or if a dated row loses its age.
+   */
+  it("says ongoing where a standing condition has no moment it began", async () => {
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([
+          { ...problem, since: null },
+          { ...problem, name: "dated", reason: "Stalled" },
+        ])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    expect(screen.getAllByTestId("attention-ongoing")).toHaveLength(1);
+    expect(screen.getByTestId("attention-ongoing")).toHaveTextContent(
+      "ongoing"
+    );
+    expect(screen.queryByText("no date")).toBeNull();
   });
 });

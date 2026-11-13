@@ -25,6 +25,7 @@ use crate::commands::helpers::{
     across, api_in, get_resource_info, list_in_scope, list_resource_infos, ResourceContext, Scoped,
 };
 use crate::commands::other_policies::Discovery;
+use crate::commands::overview::OverviewUnread;
 
 /// List Ingresses
 #[tauri::command]
@@ -207,7 +208,7 @@ pub async fn list_service_backing(
     let context = state.get_current_context().unwrap_or_default();
     crate::client::clock::timed(&state.perf, "listServiceBacking", async {
         let read_at = chrono::Utc::now();
-        let (services, published, _) = published_in(&ctx, state.discovery(&context)).await?;
+        let (services, published, ..) = published_in(&ctx, state.discovery(&context)).await?;
         Ok(ServiceBacking {
             services: services.iter().map(ServiceInfo::from).collect(),
             published,
@@ -228,6 +229,9 @@ pub struct ServiceHealthInputs {
     /// all misses its pods. Empty past [`NETWORKS_KEPT`], as where there is
     /// no address: no block is then judged against it.
     pub networks: Vec<String>,
+    /// The reads behind this namespace's verdicts that failed. Empty where
+    /// none did, which is what absence means: it lists failures.
+    pub unread: Vec<OverviewUnread>,
 }
 
 /// What `serviceHealthOf` reads of a Service and of what it publishes, and
@@ -308,8 +312,26 @@ async fn health_inputs_in(
         client,
         namespace: reach,
     };
-    let (services, published, networks) = published_in(&ctx, discovery).await?;
-    Ok(health_inputs_of(&services, published, &networks))
+    let (services, published, networks, unread) = published_in(&ctx, discovery).await?;
+    Ok(with_unread(
+        health_inputs_of(&services, published, &networks),
+        &unread,
+    ))
+}
+
+/// Each namespace's answer beside the reads behind its verdicts that failed.
+fn with_unread(
+    mut inputs: Vec<ServiceHealthInputs>,
+    unread: &[OverviewUnread],
+) -> Vec<ServiceHealthInputs> {
+    for each in &mut inputs {
+        each.unread = unread
+            .iter()
+            .filter(|entry| entry.namespace.as_deref() == Some(each.namespace.as_str()))
+            .cloned()
+            .collect();
+    }
+    inputs
 }
 
 /// The slices say that no address of a Service is ready, or that it has
@@ -319,15 +341,15 @@ async fn health_inputs_in(
 /// whether those pods are only waiting, or scaled to zero or refused them
 /// where the selector matches none: one read of each kind per namespace, whatever the number of
 /// Services in it. A list that fails leaves the answer it would have
-/// sharpened as it was.
+/// sharpened as it was, and is handed back by kind and namespace.
 async fn with_unready_cause(
     client: &kube::Client,
     services: &[Service],
     published: Vec<ServicePublished>,
-) -> Vec<ServicePublished> {
+) -> (Vec<ServicePublished>, Vec<OverviewUnread>) {
     let asked = unexplained_namespaces(services, &published);
     if asked.is_empty() {
-        return published;
+        return (published, Vec::new());
     }
     let reads = asked.into_iter().map(|ns| async move {
         let params = ListParams::default();
@@ -344,17 +366,25 @@ async fn with_unready_cause(
             replica_sets.list(&params),
             events.list(&refused)
         );
+        let mut unread = Vec::new();
         let read = Behind {
-            pods: pods.ok().map(|list| list.items),
-            deployments: deployments.ok().map(|list| list.items),
-            sets: sets.ok().map(|list| list.items),
-            replica_sets: replica_sets.ok().map(|list| list.items),
-            refusals: refusals.ok().map(|list| list.items),
+            pods: kept("Pod", &ns, pods, &mut unread),
+            deployments: kept("Deployment", &ns, deployments, &mut unread),
+            sets: kept("StatefulSet", &ns, sets, &mut unread),
+            replica_sets: kept("ReplicaSet", &ns, replica_sets, &mut unread),
+            refusals: kept("Event", &ns, refusals, &mut unread),
         };
-        (ns, read)
+        (ns, read, unread)
     });
-    let read: HashMap<String, Behind> =
-        futures::future::join_all(reads).await.into_iter().collect();
+    let mut unread = Vec::new();
+    let read: HashMap<String, Behind> = futures::future::join_all(reads)
+        .await
+        .into_iter()
+        .map(|(ns, read, lost)| {
+            unread.extend(lost);
+            (ns, read)
+        })
+        .collect();
     let now = chrono::Utc::now();
     let mut published: Vec<ServicePublished> = services
         .iter()
@@ -376,7 +406,27 @@ async fn with_unready_cause(
             }),
     )
     .await;
-    published
+    (published, unread)
+}
+
+/// A list's items, or its failure written down.
+fn kept<K: Clone>(
+    kind: &str,
+    namespace: &str,
+    answer: kube::Result<kube::core::ObjectList<K>>,
+    unread: &mut Vec<OverviewUnread>,
+) -> Option<Vec<K>> {
+    match answer {
+        Ok(list) => Some(list.items),
+        Err(error) => {
+            unread.push(OverviewUnread::of(
+                kind,
+                Some(namespace),
+                &Error::from(error),
+            ));
+            None
+        }
+    }
 }
 
 /// What one namespace answered for the Services in it the slices left
@@ -505,6 +555,7 @@ fn health_inputs_of(
     by_namespace
         .into_iter()
         .map(|(namespace, groups)| ServiceHealthInputs {
+            unread: Vec::new(),
             networks: networks
                 .get(&namespace)
                 .filter(|here| here.len() <= NETWORKS_KEPT)
@@ -532,7 +583,12 @@ fn network_of(address: std::net::IpAddr) -> String {
 async fn published_in(
     ctx: &ResourceContext,
     discovery: Discovery<'_>,
-) -> Result<(Vec<Service>, Vec<ServicePublished>, Networks)> {
+) -> Result<(
+    Vec<Service>,
+    Vec<ServicePublished>,
+    Networks,
+    Vec<OverviewUnread>,
+)> {
     let params = ListParams::default();
     let services_api = ctx.namespaced_or_cluster_api::<Service>();
     let slices_api = ctx.namespaced_or_cluster_api::<EndpointSlice>();
@@ -574,8 +630,8 @@ async fn published_in(
                 .summary()
             })
             .collect();
-        let published = with_unready_cause(&ctx.client, &services, published).await;
-        return Ok((services, published, legacy_networks(&legacy)));
+        let (published, unread) = with_unready_cause(&ctx.client, &services, published).await;
+        return Ok((services, published, legacy_networks(&legacy), unread));
     };
 
     let published = published_from_slices(&services, &slices.items)
@@ -583,8 +639,8 @@ async fn published_in(
         .zip(&services)
         .map(|(published, svc)| published.with_policies(svc, policies.as_deref(), &others))
         .collect();
-    let published = with_unready_cause(&ctx.client, &services, published).await;
-    Ok((services, published, networks_of(&slices.items)))
+    let (published, unread) = with_unready_cause(&ctx.client, &services, published).await;
+    Ok((services, published, networks_of(&slices.items), unread))
 }
 
 /// The /24 (IPv4) or /64 (IPv6) of every address listed, by namespace.
@@ -1464,6 +1520,54 @@ mod tests {
         );
     }
 
+    /// The Overview said "Services could not be read" where the Services were
+    /// read and their pods were refused. Fails if a failed read behind a
+    /// namespace's verdicts is not named by its kind, its namespace and its
+    /// code, or if a namespace whose reads all answered names one.
+    #[tokio::test]
+    async fn the_reads_behind_a_namespaces_verdicts_that_failed_are_named() {
+        use crate::client::served::test_server::{answering, failure};
+        let inputs_with = |pods: (u16, String)| async move {
+            let base = unready_demo(pods);
+            let (client, _) = answering(move |path, n| match path {
+                "/apis/apps/v1/namespaces/k8s-gui-test/deployments"
+                | "/apis/apps/v1/namespaces/k8s-gui-test/statefulsets"
+                | "/apis/apps/v1/namespaces/k8s-gui-test/replicasets"
+                | "/api/v1/namespaces/k8s-gui-test/events" => {
+                    (200, r#"{"metadata":{},"items":[]}"#.to_string())
+                }
+                _ => base(path, n),
+            })
+            .await;
+            health_inputs_in(client, Some("k8s-gui-test".to_string()), undiscovered())
+                .await
+                .expect("inputs")
+                .remove(0)
+        };
+
+        let refused = inputs_with(failure(403, "Forbidden")).await;
+        let named: Vec<(&str, Option<&str>, &str)> = refused
+            .unread
+            .iter()
+            .map(|entry| {
+                (
+                    entry.kind.as_str(),
+                    entry.namespace.as_deref(),
+                    entry.code.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            named,
+            [("Pod", Some("k8s-gui-test"), "PERMISSION_DENIED")],
+            "{:?}",
+            refused.unread
+        );
+
+        let answered = inputs_with((200, failing_readiness())).await;
+        assert!(answered.unread.is_empty(), "{:?}", answered.unread);
+    }
+
     /// Marco's ledger in the shell's count: pods refused, and the Deployment
     /// behind the Service waiting on them by its own counts. Fails if the list
     /// reader stops asking the workloads behind a Service with none ready, or
@@ -1934,7 +2038,7 @@ mod tests {
         })
         .await;
         let served = ServedIndex::default();
-        let (services, published, _) = published_in(
+        let (services, published, ..) = published_in(
             &ResourceContext {
                 client,
                 namespace: Some("team-checkout".to_string()),

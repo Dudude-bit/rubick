@@ -10,6 +10,7 @@ import type {
   PersistentVolumeClaimInfo,
   PodCause,
   ServiceHealthGroup,
+  ServiceHealthInputs,
 } from "@/generated/types";
 import {
   itemIsStale,
@@ -22,6 +23,7 @@ import {
   foldedWords,
   namespaceAttention,
   reasonWord,
+  servicesKept,
   type AttentionInputs,
   type GatewayApiInputs,
 } from "./attention";
@@ -58,6 +60,7 @@ function services(
       {
         namespace: "net",
         networks: [],
+        unread: [],
         groups: groups.map(
           ([
             names,
@@ -292,7 +295,9 @@ describe("what Needs attention lists beyond pods", () => {
     };
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", networks: [], groups: [web] }],
+        answered: [
+          { namespace: "net", networks: [], unread: [], groups: [web] },
+        ],
         unread: [],
       },
     });
@@ -334,7 +339,9 @@ describe("what Needs attention lists beyond pods", () => {
     };
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", networks: [], groups: [shut] }],
+        answered: [
+          { namespace: "net", networks: [], unread: [], groups: [shut] },
+        ],
         unread: [],
       },
     });
@@ -405,7 +412,9 @@ describe("what Needs attention lists beyond pods", () => {
       });
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", networks: [], groups: [idle, empty] }],
+        answered: [
+          { namespace: "net", networks: [], unread: [], groups: [idle, empty] },
+        ],
         unread: [],
       },
       ingresses: {
@@ -484,7 +493,7 @@ describe("what Needs attention lists beyond pods", () => {
       });
     const listed = attention({
       services: {
-        answered: [{ namespace: "net", networks: [], groups }],
+        answered: [{ namespace: "net", networks: [], unread: [], groups }],
         unread: [],
       },
       ingresses: {
@@ -556,7 +565,7 @@ describe("what Needs attention lists beyond pods", () => {
     ];
     const listed = attention({
       services: {
-        answered: [{ namespace: "shop", networks: [], groups }],
+        answered: [{ namespace: "shop", networks: [], unread: [], groups }],
         unread: [],
       },
     });
@@ -573,9 +582,10 @@ describe("what Needs attention lists beyond pods", () => {
       message: "pods is forbidden",
     },
   ];
-  const nothingPublished = (podsUnread: boolean) => ({
+  const nothingPublished = (podsUnread: boolean): ServiceHealthInputs => ({
     namespace: "shop",
     networks: [],
+    unread: [],
     groups: [
       {
         names: ["ledger"],
@@ -613,9 +623,41 @@ describe("what Needs attention lists beyond pods", () => {
       services: { answered: [nothingPublished(true)], unread: [] },
     });
     expect(listed.items.filter((item) => item.kind === "Service")).toEqual([]);
-    const check = listed.checks.find((each) => each.kind === "Service");
-    expect(check?.state).toBe("unread");
-    expect(check?.unread[0]?.code).toBe("PERMISSION_DENIED");
+    const pods = listed.checks.find((each) => each.kind === "Pod");
+    expect(pods?.state).toBe("unread");
+    expect(pods?.unread).toEqual(LOST_PODS);
+    expect(listed.complete).toBe(false);
+  });
+
+  const refusedInShop = {
+    kind: "Pod",
+    namespace: "shop",
+    code: "PERMISSION_DENIED",
+    message:
+      'pods is forbidden: User "jane" cannot list resource "pods" in API group "" in the namespace "shop"',
+  };
+
+  /**
+   * With pods refused the Overview said "Services could not be read in api
+   * and gmp-system", with a triangle: the Services were read, the pods
+   * behind them were not. Fails if the read that failed is not named by its
+   * kind and code where the Services' answer names it, or if the Services
+   * are then called unread.
+   */
+  it("names the read behind a Service's verdict that failed, not the Services", () => {
+    const listed = attention({
+      services: {
+        answered: [{ ...nothingPublished(true), unread: [refusedInShop] }],
+        unread: [],
+      },
+    });
+    const pods = listed.checks.find((each) => each.kind === "Pod");
+    expect(pods?.state).toBe("unread");
+    expect(checkRefused(pods!)).toBe(true);
+    expect(checkSaid(pods!, t)).toBe("list is forbidden in shop");
+    expect(listed.checks.find((each) => each.kind === "Service")?.state).toBe(
+      "read"
+    );
     expect(listed.complete).toBe(false);
   });
 
@@ -637,8 +679,8 @@ describe("what Needs attention lists beyond pods", () => {
     ).toEqual(["ledger"]);
   });
 
-  /** Fails if a Service waiting on unread pods in a warm window, with nothing in the overview's unread list, is counted as checked. */
-  it("counts a Service waiting on unread pods as not checked even when the overview read everything", () => {
+  /** Fails if a Service waiting on unread pods, with no failed read named anywhere, is counted as checked. */
+  it("counts a Service waiting on unread pods as not checked even when nothing names the read that failed", () => {
     const listed = attention({
       overview: overview({ unread: [] }),
       services: { answered: [nothingPublished(true)], unread: [] },
@@ -646,6 +688,37 @@ describe("what Needs attention lists beyond pods", () => {
     const check = listed.checks.find((each) => each.kind === "Service");
     expect(check?.state).toBe("unread");
     expect(check?.unread[0]?.namespace).toBe("shop");
+  });
+
+  /**
+   * Under a pods refusal the four Services with no endpoints vanished from
+   * Needs attention. Fails if the last answer about a Service whose verdict
+   * cannot be told now is dropped, is not marked stale, or outlives a read
+   * that tells it again.
+   */
+  it("keeps a Service's last verdict, stale, while its pods go unread, and lets it go once they answer", () => {
+    const key = "keeps-a-services-last-verdict";
+    const told = nothingPublished(false);
+    const untold = { ...nothingPublished(true), unread: [refusedInShop] };
+    const serving = {
+      ...told,
+      groups: [{ ...told.groups[0], ready: 1, stop: undefined }],
+    };
+    const listedWith = (answered: ServiceHealthInputs[]) =>
+      attention({
+        services: { answered, unread: [], kept: servicesKept(key, answered) },
+      });
+
+    expect(
+      listedWith([told]).items.find((item) => item.name === "ledger")?.stale
+    ).toBeUndefined();
+    const kept = listedWith([untold]);
+    const ledger = kept.items.find((item) => item.name === "ledger");
+    expect(ledger?.stale).toBe(true);
+    expect(itemIsStale(kept, ledger!)).toBe(true);
+    expect(kept.complete).toBe(false);
+    expect(listedWith([serving]).items).toEqual([]);
+    expect(listedWith([untold]).items).toEqual([]);
   });
 
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */

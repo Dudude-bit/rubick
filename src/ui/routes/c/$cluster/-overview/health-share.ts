@@ -11,6 +11,7 @@ import type { CompositionSegment } from "@/components/object/detail-blocks";
 import { groupNamed } from "@/lib/event-incarnation";
 import { drawnCrd } from "@/lib/links";
 import { iconSvg } from "@/lib/icon-svg";
+import { ERROR_CODES } from "@/lib/error-utils";
 import { allocatedPercent } from "@/lib/node-amount";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import {
@@ -452,7 +453,9 @@ const rolloutCounted =
  */
 export function deploymentSegments(
   deployments: RolloutCount[] | null,
-  t: T
+  t: T,
+  /** The pod read behind the unread words was refused, not failed: they wear the lock. */
+  podsRefused = false
 ): Segment[] {
   const read = (deployments ?? []).filter((entry) => !entry.podsUnread);
   const unread = (deployments ?? [])
@@ -463,6 +466,7 @@ export function deploymentSegments(
       count,
       tone: "neutral",
       unread: true,
+      refused: podsRefused,
     }));
   return [
     ...wordSegments(read, DEPLOYMENT_ORDER, rolloutCounted(t)),
@@ -544,7 +548,11 @@ export function workloadCards(overview: ClusterOverview, t: T): WorkloadCard[] {
     {
       kind: "Deployment",
       total: deployments && sum(deployments.read),
-      segments: deploymentSegments(deployments?.read ?? null, t),
+      segments: deploymentSegments(
+        deployments?.read ?? null,
+        t,
+        missed("Pod").some((entry) => entry.code === ERROR_CODES.PERMISSION)
+      ),
       unread: missed("Deployment"),
     },
     {

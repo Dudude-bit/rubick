@@ -1401,6 +1401,8 @@ export const en = {
     applyDocUnanswered:
       "{id} got no answer ({said}). It may have been applied: check the object before applying again.",
     applyDocNotSent: "{id} not sent",
+    writeRefusedLead: "The cluster refused it:",
+    writeFailedLead: "It did not go through:",
     writeUnanswered: "The cluster did not answer",
     writeUnansweredDetail:
       "No answer came back ({said}). The cluster may have done it all the same: check before doing it again.",
@@ -2848,6 +2850,8 @@ export const en = {
     filterMonitors: "Filter by name or namespace",
     filterMonitorsLabel: "Filter monitors by name or namespace",
     none: "No ServiceMonitor or PodMonitor in this cluster.",
+    noneInScope: "No ServiceMonitor or PodMonitor in this scope.",
+    showAllNamespaces: "Show all namespaces",
     pickOne: "Choose a monitor on the left.",
     noneMatch: "No monitor matches the filter.",
     chipAll: "all",
@@ -3067,6 +3071,7 @@ export const en = {
     couldNotRead: "Could not read the rules",
     kindUnread: "PrometheusRule objects could not be read: {reason}",
     none: "No PrometheusRule in this cluster.",
+    noneInScope: "No PrometheusRule in this scope.",
     pickOne: "Choose a rule object on the left.",
     noneMatch: "No rule object matches the filter.",
     objects: {
@@ -4622,6 +4627,7 @@ export const en = {
       "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
     unknownAge: "Unknown",
     undated: "no date",
+    attentionOngoing: "ongoing",
     freshPolling: "polling",
     freshPollingNote:
       "No watch on this view: it re-reads the cluster on a timer.",
@@ -4645,6 +4651,8 @@ export const en = {
     freshPartlyUnread: "partly unread",
     freshPartlyUnreadNote:
       "The object itself is being read, but these reads did not answer: {reads}. What they would show is not on this page.",
+    freshPartlyUnreadChecksNote:
+      "The overview is being read, but these checks did not answer: {reads}. What they would find is not on this page.",
     freshBehind: "still reading",
     freshBehindNote:
       "A read of this screen has waited on the cluster for more than {slow} s, so what is on screen is the last answer. After {deadline} s the app stops waiting and says so.",
@@ -6259,8 +6267,7 @@ export const en = {
         "Listing these was refused across the whole cluster and in {namespaces} too.",
     },
     headroomNeedsReads:
-      "Capacity and scheduler headroom are not shown: {kinds} could not be read, and the nodes are measured against them.",
-    someReads: "some of the cluster's lists",
+      "Scheduler headroom and the pods on each node are not shown: {kinds} could not be read across the cluster, and they are what it adds up.",
     noNodeAccess:
       "You do not have permission to read the cluster's nodes, so capacity and scheduler headroom are not shown.",
     controllerLower: "controller",
@@ -8643,6 +8650,11 @@ export const en = {
     },
     // Tab and group marks, which were built by concatenation: no whole
     // string for a scanner to find, which is how they stayed English.
+    keysReferenced: {
+      one: "{n} key referenced",
+      other: "{n} keys referenced",
+    },
+    keysReferencedAbsent: "{absent} absent",
     podsFailing: {
       one: "{n} of {total} failing · {name} is {status}",
       other: "{n} of {total} failing · {name} is {status}",

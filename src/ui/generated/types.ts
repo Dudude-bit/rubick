@@ -372,6 +372,14 @@ export interface ServiceHealthInputs {
   namespace: string;
   groups: ServiceHealthGroup[];
   networks: string[];
+  unread: OverviewUnread[];
+}
+
+export interface OverviewUnread {
+  kind: string;
+  namespace: string | null;
+  code: string;
+  message: string;
 }
 
 export interface ServiceHealthGroup {
@@ -2129,6 +2137,7 @@ export interface ClusterOverview {
   scheduler: SchedulerPressure;
   nodes: NodeSummary[];
   nodesKnown: boolean;
+  nodePodsUnread: OverviewUnread | null;
   warnings: WarningGroup[];
   warningsShort: EventsShort[];
   namespaces: NamespaceLoad[];
@@ -2151,13 +2160,6 @@ export interface PartialCount {
   countedIn: string[];
   refusedIn: string[];
   unreadIn: string[];
-}
-
-export interface OverviewUnread {
-  kind: string;
-  namespace: string | null;
-  code: string;
-  message: string;
 }
 
 export interface RolloutCount {
@@ -2246,7 +2248,7 @@ export interface NodeSummary {
   ready: boolean;
   schedulable: boolean;
   roles: string[];
-  podCount: number;
+  podCount: number | null;
   podCapacity: number | null;
   cpu: ResourcePressure;
   memory: ResourcePressure;

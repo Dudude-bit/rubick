@@ -35,6 +35,7 @@ import { namespacesWhere } from "@/lib/namespace-scope";
 import { sameCause } from "@/lib/pod-cause";
 import { policyNamesOf } from "@/lib/policy-door";
 import { parseRefusal } from "@/lib/refusal";
+import { keptByName } from "@/lib/kept-by-name";
 import { kindFacts } from "@/lib/resource-registry";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
 import {
@@ -88,6 +89,8 @@ export interface AttentionItem {
   unservedClass?: { name: string; rest: string | null };
   /** The NetworkPolicies that shut a Service, keyed by the sentence other Services here may share. */
   shutBy?: { key: string; policies: string[] };
+  /** The last answer about it, kept while the reads that would tell it again fail. */
+  stale?: boolean;
 }
 
 /** What Gateway API has to say about a scope, as the rail's marks read it. */
@@ -202,8 +205,9 @@ export interface Attention {
 /** Whether a row rests on a kind or a namespace whose read failed or was refused: last known, not current. */
 export const itemIsStale = (
   attention: Pick<Attention, "checks">,
-  item: Pick<AttentionItem, "kind" | "namespace">
+  item: Pick<AttentionItem, "kind" | "namespace" | "stale">
 ): boolean =>
+  item.stale === true ||
   attention.checks.some(
     (check) =>
       check.state === "unread" &&
@@ -355,80 +359,188 @@ const SERVES_NOBODY: ReadonlySet<ServiceHealth["state"]> = new Set([
   "shut",
 ]);
 
+/** A read that failed, by the kind it lists. */
+type KindUnread = Unread & { kind: string };
+
+const heldBack = (inputs: ServiceHealthInputs) =>
+  inputs.groups.filter(
+    (group) => serviceHealthOf(group, group, null).state === "podsUnread"
+  );
+
 /**
- * The namespaces where a Service's verdict waits on pods or workloads nobody
- * could read. The backend marks exactly those stops, so the verdict is left
- * out of the items and the Services check says it did not finish.
+ * The reads that failed where a Service's verdict waits on pods or workloads
+ * nobody could read, by the kind each lists: the Services were read, their
+ * pods were not. The backend marks exactly those stops, so the verdict is
+ * left out of the items and the check of the kind that failed says so.
  */
 const notCheckedIn = (
   answered: ServiceHealthInputs[],
   lost: readonly OverviewUnread[],
   t: T
-): Unread[] =>
-  answered.flatMap(({ namespace, groups }) => {
-    const health = groups
-      .map((group) => serviceHealthOf(group, group, null))
-      .find((each) => each.state === "podsUnread");
-    if (!health) return [];
-    const cause = lost.find(
-      (entry) => entry.namespace === null || entry.namespace === namespace
-    );
+): KindUnread[] =>
+  answered.flatMap((inputs) => {
+    const { namespace } = inputs;
+    const [group] = heldBack(inputs);
+    if (!group) return [];
+    const failed =
+      inputs.unread.length > 0
+        ? inputs.unread
+        : lost.filter(
+            (entry) => entry.namespace === null || entry.namespace === namespace
+          );
+    if (failed.length > 0)
+      return failed.map(({ kind, code, message }) => ({
+        kind,
+        namespace,
+        code,
+        message,
+      }));
+    const health = serviceHealthOf(group, group, null);
     return [
-      cause
-        ? { namespace, code: cause.code, message: cause.message }
-        : {
-            namespace,
-            code: "",
-            message: serviceHealthWords(health, t).reason ?? "",
-          },
+      {
+        kind: "Service",
+        namespace,
+        code: "",
+        message: serviceHealthWords(health, t).reason ?? "",
+      },
     ];
   });
+
+/** `checks` with each failed read in the check of its kind, where that check does not already cover its namespace. */
+function withFailed(
+  checks: AttentionCheck[],
+  failed: readonly KindUnread[]
+): AttentionCheck[] {
+  const out = checks.map((check) => ({ ...check, unread: [...check.unread] }));
+  for (const { kind, ...entry } of failed) {
+    const check = out.find((each) => each.kind === kind && !each.partial);
+    if (!check) {
+      out.push({ kind, state: "unread", unread: [entry] });
+      continue;
+    }
+    const covered = check.unread.some(
+      (had) => had.namespace === null || had.namespace === entry.namespace
+    );
+    if (covered) continue;
+    check.state = "unread";
+    check.unread.push(entry);
+  }
+  return out;
+}
+
+/** Each namespace's Services as the last read that could tell all their verdicts answered. */
+type Checked = ReadonlyMap<string, ServiceHealthInputs>;
+
+/** `last` moved on by `answered`: a namespace told whole again replaces what was kept of it, and one gone from the answer is let go. */
+function checkedAfter(
+  last: Checked,
+  answered: readonly ServiceHealthInputs[]
+): Checked {
+  const next = new Map<string, ServiceHealthInputs>();
+  for (const inputs of answered) {
+    const kept =
+      heldBack(inputs).length > 0 ? last.get(inputs.namespace) : inputs;
+    if (kept) next.set(inputs.namespace, kept);
+  }
+  return next;
+}
+
+/** What `checked` last said of the Services whose verdicts `answered` cannot tell now. */
+function keptServices(
+  checked: Checked,
+  answered: readonly ServiceHealthInputs[]
+): ServiceHealthInputs[] {
+  return answered.flatMap((inputs) => {
+    const last = checked.get(inputs.namespace);
+    if (!last || last === inputs) return [];
+    const untold = new Set(heldBack(inputs).flatMap((group) => group.names));
+    const groups = last.groups.flatMap((group) => {
+      const names = group.names.filter((name) => untold.has(name));
+      return names.length > 0 ? [{ ...group, names }] : [];
+    });
+    return groups.length > 0 ? [{ ...last, groups }] : [];
+  });
+}
+
+const checkedBy = new Map<
+  string,
+  {
+    answered: readonly ServiceHealthInputs[];
+    checked: Checked;
+    kept: ServiceHealthInputs[];
+  }
+>();
+keptByName(() => checkedBy.clear());
+
+/**
+ * The Services under `key` (a cluster and a scope) whose verdicts went
+ * untold, as the last read that told them answered. Moved on once per
+ * answer, so every reader of one answer is handed the same rows.
+ */
+export function servicesKept(
+  key: string,
+  answered: readonly ServiceHealthInputs[]
+): ServiceHealthInputs[] {
+  const was = checkedBy.get(key);
+  if (was?.answered === answered) return was.kept;
+  const checked = checkedAfter(was?.checked ?? new Map(), answered);
+  const kept = keptServices(checked, answered);
+  checkedBy.set(key, { answered, checked, kept });
+  return kept;
+}
 
 /** The backend kinds whose pods decide a Service's stop, as unread over `overview`. */
 const lostBackend = remember((overview: ClusterOverview) =>
   overview.unread.filter((entry) => entry.kind !== "Node")
 );
 
-const serviceItems = remember(
-  (answered: ServiceHealthInputs[], t: T): AttentionItem[] =>
-    answered.flatMap(({ namespace, groups }) =>
-      groups.flatMap((group) => {
-        const health = serviceHealthOf(group, group, null);
-        // Some addresses not ready is the workload's verdict to give; a
-        // Service with none serving is a fact no other reader reports.
-        if (!SERVES_NOBODY.has(health.state)) return [];
-        const words = serviceHealthWords(health, t);
-        const tone = toneOf(words.role);
-        if (!tone) return [];
-        const detail: AttentionDetail | null = words.cause
-          ? { says: "stopCause", ...words.cause }
-          : words.reason
-            ? ours(words.reason)
-            : null;
-        const shutBy =
-          health.state === "shut"
-            ? {
-                key: `${namespace}\n${words.reason}`,
-                policies: policyNamesOf(health.stop),
-              }
-            : undefined;
-        return group.names.map((name) => {
-          const subject = { kind: "Service", name, namespace };
-          return withKey({
-            ...subject,
-            tone,
-            reason: words.label,
-            detail,
-            since: null,
-            restarts: null,
-            foldedPods: null,
-            replaced: false,
-            opens: subject,
-            ...(shutBy && { shutBy }),
-          });
+const serviceItemsOf = (
+  answered: ServiceHealthInputs[],
+  t: T
+): AttentionItem[] =>
+  answered.flatMap(({ namespace, groups }) =>
+    groups.flatMap((group) => {
+      const health = serviceHealthOf(group, group, null);
+      // Some addresses not ready is the workload's verdict to give; a
+      // Service with none serving is a fact no other reader reports.
+      if (!SERVES_NOBODY.has(health.state)) return [];
+      const words = serviceHealthWords(health, t);
+      const tone = toneOf(words.role);
+      if (!tone) return [];
+      const detail: AttentionDetail | null = words.cause
+        ? { says: "stopCause", ...words.cause }
+        : words.reason
+          ? ours(words.reason)
+          : null;
+      const shutBy =
+        health.state === "shut"
+          ? {
+              key: `${namespace}\n${words.reason}`,
+              policies: policyNamesOf(health.stop),
+            }
+          : undefined;
+      return group.names.map((name) => {
+        const subject = { kind: "Service", name, namespace };
+        return withKey({
+          ...subject,
+          tone,
+          reason: words.label,
+          detail,
+          since: null,
+          restarts: null,
+          foldedPods: null,
+          replaced: false,
+          opens: subject,
+          ...(shutBy && { shutBy }),
         });
-      })
-    )
+      });
+    })
+  );
+
+const serviceItems = remember(serviceItemsOf);
+
+const keptItems = remember((kept: ServiceHealthInputs[], t: T) =>
+  serviceItemsOf(kept, t).map((item) => ({ ...item, stale: true }))
 );
 
 /**
@@ -550,6 +662,8 @@ const autoscalerItems = remember((rows: AutoscalerInfo[]): AttentionItem[] =>
     ];
   })
 );
+
+const NO_SERVICES: ServiceHealthInputs[] = [];
 
 const UNREAD_CLAIM_READS: ClaimReads = { classes: "unread", volumes: "unread" };
 
@@ -749,6 +863,8 @@ export interface AttentionInputs {
     answered: ServiceHealthInputs[];
     unread: Unread[] | "reading";
     overdue?: boolean;
+    /** The last answer for Services whose verdicts `answered` cannot tell now. */
+    kept?: ServiceHealthInputs[];
   };
   ingresses: Answer<Scoped<IngressHealthInput>>;
   ingressHealth: (ingress: IngressHealthInput) => IngressHealth;
@@ -963,6 +1079,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
   const backend = problemItems(overview.problems);
   const ours = [
     ...serviceItems(services.answered, t),
+    ...keptItems(services.kept ?? NO_SERVICES, t),
     ...ingress.items,
     ...autoscalerItems(input.autoscalers.data?.rows ?? []),
     ...claimItems(
@@ -979,40 +1096,43 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
   const servicesUnread =
     services.unread === "reading"
       ? []
-      : [
-          ...services.unread,
-          ...shutUncheckedIn(services.answered, t),
-          ...notCheckedIn(services.answered, lostBackend(overview), t),
-        ];
-  const checks: AttentionCheck[] = [
-    ...BACKEND_KINDS.map((kind): AttentionCheck => {
-      const unread = overview.unread.filter((entry) => entry.kind === kind);
-      return { kind, state: unread.length > 0 ? "unread" : "read", unread };
-    }),
-    ...eventsChecks(overview.warningsShort),
+      : [...services.unread, ...shutUncheckedIn(services.answered, t)];
+  const failed =
     services.unread === "reading"
-      ? { kind: "Service", state: "reading", unread: [] }
-      : {
-          kind: "Service",
-          state:
-            servicesUnread.length > 0
-              ? "unread"
-              : services.overdue
-                ? "reading"
-                : "read",
-          unread: servicesUnread,
-        },
-    checkOf(
-      "Ingress",
-      input.ingresses,
-      input.scope,
-      ingress.unknown,
-      ingress.reading
-    ),
-    checkOf("HorizontalPodAutoscaler", input.autoscalers, input.scope),
-    checkOf("PersistentVolumeClaim", input.claims, input.scope),
-    ...gatewayApiChecks(input.gatewayApi, input.scope),
-  ];
+      ? []
+      : notCheckedIn(services.answered, lostBackend(overview), t);
+  const checks = withFailed(
+    [
+      ...BACKEND_KINDS.map((kind): AttentionCheck => {
+        const unread = overview.unread.filter((entry) => entry.kind === kind);
+        return { kind, state: unread.length > 0 ? "unread" : "read", unread };
+      }),
+      ...eventsChecks(overview.warningsShort),
+      services.unread === "reading"
+        ? { kind: "Service", state: "reading", unread: [] }
+        : {
+            kind: "Service",
+            state:
+              servicesUnread.length > 0
+                ? "unread"
+                : services.overdue
+                  ? "reading"
+                  : "read",
+            unread: servicesUnread,
+          },
+      checkOf(
+        "Ingress",
+        input.ingresses,
+        input.scope,
+        ingress.unknown,
+        ingress.reading
+      ),
+      checkOf("HorizontalPodAutoscaler", input.autoscalers, input.scope),
+      checkOf("PersistentVolumeClaim", input.claims, input.scope),
+      ...gatewayApiChecks(input.gatewayApi, input.scope),
+    ],
+    failed
+  );
 
   return {
     items,

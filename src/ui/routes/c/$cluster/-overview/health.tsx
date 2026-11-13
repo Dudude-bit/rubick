@@ -388,10 +388,14 @@ function AttentionRow({
         )}
       </span>
       <span className="whitespace-nowrap text-right text-caption leading-4 text-fg-fnt">
-        <RealtimeAge
-          timestamp={item.since}
-          fallback={t("cluster", "undated")}
-        />
+        {item.since === null ? (
+          // A standing condition has no moment it began that anything recorded.
+          <span className="text-fg-mut" data-testid="attention-ongoing">
+            {t("cluster", "attentionOngoing")}
+          </span>
+        ) : (
+          <RealtimeAge timestamp={item.since} />
+        )}
       </span>
     </>
   );
@@ -1205,7 +1209,11 @@ function NodeRow({ node }: { node: NodeSummary }) {
         {!node.ready && <span className="text-caption text-err">NotReady</span>}
       </span>
       <span className="text-right font-mono text-caption text-fg-mut">
-        {node.podCount}
+        {node.podCount ?? (
+          <span className="font-sans text-fg-fnt">
+            {t("empty", "notReadLower")}
+          </span>
+        )}
         {node.podCapacity != null && (
           <>
             <Unit>/</Unit>
@@ -1214,7 +1222,9 @@ function NodeRow({ node }: { node: NodeSummary }) {
         )}
         <Unit>
           {" "}
-          {t("count", "podNoun", { n: node.podCapacity ?? node.podCount })}
+          {t("count", "podNoun", {
+            n: node.podCapacity ?? node.podCount ?? 0,
+          })}
         </Unit>
       </span>
     </div>

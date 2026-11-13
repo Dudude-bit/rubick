@@ -1410,6 +1410,8 @@ export const ru: Catalogue = {
     applyDocUnanswered:
       "{id} остался без ответа ({said}). Возможно, он применён: посмотрите объект, прежде чем применять снова.",
     applyDocNotSent: "{id} не отправлен",
+    writeRefusedLead: "Кластер отказал:",
+    writeFailedLead: "Не получилось:",
     writeUnanswered: "Кластер не ответил",
     writeUnansweredDetail:
       "Ответ не пришёл ({said}). Возможно, кластер всё равно это выполнил: проверьте, прежде чем повторять.",
@@ -3009,6 +3011,8 @@ export const ru: Catalogue = {
     filterMonitors: "Фильтр по имени или пространству имён",
     filterMonitorsLabel: "Фильтровать мониторы по имени или пространству имён",
     none: "В кластере нет ни одного ServiceMonitor или PodMonitor.",
+    noneInScope: "В этой области нет ни одного ServiceMonitor или PodMonitor.",
+    showAllNamespaces: "Показать все пространства имён",
     pickOne: "Выберите монитор слева.",
     noneMatch: "Ни один монитор не подходит под фильтр.",
     chipAll: "все",
@@ -3255,6 +3259,7 @@ export const ru: Catalogue = {
     couldNotRead: "Не удалось прочитать правила",
     kindUnread: "Объекты PrometheusRule не удалось прочитать: {reason}",
     none: "В кластере нет ни одного PrometheusRule.",
+    noneInScope: "В этой области нет ни одного PrometheusRule.",
     pickOne: "Выберите объект правил слева.",
     noneMatch: "Ни один объект правил не подходит под фильтр.",
     objects: {
@@ -5204,6 +5209,8 @@ export const ru: Catalogue = {
     freshPartlyUnread: "прочитано не всё",
     freshPartlyUnreadNote:
       "Сам объект читается, но эти чтения не ответили: {reads}. Того, что они показали бы, на этой странице нет.",
+    freshPartlyUnreadChecksNote:
+      "Обзор читается, но эти проверки не ответили: {reads}. Того, что они нашли бы, на этой странице нет.",
     freshBehind: "ещё читается",
     freshBehindNote:
       "Чтение этого экрана ждёт ответа кластера дольше {slow} с, поэтому на экране последний полученный ответ. Через {deadline} с приложение перестанет ждать и сообщит об этом.",
@@ -5285,6 +5292,7 @@ export const ru: Catalogue = {
     healthy: "В порядке",
     schedulerHeadroom: "Запас планировщика",
     undated: "без даты",
+    attentionOngoing: "продолжается",
     headroomClusterWide: "по всему кластеру, независимо от области",
     attentionRowStale:
       "Последние известные данные: чтение, на котором стоит эта строка, не удалось, она могла измениться",
@@ -6948,8 +6956,7 @@ export const ru: Catalogue = {
         "Получить этот список не разрешено ни по всему кластеру, ни в пространствах имён {namespaces}.",
     },
     headroomNeedsReads:
-      "Ёмкость и запас планировщика не показаны: не удалось прочитать {kinds}, а узлы считаются относительно них.",
-    someReads: "часть списков кластера",
+      "Запас планировщика и поды на каждом узле не показаны: не удалось прочитать {kinds} по всему кластеру, а складываются именно они.",
     noNodeAccess:
       "У вас нет прав на чтение узлов кластера, поэтому ёмкость и запас планировщика не показаны.",
     controllerLower: "контроллер",
@@ -9935,6 +9942,13 @@ export const ru: Catalogue = {
       other:
         "{keys} говорят контроллеру этого маршрута, что отвечать. По спеке правило без backendRefs получило бы 500; здесь оно получит то, что сказано там, а это приложение не читает.",
     },
+    keysReferenced: {
+      one: "Ссылка на {n} ключ",
+      few: "Ссылки на {n} ключа",
+      many: "Ссылки на {n} ключей",
+      other: "Ссылки на {n} ключа",
+    },
+    keysReferencedAbsent: "отсутствуют: {absent}",
     podsFailing: {
       one: "{n} из {total} упал · {name}: {status}",
       few: "{n} из {total} упали · {name}: {status}",

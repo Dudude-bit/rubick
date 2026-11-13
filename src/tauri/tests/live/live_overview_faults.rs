@@ -117,6 +117,16 @@ struct Drawn {
 fn print(label: &str, overview: &ClusterOverview, services: &[ServiceHealthInputs]) -> Drawn {
     println!("\n== {label}");
     println!("  served_from: {:?}", overview.served_from);
+    println!(
+        "  nodes_known={} nodes={} ready={} node_pods_unread={:?}",
+        overview.nodes_known,
+        overview.nodes.len(),
+        overview.nodes.iter().filter(|node| node.ready).count(),
+        overview
+            .node_pods_unread
+            .as_ref()
+            .map(|entry| (&entry.kind, &entry.code))
+    );
     for entry in &overview.unread {
         println!(
             "  unread: {} ns={:?} code={} {}",
@@ -166,6 +176,12 @@ fn print(label: &str, overview: &ClusterOverview, services: &[ServiceHealthInput
     let mut red = BTreeSet::new();
     let mut withheld_rows = 0;
     for inputs in services {
+        for entry in &inputs.unread {
+            println!(
+                "  services unread: {} ns={} code={}",
+                entry.kind, inputs.namespace, entry.code
+            );
+        }
         for group in &inputs.groups {
             let stop = group.stop.as_ref();
             let says = verdict(stop);
@@ -214,12 +230,84 @@ fn print(label: &str, overview: &ClusterOverview, services: &[ServiceHealthInput
 }
 
 async fn look(state: &AppState, label: &str) -> Drawn {
-    let overview = cluster_overview(state, None).await.expect("overview");
-    let services = service_health_inputs(state, None)
+    look_in(state, None, label).await
+}
+
+async fn look_in(state: &AppState, scope: Option<&[&str]>, label: &str) -> Drawn {
+    let scope = scope.map(|names| {
+        names
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect::<Vec<_>>()
+    });
+    let overview = cluster_overview(state, scope.clone())
+        .await
+        .expect("overview");
+    let services = service_health_inputs(state, scope)
         .await
         .expect("service inputs")
         .rows;
     print(label, &overview, &services)
+}
+
+fn scoped() -> Vec<String> {
+    std::env::var("RUBICK_SCOPE")
+        .unwrap_or_else(|_| "backend".into())
+        .split(',')
+        .map(str::to_string)
+        .collect()
+}
+
+/// The same faults with one namespace in scope, warm and cold: the status
+/// bar said "0 problems in backend" beside a failing Deployments read.
+#[tokio::test]
+#[ignore = "needs a cluster behind the fault-injecting proxy"]
+async fn a_failed_read_in_a_scoped_overview_is_carried() {
+    let names = scoped();
+    let scope: Vec<&str> = names.iter().map(String::as_str).collect();
+    let scope = Some(scope.as_slice());
+    for (label, kind, rules) in [
+        (
+            "pods 403",
+            "Pod",
+            serde_json::json!([{
+                "match": "/pods(\\?|$)", "code": 403, "reason": "Forbidden",
+                "message": "pods is forbidden: User \"jane@example.com\" cannot list resource \"pods\""
+            }]),
+        ),
+        (
+            "deployments 500",
+            "Deployment",
+            serde_json::json!([{
+                "match": "/deployments", "code": 500, "reason": "InternalError",
+                "message": "etcdserver: request timed out"
+            }]),
+        ),
+    ] {
+        chaos(&serde_json::json!([]));
+        let warm = connected().await;
+        look_in(&warm, scope, &format!("{label}: baseline, scoped")).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        look_in(
+            &warm,
+            scope,
+            &format!("{label}: baseline, scoped, stores filled"),
+        )
+        .await;
+        chaos(&rules);
+        look_in(&warm, scope, &format!("{label}, scoped, stores warm")).await;
+        let warm_overview = cluster_overview(&warm, Some(names.clone()))
+            .await
+            .expect("overview");
+        assert!(
+            warm_overview.unread.iter().any(|entry| entry.kind == kind),
+            "{label}: warm stores answered for a read that fails: {:?}",
+            warm_overview.unread
+        );
+        look_in(&connected().await, scope, &format!("{label}, scoped, cold")).await;
+        look_in(&connected().await, None, &format!("{label}, all, cold")).await;
+    }
+    chaos(&serde_json::json!([]));
 }
 
 /// A failed read neither adds a fault the whole read did not find nor

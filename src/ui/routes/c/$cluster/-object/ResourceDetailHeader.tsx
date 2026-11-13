@@ -74,7 +74,13 @@ export interface ResourceDetailHeaderProps {
 }
 
 /** In the freshness chip's place while a read beside the object failed: the object may be live, the page is not. */
-function PartlyUnread({ reads }: { reads: readonly string[] }) {
+export function PartlyUnread({
+  reads,
+  note = "freshPartlyUnreadNote",
+}: {
+  reads: readonly string[];
+  note?: "freshPartlyUnreadNote" | "freshPartlyUnreadChecksNote";
+}) {
   const t = useT();
   const names = reads.join(", ");
   return (
@@ -92,7 +98,7 @@ function PartlyUnread({ reads }: { reads: readonly string[] }) {
         </span>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {t("cluster", "freshPartlyUnreadNote", { reads: names })}
+        {t("cluster", note, { reads: names })}
       </TooltipContent>
     </Tooltip>
   );
