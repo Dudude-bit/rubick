@@ -17,6 +17,9 @@ vi.mock("@/hooks", async (importOriginal) => ({
   useResourceDetail: vi.fn(),
 }));
 
+// The overview these tests seed holds only `podsWarned`, which the shell's count cannot be built from.
+vi.mock("@/hooks/useAttention", () => ({ useAttention: () => null }));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     getStatefulset: vi.fn(async () => buildSet()),

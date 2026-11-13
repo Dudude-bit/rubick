@@ -7,7 +7,7 @@ import type { Finding } from "@/lib/governance";
 import type { StatusRole } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
-import { FindingEvidence, FindingLine } from "./FindingLine";
+import { FindingDetail, FindingLine } from "./FindingLine";
 import type { Problem } from "./problem";
 
 const TONE_GLYPH = { err: X, warn: TriangleAlert } as const;
@@ -77,11 +77,7 @@ export function FindingsBlock({ findings }: { findings: readonly Finding[] }) {
             key={finding.title}
             tone={finding.tone}
             headline={finding.title}
-            detail={
-              <>
-                {finding.detail} <FindingEvidence finding={finding} />
-              </>
-            }
+            detail={<FindingDetail finding={finding} />}
           />
         )
       )}

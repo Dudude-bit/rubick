@@ -9,12 +9,13 @@
  * - Copy to clipboard
  */
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   useMutation,
   useQueryClient,
   keepPreviousData,
+  type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
@@ -33,6 +34,7 @@ import { useObjectWatch, watchedByName } from "./useObjectWatch";
 import { useHeldRow } from "./useHeldRow";
 import { asksAgainOnMount, useStaleNotFound } from "./useStaleNotFound";
 import { backInTab } from "@/stores/scopeTabStore";
+import { askAgain } from "@/lib/refusals";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -214,6 +216,8 @@ export function useResourceDetail<T>(
     holdsThisObject ? kept : undefined
   );
 
+  usePartsReadAgainOnAnswer(!!readError, holdsThisObject, namespace, name);
+
   useRereadWith(
     queryKeys.detail(resourceKind, namespace, name),
     queryKeys.manifest(resourceKind, namespace, name)
@@ -314,4 +318,48 @@ export function useResourceDetail<T>(
 export function isResourceNotFoundError(error: Error | null | string): boolean {
   if (!error) return false;
   return errorCode(error) === ERROR_CODES.NOT_FOUND;
+}
+
+/**
+ * Asks again, afresh, every failed read on screen about one object but the
+ * object's own: its pods, its connections, its revisions. A part refused or
+ * failed while the object could not be read keeps that answer otherwise.
+ */
+export function rereadFailedParts(
+  client: QueryClient,
+  namespace: string | null | undefined,
+  name: string
+): Promise<void> {
+  return askAgain(() =>
+    client.refetchQueries(
+      {
+        type: "active",
+        predicate: ({ queryKey, state }) =>
+          state.status === "error" &&
+          queryKey.includes(name) &&
+          (!namespace || queryKey.includes(namespace)),
+      },
+      { cancelRefetch: false }
+    )
+  );
+}
+
+/**
+ * When the object's own read answers again after failing, every failed part
+ * read through it is asked again: nothing else would soon, since a failing
+ * read backs off and a refused one is kept.
+ */
+export function usePartsReadAgainOnAnswer(
+  failing: boolean,
+  answered: boolean,
+  namespace: string | null | undefined,
+  name: string | undefined
+): void {
+  const client = useQueryClient();
+  const wasFailing = useRef(failing);
+  useEffect(() => {
+    const recovered = wasFailing.current && !failing && answered;
+    wasFailing.current = failing;
+    if (recovered && name) void rereadFailedParts(client, namespace, name);
+  }, [failing, answered, client, namespace, name]);
 }

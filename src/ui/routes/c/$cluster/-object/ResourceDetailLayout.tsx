@@ -17,6 +17,7 @@
 import { segmentOf } from "@/lib/access-kinds";
 import { builtInKindOf, type AppLink } from "@/lib/links";
 import { useEffect, useMemo, type ReactNode } from "react";
+import { ObjectUnreadContext } from "./object-unread";
 import { ArrowLeft, Network, RefreshCw } from "lucide-react";
 import { useParams } from "@tanstack/react-router";
 
@@ -25,7 +26,10 @@ import { CaptionScope, Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
-import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
+import {
+  isResourceNotFoundError,
+  rereadFailedParts,
+} from "@/hooks/useResourceDetail";
 import { useLastOwners, type KnownOwners } from "@/hooks/useLastOwners";
 import { GoneNotice } from "./gone";
 import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
@@ -294,12 +298,16 @@ export function ResourceDetailLayout({
 }: ResourceDetailLayoutProps) {
   const t = useT();
   const queryClient = useQueryClient();
-  const retry =
-    onRetry ??
-    (() =>
-      queryClient.refetchQueries({
-        queryKey: queryKeys.detail(resourceKind, namespace, title),
-      }));
+  // One retry of the object asks every part read through it again as well.
+  const retry = () => {
+    const asked = onRetry
+      ? onRetry()
+      : queryClient.refetchQueries({
+          queryKey: queryKeys.detail(resourceKind, namespace, title),
+        });
+    if (title) void rereadFailedParts(queryClient, namespace, title);
+    return asked;
+  };
   const lineage = useLineage(
     served ?? servedOfKind(resourceKind),
     title,
@@ -357,13 +365,13 @@ export function ResourceDetailLayout({
   // a read reset or called off sits there with nothing fetching.
   const reading = isLoading || (!resource && !error);
   const found = trouble ?? problemOf(findings);
-  // Over an object its own read could not answer for, the reads beside it
-  // are as much in doubt: the chip says what the list's row says.
+  // The chip never says less than the list's row: a findings read that
+  // failed, or has not caught up after the object came back, finds nothing.
   const listed = useListedProblem(
     builtIn,
     namespace ?? null,
     title,
-    !found && !!resource && !!freshness?.stale
+    !found && !!resource
   );
   // A page names its object from what it read, which an unread one has not.
   const route = useParams({ strict: false });
@@ -436,93 +444,99 @@ export function ResourceDetailLayout({
   // and it is the tab's own content that grows into what is left.
   const surface = surfaceIsOpen(tabs, activeTab);
   const problem = found ?? listed;
+  const unreadObject = freshness?.stale
+    ? { kind: resourceKind, name: title, failure: freshness.failure }
+    : null;
 
   return (
-    <CaptionScope kind={resourceKind}>
-      <div
-        className={cn(
-          // 12px rather than the page's 22px: what is left in this column is
-          // chrome — identity, then the strip — and the mock's whole gain is
-          // that the two read as one band. The 22px rhythm still belongs to
-          // the blocks, which the open tab's panel now owns.
-          "flex flex-col gap-3",
-          surface && "h-full min-h-0"
-        )}
-      >
-        <ResourceDetailHeader
-          name={title}
-          kind={resourceKind}
-          served={served}
-          listLink={listLink}
-          listLabel={listLabel}
-          namespace={namespace}
-          namespaceLink={namespaceLink}
-          createdAt={createdAt}
-          status={
-            statusBadge && (
-              <WithProblem problem={problem} role={statusRole}>
-                {statusBadge}
-              </WithProblem>
-            )
-          }
-          meta={
-            <>
-              {badges}
-              <DeliveryMarks deliveries={deliveries} />
-              <HelmMark object={resource} />
-            </>
-          }
-          note={headerNote}
-          onBack={onBack}
-          dataUpdatedAt={freshness?.dataUpdatedAt}
-          live={freshness?.live}
-          slowed={freshness?.slowed}
-          stale={freshness?.stale}
-          slowRead={freshness?.slowRead}
-          unread={unread}
-        />
+    <ObjectUnreadContext.Provider value={unreadObject}>
+      <CaptionScope kind={resourceKind}>
+        <div
+          className={cn(
+            // 12px rather than the page's 22px: what is left in this column is
+            // chrome — identity, then the strip — and the mock's whole gain is
+            // that the two read as one band. The 22px rhythm still belongs to
+            // the blocks, which the open tab's panel now owns.
+            "flex flex-col gap-3",
+            surface && "h-full min-h-0"
+          )}
+        >
+          <ResourceDetailHeader
+            name={title}
+            kind={resourceKind}
+            served={served}
+            listLink={listLink}
+            listLabel={listLabel}
+            namespace={namespace}
+            namespaceLink={namespaceLink}
+            createdAt={createdAt}
+            status={
+              statusBadge && (
+                <WithProblem problem={problem} role={statusRole}>
+                  {statusBadge}
+                </WithProblem>
+              )
+            }
+            meta={
+              <>
+                {badges}
+                <DeliveryMarks deliveries={deliveries} />
+                <HelmMark object={resource} />
+              </>
+            }
+            note={headerNote}
+            onBack={onBack}
+            dataUpdatedAt={freshness?.dataUpdatedAt}
+            live={freshness?.live}
+            slowed={freshness?.slowed}
+            stale={freshness?.stale}
+            failure={freshness?.failure}
+            slowRead={freshness?.slowRead}
+            unread={unread}
+          />
 
-        {/* Above the strip, and so on every tab: both say something about the
+          {/* Above the strip, and so on every tab: both say something about the
             object rather than about a view of it. Usually neither is there at
             all — the delivery line is earned per object, never per managed
             object, and a summary is what a healthy object does not have. */}
-        <DeliveryBanner deliveries={deliveries} />
-        {/* One mount for every kind that has a page. An alert names objects
+          <DeliveryBanner deliveries={deliveries} />
+          {/* One mount for every kind that has a page. An alert names objects
             this app draws through six different components, and a banner
             copied into each is how five of them come to say something the
             sixth does not. */}
-        {banner}
-        {freshness?.stale && (
-          <StaleRows
-            object
-            label={`${resourceKind} ${title}`}
-            since={freshness.dataUpdatedAt}
-            error={freshness.failure}
-            onRetry={retry}
-          />
-        )}
-        {summary}
-        <FindingsBlock findings={findings} />
+          {banner}
+          {freshness?.stale && (
+            <StaleRows
+              object
+              label={`${resourceKind} ${title}`}
+              since={freshness.dataUpdatedAt}
+              error={freshness.failure}
+              onRetry={retry}
+            />
+          )}
+          {summary}
+          <FindingsBlock findings={findings} />
 
-        <DetailTabs
-          tabs={tabs}
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          onTabAgain={onTabAgain}
-          subject={`${resourceKind}/${namespace ?? ""}/${title}`}
-          actions={
-            <>
-              <ShareObjectAction
-                subject={subject}
-                resource={resource}
-                contribute={share}
-              />
-              {actions}
-            </>
-          }
-        />
-      </div>
-    </CaptionScope>
+          <DetailTabs
+            tabs={tabs}
+            activeTab={activeTab}
+            onTabChange={onTabChange}
+            onTabAgain={onTabAgain}
+            subject={`${resourceKind}/${namespace ?? ""}/${title}`}
+            actions={
+              <>
+                <ShareObjectAction
+                  subject={subject}
+                  resource={resource}
+                  contribute={share}
+                />
+                {actions}
+              </>
+            }
+          />
+        </div>
+      </CaptionScope>
+    </ObjectUnreadContext.Provider>
   );
 }
 

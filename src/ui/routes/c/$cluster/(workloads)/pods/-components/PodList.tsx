@@ -50,7 +50,7 @@ import {
   PROBLEM_MARK_PX,
   type Problem,
 } from "../../../-object/problem";
-import { problemOfRow, rowProblems } from "../../-components/row-cause";
+import { problemOfRow, rowProblems } from "../../../-object/row-items";
 import { useAttention } from "@/hooks/useAttention";
 import { statusRole } from "@/lib/status-role";
 

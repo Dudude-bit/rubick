@@ -16,6 +16,8 @@ import { segmentOf } from "@/lib/access-kinds";
 import { getDisplayPlural, type ResourceKind } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
+import { isRefusal } from "@/lib/error-utils";
+import { useRefusedAt } from "@/lib/refusals";
 import { useT } from "@/i18n/useT";
 import { LineageTrail } from "./Lineage";
 import { servedOfKind } from "./ownership";
@@ -65,6 +67,8 @@ export interface ResourceDetailHeaderProps {
   slowed?: boolean;
   /** The last read failed, and the object on screen is from the one before it. */
   stale?: boolean;
+  /** Why that read failed: a refusal is said as one, dated when it was refused. */
+  failure?: unknown;
   /** A re-read has waited on the cluster past the slow-read grace. */
   slowRead?: boolean;
   /** What the page could not read besides the object: the reads that failed or were refused, by name. */
@@ -219,11 +223,14 @@ export function ResourceDetailHeader({
   live,
   slowed,
   stale,
+  failure,
   slowRead,
   unread,
   served,
 }: ResourceDetailHeaderProps) {
   const t = useT();
+  const refused = stale && isRefusal(failure);
+  const refusedAt = useRefusedAt(refused ? failure : null);
   const segment = {
     link: given === null ? null : (given ?? listLink(kind)),
     label: listLabel ?? getDisplayPlural(kind),
@@ -309,7 +316,8 @@ export function ResourceDetailHeader({
             {t("action", "ageOldSuffix")}
           </span>
         )}
-        {unread && unread.length > 0 ? (
+        {/* The object's own failure first: its parts fail with it. */}
+        {unread && unread.length > 0 && !stale ? (
           <PartlyUnread reads={unread} />
         ) : (
           <DataFreshness
@@ -318,6 +326,7 @@ export function ResourceDetailHeader({
             slowed={slowed}
             stale={stale}
             slowRead={slowRead}
+            refusedAt={refused ? refusedAt : undefined}
             reserve={false}
           />
         )}

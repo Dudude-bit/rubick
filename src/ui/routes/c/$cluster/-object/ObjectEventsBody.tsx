@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { TriangleAlert } from "lucide-react";
 
 import { useT } from "@/i18n/useT";
 import { EventRows } from "@/components/object/detail-blocks";
@@ -11,10 +10,12 @@ import {
   eventsUnreadWords,
   type ObjectEventsQuery,
 } from "@/hooks/useObjectEvents";
-import { errorToShow, isRefusal } from "@/lib/error-utils";
+import { isRefusal } from "@/lib/error-utils";
 import { formatWhen } from "@/lib/utils";
 import { useHeldRows } from "../-list/held-rows";
 import { HeldUpdates } from "../-list/HeldUpdates";
+import { useObjectUnread } from "./object-unread";
+import { WaitsOnObject } from "./WaitsOnObject";
 
 const NO_EVENTS: EventInfo[] = [];
 
@@ -38,6 +39,7 @@ export function ObjectEventsBody({
   compact?: boolean;
 }) {
   const t = useT();
+  const unreadObject = useObjectUnread();
   const { data, error } = query;
   const [pointed, setPointed] = useState(false);
   const rows = shown ?? data ?? NO_EVENTS;
@@ -101,21 +103,21 @@ export function ObjectEventsBody({
         </p>
       )}
       {query.ownedUnread && (
-        <p
-          className="mt-1.5 flex items-start gap-1.5 text-xs text-warn"
+        <div
+          className="mt-1.5"
           data-testid="owned-events-unread"
+          data-read={isRefusal(query.ownedUnread.error) ? "refused" : "failed"}
         >
-          <TriangleAlert
-            className="mt-0.5 h-3.5 w-3.5 flex-none"
-            aria-hidden="true"
-          />
-          <span>
-            {t("empty", query.ownedUnread.unread)}{" "}
-            <span className="font-mono text-fg-fnt">
-              {errorToShow(query.ownedUnread.error)}
-            </span>
-          </span>
-        </p>
+          {unreadObject ? (
+            <WaitsOnObject unread={unreadObject} />
+          ) : (
+            <Unknown
+              question={t("empty", query.ownedUnread.unread)}
+              error={query.ownedUnread.error}
+              onRetry={() => query.refetch()}
+            />
+          )}
+        </div>
       )}
     </div>
   );

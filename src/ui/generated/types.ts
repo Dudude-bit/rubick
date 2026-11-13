@@ -2186,6 +2186,7 @@ export interface PodComposition {
   terminating: number;
   stuck: ReasonCount[];
   starting: number;
+  troubled: number;
 }
 
 export interface Census<T> {

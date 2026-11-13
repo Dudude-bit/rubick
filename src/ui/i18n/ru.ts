@@ -3779,6 +3779,10 @@ export const ru: Catalogue = {
     capacityWord: "ёмкость",
     usageShareOf: "{percent}% от значения «{noun}»",
     usageRestarted: "перезапуск",
+    usageNoSample: "Нет замера между {from} и {to}",
+    usageNoSampleSince: "Нет замера после {from}",
+    usageNoSampleBefore: "Нет замера до {to}",
+    usageNoSampleHere: "Здесь нет замера",
     usageNothingYet: "{label}: пока ничего не записано.",
     usageNow: "сейчас {value}",
     usagePeak: "пик {value}",
@@ -4135,6 +4139,12 @@ export const ru: Catalogue = {
       few: "{pods} из {n} подов:",
       many: "{pods} из {n} подов:",
       other: "{pods} из {n} пода:",
+    },
+    podsTroubled: {
+      one: "{reason}: {n} его под",
+      few: "{reason}: {n} его пода",
+      many: "{reason}: {n} его подов",
+      other: "{reason}: {n} его пода",
     },
     problemRestarts: {
       one: "{n} перезапуск с момента создания",
@@ -5181,6 +5191,8 @@ export const ru: Catalogue = {
       "API метрик отвечает ошибкой, поэтому CPU и памяти может не быть",
     metricsErrorBody:
       "Кластер ответил ошибкой. Запрос повторяется по обычному расписанию.",
+    metricsRefusedSince: "Отказ с {time}",
+    metricsFailingSince: "Сбои с {time}",
     metricsCheckAgain: "Проверить снова",
     metricsChecking: "Проверяем…",
     metricsHideForCluster: "Скрыть для этого кластера",
@@ -7493,10 +7505,14 @@ export const ru: Catalogue = {
       "Прочитаны все поды, Deployment, StatefulSet, DaemonSet, Job, CronJob и Ingress {where}; ни один из них его не называет.",
     couldNotReadKind: "Не удалось прочитать этот {kind}: {error}",
     couldNotReadEvents: "Не удалось прочитать события.",
+    waitsOnRefusedObject:
+      "Читается через {kind} {name}, а его кластер сейчас читать не даёт.",
+    waitsOnFailedObject:
+      "Читается через {kind} {name}, а его сейчас не удаётся прочитать.",
     replicaSetWarningsUnread:
-      "Не удалось прочитать события его ReplicaSet, а именно там пишется, почему не создаются поды:",
+      "Не удалось прочитать события его ReplicaSet, а именно там пишется, почему не создаются поды.",
     jobWarningsUnread:
-      "Не удалось прочитать события его Job, а именно там пишется, почему не создаются поды:",
+      "Не удалось прочитать события его Job, а именно там пишется, почему не создаются поды.",
     eventsRefusedHere: "У вас нет прав читать эти события.",
     eventsNoneReadAt:
       "Прочитано в {time}: событий пока нет. Кластер хранит события около часа.",
@@ -8361,6 +8377,12 @@ export const ru: Catalogue = {
       many: "запускаются",
       other: "запускаются",
     },
+    troubledCounted: {
+      one: "с проблемой",
+      few: "с проблемами",
+      many: "с проблемами",
+      other: "с проблемами",
+    },
     waitingCounted: {
       one: "ожидает",
       few: "ожидают",
@@ -8892,6 +8914,7 @@ export const ru: Catalogue = {
     previousTab: "Предыдущая вкладка",
     newTab: "Новая вкладка",
     closeTab: "Закрыть вкладку",
+    goBack: "Назад, на страницу до этой во вкладке",
     nthTab: "Вкладка по номеру, 9 открывает последнюю",
     rowMove: "Переход между строками",
     rowOpen: "Открыть строку",

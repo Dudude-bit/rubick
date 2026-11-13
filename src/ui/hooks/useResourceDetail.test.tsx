@@ -36,7 +36,7 @@ vi.mock("@/lib/logger", () => ({
   logDebug: () => {},
 }));
 
-import { QueryCache, QueryClient } from "@tanstack/react-query";
+import { QueryCache, QueryClient, useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import { markNavigation } from "@/lib/navigation-clock";
 import { logQueryFailure } from "@/lib/query-log";
@@ -583,5 +583,59 @@ describe("the tab a detail page is open on", () => {
     act(() => result.current.setActiveTab("overview"));
     await waitFor(() => expect(router.state.location.href).toBe(PATH));
     await waitFor(() => expect(result.current.activeTab).toBe("overview"));
+  });
+});
+
+describe("a detail page whose own read comes back", () => {
+  /**
+   * Shots r6-10/11: the object read again, and the Usage and Connections
+   * boxes kept their failure for 15 s with no new request. Fails if a part
+   * read through the object waits on its own backed-off timer once the
+   * object answers again.
+   */
+  it("asks every failed part about the object again the moment the object answers", async () => {
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockResolvedValueOnce({ name: "api-7bcd" })
+      .mockRejectedValueOnce(new Error("etcdserver: request timed out"))
+      .mockResolvedValue({ name: "api-7bcd" });
+    const part = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error("etcdserver: request timed out"))
+      .mockResolvedValue("pods");
+    const result = {} as { current: UseResourceDetailResult<Pod> };
+    function Probe() {
+      result.current = useResourceDetail<Pod>({
+        resourceKind: "Pod",
+        fetchResource: (name) => fetch(name),
+        refresh: false,
+      });
+      useQuery({
+        queryKey: queryKeys.ownedPods("Pod", "default", "api-7bcd"),
+        queryFn: part,
+        retry: false,
+      });
+      return null;
+    }
+    const client = testQueryClient();
+    await renderWithRouter(<Probe />, {
+      client,
+      at: PATH,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await waitFor(() => expect(part).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.resource).toBeDefined());
+
+    await act(() => result.current.refetch());
+    await waitFor(() =>
+      expect(
+        client.getQueryState(queryKeys.detail("Pod", "default", "api-7bcd"))
+          ?.status
+      ).toBe("error")
+    );
+    expect(part).toHaveBeenCalledTimes(1);
+
+    await act(() => result.current.refetch());
+    await waitFor(() => expect(part).toHaveBeenCalledTimes(2));
   });
 });

@@ -6,6 +6,10 @@ import type { EventInfo } from "@/generated/types";
 import type { ObjectEventsQuery } from "@/hooks/useObjectEvents";
 import { renderWithRouter } from "@/test/render";
 import { ObjectEventsBody } from "./ObjectEventsBody";
+import { ObjectUnreadContext } from "./object-unread";
+
+const REFUSED =
+  'replicasets.apps is forbidden: User "jane@example.com" cannot list resource "replicasets" in API group "apps" in the namespace "shop"';
 
 const about = (pod: string, reason: string, at: number): EventInfo => ({
   name: `${pod}.${reason}`,
@@ -116,19 +120,64 @@ describe("one object's events, live", () => {
     expect(screen.queryByRole("link", { name: "Deployment web" })).toBeNull();
   });
 
-  /** Fails if the warnings that could not be read go unsaid under the rows that could. */
-  it("says under its own rows that its ReplicaSets' warnings could not be read", async () => {
+  /**
+   * Shot r6-07: a refused read of them was an amber triangle over mono text.
+   * Fails if the warnings that could not be read go unsaid under the rows
+   * that could, or a refusal is not the framed lock with the rule to ask for.
+   */
+  it("says under its own rows that its ReplicaSets' warnings were refused, with the rule to ask for", async () => {
     await renderWithRouter(
       <ObjectEventsBody
         query={answered([about("web", "Started", 1)], {
           unread: "replicaSetWarningsUnread",
-          error: new Error("replicasets.apps is forbidden"),
+          error: new Error(REFUSED),
         })}
         everyObject={false}
       />
     );
-    expect(screen.getByTestId("owned-events-unread")).toHaveTextContent(
-      "Could not read the events of its ReplicaSets, where a failure to create its pods is written: replicasets.apps is forbidden"
+    const line = screen.getByTestId("owned-events-unread");
+    expect(line).toHaveAttribute("data-read", "refused");
+    expect(line).toHaveTextContent(
+      "Could not read the events of its ReplicaSets, where a failure to create its pods is written."
     );
+    expect(
+      screen.getByRole("button", { name: /Copy the rule to ask for/ })
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /Try the read again/ })
+    ).toBeVisible();
+  });
+
+  /**
+   * Shot r6-07: under the peek's own refused read the line repeated the
+   * notice above it with its own, older cause. Fails if a part read through
+   * an unread object draws its own box instead of one line worded from the
+   * object's failure now.
+   */
+  it("waits on the object in one quiet line while the object itself is unread", async () => {
+    await renderWithRouter(
+      <ObjectUnreadContext.Provider
+        value={{
+          kind: "Deployment",
+          name: "web",
+          failure: new Error("etcdserver: request timed out"),
+        }}
+      >
+        <ObjectEventsBody
+          query={answered([about("web", "Started", 1)], {
+            unread: "replicaSetWarningsUnread",
+            error: new Error(REFUSED),
+          })}
+          everyObject={false}
+        />
+      </ObjectUnreadContext.Provider>
+    );
+    expect(screen.getByTestId("waits-on-object")).toHaveTextContent(
+      "Read through Deployment web, which could not be read just now."
+    );
+    expect(
+      screen.queryByRole("button", { name: /Try the read again/ })
+    ).toBeNull();
+    expect(screen.queryByText(/forbidden/)).toBeNull();
   });
 });

@@ -27,6 +27,8 @@ import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
 import { useGovernanceFindings } from "../../-components/use-governance-findings";
+import { PodsTroubleLines } from "../../../-object/PodsTrouble";
+import { usePodsTrouble, withPodsTrouble } from "../../../-object/pods-trouble";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { unreadOf } from "../../../-object/problem";
 import {
@@ -113,6 +115,7 @@ export function StatefulSetDetail() {
   const chain = useChainAnswer(ResourceType.StatefulSet, name, namespace);
   const connections = chain.read;
   const findings = useGovernanceFindings(connections);
+  const podsTrouble = usePodsTrouble(ResourceType.StatefulSet, namespace, name);
 
   const podsKey = queryKeys.ownedPods(
     ResourceType.StatefulSet,
@@ -511,6 +514,7 @@ export function StatefulSetDetail() {
         namespace={statefulSet?.namespace || namespace}
         createdAt={statefulSet?.createdAt}
         findings={findings}
+        trouble={withPodsTrouble(findings, podsTrouble)}
         statusRole={statefulSet && workloadRole(statefulSet.rollout)}
         unread={unreadOf([
           [t("columns", "events"), events.error],
@@ -545,6 +549,7 @@ export function StatefulSetDetail() {
                 refused={refused}
                 className="mb-1"
               />
+              <PodsTroubleLines pods={podsTrouble} />
               <RolloutSummary
                 rollout={statefulSet.rollout}
                 subject={{ kind: ResourceType.StatefulSet, name, namespace }}

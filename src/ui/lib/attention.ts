@@ -905,7 +905,8 @@ export type AttentionLine =
 const workloadKey = (kind: string, name: string, namespace: string | null) =>
   `${kind}/${namespace ?? "-"}/${name}`;
 
-function causeTold(head: AttentionItem, row: AttentionItem): boolean {
+/** Whether a workload's own row already tells the cause one of its pods' rows gives. */
+export function causeTold(head: AttentionItem, row: AttentionItem): boolean {
   const told = head.detail?.says === "podsCause" ? head.detail.cause : null;
   const own = row.detail?.says === "cause" ? row.detail.cause : null;
   return told !== null && own !== null && sameCause(told, own);

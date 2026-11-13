@@ -51,6 +51,8 @@ import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
 import { useGovernanceFindings } from "../../-components/use-governance-findings";
+import { PodsTroubleLines } from "../../../-object/PodsTrouble";
+import { usePodsTrouble, withPodsTrouble } from "../../../-object/pods-trouble";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { unreadOf } from "../../../-object/problem";
 import {
@@ -160,6 +162,7 @@ export function DeploymentDetail() {
   const chain = useChainAnswer(ResourceType.Deployment, name, namespace);
   const connections = chain.read;
   const findings = useGovernanceFindings(connections);
+  const podsTrouble = usePodsTrouble(ResourceType.Deployment, namespace, name);
 
   const podsKey = queryKeys.ownedPods(ResourceType.Deployment, namespace, name);
   const podsQuery = useLiveQuery({
@@ -686,6 +689,7 @@ export function DeploymentDetail() {
         namespace={deployment?.namespace}
         createdAt={deployment?.createdAt}
         findings={findings}
+        trouble={withPodsTrouble(findings, podsTrouble)}
         statusRole={rollout && workloadRole(rollout)}
         unread={unreadOf([
           [t("columns", "events"), events.error],
@@ -752,6 +756,7 @@ export function DeploymentDetail() {
                 refused={deployment?.podsRefused ?? null}
                 className="mb-1"
               />
+              <PodsTroubleLines pods={podsTrouble} />
               <RolloutSummary
                 rollout={rollout}
                 subject={{ kind: ResourceType.Deployment, name, namespace }}

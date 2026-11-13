@@ -58,7 +58,12 @@ import { useObjectConnections } from "@/hooks/useConnections";
 import { governanceFindings } from "@/lib/governance-findings";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { WithProblem } from "../-object/ProblemTone";
-import { GOVERNED, problemOf, useListedProblem } from "../-object/problem";
+import {
+  GOVERNED,
+  MARKED,
+  problemOf,
+  useListedProblem,
+} from "../-object/problem";
 import { peekQueryKey, resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
@@ -75,11 +80,14 @@ import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { usePeekWidth } from "./peek-width";
 import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
-import { ERROR_CODES, errorCode } from "@/lib/error-utils";
-import { useHeldRow } from "@/hooks/useHeldRow";
+import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
+import { useRefusedAt } from "@/lib/refusals";
+import { useHeldRow, useHoldingList } from "@/hooks/useHeldRow";
+import { usePartsReadAgainOnAnswer } from "@/hooks/useResourceDetail";
 import { useListLive } from "@/hooks/useWatchedList";
 import { Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
+import { ObjectUnreadContext } from "../-object/object-unread";
 import { ServiceHealthView } from "../-object/health-views";
 import { StaleRows } from "@/components/ui/stale-rows";
 import { Unknown } from "@/components/ui/unknown";
@@ -139,6 +147,13 @@ export function PeekContent({
   const error = reappearing ? null : read.error;
   const isLoading = read.isLoading || reappearing;
   const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
+  const refusedAt = useRefusedAt(error);
+  usePartsReadAgainOnAnswer(
+    read.error !== null,
+    read.data !== undefined,
+    namespace,
+    target.name
+  );
   const visible = useSurfaceVisible();
   usePodWatch(
     namespace,
@@ -168,7 +183,7 @@ export function PeekContent({
           : null
       )
     ) !== null;
-  const governed = !!builtIn && GOVERNED.has(builtIn);
+  const marked = !!builtIn && MARKED.has(builtIn);
   const held = useHeldRow(
     builtIn,
     namespace,
@@ -179,7 +194,7 @@ export function PeekContent({
   // A live watch on a list holding this object reads it again at every
   // change it sees, as `rowDetail` asks of every list of these kinds.
   const followed = useListLive(
-    useHeldRow(builtIn, namespace, target.name, data !== undefined)?.key ?? null
+    useHoldingList(builtIn, namespace, target.name, data !== undefined)
   );
   const summary = useMemo(() => {
     const shown = data ?? held?.row;
@@ -322,6 +337,7 @@ export function PeekContent({
               live={followed}
               slowed={read.freshness.slowed}
               stale={error !== null}
+              refusedAt={isRefusal(error) ? refusedAt : undefined}
               slowRead={read.freshness.slowRead}
               reserve={false}
             />
@@ -348,7 +364,7 @@ export function PeekContent({
             />
           ) : summary?.status ? (
             <GovernedStatus
-              on={governed && !gone}
+              on={marked && !gone}
               target={target}
               namespace={namespace}
               role={summary.statusRole ?? statusRole(summary.status)}
@@ -553,73 +569,79 @@ function PeekOverview({
 }) {
   const t = useT();
   const builtIn = builtInKindOf(target);
+  const unreadObject =
+    error && summary && gone === false
+      ? { kind: target.kind, name: target.name, failure: error }
+      : null;
   return (
-    <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-lane [scrollbar-gutter:stable] pb-5 pl-3.5 pr-1.5">
-      {error && gone !== false ? (
-        <GoneNotice
-          className="mt-4"
-          kind={target.kind}
-          namespace={target.namespace ?? null}
-          owners={gone}
-          error={error}
-        />
-      ) : error && !summary ? (
-        <Unknown
-          className="mt-4"
-          question={t("empty", "kindCouldNotRead", { kind: target.kind })}
-          error={error}
-          onRetry={onRetry}
-        />
-      ) : isLoading || !summary ? (
-        <PeekSkeleton />
-      ) : (
-        <>
-          {error && (
-            <StaleRows
-              object
-              className="mt-4 mb-2"
-              label={`${target.kind} ${target.name}`}
-              since={readAt}
-              error={error}
-              onRetry={onRetry}
-            />
-          )}
-          {summary.lead}
-          {summary.groups.map((group) => (
-            <div key={group.title}>
-              <PeekHeading title={group.title} count={group.count} />
-              {group.table ? (
-                <WordTable
-                  table={group.table}
-                  emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
-                />
-              ) : (
-                <KeyValueList
-                  items={group.items}
-                  emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
-                />
-              )}
-            </div>
-          ))}
-        </>
-      )}
-      {/*
-       * The same objects as the detail pages, and the same question: the
-       * page showed what was firing about a workload while the peek at the
-       * same workload showed nothing. The block draws itself only where an
-       * evaluator can name the kind.
-       */}
-      {builtIn && (
-        <AlertsAbout
-          className="mt-3"
-          kind={builtIn}
-          name={target.name}
-          namespace={target.namespace ?? null}
-        />
-      )}
-      {gone === false && <LiveReads target={target} />}
-      <PeekEvents target={target} />
-    </div>
+    <ObjectUnreadContext.Provider value={unreadObject}>
+      <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-lane [scrollbar-gutter:stable] pb-5 pl-3.5 pr-1.5">
+        {error && gone !== false ? (
+          <GoneNotice
+            className="mt-4"
+            kind={target.kind}
+            namespace={target.namespace ?? null}
+            owners={gone}
+            error={error}
+          />
+        ) : error && !summary ? (
+          <Unknown
+            className="mt-4"
+            question={t("empty", "kindCouldNotRead", { kind: target.kind })}
+            error={error}
+            onRetry={onRetry}
+          />
+        ) : isLoading || !summary ? (
+          <PeekSkeleton />
+        ) : (
+          <>
+            {error && (
+              <StaleRows
+                object
+                className="mt-4 mb-2"
+                label={`${target.kind} ${target.name}`}
+                since={readAt}
+                error={error}
+                onRetry={onRetry}
+              />
+            )}
+            {summary.lead}
+            {summary.groups.map((group) => (
+              <div key={group.title}>
+                <PeekHeading title={group.title} count={group.count} />
+                {group.table ? (
+                  <WordTable
+                    table={group.table}
+                    emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
+                  />
+                ) : (
+                  <KeyValueList
+                    items={group.items}
+                    emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
+                  />
+                )}
+              </div>
+            ))}
+          </>
+        )}
+        {/*
+         * The same objects as the detail pages, and the same question: the
+         * page showed what was firing about a workload while the peek at the
+         * same workload showed nothing. The block draws itself only where an
+         * evaluator can name the kind.
+         */}
+        {builtIn && (
+          <AlertsAbout
+            className="mt-3"
+            kind={builtIn}
+            name={target.name}
+            namespace={target.namespace ?? null}
+          />
+        )}
+        {gone === false && <LiveReads target={target} />}
+        <PeekEvents target={target} />
+      </div>
+    </ObjectUnreadContext.Provider>
   );
 }
 
@@ -809,9 +831,9 @@ function PeekEvents({ target }: { target: PeekTarget }) {
 }
 
 /**
- * The status chip of a kind an autoscaler or a budget can govern, carrying
- * their worst finding. Mounted only for those kinds: the connections read it
- * makes has no business in a pod's peek.
+ * The status chip of a kind whose list row carries a problem mark, carrying
+ * what that row carries, or, before the shell has answered, the worst
+ * finding of what governs it read here.
  */
 function GovernedStatus({
   on,
@@ -848,21 +870,22 @@ function GovernedProblem({
   t: T;
   children: ReactNode;
 }) {
+  const kind = builtInKindOf(target);
+  // The connections read has no business in a pod's peek.
+  const governs = !!kind && GOVERNED.has(kind);
   const governing = useObjectConnections(
     target.kind,
     target.name,
     namespace ?? null,
-    true
+    governs
   );
-  const found = problemOf(governanceFindings(governing.data, t));
-  const listed = useListedProblem(
-    target.kind,
-    namespace ?? null,
-    target.name,
-    !found && governing.error !== null
-  );
+  const found = governs
+    ? problemOf(governanceFindings(governing.data, t))
+    : null;
+  // The row's own count first, so the two never disagree on it.
+  const listed = useListedProblem(kind, namespace ?? null, target.name, true);
   return (
-    <WithProblem problem={found ?? listed} role={role}>
+    <WithProblem problem={listed ?? found} role={role}>
       {children}
     </WithProblem>
   );

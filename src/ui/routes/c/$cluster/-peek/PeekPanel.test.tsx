@@ -3731,10 +3731,65 @@ describe("a governed workload's peek beside its list", () => {
       expect(document.querySelector('[data-problem="warn"]')).not.toBeNull()
     );
     const chip = document.querySelector('[data-problem="warn"]');
-    expect(chip).toHaveTextContent(/^1 problem·Ready$/);
+    // The lone "1" is the mark a narrow cell shows instead, hidden here by CSS.
+    expect(chip).toHaveTextContent(/^1 problem1·Ready$/);
     expect(chip).toHaveAttribute("title", "TooManyReplicas");
     expect(screen.getByText("read failing")).toBeVisible();
     expect(screen.getByText(/^last answer \d+s ago$/)).toBeVisible();
+  });
+
+  /**
+   * Vercel r6 B5: a Deployment read Ready while both its pods failed their
+   * liveness probe and its row said so. Fails if the peek's chip does not
+   * count its pods' problems as the row does, or its body does not name them.
+   */
+  it("counts and names its pods' problems as its row does", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockResolvedValue(CART as never);
+    vi.mocked(commands.getResourceConnections).mockRejectedValue(
+      new Error("500 from get")
+    );
+    shell.items = [
+      {
+        ...CEILING,
+        key: "pod/shop/cart-1",
+        kind: "Pod",
+        name: "cart-1",
+        reason: "liveness",
+        workload: { kind: "Deployment", name: "cart" },
+        opens: { kind: "Pod", name: "cart-1", namespace: "shop" },
+      },
+    ];
+    await open(Date.now());
+    await waitFor(() =>
+      expect(document.querySelector('[data-problem="warn"]')).not.toBeNull()
+    );
+    expect(await screen.findByTestId("pods-trouble")).toHaveTextContent(
+      "cart-1"
+    );
+  });
+
+  /**
+   * Shot r6-07: under its own failed read the peek kept "1 problem" and
+   * dropped the finding line the healthy peek leads with. Fails if the body
+   * says nothing of the row's finding once its own read of what governs it
+   * fails.
+   */
+  it("says the row's finding in the body when its own read of what governs it fails", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockRejectedValue(
+      new Error("500 from get")
+    );
+    vi.mocked(commands.getResourceConnections).mockRejectedValue(
+      new Error("500 from get")
+    );
+    shell.items = [CEILING];
+    await open(Date.now() - 30_000);
+    expect(
+      await within(await screen.findByTestId("workload-diagnosis")).findByText(
+        "TooManyReplicas"
+      )
+    ).toBeVisible();
   });
 
   /**
@@ -3753,5 +3808,112 @@ describe("a governed workload's peek beside its list", () => {
     await open(Date.now());
     expect(await screen.findByText("live")).toBeVisible();
     expect(screen.queryByText("polling")).toBeNull();
+  });
+});
+
+describe("a pod's peek beside the Pods list", () => {
+  beforeEach(mockCluster);
+  afterEach(() => {
+    shell.items = [];
+    shell.live.clear();
+  });
+
+  const NAME = "crash-demo-56588f6b8c-8bj9v";
+  const RUNNING = buildPod({
+    status: {
+      ...buildPod().status,
+      phase: "Running",
+      display: "Running",
+      ready: true,
+    },
+    containers: [
+      {
+        ...buildPod().containers[0],
+        name: "repo-server",
+        ready: true,
+        restartCount: 1,
+      },
+    ],
+    restartCount: 1,
+  });
+  const SAID =
+    'Liveness probe failed: Get "http://10.10.3.52:8084/healthz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)';
+  const PROBE = {
+    key: `pod/k8s-gui-test/${NAME}`,
+    tone: "warn",
+    kind: "Pod",
+    name: NAME,
+    namespace: "k8s-gui-test",
+    reason: "liveness",
+    detail: {
+      says: "probe",
+      failure: {
+        container: "repo-server",
+        probe: "liveness",
+        restarts: 1,
+        said: SAID,
+        since: null,
+      },
+    },
+    since: null,
+    restarts: 1,
+    foldedPods: null,
+    replaced: false,
+    opens: { kind: "Pod", name: NAME, namespace: "k8s-gui-test" },
+  };
+  const ROWS_KEY = ["pod-rows", "k8s-gui-test"];
+  const open = () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    client.setQueryData(ROWS_KEY, {
+      rows: [{ name: NAME, namespace: "k8s-gui-test" }],
+      unread: [],
+    });
+    return renderWithRouter(<PeekPanel />, {
+      client,
+      at: POD_PEEK,
+      route: "/c/$cluster/$",
+    });
+  };
+
+  /**
+   * Shots r6-30/43: the Pods row said "1 problem · Running" and the pod's
+   * page led with its failing liveness probe, while the peek said a plain
+   * green Running. Fails if the peek's chip does not carry the row's
+   * problem, or its Overview does not lead with the page's sentence.
+   */
+  it("carries the row's problem and leads with the page's cause sentence", async () => {
+    connected();
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING);
+    shell.items = [PROBE];
+    await open();
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-problem="warn"]')).not.toBeNull()
+    );
+    const chip = document.querySelector('[data-problem="warn"]');
+    expect(chip).toHaveTextContent(/1 problem/);
+    expect(chip).toHaveTextContent(/Running$/);
+    expect(
+      await screen.findByText("repo-server fails its liveness probe")
+    ).toBeVisible();
+    expect(screen.getByTestId("listed-findings")).toHaveTextContent(
+      "(Client.Timeout exceeded while awaiting headers). Most likely why it restarts:"
+    );
+  });
+
+  /**
+   * Shots r6-30/43: the Pods list said "live" and the peek of its row
+   * "polled less often", though the Pods list's watch reads the pod again at
+   * every change. Fails if the peek looks for the Pods list anywhere but
+   * where the Pods page keeps its rows.
+   */
+  it("says live while the Pods list's watch holds the pod", async () => {
+    connected();
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING);
+    shell.live.add(JSON.stringify(ROWS_KEY));
+    await open();
+    expect(await screen.findByText("live")).toBeVisible();
   });
 });

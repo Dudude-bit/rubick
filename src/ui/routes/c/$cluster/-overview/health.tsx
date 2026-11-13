@@ -338,6 +338,7 @@ function AttentionRow({
           name={item.name}
           namespace={item.namespace}
           showKind={false}
+          opens="page"
           className="max-w-full"
         />
         {elsewhere && (
@@ -348,6 +349,7 @@ function AttentionRow({
               name={item.opens.name}
               namespace={item.opens.namespace}
               showKind={false}
+              opens="page"
               className="max-w-full"
             />
           </>
@@ -401,7 +403,6 @@ function AttentionRow({
     </>
   );
 
-  // The row opens the object's page; the name inside it opens the peek.
   return (
     <OpensRow link={link} stale={stale}>
       {body}
@@ -1238,6 +1239,7 @@ function NodeRow({ node }: { node: NodeSummary }) {
           kind={ResourceType.Node}
           name={node.name}
           showKind={false}
+          opens="page"
         />
         {node.roles.map((role) => (
           <span key={role} className="text-caption text-fg-fnt">

@@ -26,6 +26,8 @@ import {
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
+import { useObjectUnread } from "./object-unread";
+import { WaitsOnObject } from "./WaitsOnObject";
 import { PATH_PATIENCE_MS, useOverdue } from "./useOverdue";
 import {
   CopyableAddress,
@@ -663,6 +665,7 @@ export function TrafficChain({
   // The ways in a vendor's objects state — see `service.routes`.
   const routed2 = useServicesRoutes(serviceHops);
   const overdue = useOverdue(isPending, PATH_PATIENCE_MS);
+  const unreadObject = useObjectUnread();
 
   if (overdue) {
     return (
@@ -680,6 +683,7 @@ export function TrafficChain({
       <p className="text-xs text-fg-fnt">{t("empty", "followingPathIn")}</p>
     );
   }
+  if (error && unreadObject) return <WaitsOnObject unread={unreadObject} />;
   if (error || !data) {
     // The same read the Connections tab escapes: this chain reads the one
     // `useConnections` query too, so a refusal offers the rule here as well,

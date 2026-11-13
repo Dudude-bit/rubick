@@ -17,6 +17,8 @@ import { PerfProfiler } from "@/lib/perf-profiler";
 import { Section } from "@/components/ui/section";
 import { Eyebrow, Reading } from "@/components/ui/states";
 import { Unknown } from "@/components/ui/unknown";
+import { useObjectUnread } from "./object-unread";
+import { WaitsOnObject } from "./WaitsOnObject";
 import { PATH_PATIENCE_MS, useOverdue } from "./useOverdue";
 import { shortRevision } from "@/integrations";
 import { cn } from "@/lib/utils";
@@ -300,6 +302,7 @@ function ConnectionsPanelInner({
   delivery?: DeliveryQuery | null;
 }) {
   const t = useT();
+  const unreadObject = useObjectUnread();
   const { data, isPending, error } = query;
   const { deliveries } = useDelivery(delivery ?? null);
   const overdue = useOverdue(isPending, PATH_PATIENCE_MS);
@@ -327,11 +330,15 @@ function ConnectionsPanelInner({
   if (error || !data) {
     return (
       <Section>
-        <Unknown
-          question={t("empty", "couldNotReadWhatConnects")}
-          error={error ?? t("empty", "clusterDidNotAnswer")}
-          onRetry={() => void query.refetch()}
-        />
+        {error && unreadObject ? (
+          <WaitsOnObject unread={unreadObject} />
+        ) : (
+          <Unknown
+            question={t("empty", "couldNotReadWhatConnects")}
+            error={error ?? t("empty", "clusterDidNotAnswer")}
+            onRetry={() => void query.refetch()}
+          />
+        )}
       </Section>
     );
   }

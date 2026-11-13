@@ -4,6 +4,7 @@ import { useAttention } from "@/hooks/useAttention";
 import type { AttentionItem } from "@/lib/attention";
 import type { Finding } from "@/lib/governance";
 import { ResourceType } from "@/lib/resource-registry";
+import { itemsOfRow } from "./row-items";
 
 export type ProblemTone = "err" | "warn";
 
@@ -34,6 +35,12 @@ export function problemOf(findings: readonly Finding[]): Problem | null {
     : null;
 }
 
+/** The cluster's words closed as a sentence, so the words we add after them start one of their own. */
+export function closedSentence(said: string): string {
+  const text = said.trimEnd();
+  return text === "" || /[.!?…]["'”»)\]]*$/.test(text) ? text : `${text}.`;
+}
+
 /** The names of the reads that failed, for the header to say the page is partly unread. */
 export const unreadOf = (
   reads: readonly (readonly [name: string, error: unknown])[]
@@ -46,22 +53,19 @@ export const GOVERNED: ReadonlySet<string> = new Set([
   ResourceType.DaemonSet,
 ]);
 
-/** The worst of the shell's problems one object answers for through another, as its list row counts them. */
-export function attentionProblem(
+/** The kinds whose list row carries a problem mark, and so their peek and their page's chip. */
+export const MARKED: ReadonlySet<string> = new Set([
+  ...GOVERNED,
+  ResourceType.Pod,
+]);
+
+/** The worst of the shell's problems one object's row carries, by its list's own rule (`itemsOfRow`). */
+export const attentionProblem = (
   items: readonly AttentionItem[],
   kind: string,
   namespace: string | null,
   name: string
-): Problem | null {
-  const own = items.filter(
-    ({ kind: of, opens }) =>
-      of !== opens.kind &&
-      opens.kind === kind &&
-      opens.name === name &&
-      (opens.namespace ?? "") === (namespace ?? "")
-  );
-  return problemOfItems(own);
-}
+): Problem | null => problemOfItems(itemsOfRow(items, kind, namespace, name));
 
 /** One object's attention items as its problem: the worst one's tone and words, and how many. */
 export function problemOfItems(own: readonly AttentionItem[]): Problem | null {
@@ -80,10 +84,28 @@ export function problemOfItems(own: readonly AttentionItem[]): Problem | null {
   };
 }
 
+/** The items the list row of this object carries, while `wanted`; `null` where the shell has not answered. */
+export function useListedItems(
+  kind: string | null | undefined,
+  namespace: string | null,
+  name: string,
+  wanted: boolean
+): AttentionItem[] | null {
+  const on = wanted && !!kind && MARKED.has(kind);
+  const attention = useAttention({ enabled: on });
+  return useMemo(
+    () =>
+      on && attention && kind
+        ? itemsOfRow(attention.items, kind, namespace, name)
+        : null,
+    [on, attention, kind, namespace, name]
+  );
+}
+
 /**
  * The list row's problem for an object whose own findings name none: the
- * same fact the row beside it draws, so a chip whose governing read failed
- * does not say all is well where the list says otherwise.
+ * same fact the row beside it draws, so a chip whose own read failed or
+ * found less does not say all is well where the list says otherwise.
  */
 export function useListedProblem(
   kind: string | null | undefined,
@@ -91,13 +113,6 @@ export function useListedProblem(
   name: string,
   wanted: boolean
 ): Problem | null {
-  const on = wanted && !!kind && GOVERNED.has(kind);
-  const attention = useAttention({ enabled: on });
-  return useMemo(
-    () =>
-      on && attention && kind
-        ? attentionProblem(attention.items, kind, namespace, name)
-        : null,
-    [on, attention, kind, namespace, name]
-  );
+  const items = useListedItems(kind, namespace, name, wanted);
+  return useMemo(() => items && problemOfItems(items), [items]);
 }

@@ -422,4 +422,53 @@ describe("the problem a workload list's row carries", () => {
     expect(await screen.findByText("TooManyReplicas")).toBeVisible();
     expect(screen.getAllByText("none")).toHaveLength(1);
   });
+
+  /**
+   * argocd-repo-server read a green "Ready 2/2" beside two pods failing their
+   * liveness probe. Fails if a workload's row stops carrying its pods' rows.
+   */
+  it("hands a workload's row its pods' rows, counted once each", async () => {
+    watch.live = false;
+    attention.items = ["api-7d4-a", "api-7d4-b"].map((name) => ({
+      key: name,
+      tone: "warn",
+      kind: "Pod",
+      name,
+      namespace: "prod",
+      reason: "Unhealthy",
+      detail: null,
+      workload: { kind: "Deployment", name: "api" },
+      opens: { kind: "Pod", name, namespace: "prod" },
+    }));
+    const List = createWorkloadListPage<Item>({
+      resourceType: ResourceType.Deployment,
+      title: "Deployments",
+      fetchList: async () => ({
+        rows: [
+          { name: "api", namespace: "prod" },
+          { name: "worker", namespace: "prod" },
+        ],
+        unread: [],
+      }),
+      matchPods: matchDeploymentPods,
+      deleter: async () => undefined,
+      columns: () => [
+        { accessorKey: "name", header: "Name" },
+        {
+          id: "problem",
+          header: "Problem",
+          cell: ({ row }) =>
+            row.original.problem
+              ? `${row.original.problem.n} ${row.original.problem.title}`
+              : "none",
+        },
+      ],
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    await mount(client, List);
+    expect(await screen.findByText("2 Unhealthy")).toBeVisible();
+    expect(screen.getAllByText("none")).toHaveLength(1);
+  });
 });

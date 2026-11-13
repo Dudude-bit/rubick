@@ -36,6 +36,8 @@ import { PeekHeading } from "./peek-heading";
 import { ChainWatches } from "../-object/ChainWatches";
 import { useT } from "@/i18n/useT";
 import { Unknown } from "@/components/ui/unknown";
+import { useObjectUnread } from "../-object/object-unread";
+import { WaitsOnObject } from "../-object/WaitsOnObject";
 import { queryKeys } from "@/lib/query-keys";
 
 /**
@@ -85,6 +87,7 @@ function TrafficPath({
   chain: ConnectionsRead;
 }) {
   const t = useT();
+  const unreadObject = useObjectUnread();
   const namespace = target.namespace ?? "";
   const service = { namespace, name: target.name };
   const isServiceish = kind === "Service" || kind === "Endpoints";
@@ -429,14 +432,17 @@ function TrafficPath({
   return (
     <div>
       <PeekHeading title={t("nav", "trafficPath")} />
-      {conns.error && (
-        <Unknown
-          className="my-1"
-          question={t("empty", "couldNotReadConnections")}
-          error={conns.error}
-          onRetry={() => conns.refetch()}
-        />
-      )}
+      {conns.error &&
+        (unreadObject ? (
+          <WaitsOnObject className="my-1" unread={unreadObject} />
+        ) : (
+          <Unknown
+            className="my-1"
+            question={t("empty", "couldNotReadConnections")}
+            error={conns.error}
+            onRetry={() => conns.refetch()}
+          />
+        ))}
       {routed.error && (
         <Unknown
           className="my-1"

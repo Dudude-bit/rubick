@@ -7,6 +7,11 @@ vi.mock("@/hooks", async (importOriginal) => ({
   useResourceDetail: vi.fn(),
 }));
 
+const shell = vi.hoisted(() => ({ items: null as unknown[] | null }));
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => shell.items && { items: shell.items },
+}));
+
 import { useResourceDetail } from "@/hooks";
 import type { AccessQuery, DeploymentInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
@@ -50,6 +55,7 @@ const replicaSets = vi.hoisted(() => ({
 }));
 
 beforeEach(() => {
+  shell.items = null;
   forgetRefusals();
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
   vi.mocked(useResourceDetail).mockReturnValue({
@@ -764,6 +770,39 @@ describe("Delete on a Deployment's page", () => {
         name: "ledger",
         namespace: "team-blind",
       })
+    );
+  });
+});
+
+/**
+ * argocd-repo-server's page said a green "Ready 2/2" with nothing above its
+ * tabs while both its pods failed their liveness probe. Fails if the page's
+ * chip or its line above the tabs stops carrying its pods' rows.
+ */
+describe("a Deployment whose pods fail", () => {
+  it("counts its pods' rows on its chip and names them above the tabs", async () => {
+    shell.items = ["ledger-6d9f7-a", "ledger-6d9f7-b"].map((name) => ({
+      key: name,
+      tone: "warn",
+      kind: "Pod",
+      name,
+      namespace: "team-blind",
+      reason: "Unhealthy",
+      detail: null,
+      foldedPods: null,
+      workload: { kind: "Deployment", name: "ledger" },
+      opens: { kind: "Pod", name, namespace: "team-blind" },
+    }));
+    await open();
+
+    expect(
+      await screen.findByText("2 of its pods are Unhealthy")
+    ).toBeInTheDocument();
+    const chip = document.querySelector('[data-problem="warn"]');
+    expect(chip).toHaveTextContent("2 problems");
+    expect(screen.getByText("ledger-6d9f7-b").closest("a")).toHaveAttribute(
+      "href",
+      "/c/prod/pods/team-blind/ledger-6d9f7-b"
     );
   });
 });

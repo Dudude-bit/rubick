@@ -11,8 +11,8 @@ import { kubeletWarned, sharedText } from "@/lib/pod-cause";
 import { causeDeadlines, workloadCause } from "@/lib/share/pod-status";
 import { createRefusal, refusalText, refusedUid } from "@/lib/create-refusal";
 import { causeTextPx } from "../../-list/columns";
-import type { AttentionItem } from "@/lib/attention";
-import { problemOfItems, type Problem } from "../../-object/problem";
+import type { Problem } from "../../-object/problem";
+import { ownerKey } from "../../-object/row-items";
 
 /** What a list row says of the cause its pods share: still reading them, could not read them, or what they told; first, that the API server refuses them. */
 export type RowCause =
@@ -59,45 +59,6 @@ export const PODS_UNREAD: RowPods = {
   deadlines: [],
   unread: { has: () => true },
 };
-
-const ownerKey = (kind: string, namespace: string, name: string) =>
-  `${kind}\0${namespace}\0${name}`;
-
-/**
- * What the shell's problem count holds against a workload through another
- * object (an autoscaler that cannot scale it), by the workload's key: its own
- * rollout is already the badge's word, so only what opens it from elsewhere.
- */
-export function rowProblems(
-  items: readonly AttentionItem[],
-  /** The rows' own kind, whose own items count: a pod's probe is its row's, not a workload's word. */
-  own?: string
-): ReadonlyMap<string, Problem> {
-  const byRow = new Map<string, AttentionItem[]>();
-  for (const item of items) {
-    const ownItem = item.kind === item.opens.kind;
-    if (own === undefined ? ownItem : !ownItem || item.kind !== own) continue;
-    const key = ownerKey(
-      item.opens.kind,
-      item.opens.namespace ?? "",
-      item.opens.name
-    );
-    byRow.set(key, [...(byRow.get(key) ?? []), item]);
-  }
-  const problems = new Map<string, Problem>();
-  for (const [key, own] of byRow) {
-    const problem = problemOfItems(own);
-    if (problem) problems.set(key, problem);
-  }
-  return problems;
-}
-
-export const problemOfRow = (
-  problems: ReadonlyMap<string, Problem>,
-  kind: string,
-  namespace: string,
-  name: string
-): Problem | null => problems.get(ownerKey(kind, namespace, name)) ?? null;
 
 /** Each pod under the workload Rust read off its owner, as the list's verdicts count them. */
 export function rowPods(

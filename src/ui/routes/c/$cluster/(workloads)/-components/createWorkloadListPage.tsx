@@ -45,14 +45,13 @@ import type { Rollout } from "@/generated/types";
 import { rowsWithStarts, startsOf } from "@/lib/workload-status";
 import {
   PODS_UNREAD,
-  problemOfRow,
   rowCause,
-  rowProblems,
   rowPods,
   rowRefusal,
   type CauseOwner,
   type WorkloadRow,
 } from "./row-cause";
+import { problemOfRow, rowProblems } from "../../-object/row-items";
 
 type Workload = { name: string; namespace: string; uid?: string };
 

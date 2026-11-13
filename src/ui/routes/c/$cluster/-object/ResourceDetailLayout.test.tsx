@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { useQuery } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "@tanstack/react-router";
 import { Info } from "lucide-react";
@@ -9,6 +10,7 @@ import { SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { DetailError, ResourceDetailLayout } from "./ResourceDetailLayout";
+import { useObjectUnread } from "./object-unread";
 
 const shellItems = vi.hoisted(() => ({ items: [] as unknown[] }));
 vi.mock("@/hooks/useAttention", () => ({
@@ -1314,5 +1316,155 @@ describe("ResourceDetailLayout says when a read beside the object failed", () =>
     );
     expect(screen.queryByTestId("partly-unread")).toBeNull();
     expect(screen.getByText("live")).toBeInTheDocument();
+  });
+});
+
+describe("ResourceDetailLayout after its object comes back, and while it cannot", () => {
+  const freshness = (stale: boolean, failure: unknown = null) => ({
+    dataUpdatedAt: Date.now() - 30_000,
+    slowed: false,
+    paused: false,
+    everyMs: 5000,
+    stale,
+    slowRead: false,
+    failure,
+    waitingSince: null,
+  });
+  const hpaItem = {
+    tone: "warn",
+    kind: "HorizontalPodAutoscaler",
+    name: "api",
+    namespace: "argocd",
+    reason: "api cannot reach what it scales",
+    detail: null,
+    opens: { kind: "Deployment", name: "api", namespace: "argocd" },
+  };
+
+  /**
+   * Shots r6-10/11: the object read again, its findings read had not, and
+   * the header dropped "1 problem" beside a row still saying it. Fails if
+   * the chip floors at the row's problem only while the object is stale.
+   */
+  it("carries the row's problem whenever its own findings name none", async () => {
+    shellItems.items = [hpaItem];
+    try {
+      await wrap(
+        <ResourceDetailLayout
+          {...base}
+          resource={{ name: "api" }}
+          title="api"
+          namespace="argocd"
+          resourceKind="Deployment"
+          statusBadge={<span>Idle</span>}
+          findings={[]}
+          activeTab="overview"
+          tabs={overview}
+          freshness={freshness(false)}
+        />
+      );
+      expect(document.querySelector('[data-problem="warn"]')).toHaveAttribute(
+        "title",
+        "api cannot reach what it scales"
+      );
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
+  /**
+   * Shot r6-12: only each box's own retry cleared it. Fails if the object's
+   * one retry leaves a failed part about it to its own timer.
+   */
+  it("asks every failed part about the object again on the object's one retry", async () => {
+    const part = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValue(new Error("etcdserver: request timed out"));
+    function Part() {
+      useQuery({
+        queryKey: ["owned-pods", "Deployment", "argocd", "api", null],
+        queryFn: part,
+        retry: false,
+      });
+      return <p>pods</p>;
+    }
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        resource={{ name: "api" }}
+        title="api"
+        namespace="argocd"
+        resourceKind="Deployment"
+        onRetry={() => undefined}
+        activeTab="overview"
+        tabs={[{ ...overview[0], content: <Part /> }]}
+        freshness={freshness(true, new Error("500 from get"))}
+      />
+    );
+    await waitFor(() => expect(part).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Try the read again/ })
+      ).toBeEnabled()
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Try the read again/ })
+    );
+    await waitFor(() => expect(part).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * Shots r6-07/08: the peek said "read failing" and the page "partly
+   * unread" for one refused GET of the object. Fails if the parts that fail
+   * with the object outrank its own failure, or a refusal is not said as one.
+   */
+  it("says the object's own refusal in the chip, over the parts that fail with it", async () => {
+    const refused = new Error('deployments.apps "api" is forbidden');
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        resource={{ name: "api" }}
+        title="api"
+        namespace="argocd"
+        resourceKind="Deployment"
+        activeTab="overview"
+        tabs={overview}
+        unread={["Pods", "Revisions"]}
+        freshness={freshness(true, refused)}
+      />
+    );
+    expect(screen.queryByTestId("partly-unread")).toBeNull();
+    expect(screen.getByText("refused")).toBeInTheDocument();
+  });
+
+  /** Fails if a part read through an object its own read cannot answer for is not told so, or is told after the object answers. */
+  it("tells the parts under it which object they wait on, only while it is unread", async () => {
+    function Part() {
+      const unread = useObjectUnread();
+      return (
+        <p data-testid="part">
+          {unread ? `waits on ${unread.kind} ${unread.name}` : "reads"}
+        </p>
+      );
+    }
+    const props = {
+      ...base,
+      resource: { name: "api" },
+      title: "api",
+      namespace: "argocd",
+      resourceKind: "Deployment",
+      activeTab: "overview",
+      tabs: [{ ...overview[0], content: <Part /> }],
+    };
+    const { rerender } = await wrapRerenderable(
+      <ResourceDetailLayout
+        {...props}
+        freshness={freshness(true, new Error("500 from get"))}
+      />
+    );
+    expect(screen.getByTestId("part")).toHaveTextContent(
+      "waits on Deployment api"
+    );
+    rerender(<ResourceDetailLayout {...props} freshness={freshness(false)} />);
+    expect(screen.getByTestId("part")).toHaveTextContent("reads");
   });
 });

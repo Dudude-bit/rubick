@@ -266,6 +266,7 @@ describe("a pod up and failing its readiness probe", () => {
       terminating: 0,
       stuck: [],
       starting: 0,
+      troubled: 0,
     };
 
     expect(podsServing(composition)).toBe(

@@ -206,7 +206,7 @@ describe("the report of any object", () => {
     );
     await waitFor(() =>
       expect(unread.result.current.report?.notRead.join(" ")).toContain(
-        "Could not read the events of its ReplicaSets, where a failure to create its pods is written: replicasets.apps is forbidden"
+        "Could not read the events of its ReplicaSets, where a failure to create its pods is written. replicasets.apps is forbidden"
       )
     );
   });

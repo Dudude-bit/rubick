@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { ResourcePressure } from "@/generated/types";
+import type { PodComposition, ResourcePressure } from "@/generated/types";
 import { parseMemory } from "@/lib/k8s-quantity";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -8,6 +8,7 @@ import {
   composedDetail,
   cpuRatio,
   memoryRatio,
+  podSegments,
   schedulerShare,
 } from "./health-share";
 
@@ -138,5 +139,43 @@ describe("a workload's row that leads with its pods' cause", () => {
     ).toContain(
       "Error: DATABASE_URL is not set · The controller says: Deployment does not have minimum availability."
     );
+  });
+});
+
+describe("the Pods tile", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const nine: PodComposition = {
+    running: 9,
+    pending: 0,
+    succeeded: 0,
+    failed: 0,
+    unknown: 0,
+    crashLooping: 0,
+    notReady: 0,
+    ready: 9,
+    terminating: 0,
+    stuck: [],
+    starting: 0,
+    troubled: 2,
+  };
+
+  /**
+   * argocd's tile read "9 Running" in one green bar while Needs attention
+   * listed two of those pods failing their liveness probe. Fails if a
+   * serving pod a row names is drawn healthy, or counted twice.
+   */
+  it("draws the Running pods a row names apart, in amber, and the rest green", () => {
+    const drawn = podSegments(nine, t)
+      .filter(({ count }) => count > 0)
+      .map(({ label, qualifier, count, tone }) => ({
+        label,
+        qualifier,
+        count,
+        tone,
+      }));
+    expect(drawn).toEqual([
+      { label: "Running", qualifier: undefined, count: 7, tone: "ok" },
+      { label: "Running", qualifier: "with a problem", count: 2, tone: "warn" },
+    ]);
   });
 });

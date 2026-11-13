@@ -19,6 +19,8 @@ import { isRefusal } from "@/lib/error-utils";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
+import { useObjectUnread } from "../../-object/object-unread";
+import { WaitsOnObject } from "../../-object/WaitsOnObject";
 import { UsageNote, UsageRowsSkeleton } from "../../-usage/usage-chart";
 import { UsageBlock } from "../../-usage/usage-block";
 import { useCapabilityState } from "@/integrations";
@@ -231,6 +233,14 @@ function PodsUnknownUsage({
 }) {
   const t = useT();
   const history = useCapabilityState("usage.history");
+  const unreadObject = useObjectUnread();
+  if (error && unreadObject)
+    return (
+      <Section>
+        <SectionHeader title={t("columns", "usage")} />
+        <WaitsOnObject className="mx-1.5 my-1" unread={unreadObject} />
+      </Section>
+    );
   return (
     <Section>
       <SectionHeader

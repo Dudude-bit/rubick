@@ -3472,6 +3472,10 @@ export const en = {
     capacityWord: "capacity",
     usageShareOf: "{percent}% of {noun}",
     usageRestarted: "restarted",
+    usageNoSample: "No sample between {from} and {to}",
+    usageNoSampleSince: "No sample since {from}",
+    usageNoSampleBefore: "No sample before {to}",
+    usageNoSampleHere: "No sample here",
     usageNothingYet: "{label}: nothing recorded yet.",
     usageNow: "now {value}",
     usagePeak: "peak {value}",
@@ -3774,6 +3778,10 @@ export const en = {
     podsShareCause: {
       one: "{pods} of {n} pod:",
       other: "{pods} of {n} pods:",
+    },
+    podsTroubled: {
+      one: "{n} of its pods is {reason}",
+      other: "{n} of its pods are {reason}",
     },
     problemRestarts: {
       one: "{n} restart since creation",
@@ -4621,6 +4629,8 @@ export const en = {
       "The metrics API is failing, so CPU and memory may be missing",
     metricsErrorBody:
       "The cluster answered with an error. It is asked again on the usual schedule.",
+    metricsRefusedSince: "Refused since {time}",
+    metricsFailingSince: "Failing since {time}",
     metricsCheckAgain: "Check again",
     metricsChecking: "Checking…",
     metricsHideForCluster: "Hide for this cluster",
@@ -6773,10 +6783,14 @@ export const en = {
       "Every pod, Deployment, StatefulSet, DaemonSet, Job, CronJob and Ingress {where} was read; none of them names it.",
     couldNotReadKind: "Could not read this {kind}: {error}",
     couldNotReadEvents: "Could not read events.",
+    waitsOnRefusedObject:
+      "Read through {kind} {name}, which the cluster will not let you read just now.",
+    waitsOnFailedObject:
+      "Read through {kind} {name}, which could not be read just now.",
     replicaSetWarningsUnread:
-      "Could not read the events of its ReplicaSets, where a failure to create its pods is written:",
+      "Could not read the events of its ReplicaSets, where a failure to create its pods is written.",
     jobWarningsUnread:
-      "Could not read the events of its Jobs, where a failure to create their pods is written:",
+      "Could not read the events of its Jobs, where a failure to create their pods is written.",
     eventsRefusedHere: "You do not have permission to read these events.",
     eventsNoneReadAt:
       "Read at {time}: none yet. The cluster keeps events for about an hour.",
@@ -7603,6 +7617,7 @@ export const en = {
     retryingCounted: { other: "Retrying" },
     suspendedCounted: { other: "Suspended" },
     startingCounted: { other: "starting" },
+    troubledCounted: { other: "with a problem" },
     waitingCounted: { other: "Waiting" },
     ready: "Ready",
     progressing: "Progressing",
@@ -8068,6 +8083,7 @@ export const en = {
     previousTab: "Previous tab",
     newTab: "New tab",
     closeTab: "Close tab",
+    goBack: "Back to the page before in this tab",
     nthTab: "Tab by number, 9 is the last",
     rowMove: "Move between rows",
     rowOpen: "Open the row",

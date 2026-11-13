@@ -1,7 +1,14 @@
 import { Fragment } from "react";
+import { ResourceMessage } from "@/components/object/ResourceMessage";
+import type { PodInfo, ProbeFailure } from "@/generated/types";
 import type { Finding } from "@/lib/governance";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
+import { podContainers } from "@/lib/container-sequence";
+import { lastTermination } from "@/lib/pod-status";
 import { cn } from "@/lib/utils";
+import { ExitWords } from "./ExitAgo";
+import { closedSentence } from "./problem";
 
 const FINDING_TONE: Record<Finding["tone"], string> = {
   err: "text-err",
@@ -45,8 +52,54 @@ export function FindingLine({ finding }: { finding: Finding }) {
         {finding.title}
       </p>
       <p className="text-caption text-fg-fnt">
-        {finding.detail} <FindingEvidence finding={finding} />
+        <FindingDetail finding={finding} />
       </p>
     </div>
+  );
+}
+
+/** A finding's sentence and then its readings, the sentence closed before them. */
+export function FindingDetail({ finding }: { finding: Finding }) {
+  if (!finding.evidence?.length) return <>{finding.detail}</>;
+  return (
+    <>
+      {closedSentence(finding.detail)} <FindingEvidence finding={finding} />
+    </>
+  );
+}
+
+/**
+ * A container restarted while its probe fails, as the pod's page and its
+ * peek say it: how the last run ended, the kubelet's words closed as a
+ * sentence, and the link between them named as the guess it is.
+ */
+export function ProbeFailureDetail({
+  pod,
+  failure,
+}: {
+  pod: PodInfo;
+  failure: ProbeFailure;
+}) {
+  const t = useT();
+  const container = podContainers(pod).find(
+    ({ name }) => name === failure.container
+  );
+  const n = container?.restartCount ?? failure.restarts;
+  const last = container ? lastTermination(container) : null;
+  return (
+    <>
+      {last
+        ? parts(t("empty", "crashRestartsWithLastRun", { n }), {
+            how: <ExitWords termination={last} between=", " />,
+          })
+        : t("empty", "crashRestartsNoLastRun", { n })}{" "}
+      <ResourceMessage
+        message={closedSentence(failure.said)}
+        subject={{ kind: "Pod", name: pod.name, namespace: pod.namespace }}
+      />
+      {failure.probe === "liveness" && (
+        <> {t("empty", "probeLikelyRestartCause")}</>
+      )}
+    </>
   );
 }

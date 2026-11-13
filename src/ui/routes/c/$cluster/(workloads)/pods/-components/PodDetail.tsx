@@ -95,6 +95,7 @@ import { eventsTab } from "../../../-object/events-tab";
 import { useNodePlacement } from "./useNodePlacement";
 import { SpotMark } from "../../../-object/spot-mark";
 import { ExitWords, RestartsWords } from "../../../-object/ExitAgo";
+import { ProbeFailureDetail } from "../../../-object/FindingLine";
 import { RunLogWords } from "../../../-object/RunLogWords";
 import { parts } from "@/i18n/parts";
 import { commands } from "@/lib/commands";
@@ -282,31 +283,12 @@ function probeProblem(
     events,
     Date.now()
   );
-  const container = containers.find((c) => c.name === failure?.container);
-  if (!failure || !container) return null;
-  const last = lastTermination(container);
+  if (!failure || !containers.some((c) => c.name === failure.container))
+    return null;
   return {
     reason: failure.probe,
     headline: probeFailureHeadline(failure, t),
-    detail: (
-      <>
-        {last
-          ? parts(
-              t("empty", "crashRestartsWithLastRun", {
-                n: container.restartCount,
-              }),
-              { how: <ExitWords termination={last} between=", " /> }
-            )
-          : t("empty", "crashRestartsNoLastRun", {
-              n: container.restartCount,
-            })}{" "}
-        <ResourceMessage
-          message={failure.said}
-          subject={{ kind: "Pod", name: pod.name, namespace: pod.namespace }}
-        />{" "}
-        {failure.probe === "liveness" && t("empty", "probeLikelyRestartCause")}
-      </>
-    ),
+    detail: <ProbeFailureDetail pod={pod} failure={failure} />,
     tone: "warn",
   };
 }

@@ -364,12 +364,19 @@ export function readyBetweenCrashes(pods: PodComposition): number {
  * while they serve nothing, or drain. A pod held in an error that waiting will not clear is carved out
  * of Pending under that error, the word the Pods list prints for it. One
  * still inside its wait stays Pending, as its row says, and is qualified as
- * starting in blue, which its workload says too.
+ * starting in blue, which its workload says too. One serving that a row of
+ * Needs attention names all the same is Running with a problem, in amber.
  */
 export function podSegments(pods: PodComposition, t: T): Segment[] {
   const stuck = pods.stuck.reduce((n, held) => n + held.count, 0);
   return [
-    { label: "Running", count: podsServing(pods), tone: "ok" },
+    { label: "Running", count: podsServing(pods) - pods.troubled, tone: "ok" },
+    {
+      label: "Running",
+      qualifier: t("statusWords", "troubledCounted", { n: pods.troubled }),
+      count: pods.troubled,
+      tone: "warn",
+    },
     { label: "NotReady", count: pods.notReady, tone: "warn" },
     { label: "Terminating", count: pods.terminating, tone: "warn" },
     {

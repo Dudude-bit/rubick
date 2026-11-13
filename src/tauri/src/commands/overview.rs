@@ -615,6 +615,11 @@ pub struct PodComposition {
     /// `pending_grace` gives them and showing no fault, which Needs attention
     /// does not list and the workload running them counts as coming up.
     pub starting: usize,
+    /// Also a subset of `running`, apart from the others: up and `Ready`,
+    /// and named by a row of Needs attention all the same, a liveness probe
+    /// failing between restarts. Counted serving, the bar drew them green.
+    #[serde(default)]
+    pub troubled: usize,
 }
 
 /// How many pods one reason holds.
@@ -2023,11 +2028,7 @@ fn unlisted_pods<'a>(
     problems: &[ClusterProblem],
     now: DateTime<Utc>,
 ) -> Vec<ReasonCount> {
-    let listed: HashSet<(Option<&str>, &str)> = problems
-        .iter()
-        .filter(|p| p.kind == "Pod")
-        .map(|p| (p.namespace.as_deref(), p.name.as_str()))
-        .collect();
+    let listed = listed_pods(problems);
     let mut counts = [0usize; UNLISTED.len()];
     for pod in pods {
         let key = (
@@ -2060,6 +2061,37 @@ fn unlisted_pods<'a>(
             count,
         })
         .collect()
+}
+
+fn listed_pods(problems: &[ClusterProblem]) -> HashSet<(Option<&str>, &str)> {
+    problems
+        .iter()
+        .filter(|p| p.kind == "Pod")
+        .map(|p| (p.namespace.as_deref(), p.name.as_str()))
+        .collect()
+}
+
+/// See [`PodComposition::troubled`]. Branches as [`pod_composition`] does, so only a pod its Running segment counts is counted.
+fn troubled_pods<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    problems: &[ClusterProblem],
+    now: DateTime<Utc>,
+) -> usize {
+    let listed = listed_pods(problems);
+    pods.into_iter()
+        .filter(|pod| {
+            let status = pod.status.as_ref();
+            status.and_then(|s| s.phase.as_deref()) == Some("Running")
+                && pod.metadata.deletion_timestamp.is_none()
+                && !crash_looping(pod, now)
+                && stuck_reason(pod).is_none()
+                && condition_is_true(status, "Ready")
+                && listed.contains(&(
+                    pod.metadata.namespace.as_deref(),
+                    pod.metadata.name.as_deref().unwrap_or_default(),
+                ))
+        })
+        .count()
 }
 
 /// How many verdicts each word covers, a word whose pods went unread counted
@@ -2521,6 +2553,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     let problems = fold_replaced(problems, refs(input.scoped_pods));
     let problems = with_kubelet_words(problems, events.iter().copied(), input.events_short);
     let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
+    let pods_troubled = troubled_pods(refs(input.scoped_pods), &problems, input.now);
     // One namespace's breakdown restates it; several are each the picker's.
     let namespaces = match input.scope {
         None if pods_known => namespace_loads(refs(input.scoped_pods), &problems),
@@ -2561,7 +2594,10 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         warnings_short: input.events_short.to_vec(),
         counts,
         pods: census("Pod").map(|complete| Census {
-            read: pod_composition(refs(input.scoped_pods), input.now, &warned),
+            read: PodComposition {
+                troubled: pods_troubled,
+                ..pod_composition(refs(input.scoped_pods), input.now, &warned)
+            },
             complete,
         }),
         pods_warned,
@@ -6717,6 +6753,39 @@ mod tests {
             .filter(|row| row.containers.iter().any(|c| !c.ready))
             .count();
         assert_eq!(composition.not_ready, unready_rows);
+    }
+
+    /// argocd's repo-server pods stayed Ready while their liveness probe
+    /// failed, and the Pods tile drew all nine green beside Needs attention
+    /// listing two. Fails if a Ready pod a row names is not counted apart,
+    /// or if one already carved out as not ready is counted twice.
+    #[test]
+    fn a_ready_pod_a_row_names_is_counted_troubled_and_only_once() {
+        let mut ready = search_pod(true);
+        ready.metadata.name = Some("repo-server-mpmgs".to_string());
+        let mut quiet = search_pod(true);
+        quiet.metadata.name = Some("repo-server-khl75".to_string());
+        let unready = search_pod(false);
+        let row = |name: &str| ClusterProblem {
+            severity: ProblemSeverity::Warning,
+            kind: "Pod".to_string(),
+            name: name.to_string(),
+            namespace: Some("shop".to_string()),
+            reason: UNHEALTHY.to_string(),
+            detail: None,
+            since: None,
+            restarts: None,
+            folded_pods: None,
+            replaced: false,
+            workload: None,
+        };
+        let problems = [row("repo-server-mpmgs"), row("search-77fbd8f66-52kp8")];
+        let pods = [ready, quiet, unready];
+
+        let troubled = troubled_pods(&pods, &problems, Utc::now());
+        let composition = pod_composition(&pods, Utc::now(), &HashSet::new());
+
+        assert_eq!((troubled, composition.not_ready), (1, 1));
     }
 
     /// Sam's old big-pull pod kept `Ready` while it terminated, and the

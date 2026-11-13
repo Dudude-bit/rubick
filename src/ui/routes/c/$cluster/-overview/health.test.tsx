@@ -146,6 +146,7 @@ const RUNNING: Census<PodComposition> = {
     terminating: 0,
     stuck: [],
     starting: 0,
+    troubled: 0,
   },
   complete: true,
 };
@@ -1106,6 +1107,7 @@ describe("a scope one namespace of which refused its pods", () => {
         terminating: 0,
         stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
         starting: 0,
+        troubled: 0,
       },
       complete: false,
     },
@@ -1498,6 +1500,7 @@ describe("a scope one namespace of which refused its pods", () => {
         terminating: 0,
         stuck: [{ reason: "ImagePullBackOff", count: 1 }],
         starting: 0,
+        troubled: 0,
       },
       complete: true,
     });
@@ -2152,6 +2155,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [],
       starting: 0,
+      troubled: 0,
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -2182,6 +2186,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [],
       starting: 0,
+      troubled: 0,
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -2209,6 +2214,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 1,
       stuck: [],
       starting: 0,
+      troubled: 0,
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -2234,6 +2240,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [],
       starting: 0,
+      troubled: 0,
     });
 
     expect(screen.getByTestId("attention-summary")).toHaveTextContent(
@@ -2263,6 +2270,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [],
       starting: 2,
+      troubled: 0,
     };
     await panel(attentionFrom([{ ...problem, severity: "critical" }]), pods);
 
@@ -2309,6 +2317,7 @@ describe("what Needs attention says it checked", () => {
       terminating: 0,
       stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
       starting: 0,
+      troubled: 0,
     };
     await panel(attentionFrom([{ ...problem, severity: "critical" }]), pods);
 
@@ -3356,6 +3365,41 @@ describe("a Needs attention row", () => {
     (row() as HTMLElement).focus();
     await userEvent.keyboard("{Enter}");
     expect(typed.router.state.location.pathname).toBe(at);
+  });
+});
+
+describe("the name inside a Needs attention row", () => {
+  const crashing: ClusterProblem = {
+    ...problem,
+    kind: "Pod",
+    name: "api-7d9f",
+    severity: "critical",
+    reason: "CrashLoopBackOff",
+  };
+
+  /**
+   * Clicking the object's name did nothing while the row's empty part opened
+   * the page. Fails if a full pointer sequence on the name stops opening the
+   * same page the row opens.
+   */
+  it("opens the row's page on a full pointer sequence", async () => {
+    const shown = await wrap(
+      <AttentionPanel
+        attention={attentionFrom([crashing])}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    const name = screen.getByRole("link", { name: "Pod api-7d9f" });
+    await userEvent.pointer([
+      { target: name, keys: "[MouseLeft>]" },
+      { keys: "[/MouseLeft]" },
+    ]);
+    expect(shown.router.state.location.pathname).toBe(
+      "/c/prod/pods/k8s-gui-test/api-7d9f"
+    );
   });
 });
 
