@@ -113,11 +113,12 @@ function Outside({ end }: { end: OutsideEnd }) {
 }
 
 const MANY_MISSING = 4;
+const MANY_KEYS = 6;
 
-function MissingKeys({ row }: { row: ConnRow }) {
-  const t = useT();
-  const missing = row.missingKeys ?? [];
-  const lines = missing.map((key) => (
+const keysFolded = (row: ConnRow) => (row.keysReferenced ?? 0) > MANY_KEYS;
+
+function missingLines(row: ConnRow, t: ReturnType<typeof useT>) {
+  return (row.missingKeys ?? []).map((key) => (
     <p
       key={key.key}
       className={cn(
@@ -132,6 +133,12 @@ function MissingKeys({ row }: { row: ConnRow }) {
       })}
     </p>
   ));
+}
+
+function MissingKeys({ row }: { row: ConnRow }) {
+  const t = useT();
+  const missing = row.missingKeys ?? [];
+  const lines = missingLines(row, t);
   if (missing.length < MANY_MISSING || !missing.every((key) => key.optional))
     return <>{lines}</>;
   return (
@@ -144,6 +151,34 @@ function MissingKeys({ row }: { row: ConnRow }) {
       </summary>
       {lines}
     </details>
+  );
+}
+
+/** A reference to many keys is one line with a disclosure; absent keys that are required stay outside it. */
+function KeysFolded({ row }: { row: ConnRow }) {
+  const t = useT();
+  const missing = row.missingKeys ?? [];
+  const required = missing.filter((key) => !key.optional);
+  return (
+    <>
+      <details className="group text-caption text-fg-fnt">
+        <summary className="cursor-pointer select-none rounded py-0.5 hover:text-fg-mut">
+          {t("count", "keysReferenced", { n: row.keysReferenced ?? 0 })}
+          {missing.length > 0 &&
+            `, ${t("count", "keysReferencedAbsent", { absent: missing.length })}`}
+        </summary>
+        {row.ways.map((way) => (
+          <p key={way} className="text-caption text-fg-fnt">
+            {way}
+          </p>
+        ))}
+        {missingLines(
+          { ...row, missingKeys: missing.filter((key) => key.optional) },
+          t
+        )}
+      </details>
+      {missingLines({ ...row, missingKeys: required }, t)}
+    </>
   );
 }
 
@@ -190,13 +225,19 @@ function Row({ row }: { row: ConnRow }) {
             {row.refused}
           </p>
         )}
-        {!inline &&
-          row.ways.map((way) => (
-            <p key={way} className="text-caption text-fg-fnt">
-              {way}
-            </p>
-          ))}
-        <MissingKeys row={row} />
+        {keysFolded(row) && !inline ? (
+          <KeysFolded row={row} />
+        ) : (
+          <>
+            {!inline &&
+              row.ways.map((way) => (
+                <p key={way} className="text-caption text-fg-fnt">
+                  {way}
+                </p>
+              ))}
+            <MissingKeys row={row} />
+          </>
+        )}
       </div>
     </div>
   );

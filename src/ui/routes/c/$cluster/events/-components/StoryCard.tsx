@@ -44,12 +44,12 @@ const STATE_LABEL: Record<StoryState, keyof typeof en.readings> = {
   gone: "storyEndedWithObject",
 };
 
-// `unknown` is drawn neutral, never green: the reassuring colour is the one
+// `done` and `unknown` are drawn neutral, never green: the reassuring colour is the one
 // the reader stops looking at, and nothing here established it.
 const STATE_TONE: Record<StoryState, string> = {
   stillHappening: "bg-err/15 text-err",
   settled: "bg-fg-fnt/15 text-fg-mut",
-  done: "bg-ok/15 text-ok",
+  done: "bg-fg-fnt/15 text-fg-mut",
   unknown: "bg-fg-fnt/15 text-fg-mut",
   earlier: "bg-fg-fnt/15 text-fg-mut",
   gone: "bg-fg-fnt/15 text-fg-mut",

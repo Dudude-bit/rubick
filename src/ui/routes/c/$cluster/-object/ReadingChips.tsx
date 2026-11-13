@@ -7,9 +7,9 @@ import {
   Filter,
   Hourglass,
   ListChecks,
+  Lock,
   Loader2,
   MinusCircle,
-  ShieldOff,
   type LucideIcon,
 } from "lucide-react";
 
@@ -45,9 +45,9 @@ const LOOK: Record<
   syncing: { icon: Loader2, tone: "text-info", spin: true, key: "syncing" },
   queued: { icon: Hourglass, tone: "text-warn", key: "queued" },
   stale: { icon: Clock, tone: "text-warn", key: "stale" },
-  refused: { icon: ShieldOff, tone: "text-err", key: "refused" },
+  refused: { icon: Lock, tone: "text-warn", key: "refused" },
   partial: { icon: Filter, tone: "text-warn", key: "partial" },
-  failed: { icon: AlertTriangle, tone: "text-err", key: "readFailed" },
+  failed: { icon: AlertTriangle, tone: "text-warn", key: "readFailed" },
   unlistable: { icon: Ban, tone: "text-fg-fnt", key: "unlistable" },
   unwatchable: { icon: EyeOff, tone: "text-fg-fnt", key: "unwatchable" },
   skipped: { icon: MinusCircle, tone: "text-fg-fnt", key: "skipped" },

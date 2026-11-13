@@ -230,6 +230,55 @@ describe("ConnectionsPanel", () => {
   });
 
   /**
+   * argocd-cmd-params-cm drew thirty env lines by default, every key present.
+   * Fails if a reference to many keys stops folding into one line that counts
+   * the keys and the absent ones, or if a small one folds.
+   */
+  it("folds a reference to many keys into one counted line", async () => {
+    const configMap: ObjectRef = {
+      kind: "ConfigMap",
+      name: "cmd-params",
+      namespace: "k8s-gui-test",
+      existence: "present",
+      facts: null,
+    };
+    const env = (n: number) => ({
+      how: "env" as const,
+      container: "server",
+      name: `KEY_${n}`,
+      key: `key.${n}`,
+      optional: false,
+      keyPresent: n !== 3,
+    });
+    const edge = (count: number) => ({
+      from: subject,
+      to: configMap,
+      relation: {
+        verb: "uses" as const,
+        usages: Array.from({ length: count }, (_, n) => env(n)),
+      },
+    });
+    const { unmount } = await wrap(
+      <ConnectionsPanel
+        query={query({ data: answered({ edges: [edge(30)] }) })}
+      />
+    );
+    const summary = screen.getByText("30 keys referenced, 1 absent");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("key key.3 is not in this ConfigMap")).toHaveClass(
+      "text-err"
+    );
+    unmount();
+
+    await wrap(
+      <ConnectionsPanel
+        query={query({ data: answered({ edges: [edge(3)] }) })}
+      />
+    );
+    expect(screen.queryByText(/keys referenced/)).toBeNull();
+  });
+
+  /**
    * An owner reference names a group. Read by the kind alone, a pod made by
    * a namesake of a built-in controller linked to the built-in's page.
    */

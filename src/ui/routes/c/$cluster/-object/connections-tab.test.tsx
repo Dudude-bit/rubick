@@ -75,7 +75,14 @@ describe("the Connections tab's mark", () => {
     ).toEqual({
       shows: "unchecked",
       says: "Could not read what connects to this.",
+      refused: true,
     });
+    expect(
+      connectionsMark(
+        { data: undefined, error: new Error("timeout") } as ConnectionsQuery,
+        t
+      )
+    ).not.toHaveProperty("refused");
     expect(
       connectionsMark(
         { data: undefined, error: null, isPending: true } as ConnectionsQuery,

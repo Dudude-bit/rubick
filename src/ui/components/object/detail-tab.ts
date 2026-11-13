@@ -9,6 +9,7 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
+import { isRefusal } from "@/lib/error-utils";
 import { failingCondition } from "@/lib/condition-health";
 import type { T } from "@/i18n/useT";
 import { statusRole } from "@/lib/status-role";
@@ -114,10 +115,17 @@ export const countMark = (
  */
 export function readCountMark(
   count: number | null,
-  unread: string | null
+  unread: string | null,
+  error?: unknown
 ): DetailTabMark | undefined {
   if (unread === null) return count === null ? undefined : countMark(count);
-  return count ? countMark(`${count}+`) : { shows: "unchecked", says: unread };
+  return count
+    ? countMark(`${count}+`)
+    : {
+        shows: "unchecked",
+        says: unread,
+        ...(isRefusal(error) && { refused: true }),
+      };
 }
 
 export const severityMark = (
@@ -167,7 +175,11 @@ export function podsMark(
 ): DetailTabMark | undefined {
   // The tab's body says the read failed exactly when it has no rows to show.
   if (read.error && pods.length === 0)
-    return { shows: "unchecked", says: t("empty", "couldNotReadWorkloadPods") };
+    return {
+      shows: "unchecked",
+      says: t("empty", "couldNotReadWorkloadPods"),
+      ...(isRefusal(read.error) && { refused: true }),
+    };
   if (read.pending) return undefined;
   const failing = pods.filter(
     (pod) =>

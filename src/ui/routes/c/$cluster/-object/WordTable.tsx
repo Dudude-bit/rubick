@@ -40,7 +40,10 @@ export function WordTable({
             {table.rows.map((row, index) => (
               <tr key={index} className="border-b border-hair last:border-b-0">
                 {row.map((cell, column) => (
-                  <td key={column} className="py-1 pr-3 align-top">
+                  <td
+                    key={column}
+                    className="py-1 pr-3 align-top wrap-anywhere"
+                  >
                     <Words cell={cell} />
                   </td>
                 ))}

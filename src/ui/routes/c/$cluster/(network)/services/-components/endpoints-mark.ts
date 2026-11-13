@@ -5,7 +5,8 @@ import { endpointCount, publishedFor, publishedUnread } from "@/lib/published";
 
 /** Every address the tab lists, ready or not; nothing while the read is out. */
 export function endpointsMark(query: ConnectionsRead, t: T) {
-  if (query.error) return readCountMark(null, t("empty", "publishedUnread"));
+  if (query.error)
+    return readCountMark(null, t("empty", "publishedUnread"), query.error);
   const published = query.data && publishedFor(query.data, query.data.subject);
   const unread =
     query.data && !published && publishedUnread(query.data) !== null;

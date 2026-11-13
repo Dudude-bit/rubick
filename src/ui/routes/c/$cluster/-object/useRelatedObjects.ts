@@ -164,6 +164,7 @@ export function useRelatedObjects(
 export function relatedMark(query: RelatedObjects, kind: string, t: T) {
   return readCountMark(
     query.related.length || null,
-    query.error ? t("empty", "relatedShortBy", { kind }) : null
+    query.error ? t("empty", "relatedShortBy", { kind }) : null,
+    query.error
   );
 }

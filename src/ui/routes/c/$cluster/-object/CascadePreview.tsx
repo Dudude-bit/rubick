@@ -153,11 +153,17 @@ function Dependents({
                 <span className="flex-none font-mono text-fg">
                   {object.kind}
                 </span>
-                <span className="truncate font-mono text-fg">
+                <span
+                  className="min-w-0 truncate font-mono text-fg"
+                  title={object.name}
+                >
                   {object.name}
                 </span>
                 {ways.length > 0 && (
-                  <span className="truncate text-fg-mut">
+                  <span
+                    className="min-w-0 truncate text-fg-mut"
+                    title={ways.join(" · ")}
+                  >
                     {ways.join(" · ")}
                   </span>
                 )}

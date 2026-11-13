@@ -250,6 +250,24 @@ describe("Delete on a Service that Ingresses route to", () => {
   });
 
   /**
+   * A long route in the "left behind" rows widened the dialog past its edge
+   * and took the Delete button with it. Fails if a row stops shrinking or the
+   * dialog's track stops being zero-floored.
+   */
+  it("keeps a long route to one shrinking line inside the dialog", async () => {
+    const host = `${"very-long-label.".repeat(12)}example.test`;
+    getResourceConnections.mockResolvedValue(
+      neighbourhood({ edges: [routes("long-one", host)] })
+    );
+    const dialog = await openDelete();
+    const left = await within(dialog).findByTestId("dependents");
+    const way = within(left).getByText(new RegExp(host.slice(0, 30)));
+    expect(way).toHaveClass("min-w-0", "truncate");
+    expect(way).toHaveAttribute("title", expect.stringContaining(host));
+    expect(dialog.className).toContain("grid-cols-[minmax(0,1fr)]");
+  });
+
+  /**
    * A refused or failed read is not "nothing points at it". Fails if the
    * dialog falls silent when the neighbourhood could not be read.
    */

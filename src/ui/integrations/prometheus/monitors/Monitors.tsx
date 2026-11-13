@@ -16,6 +16,8 @@ import {
 } from "../../page-kit";
 import { Eyebrow, Reading } from "@/components/ui/states";
 import { Unknown } from "@/components/ui/unknown";
+import { Alert } from "@/components/ui/alert";
+import { NoneHere } from "../NoneHere";
 import { useShareSection } from "@/components/share/screen-share";
 import { narrowedWords } from "@/lib/report-parts";
 import { ladderSection, ladderUnread } from "./share";
@@ -347,9 +349,9 @@ function ScrapeTruth({
 
 function Note({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-[52ch] rounded-[5px] border border-info/40 bg-info/5 px-3 py-2 text-xs leading-relaxed text-fg-mut">
+    <Alert variant="info" className="max-w-[52ch]">
       {children}
-    </p>
+    </Alert>
   );
 }
 
@@ -507,13 +509,17 @@ function Ladder({
             </div>
           );
         })}
-        {shown.length === 0 && (
-          <p className="px-2 py-3 text-xs text-fg-mut">
-            {rows.length === 0
-              ? t("monitors", "none")
-              : t("monitors", "noneMatch")}
-          </p>
-        )}
+        {shown.length === 0 &&
+          (rows.length === 0 ? (
+            <NoneHere
+              inCluster={t("monitors", "none")}
+              inScope={t("monitors", "noneInScope")}
+            />
+          ) : (
+            <p className="px-2 py-3 text-xs text-fg-mut">
+              {t("monitors", "noneMatch")}
+            </p>
+          ))}
       </div>
       <p className="mt-auto flex gap-3 border-t border-hair pt-2 text-caption text-fg-fnt">
         <span>{t("monitors", "keysMove")}</span>

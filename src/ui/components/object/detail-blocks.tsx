@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
-import { EyeOff, type LucideIcon } from "lucide-react";
+import { Lock, TriangleAlert, type LucideIcon } from "lucide-react";
 
 import { UnitValue, UnreadMetric } from "@/components/ui/metric-value";
 import {
@@ -418,6 +418,11 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
   );
 }
 
+function UnreadGlyph({ refused }: { refused?: boolean }) {
+  const Glyph = refused ? Lock : TriangleAlert;
+  return <Glyph className="h-3 w-3 flex-none" aria-hidden="true" />;
+}
+
 export type CompositionTone = "ok" | "pending" | "warn" | "err" | "neutral";
 
 export interface CompositionSegment {
@@ -426,6 +431,7 @@ export interface CompositionSegment {
   tone: CompositionTone;
   /** Counted from what nobody could confirm: drawn with the not-read mark. */
   unread?: boolean;
+  refused?: boolean;
   /** Words that qualify the count, kept whole: they wrap onto their own line rather than break. */
   qualifier?: string;
 }
@@ -525,9 +531,7 @@ export function Composition({
                   {segment.count} {segment.label}
                 </span>{" "}
                 <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                  {segment.unread && (
-                    <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
-                  )}
+                  {segment.unread && <UnreadGlyph refused={segment.refused} />}
                   {segment.qualifier}
                 </span>
               </span>
@@ -539,9 +543,7 @@ export function Composition({
                   segment.unread && "inline-flex items-center gap-1"
                 )}
               >
-                {segment.unread && (
-                  <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
-                )}
+                {segment.unread && <UnreadGlyph refused={segment.refused} />}
                 {segment.count} {segment.label}
               </span>
             )

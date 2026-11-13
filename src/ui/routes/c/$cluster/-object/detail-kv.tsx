@@ -54,7 +54,7 @@ export function KeyValueRow({
   return (
     <div
       className={cn(
-        "grid grid-cols-[minmax(min(min-content,40%),132px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0",
+        "grid grid-cols-[132px_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0",
         className
       )}
     >

@@ -97,3 +97,28 @@ describe("a key's wrapping points", () => {
     );
   });
 });
+
+describe("a key-value row", () => {
+  /**
+   * A label stacked over its value doubled the height of the Rollout and
+   * Placement blocks. Fails if the key column stops being a fixed track beside the value.
+   */
+  it("keeps key and value on one row at the canonical key width", () => {
+    render(
+      <KeyValueList items={[{ label: "Ready", value: "5 of 5 ready" }]} />
+    );
+    const row = screen.getByText("5 of 5 ready").parentElement!;
+    expect(row.className).toContain("grid-cols-[132px_minmax(0,1fr)]");
+    expect(row.className).not.toContain("min-content");
+  });
+
+  /** Fails if a long key loses its break opportunities after `.`, `/` and `-`. */
+  it("offers a break after the separators of a long key", () => {
+    const { container } = render(
+      <KeyValueList
+        items={[{ label: "app.kubernetes.io/component", value: "api" }]}
+      />
+    );
+    expect(container.querySelectorAll("dt wbr")).toHaveLength(3);
+  });
+});
