@@ -989,6 +989,7 @@ mod refused_list_tests {
         let snapshot = Snapshot {
             pods: Ok(Vec::new()),
             deployments: Ok(vec![parked]),
+            stateful_sets: Ok(Vec::new()),
             ..all_refused()
         };
         let mut out = Neighbourhood::new();

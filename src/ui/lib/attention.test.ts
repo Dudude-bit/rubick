@@ -12,6 +12,7 @@ import type {
   ServiceHealthGroup,
 } from "@/generated/types";
 import {
+  itemIsStale,
   attentionLines,
   attentionOf,
   checkKey,
@@ -564,58 +565,87 @@ describe("what Needs attention lists beyond pods", () => {
     ]);
   });
 
+  const LOST_PODS = [
+    {
+      kind: "Pod",
+      namespace: null,
+      code: "PERMISSION_DENIED",
+      message: "pods is forbidden",
+    },
+  ];
+  const nothingPublished = (podsUnread: boolean) => ({
+    namespace: "shop",
+    networks: [],
+    groups: [
+      {
+        names: ["ledger"],
+        type: "ClusterIP",
+        selectorless: false,
+        targets: [],
+        ready: 0,
+        draining: 0,
+        notReady: 0,
+        unrouted: 0,
+        stop: {
+          reason: "publishesNothingYet" as const,
+          service: {
+            kind: "Service",
+            name: "ledger",
+            namespace: "shop",
+            existence: "present" as const,
+            facts: null,
+          },
+          selector: "app=ledger",
+          podsUnread,
+        },
+      },
+    ],
+  });
+
   /**
    * With Pods refused, three healthy Services turned red with "Nothing is
-   * published behind". Fails if a no-pods verdict is raised while the pod
-   * read behind it was lost, or if the Services check then says it read.
+   * published behind". Fails if a verdict the backend marks as waiting on the
+   * lost pod read is raised, or if the Services check then says it read.
    */
-  it("withholds a no-pods verdict for a Service while the Pod read is lost and says the check did not finish", () => {
-    const ref = {
-      kind: "Service",
-      name: "ledger",
-      namespace: "shop",
-      existence: "present" as const,
-      facts: null,
-    };
-    const lostPods = [
-      {
-        kind: "Pod",
-        namespace: null,
-        code: "PERMISSION_DENIED",
-        message: "pods is forbidden",
-      },
-    ];
-    const answered = {
-      namespace: "shop",
-      networks: [],
-      groups: [
-        {
-          names: ["ledger"],
-          type: "ClusterIP",
-          selectorless: false,
-          targets: [],
-          ready: 0,
-          draining: 0,
-          notReady: 0,
-          unrouted: 0,
-          stop: {
-            reason: "publishesNothingYet" as const,
-            service: ref,
-            selector: "app=ledger",
-            podsUnread: false,
-          },
-        },
-      ],
-    };
+  it("withholds a no-pods verdict the backend marks as waiting on a lost read and says the check did not finish", () => {
     const listed = attention({
-      overview: overview({ unread: lostPods }),
-      services: { answered: [answered], unread: [] },
+      overview: overview({ unread: LOST_PODS }),
+      services: { answered: [nothingPublished(true)], unread: [] },
     });
     expect(listed.items.filter((item) => item.kind === "Service")).toEqual([]);
-    expect(listed.checks.find((check) => check.kind === "Service")?.state).toBe(
-      "unread"
-    );
+    const check = listed.checks.find((each) => each.kind === "Service");
+    expect(check?.state).toBe("unread");
+    expect(check?.unread[0]?.code).toBe("PERMISSION_DENIED");
     expect(listed.complete).toBe(false);
+  });
+
+  /**
+   * The frontend used to hide every pod-dependent Service row once any pod
+   * read was lost, which hid four real faults. Fails if a Service the
+   * backend still calls a fault, since reading the pods could only make it
+   * red, disappears beside a lost pod read.
+   */
+  it("keeps a Service fault that no pod read could excuse", () => {
+    const listed = attention({
+      overview: overview({ unread: LOST_PODS }),
+      services: { answered: [nothingPublished(false)], unread: [] },
+    });
+    expect(
+      listed.items
+        .filter((item) => item.kind === "Service")
+        .map((item) => item.name)
+    ).toEqual(["ledger"]);
+  });
+
+  /** Fails if a Service waiting on unread pods in a warm window, with nothing in the overview's unread list, is counted as checked. */
+  it("counts a Service waiting on unread pods as not checked even when the overview read everything", () => {
+    const listed = attention({
+      overview: overview({ unread: [] }),
+      services: { answered: [nothingPublished(true)], unread: [] },
+    });
+    const check = listed.checks.find((each) => each.kind === "Service");
+    expect(check?.state).toBe("unread");
+    expect(check?.unread[0]?.namespace).toBe("shop");
   });
 
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */
@@ -1537,5 +1567,55 @@ describe("the word a row's reason is printed in", () => {
     expect(reasonWord({ kind: "Pod", reason: "Restarting" }, ru)).toBe(
       "Перезапускается"
     );
+  });
+});
+
+describe("which rows rest on a read that failed", () => {
+  const failed = (kind: string, namespace: string | null) => ({
+    kind,
+    state: "unread" as const,
+    unread: [{ namespace, code: "KUBE_API", message: "timed out" }],
+  });
+  const row = { kind: "Deployment", namespace: "shop" };
+
+  /**
+   * A row of a kind whose read failed is last known. Fails if a failed kind's
+   * rows are treated as current.
+   */
+  it("calls a row stale when its kind was unread across the cluster", () => {
+    expect(itemIsStale({ checks: [failed("Deployment", null)] }, row)).toBe(
+      true
+    );
+  });
+
+  /**
+   * An unread namespace stales only its own rows. Fails if one namespace's
+   * refusal spreads to the others.
+   */
+  it("calls a row stale only in the namespaces that were unread", () => {
+    const checks = [failed("Deployment", "billing")];
+    expect(itemIsStale({ checks }, row)).toBe(false);
+    expect(itemIsStale({ checks }, { ...row, namespace: "billing" })).toBe(
+      true
+    );
+  });
+
+  /**
+   * A read that was only cut short has not lost the rows it found. Fails if a
+   * partial check stales them, or a kind that was read does.
+   */
+  it("leaves a partial read, and a kind that was read, as current", () => {
+    expect(
+      itemIsStale(
+        { checks: [{ ...failed("Deployment", null), partial: true }] },
+        row
+      )
+    ).toBe(false);
+    expect(
+      itemIsStale(
+        { checks: [{ kind: "Deployment", state: "read", unread: [] }] },
+        row
+      )
+    ).toBe(false);
   });
 });

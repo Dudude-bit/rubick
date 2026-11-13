@@ -278,6 +278,14 @@ pub async fn list_service_health_inputs(
     scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<Scoped<ServiceHealthInputs>> {
+    service_health_inputs(&state, scope).await
+}
+
+/// See [`list_service_health_inputs`].
+pub async fn service_health_inputs(
+    state: &AppState,
+    scope: Option<Vec<String>>,
+) -> Result<Scoped<ServiceHealthInputs>> {
     let client = (*state.current_client()?).clone();
     let context = state.get_current_context().unwrap_or_default();
     let discovery = state.discovery(&context);
@@ -438,12 +446,12 @@ fn explained(
         behind.deployments.as_deref().unwrap_or_default(),
         behind.sets.as_deref().unwrap_or_default(),
     );
+    let all_read = behind.deployments.is_some() && behind.sets.is_some();
     let waiting = published::makers(deployments, sets, behind.replica_sets.as_deref(), refusals);
-    let published = published.with_workloads(svc, &waiting, selected.as_deref(), now);
+    let published = published.with_workloads(svc, &waiting, all_read, selected.as_deref(), now);
     if !matches!(published.stop, Some(ChainStop::SelectsNothing { .. })) {
         return published;
     }
-    let all_read = behind.deployments.is_some() && behind.sets.is_some();
     published
         .with_makers(
             svc,
@@ -1728,6 +1736,76 @@ mod tests {
                 })
             ),
             "{empty:?}"
+        );
+    }
+
+    /// The GKE rig with its pods refused: `api`, scaled to zero, joined Needs
+    /// attention in red as "nothing published yet", and with its Deployments
+    /// failing, alertmanager behind a `StatefulSet` at zero stayed idle.
+    /// Fails if a Service is called a fault that its unread pods could have
+    /// called idle, is called idle beside a workload list that failed, or if
+    /// one behind no workload at all is let off with its pods unread.
+    #[tokio::test]
+    async fn a_service_at_zero_is_neither_a_fault_nor_idle_beside_a_read_that_failed() {
+        use crate::client::served::test_server::{answering, failure};
+        let at_zero = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "DeploymentList", "metadata": {},
+            "items": [{
+                "metadata": { "name": "hello-web", "namespace": "lena-sandbox" },
+                "spec": {
+                    "replicas": 0,
+                    "selector": { "matchLabels": { "app": "hello-web" } },
+                    "template": {
+                        "metadata": { "labels": { "app": "hello-web" } },
+                        "spec": { "containers": [] }
+                    }
+                }
+            }]
+        })
+        .to_string();
+        let none = serde_json::json!({ "apiVersion": "apps/v1", "kind": "DeploymentList", "metadata": {}, "items": [] }).to_string();
+        let stop_with = |deployments: (u16, String),
+                         pods: Option<(u16, String)>,
+                         sets: Option<(u16, String)>| async move {
+            let base = hello_web_at_zero(deployments);
+            let (client, _) = answering(move |path, n| match (path, &pods, &sets) {
+                ("/api/v1/namespaces/lena-sandbox/pods", Some(pods), _) => pods.clone(),
+                ("/apis/apps/v1/namespaces/lena-sandbox/statefulsets", _, Some(sets)) => {
+                    sets.clone()
+                }
+                _ => base(path, n),
+            })
+            .await;
+            health_inputs_in(client, Some("lena-sandbox".to_string()), undiscovered())
+                .await
+                .expect("inputs")[0]
+                .groups[0]
+                .stop
+                .clone()
+        };
+        let refused = || Some(failure(403, "Forbidden"));
+        let pods_unread = |stop: &Option<ChainStop>| match stop {
+            Some(ChainStop::PublishesNothingYet { pods_unread, .. }) => *pods_unread,
+            other => panic!("{other:?}"),
+        };
+
+        let idle_unread = stop_with((200, at_zero.clone()), refused(), None).await;
+        assert!(pods_unread(&idle_unread), "{idle_unread:?}");
+        let both_unread = stop_with(failure(500, "InternalError"), refused(), None).await;
+        assert!(pods_unread(&both_unread), "{both_unread:?}");
+        let nothing_behind = stop_with((200, none), refused(), None).await;
+        assert!(!pods_unread(&nothing_behind), "{nothing_behind:?}");
+        let sets_failed =
+            stop_with((200, at_zero), None, Some(failure(500, "InternalError"))).await;
+        assert!(
+            matches!(
+                sets_failed,
+                Some(ChainStop::SelectsNothing {
+                    makers_read: false,
+                    ..
+                })
+            ),
+            "{sets_failed:?}"
         );
     }
 

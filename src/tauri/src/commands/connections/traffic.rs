@@ -363,7 +363,13 @@ pub(super) fn note_reach(
         .with_stop(svc, pods)
         .with_policies(svc, snapshot.policies.as_deref(), &snapshot.others)
         .with_makers(svc, &makers, snapshot.makers_read())
-        .with_workloads(svc, &makers, pods, chrono::Utc::now())
+        .with_workloads(
+            svc,
+            &makers,
+            snapshot.makers_read(),
+            pods,
+            chrono::Utc::now(),
+        )
         .with_near_miss(svc, snapshot.pods());
     let stop = published.stop.clone();
     out.published.push(match carry {
