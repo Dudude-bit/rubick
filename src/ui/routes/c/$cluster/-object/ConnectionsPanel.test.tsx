@@ -120,6 +120,7 @@ describe("ConnectionsPanel", () => {
                       subPath: null,
                       volume: "config",
                       projected: false,
+                      optional: false,
                     },
                   ],
                 },

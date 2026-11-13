@@ -335,6 +335,20 @@ export function describeExistence(
   return null;
 }
 
+/** A row's word on its object's existence, and whether that absence is a fault: one drawn on only optionally stops nothing. */
+export function rowExistence(
+  row: Pick<ConnRow, "object" | "optionalOnly" | "verifiable">,
+  t: T
+): { existence: string | null; missing: boolean } {
+  if (!row.object) return { existence: null, missing: false };
+  if (row.object.existence === "missing" && row.optionalOnly)
+    return { existence: t("nav", "optionalNotPresent"), missing: false };
+  return {
+    existence: describeExistence(row.object, t, row.verifiable ?? false),
+    missing: row.object.existence === "missing",
+  };
+}
+
 export type HopTone = "on" | "info" | "unknown" | "warn" | "bad";
 
 const STOP_TONE: Record<StopMood, HopTone> = {
@@ -2056,7 +2070,7 @@ function needsToRun(conns: ResourceConnections, t: T): ConnRow[] {
         .length,
       optionalOnly:
         edge.relation.usages.length > 0 &&
-        edge.relation.usages.every((use) => use.how === "env" && use.optional),
+        edge.relation.usages.every((use) => "optional" in use && use.optional),
       verifiable: true,
       rank: needRank(edge),
     }));

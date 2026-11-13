@@ -1195,6 +1195,14 @@ export async function listDependents(
   return invoke<Dependents>("list_dependents", { uid, scope, page });
 }
 
+export async function listDependentsBeside(
+  owner: string,
+  uid: string,
+  scope: string[] | null
+): Promise<Beside> {
+  return invoke<Beside>("list_dependents_beside", { owner, uid, scope });
+}
+
 export async function previewCascade(
   uid: string,
   scope: string[] | null
@@ -1556,6 +1564,12 @@ export async function recheckMetrics(): Promise<void> {
   return invoke<void>("recheck_metrics");
 }
 
+export async function listOtherPolicyKinds(
+  namespaces: string[]
+): Promise<OtherPolicyKinds[]> {
+  return invoke<OtherPolicyKinds[]>("list_other_policy_kinds", { namespaces });
+}
+
 export async function perfSetRecording(recording: boolean): Promise<void> {
   return invoke<void>("perf_set_recording", { recording });
 }
@@ -1626,12 +1640,6 @@ export async function listIngresses(
   filters: ResourceFilters | null
 ): Promise<IngressInfo[]> {
   return invoke<IngressInfo[]>("list_ingresses", { filters });
-}
-
-export async function listOtherPolicyKinds(
-  namespaces: string[]
-): Promise<OtherPolicyKinds[]> {
-  return invoke<OtherPolicyKinds[]>("list_other_policy_kinds", { namespaces });
 }
 
 export async function listNetworkPoliciesIn(
@@ -2174,12 +2182,4 @@ export async function listCronjobsIn(
   scope: string[] | null
 ): Promise<Scoped<CronJobInfo>> {
   return invoke<Scoped<CronJobInfo>>("list_cronjobs_in", { scope });
-}
-
-export async function listDependentsBeside(
-  owner: string,
-  uid: string,
-  scope: string[] | null
-): Promise<Beside> {
-  return invoke<Beside>("list_dependents_beside", { owner, uid, scope });
 }

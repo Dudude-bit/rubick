@@ -18,6 +18,7 @@ import {
   describeStop,
   describeUsages,
   referencesUnread,
+  rowExistence,
   hopTone,
   stopCause,
   stopUnder,
@@ -2260,6 +2261,7 @@ describe("the groups", () => {
     subPath: null,
     volume: "config",
     projected: false,
+    optional: false,
   };
   const env: Usage = {
     how: "env",
@@ -2302,7 +2304,7 @@ describe("the groups", () => {
           mount,
           { ...mount, container: "seed" },
           env,
-          { how: "envFrom", container: "app" },
+          { how: "envFrom", container: "app", optional: false },
         ],
         t
       )
@@ -2475,6 +2477,40 @@ describe("the groups", () => {
     ]);
     expect(needsOf(false)?.missingKeys).toEqual(usedByOf(false)?.missingKeys);
     expect(needsOf(null)?.missingKeys).toBeUndefined();
+  });
+
+  const absentTls = ref("Secret", "argocd-repo-server-tls", null, "missing");
+  const tlsDrawn = (usages: Usage[]) => {
+    const server = ref("Deployment", "argocd-repo-server");
+    const row = connectionGroups(
+      connections(server, [
+        { from: server, to: absentTls, relation: { verb: "uses", usages } },
+      ]),
+      t
+    ).find((group) => group.key === "needs")?.rows[0];
+    return row && rowExistence(row, t);
+  };
+
+  /** argocd-repo-server, 5/5 Ready, drew its absent argocd-repo-server-tls
+   *  in red under Needs to run: the volume says `optional: true`. Fails if
+   *  an optional mount, unmounted volume or envFrom is drawn missing, or if
+   *  one required use beside them is let off. */
+  it("draws an absent object every use of which is optional as not present, never missing", () => {
+    const optional = { ...mount, optional: true };
+    const notPresent = { existence: "optional · not present", missing: false };
+    expect(tlsDrawn([optional])).toEqual(notPresent);
+    expect(
+      tlsDrawn([
+        { how: "unmounted", volume: "tls", projected: false, optional: true },
+        { how: "envFrom", container: "app", optional: true },
+      ])
+    ).toEqual(notPresent);
+    const required = {
+      existence: describeExistence(absentTls, t),
+      missing: true,
+    };
+    expect(tlsDrawn([optional, mount])).toEqual(required);
+    expect(tlsDrawn([optional, { how: "imagePullSecret" }])).toEqual(required);
   });
 });
 
@@ -3540,7 +3576,7 @@ describe("what a delete leaves pointing at the object", () => {
           to: config,
           relation: {
             verb: "uses",
-            usages: [{ how: "envFrom", container: "app" }],
+            usages: [{ how: "envFrom", container: "app", optional: false }],
           },
         },
       ]),
@@ -3675,6 +3711,7 @@ describe("a Links tab in Russian", () => {
                   subPath: null,
                   volume: "data",
                   projected: false,
+                  optional: false,
                 },
               ],
             },

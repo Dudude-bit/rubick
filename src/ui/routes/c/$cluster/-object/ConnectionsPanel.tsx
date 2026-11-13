@@ -22,7 +22,7 @@ import { shortRevision } from "@/integrations";
 import { cn } from "@/lib/utils";
 import {
   connectionGroups,
-  describeExistence,
+  rowExistence,
   type ConnRow,
   type OutsideEnd,
 } from "@/lib/connections";
@@ -149,9 +149,7 @@ function MissingKeys({ row }: { row: ConnRow }) {
 
 function Row({ row }: { row: ConnRow }) {
   const t = useT();
-  const existence = row.object
-    ? describeExistence(row.object, t, row.verifiable ?? false)
-    : null;
+  const { existence, missing } = rowExistence(row, t);
   // One way stays on the name's line, as a name and what it is for. Several
   // become their own lines, because five clauses joined by commas is a
   // sentence nobody finishes.
@@ -179,14 +177,10 @@ function Row({ row }: { row: ConnRow }) {
             <span
               className={cn(
                 "text-caption",
-                row.object?.existence === "missing" && !row.optionalOnly
-                  ? "text-err"
-                  : "text-fg-fnt"
+                missing ? "text-err" : "text-fg-fnt"
               )}
             >
-              {row.object?.existence === "missing" && row.optionalOnly
-                ? t("nav", "optionalNotPresent")
-                : existence}
+              {existence}
             </span>
           )}
         </span>

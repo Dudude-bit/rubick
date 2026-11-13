@@ -14,7 +14,7 @@
 //! spelled out.
 
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::core::v1::PodSpec;
+use k8s_openapi::api::core::v1::{PodSpec, Volume};
 use serde::{Deserialize, Serialize};
 
 use super::gateway::{ListenerInfo, ObjectName};
@@ -269,10 +269,16 @@ pub enum Usage {
         volume: String,
         /// Reached through a `projected` volume rather than named directly.
         projected: bool,
+        /// `optional: true` where the volume names it: the pod starts without it.
+        optional: bool,
     },
     /// A volume declared from this object that no container mounts. A real
     /// state, and the silent mistake the YAML does not point at.
-    Unmounted { volume: String, projected: bool },
+    Unmounted {
+        volume: String,
+        projected: bool,
+        optional: bool,
+    },
     /// One environment variable reading one key.
     Env {
         container: String,
@@ -285,7 +291,7 @@ pub enum Usage {
         key_present: Option<bool>,
     },
     /// Every key becomes an environment variable.
-    EnvFrom { container: String },
+    EnvFrom { container: String, optional: bool },
     /// `spec.imagePullSecrets`.
     ImagePullSecret,
     /// `spec.serviceAccountName` — the identity the containers hold.
@@ -481,8 +487,9 @@ pub enum ChainStop {
     PublishesNothingYet {
         service: ObjectRef,
         selector: String,
-        /// Every workload behind it waits on pods that could not be read to
-        /// say whether they are still starting.
+        /// Its pods were not read, and could have said it is no fault: a
+        /// workload behind it at zero, making or waiting on its pods, or the
+        /// workloads not read either.
         #[serde(rename = "podsUnread", default)]
         pods_unread: bool,
     },
@@ -802,11 +809,13 @@ pub fn usages_in_pod_spec(spec: &PodSpec, target_kind: &str, target_name: &str) 
             continue;
         }
         let projected = source == "projected";
+        let optional = optional_in(volume, target_kind, target_name);
         let mounts = mounts_of(spec, &volume.name);
         if mounts.is_empty() {
             usages.push(Usage::Unmounted {
                 volume: volume.name.clone(),
                 projected,
+                optional,
             });
             continue;
         }
@@ -817,6 +826,7 @@ pub fn usages_in_pod_spec(spec: &PodSpec, target_kind: &str, target_name: &str) 
             sub_path: mount.sub_path,
             volume: volume.name.clone(),
             projected,
+            optional,
         }));
     }
 
@@ -855,20 +865,23 @@ pub fn usages_in_pod_spec(spec: &PodSpec, target_kind: &str, target_name: &str) 
         }
 
         for env_from in container.env_from.iter().flatten() {
-            let matches = match target_kind {
+            let optional = match target_kind {
                 "ConfigMap" => env_from
                     .config_map_ref
                     .as_ref()
-                    .is_some_and(|r| r.name == target_name),
+                    .filter(|r| r.name == target_name)
+                    .map(|r| r.optional),
                 "Secret" => env_from
                     .secret_ref
                     .as_ref()
-                    .is_some_and(|r| r.name == target_name),
-                _ => false,
+                    .filter(|r| r.name == target_name)
+                    .map(|r| r.optional),
+                _ => None,
             };
-            if matches {
+            if let Some(optional) = optional {
                 usages.push(Usage::EnvFrom {
                     container: container.name.clone(),
+                    optional: optional.unwrap_or(false),
                 });
             }
         }
@@ -890,6 +903,36 @@ pub fn usages_in_pod_spec(spec: &PodSpec, target_kind: &str, target_name: &str) 
     }
 
     usages
+}
+
+/// Whether every source of `volume` naming the object says `optional: true`.
+/// A source with no such bit, a claim's, never does.
+fn optional_in(volume: &Volume, target_kind: &str, target_name: &str) -> bool {
+    if let Some(config_map) = &volume.config_map {
+        return config_map.optional == Some(true);
+    }
+    if let Some(secret) = &volume.secret {
+        return secret.optional == Some(true);
+    }
+    let named: Vec<Option<bool>> = volume
+        .projected
+        .iter()
+        .flat_map(|projected| projected.sources.iter().flatten())
+        .filter_map(|source| match target_kind {
+            "ConfigMap" => source
+                .config_map
+                .as_ref()
+                .filter(|c| c.name == target_name)
+                .map(|c| c.optional),
+            "Secret" => source
+                .secret
+                .as_ref()
+                .filter(|s| s.name == target_name)
+                .map(|s| s.optional),
+            _ => None,
+        })
+        .collect();
+    !named.is_empty() && named.iter().all(|optional| *optional == Some(true))
 }
 
 #[cfg(test)]
@@ -935,6 +978,7 @@ mod tests {
                 sub_path: None,
                 volume: "data".to_string(),
                 projected: false,
+                optional: false,
             }]
         );
     }
@@ -949,7 +993,104 @@ mod tests {
             vec![Usage::Unmounted {
                 volume: "data".to_string(),
                 projected: false,
+                optional: false,
             }]
+        );
+    }
+
+    /// argocd-repo-server, 5/5 Ready, drew its absent `argocd-repo-server-tls`
+    /// in red under Needs to run: the volume says `optional: true` and the
+    /// wire carried no bit to say so. Fails if a mount, an unmounted volume,
+    /// a projection or an `envFrom` stops carrying the source's own
+    /// `optional`, or claims it where a source naming the object does not.
+    #[test]
+    fn an_optional_source_says_so_on_every_way_it_is_drawn_on() {
+        use k8s_openapi::api::core::v1::{
+            EnvFromSource, ProjectedVolumeSource, SecretEnvSource, SecretProjection,
+            SecretVolumeSource, VolumeProjection,
+        };
+        let secret = |optional: Option<bool>| Volume {
+            name: "argocd-repo-server-tls".to_string(),
+            secret: Some(SecretVolumeSource {
+                secret_name: Some("argocd-repo-server-tls".to_string()),
+                optional,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let projection = |optional: Option<bool>| VolumeProjection {
+            secret: Some(SecretProjection {
+                name: "argocd-repo-server-tls".to_string(),
+                optional,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let projected = |sources: Vec<VolumeProjection>| Volume {
+            name: "bundle".to_string(),
+            projected: Some(ProjectedVolumeSource {
+                sources: Some(sources),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let optional = |volume: Volume, mounted: bool, env_from: Option<bool>| {
+            let spec = PodSpec {
+                containers: vec![Container {
+                    name: "argocd-repo-server".to_string(),
+                    volume_mounts: mounted.then(|| {
+                        vec![VolumeMount {
+                            name: volume.name.clone(),
+                            mount_path: "/app/config/reposerver/tls".to_string(),
+                            ..Default::default()
+                        }]
+                    }),
+                    env_from: env_from.map(|optional| {
+                        vec![EnvFromSource {
+                            secret_ref: Some(SecretEnvSource {
+                                name: "argocd-repo-server-tls".to_string(),
+                                optional: Some(optional),
+                            }),
+                            ..Default::default()
+                        }]
+                    }),
+                    ..Default::default()
+                }],
+                volumes: Some(vec![volume]),
+                ..Default::default()
+            };
+            usages_in_pod_spec(&spec, "Secret", "argocd-repo-server-tls")
+                .into_iter()
+                .map(|usage| match usage {
+                    Usage::Mount { optional, .. }
+                    | Usage::Unmounted { optional, .. }
+                    | Usage::EnvFrom { optional, .. } => optional,
+                    other => panic!("{other:?}"),
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(optional(secret(Some(true)), true, None), [true]);
+        assert_eq!(optional(secret(None), true, None), [false]);
+        assert_eq!(optional(secret(Some(true)), false, None), [true]);
+        assert_eq!(
+            optional(secret(Some(false)), false, Some(true)),
+            [false, true]
+        );
+        assert_eq!(
+            optional(
+                projected(vec![projection(Some(true)), projection(Some(true))]),
+                true,
+                None
+            ),
+            [true]
+        );
+        assert_eq!(
+            optional(
+                projected(vec![projection(Some(true)), projection(None)]),
+                true,
+                None
+            ),
+            [false]
         );
     }
 
@@ -1000,6 +1141,7 @@ mod tests {
                     sub_path: None,
                     volume: "app-config".to_string(),
                     projected: false,
+                    optional: false,
                 },
                 Usage::Env {
                     container: "app".to_string(),
@@ -1080,6 +1222,7 @@ mod tests {
             sub_path: Some("app.conf".to_string()),
             volume: "app-config".to_string(),
             projected: false,
+            optional: false,
         })
         .expect("serialize");
         assert_eq!(json["how"], "mount");

@@ -495,11 +495,6 @@ export interface PublishedPort {
   exposed: boolean;
 }
 
-export interface OtherPolicyKinds {
-  namespace: string;
-  kinds: string[];
-}
-
 export interface NetworkPolicyInfo {
   name: string;
   namespace: string;
@@ -667,6 +662,11 @@ export interface CommandTimes {
   p95: number;
   max: number;
   maxApiCalls: number;
+}
+
+export interface OtherPolicyKinds {
+  namespace: string;
+  kinds: string[];
 }
 
 export interface NodeMetricsResponse {
@@ -1033,6 +1033,11 @@ export interface SetupWarning {
   fault: SetupFault;
 }
 
+export interface LatestEvents {
+  events: EventInfo[];
+  short: boolean;
+}
+
 export interface EventInfo {
   name: string;
   namespace: string;
@@ -1053,11 +1058,6 @@ export interface InvolvedObjectInfo {
   name: string;
   namespace: string | null;
   uid: string | null;
-}
-
-export interface LatestEvents {
-  events: EventInfo[];
-  short: boolean;
 }
 
 export interface EventFilters {
@@ -1134,12 +1134,9 @@ export interface KindCount {
   count: number;
 }
 
-export interface Dependents {
-  dependents: Dependent[];
-  page: number;
-  pageSize: number;
-  total: number;
-  notRead: NotRead;
+export interface Beside {
+  previous: Dependent | null;
+  next: Dependent | null;
 }
 
 export interface Dependent {
@@ -1152,6 +1149,14 @@ export interface Dependent {
   namespace: string | null;
   controlled: boolean;
   dependents: number;
+}
+
+export interface Dependents {
+  dependents: Dependent[];
+  page: number;
+  pageSize: number;
+  total: number;
+  notRead: NotRead;
 }
 
 export interface CronJobDetailInfo {
@@ -3000,8 +3005,9 @@ export type Usage =
       subPath: string | null;
       volume: string;
       projected: boolean;
+      optional: boolean;
     }
-  | { how: "unmounted"; volume: string; projected: boolean }
+  | { how: "unmounted"; volume: string; projected: boolean; optional: boolean }
   | {
       how: "env";
       container: string;
@@ -3010,7 +3016,7 @@ export type Usage =
       optional: boolean;
       keyPresent: boolean | null;
     }
-  | { how: "envFrom"; container: string }
+  | { how: "envFrom"; container: string; optional: boolean }
   | { how: "imagePullSecret" }
   | { how: "identity" }
   | { how: "ingressTls"; hosts: string[] };
@@ -3054,12 +3060,6 @@ export type SearchContextStatus =
   | "failed"
   | "skipped";
 
-export type ApplyOutcome =
-  | { says: "applied" }
-  | { says: "refused"; code: string; said: string }
-  | { says: "unanswered"; said: string }
-  | { says: "notSent" };
-
 export type DryRunOutcome =
   | { says: "created" }
   | { says: "configured" }
@@ -3067,6 +3067,12 @@ export type DryRunOutcome =
   | { says: "liveUnread"; said: string }
   | { says: "refused"; said: string }
   | { says: "unanswered"; said: string };
+
+export type ApplyOutcome =
+  | { says: "applied" }
+  | { says: "refused"; code: string; said: string }
+  | { says: "unanswered"; said: string }
+  | { says: "notSent" };
 
 export type AnsiColor =
   | { kind: "named"; index: number }
@@ -3093,6 +3099,11 @@ export type FieldOp = "=" | "≠";
 
 export type LevelOp = "=" | "≥";
 
+export type WithheldPart =
+  | { says: "keys"; keys: string[] }
+  | { says: "rewritten"; keys: string[] }
+  | { says: "unread" };
+
 export type TerminalState =
   | "idle"
   | "connecting"
@@ -3104,6 +3115,11 @@ export type TerminalState =
 export type RollbackOutcome =
   | { outcome: "rolledBack" }
   | { outcome: "alreadyThere" };
+
+export type Holder =
+  | { held: "by"; uid: string }
+  | { held: "nobody" }
+  | { held: "notRead" };
 
 export type CountKind =
   | "pods"
@@ -3124,6 +3140,10 @@ export type CountKind =
 
 export type OverviewSource = "watch" | "list";
 
+export type EventsShort =
+  | { why: "capped"; namespace: string | null }
+  | { why: "failed"; namespace: string | null; code: string; message: string };
+
 export type Incarnation = "current" | "earlier" | "gone" | "unchecked";
 
 export type ProblemDetail =
@@ -3142,15 +3162,6 @@ export type ProblemDetail =
   | { says: "podsRefused"; said: string };
 
 export type ProblemSeverity = "critical" | "warning";
-
-export type EventsShort =
-  | { why: "capped"; namespace: string | null }
-  | { why: "failed"; namespace: string | null; code: string; message: string };
-
-export type Holder =
-  | { held: "by"; uid: string }
-  | { held: "nobody" }
-  | { held: "notRead" };
 
 export type CertificateProblem =
   | { says: "noSecret" }
@@ -3349,11 +3360,6 @@ export type Withheld =
   | { says: "keyName" }
   | { says: "helmRelease" };
 
-export type WithheldPart =
-  | { says: "keys"; keys: string[] }
-  | { says: "rewritten"; keys: string[] }
-  | { says: "unread" };
-
 export type FileRead =
   | { state: "preview"; preview: FilePreview }
   | { state: "withheld" }
@@ -3362,8 +3368,3 @@ export type FileRead =
   | { state: "failed"; exit_code: number | null; message: string };
 
 export type RawJson = RawValue;
-
-export interface Beside {
-  previous: Dependent | null;
-  next: Dependent | null;
-}
