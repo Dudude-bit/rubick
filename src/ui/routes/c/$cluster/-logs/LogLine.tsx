@@ -216,10 +216,11 @@ export const LogLineComponent = memo(function LogLineComponent({
                 key: "level",
                 value: LEVEL_WORDS[level],
               })}
+              aria-label={LEVEL_WORDS[level]}
               className={`mr-2 text-micro font-semibold uppercase tracking-wide hover:underline ${LEVEL_COLORS[level]}`}
               onClick={() => onLevelClick?.(level)}
             >
-              {LEVEL_WORDS[level]}
+              {level === "unknown" ? "·" : LEVEL_WORDS[level]}
             </button>
           )}
           <button

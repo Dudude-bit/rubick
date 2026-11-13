@@ -1003,3 +1003,41 @@ describe("a Service none of whose pods is ready", () => {
     expect(failing("podsUnread").reason).not.toContain("web exited");
   });
 });
+
+describe("a headless Service that selects no pod", () => {
+  const stop: ChainStop = {
+    reason: "selectsNothing",
+    service: SERVICE,
+    selector: "app=db",
+    near: null,
+    makersRead: true,
+  };
+  const facts = (clusterIp: string) =>
+    ({
+      kind: "service",
+      type: "ClusterIP",
+      clusterIp,
+      externalName: null,
+      selector: "app=db",
+      ports: [],
+    }) as ObjectRef["facts"];
+
+  /** A headless Service has no address to refuse a connection; fails if the note says it does. */
+  it("says its DNS name resolves to nothing, not that an address refuses connections", () => {
+    const hop = chainStopHop(stop, { ...SERVICE, facts: facts("None") }, t);
+    expect(hop).toMatchObject({
+      note: expect.stringContaining("resolves to nothing"),
+    });
+    expect(hop).not.toMatchObject({
+      note: expect.stringContaining("connection refused"),
+    });
+  });
+
+  /** The ordinary Service keeps its sentence; fails if the headless words leak to it. */
+  it("keeps the refusal for a Service that has an address", () => {
+    const hop = chainStopHop(stop, { ...SERVICE, facts: facts("10.0.0.1") }, t);
+    expect(hop).toMatchObject({
+      note: expect.stringContaining("connection refused"),
+    });
+  });
+});

@@ -183,10 +183,9 @@ function DeliveryWhere({
 }
 
 /**
- * The `Delivery` column's cell. Empty for the ordinary delivered-and-fine
- * row, which on a GitOps cluster is most of them: a problem earns a mark and
- * inventory does not. `not delivered` is faint and not a warning — it is
- * worth knowing and it is not a fault.
+ * The `Delivery` column's cell: the controller's name for the ordinary
+ * delivered-and-fine row, a warning for a problem. `not delivered` is faint
+ * and not a warning — it is worth knowing and it is not a fault.
  */
 export function DeliveryCell({ deliveries }: { deliveries: Delivery[] }) {
   const t = useT();

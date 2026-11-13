@@ -1,12 +1,11 @@
 /**
  * The `Delivery` column, and the filter that is the real reason it exists.
  *
- * There is deliberately **no "managed" mark**: on a cluster Argo or Flux runs
- * every row would carry one, and the column earns its width by being empty
- * for the ordinary row. The filter is where being delivered pays off instead
- * — *show me what Argo does not own* is how you find the thing somebody
- * applied by hand and never wrote down, and it costs nothing on screen until
- * it is used.
+ * A delivered row names its controller in the faintest tone, so the cell is
+ * never blank over a peek that names it, and a problem still outshouts it.
+ * The filter is where being delivered pays off — *show me what Argo does not
+ * own* is how you find the thing somebody applied by hand and never wrote
+ * down.
  */
 
 import { Eyebrow, SegmentedControl } from "@/components/ui/states";

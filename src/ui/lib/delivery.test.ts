@@ -199,9 +199,13 @@ describe("a label is a claim, and an unconfirmed claim is never delivery", () =>
   });
 });
 
-describe("the list column is empty for the rule and marks the exception", () => {
-  it("draws nothing for a delivered, in-sync row", () => {
-    expect(deliveryCell([delivered()], t)).toBe(null);
+describe("the list column names the controller for the rule and marks the exception", () => {
+  /** A blank cell beside a peek that names Argo CD; fails if the cell goes empty again. */
+  it("names the controller, faintly, for a delivered, in-sync row", () => {
+    expect(deliveryCell([delivered()], t)).toEqual({
+      text: "Argo CD",
+      tone: "faint",
+    });
   });
 
   it("draws `not delivered` quietly, because it is not a fault", () => {
@@ -228,7 +232,7 @@ describe("the list column is empty for the rule and marks the exception", () => 
         [delivered({ vendor: "Flux", vendorId: "flux", sync: null })],
         t
       )
-    ).toBe(null);
+    ).toEqual({ text: "Flux", tone: "faint" });
   });
 
   it("filters to what nothing delivers, and to what needs attention", () => {

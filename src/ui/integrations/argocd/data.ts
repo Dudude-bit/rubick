@@ -13,7 +13,9 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 
+import { STALE_TIMES } from "@/lib/refresh";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -32,8 +34,7 @@ export const PROJECTS_CRD = `appprojects.${GROUP}`;
 /** Every Argo component labels its own workload with this. */
 const CONTROLLER_SELECTOR = "app.kubernetes.io/part-of=argocd";
 
-/** A minute: a sync takes minutes and the page is read, not watched. */
-export const ARGO_STALE = 60_000;
+export const ARGO_STALE = STALE_TIMES.resourceList;
 
 export const APPLICATIONS_KEY = ["argocd", "applications"] as const;
 
@@ -49,7 +50,8 @@ export async function fetchApplications(): Promise<ArgoApp[]> {
 
 export function useApplications() {
   const context = useClusterStore((state) => state.currentContext);
-  return useQuery({
+  return useLiveQuery({
+    refresh: "resourceList",
     queryKey: [context, ...APPLICATIONS_KEY],
     queryFn: fetchApplications,
     staleTime: ARGO_STALE,
@@ -77,7 +79,8 @@ export async function fetchApplicationSets(): Promise<CustomResourceInfo[]> {
 
 export function useApplicationSets() {
   const context = useClusterStore((state) => state.currentContext);
-  return useQuery({
+  return useLiveQuery({
+    refresh: "resourceList",
     queryKey: [context, "argocd", "applicationsets"],
     queryFn: fetchApplicationSets,
     staleTime: ARGO_STALE,
@@ -86,7 +89,8 @@ export function useApplicationSets() {
 
 export function useProjects() {
   const context = useClusterStore((state) => state.currentContext);
-  return useQuery({
+  return useLiveQuery({
+    refresh: "resourceList",
     queryKey: [context, "argocd", "projects"],
     queryFn: () => commands.listCustomResources(PROJECTS_CRD, null, null, null),
     staleTime: ARGO_STALE,

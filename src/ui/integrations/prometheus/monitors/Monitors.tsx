@@ -521,10 +521,12 @@ function Ladder({
             </p>
           ))}
       </div>
-      <p className="mt-auto flex gap-3 border-t border-hair pt-2 text-caption text-fg-fnt">
-        <span>{t("monitors", "keysMove")}</span>
-        <span>{t("monitors", "keysOpen")}</span>
-      </p>
+      {shown.length > 0 && (
+        <p className="mt-auto flex gap-3 border-t border-hair pt-2 text-caption text-fg-fnt">
+          <span>{t("monitors", "keysMove")}</span>
+          <span>{t("monitors", "keysOpen")}</span>
+        </p>
+      )}
     </div>
   );
 }

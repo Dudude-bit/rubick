@@ -39,7 +39,8 @@ vi.mock("./data", async (original) => ({
   usePicture: () => ({ data: PICTURE, error: null, refetch: () => {} }),
 }));
 vi.mock("./Detail", () => ({ Detail: () => null }));
-vi.mock("../saved-connection", () => ({
+vi.mock("../saved-connection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../saved-connection")>()),
   useSavedConnection: () => ({ data: null }),
 }));
 
@@ -138,6 +139,30 @@ describe("a cluster with monitors and no Prometheus object", () => {
     expect(notice.className).not.toContain("text-err");
     expect(screen.queryByText(en.monitors.rowNotPickedUp)).toBeNull();
     expect(screen.getAllByText(en.monitors.rowNotChecked)).toHaveLength(2);
+  });
+});
+
+/** The move/open hint sat under an empty list; fails if it shows with no rows to move over. */
+describe("the keyboard hint under the ladder", () => {
+  const before = PICTURE;
+  afterEach(() => {
+    PICTURE = before;
+  });
+
+  it("is shown over rows and gone over none", async () => {
+    const view = await renderWithRouter(<Monitors />, {
+      at: "/c/prod/integrations/prometheus",
+    });
+    expect(await screen.findByText(en.monitors.keysMove)).toBeInTheDocument();
+    view.unmount();
+    PICTURE = {
+      ...before,
+      serviceMonitors: { state: "read", items: [] },
+    } as unknown as Picture;
+    await renderWithRouter(<Monitors />, {
+      at: "/c/prod/integrations/prometheus",
+    });
+    expect(screen.queryByText(en.monitors.keysMove)).toBeNull();
   });
 });
 

@@ -489,7 +489,7 @@ function PickedUpStep({
       ? "mut"
       : pickedUp.by.length > 0
         ? "ok"
-        : pickedUp.state === "unknown"
+        : pickedUp.state === "unknown" || row.scrape.state !== "read"
           ? "warn"
           : "err";
   return (
@@ -569,7 +569,14 @@ function PickedUpStep({
         );
       })}
       {pickedUp.state === "judged" && pickedUp.by.length === 0 && (
-        <p className="text-xs text-err">{t("monitors", "notPickedUp")}</p>
+        <p
+          className={cn(
+            "text-xs",
+            row.scrape.state === "read" ? "text-err" : "text-warn"
+          )}
+        >
+          {t("monitors", "notPickedUp")}
+        </p>
       )}
       {pickedUp.state === "unknown" && pickedUp.by.length === 0 && (
         <p className="text-xs text-warn">{unknowableWords(pickedUp.why, t)}</p>

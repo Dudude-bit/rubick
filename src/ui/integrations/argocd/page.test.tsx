@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 
+import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 
@@ -143,6 +144,26 @@ async function openRow(name: string) {
     await screen.findByRole("button", { name: `Expand ${name}` })
   );
 }
+
+describe("the freshness of the Applications read", () => {
+  /** The page re-read on a bare staleTime and drew no mark; fails if the chip goes. */
+  it("says how current the Applications are, as every list does", async () => {
+    answers.set(APPLICATIONS_CRD, () =>
+      Promise.resolve([
+        application(
+          "aaa",
+          {},
+          { sync: { status: "Synced" }, health: { status: "Healthy" } }
+        ),
+      ])
+    );
+    useClusterStore.setState({ isConnected: true });
+    await renderOn("applications");
+    await waitFor(() =>
+      expect(screen.getAllByText("polling").length).toBeGreaterThan(0)
+    );
+  });
+});
 
 describe("Applications that are not in sync", () => {
   const healthy = application(

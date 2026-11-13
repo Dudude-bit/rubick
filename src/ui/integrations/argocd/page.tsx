@@ -19,6 +19,7 @@
  * answers through the `service.routes` capability.
  */
 
+import { DataFreshness } from "@/components/ui/realtime";
 import { Eyebrow, Reading } from "@/components/ui/states";
 import { applicationsNeedAttention } from "@/lib/two-counts";
 import { useCallback, useMemo } from "react";
@@ -247,13 +248,21 @@ export default function ArgoCdPage() {
         activeTab={tab}
         onTabChange={setTab}
         actions={
-          <ShareScreenAction
-            screen={{
-              scope: null,
-              title: `Argo CD · ${activeTab.label}`,
-              icon: activeTabIcon,
-            }}
-          />
+          <>
+            <DataFreshness
+              dataUpdatedAt={applications.freshness.dataUpdatedAt}
+              slowed={applications.freshness.slowed}
+              stale={applications.freshness.stale}
+              slowRead={applications.freshness.slowRead}
+            />
+            <ShareScreenAction
+              screen={{
+                scope: null,
+                title: `Argo CD · ${activeTab.label}`,
+                icon: activeTabIcon,
+              }}
+            />
+          </>
         }
       />
     </div>

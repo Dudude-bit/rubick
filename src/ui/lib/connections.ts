@@ -32,7 +32,7 @@ import {
   type IngressClaim,
 } from "./ingress-health";
 import type { RouteTls } from "./ingress-tls";
-import { clusterIpText } from "./cluster-ip";
+import { clusterIpOf, clusterIpText } from "./cluster-ip";
 import { refusalText } from "./create-refusal";
 import { makersUnread, stopMood, type StopMood } from "./stop-mood";
 import {
@@ -831,6 +831,12 @@ export function chainStopHop(
     };
   }
   const said = describeStop(stop, t);
+  if (
+    subject.facts?.kind === "service" &&
+    clusterIpOf(subject.facts.clusterIp).state === "headless" &&
+    said.note === t("nav", "connectionRefusedNothingBehind")
+  )
+    said.note = t("nav", "headlessNothingBehind");
   if (stop.reason === "podsRefused") {
     const others = stop.workloads.filter(
       (workload) => !sameObject(workload, subject)

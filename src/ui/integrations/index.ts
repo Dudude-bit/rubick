@@ -526,6 +526,11 @@ export function vendorIcon(vendorId: string): LucideIcon | null {
   );
 }
 
+/** The name a vendor goes by, or `null` for an id this registry does not know. */
+export function vendorName(vendorId: string): string | null {
+  return VENDORS.find((vendor) => vendor.id === vendorId)?.name ?? null;
+}
+
 /**
  * A detected extension's facts, or the reason there are none.
  *

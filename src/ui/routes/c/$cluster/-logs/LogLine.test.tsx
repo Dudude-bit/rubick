@@ -75,6 +75,38 @@ describe("how a collapsed run of repeats says how long it took", () => {
   });
 });
 
+describe("the Table view's level cell", () => {
+  const drawTable = (level: StreamedLogLine["level"]) =>
+    render(
+      <LogLineComponent
+        log={{ ...line(1, 1), level }}
+        viewMode="table"
+        searchQuery=""
+        containerColor={undefined}
+        expanded={false}
+        onToggleDetail={() => {}}
+        lineId={1}
+      />
+    );
+
+  /** "UNLABELLED" shouted louder than the message; fails if a line with no level prints a word for it. */
+  it("draws a dash, not a word, for a line with no level", () => {
+    useLocaleStore.setState({ choice: "en" });
+    drawTable(null);
+    expect(screen.queryByText("unlabelled")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "unlabelled" })
+    ).toHaveTextContent("·");
+  });
+
+  /** The levels that exist keep their word. */
+  it("keeps the word for a line that has one", () => {
+    useLocaleStore.setState({ choice: "en" });
+    drawTable("warn");
+    expect(screen.getByText("warn")).toBeInTheDocument();
+  });
+});
+
 describe("what a collapsed run marks for a search", () => {
   /**
    * Marco's "payments": the single lines lit the word and the collapsed

@@ -118,6 +118,29 @@ describe("what the Monitors page says a Prometheus picks up", () => {
 });
 
 /**
+ * "Nothing scrapes it" was claimed in red with scraping unchecked. Fails if
+ * the not-picked-up line goes red while no Prometheus is connected.
+ */
+describe("the not-picked-up line", () => {
+  const unpicked = {
+    ...row,
+    pickedUp: { state: "judged", by: [] },
+  } as MonitorRow;
+  it("is amber while scraping is unchecked", async () => {
+    await renderWithRouter(
+      <Detail
+        row={unpicked}
+        picture={picture({ serviceMonitorSelector: {} })}
+      />,
+      { at: "/c/prod", route: "/c/$cluster" }
+    );
+    expect(screen.getByText(en.monitors.notPickedUp).className).toContain(
+      "text-warn"
+    );
+  });
+});
+
+/**
  * The step under "Picked up by" said "No Prometheus object in the cluster,
  * so nothing picks it up" in red. Fails if a cluster with no Prometheus
  * object gets the missing-CRD sentence, or a verdict about who reads it.
