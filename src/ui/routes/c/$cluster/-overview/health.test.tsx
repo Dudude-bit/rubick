@@ -948,9 +948,37 @@ describe("the Needs attention heading", () => {
       />
     );
     expect(
-      screen.getByText("2+ · worst first · not all checked")
+      screen.getByText("2 · worst first · not all checked")
     ).toBeInTheDocument();
     unmount();
+  });
+});
+
+describe("the Needs attention rows by keyboard", () => {
+  /**
+   * The footer promises "move". Fails if Down from the page does not land
+   * on the first row, or Down and Up on a row do not reach its neighbours.
+   */
+  it("moves a focus between the rows with the arrow keys", async () => {
+    const attention = attentionFrom([problem, { ...problem, name: "cart" }]);
+    await wrap(
+      <AttentionPanel
+        attention={attention}
+        pods={RUNNING}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    const rows = [...document.querySelectorAll("div[role=link]")];
+    expect(rows.length).toBeGreaterThan(1);
+    const user = userEvent.setup();
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(rows[0]);
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(rows[1]);
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(rows[0]);
   });
 });
 
@@ -1228,7 +1256,7 @@ describe("a scope one namespace of which refused its pods", () => {
     expect(problems.count).toBe(0);
     expect(problems.body).toEqual({
       type: "text",
-      text: "nothing found in what could be checked",
+      text: "no problems found · not all checked",
     });
 
     const unchecked = uncheckedShare(attention, t)!;
@@ -1293,7 +1321,7 @@ describe("a scope one namespace of which refused its pods", () => {
       />
     );
     expect(
-      screen.getByText("nothing found in what could be checked")
+      screen.getByText("no problems found · not all checked")
     ).toBeInTheDocument();
     const row = screen.getByTestId("attention-unconfirmed");
     expect(row).toHaveTextContent("ledger");
@@ -1883,7 +1911,7 @@ describe("what Needs attention says it checked", () => {
   /**
    * Sam's `net`: the Services could not be looked at and the panel said
    * "nothing broken". A refused kind is named with the cluster's reason, and
-   * the empty list is "nothing found in what could be checked", never
+   * the empty list is "no problems found · not all checked", never
    * "nothing needs attention". Fails if the refused branch is folded into read.
    */
   it("never says nothing needs attention beside a kind it was refused", async () => {
@@ -1905,9 +1933,7 @@ describe("what Needs attention says it checked", () => {
     const { container } = await panel(refused);
 
     expect(container).not.toHaveTextContent("nothing needs attention");
-    expect(container).toHaveTextContent(
-      "nothing found in what could be checked"
-    );
+    expect(container).toHaveTextContent("no problems found · not all checked");
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Services");
     expect(unchecked).toHaveTextContent("list is forbidden in net");

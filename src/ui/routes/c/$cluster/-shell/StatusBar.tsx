@@ -269,9 +269,7 @@ export function StatusBar({
                     {here.pods && !here.pods.complete && <span>·</span>}
                     {!here.pods?.complete && (
                       <span className="text-fg-fnt">
-                        {t("cluster", "podsNotCounted", {
-                          where: podsUnreadIn(here.unread, t),
-                        })}
+                        {podsUnreadIn(here.unread, t)}
                       </span>
                     )}
                     <span>·</span>
@@ -360,8 +358,10 @@ function podsUnreadIn(unread: readonly OverviewUnread[], t: T): string {
     ),
   ];
   return named.length === 0
-    ? t("cluster", "countsInAll")
-    : t("cluster", "countsIn", { scope: scopeLabel(named, t) });
+    ? t("cluster", "podsNotCountedBare")
+    : t("cluster", "podsNotCounted", {
+        where: t("cluster", "countsIn", { scope: scopeLabel(named, t) }),
+      });
 }
 
 /** The count the Overview's panel heads, in the colour of its worst row. */

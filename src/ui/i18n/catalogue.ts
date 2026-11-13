@@ -986,7 +986,8 @@ export const en = {
     rangeNeedsPrometheus:
       "Needs a Prometheus: metrics-server keeps no history to range over",
     realtimeUnavailable: "Real-time updates unavailable",
-    fallingBackToPolling: "{title}: falling back to periodic refresh.",
+    fallingBackToPolling:
+      "{title}: live updates stopped; the list is read again periodically.",
     dismissJob: "Dismiss {job} {name}",
     closeTerminal: "Close terminal",
     startShellIn: "Start a shell in {container}",
@@ -2843,6 +2844,7 @@ export const en = {
       one: "{n} monitor, scraped",
       other: "{n} monitors, all scraped",
     },
+    noMonitors: "0 monitors",
     scrapeUnchecked: {
       one: "{n} monitor; whether it is scraped is unchecked",
       other: "{n} monitors; whether they are scraped is unchecked",
@@ -4799,6 +4801,7 @@ export const en = {
     countPartialUnread:
       "The list could not be counted in {names}, so there may be more.",
     podsNotCounted: "pods not counted {where}",
+    podsNotCountedBare: "pods not counted",
     notReadWhere: "not read {where}",
     countsIn: "in {scope}",
     countsInAll: "in all namespaces",
@@ -4876,7 +4879,6 @@ export const en = {
     connectingInline: "connecting…",
     searchingInline: "searching…",
     failedInline: "failed",
-    kindsUnreadNamed: "{counts}: {kinds}",
     kindsRefusedHover: "The cluster refused your account: {kinds}",
     kindsRefusedInHover: "Refused in {namespaces}: {kinds}",
     kindFailedInHover: "{kind} in {namespaces}: {message}",
@@ -4900,14 +4902,16 @@ export const en = {
     signInAgain: "Sign in again",
     podCount: { one: "{n} pod", other: "{n} pods" },
     problemCount: { one: "{n} problem", other: "{n} problems" },
-    problemCountPartial: { other: "{n}+ problems, not all checked" },
-    problemCountAtLeast: { other: "{n}+ problems" },
-    problemsNotAllChecked: "not all checked",
+    problemCountPartial: {
+      one: "{n} problem · not all checked",
+      other: "{n} problems · not all checked",
+    },
+    problemsNoneNotAllChecked: "no problems found · not all checked",
     finishedOnNode: "Finished here",
     finishedOnNodeNote:
       "Succeeded and Failed pods hold no place on the node, so the pod counts on this page leave them out, as kubectl describe node does.",
     attentionNothing: "nothing needs attention",
-    attentionNoneFound: "nothing found in what could be checked",
+    attentionNoneFound: "no problems found · not all checked",
     attentionNotChecked: "Not checked",
     attentionUnconfirmed:
       "its controller has said {word} for {age}; its pods were not read",
@@ -6112,6 +6116,7 @@ export const en = {
     insideTheProxy: "inside the proxy",
     thePathThrough: "the path through {path}",
     notReadLower: "not read",
+    podsNotReadLower: "pods not read",
     kindRule: "{kind} rule",
     shownInFullBelow: "shown in full below",
     traefiksOwnNotService: "Traefik's own, not a Service",
@@ -6675,6 +6680,7 @@ export const en = {
       "{vendor} answered with nothing for this workload; its labels may not match this app's query (tried {labels}). Nothing was found in the last {range}.",
     historyLoadedSummary:
       "from {from}, the last {range}. Not live: these lines do not grow and {follow} does not reach them.",
+    notReadFault: "could not be read",
     notReadableWithAccess: "not readable with this access",
     valueNotRead: "not read",
     eventsNeedDefinition:
@@ -7024,6 +7030,8 @@ export const en = {
     couldNotReadInScope: "Could not read {label} in this scope.",
     staleRows:
       "Could not read {label} just now. The rows below are from {time}, the last read that answered.",
+    watchLiveListFailing:
+      "The rows come from the open watch, which is still live. A fresh list of {label} is failing.",
     staleObject:
       "Could not read {label} just now. What is below is from {time}, the last read that answered.",
     couldNotReadInNamespace: "Could not read {label} in {namespace}.",
@@ -8717,7 +8725,7 @@ export const en = {
       other: "{n} Failed and replaced, in their workloads' rows",
     },
     worstFirst: "{n} · worst first",
-    worstFirstPartial: "{n}+ · worst first · not all checked",
+    worstFirstPartial: "{n} · worst first · not all checked",
     moreMostSevere: "+{n} more; showing the {shown} most severe",
     unrankedProblems: {
       one: "{n} unranked problem",

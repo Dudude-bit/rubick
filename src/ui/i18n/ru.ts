@@ -983,7 +983,8 @@ export const ru: Catalogue = {
     rangeNeedsPrometheus:
       "Нужен Prometheus: metrics-server не хранит историю, по которой можно выбрать интервал",
     realtimeUnavailable: "Обновления в реальном времени недоступны",
-    fallingBackToPolling: "{title}: переходим на периодическое обновление.",
+    fallingBackToPolling:
+      "{title}: живые обновления остановились, список перечитывается периодически.",
     dismissJob: "Убрать {job} {name}",
     closeTerminal: "Закрыть терминал",
     startShellIn: "Запустить оболочку в {container}",
@@ -3002,6 +3003,7 @@ export const ru: Catalogue = {
       many: "{n} мониторов, метрики собираются по всем",
       other: "{n} монитора, метрики собираются по всем",
     },
+    noMonitors: "0 мониторов",
     scrapeUnchecked: {
       one: "{n} монитор, собираются ли метрики, не проверено",
       few: "{n} монитора, собираются ли метрики, не проверено",
@@ -5370,6 +5372,7 @@ export const ru: Catalogue = {
     countPartialUnread:
       "В {names} список посчитать не удалось, так что всего может быть больше.",
     podsNotCounted: "поды не посчитаны {where}",
+    podsNotCountedBare: "поды не посчитаны",
     notReadWhere: "не прочитано {where}",
     countsIn: "в {scope}",
     countsInAll: "во всех пространствах имён",
@@ -5460,7 +5463,6 @@ export const ru: Catalogue = {
     connectingInline: "подключение…",
     searchingInline: "поиск…",
     failedInline: "ошибка",
-    kindsUnreadNamed: "{counts}: {kinds}",
     kindsRefusedHover: "Кластер отказал вашей учётной записи: {kinds}",
     kindsRefusedInHover: "Отказано в {namespaces}: {kinds}",
     kindFailedInHover: "{kind} в {namespaces}: {message}",
@@ -5494,14 +5496,18 @@ export const ru: Catalogue = {
       many: "{n} проблем",
       other: "{n} проблемы",
     },
-    problemCountPartial: { other: "{n}+ проблем, проверено не всё" },
-    problemCountAtLeast: { other: "{n}+ проблем" },
-    problemsNotAllChecked: "проверено не всё",
+    problemCountPartial: {
+      one: "{n} проблема · проверено не всё",
+      few: "{n} проблемы · проверено не всё",
+      many: "{n} проблем · проверено не всё",
+      other: "{n} проблемы · проверено не всё",
+    },
+    problemsNoneNotAllChecked: "проблем не найдено · проверено не всё",
     finishedOnNode: "Завершились здесь",
     finishedOnNodeNote:
       "Поды в фазе Succeeded и Failed не занимают места на узле, поэтому счётчики подов на этой странице их не учитывают, как и kubectl describe node.",
     attentionNothing: "ничего не требует внимания",
-    attentionNoneFound: "в проверенном ничего не найдено",
+    attentionNoneFound: "проблем не найдено · проверено не всё",
     attentionNotChecked: "Не проверено",
     attentionUnconfirmed:
       "контроллер говорит {word} уже {age}; поды не прочитаны",
@@ -6778,6 +6784,7 @@ export const ru: Catalogue = {
     insideTheProxy: "внутри прокси",
     thePathThrough: "путь через {path}",
     notReadLower: "не прочитано",
+    podsNotReadLower: "поды не прочитаны",
     kindRule: "правило {kind}",
     shownInFullBelow: "полностью показано ниже",
     traefiksOwnNotService: "собственный объект Traefik, а не Service",
@@ -7388,6 +7395,7 @@ export const ru: Catalogue = {
       "{vendor} ничего не вернул для этой нагрузки: возможно, её метки не совпадают с запросом приложения (пробовали {labels}). За последние {range} ничего не найдено.",
     historyLoadedSummary:
       "из {from}, за последние {range}. Не в реальном времени: эти строки не растут, и «{follow}» до них не дотягивается.",
+    notReadFault: "не удалось прочитать",
     notReadableWithAccess: "недоступно с этими правами",
     valueNotRead: "не прочитано",
     eventsNeedDefinition:
@@ -7745,6 +7753,8 @@ export const ru: Catalogue = {
     couldNotReadInScope: "Не удалось прочитать {label} в текущей области.",
     staleRows:
       "Сейчас не удаётся прочитать {label}. Строки ниже получены в {time}, при последнем успешном чтении.",
+    watchLiveListFailing:
+      "Строки приходят из открытого наблюдения, оно по-прежнему работает. Свежий список ({label}) прочитать не удаётся.",
     staleObject:
       "Сейчас не удаётся прочитать {label}. Ниже показано то, что получено в {time}, при последнем успешном чтении.",
     couldNotReadInNamespace: "Не удалось прочитать {label} в {namespace}.",
@@ -10076,7 +10086,7 @@ export const ru: Catalogue = {
       other: "{n} Failed и заменены, в строках своих нагрузок",
     },
     worstFirst: "{n} · сначала худшие",
-    worstFirstPartial: "{n}+ · сначала худшие · проверено не всё",
+    worstFirstPartial: "{n} · сначала худшие · проверено не всё",
     moreMostSevere: "ещё {n}; показаны {shown} самых серьёзных",
     unrankedProblems: {
       one: "{n} проблема вне списка",

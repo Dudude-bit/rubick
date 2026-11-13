@@ -1551,7 +1551,7 @@ function NamespaceRow({
       role="option"
       aria-selected={row.selected}
       // Spelled out, because an option's own text reads as "prod 12 · 3 bad".
-      aria-label={[row.label, note ?? pods, problems?.spoken]
+      aria-label={[row.label, note ?? pods, problems?.shown]
         .filter(Boolean)
         .join(", ")}
       // The one thing about the row that cannot be read off the row itself:
@@ -1630,12 +1630,7 @@ function problemWords(problems: NamespaceAttention | null, t: T) {
   if (!problems || (problems.complete && problems.total === 0)) return null;
   const { total: n, complete, worst } = problems;
   return {
-    shown: complete
-      ? t("cluster", "problemCount", { n })
-      : n > 0
-        ? t("cluster", "problemCountAtLeast", { n })
-        : t("cluster", "problemsNotAllChecked"),
-    spoken: attentionWords({ total: n, complete }, t),
+    shown: attentionWords({ total: n, complete }, t),
     tone: worst ? ATTENTION_TEXT[worst] : "text-fg-mut",
   };
 }

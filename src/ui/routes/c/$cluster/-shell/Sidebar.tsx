@@ -1059,7 +1059,7 @@ function AttentionCount({
       title={
         behind || complete
           ? countAge(counts, false, counts.readAt, t)
-          : t("cluster", "problemsNotAllChecked")
+          : attentionWords({ total: n, complete }, t)
       }
       aria-label={attentionWords({ total: n, complete }, t)}
     >
@@ -1070,7 +1070,7 @@ function AttentionCount({
           className="h-1.5 w-1.5 flex-none rounded-full border border-fg-fnt"
         />
       )}
-      {attentionFigure(attention)}
+      {(complete || n > 0) && attentionFigure(attention)}
     </span>
   );
 }
@@ -1216,7 +1216,7 @@ function PartialCountMark({
       data-testid="partial-count"
     >
       <Lock className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
-      {`${partial.counted}+`}
+      {partial.counted > 0 && partial.counted}
     </span>
   );
 }

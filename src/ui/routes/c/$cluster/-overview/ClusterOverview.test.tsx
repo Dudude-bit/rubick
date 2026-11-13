@@ -436,7 +436,7 @@ describe("the gap where the nodes are not shown", () => {
       "Pods could not be read across the cluster"
     );
     const row = screen.getByText("node-a").closest("[role=link]")!;
-    expect(row).toHaveTextContent("not read/110 pods");
+    expect(row).toHaveTextContent("pods not read");
     expect(screen.queryByText("CPU")).toBeNull();
     expect(
       screen.queryByText(/permission to read the cluster's nodes/)

@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -408,6 +409,9 @@ function AttentionRow({
   );
 }
 
+const openRows = (rows: Element | null) =>
+  rows?.querySelectorAll<HTMLElement>(":scope > [role=link]") ?? [];
+
 /** A row that opens `link`, where a link inside it still opens its own. */
 function OpensRow({
   link,
@@ -442,10 +446,22 @@ function OpensRow({
         navigate(link);
       }}
       onKeyDown={(event) => {
-        if (event.key !== "Enter") return;
-        navigate(link);
+        if (event.key === "Enter") return navigate(link);
+        const step =
+          event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+        if (step === 0 || event.altKey || event.metaKey || event.ctrlKey)
+          return;
+        const rows = [...openRows(event.currentTarget.parentElement)];
+        const next = rows[rows.indexOf(event.currentTarget) + step];
+        if (!next) return;
+        event.preventDefault();
+        next.focus();
       }}
-      className={cn(ROW, "cursor-pointer hover:bg-hover", stale && STALE)}
+      className={cn(
+        ROW,
+        "cursor-pointer hover:bg-hover focus-visible:bg-hover",
+        stale && STALE
+      )}
     >
       {children}
     </div>
@@ -527,14 +543,7 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   return (
     <li className="col-span-full grid grid-cols-subgrid items-baseline py-[3px] text-xs">
       <Icon
-        className={cn(
-          MARK,
-          reading
-            ? "animate-spin text-info"
-            : refused
-              ? "text-fg-mut"
-              : "text-warn"
-        )}
+        className={cn(MARK, reading ? "animate-spin text-info" : "text-warn")}
         aria-hidden="true"
       />
       <span className="inline-flex items-baseline gap-1 whitespace-nowrap font-mono text-fg-mid">
@@ -748,6 +757,28 @@ export function AttentionPanel({
   const whole = complete && !refreshFailing;
   const summaryRole: StatusRole = worst ?? (whole ? "ok" : "neutral");
   const [overallBox, overallContent, overallRoom] = useHeldRoom();
+  const rowsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const enter = (event: KeyboardEvent) => {
+      if (
+        event.key !== "ArrowDown" ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        document.activeElement !== document.body
+      )
+        return;
+      const first = openRows(rowsRef.current)[0];
+      const top = first?.getBoundingClientRect().top;
+      if (top === undefined || top < 0 || top > window.innerHeight) return;
+      event.preventDefault();
+      first.focus();
+    };
+    window.addEventListener("keydown", enter);
+    return () => window.removeEventListener("keydown", enter);
+  }, []);
 
   return (
     <Section>
@@ -763,7 +794,7 @@ export function AttentionPanel({
               : t("cluster", "attentionNoneFound")
         }
       />
-      <div className={ROWS} {...{ [ANCHOR_ROWS]: "" }}>
+      <div ref={rowsRef} className={ROWS} {...{ [ANCHOR_ROWS]: "" }}>
         {unchecked.length + attention.unconfirmed.length > 0 && (
           <div
             className="col-span-full mb-1 border-b border-hair pb-1.5"
@@ -982,6 +1013,8 @@ export function OverviewSkeleton() {
   );
 }
 
+const isPermission = (entry: Unread) => entry.code === ERROR_CODES.PERMISSION;
+
 /** Words about where a kind went unread, behind the mark of why: refused or failed. */
 function UnreadMark({
   unread,
@@ -990,16 +1023,14 @@ function UnreadMark({
   unread: readonly Unread[];
   children: React.ReactNode;
 }) {
-  const refused = unread.every(
-    (entry) => entry.code === ERROR_CODES.PERMISSION
-  );
+  const refused = unread.every(isPermission);
   const Icon = refused ? Lock : TriangleAlert;
   return (
     <span title={unread.find((entry) => entry.message)?.message}>
       <Icon
         className={cn(
           "mr-1 inline-block h-2.5 w-2.5 align-[-1px]",
-          refused ? "text-fg-mut" : "text-warn"
+          "text-warn"
         )}
         aria-hidden="true"
       />
@@ -1070,6 +1101,11 @@ export function WorkloadsPanel({
                 )}
                 segments={card.segments}
                 note={note}
+                unreadLegend={
+                  unread && !card.unread.every(isPermission)
+                    ? t("empty", "notReadFault")
+                    : undefined
+                }
               />
             </div>
           );
@@ -1209,23 +1245,27 @@ function NodeRow({ node }: { node: NodeSummary }) {
         {!node.ready && <span className="text-caption text-err">NotReady</span>}
       </span>
       <span className="text-right font-mono text-caption text-fg-mut">
-        {node.podCount ?? (
+        {node.podCount === null ? (
           <span className="font-sans text-fg-fnt">
-            {t("empty", "notReadLower")}
+            {t("empty", "podsNotReadLower")}
           </span>
-        )}
-        {node.podCapacity != null && (
+        ) : (
           <>
-            <Unit>/</Unit>
-            {node.podCapacity}
+            {node.podCount}
+            {node.podCapacity != null && (
+              <>
+                <Unit>/</Unit>
+                {node.podCapacity}
+              </>
+            )}
+            <Unit>
+              {" "}
+              {t("count", "podNoun", {
+                n: node.podCapacity ?? node.podCount,
+              })}
+            </Unit>
           </>
         )}
-        <Unit>
-          {" "}
-          {t("count", "podNoun", {
-            n: node.podCapacity ?? node.podCount ?? 0,
-          })}
-        </Unit>
       </span>
     </div>
   );

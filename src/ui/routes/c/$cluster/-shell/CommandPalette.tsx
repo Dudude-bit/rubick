@@ -1,4 +1,5 @@
 import {
+  Fragment,
   lazy,
   Suspense,
   useCallback,
@@ -1476,7 +1477,17 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
     served,
     split,
   } = entry;
-  const { refusals } = unreadParts(cluster);
+  const unread =
+    split === null
+      ? []
+      : (
+          [
+            [true, true, split.partly - split.failed.partly],
+            [true, false, split.failed.partly],
+            [false, true, split.refused - split.failed.refused],
+            [false, false, split.failed.refused],
+          ] as const
+        ).filter(([, , n]) => n > 0);
   return (
     <div
       role="presentation"
@@ -1494,32 +1505,22 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
               searched: split.read,
             })}
       </span>
-      {split !== null && split.partly > 0 && (
-        <span
-          className="flex items-center gap-1 text-fg-fnt"
-          title={unreadHover(cluster, t)}
-        >
-          <Lock className="h-3 w-3 flex-none" aria-hidden />
-          {t("count", refusals ? "kindsPartlyRefused" : "kindsPartlyUnread", {
-            n: split.partly,
-          })}
-        </span>
-      )}
-      {split !== null && split.refused > 0 && (
-        <span
-          className="flex items-center gap-1 text-warn"
-          title={unreadHover(cluster, t)}
-        >
-          <Lock className="h-3 w-3 flex-none" aria-hidden />
-          {t(
-            "count",
-            refusals ? "kindsRefusedWherever" : "kindsUnreadWherever",
-            {
-              n: split.refused,
-            }
-          )}
-        </span>
-      )}
+      {unread.map(([partly, refused, n]) => {
+        const Mark = refused ? Lock : TriangleAlert;
+        return (
+          <span
+            key={`${partly}-${refused}`}
+            className={cn(
+              "flex items-center gap-1",
+              partly ? "text-fg-fnt" : "text-warn"
+            )}
+            title={unreadHover(cluster, t)}
+          >
+            <Mark className="h-3 w-3 flex-none" aria-hidden />
+            {t("count", unreadKey(refused, partly, true), { n })}
+          </span>
+        );
+      })}
       {scope !== null && (
         <span className="flex items-center gap-1">
           <FolderOpen className="h-3 w-3 flex-none" aria-hidden />
@@ -1570,6 +1571,14 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
       )}
     </div>
   );
+}
+
+/** `ofSearched`: said after "searched in n of m", where a partly read kind is one "of them". */
+function unreadKey(refused: boolean, partly: boolean, ofSearched = false) {
+  if (partly && ofSearched)
+    return refused ? "kindsPartlyRefused" : "kindsPartlyUnread";
+  if (refused) return partly ? "kindsRefusedSomewhere" : "kindsRefusedWherever";
+  return partly ? "kindsUnreadSomewhere" : "kindsUnreadWherever";
 }
 
 /** Every refused kind on one line, and any other failure with its own words. */
@@ -1666,42 +1675,30 @@ function ClusterGroup({
     if (cluster.truncated)
       state = t("count", "matchesCapped", { n: cluster.matched });
     if (cluster.unreadable.length > 0) {
-      const Mark = cluster.unreadable.every(
-        (unread) => unread.reason === "forbidden"
-      )
-        ? Lock
-        : TriangleAlert;
       // The one place the palette names what it could not read: cut to the
       // row, whole on hover. Refusals share one line: forty 403 sentences
       // made a tooltip taller than the screen.
       // The summary's own words and counts: a kind read in one namespace
       // and refused in another is not one the cluster refused outright.
-      const { wherever, somewhere, refusals } = unreadParts(cluster);
-      const counts = [
-        wherever.length > 0 &&
-          t(
-            "count",
-            refusals ? "kindsRefusedWherever" : "kindsUnreadWherever",
-            {
-              n: wherever.length,
-            }
-          ),
-        somewhere.length > 0 &&
-          t(
-            "count",
-            refusals ? "kindsRefusedSomewhere" : "kindsUnreadSomewhere",
-            { n: somewhere.length }
-          ),
-      ]
-        .filter(Boolean)
-        .join(", ");
+      const groups = unreadParts(cluster);
       state = (
         <span className="min-w-0 truncate" title={unreadHover(cluster, t)}>
-          {state} · <Mark className="inline h-3 w-3 align-[-2px]" aria-hidden />{" "}
-          {t("cluster", "kindsUnreadNamed", {
-            counts,
-            kinds: kindNames([...wherever, ...somewhere]),
+          {state} ·{" "}
+          {groups.map(({ refused, partly, kinds }, at) => {
+            const Mark = refused ? Lock : TriangleAlert;
+            return (
+              <Fragment key={`${partly}-${refused}`}>
+                {at > 0 && ", "}
+                <Mark
+                  className="inline h-3 w-3 align-[-2px]"
+                  aria-hidden
+                />{" "}
+                {t("count", unreadKey(refused, partly), { n: kinds.length })}
+              </Fragment>
+            );
           })}
+          {": "}
+          {kindNames(groups.flatMap((group) => group.kinds))}
         </span>
       );
       tone = "text-warn";

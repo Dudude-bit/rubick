@@ -23,6 +23,7 @@ import {
   kindLabels,
   kindSplit,
   orderHits,
+  unreadParts,
 } from "./palette-entries";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -1031,6 +1032,7 @@ describe("each served kind counted once", () => {
       read: 2,
       partly: 1,
       refused: 0,
+      failed: { partly: 0, refused: 0 },
       loading: 0,
       notSearched: 3,
       unlistable: 1,
@@ -1053,6 +1055,24 @@ describe("each served kind counted once", () => {
           split.notSearched +
           split.unlistable
       ).toBe(catalogue.length);
+  });
+
+  /** Fails if a kind that timed out is counted with the refusals, and so drawn beside a lock and called refused. */
+  it("counts a kind that failed apart from one that was refused", () => {
+    const split = kindSplit(catalogue, {
+      ...cluster("k3d-dev"),
+      searched: [kind("a")],
+      unreadable: [
+        { ...refused("a", ["team-blind"]), reason: "timeout" as const },
+        refused("b", []),
+        { ...refused("c", []), reason: "timeout" as const },
+      ],
+    });
+    expect(split).toMatchObject({
+      partly: 1,
+      refused: 2,
+      failed: { partly: 1, refused: 1 },
+    });
   });
 });
 
@@ -1646,5 +1666,37 @@ describe("the quick actions' icons", () => {
     expect(iconOf("nav:goToSecrets")).toBe(
       getResourceIcon(ResourceType.Secret)
     );
+  });
+});
+
+describe("the kinds a search could not read", () => {
+  const unread = (plural: string, reason: string) =>
+    ({
+      kind: plural,
+      group: "apps",
+      plural,
+      reason,
+      namespaces: [],
+      message: reason,
+    }) as unknown as ClusterSearchState["unreadable"][number];
+
+  /** Fails if a 500 is counted with the refusals, and so worded as "refused" beside a lock. */
+  it("keeps a refused kind apart from one that failed", () => {
+    const state = {
+      ...cluster("a"),
+      unreadable: [
+        unread("secrets", "forbidden"),
+        unread("deployments", "error"),
+      ],
+    };
+    expect(
+      unreadParts(state).map(({ refused, kinds }) => [
+        refused,
+        kinds.map((kind) => kind.plural),
+      ])
+    ).toEqual([
+      [true, ["secrets"]],
+      [false, ["deployments"]],
+    ]);
   });
 });

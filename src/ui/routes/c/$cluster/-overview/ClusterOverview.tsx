@@ -12,7 +12,7 @@ import {
 } from "@/hooks/useClusterOverview";
 import { DataFreshness } from "@/components/ui/realtime/data-freshness";
 import { useAttention } from "@/hooks/useAttention";
-import { attentionFigure, unreadWhere, type Attention } from "@/lib/attention";
+import { attentionWords, unreadWhere, type Attention } from "@/lib/attention";
 import { PartlyUnread } from "../-object/ResourceDetailHeader";
 import { ClusterFrontDoor } from "../../../-components/ClusterFrontDoor";
 import { MyServices } from "./MyServices";
@@ -71,7 +71,7 @@ function overviewStats(
   const stats: ReportStat[] = [
     {
       label: t("action", "needsAttention"),
-      value: attentionFigure(attention),
+      value: attentionWords(attention, t),
       role: attention.worst ?? (attention.complete ? "ok" : "neutral"),
     },
     {
@@ -258,7 +258,7 @@ export function ClusterOverview() {
                 title={nodePods.message}
               >
                 <NodePodsIcon
-                  className="h-4 w-4 text-fg-mut"
+                  className="h-4 w-4 text-warn"
                   aria-hidden="true"
                 />
                 <p className="text-xs text-fg-mut">
@@ -287,7 +287,7 @@ export function ClusterOverview() {
         <Section>
           <SectionHeader title="Nodes" />
           <div className="flex items-center gap-2 py-1">
-            <Lock className="h-4 w-4 text-fg-mut" aria-hidden="true" />
+            <Lock className="h-4 w-4 text-warn" aria-hidden="true" />
             <p className="text-xs text-fg-mut">{t("empty", "noNodeAccess")}</p>
           </div>
         </Section>

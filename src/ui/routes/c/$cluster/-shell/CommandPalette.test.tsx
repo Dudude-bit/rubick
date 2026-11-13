@@ -306,8 +306,9 @@ describe("the command palette's hits", () => {
 
   /**
    * Marco's hover carried one 403 sentence per kind and ran past the bottom
-   * of a 900px screen. Fails if refusals stop sharing one line, or a failure
-   * that is not a refusal loses its own words.
+   * of a 900px screen. Fails if refusals stop sharing one line, a failure
+   * that is not a refusal loses its own words, or a timeout is counted as
+   * refused beside the lock.
    */
   it("says every refusal on one hover line and keeps other failures' words", async () => {
     search.unreadable = [
@@ -330,7 +331,7 @@ describe("the command palette's hits", () => {
     ];
     await open("access");
     const line = await screen.findByText(
-      /5 kinds could not be read wherever asked: DaemonSet/
+      /4 kinds refused wherever asked, 1 kind could not be read wherever asked: DaemonSet/
     );
     expect(line.getAttribute("title")?.split("\n")).toEqual([
       "The cluster refused your account: DaemonSet, Lease, Node, Role",

@@ -1458,11 +1458,15 @@ describe("the count beside a namespace", () => {
     ];
     const list = await open();
 
-    expect(within(list).getByText("14 · 3+ problems")).toBeInTheDocument();
+    expect(
+      within(list).getByText("14 · 3 problems · not all checked")
+    ).toBeInTheDocument();
     expect(
       within(list).getByRole("option", { name: /^shop,/ })
-    ).toHaveAccessibleName("shop, 14 pods, 3+ problems, not all checked");
-    expect(within(list).getByText("4 · not all checked")).toBeInTheDocument();
+    ).toHaveAccessibleName("shop, 14 pods, 3 problems · not all checked");
+    expect(
+      within(list).getByText("4 · no problems found · not all checked")
+    ).toBeInTheDocument();
   });
 });
 

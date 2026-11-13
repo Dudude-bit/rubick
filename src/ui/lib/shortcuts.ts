@@ -300,6 +300,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "not a shortcut: arrows, Home and End walk the sidebar's rows, which take one tab stop",
   "src/ui/components/ui/data-table.tsx":
     "not a shortcut: bare left and right walk the focused row's links; a chord passes through",
+  "src/ui/routes/c/$cluster/-overview/health.tsx":
+    "not a shortcut: a bare down arrow with nothing focused enters the Overview's problem rows, and up and down walk them",
 };
 
 export function chordsOf(): Shortcut[] {

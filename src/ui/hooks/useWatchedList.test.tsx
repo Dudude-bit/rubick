@@ -145,7 +145,9 @@ describe("a list kept current by a watch", () => {
       )
     );
     const { description } = toast.mock.calls[0][0];
-    expect(description).toBe("Pods: falling back to periodic refresh.");
+    expect(description).toBe(
+      "Pods: live updates stopped; the list is read again periodically."
+    );
   });
 
   it("stops polling when the watch recovers, and speaks up at the next failure", () => {

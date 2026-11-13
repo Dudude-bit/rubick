@@ -1021,12 +1021,9 @@ function countByNamespace(
   return counts;
 }
 
-/** A count some kind went unread for is a floor, and every badge marks it so. */
-export const attentionFigure = ({
-  total,
-  complete,
-}: Pick<Attention, "total" | "complete">): string =>
-  complete ? String(total) : `${total}+`;
+/** The count alone; a surface whose count some kind went unread for says so beside it, never as a "+". */
+export const attentionFigure = ({ total }: Pick<Attention, "total">): string =>
+  String(total);
 
 /** The same count in words, alike on every surface that has room for them. */
 export function attentionWords(
@@ -1036,7 +1033,7 @@ export function attentionWords(
   if (complete) return t("cluster", "problemCount", { n: total });
   return total > 0
     ? t("cluster", "problemCountPartial", { n: total })
-    : t("cluster", "problemsNotAllChecked");
+    : t("cluster", "problemsNoneNotAllChecked");
 }
 
 export const ATTENTION_TEXT = {

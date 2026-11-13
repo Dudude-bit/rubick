@@ -545,7 +545,7 @@ describe("what the problem count counts", () => {
 
     const counts = screen.getByTestId("scope-counts");
     expect(counts).toHaveTextContent("pods not counted in team-blind");
-    expect(counts).toHaveTextContent("2+ problems");
+    expect(counts).toHaveTextContent("2 problems · not all checked");
     expect(counts).toHaveTextContent("in team-blind, team-checkout");
     expect(counts).not.toHaveTextContent(/\d+ pods/);
   });
@@ -571,7 +571,7 @@ describe("what the problem count counts", () => {
     bar();
 
     expect(screen.getByTestId("scope-counts")).toHaveTextContent(
-      /^4 pods·pods not counted in team-blind·2\+ problems/
+      /^4 pods·pods not counted in team-blind·2 problems · not all checked/
     );
   });
 

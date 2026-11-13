@@ -368,6 +368,8 @@ export interface KindSplit {
   /** Of `read`, the kinds refused in some namespace it was asked in. */
   partly: number;
   refused: number;
+  /** Of `partly` and of `refused`, the ones that failed rather than being refused. */
+  failed: { partly: number; refused: number };
   loading: number;
   notSearched: number;
   unlistable: number;
@@ -381,11 +383,15 @@ export function kindSplit(
     new Set(list.map((kind) => `${kind.group}/${kind.plural}`));
   const read = keys(cluster.searched);
   const unread = keys(cluster.unreadable);
+  const failed = keys(
+    cluster.unreadable.filter((kind) => kind.reason !== "forbidden")
+  );
   const loading = keys(cluster.loading);
   const split: KindSplit = {
     read: 0,
     partly: 0,
     refused: 0,
+    failed: { partly: 0, refused: 0 },
     loading: 0,
     notSearched: 0,
     unlistable: 0,
@@ -396,36 +402,42 @@ export function kindSplit(
     else if (read.has(key)) {
       split.read += 1;
       if (unread.has(key)) split.partly += 1;
-    } else if (unread.has(key)) split.refused += 1;
-    else if (loading.has(key)) split.loading += 1;
+      if (failed.has(key)) split.failed.partly += 1;
+    } else if (unread.has(key)) {
+      split.refused += 1;
+      if (failed.has(key)) split.failed.refused += 1;
+    } else if (loading.has(key)) split.loading += 1;
     else split.notSearched += 1;
   }
   return split;
 }
 
+export type UnreadGroup = {
+  refused: boolean;
+  partly: boolean;
+  kinds: ClusterSearchState["unreadable"];
+};
+
 /**
  * The kinds a search could not read, split as the summary splits them: not
- * read anywhere it asked, or read in one namespace and refused in another.
- * Marco's header counted both as one "could not read 22" beside a summary
- * saying "13 refused wherever asked".
+ * read anywhere it asked, or read in one namespace and refused in another,
+ * and each of those by cause, so a 500 is never worded as a refusal.
  */
-export function unreadParts(cluster: ClusterSearchState): {
-  wherever: ClusterSearchState["unreadable"];
-  somewhere: ClusterSearchState["unreadable"];
-  /** Every one a refusal, so "refused" is the word; otherwise "could not read". */
-  refusals: boolean;
-} {
+export function unreadParts(cluster: ClusterSearchState): UnreadGroup[] {
   const read = new Set(
     cluster.searched.map((kind) => `${kind.group}/${kind.plural}`)
   );
-  const somewhere = cluster.unreadable.filter((kind) =>
-    read.has(`${kind.group}/${kind.plural}`)
-  );
-  return {
-    wherever: cluster.unreadable.filter((kind) => !somewhere.includes(kind)),
-    somewhere,
-    refusals: cluster.unreadable.every((kind) => kind.reason === "forbidden"),
-  };
+  const groups: UnreadGroup[] = [];
+  for (const partly of [false, true])
+    for (const refused of [true, false]) {
+      const kinds = cluster.unreadable.filter(
+        (kind) =>
+          read.has(`${kind.group}/${kind.plural}`) === partly &&
+          (kind.reason === "forbidden") === refused
+      );
+      if (kinds.length > 0) groups.push({ refused, partly, kinds });
+    }
+  return groups;
 }
 
 /** Kind names in reading order, with the group beside a name two groups share: "Event (core), Event (events.k8s.io)". */
