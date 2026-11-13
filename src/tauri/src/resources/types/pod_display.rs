@@ -734,6 +734,29 @@ pub fn restarts(pod: &Pod) -> (i32, Option<DateTime<Utc>>) {
     (total, last)
 }
 
+/// The containers a probe runs in, sidecars and app containers, each with its restarts.
+#[must_use]
+pub fn probed_restarts(pod: &Pod) -> Vec<super::ContainerRestarts> {
+    let status = pod.status.as_ref();
+    status
+        .and_then(|s| s.init_container_statuses.as_deref())
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| sidecar_at(pod, *index))
+        .map(|(_, cs)| cs)
+        .chain(
+            status
+                .and_then(|s| s.container_statuses.as_deref())
+                .unwrap_or_default(),
+        )
+        .map(|cs| super::ContainerRestarts {
+            container: cs.name.clone(),
+            n: cs.restart_count,
+        })
+        .collect()
+}
+
 /// The containers behind [`restarts`], each with its own count, where more
 /// than one of them restarted: one total over an init container that looped
 /// and one that finished fine read as three different numbers on one page.

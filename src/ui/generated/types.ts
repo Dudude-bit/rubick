@@ -2279,6 +2279,14 @@ export interface ClusterProblem {
   workload?: PodWorkload;
 }
 
+export interface ProbeFailure {
+  container: string;
+  probe: ProbeKind;
+  restarts: number;
+  said: string;
+  since: string | null;
+}
+
 export interface TlsCertificate {
   secretName: string;
   certificate: CertificateFacts | null;
@@ -3161,7 +3169,10 @@ export type ProblemDetail =
       said: string | null;
     }
   | { says: "cause"; cause: PodCause; by: ContainerRestarts[] | null }
-  | { says: "podsRefused"; said: string };
+  | { says: "podsRefused"; said: string }
+  | { says: "probe"; failure: ProbeFailure };
+
+export type ProbeKind = "liveness" | "readiness" | "startup";
 
 export type ProblemSeverity = "critical" | "warning";
 

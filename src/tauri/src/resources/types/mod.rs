@@ -13,6 +13,7 @@ pub mod pod_cause;
 pub mod pod_display;
 pub mod pod_row;
 pub mod probe;
+pub mod probe_failure;
 pub mod service;
 
 pub use common::{
@@ -36,10 +37,11 @@ pub use pod_cause::{
 };
 pub use pod_display::{
     backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, failed_at, gone,
-    looping_until, pending_grace, pending_since, rejected_at_admission, replaced, restarting_until,
-    restarts, restarts_by, stuck_reason, stuck_since, within_pending_grace, PodGone,
-    CRASH_LOOP_WINDOW_SECONDS, PENDING_GRACE_SECONDS, START_GRACE_SECONDS,
+    looping_until, pending_grace, pending_since, probed_restarts, rejected_at_admission, replaced,
+    restarting_until, restarts, restarts_by, stuck_reason, stuck_since, within_pending_grace,
+    PodGone, CRASH_LOOP_WINDOW_SECONDS, PENDING_GRACE_SECONDS, START_GRACE_SECONDS,
 };
 pub use pod_row::{PodRow, PodRowStatus, PodWorkload, RowContainer};
 pub use probe::{ContainerProbes, ProbeHandler, ProbeInfo};
+pub use probe_failure::{probe_failure, ProbeFailure, ProbeKind, PROBE_WINDOW_MINUTES};
 pub use service::{ServiceInfo, ServicePortInfo};

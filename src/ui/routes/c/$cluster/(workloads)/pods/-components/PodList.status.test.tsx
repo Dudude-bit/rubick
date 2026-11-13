@@ -29,6 +29,7 @@ type Row = {
   initContainers?: RowContainer[];
   nodeSilence?: unknown;
   kubeletWarned?: boolean;
+  problem?: { tone: "err" | "warn"; n: number; title: string };
 };
 
 function statusCell(original: Row) {
@@ -43,6 +44,36 @@ function statusCell(original: Row) {
 }
 
 const RUNNING = { display: "Running", phase: "Running" };
+
+describe("a Running pod whose probe fails", () => {
+  /**
+   * The Overview listed argocd-repo-server's failing readiness probe while
+   * its row in Pods said only Running. Fails if the row drops the problem,
+   * its cause on hover, or puts the mark after the word where a narrow
+   * column cuts it.
+   */
+  it("leads its status with the problem and says the cause on hover", () => {
+    const { container } = render(
+      <>
+        {statusCell({
+          status: RUNNING,
+          problem: {
+            tone: "err",
+            n: 1,
+            title: "Readiness probe failing on repo-server: HTTP 503",
+          },
+        })}
+      </>
+    );
+    const mark = screen.getByText("1 problem");
+    expect(mark.closest("[title]")?.getAttribute("title")).toBe(
+      "Readiness probe failing on repo-server: HTTP 503"
+    );
+    expect(container.textContent?.indexOf("1 problem")).toBeLessThan(
+      container.textContent?.indexOf("Running") ?? -1
+    );
+  });
+});
 
 describe("a pod its controller replaced", () => {
   /**

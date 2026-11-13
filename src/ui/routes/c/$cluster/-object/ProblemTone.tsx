@@ -26,38 +26,56 @@ const TONE_GLYPH = { err: X, warn: TriangleAlert } as const;
 export function WithProblem({
   problem,
   role,
+  markFirst = false,
   children,
 }: {
   problem: Problem | null;
   /** The role the wrapped badge is drawn in. */
   role: StatusRole;
+  /** The mark leads and never shrinks, so a narrow cell cuts the word and not the mark. */
+  markFirst?: boolean;
   children: ReactNode;
 }) {
   const t = useT();
   if (!problem) return <>{children}</>;
   const quiet = role !== "warn" && role !== "err";
   const Glyph = TONE_GLYPH[problem.tone];
+  const dot = <span aria-hidden="true">·</span>;
   return (
     <span
-      className="inline-flex min-w-0 items-baseline gap-1.5"
+      className="inline-flex min-w-0 max-w-full items-baseline gap-1.5"
       title={problem.title}
       data-problem={problem.tone}
     >
+      {markFirst && (
+        <span
+          className={cn(
+            "inline-flex flex-none items-center gap-1 text-caption font-medium",
+            TONE_TEXT[problem.tone]
+          )}
+        >
+          <Glyph className="h-2.5 w-2.5" aria-hidden="true" />
+          {t("cluster", "problemCount", { n: problem.n })}
+          {dot}
+        </span>
+      )}
       <span
         className={cn("inline-flex min-w-0", quiet && RECOLOUR[problem.tone])}
       >
         {children}
       </span>
-      <span
-        className={cn(
-          "inline-flex flex-none items-center gap-1 text-caption font-medium",
-          TONE_TEXT[problem.tone]
-        )}
-      >
-        <span aria-hidden="true">·</span>
-        <Glyph className="h-2.5 w-2.5" aria-hidden="true" />
-        {t("cluster", "problemCount", { n: problem.n })}
-      </span>
+      {!markFirst && (
+        <span
+          className={cn(
+            "inline-flex flex-none items-center gap-1 text-caption font-medium",
+            TONE_TEXT[problem.tone]
+          )}
+        >
+          {dot}
+          <Glyph className="h-2.5 w-2.5" aria-hidden="true" />
+          {t("cluster", "problemCount", { n: problem.n })}
+        </span>
+      )}
     </span>
   );
 }

@@ -1141,6 +1141,9 @@ describe("a running pod that restarts while its probe fails", () => {
         return [
           {
             ...podEvent("Unhealthy", "Warning", 4),
+            // Inside the window a probe failure counts for.
+            firstTimestamp: new Date(Date.now() - 20 * 60_000).toISOString(),
+            lastTimestamp: new Date(Date.now() - 5 * 60_000).toISOString(),
             message:
               "Liveness probe failed: HTTP probe failed with statuscode: 500",
           },

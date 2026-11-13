@@ -7,7 +7,7 @@ import {
 } from "@/lib/workload-status";
 import type { Rollout } from "@/generated/types";
 import { WithProblem } from "../../-object/ProblemTone";
-import type { Problem } from "../../-object/problem";
+import { PROBLEM_MARK_PX, type Problem } from "../../-object/problem";
 import { RolloutBadge } from "../../-object/RolloutSummary";
 import { statusCellPx } from "../../-list/columns";
 import {
@@ -37,7 +37,7 @@ const SEVERITY: Record<RowVerdict, number> = {
 const PROBLEM_RANK = { warn: 1, err: 2 } as const;
 
 const FLOOR = statusCellPx(14);
-const PROBLEM_PX = Math.ceil(13 * 6.6);
+const WORD_FLOOR = statusCellPx(5);
 
 /** Where each row's rollout stands, in the word the page and the peek print, and the cause its pods share. */
 export function createRolloutColumn<Row extends RolloutRow>(): ColumnDef<Row> {
@@ -46,13 +46,16 @@ export function createRolloutColumn<Row extends RolloutRow>(): ColumnDef<Row> {
     id: "status",
     header: columnHeader("columns", "status"),
     meta: {
-      floor: FLOOR,
+      floor: (_t: unknown, rows: readonly Row[]) =>
+        rows.some((row) => row.problem)
+          ? Math.max(FLOOR, WORD_FLOOR + PROBLEM_MARK_PX)
+          : FLOOR,
       sort: (row: Row) =>
         SEVERITY[verdictOf(row.rollout)] * 10 +
         (row.problem ? PROBLEM_RANK[row.problem.tone] : 0),
       ideal: (t, rows: readonly Row[]) =>
         FLOOR +
-        (rows.some((row) => row.problem) ? PROBLEM_PX : 0) +
+        (rows.some((row) => row.problem) ? PROBLEM_MARK_PX : 0) +
         causeCellPx(
           rows.map((row) => ({
             podsCause: row.podsCause,
@@ -76,6 +79,7 @@ export function createRolloutColumn<Row extends RolloutRow>(): ColumnDef<Row> {
       >
         <WithProblem
           problem={row.original.problem ?? null}
+          markFirst
           role={workloadRole(row.original.rollout)}
         >
           <RolloutBadge rollout={row.original.rollout} />

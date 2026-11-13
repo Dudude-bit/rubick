@@ -132,6 +132,10 @@ pub enum ProblemDetail {
     },
     /// A workload whose pods the API server refuses to create, in its words.
     PodsRefused { said: String },
+    /// A pod whose containers restart while the kubelet says a probe fails.
+    Probe {
+        failure: crate::resources::ProbeFailure,
+    },
 }
 
 impl ProblemDetail {
@@ -1075,6 +1079,72 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
 
 /// This app's word for a pod that runs and is not Ready; the kubelet has none.
 const NOT_READY: &str = "NotReady";
+
+/// The kubelet's reason on the events that say a probe failed.
+const UNHEALTHY: &str = "Unhealthy";
+
+/// The pods no other row speaks for whose containers restart while the
+/// kubelet says a probe fails: what their own page leads with, said where
+/// the Overview and the list count them. An events read that failed gives
+/// none of them, and the Event check says what went unread.
+fn probe_problems<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    events: &[&Event],
+    told: &[ClusterProblem],
+    now: DateTime<Utc>,
+) -> Vec<ClusterProblem> {
+    let mut unhealthy: HashMap<&str, Vec<crate::resources::EventInfo>> = HashMap::new();
+    for event in events {
+        if event.reason.as_deref() != Some(UNHEALTHY) {
+            continue;
+        }
+        if let Some(uid) = event.involved_object.uid.as_deref() {
+            unhealthy
+                .entry(uid)
+                .or_default()
+                .push(crate::resources::EventInfo::from(*event));
+        }
+    }
+    if unhealthy.is_empty() {
+        return Vec::new();
+    }
+    let told: HashSet<(Option<&str>, &str)> = told
+        .iter()
+        .filter(|problem| problem.kind == "Pod")
+        .map(|problem| (problem.namespace.as_deref(), problem.name.as_str()))
+        .collect();
+    pods.into_iter()
+        .filter(|pod| {
+            pod.status.as_ref().and_then(|s| s.phase.as_deref()) != Some("Succeeded")
+                && !told.contains(&(
+                    pod.metadata.namespace.as_deref(),
+                    pod.metadata.name.as_deref().unwrap_or_default(),
+                ))
+        })
+        .filter_map(|pod| {
+            let about = unhealthy.get(crate::resources::events_uid(pod)?)?;
+            let failure = crate::resources::probe_failure(
+                &crate::resources::probed_restarts(pod),
+                about,
+                now,
+            )?;
+            let (restarts, _) = crate::resources::restarts(pod);
+            Some(ClusterProblem {
+                severity: ProblemSeverity::Warning,
+                kind: "Pod".to_string(),
+                name: pod.metadata.name.clone().unwrap_or_default(),
+                namespace: pod.metadata.namespace.clone(),
+                reason: UNHEALTHY.to_string(),
+                since: failure.since.map(|t| t.to_rfc3339()),
+                detail: Some(ProblemDetail::Probe { failure }),
+                restarts: Some(restarts),
+                folded_pods: None,
+                replaced: crate::resources::replaced(pod),
+                workload: crate::resources::PodWorkload::of(pod),
+            })
+        })
+        .collect()
+}
 
 /// A Pending pod inside the wait it gets and showing no fault, a restart
 /// included, as the workload running it reads it.
@@ -2381,6 +2451,12 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         .filter_map(|(pod, _)| pod.metadata.uid.as_deref())
         .collect();
     let mut problems = pod_problems(refs(input.scoped_pods), input.now);
+    problems.extend(probe_problems(
+        refs(input.scoped_pods),
+        &events,
+        &problems,
+        input.now,
+    ));
     let by_deployment = pods_by_deployment(refs(input.scoped_pods));
     problems.extend(deployment_problems(
         refs(input.deployments),
@@ -2827,7 +2903,16 @@ pub async fn cluster_overview(
                 .await?;
             let (looked, lost) = tokio::join!(
                 look_up_holders(&here, &memo, refs(&snapshot.events), scope.as_deref()),
-                unlistable(&client, scope.as_deref()),
+                async {
+                    if let Some(lost) = state.overview_cache.probed(&context, &scope) {
+                        return lost;
+                    }
+                    let lost = unlistable(&client, scope.as_deref()).await;
+                    state
+                        .overview_cache
+                        .keep_probe(&context, &scope, lost.clone());
+                    lost
+                },
             );
             lost.is_empty().then_some((snapshot, looked))
         },
@@ -5186,6 +5271,82 @@ mod tests {
             panic!("the workload tells its pod's cause");
         };
         assert!(matches!(cause, crate::resources::PodCause::NotReady { .. }));
+    }
+
+    fn probed(restarts: i32) -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "api-1", "namespace": "shop", "uid": "pod-uid-1"},
+            "spec": {"containers": [{"name": "api", "livenessProbe": {
+                "httpGet": {"path": "/healthz", "port": 8080}
+            }}]},
+            "status": {
+                "phase": "Running",
+                "conditions": [{"type": "Ready", "status": "True"}],
+                "containerStatuses": [{
+                    "name": "api", "image": "", "imageID": "", "ready": true,
+                    "restartCount": restarts, "state": {"running": {}}
+                }]
+            }
+        }))
+        .unwrap()
+    }
+
+    fn unhealthy(message: &str, minutes_ago: i64, now: DateTime<Utc>) -> Event {
+        serde_json::from_value(serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Event",
+            "metadata": {"name": "api-1.probe", "namespace": "shop"},
+            "type": "Warning",
+            "reason": "Unhealthy",
+            "message": message,
+            "count": 3,
+            "lastTimestamp": (now - chrono::Duration::minutes(minutes_ago))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+            "involvedObject": {"kind": "Pod", "name": "api-1", "namespace": "shop", "uid": "pod-uid-1"}
+        }))
+        .unwrap()
+    }
+
+    /// A pod's page led with its failing liveness probe while the Overview,
+    /// the list and the status bar said nothing. Fails if the Overview does
+    /// not raise the row the page leads with.
+    #[test]
+    fn a_pod_whose_probe_fails_while_it_restarts_needs_attention() {
+        let now = Utc::now();
+        let pod = probed(2);
+        let event = unhealthy(
+            "Liveness probe failed: HTTP probe failed with statuscode: 500",
+            5,
+            now,
+        );
+        let rows = probe_problems([&pod], &[&event], &[], now);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].reason, UNHEALTHY);
+        assert_eq!(rows[0].restarts, Some(2));
+        assert!(matches!(
+            &rows[0].detail,
+            Some(ProblemDetail::Probe { failure }) if failure.probe == crate::resources::ProbeKind::Liveness
+        ));
+    }
+
+    /// Fails if a pod that never restarted, a failure outside the window, an
+    /// events list that was not read, or a pod another row already tells
+    /// about raises a probe row.
+    #[test]
+    fn no_probe_row_without_restarts_a_recent_failure_events_or_for_a_pod_already_told() {
+        let now = Utc::now();
+        let failing = unhealthy("Liveness probe failed: context deadline exceeded", 5, now);
+        assert!(probe_problems([&probed(0)], &[&failing], &[], now).is_empty());
+        let old = unhealthy(
+            "Liveness probe failed: context deadline exceeded",
+            crate::resources::PROBE_WINDOW_MINUTES + 10,
+            now,
+        );
+        assert!(probe_problems([&probed(2)], &[&old], &[], now).is_empty());
+        assert!(probe_problems([&probed(2)], &[], &[], now).is_empty());
+        let told = probe_problems([&probed(2)], &[&failing], &[], now);
+        assert!(probe_problems([&probed(2)], &[&failing], &told, now).is_empty());
     }
 
     /// The Overview named two Ready pods' old exits as why a Deployment was

@@ -82,7 +82,7 @@ import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { podForwardPorts } from "@/lib/port-forward";
 import { PodNetworkPolicies } from "./PodNetworkPolicies";
 import { usePodReplacementSearch } from "./usePodReplacementSearch";
-import { probeFailure } from "./probe-failure";
+import { probeFailure, probeFailureHeadline } from "@/lib/probe-failure";
 import { unreadOf, type Problem } from "../../../-object/problem";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
@@ -280,18 +280,18 @@ function probeProblem(
   events: readonly EventInfo[] | undefined,
   t: ReturnType<typeof useT>
 ): Omit<PodProblem, "tab"> | null {
-  const failure = probeFailure(events);
-  const container = podContainers(pod)
-    .filter((c) => c.restartCount > 0)
-    .sort((a, b) => b.restartCount - a.restartCount)[0];
+  const containers = podContainers(pod);
+  const failure = probeFailure(
+    containers.map((c) => ({ container: c.name, n: c.restartCount })),
+    events,
+    Date.now()
+  );
+  const container = containers.find((c) => c.name === failure?.container);
   if (!failure || !container) return null;
   const last = lastTermination(container);
   return {
     reason: failure.probe,
-    headline: t("empty", "probeFailing", {
-      container: container.name,
-      probe: failure.probe,
-    }),
+    headline: probeFailureHeadline(failure, t),
     detail: (
       <>
         {last
@@ -305,7 +305,7 @@ function probeProblem(
               n: container.restartCount,
             })}{" "}
         <ResourceMessage
-          message={failure.message}
+          message={failure.said}
           subject={{ kind: "Pod", name: pod.name, namespace: pod.namespace }}
         />{" "}
         {failure.probe === "liveness" && t("empty", "probeLikelyRestartCause")}

@@ -12,6 +12,7 @@ import { groupNamed } from "@/lib/event-incarnation";
 import { drawnCrd } from "@/lib/links";
 import { iconSvg } from "@/lib/icon-svg";
 import { ERROR_CODES } from "@/lib/error-utils";
+import { probeFailureHeadline } from "@/lib/probe-failure";
 import { allocatedPercent } from "@/lib/node-amount";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import {
@@ -112,6 +113,8 @@ export function composedDetail(
         .join(" · ");
     case "podsRefused":
       return refusalText(detail.said, t);
+    case "probe":
+      return `${probeFailureHeadline(detail.failure, t)}: ${detail.failure.said}`;
   }
 }
 

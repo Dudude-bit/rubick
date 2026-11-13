@@ -44,9 +44,14 @@ import { PodSelectorBanner } from "./PodSelectorBanner";
 import { PodStatusBadge } from "./PodStatusBadge";
 import { useShellAskStore } from "@/stores/shellAskStore";
 import { NodeRef } from "../../../-object/NodeRef";
+import { WithProblem } from "../../../-object/ProblemTone";
+import { PROBLEM_MARK_PX, type Problem } from "../../../-object/problem";
+import { problemOfRow, rowProblems } from "../../-components/row-cause";
+import { useAttention } from "@/hooks/useAttention";
+import { statusRole } from "@/lib/status-role";
 
 /** A pod row that also knows whether its node is still reporting. */
-type PodRow = WithNodeSilence<PodWithMetrics>;
+type PodRow = WithNodeSilence<PodWithMetrics> & { problem?: Problem | null };
 
 /**
  * How long ago the last restart was.
@@ -122,11 +127,19 @@ export const columns: ColumnDef<PodRow>[] = [
     accessorFn: (pod) => pod.status.display,
     enableSorting: true,
     meta: {
-      // The widest status its rows say; "CreateContainerConfigError" before any row is read.
+      // The widest status its rows say, and a problem's mark beside it; "CreateContainerConfigError" before any row is read.
       floor: (_t, rows: readonly PodRow[]) =>
         rows.length === 0
           ? 224
-          : badgeCellPx(rows.map((pod) => pod.status.display)),
+          : Math.max(
+              badgeCellPx(rows.map((pod) => pod.status.display)),
+              ...rows
+                .filter((pod) => pod.problem)
+                .map(
+                  (pod) =>
+                    badgeCellPx([pod.status.display]) + 6 + PROBLEM_MARK_PX
+                )
+            ),
       // Room for "already replaced" beside the badge while the port has it.
       ideal: (t, rows: readonly PodRow[]) => {
         const replaced = rows.filter((pod) => pod.status.gone === "replaced");
@@ -151,10 +164,16 @@ export const columns: ColumnDef<PodRow>[] = [
     cell: ({ row }) => (
       <span className="inline-flex min-w-0 max-w-full items-baseline gap-1.5">
         <span className="flex-none">
-          <PodStatusBadge
-            pod={row.original}
-            silence={row.original.nodeSilence ?? null}
-          />
+          <WithProblem
+            problem={row.original.problem ?? null}
+            markFirst
+            role={statusRole(row.original.status.display)}
+          >
+            <PodStatusBadge
+              pod={row.original}
+              silence={row.original.nodeSilence ?? null}
+            />
+          </WithProblem>
         </span>
         {row.original.status.gone === "replaced" && (
           <span className="truncate text-caption text-fg-mut">
@@ -278,10 +297,25 @@ export function PodList() {
     refetch,
   } = usePodsWithMetrics();
   const filter = usePodFilter();
-  const rows = useMemo(
-    () => narrowPods(podsWithMetrics, filter),
-    [podsWithMetrics, filter]
+  const attention = useAttention();
+  const problems = useMemo(
+    () => rowProblems(attention?.items ?? [], ResourceType.Pod),
+    [attention]
   );
+  const rows = useMemo(() => {
+    const narrowed = narrowPods(podsWithMetrics, filter);
+    if (problems.size === 0) return narrowed;
+    // Only a pod with a problem is a new object: the rest keep their identity.
+    return narrowed.map((pod) => {
+      const problem = problemOfRow(
+        problems,
+        ResourceType.Pod,
+        pod.namespace,
+        pod.name
+      );
+      return problem ? { ...pod, problem } : pod;
+    });
+  }, [podsWithMetrics, filter, problems]);
 
   const quickActions = useMemo<
     (

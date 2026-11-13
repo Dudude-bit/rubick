@@ -1,0 +1,167 @@
+{
+  "about": "Whether the events about one pod say a probe of its fails, as both halves read it: `probe_failure` in src/tauri/src/resources/types/probe_failure.rs (the Overview's row, the status bar, a pod's list row) and `probeFailure` in src/ui/lib/probe-failure.ts (a pod's page). `containers` are the containers a probe runs in, sidecars and app containers, with their restarts; `events` the kubelet's events about the pod. `is` is the finding, or null where none restarted, no probe failed inside `windowMinutes` of `now`, or nothing was read.",
+  "windowMinutes": 60,
+  "cases": [
+    {
+      "name": "a container that restarted beside a liveness probe failing ten minutes ago",
+      "now": "2026-11-13T10:00:00Z",
+      "containers": [{ "container": "app", "n": 3 }],
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "Unhealthy",
+          "message": "Liveness probe failed: HTTP probe failed with statuscode: 500",
+          "firstTimestamp": "2026-11-13T09:20:00Z",
+          "lastTimestamp": "2026-11-13T09:50:00Z"
+        }
+      ],
+      "is": {
+        "container": "app",
+        "probe": "liveness",
+        "restarts": 3,
+        "said": "Liveness probe failed: HTTP probe failed with statuscode: 500",
+        "since": "2026-11-13T09:20:00Z"
+      }
+    },
+    {
+      "name": "the newest of two probes that failed",
+      "now": "2026-11-13T10:00:00Z",
+      "containers": [{ "container": "app", "n": 1 }],
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "Unhealthy",
+          "message": "Liveness probe failed: connection refused",
+          "firstTimestamp": "2026-11-13T09:40:00Z",
+          "lastTimestamp": "2026-11-13T09:45:00Z"
+        },
+        {
+          "type": "Warning",
+          "reason": "Unhealthy",
+          "message": "Readiness probe failed: connection refused",
+          "firstTimestamp": "2026-11-13T09:50:00Z",
+          "lastTimestamp": "2026-11-13T09:55:00Z"
+        }
+      ],
+      "is": {
+        "container": "app",
+        "probe": "readiness",
+        "restarts": 1,
+        "said": "Readiness probe failed: connection refused",
+        "since": "2026-11-13T09:50:00Z"
+      }
+    },
+    {
+      "name": "the container that restarted most, the first of two that restarted alike",
+      "now": "2026-11-13T10:00:00Z",
+      "containers": [
+        { "container": "proxy", "n": 2 },
+        { "container": "app", "n": 4 },
+        { "container": "worker", "n": 4 }
+      ],
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "Unhealthy",
+          "message": "startup probe failed: timeout",
+          "firstTimestamp": null,
+          "lastTimestamp": "2026-11-13T09:59:00Z"
+        }
+      ],
+      "is": {
+        "container": "app",
+        "probe": "startup",
+        "restarts": 4,
+        "said": "startup probe failed: timeout",
+        "since": "2026-11-13T09:59:00Z"
+      }
+    },
+    {
+      "name": "an undated probe failure is not one known to be over",
+      "now": "2026-11-13T10:00:00Z",
+      "containers": [{ "container": "app", "n": 2 }],
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "Unhealthy",
+          "message": "Liveness probe failed: exit 1",
+          "firstTimestamp": null,
+          "lastTimestamp": null
+        }
+      ],
+      "is": {
+        "container": "app",
+        "probe": "liveness",
+        "restarts": 2,
+        "said": "Liveness probe failed: exit 1",
+        "since": null
+      }
+    },
+    {
+      "name": "a probe failing in a pod none of whose containers restarted",
+      "now": "2026-11-13T10:00:00Z",
+      "containers": [{ "container": "app", "n": 0 }],
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "Unhealthy",
+          "message": "Liveness probe failed: HTTP probe failed with statuscode: 500",
+          "firstTimestamp": "2026-11-13T09:50:00Z",
+          "lastTimestamp": "2026-11-13T09:55:00Z"
+        }
+      ],
+      "is": null
+    },
+    {
+      "name": "a probe failure last seen past the window",
+      "now": "2026-11-13T10:00:00Z",
+      "containers": [{ "container": "app", "n": 5 }],
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "Unhealthy",
+          "message": "Liveness probe failed: HTTP probe failed with statuscode: 500",
+          "firstTimestamp": "2026-11-13T07:00:00Z",
+          "lastTimestamp": "2026-11-13T08:59:59Z"
+        }
+      ],
+      "is": null
+    },
+    {
+      "name": "warnings that are not a probe failing, and an Unhealthy sentence about something else",
+      "now": "2026-11-13T10:00:00Z",
+      "containers": [{ "container": "app", "n": 5 }],
+      "events": [
+        {
+          "type": "Warning",
+          "reason": "BackOff",
+          "message": "Back-off restarting failed container app",
+          "firstTimestamp": "2026-11-13T09:50:00Z",
+          "lastTimestamp": "2026-11-13T09:55:00Z"
+        },
+        {
+          "type": "Warning",
+          "reason": "Unhealthy",
+          "message": "Liveness probe errored: rpc error",
+          "firstTimestamp": "2026-11-13T09:50:00Z",
+          "lastTimestamp": "2026-11-13T09:55:00Z"
+        },
+        {
+          "type": "Normal",
+          "reason": "Unhealthy",
+          "message": "Liveness probe failed: exit 1",
+          "firstTimestamp": "2026-11-13T09:50:00Z",
+          "lastTimestamp": "2026-11-13T09:55:00Z"
+        }
+      ],
+      "is": null
+    },
+    {
+      "name": "no events read",
+      "now": "2026-11-13T10:00:00Z",
+      "containers": [{ "container": "app", "n": 5 }],
+      "events": [],
+      "is": null
+    }
+  ]
+}

@@ -69,11 +69,14 @@ const ownerKey = (kind: string, namespace: string, name: string) =>
  * rollout is already the badge's word, so only what opens it from elsewhere.
  */
 export function rowProblems(
-  items: readonly AttentionItem[]
+  items: readonly AttentionItem[],
+  /** The rows' own kind, whose own items count: a pod's probe is its row's, not a workload's word. */
+  own?: string
 ): ReadonlyMap<string, Problem> {
   const byRow = new Map<string, AttentionItem[]>();
   for (const item of items) {
-    if (item.kind === item.opens.kind) continue;
+    const ownItem = item.kind === item.opens.kind;
+    if (own === undefined ? ownItem : !ownItem || item.kind !== own) continue;
     const key = ownerKey(
       item.opens.kind,
       item.opens.namespace ?? "",
@@ -84,7 +87,12 @@ export function rowProblems(
   return new Map(
     [...byRow].map(([key, own]) => {
       const worst = own.find((item) => item.tone === "err") ?? own[0];
-      const said = worst.detail?.says === "said" ? worst.detail.text : null;
+      const said =
+        worst.detail?.says === "said"
+          ? worst.detail.text
+          : worst.detail?.says === "probe"
+            ? worst.detail.failure.said
+            : null;
       return [
         key,
         {

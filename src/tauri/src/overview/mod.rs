@@ -31,7 +31,7 @@ use serde::de::DeserializeOwned;
 use tokio::sync::{broadcast, Notify};
 use tokio_util::sync::CancellationToken;
 
-use crate::commands::overview::KeptSides;
+use crate::commands::overview::{KeptSides, OverviewUnread};
 use crate::state::AppEvent;
 
 pub mod holders;
@@ -69,10 +69,19 @@ pub struct OverviewCache {
     holders: DashMap<String, Arc<HolderMemo>>,
     /// What each cluster's last whole read of a scope found beside the stores.
     beside: DashMap<(String, Option<Vec<String>>), Arc<KeptSides>>,
+    /// What the last probe of each scope's lists found, and when: a retry
+    /// on a struggling API server asked five lists per namespace each time.
+    probed: DashMap<ScopeKey, (Instant, Vec<OverviewUnread>)>,
     /// Where a change the stores took is announced, so a screen showing the
     /// overview reads it again then rather than a ten-second poll later.
     events: Option<broadcast::Sender<AppEvent>>,
 }
+
+/// A cluster's name and the namespaces a read reached, `None` for all of them.
+type ScopeKey = (String, Option<Vec<String>>);
+
+/// How long a probe of a scope's lists answers for it.
+pub const PROBE_EVERY: Duration = Duration::from_secs(30);
 
 /// The steady rate a cluster's changes are announced at under churn.
 /// Changes past it are gathered into the next announcement, never dropped.
@@ -356,6 +365,7 @@ impl OverviewCache {
         self.refused_counts.remove(context);
         self.holders.remove(context);
         self.beside.retain(|(of, _), _| of != context);
+        self.probed.retain(|(of, _), _| of != context);
     }
 
     pub fn forget_all(&self) {
@@ -368,6 +378,7 @@ impl OverviewCache {
         self.refused_counts.clear();
         self.holders.clear();
         self.beside.clear();
+        self.probed.clear();
     }
 
     /// The counts `context` refused on this connection.
@@ -410,6 +421,32 @@ impl OverviewCache {
         self.beside
             .get(&(context.to_string(), scope.clone()))
             .map(|kept| kept.clone())
+    }
+
+    /// What the last probe of `scope`'s lists found, while it is younger than [`PROBE_EVERY`].
+    #[must_use]
+    pub fn probed(
+        &self,
+        context: &str,
+        scope: &Option<Vec<String>>,
+    ) -> Option<Vec<OverviewUnread>> {
+        self.probed
+            .get(&(context.to_string(), scope.clone()))
+            .filter(|kept| kept.0.elapsed() < PROBE_EVERY)
+            .map(|kept| kept.1.clone())
+    }
+
+    pub fn keep_probe(
+        &self,
+        context: &str,
+        scope: &Option<Vec<String>>,
+        lost: Vec<OverviewUnread>,
+    ) {
+        let key = (context.to_string(), scope.clone());
+        if self.probed.len() >= KEPT_SCOPES && !self.probed.contains_key(&key) {
+            self.probed.clear();
+        }
+        self.probed.insert(key, (Instant::now(), lost));
     }
 
     /// The watches this process holds, for diagnostics.
@@ -991,6 +1028,34 @@ mod tests {
     /// plausibly fixes whatever made the watches give up. Leaving the
     /// cooldown behind made `forget`'s own promise — "the next request
     /// starts them again" — false for the next five minutes.
+    /// A retry on an API server that was already timing out asked five lists
+    /// per namespace on every read. Fails if a probe younger than the window
+    /// is not reused, an older one is, or a reconnect keeps it.
+    #[test]
+    fn a_probe_answers_for_its_scope_until_it_ages_or_the_cluster_is_forgotten() {
+        let cache = OverviewCache::default();
+        let scope = Some(vec!["shop".to_string()]);
+        let lost = vec![OverviewUnread {
+            kind: "Deployment".to_string(),
+            namespace: Some("shop".to_string()),
+            code: "NO_ANSWER".to_string(),
+            message: "etcdserver: request timed out".to_string(),
+        }];
+        assert_eq!(cache.probed("prod", &scope), None);
+        cache.keep_probe("prod", &scope, lost.clone());
+        assert_eq!(cache.probed("prod", &scope), Some(lost.clone()));
+        assert_eq!(cache.probed("prod", &None), None);
+        cache.forget("prod");
+        assert_eq!(cache.probed("prod", &scope), None);
+        let aged = Instant::now()
+            .checked_sub(PROBE_EVERY + Duration::from_secs(1))
+            .expect("an instant past the window");
+        cache
+            .probed
+            .insert(("prod".to_string(), scope.clone()), (aged, lost));
+        assert_eq!(cache.probed("prod", &scope), None);
+    }
+
     #[test]
     fn forgetting_a_cluster_lifts_the_pause_it_was_holding() {
         let cache = OverviewCache::default();
