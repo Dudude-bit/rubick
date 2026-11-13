@@ -38,7 +38,7 @@ describe("a plain confirmation on critical infrastructure", () => {
     });
     expect(confirmButton()).toBeDisabled();
 
-    fireEvent.change(screen.getByPlaceholderText(PROD), {
+    fireEvent.change(screen.getByRole("textbox"), {
       target: { value: PROD },
     });
     expect(confirmButton()).toBeEnabled();
@@ -78,7 +78,8 @@ describe("a typed confirmation on critical infrastructure", () => {
       />
     );
 
-    const input = screen.getByPlaceholderText(PROD);
+    expect(screen.getByText(PROD, { selector: "code" })).toBeInTheDocument();
+    const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "payments" } });
     expect(confirmButton()).toBeDisabled();
 
@@ -104,7 +105,7 @@ describe("a typed confirmation on critical infrastructure", () => {
       />
     );
     const { rerender } = render(dialog("redis"));
-    fireEvent.change(screen.getByPlaceholderText(PROD), {
+    fireEvent.change(screen.getByRole("textbox"), {
       target: { value: PROD },
     });
     expect(confirmButton()).toBeEnabled();
@@ -112,7 +113,7 @@ describe("a typed confirmation on critical infrastructure", () => {
     rerender(dialog(null));
     rerender(dialog("postgres"));
 
-    expect(screen.getByPlaceholderText(PROD)).toHaveValue("");
+    expect(screen.getByRole("textbox")).toHaveValue("");
     expect(confirmButton()).toBeDisabled();
   });
 
@@ -127,7 +128,10 @@ describe("a typed confirmation on critical infrastructure", () => {
         onConfirm={() => {}}
       />
     );
-    fireEvent.change(screen.getByPlaceholderText("payments"), {
+    expect(
+      screen.getByText("payments", { selector: "code" })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "payments" },
     });
     expect(confirmButton()).toBeEnabled();

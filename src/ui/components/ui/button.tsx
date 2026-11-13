@@ -81,7 +81,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         {...props}
         disabled={props.disabled || pending}
-        aria-busy={pending || undefined}
+        aria-busy={pending || props["aria-busy"] || undefined}
       >
         {pending && (
           <Spinner

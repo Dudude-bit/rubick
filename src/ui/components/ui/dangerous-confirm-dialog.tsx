@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +13,7 @@ import { CriticalNotice } from "@/components/ui/critical-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { buttonVariants } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 
@@ -29,7 +30,8 @@ interface DangerousConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  /** A promise keeps the dialog open and pending until it settles; it closes only on success. */
+  onConfirm: () => unknown;
   isLoading?: boolean;
 }
 
@@ -44,10 +46,12 @@ export function DangerousConfirmDialog({
   cancelLabel,
   onOpenChange,
   onConfirm,
-  isLoading = false,
+  isLoading: loadingFromCaller = false,
 }: DangerousConfirmDialogProps) {
   const t = useT();
   const [inputValue, setInputValue] = useState("");
+  const [running, setRunning] = useState(false);
+  const isLoading = loadingFromCaller || running;
   // Forgotten whenever the dialog is closed, whoever closed it: a caller that
   // flips `open` after a success fires no onOpenChange.
   if (!open && inputValue !== "") setInputValue("");
@@ -60,14 +64,27 @@ export function DangerousConfirmDialog({
 
   const isConfirmEnabled = inputValue === expected && !isLoading;
 
-  const handleConfirm = () => {
-    if (isConfirmEnabled) {
-      onConfirm();
-    }
+  const handleConfirm = (event: MouseEvent) => {
+    if (!isConfirmEnabled) return;
+    const result = onConfirm();
+    if (!(result instanceof Promise)) return;
+    event.preventDefault();
+    setRunning(true);
+    result
+      .then(
+        () => onOpenChange(false),
+        () => undefined
+      )
+      .finally(() => setRunning(false));
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!isLoading) onOpenChange(next);
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
@@ -99,7 +116,7 @@ export function DangerousConfirmDialog({
             id="confirmation-input"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={confirmationPlaceholder ?? expected}
+            placeholder={confirmationPlaceholder}
             autoComplete="off"
             data-autofocus
           />
@@ -113,10 +130,12 @@ export function DangerousConfirmDialog({
             className={buttonVariants({ variant: "destructive" })}
             onClick={handleConfirm}
             disabled={!isConfirmEnabled}
+            aria-busy={isLoading || undefined}
           >
-            {isLoading
-              ? t("action", "processing")
-              : (confirmLabel ?? t("action", "confirm"))}
+            {isLoading && (
+              <Spinner size="xs" aria-hidden="true" className="mr-1.5" />
+            )}
+            {confirmLabel ?? t("action", "confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

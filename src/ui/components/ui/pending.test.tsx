@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import { Button } from "./button";
 import { ConfirmDialog } from "./confirm-dialog";
+import { DangerousConfirmDialog } from "./dangerous-confirm-dialog";
 import { SegmentedControl } from "./states";
+
+vi.mock("@/hooks/useCritical", () => ({
+  useCritical: () => ({ critical: false, context: null }),
+}));
 
 vi.mock("@/hooks/useCriticalGate", () => ({
   useCriticalGate: () => ({ notice: null, input: null, blocked: false }),
@@ -117,5 +122,51 @@ describe("a segmented control", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "List" }));
     expect(change).not.toHaveBeenCalled();
+  });
+});
+
+describe("a typed confirmation whose action takes time", () => {
+  /** Fails if the dialog closes on the click, which hid the pending state and any failure of a cascading delete. */
+  it("stays open and pending until the action succeeds", async () => {
+    let finish: () => void = () => undefined;
+    const run = new Promise<void>((resolve) => (finish = resolve));
+    const openChange = vi.fn();
+    render(
+      <DangerousConfirmDialog
+        open
+        title="Delete CustomResourceDefinition"
+        confirmationText="widgets.example.com"
+        confirmLabel="Delete"
+        onOpenChange={openChange}
+        onConfirm={() => run}
+      />
+    );
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "widgets.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled()
+    );
+    expect(openChange).not.toHaveBeenCalledWith(false);
+    finish();
+    await waitFor(() => expect(openChange).toHaveBeenCalledWith(false));
+  });
+
+  /** Fails if the field arrives looking filled in with the very name it asks for. */
+  it("leaves the field empty rather than showing the name as its placeholder", () => {
+    render(
+      <DangerousConfirmDialog
+        open
+        title="Delete CustomResourceDefinition"
+        confirmationText="widgets.example.com"
+        onOpenChange={() => undefined}
+        onConfirm={() => undefined}
+      />
+    );
+    expect(screen.getByRole("textbox")).not.toHaveAttribute(
+      "placeholder",
+      "widgets.example.com"
+    );
   });
 });
