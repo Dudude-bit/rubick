@@ -138,16 +138,17 @@ function MessageCell({ row }: { row: { original: EventInfo } }) {
   );
 }
 
-function CountCell({ row }: { row: { original: EventInfo } }) {
+/** Beside a count the cluster did not report, a count of one is still an answer. */
+export function CountCell({ row }: { row: { original: EventInfo } }) {
   const t = useT();
-  const count = row.original.count ?? 0;
+  const { count } = row.original;
   const tally = tallyOf(row.original);
   return (
     <span
       className="font-mono text-caption text-fg-fnt"
       title={tally ? sayWords(tally, t) : undefined}
     >
-      {count > 1 ? `×${count}` : ""}
+      {count === null ? <None /> : `×${Math.max(1, count)}`}
     </span>
   );
 }

@@ -73,6 +73,21 @@ const STATE_LINE: Record<StoryState, string> = {
   gone: "text-fg-mut",
 };
 
+/** What a story nobody could place says it could not place: a routine story is not an unread one. */
+function unknownWords(
+  story: Story,
+  options: StoryOptions
+): { label: keyof typeof en.readings; hint: keyof typeof en.readings } {
+  if (story.warnings > 0)
+    return { label: "storyStateUnknown", hint: "storyUndatedHint" };
+  return {
+    label: "storyNoWarningsRead",
+    hint: options.narrowed
+      ? "storyNoWarningsReadNarrowed"
+      : "storyNoWarningsReadCut",
+  };
+}
+
 /** How many of a story's pods the timeline asks about; the rest is said in words. */
 const STATUS_PODS = 5;
 
@@ -157,11 +172,17 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
   const lastSeen = useRealtimeAge(
     story.lastAt === null ? null : new Date(story.lastAt).toISOString()
   );
-  const span =
+  const spanWords =
     story.firstAt !== null && story.lastAt !== null
       ? coverWords(story.lastAt - story.firstAt, t, "alone")
       : null;
+  const span =
+    spanWords !== null && story.firstAt! < options.now - options.windowMs
+      ? t("readings", "storyReachesBack", { span: spanWords })
+      : spanWords;
   const { subject } = story;
+  const unknown =
+    story.state === "unknown" ? unknownWords(story, options) : null;
   const pods = t("readings", "podsOf", {
     name: subject.name,
     n: podsAmong(story.members),
@@ -243,10 +264,14 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
                     : "storyEndedWithObjectHint",
                   { kind: subject.kind, name: subject.name }
                 )
-              : undefined
+              : unknown
+                ? t("readings", unknown.hint)
+                : undefined
           }
         >
-          {t("readings", STATE_LABEL[story.state])}
+          {unknown
+            ? t("readings", unknown.label)
+            : t("readings", STATE_LABEL[story.state])}
         </span>
         <span className="ml-auto text-caption text-fg-fnt">
           {[
@@ -268,6 +293,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
       <Strip
         buckets={densityOf(story, options)}
         title={t("readings", "lastSeenStrip")}
+        unreadTitle={t("readings", "lastSeenStripUnread")}
       />
 
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
@@ -312,16 +338,20 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
 function Strip({
   buckets,
   title,
+  unreadTitle,
 }: {
   buckets: DensityBucket[];
   title: string;
+  unreadTitle: string;
 }) {
   const peak = Math.max(1, ...buckets.map((b) => b.count));
   return (
     <div
       className="mt-1.5 flex h-4 items-end gap-px"
       role="img"
-      aria-label={title}
+      aria-label={
+        buckets.some((b) => !b.read) ? `${title} ${unreadTitle}` : title
+      }
       title={title}
     >
       {buckets.map((bucket, index) => (
@@ -340,6 +370,7 @@ function Strip({
                   ? "bg-warn"
                   : "bg-fg-fnt"
           )}
+          title={bucket.read ? undefined : unreadTitle}
           style={{
             height: !bucket.read
               ? "100%"

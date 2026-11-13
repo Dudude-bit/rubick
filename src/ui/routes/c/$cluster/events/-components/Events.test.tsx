@@ -54,6 +54,7 @@ vi.mock("@/lib/commands", () => ({
     listCrds: vi.fn(async () => []),
     getPod: vi.fn(async () => ({ containers: [] })),
     checkListAccess: vi.fn(async () => []),
+    listNamespaces: vi.fn(async () => [{ name: "team-checkout" }]),
     getObjectMetadata: vi.fn(async () => ({
       uid: null,
       labels: {},
@@ -288,6 +289,61 @@ describe("a feed a watch keeps", () => {
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(listEvents).not.toHaveBeenCalled();
     expect(screen.getByText("live")).toBeInTheDocument();
+  }, 30_000);
+
+  const overviewCannotListEvents = (client: {
+    setQueryData: (key: unknown[], data: unknown) => void;
+  }) =>
+    act(() =>
+      client.setQueryData(queryKeys.clusterOverview(null, []), {
+        warnings: [],
+        unread: [
+          {
+            kind: "Event",
+            namespace: null,
+            code: "NO_ANSWER",
+            message: "500 Internal Server Error",
+          },
+        ],
+      })
+    );
+
+  /**
+   * Under an events list answering 500 the page wore "live" while the
+   * Overview said it could not read them. Fails if the notice goes, drops
+   * the cluster's reason, or the chip still says live.
+   */
+  it("says the rows come from the watch and a fresh list fails when the overview cannot list events", async () => {
+    const { client } = await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/A fresh list of events/)
+    ).not.toBeInTheDocument();
+
+    overviewCannotListEvents(client);
+    expect(
+      await screen.findByText(/A fresh list of events is failing/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/500 Internal Server Error/)).toBeInTheDocument();
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+  });
+
+  /**
+   * The cap is not a failure: a live feed cut at its limit with a failing
+   * overview read shows one notice, and the table's own cap line is left
+   * to the header. Fails if the footer cap is drawn beside the notice.
+   */
+  it("leaves the cut to the header while the notice speaks", async () => {
+    layOutRows();
+    const { client } = await watched();
+    burst(Array.from({ length: 600 }, (_, index) => dated("prod", index)));
+    await screen.findByText("500 normal events · of the latest 500");
+    overviewCannotListEvents(client);
+    await screen.findByText(/A fresh list of events is failing/);
+    expect(
+      screen.queryByText(/Only the latest 500 were read/)
+    ).not.toBeInTheDocument();
   }, 30_000);
 
   /**
@@ -1953,7 +2009,7 @@ describe("stories", () => {
     expect(card.textContent).not.toMatch(/278 events/);
     expect(
       screen.getByText(
-        "1 story in the 1h window · 1 warning event · 2 normal events · in those stories"
+        "1 story with events in the last 1h · 1 warning event · 2 normal events · in those stories"
       )
     ).toBeInTheDocument();
   });
@@ -2090,11 +2146,13 @@ describe("stories", () => {
 
       await userEvent.click(screen.getByRole("button", { name: "Истории" }));
       const stories = await screen.findByTitle(
-        /^1 история за 1\sч · 3 предупреждения · в этих историях$/
+        /^1 история с событиями за последние 1\sч · 3 предупреждения · в этих историях$/
       );
       expect(
         within(stories).getByTestId("events-count-drawn").textContent
-      ).toMatch(/^1 история за 1\sч · ▲ 3 · в этих историях$/);
+      ).toMatch(
+        /^1 история с событиями за последние 1\sч · ▲ 3 · в этих историях$/
+      );
     } finally {
       useLocaleStore.setState({ choice: null });
     }

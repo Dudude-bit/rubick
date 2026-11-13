@@ -234,6 +234,8 @@ export const en = {
       "{kind} routes this path to a backend that was never created, so the controller has nothing to send the request to.",
     connectionRefusedNothingBehind:
       "Anything that reaches this address gets a connection refused. The Service exists and is wired up; there is simply nothing behind it.",
+    headlessNothingBehind:
+      "A headless Service has no address of its own. Its DNS name resolves to the IPs of its ready pods, and with no pod behind it, it resolves to nothing.",
     stopMakersUnreadNote:
       "Anything that reaches this address gets a connection refused. The Deployments and StatefulSets here could not be read, so whether one is scaled to zero or was refused its pods is not known.",
     endpointsByHandNoneWritten:
@@ -1804,6 +1806,11 @@ export const en = {
     terminalCount: { one: "{n} shell", other: "{n} shells" },
     watchCount: { one: "{n} watch", other: "{n} watches" },
     watching: "Watching",
+    writes: "Writes",
+    writesEmpty: "No write has failed",
+    writesEmptyHint:
+      "A change that was refused, failed or went unanswered stays here after its message is gone.",
+    clearWrites: "Clear",
     active: "{n} active",
   },
   checks: {
@@ -2882,7 +2889,7 @@ export const en = {
     verdictSelectsNothingBody: "{selector} matches nothing in {namespace}.",
     verdictSelectionUnread: "What it selects could not be counted.",
     verdictSelectorUnevaluable: "Its selector cannot be evaluated.",
-    verdictNotPickedUp: "No Prometheus picks it up, so nothing scrapes it.",
+    verdictNotPickedUp: "No Prometheus selects it.",
     verdictNoInstances:
       "Selected. No Prometheus object is in the cluster to pick it up; whether something else reads it is not judged.",
     verdictPickedUpUnknown: "Whether a Prometheus picks it up is unknown.",
@@ -3345,6 +3352,16 @@ export const en = {
     storyStillHappening: "still happening",
     storySettled: "settled",
     storyStateUnknown: "cannot say",
+    storyNoWarningsRead: "no warnings read",
+    storyNoWarningsReadNarrowed:
+      "No warning among the events read. A type or search filter left others out, so an earlier warning may exist.",
+    storyNoWarningsReadCut:
+      "No warning among the events read. The read stopped at its limit before the start of this window, so an older warning may exist.",
+    storyUndatedHint:
+      "A warning in this story carries no time, so it cannot be told whether it is over.",
+    storyReachesBack: "{span}, reaching before the window",
+    lastSeenStripUnread:
+      "The hatched part is older than the newest events this read kept. Nobody looked there, so it is not quiet.",
     storyEndedWithObject: "ended with it",
     storyEndedWithObjectHint:
       "The {kind} {name} these events were about was replaced by another object of that name, so nothing more can happen to it.",
@@ -4641,6 +4658,7 @@ export const en = {
     freshSlowed: "polled less often",
     freshOffline: "offline",
     freshStale: "read failing",
+    freshAnswerAge: "last answer {age} ago",
     countsKindRefused:
       "The last read of this was refused or failed, so this number may not be current.",
     freshLiveNote:
@@ -6266,6 +6284,12 @@ export const en = {
       one: "You can list them in {namespaces}.",
       other: "You can list them in {namespaces}.",
     },
+    listableInUnchecked: {
+      one: "You can list them in {namespaces}, if it exists: the list of namespaces could not be read to check.",
+      other:
+        "You can list them in {namespaces}, if those exist: the list of namespaces could not be read to check.",
+    },
+    refusedAskingAgain: "Refused {age}; asking the cluster again.",
     refusedClusterWideAndIn: {
       one: "Listing these was refused across the whole cluster and in {namespaces} too.",
       other:
@@ -7254,6 +7278,7 @@ export const en = {
     noMatchesYet:
       "No matches yet: {answered} of {total} clusters have answered.",
     stillSearchingFor: "Still reading names for “{query}”…",
+    nothingToOpenYet: "Nothing to open yet: the names are still being read.",
     nothingSearchedNoCluster:
       "Nothing has been searched: no cluster here is connected yet.",
     nothingSearchedAnywhere:
@@ -8165,8 +8190,8 @@ export const en = {
       other: "{n} gone, lines kept",
     },
     storiesInWindow: {
-      one: "{n} story in the {span} window",
-      other: "{n} stories in the {span} window",
+      one: "{n} story with events in the last {span}",
+      other: "{n} stories with events in the last {span}",
     },
     eventsWaiting: { one: "Show {n} update", other: "Show {n} updates" },
     eventObjects: { one: "{n} event", other: "{n} events" },

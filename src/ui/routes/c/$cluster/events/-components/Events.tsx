@@ -54,6 +54,8 @@ import { useHeldOrder } from "../../-list/held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
 import { StaleRows } from "@/components/ui/stale-rows";
+import { Unknown } from "@/components/ui/unknown";
+import { useOverviewUnreadOf } from "../../-list/overview-unread";
 import { KindAbout } from "@/components/object/KindAbout";
 import { HeldLines } from "../../-list/HeldLines";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -468,6 +470,11 @@ export function Events() {
   // Refused now, the feed is refused, whatever an earlier read showed.
   const refused = failed !== null && isRefusal(failed);
   const refusedAt = useRefusedAt(refused ? failed : null);
+  const freshList = useOverviewUnreadOf(ResourceType.Event);
+  const warm =
+    watching && !watch.resyncing && !refused && failed === null
+      ? freshList.unread
+      : null;
   // `others` is what the type filter left out, where the read held it: a
   // polled read asked the cluster for the one type alone.
   const { pool, windowFull, others } = useMemo(() => {
@@ -826,10 +833,10 @@ export function Events() {
             )}
             <DataFreshness
               dataUpdatedAt={freshness.dataUpdatedAt}
-              live={watching && !watch.resyncing}
+              live={watching && !watch.resyncing && !warm}
               slowed={!fromWatch && freshness.slowed}
               slowRead={!fromWatch && freshness.slowRead}
-              stale={stale || (nothingRead && !isRefusal(failed))}
+              stale={stale || !!warm || (nothingRead && !isRefusal(failed))}
               refusedAt={refused ? refusedAt : undefined}
             />
             <ShareScreenAction
@@ -849,6 +856,19 @@ export function Events() {
               onRetry={() =>
                 several ? parts.refetch() : void single.refetch()
               }
+            />
+          )}
+          {warm && (
+            <Unknown
+              compact
+              className="mb-2"
+              question={t("empty", "watchLiveListFailing", {
+                label: "events",
+              })}
+              error={Object.assign(new Error(warm.message), {
+                code: warm.code,
+              })}
+              onRetry={freshList.retry}
             />
           )}
           {short && !stale && !showSkeleton && (
@@ -921,7 +941,7 @@ export function Events() {
               question={[cacheKey, eventType, eventLimit, query].join("\n")}
               held={pointed}
               cutAt={
-                windowFull && limit !== null && !stale && !short
+                windowFull && limit !== null && !stale && !warm && !short
                   ? limit
                   : undefined
               }
