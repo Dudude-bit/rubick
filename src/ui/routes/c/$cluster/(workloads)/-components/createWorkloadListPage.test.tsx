@@ -165,7 +165,9 @@ describe("a workload list while a new scope is read", () => {
     expect(screen.queryByText(/in staging/)).toBeNull();
     expect(screen.queryByText("1 Deployment")).toBeNull();
     expect(
-      screen.getByText("1 Deployment, from the namespaces that answered")
+      screen.getByText(
+        "1 Deployment, from the previous scope while this one is read"
+      )
     ).toBeVisible();
   });
 });

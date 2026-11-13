@@ -326,6 +326,7 @@ export function StatefulSetDetail() {
                   pods={pods}
                   podsError={podsError}
                   podsPending={podsPending}
+                  onRetryPods={() => void refetchPods()}
                   idle={
                     desired === 0
                       ? t("empty", "kindScaledToZero", {
@@ -585,12 +586,16 @@ export function StatefulSetDetail() {
       <ScaleDialog
         warnings={scaleWarnings(connections, intercept("Scale"), t)}
         open={scaleOpen}
-        onOpenChange={setScaleOpen}
+        onOpenChange={(open) => {
+          if (open) scaleMutation.reset();
+          setScaleOpen(open);
+        }}
         kind={ResourceType.StatefulSet}
         name={name ?? ""}
         namespace={namespace || null}
         current={replicas?.desired}
         busy={scaleMutation.isPending}
+        error={scaleMutation.isError ? scaleMutation.error : null}
         onSubmit={(replicas) => scaleMutation.mutate(replicas)}
       />
       {asking.dialog}

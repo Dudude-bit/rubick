@@ -500,6 +500,7 @@ export function DeploymentDetail() {
                 pods={pods}
                 podsError={podsError}
                 podsPending={podsPending}
+                onRetryPods={() => void refetchPods()}
                 idle={
                   desired === 0
                     ? t("empty", "kindScaledToZero", {
@@ -759,12 +760,16 @@ export function DeploymentDetail() {
       <ScaleDialog
         warnings={scaleWarnings(connections, intercept("Scale"), t)}
         open={scaleDialogOpen}
-        onOpenChange={setScaleDialogOpen}
+        onOpenChange={(open) => {
+          if (open) scaleMutation.reset();
+          setScaleDialogOpen(open);
+        }}
         kind={ResourceType.Deployment}
         name={name ?? ""}
         namespace={namespace || null}
         current={deployment?.replicas.desired}
         busy={scaleMutation.isPending}
+        error={scaleMutation.isError ? scaleMutation.error : null}
         onSubmit={(replicas) => scaleMutation.mutate(replicas)}
       />
 
@@ -791,18 +796,18 @@ export function DeploymentDetail() {
             {imageGate.input}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setImageDialogOpen(false)}
+              disabled={updateImageMutation.isPending}
+            >
               {t("action", "cancel")}
             </Button>
             <ReasonTip reason={patchDenied}>
               <Button
                 onClick={() => !patchDenied && updateImageMutation.mutate()}
-                disabled={
-                  !patchDenied &&
-                  (updateImageMutation.isPending ||
-                    !newImage ||
-                    imageGate.blocked)
-                }
+                pending={updateImageMutation.isPending}
+                disabled={!patchDenied && (!newImage || imageGate.blocked)}
                 aria-disabled={patchDenied ? true : undefined}
                 className={cn(patchDenied && "cursor-default opacity-40")}
               >

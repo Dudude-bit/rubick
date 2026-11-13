@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle, Server, Clock, Loader2 } from "lucide-react";
+import { AlertTriangle, Server } from "lucide-react";
 import type {
   DebugConfig,
   DebugOperation,
@@ -26,12 +26,11 @@ import type {
   MadePod,
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
-import { formatTimeUnit } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { DEBUG_IMAGES } from "./constants";
+import { DebugNotReady, DebugPolling } from "./DebugWaiting";
 import { useDebugOperation } from "@/hooks";
 import { debugFailureWords } from "@/hooks/useDebugOperation";
-import { Progress } from "@/components/ui/progress";
 import { useT } from "@/i18n/useT";
 import { toastError, toastWriteError } from "@/lib/toast-error";
 import { ReasonTip } from "@/components/object/detail-blocks";
@@ -74,6 +73,7 @@ export function DebugNodeDialog({
   const isImageValid = image.trim().length > 0;
 
   const [showTimeoutDialog, setShowTimeoutDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [timeoutOperation, setTimeoutOperation] =
     useState<DebugOperation | null>(null);
 
@@ -169,6 +169,7 @@ export function DebugNodeDialog({
 
   const handleDeletePod = async () => {
     if (timeoutOperation) {
+      setDeleting(true);
       try {
         await commands.deleteDebugPod(
           timeoutOperation.podName,
@@ -182,6 +183,8 @@ export function DebugNodeDialog({
         });
       } catch (err) {
         toastWriteError(t("action", "failedToDeletePod"), err);
+      } finally {
+        setDeleting(false);
       }
     }
     setShowTimeoutDialog(false);
@@ -197,101 +200,49 @@ export function DebugNodeDialog({
 
   if (showTimeoutDialog && timeoutOperation) {
     return (
-      <Dialog open={open} onOpenChange={() => {}}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warn" />
-              {t("action", "debugPodNotReady")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("action", "theDebugPod")}{" "}
-              <span className="font-medium">{timeoutOperation.podName}</span>{" "}
-              {t("action", "onNode")}{" "}
-              <span className="font-medium">{nodeName}</span>{" "}
-              {t("action", "didNotBecomeReady")}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-4">
-            {statusReason && (
-              <div className="rounded-md border border-hair p-3">
-                <div className="flex items-center gap-2 text-xs">
-                  <Clock className="h-3.5 w-3.5 text-fg-fnt" />
-                  <span className="text-fg-mut">
-                    {t("action", "lastStatus")}:
-                  </span>
-                  <span className="font-medium">{statusReason}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={handleLeave}>
-              {t("action", "leave")}
-            </Button>
-            <Button variant="destructive" onClick={handleDeletePod}>
-              {t("action", "deletePod")}
-            </Button>
-            <Button onClick={handleKeepWaiting}>
-              {t("action", "keepWaiting")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DebugNotReady
+        open={open}
+        title={t("action", "debugPodNotReady")}
+        description={
+          <>
+            {t("action", "theDebugPod")}{" "}
+            <span className="font-medium">{timeoutOperation.podName}</span>{" "}
+            {t("action", "onNode")}{" "}
+            <span className="font-medium">{nodeName}</span>{" "}
+            {t("action", "didNotBecomeReady")}
+          </>
+        }
+        statusReason={statusReason}
+        deleting={deleting}
+        onLeave={handleLeave}
+        onDelete={handleDeletePod}
+        onKeepWaiting={handleKeepWaiting}
+      />
     );
   }
 
-  // Render polling UI
   if (isPolling) {
     return (
-      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              {state === "creating"
-                ? t("action", "creatingDebugPod")
-                : t("action", "waitingForPod")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("action", "debugPodPrefix")} {t("action", "onNode")}{" "}
-              <span className="font-medium">{nodeName}</span>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* Status */}
-            <div className="rounded-md border border-hair p-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-fg-mut">{t("columns", "status")}</span>
-                <span className="font-medium">
-                  {statusReason || t("action", "initializing")}
-                </span>
-              </div>
-            </div>
-
-            {/* Progress */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-fg-mut">{t("action", "elapsed")}</span>
-                <span className="font-medium">
-                  {formatTimeUnit(elapsedSeconds, "second")} /{" "}
-                  {formatTimeUnit(timeoutSeconds, "second")}
-                </span>
-              </div>
-              <Progress value={progressPercent} className="h-2" />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCancel}>
-              {t("action", "cancel")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DebugPolling
+        open={open}
+        onOpenChange={handleDialogOpenChange}
+        title={
+          state === "creating"
+            ? t("action", "creatingDebugPod")
+            : t("action", "waitingForPod")
+        }
+        description={
+          <>
+            {t("action", "debugPodPrefix")} {t("action", "onNode")}{" "}
+            <span className="font-medium">{nodeName}</span>
+          </>
+        }
+        statusReason={statusReason}
+        elapsedSeconds={elapsedSeconds}
+        timeoutSeconds={timeoutSeconds}
+        progressPercent={progressPercent}
+        onCancel={handleCancel}
+      />
     );
   }
 

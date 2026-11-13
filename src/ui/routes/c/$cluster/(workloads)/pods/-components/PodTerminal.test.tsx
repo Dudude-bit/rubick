@@ -46,12 +46,14 @@ vi.mock("@/components/terminal/Terminal", async () => {
       replay,
       onClose,
       closeLabel,
+      connecting,
     }: {
       sessionId: string | null;
       onSize?: (cols: number, rows: number) => void;
       replay?: () => string;
       onClose?: () => void;
       closeLabel?: string;
+      connecting?: boolean;
     }) => {
       pane.close = onClose;
       useEffect(() => {
@@ -64,6 +66,7 @@ vi.mock("@/components/terminal/Terminal", async () => {
           data-session-id={sessionId ?? ""}
           data-replay={sessionId ? (replay?.() ?? "") : ""}
           data-close-label={closeLabel ?? ""}
+          data-connecting={String(connecting ?? false)}
         />
       );
     },
@@ -423,5 +426,55 @@ describe("a shell opened at the pane's size", () => {
     await act(async () => answer("term-late"));
 
     expect(commands.closeTerminal).toHaveBeenCalledWith("term-late");
+  });
+});
+
+describe("PodTerminal while the shell opens and after it ends", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  /**
+   * With no session id the badge said "Idle" over a blank body for the whole
+   * handshake. Fails if the pane stops telling the terminal it is connecting.
+   */
+  it("tells the terminal it is connecting until the shell answers", async () => {
+    let answer: (id: string) => void = () => {};
+    vi.mocked(commands.openPodShell).mockImplementationOnce(
+      () => new Promise<string>((resolve) => (answer = resolve))
+    );
+    render(<PodTerminal {...props} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("terminal-stub")).toHaveAttribute(
+        "data-connecting",
+        "true"
+      )
+    );
+    await act(async () => answer("term-1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("terminal-stub")).toHaveAttribute(
+        "data-connecting",
+        "false"
+      )
+    );
+  });
+
+  /**
+   * Typing `exit` left a neutral "Ended" badge and nowhere to go but the
+   * small cross. Fails if the pane stops offering a new shell in place.
+   */
+  it("offers a new shell when the shell exits on its own", async () => {
+    await renderConnected();
+    await waitFor(() => expect(listeners["terminal-closed"]).toBeDefined());
+    act(() =>
+      listeners["terminal-closed"]!({ payload: { session_id: "term-1" } })
+    );
+    expect(
+      await screen.findByText(/The shell on log-demo-7f9\/app ended/)
+    ).toBeInTheDocument();
+    vi.mocked(commands.openPodShell).mockClear();
+    screen.getByRole("button", { name: /Start a new shell/ }).click();
+    await waitFor(() => expect(commands.openPodShell).toHaveBeenCalledTimes(1));
   });
 });

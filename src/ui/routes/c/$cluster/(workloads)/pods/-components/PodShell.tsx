@@ -15,7 +15,7 @@ import { ExitAgo } from "../../../-object/ExitAgo";
 import type { ContainerInfo, PodInfo } from "@/generated/types";
 
 import { PodTerminal } from "./PodTerminal";
-import { StartOnAsk } from "./StartOnAsk";
+import { HollowFrame, StartOnAsk } from "./StartOnAsk";
 import type { PodDenied } from "@/lib/access";
 import { ReasonTip } from "@/components/object/detail-blocks";
 import { cn } from "@/lib/utils";
@@ -236,10 +236,9 @@ function Hollow({
   children: ReactNode;
 }) {
   return (
-    <div className="max-w-[62ch] px-3 pb-12 pt-11" data-testid="shell-hollow">
-      <h3 className="mb-1.5 text-title font-medium text-fg">{headline}</h3>
+    <HollowFrame headline={headline} testId="shell-hollow">
       {children}
-    </div>
+    </HollowFrame>
   );
 }
 

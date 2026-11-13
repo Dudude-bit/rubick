@@ -26,6 +26,8 @@ import {
   type UsageSample,
 } from "@/lib/usage-history";
 import { useT } from "@/i18n/useT";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { BAND_H } from "./band-frame";
 import type { en } from "@/i18n/catalogue";
 
@@ -232,7 +234,7 @@ function UsageChartInner({
           )}
         </p>
       )}
-      <Note>
+      <UsageNote>
         {suppressNote || (drawn === 0 && value === null)
           ? null
           : drawn <= 1 && live
@@ -240,17 +242,53 @@ function UsageChartInner({
             : (limit === null || limit <= 0) && noLimitNote !== null
               ? t("empty", noLimitNote)
               : null}
-      </Note>
+      </UsageNote>
     </div>
   );
 }
 
-/** Sits under the band, in the plot's own column. */
-function Note({ children }: { children?: React.ReactNode }) {
+const PLOT_GUTTER_PX = 104;
+
+/** A line under the bands, aligned to the plot's own column. */
+export function UsageNote({
+  children,
+  tone = "fnt",
+}: {
+  children?: React.ReactNode;
+  tone?: "fnt" | "mut" | "warn";
+}) {
   if (!children) return null;
   return (
-    <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
+    <p
+      style={{ paddingLeft: PLOT_GUTTER_PX }}
+      className={cn(
+        "pb-1 pr-1.5 text-caption leading-snug",
+        tone === "warn"
+          ? "text-warn"
+          : tone === "mut"
+            ? "text-fg-mut"
+            : "text-fg-fnt"
+      )}
+    >
       {children}
     </p>
+  );
+}
+
+/** Two rows in the shape of the bands, held while the first reading is on its way. */
+export function UsageRowsSkeleton() {
+  return (
+    <div role="status" aria-busy="true">
+      {[0, 1].map((row) => (
+        <div
+          key={row}
+          className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-2"
+        >
+          <Skeleton className="h-3 w-14" />
+          <Skeleton style={{ height: BAND_H }} />
+          <Skeleton className="ml-auto h-3 w-24" />
+        </div>
+      ))}
+    </div>
   );
 }

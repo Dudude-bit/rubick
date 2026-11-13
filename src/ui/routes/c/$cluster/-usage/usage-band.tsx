@@ -193,7 +193,7 @@ export default function Band(props: BandProps) {
           {!recorded && limitInView(limit, max) && (
             <ReferenceLine
               y={limit!}
-              stroke="hsl(var(--warn))"
+              stroke="hsl(var(--fg-mut))"
               strokeOpacity={0.8}
               strokeWidth={1}
               strokeDasharray="3 3"
@@ -225,7 +225,7 @@ export default function Band(props: BandProps) {
               <Line
                 type="stepAfter"
                 dataKey="ceiling"
-                stroke="hsl(var(--warn))"
+                stroke="hsl(var(--fg-mut))"
                 strokeOpacity={0.8}
                 strokeWidth={1}
                 strokeDasharray="3 3"
@@ -329,7 +329,7 @@ function LimitLabel({
       x={x}
       y={y}
       textAnchor="end"
-      className="fill-warn font-mono text-micro opacity-90"
+      className="fill-fg-mut font-mono text-micro opacity-90"
     >
       {word} {text}
     </text>

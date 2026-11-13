@@ -6,13 +6,22 @@
  */
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { SegmentedControl } from "@/components/ui/states";
+import { Spinner } from "@/components/ui/spinner";
+import { Unknown } from "@/components/ui/unknown";
 import { UsageRow } from "@/components/object/detail-blocks";
 import type { TrafficChartProps } from "./traffic-chart";
 import { BAND_H } from "./band-frame";
-import { NO_LIMIT_NOTE, UsageChart, WATCHING_NOTE } from "./usage-chart";
+import {
+  NO_LIMIT_NOTE,
+  UsageChart,
+  UsageNote,
+  UsageRowsSkeleton,
+  WATCHING_NOTE,
+} from "./usage-chart";
 import { useUsageHistory } from "./useUsageHistory";
 import { useCapabilityState, USAGE_RANGES } from "@/integrations";
 import type {
@@ -64,6 +73,13 @@ export interface UsageBlockProps {
   /** `dataUpdatedAt` of the metrics query. */
   sampledAt: number | null | undefined;
   status: MetricsStatus | null;
+  /**
+   * How the metrics read itself is going. With no answer yet the bands are a
+   * skeleton, and with a failure and no answer they are `Unknown`: neither is
+   * "not reporting", which is what an object metrics-server was asked about
+   * and had nothing for looks like.
+   */
+  reading?: { pending: boolean; error: unknown; retry: () => unknown };
   /** Drives the storage summary; already fetched by every page with a
    *  Connections tab, so this costs nothing. */
   connections?: ResourceConnections | null;
@@ -127,6 +143,7 @@ export function UsageBlock({
   restarts,
   sampledAt,
   status,
+  reading,
   connections,
   children,
   history,
@@ -136,6 +153,10 @@ export function UsageBlock({
   const t = useT();
   const absence = absenceOf(status);
   const available = absence === null;
+  const unanswered = status === null && live && cpu == null && memory == null;
+  const metricsFailed = unanswered && Boolean(reading?.error);
+  const metricsPending =
+    unanswered && !metricsFailed && reading?.pending === true;
   /** Nothing declares a ceiling for either measure. */
   const neither =
     (cpuLimit === null || cpuLimit <= 0) &&
@@ -236,8 +257,19 @@ export function UsageBlock({
           ) : undefined
         }
       />
-      <div>
-        {drawable ? (
+      <div
+        className={past.switching ? "opacity-60 transition-opacity" : undefined}
+      >
+        {past.window === null && metricsPending ? (
+          <UsageRowsSkeleton />
+        ) : past.window === null && metricsFailed ? (
+          <Unknown
+            className="mx-1.5 my-1"
+            question={t("empty", "usageMetricsNotRead")}
+            error={reading?.error}
+            onRetry={reading?.retry}
+          />
+        ) : drawable ? (
           <>
             <UsageChart
               label="CPU"
@@ -283,31 +315,27 @@ export function UsageBlock({
               }
             />
             {absence !== null && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
+              <UsageNote>
                 {t("empty", "historyWithoutMetricsServer", {
                   vendor: past.vendor,
                   reason: t("cluster", ABSENCE_SHORT[absence]),
                 })}
-              </p>
+              </UsageNote>
             )}
             {/* Only where the supplier actually answered. A refused or
              *  failed probe also lands here as `null`, and saying
              *  "kube-state-metrics is not in this Prometheus" about an
              *  install that is there and answering is the collapse. */}
             {declared === null && declaredKnown && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
-                {t("empty", "declaredNowOnly")}
-              </p>
+              <UsageNote>{t("empty", "declaredNowOnly")}</UsageNote>
             )}
             {declared === null && !declaredKnown && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
-                {t("empty", "declaredUnknown")}
-              </p>
+              <UsageNote>{t("empty", "declaredUnknown")}</UsageNote>
             )}
             {past.window?.basis === "pods" && kept && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-mut">
+              <UsageNote tone="mut">
                 {t("empty", "nodesFromPods", { vendor: past.vendor })}
-              </p>
+              </UsageNote>
             )}
             {past.traffic && (
               // A window with nothing drawable draws no row, so the space is
@@ -324,11 +352,7 @@ export function UsageBlock({
                 <TrafficChart window={past.traffic} />
               </React.Suspense>
             )}
-            {shared && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
-                {shared}
-              </p>
-            )}
+            {shared && <UsageNote>{shared}</UsageNote>}
             {!live && idleNote && (
               <p className="px-1.5 pb-1 pt-1 text-caption leading-snug text-fg-fnt">
                 {idleNote}{" "}
@@ -364,6 +388,14 @@ export function UsageBlock({
          *  note is the only place that failure is spoken. Inside, it was
          *  the silent fallback its own doc comment warns about. */}
         <HistoryNote state={past} available={available} />
+        {past.trafficError != null && (
+          <UsageNote tone="warn">
+            {t("empty", "trafficNotRead", {
+              vendor: past.vendor,
+              reason: errorToShow(past.trafficError),
+            })}
+          </UsageNote>
+        )}
         {children}
       </div>
       {storage && <StorageRow summary={storage} />}
@@ -395,17 +427,17 @@ function HistoryNote({
   const t = useT();
   if (state.status === "unreachable") {
     return (
-      <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-warn">
+      <UsageNote tone="warn">
         {t("empty", "vendorDidNotAnswer", {
           vendor: state.vendor,
           reason: state.reason,
         })}
-      </p>
+      </UsageNote>
     );
   }
   if (state.status === "absent" && state.offerable) {
     return (
-      <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
+      <UsageNote>
         {parts(
           t(
             "empty",
@@ -422,7 +454,7 @@ function HistoryNote({
             ),
           }
         )}
-      </p>
+      </UsageNote>
     );
   }
   return null;
@@ -431,9 +463,8 @@ function HistoryNote({
 /**
  * Live where a supplier is answering, dimmed and inert where none is.
  *
- * `disabled` rather than a styled span, so assistive tech is told what the
- * dimming says; the title names what is missing, because a control that is
- * off for an undiscoverable reason is worse than no control.
+ * The title names what is missing, because a control that is off for an
+ * undiscoverable reason is worse than no control.
  */
 function RangePicker({
   enabled,
@@ -448,35 +479,28 @@ function RangePicker({
 }) {
   const t = useT();
   return (
-    <span className="flex items-center gap-0.5">
+    <span className="flex items-center gap-1">
       {loading && (
-        <span className="mr-1 text-micro text-fg-fnt">
-          {t("action", "readingInline")}
-        </span>
+        <Spinner
+          size="xs"
+          aria-label={t("action", "readingInline")}
+          className="flex-none"
+        />
       )}
-      {USAGE_RANGES.map((range) => (
-        <button
-          key={range}
-          type="button"
-          disabled={!enabled}
-          aria-pressed={selected === range}
-          onClick={() => onSelect(selected === range ? null : range)}
-          title={
-            enabled
-              ? t("action", "askForLastRange", { range })
-              : t("action", "rangeNeedsPrometheus")
-          }
-          className={
-            enabled
-              ? selected === range
-                ? "rounded bg-sel px-1.5 py-0.5 text-caption text-fg"
-                : "rounded px-1.5 py-0.5 text-caption text-fg-mut hover:bg-hover hover:text-fg"
-              : "cursor-default rounded px-1.5 py-0.5 text-caption text-fg-mut opacity-40"
-          }
-        >
-          {range}
-        </button>
-      ))}
+      <SegmentedControl
+        label={t("columns", "usage")}
+        value={selected}
+        onChange={onSelect}
+        onClear={() => onSelect(null)}
+        segments={USAGE_RANGES.map((range) => ({
+          value: range,
+          label: range,
+          disabled: !enabled,
+          title: enabled
+            ? t("action", "askForLastRange", { range })
+            : t("action", "rangeNeedsPrometheus"),
+        }))}
+      />
     </span>
   );
 }
@@ -491,6 +515,8 @@ interface RangedHistory {
   range: UsageRange | null;
   select: (range: UsageRange | null) => void;
   loading: boolean;
+  /** The window on screen is the previous range's while the new one is read. */
+  switching: boolean;
   window: {
     samples: readonly UsageSampleLike[];
     resolution: Saying;
@@ -500,6 +526,7 @@ interface RangedHistory {
     basis?: NodeBasis;
   } | null;
   traffic: TrafficLike | null;
+  trafficError: unknown;
   endpoint: string;
   vendor: string;
   reason: string;
@@ -551,6 +578,10 @@ function useRangedHistory(
         range: range!,
       }),
     enabled: enabled && range !== null,
+    placeholderData: (previous, previousQuery) =>
+      JSON.stringify(previousQuery?.queryKey[1]) === JSON.stringify(scope)
+        ? keepPreviousData(previous)
+        : undefined,
     // A range query is expensive on somebody else's server and the window it
     // describes barely moves; re-asking on every tab switch would be rude.
     staleTime: 30_000,
@@ -597,7 +628,9 @@ function useRangedHistory(
       live && available ? setRange : (next) => next !== null && setRange(next),
     loading: query.isFetching,
     window: range !== null && query.data ? query.data : null,
+    switching: query.isPlaceholderData,
     traffic: range !== null ? (trafficQuery.data ?? null) : null,
+    trafficError: range !== null ? trafficQuery.error : null,
     endpoint: power.state === "absent" ? "" : power.endpoint,
     vendor: power.state === "absent" ? "" : power.vendor,
     reason:
@@ -616,9 +649,11 @@ function useRangedHistory(
  * no supplier is connected — the fallback sentence below is the answer in
  * that case and it costs no requests to say it.
  */
-function useFullness(
-  summary: ReturnType<typeof storageSummary>
-): Map<string, VolumeFullness> {
+function useFullness(summary: ReturnType<typeof storageSummary>): {
+  byClaim: Map<string, VolumeFullness>;
+  error: unknown;
+  retry: () => unknown;
+} {
   const power = useCapabilityState("volume.fullness");
   const namespace = summary?.claims[0]?.namespace ?? null;
   const claims = React.useMemo(
@@ -630,7 +665,7 @@ function useFullness(
     [summary, namespace]
   );
 
-  const { data } = useQuery({
+  const { data, error, refetch } = useQuery({
     queryKey: ["volume-fullness", namespace, claims],
     queryFn: () =>
       (power as Extract<typeof power, { state: "ready" }>).use({
@@ -642,10 +677,11 @@ function useFullness(
     retry: false,
   });
 
-  return React.useMemo(
+  const byClaim = React.useMemo(
     () => new Map((data ?? []).map((entry) => [entry.claim, entry])),
     [data]
   );
+  return { byClaim, error: data ? null : error, retry: refetch };
 }
 
 function StorageRow({
@@ -655,7 +691,7 @@ function StorageRow({
 }) {
   const t = useT();
   const { claims, declared, unbound } = summary;
-  const fullness = useFullness(summary);
+  const { byClaim: fullness, error, retry } = useFullness(summary);
   // The fallback sentence is not replaced wholesale: a cluster where the
   // kubelet reports some volumes and not others still owes the reader the
   // reason the quiet ones are quiet.
@@ -710,14 +746,23 @@ function StorageRow({
        *  said in words rather than implied by an empty bar — and still said
        *  for the volumes nothing measured, because "no kubelet scraping"
        *  and "an unprovisioned volume" look identical from here. */}
-      {measured < claims.length && (
-        <p className="px-1.5 pt-1 text-caption leading-snug text-fg-fnt">
-          {measured === 0
-            ? t("empty", "declaredSizeNotFullness")
-            : t("empty", "declaredSizeForUnreported", {
-                n: claims.length - measured,
-              })}
-        </p>
+      {error != null ? (
+        <Unknown
+          className="mx-1.5 mt-1"
+          question={t("empty", "fullnessNotRead")}
+          error={error}
+          onRetry={retry}
+        />
+      ) : (
+        measured < claims.length && (
+          <p className="px-1.5 pt-1 text-caption leading-snug text-fg-fnt">
+            {measured === 0
+              ? t("empty", "declaredSizeNotFullness")
+              : t("empty", "declaredSizeForUnreported", {
+                  n: claims.length - measured,
+                })}
+          </p>
+        )
       )}
     </div>
   );

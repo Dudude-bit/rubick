@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { ArrowDownToLine, Snowflake } from "lucide-react";
 import type { LogFormat } from "@/generated/types";
 import {
   Tooltip,
@@ -25,6 +26,9 @@ import { useT } from "@/i18n/useT";
  * not read as a stall, short enough that a burst is still visible as one.
  */
 const RATE_SAMPLE = 400;
+
+/** Two lines 65 ms apart are not 15 lines a second; under a second there is no rate yet. */
+const MIN_RATE_SPAN_MS = 1000;
 
 interface LogStatusBarProps {
   logs: StreamedLogLine[];
@@ -138,7 +142,7 @@ export function LogStatusBar({
           })}
           className="whitespace-nowrap text-info hover:text-fg"
         >
-          <span aria-hidden="true">❄ </span>
+          <Snowflake aria-hidden="true" className="mr-1 inline h-3 w-3" />
           {t("count", "frozenLines", {
             n: frozenLines,
             count: formatCount(frozenLines),
@@ -166,7 +170,10 @@ export function LogStatusBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="cursor-help whitespace-nowrap text-info">
-              <span aria-hidden="true">⇣ </span>
+              <ArrowDownToLine
+                aria-hidden="true"
+                className="mr-1 inline h-3 w-3"
+              />
               {t("action", "intake")} {intakeKey} ·{" "}
               {kept !== null
                 ? `${t("count", "keptPerSecond", { rate: formatLineRate(kept) })}${
@@ -281,6 +288,6 @@ function measureRate(
   }
   if (end - start < 1) return null;
   const span = logs[end].epoch - logs[start].epoch;
-  if (span <= 0) return null;
+  if (span < MIN_RATE_SPAN_MS) return null;
   return ((end - start) / span) * 1000;
 }

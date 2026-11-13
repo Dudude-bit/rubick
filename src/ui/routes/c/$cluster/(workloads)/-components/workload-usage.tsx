@@ -13,9 +13,12 @@
  */
 import type { EmptyKey } from "../../-usage/usage-chart";
 import { useMemo } from "react";
+
 import { EyeOff } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { Unknown } from "@/components/ui/unknown";
+import { UsageRowsSkeleton } from "../../-usage/usage-chart";
 import { UsageBlock } from "../../-usage/usage-block";
 import { useCapabilityState } from "@/integrations";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -56,6 +59,7 @@ export interface WorkloadUsageProps {
   podsError?: unknown;
   /** The pod read has not answered yet. */
   podsPending?: boolean;
+  onRetryPods?: () => unknown;
   /**
    * Why there is nothing to measure, in this kind's own words — a Job that
    * finished and a CronJob between runs are both at zero for reasons a reader
@@ -75,6 +79,7 @@ export function WorkloadUsage({
   pods,
   podsError,
   podsPending = false,
+  onRetryPods,
   idle,
   connections,
   noLimitNote,
@@ -90,7 +95,7 @@ export function WorkloadUsage({
     : "limitsNotKnown";
   const running = useMemo(() => runningPods(pods), [pods]);
 
-  const { podMetrics, podStatus, podSampledAt } = useMetrics({
+  const { podMetrics, podStatus, podSampledAt, podMetricsQuery } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
     enabled: running.length > 0,
@@ -122,7 +127,13 @@ export function WorkloadUsage({
       : undefined;
 
   if (unread || podsPending) {
-    return <PodsUnknownUsage kind={kind} unread={unread} />;
+    return (
+      <PodsUnknownUsage
+        kind={kind}
+        error={unread ? podsError : null}
+        onRetry={onRetryPods}
+      />
+    );
   }
 
   // The one case metrics-server and a Prometheus disagree about. Both are
@@ -173,6 +184,11 @@ export function WorkloadUsage({
       restarts={withMetrics.reduce((total, pod) => total + pod.restartCount, 0)}
       sampledAt={podSampledAt}
       status={podStatus}
+      reading={{
+        pending: podMetricsQuery.isPending,
+        error: podMetricsQuery.data ? null : podMetricsQuery.error,
+        retry: podMetricsQuery.refetch,
+      }}
       connections={connections}
       history={scope}
     />
@@ -203,14 +219,22 @@ function IdleUsage({ says, exited }: { says: string; exited: boolean }) {
 }
 
 /** The pods were not read, or not yet: whether any run is not known, so nothing is said to. */
-function PodsUnknownUsage({ kind, unread }: { kind: string; unread: boolean }) {
+function PodsUnknownUsage({
+  kind,
+  error,
+  onRetry,
+}: {
+  kind: string;
+  error: unknown;
+  onRetry?: () => unknown;
+}) {
   const t = useT();
   return (
     <Section>
       <SectionHeader
         title={t("columns", "usage")}
         count={
-          unread ? (
+          error ? (
             <span className="inline-flex items-center gap-1">
               <EyeOff className="h-3 w-3" aria-hidden="true" />
               {t("empty", "podsNotRead")}
@@ -220,10 +244,15 @@ function PodsUnknownUsage({ kind, unread }: { kind: string; unread: boolean }) {
           )
         }
       />
-      {unread && (
-        <p className="px-1.5 pt-1 text-caption leading-snug text-fg-fnt">
-          {t("empty", "usagePodsNotRead", { kind })}
-        </p>
+      {error ? (
+        <Unknown
+          className="mx-1.5 my-1"
+          question={t("empty", "usagePodsNotRead", { kind })}
+          error={error}
+          onRetry={onRetry}
+        />
+      ) : (
+        <UsageRowsSkeleton />
       )}
     </Section>
   );

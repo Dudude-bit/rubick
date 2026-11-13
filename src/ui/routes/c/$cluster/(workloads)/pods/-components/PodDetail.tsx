@@ -532,7 +532,7 @@ export function PodDetail() {
     name ?? null
   );
 
-  const { podMetrics, podStatus, podSampledAt } = useMetrics({
+  const { podMetrics, podStatus, podSampledAt, podMetricsQuery } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
     enabled: !!pod && !gone,
@@ -794,7 +794,7 @@ export function PodDetail() {
     {
       label: t("columns", "node"),
       value: pod?.nodeName ? (
-        <span className="inline-flex items-baseline gap-2">
+        <span className="inline-flex min-w-0 flex-wrap items-baseline gap-x-2">
           <NodeRef name={pod.nodeName} />
           {nodeIsSpot && <SpotMark says="spot" />}
         </span>
@@ -1066,6 +1066,13 @@ export function PodDetail() {
                       restarts={pod?.restartCount ?? null}
                       sampledAt={podSampledAt}
                       status={podStatus}
+                      reading={{
+                        pending: podMetricsQuery.isPending,
+                        error: podMetricsQuery.data
+                          ? null
+                          : podMetricsQuery.error,
+                        retry: podMetricsQuery.refetch,
+                      }}
                       connections={connections.data}
                       history={
                         pod?.namespace && pod?.name

@@ -9,7 +9,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowDownToLine, ChevronDown, ChevronUp } from "lucide-react";
 
 import type { DensityStripMode } from "@/stores/displaySettingsStore";
 
@@ -450,7 +450,7 @@ export function LogDensityStrip({
               className="flex-none text-micro leading-none text-info"
               title={t("empty", "intakeNotOnBand")}
             >
-              <span aria-hidden="true">⇣</span>
+              <ArrowDownToLine aria-hidden="true" className="h-3 w-3" />
               <span className="sr-only">
                 {t("action", "mapsKeptLinesOnly")}
               </span>
@@ -811,7 +811,7 @@ function Head({
           className="ml-auto shrink-0 text-info"
           title={t("empty", "intakeNotOnMap")}
         >
-          <span aria-hidden="true">⇣ </span>
+          <ArrowDownToLine aria-hidden="true" className="mr-1 inline h-3 w-3" />
           {t("action", "mapsKeptLinesOnly")}
         </span>
       )}

@@ -118,6 +118,26 @@ describe("MetricsStatusBanner", () => {
   });
 
   /**
+   * Hiding is remembered per cluster for good, so a metrics failure put away
+   * stayed silent while rows kept showing reduced data. Fails if a failing
+   * metrics read can be hidden, or an old hidden mark still hides it.
+   */
+  it("cannot be put away while the metrics read is failing", async () => {
+    useMetricsNoticeStore.setState({ hidden: { "acme-staging": ["error"] } });
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "error", message: "502" }} />
+    );
+    expect(
+      screen.getByText(
+        "The metrics API is failing, so CPU and memory may be missing"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Hide for this cluster" })
+    ).toBeNull();
+  });
+
+  /**
    * The backend now answers every metrics read from its five-minute memory,
    * so Check again that only refetched would read the memory back: a
    * metrics-server installed a minute ago would still say "not installed".

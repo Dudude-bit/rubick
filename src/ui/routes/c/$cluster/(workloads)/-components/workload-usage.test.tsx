@@ -1,9 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { getPodsMetrics: vi.fn() },
+  commands: {
+    getPodsMetrics: vi.fn(),
+    forgetDiscovery: () => Promise.resolve(),
+  },
 }));
 
 vi.mock("@/integrations", async (importOriginal) => ({
@@ -164,6 +168,24 @@ describe("WorkloadUsage whose pods were not read", () => {
     );
   });
 
+  /** Fails if a refused pod read is a dead end with no way to ask again. */
+  it("offers to read the pods again", async () => {
+    const onRetryPods = vi.fn();
+    view({
+      kind: "Deployment",
+      podsError: new Error("pods is forbidden"),
+      onRetryPods,
+    });
+    await userEvent.click(screen.getByRole("button", { name: /again/i }));
+    await waitFor(() => expect(onRetryPods).toHaveBeenCalled());
+  });
+
+  /** Fails if the wait for the pods is drawn as a bare header that grows two rows when they arrive. */
+  it("holds the shape of the rows while the pods have not answered", () => {
+    view({ podsPending: true });
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+  });
+
   /** Fails if a failed re-read hides pods the last read found. */
   it("keeps the pods a read found before the next one failed", () => {
     view({
@@ -173,6 +195,26 @@ describe("WorkloadUsage whose pods were not read", () => {
       idle: "This Job has finished.",
     });
     expect(screen.getByText(/This Job has finished/i)).toBeInTheDocument();
+  });
+});
+
+describe("WorkloadUsage whose pods run but whose metrics read failed", () => {
+  beforeEach(() => {
+    useUsageHistoryStore.getState().clear();
+    vi.mocked(commands.getPodsMetrics).mockReset();
+  });
+
+  /**
+   * Running pods and a metrics read that threw drew "not reporting" on both
+   * rows. Fails if the failure is said as the pods reporting nothing.
+   */
+  it("says the metrics could not be read instead of not reporting", async () => {
+    vi.mocked(commands.getPodsMetrics).mockRejectedValue(new Error("boom"));
+    view({ pods: [pod("api-1", "Running")] });
+    expect(
+      await screen.findByText(/Could not read CPU and memory/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("not reporting")).toBeNull();
   });
 });
 
@@ -219,7 +261,9 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
       idle: "This Job has finished.",
     });
 
-    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    await waitFor(() =>
+      expect(dom.querySelector("svg:not(.animate-spin)")).not.toBeNull()
+    );
     expect(screen.getByText(/from prometheus.monitoring:9090/i)).toBeVisible();
     expect(screen.getByText(/This Job has finished/i)).toBeVisible();
   });
@@ -237,7 +281,9 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
       idle: "This Job has finished.",
     });
 
-    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    await waitFor(() =>
+      expect(dom.querySelector("svg:not(.animate-spin)")).not.toBeNull()
+    );
     expect(screen.queryByText(/watching from now/i)).toBeNull();
     expect(
       screen.queryByText(/watched since you opened this page/i)
@@ -258,7 +304,9 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
       idle: "This Job has finished.",
     });
 
-    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    await waitFor(() =>
+      expect(dom.querySelector("svg:not(.animate-spin)")).not.toBeNull()
+    );
     expect(screen.getAllByText(/^peak$/)).toHaveLength(2);
   });
 
@@ -375,7 +423,9 @@ describe("WorkloadUsage with a pod running", () => {
       pods: [pod("stateful-demo-0", "Running")],
       idle: "This StatefulSet is scaled to zero.",
     });
-    await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
+    await waitFor(() =>
+      expect(dom.querySelector("svg:not(.animate-spin)")).not.toBeNull()
+    );
     expect(screen.getByText(/summed over 1 pod/i)).toBeInTheDocument();
     expect(screen.queryByText(/scaled to zero/i)).not.toBeInTheDocument();
   });

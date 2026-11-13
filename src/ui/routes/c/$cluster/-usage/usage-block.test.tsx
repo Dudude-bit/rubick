@@ -37,6 +37,7 @@ vi.mock("@/lib/commands", () => ({
     probePrometheus: () => probePrometheus(),
     prometheusQueryRange: (query: string) => prometheusQueryRange(query),
     prometheusQuery: () => prometheusQuery(),
+    forgetDiscovery: () => Promise.resolve(),
   },
 }));
 
@@ -808,5 +809,134 @@ describe("UsageBlock for a node summed from its pods", () => {
     await openHour("uid-node-root");
     await screen.findByText(/from prometheus\.monitoring:9090/);
     expect(screen.queryByText(/Summed from each node's pods/)).toBeNull();
+  });
+});
+
+describe("UsageBlock while the metrics read has not answered", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  const unanswered = {
+    kind: "Deployment",
+    uid: "uid-pending",
+    cpu: null,
+    memory: null,
+    cpuLimit: 200,
+    memoryLimit: null,
+    sampledAt: null,
+    status: null,
+  } as const;
+
+  /**
+   * An object metrics-server had nothing for and an object it was never
+   * asked about drew the same "not reporting" rows. Fails if a read still on
+   * its way is said as "not reporting".
+   */
+  it("holds the bands as a skeleton instead of saying not reporting", async () => {
+    await wrap(
+      <UsageBlock
+        {...unanswered}
+        reading={{ pending: true, error: null, retry: vi.fn() }}
+      />
+    );
+    expect(screen.queryByText("not reporting")).toBeNull();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+  });
+
+  /**
+   * Fails if a refused or failed metrics read is drawn as rows that say the
+   * object reports nothing, or offers no way to ask again.
+   */
+  it("says the read failed and offers to ask again instead of not reporting", async () => {
+    const retry = vi.fn();
+    await wrap(
+      <UsageBlock
+        {...unanswered}
+        reading={{ pending: false, error: new Error("boom"), retry }}
+      />
+    );
+    expect(screen.queryByText("not reporting")).toBeNull();
+    expect(
+      screen.getByText(/Could not read CPU and memory from metrics-server/)
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /again/i }));
+    await waitFor(() => expect(retry).toHaveBeenCalled());
+  });
+
+  /** Fails if the failure branch is keyed on the error alone, so a stale error hides a reading that did arrive. */
+  it("draws the bands once a reading has arrived, whatever the last read said", async () => {
+    await wrap(
+      <UsageBlock
+        {...unanswered}
+        cpu={48}
+        status={{ status: "available", message: null }}
+        reading={{ pending: false, error: new Error("boom"), retry: vi.fn() }}
+      />
+    );
+    expect(
+      screen.queryByText(/Could not read CPU and memory/)
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("UsageBlock storage fullness that could not be read", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  const mounted = () =>
+    wrap(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-fullness"
+        cpu={48}
+        memory={96}
+        cpuLimit={200}
+        memoryLimit={128}
+        sampledAt={1_700_000_000_000}
+        status={{ status: "available", message: null }}
+        connections={withClaim()}
+      />
+    );
+
+  /**
+   * A failed fullness read landed in the same sentence as "no supplier
+   * connected". Fails if the failure is said as "declared size, not fullness".
+   */
+  it("says the read failed instead of that only declared sizes exist", async () => {
+    getPrometheusConnection.mockResolvedValue(CONNECTED);
+    prometheusQuery.mockRejectedValue(new Error("query timed out"));
+    await mounted();
+    expect(
+      await screen.findByText(/Could not read how full the volumes are/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Declared size, not how full/i)).toBeNull();
+  });
+});
+
+describe("UsageBlock range switch", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  /**
+   * The picker was a hand-rolled button row that fell back to the live
+   * window while the next range loaded. Fails if the chosen range stops
+   * being exposed as pressed on the segmented control.
+   */
+  it("marks the chosen range as pressed", async () => {
+    getPrometheusConnection.mockResolvedValue(CONNECTED);
+    await wrap(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-range"
+        cpu={48}
+        memory={96}
+        cpuLimit={200}
+        memoryLimit={128}
+        sampledAt={1_700_000_000_000}
+        status={{ status: "available", message: null }}
+        history={{ kind: "pod", namespace: "ns", pod: "p" }}
+      />
+    );
+    const hour = await screen.findByRole("button", { name: "1h" });
+    await waitFor(() => expect(hour).toBeEnabled());
+    await userEvent.click(hour);
+    expect(hour).toHaveAttribute("aria-pressed", "true");
   });
 });

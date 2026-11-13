@@ -121,7 +121,7 @@ export function CountBlock({
   return (
     <Section>
       <SectionHeader title={title} count={caption(subject, sets, guards, t)} />
-      <div className="grid gap-x-8 md:grid-cols-2">
+      <div className="grid gap-x-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div>{children}</div>
         {rows.length > 0 && (
           <KeyValueList items={rows} className="self-start" />
@@ -196,7 +196,7 @@ export function FactBlock({ title, count, items }: FactBlockProps) {
       {split === 0 ? (
         <KeyValueList items={items} />
       ) : (
-        <div className="grid gap-x-8 md:grid-cols-2">
+        <div className="grid gap-x-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <KeyValueList items={items.slice(0, split)} />
           <KeyValueList items={items.slice(split)} className="self-start" />
         </div>

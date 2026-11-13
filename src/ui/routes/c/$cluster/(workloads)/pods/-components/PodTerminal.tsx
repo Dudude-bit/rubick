@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Terminal, TerminalMetadata } from "@/components/terminal/Terminal";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
+import { StreamFailure } from "@/components/terminal/StreamFailure";
 import { commands } from "@/lib/commands";
 import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError, ERROR_CODES, errorCode } from "@/lib/error-utils";
@@ -285,41 +286,58 @@ export function PodTerminal({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-canvas">
-      {failureReason && (
-        <div
-          role="alert"
-          className="flex items-start justify-between gap-3 border-b border-hair px-4 py-2"
-        >
-          <div className="min-w-0">
-            <p className={`text-xs ${canReconnect ? "text-err" : "text-warn"}`}>
-              {canReconnect
-                ? t("empty", "noShellOn", {
-                    target: `${podName}/${containerName}`,
-                  })
-                : t("empty", "noLongerAvailable", {
-                    target: `${podName}/${containerName}`,
-                  })}
-            </p>
-            <p className="mt-0.5 wrap-break-word text-caption text-fg-mut">
-              {failureReason}
-            </p>
-          </div>
-          {canReconnect ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={connect}
-            >
-              <RefreshCw className="mr-2 h-3.5 w-3.5" />
-              {t("action", "reconnect")}
-            </Button>
-          ) : (
-            <span className="shrink-0 whitespace-nowrap pt-0.5 text-caption text-fg-fnt">
-              {t("empty", "nothingLeftToAttachTo")}
-            </span>
-          )}
-        </div>
+      {failureReason ? (
+        <StreamFailure
+          tone={canReconnect ? "err" : "warn"}
+          headline={
+            canReconnect
+              ? t("empty", "noShellOn", {
+                  target: `${podName}/${containerName}`,
+                })
+              : t("empty", "noLongerAvailable", {
+                  target: `${podName}/${containerName}`,
+                })
+          }
+          detail={failureReason}
+          action={
+            canReconnect ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={connect}
+              >
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                {t("action", "reconnect")}
+              </Button>
+            ) : (
+              <span className="shrink-0 whitespace-nowrap pt-0.5 text-caption text-fg-fnt">
+                {t("empty", "nothingLeftToAttachTo")}
+              </span>
+            )
+          }
+        />
+      ) : (
+        ended &&
+        sessionId && (
+          <StreamFailure
+            tone="warn"
+            headline={t("empty", "shellExited", {
+              target: `${podName}/${containerName}`,
+            })}
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={connect}
+              >
+                <Play className="mr-2 h-3 w-3" aria-hidden="true" />
+                {t("action", "startNewShell")}
+              </Button>
+            }
+          />
+        )
       )}
       <Terminal
         sessionId={sessionId}
@@ -329,6 +347,7 @@ export function PodTerminal({
         replay={replay}
         ownsSession={false}
         closeLabel={t("activity", "endShell", { pod: podName })}
+        connecting={isConnecting}
       />
     </div>
   );

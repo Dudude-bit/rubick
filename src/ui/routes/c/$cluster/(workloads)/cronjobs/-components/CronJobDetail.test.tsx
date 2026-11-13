@@ -680,6 +680,46 @@ describe("Run now and the access review", () => {
     expect(commands.triggerCronjob).not.toHaveBeenCalled();
   });
 
+  /**
+   * The dialog used to close on the click, so a refused run was a toast over
+   * a screen that had already moved on. Fails if a run that failed closes the
+   * dialog or says nothing inside it.
+   */
+  it("stays open and says why when the run is refused", async () => {
+    mockDetail(buildCronJob({ namespace: "team-checkout" }));
+    vi.mocked(commands.checkAccess).mockImplementation(marcoReview);
+    vi.mocked(commands.triggerCronjob).mockRejectedValueOnce(
+      new Error("jobs.batch is forbidden")
+    );
+    await renderPage();
+    fireEvent.click(runNow());
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Run now" }));
+    expect(
+      await within(dialog).findByText(/jobs.batch is forbidden/)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  /** Fails if the dialog closes before the write has answered, or never closes after it did. */
+  it("holds the dialog pending until the run is created, then closes it", async () => {
+    mockDetail(buildCronJob({ namespace: "team-checkout" }));
+    vi.mocked(commands.checkAccess).mockImplementation(marcoReview);
+    let created: (name: string) => void = () => {};
+    vi.mocked(commands.triggerCronjob).mockImplementationOnce(
+      () => new Promise<string>((resolve) => (created = resolve))
+    );
+    await renderPage();
+    fireEvent.click(runNow());
+    const dialog = await screen.findByRole("alertdialog");
+    const confirm = within(dialog).getByRole("button", { name: "Run now" });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(confirm).toHaveAttribute("aria-busy", "true"));
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    await act(async () => created("nightly-backup-2"));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
   /** Marco's Role grants create on jobs in team-checkout. Fails if the guard shuts it. */
   it("stays offered where the review allows it", async () => {
     mockDetail(buildCronJob({ namespace: "team-checkout" }));

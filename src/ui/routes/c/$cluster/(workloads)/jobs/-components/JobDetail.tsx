@@ -84,6 +84,7 @@ export function JobDetail() {
     data: pods = [],
     error: podsError,
     isPending: podsPending,
+    refetch: refetchPods,
   } = useLiveQuery({
     queryKey: podsKey,
     queryFn: async () => {
@@ -222,6 +223,7 @@ export function JobDetail() {
                   pods={pods}
                   podsError={podsError}
                   podsPending={podsPending}
+                  onRetryPods={() => void refetchPods()}
                   idle={
                     job?.completionTime
                       ? t("empty", "jobFinished")
@@ -336,6 +338,7 @@ export function JobDetail() {
       job,
       pods,
       podsError,
+      refetchPods,
       podsPending,
       yaml,
       copyYaml,

@@ -8,6 +8,7 @@ import {
 
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { Section, SectionHeader } from "@/components/ui/section";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { PodInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
@@ -91,9 +92,20 @@ export function PodNetworkPolicies({ pod }: { pod: PodInfo }) {
 
   if (read.isPending) {
     return (
-      <p className="text-xs text-fg-fnt">
-        {t("readings", "podPoliciesReading")}
-      </p>
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label={t("readings", "podPoliciesReading")}
+        className="flex flex-col gap-6"
+      >
+        {[0, 1].map((block) => (
+          <div key={block} className="flex flex-col gap-2">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-3 w-56" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+        ))}
+      </div>
     );
   }
 

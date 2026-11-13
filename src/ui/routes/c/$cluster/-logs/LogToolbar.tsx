@@ -295,19 +295,20 @@ export function LogToolbar({
         <button
           type="button"
           onClick={onToggleStreaming}
-          disabled={isConnecting}
           title={
-            partly
-              ? t("action", "streamLivePartlyHint", { ...followed })
-              : isStreaming
-                ? t("action", "stopStreamHint")
-                : t("action", "startStreamHint")
+            isConnecting
+              ? t("action", "stopStreamHint")
+              : partly
+                ? t("action", "streamLivePartlyHint", { ...followed })
+                : isStreaming
+                  ? t("action", "stopStreamHint")
+                  : t("action", "startStreamHint")
           }
-          className="flex h-6 items-center gap-1.5 rounded bg-sel px-2 text-xs text-fg hover:bg-hover disabled:opacity-60"
+          className="flex h-6 items-center gap-1.5 rounded bg-sel px-2 text-xs text-fg hover:bg-hover "
         >
           {isConnecting ? (
             <>
-              <Spinner size="sm" />
+              <Spinner size="xs" />
               {t("action", "connecting")}
             </>
           ) : (

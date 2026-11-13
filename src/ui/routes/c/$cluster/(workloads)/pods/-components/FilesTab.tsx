@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Reading as ReadingLine } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { ReasonTip } from "@/components/object/detail-blocks";
 import { useToast } from "@/components/ui/use-toast";
@@ -47,7 +51,6 @@ import {
   type SortKey,
   volumeSources,
 } from "@/lib/container-files";
-import { errorToShow } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatShortcut } from "@/lib/platform";
 import { cn, formatDecimal, formatSince, formatWhen } from "@/lib/utils";
@@ -264,9 +267,12 @@ export function FilesTab({
   const { toast } = useToast();
   const selectedEntry = rows.find((r) => r.name === selected) ?? null;
   const [bigDownload, setBigDownload] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const downloadingRef = useRef(false);
   const download = useCallback(
     async (confirmed = false) => {
       if (!selectedEntry || !container || path === null) return;
+      if (downloadingRef.current) return;
       // The button is disabled past the cap; ⌘S reached the same command with
       // nothing in its way, and the reader got a refusal from the backend
       // instead of the sentence the button's tooltip had been showing.
@@ -288,6 +294,8 @@ export function FilesTab({
         defaultPath: selectedEntry.name,
       });
       if (!destination) return;
+      downloadingRef.current = true;
+      setDownloading(true);
       try {
         const result = await commands.downloadContainerFile(
           pod.name,
@@ -320,6 +328,9 @@ export function FilesTab({
           t("files", "downloadFailed", { name: selectedEntry.name }),
           error
         );
+      } finally {
+        downloadingRef.current = false;
+        setDownloading(false);
       }
     },
     [selectedEntry, container, pod.name, pod.namespace, path, via, toast, t]
@@ -490,17 +501,13 @@ export function FilesTab({
             }}
           />
           {(entries.length > 0 || state.phase === "reading") && (
-            <input
+            <Input
               ref={filterRef}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               aria-label={filterLabel}
               placeholder={filterLabel}
-              className="ml-auto w-48 rounded border border-hair bg-canvas px-1.5 py-0.5 text-caption focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+              className="ml-auto w-48"
             />
           )}
         </div>
@@ -521,9 +528,9 @@ export function FilesTab({
           onBack={() => setMountsOnly(false)}
         />
       ) : path === null ? (
-        <Sentence>
+        <ReadingLine className="px-3 py-6">
           {t("files", "findingWorkingDir", { container: container.name })}
-        </Sentence>
+        </ReadingLine>
       ) : beforeAnswer ? (
         <div
           data-testid="files-loading"
@@ -639,6 +646,7 @@ export function FilesTab({
               life={life}
               via={via}
               onDownload={() => void download()}
+              downloading={downloading}
             />
           )}
         </div>
@@ -1068,12 +1076,27 @@ function Failure({
       </div>
     );
   }
+  const wsForbidden =
+    state.reason === "failed" &&
+    state.exitCode === null &&
+    /\b403\b|forbidden/i.test(state.message);
+  if (state.reason === "refused" || wsForbidden) {
+    return (
+      <div className="px-3 py-6">
+        <Unknown
+          question={t("files", "execRefused", { container })}
+          error={state.stderr.trim() || state.message}
+          onRetry={onRetry}
+        />
+      </div>
+    );
+  }
   const title =
-    state.reason === "refused"
-      ? t("files", "refused")
-      : state.reason === "notRunning"
-        ? t("files", "notRunningNow", { container })
-        : t("files", "listFailed", { code: state.exitCode ?? "?" });
+    state.reason === "notRunning"
+      ? t("files", "notRunningNow", { container })
+      : state.exitCode === null
+        ? t("files", "listFailedNoCode")
+        : t("files", "listFailed", { code: state.exitCode });
   return (
     <div className="px-3 py-6 text-xs">
       <p className="font-medium text-err">{title}</p>
@@ -1241,6 +1264,7 @@ function Preview({
   life,
   via,
   onDownload,
+  downloading,
 }: {
   pod: PodInfo;
   container: string;
@@ -1250,6 +1274,7 @@ function Preview({
   life: string;
   via: Via | null;
   onDownload: () => void;
+  downloading: boolean;
 }) {
   const t = useT();
   const copy = useCopyToClipboard();
@@ -1328,7 +1353,8 @@ function Preview({
           <button
             type="button"
             onClick={onDownload}
-            disabled={tooBig}
+            disabled={tooBig || downloading}
+            aria-busy={downloading || undefined}
             className="flex items-center gap-1 text-info hover:underline disabled:cursor-not-allowed disabled:opacity-50"
             title={
               tooBig
@@ -1338,16 +1364,24 @@ function Preview({
                 : undefined
             }
           >
-            <Download className="h-3 w-3" />
+            {downloading ? (
+              <Spinner size="xs" aria-hidden="true" />
+            ) : (
+              <Download className="h-3 w-3" />
+            )}
             {t("action", "download")}
           </button>
         </p>
       </div>
       <div className="min-h-0 flex-1 overflow-auto scrollbar-lane px-3 py-2 font-mono text-caption">
         {query.isPending ? (
-          <span className="text-fg-fnt">{t("action", "readingInline")}</span>
+          <ReadingLine>{t("action", "readingInline")}</ReadingLine>
         ) : query.error ? (
-          <span className="text-err">{errorToShow(query.error)}</span>
+          <Unknown
+            question={t("files", "previewNotRead", { name: entry.name })}
+            error={query.error}
+            onRetry={() => query.refetch()}
+          />
         ) : read?.state === "noTools" ? (
           <span className="text-fg-mut">{t("files", "noHeadInImage")}</span>
         ) : read?.state === "failed" ? (

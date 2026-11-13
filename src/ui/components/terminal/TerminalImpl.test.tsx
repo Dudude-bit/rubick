@@ -1,19 +1,28 @@
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { act, render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 
 const session = vi.hoisted(() => ({
+  error: null as string | null,
   resize: vi.fn(async (_cols: number, _rows: number) => undefined),
 }));
 
 vi.mock("@/hooks/useGenericTerminalSession", async () => {
   const { useEffect, useState } = await import("react");
   return {
-    useGenericTerminalSession: () => {
+    useGenericTerminalSession: ({
+      sessionId,
+    }: {
+      sessionId: string | null;
+    }) => {
       const [status, setStatus] = useState("idle");
-      useEffect(() => setStatus("connected"), []);
+      useEffect(
+        () =>
+          setStatus(session.error ? "error" : sessionId ? "connected" : "idle"),
+        [sessionId]
+      );
       return {
         status,
-        error: null,
+        error: session.error,
         send: vi.fn(),
         resize: session.resize,
         disconnect: vi.fn(),
@@ -80,4 +89,31 @@ it("tells a running shell the pane's size only once the pane has fitted", async 
   });
 
   expect(session.resize.mock.calls).toEqual([[132, 41]]);
+});
+
+/**
+ * With no session id yet the badge said "Idle" over a blank body for the
+ * whole handshake. Fails if a pane told it is connecting says anything else.
+ */
+it("says Connecting while the session it was told is opening has no id yet", () => {
+  render(<Terminal sessionId={null} connecting />);
+  expect(screen.getAllByText("Connecting")).toHaveLength(2);
+});
+
+/** Fails if a pane that was not told it is connecting claims to be. */
+it("says Idle when no session is wanted", () => {
+  render(<Terminal sessionId={null} />);
+  expect(screen.getByText("Idle")).toBeInTheDocument();
+  expect(screen.queryByText("Connecting")).toBeNull();
+});
+
+/** Fails if the reason a connection broke is cut at 240px with no way to read it. */
+it("keeps the whole connection error readable in a tooltip", () => {
+  session.error =
+    "failed to upgrade to a WebSocket connection: 500 Internal Server Error";
+  render(<Terminal sessionId="term-1" />);
+  expect(
+    screen.getByTitle(/failed to upgrade to a WebSocket connection: 500/)
+  ).toBeInTheDocument();
+  session.error = null;
 });

@@ -87,7 +87,7 @@ export function MetricsStatusBanner({
       />
     ) : null;
   }
-  if (hidden.includes(absence)) return null;
+  if (absence !== "error" && hidden.includes(absence)) return null;
 
   const { icon: Icon, variant, title, body } = NOTICE[absence];
   const details = status.message?.trim();
@@ -126,7 +126,7 @@ export function MetricsStatusBanner({
             {details && <ErrorDetails text={details} />}
           </div>
         </div>
-        {context && (
+        {context && absence !== "error" && (
           <button
             type="button"
             aria-label={t("cluster", "metricsHideForCluster")}

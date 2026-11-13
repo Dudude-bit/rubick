@@ -370,6 +370,9 @@ export function LogViewer({
     onWiped: useCallback(() => setFrozen(null), []),
   });
 
+  const [attempted, setAttempted] = useState(false);
+  if (!attempted && (isConnecting || isStreaming)) setAttempted(true);
+
   // Not `dropped > 0`: with an interval frozen, eviction steps over it and
   // takes what is around it, so the missing lines are a hole beside the
   // kept block and not a head the log starts after.
@@ -1294,8 +1297,12 @@ export function LogViewer({
         <EmptyState
           failed={bannered.length > 0}
           connecting={
-            // A previous run is still arriving until its read says it ended.
-            isConnecting || (previousRun && !isPaused && previousRead === null)
+            // A previous run is still arriving until its read says it ended;
+            // and before the first attach the pane has not stopped, it has
+            // not started.
+            isConnecting ||
+            (previousRun && !isPaused && previousRead === null) ||
+            (!attempted && !isPaused && !isStreaming)
           }
           streaming={isStreaming}
           retained={retained}

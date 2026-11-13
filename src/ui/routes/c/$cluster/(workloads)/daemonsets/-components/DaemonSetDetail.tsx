@@ -311,6 +311,7 @@ export function DaemonSetDetail() {
                   pods={pods}
                   podsError={podsError}
                   podsPending={podsPending}
+                  onRetryPods={() => void refetchPods()}
                   idle={
                     desired === 0
                       ? t("empty", "daemonSetNoNodeMatches")
