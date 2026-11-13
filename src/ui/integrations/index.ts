@@ -892,6 +892,8 @@ export interface IntegrationPageEntry {
   link: AppLink;
   /** `null` while it is being read, and where the cluster refused to say. */
   count: number | null;
+  /** The count is of the window's namespaces, so a scope with no namespace has none. */
+  scoped: boolean;
   /**
    * The dot beside the count — the worst thing on the vendor's page, or
    * nothing. `null` wherever {@link count} is, and for a vendor whose page
@@ -1128,6 +1130,7 @@ export function useIntegrationPages(): {
         forwarded.has(vendor.id) &&
         connections.get(vendor.id)?.state !== "connected",
       count: measured?.count ?? null,
+      scoped: vendor.page?.count?.scoped === true,
       tone: measured?.tone ?? null,
       own: index !== -1,
       operator: vendor.extension.operator === true,

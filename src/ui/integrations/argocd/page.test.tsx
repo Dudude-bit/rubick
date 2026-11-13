@@ -523,9 +523,11 @@ describe("Argo's own workloads", () => {
 
     await renderOn("controller");
 
-    expect(await screen.findByText(/Could not list deployments/)).toHaveClass(
-      "text-warn"
-    );
+    expect(
+      (await screen.findByText(/Could not list deployments/)).closest(
+        "[role=alert]"
+      )
+    ).toHaveClass("border-dashed");
     expect(screen.queryByText(/Nothing in this cluster carries/)).toBeNull();
   });
 });

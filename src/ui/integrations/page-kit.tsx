@@ -13,6 +13,7 @@
  * ordering and every sentence in them are each vendor's own.
  */
 
+import { Alert } from "@/components/ui/alert";
 import { Eyebrow } from "@/components/ui/states";
 import {
   Children,
@@ -45,7 +46,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import { objectLink } from "@/lib/links";
 import type { ReportFinding } from "@/lib/report";
 import { ORDER, slugOf, type PlacedSection } from "@/lib/report-parts";
-import { TONE_BORDER, TONE_TEXT } from "@/lib/tone";
+import { TONE_TEXT } from "@/lib/tone";
 
 /**
  * How a list registers what it draws for Share: a title for the section (and
@@ -597,6 +598,12 @@ export function TroubleRow({
   );
 }
 
+const FINDING_VARIANT = {
+  err: "destructive",
+  warn: "warn",
+  unknown: "warn",
+} as const satisfies Record<Exclude<RowTone, "ok">, "destructive" | "warn">;
+
 /**
  * A finding: what is wrong, in one line, with the reason under it.
  *
@@ -617,8 +624,11 @@ export function Finding({
   children?: ReactNode;
 }) {
   return (
-    <div className={cn("border-l-2 pl-2.5", TONE_BORDER[tone])}>
-      <p className={cn("text-xs", toneText(tone))}>{title}</p>
+    <Alert variant={FINDING_VARIANT[tone]}>
+      <AlertTriangle aria-hidden />
+      <p className={cn("text-xs", tone === "err" ? "text-err" : "text-fg")}>
+        {title}
+      </p>
       {verbatim && (
         <p className="mt-0.5 select-text wrap-break-word font-mono text-caption text-fg-mut">
           {withoutCredentials(verbatim)}
@@ -627,7 +637,7 @@ export function Finding({
       {children != null && (
         <div className="mt-0.5 text-xs text-fg-mut">{children}</div>
       )}
-    </div>
+    </Alert>
   );
 }
 

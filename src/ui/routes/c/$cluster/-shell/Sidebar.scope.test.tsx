@@ -102,6 +102,32 @@ describe("the rail's counts over a namespace the cluster does not have", () => {
   });
 });
 
+describe("an integration row's count over a namespace the cluster does not have", () => {
+  /**
+   * The Prometheus row read 0 beside a page that said there is no namespace
+   * of that name: the monitors of a scope that does not exist are not none,
+   * they were not read. Fails if the row prints its own count for a missing
+   * scope, or marks a row whose count is of the whole cluster.
+   */
+  it("marks a scoped integration count missing instead of printing 0", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.detectInClusterExtensions).mockResolvedValue([
+      { id: "prometheus", installed: true, version: null },
+    ] as never);
+    await renderWithRouter(
+      <Sidebar missing={{ missing: ["lena"], whole: true, checking: false }} />,
+      { at: "/c/acme-staging", route: "/c/$cluster/$" }
+    );
+
+    const prometheus = await row("Prometheus");
+    expect(
+      await within(prometheus).findByTestId("scope-missing-count")
+    ).toBeInTheDocument();
+    expect(within(prometheus).queryByText("0")).toBeNull();
+    vi.mocked(commands.detectInClusterExtensions).mockResolvedValue([]);
+  });
+});
+
 describe("the Routes row of a reader bound to their namespace", () => {
   /**
    * marco may list HTTPRoutes in his namespace and neither GRPCRoutes nor

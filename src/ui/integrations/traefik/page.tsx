@@ -42,7 +42,17 @@ import {
 } from "../ingress";
 import { Link } from "@tanstack/react-router";
 import { stopUnder } from "@/lib/connections";
-import { Box, Filter, Globe, Network, Plug } from "lucide-react";
+import {
+  Box,
+  Filter,
+  Globe,
+  Info,
+  Network,
+  Plug,
+  TriangleAlert,
+} from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
@@ -899,7 +909,8 @@ function RawRule({ route }: { route: TraefikRoute }) {
   const t = useT();
   const { rule } = route;
   return (
-    <div className="mt-1 border-l-2 border-hair pl-2.5">
+    <Alert variant="info" className="mt-1">
+      <Info aria-hidden />
       <p className="text-caption text-fg-mut">
         {rule.refused
           ? t("empty", "ruleShownAsWrittenBecause", {
@@ -913,7 +924,7 @@ function RawRule({ route }: { route: TraefikRoute }) {
       <p className="mt-0.5 select-text break-all font-mono text-caption text-fg-mid">
         {rule.raw}
       </p>
-    </div>
+    </Alert>
   );
 }
 
@@ -1231,15 +1242,18 @@ function PlainEntryPointNote({ controller }: { controller: ControllerInfo }) {
   if (plain.length === 0) return null;
 
   return (
-    <p className="max-w-[92ch] border-l-2 border-warn pl-2.5 text-xs text-fg-mut">
-      <span className="text-warn">
-        {t("empty", "plainEntryPointsHead", {
-          n: plain.length,
-          list: plain.map((entry) => entry.name).join(", "),
-        })}
-      </span>{" "}
-      {t("empty", "plainEntryPointsNote")}
-    </p>
+    <Alert variant="warn" className="max-w-[92ch]">
+      <TriangleAlert aria-hidden />
+      <p className="text-fg-mut">
+        <span className="text-fg">
+          {t("empty", "plainEntryPointsHead", {
+            n: plain.length,
+            list: plain.map((entry) => entry.name).join(", "),
+          })}
+        </span>{" "}
+        {t("empty", "plainEntryPointsNote")}
+      </p>
+    </Alert>
   );
 }
 

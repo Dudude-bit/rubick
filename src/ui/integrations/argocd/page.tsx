@@ -23,7 +23,9 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { Eyebrow, Reading } from "@/components/ui/states";
 import { applicationsNeedAttention } from "@/lib/two-counts";
 import { useCallback, useMemo } from "react";
-import { Box, GitBranch, Layers, Shield } from "lucide-react";
+import { Box, CircleAlert, GitBranch, Layers, Shield } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
@@ -1000,9 +1002,10 @@ function AppSetsTab({
                 </span>
               </div>
               {failing && (
-                <p className="mt-1 border-l-2 border-err pl-2.5 font-mono text-caption text-err">
-                  {failing.message}
-                </p>
+                <Alert variant="destructive" className="mt-1 py-1">
+                  <CircleAlert aria-hidden />
+                  <p className="font-mono text-caption">{failing.message}</p>
+                </Alert>
               )}
             </div>
           );

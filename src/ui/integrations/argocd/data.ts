@@ -12,7 +12,6 @@
  * answer.
  */
 
-import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { STALE_TIMES } from "@/lib/refresh";
@@ -271,7 +270,8 @@ function unreadOf(
 
 export function useController() {
   const context = useClusterStore((state) => state.currentContext);
-  return useQuery({
+  return useLiveQuery({
+    refresh: "resourceList",
     queryKey: [context, "argocd", "controller"],
     queryFn: async (): Promise<ControllerInfo> => {
       const filters = {

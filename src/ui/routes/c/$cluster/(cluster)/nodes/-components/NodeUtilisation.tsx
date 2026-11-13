@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { TriangleAlert } from "lucide-react";
 
 import {
   Table,
@@ -278,10 +279,8 @@ function SilentNodes({
   );
   const monitors = `${vendor} › ${t("monitors", "tabMonitors")}`;
   return (
-    <div
-      className="mb-2 rounded border border-hair border-l-2 border-l-warn px-3 py-2 text-xs"
-      role="status"
-    >
+    <Alert variant="warn" role="status" className="mb-2">
+      <TriangleAlert aria-hidden />
       <p className="text-fg">{t("empty", "nodesSilentTitle", { vendor })}</p>
       <p className="mt-1 text-fg-mut">
         {parts(t("empty", "nodesSilentAsked"), {
@@ -304,7 +303,7 @@ function SilentNodes({
           ),
         })}
       </p>
-    </div>
+    </Alert>
   );
 }
 

@@ -1033,6 +1033,28 @@ describe("a headless Service that selects no pod", () => {
     });
   });
 
+  /**
+   * Where the workloads were not read the note still said "an address gets a
+   * connection refused" for a Service that has none. Fails if the unread
+   * branch stops agreeing with the read one, or drops what was not read.
+   */
+  it("says the same of a headless Service whose workloads were not read, and what was not read", () => {
+    const hop = chainStopHop(
+      { ...stop, makersRead: false },
+      { ...SERVICE, facts: facts("None") },
+      t
+    );
+    expect(hop).toMatchObject({
+      note: expect.stringContaining("resolves to nothing"),
+    });
+    expect(hop).toMatchObject({
+      note: expect.stringContaining("could not be read"),
+    });
+    expect(hop).not.toMatchObject({
+      note: expect.stringContaining("connection refused"),
+    });
+  });
+
   /** The ordinary Service keeps its sentence; fails if the headless words leak to it. */
   it("keeps the refusal for a Service that has an address", () => {
     const hop = chainStopHop(stop, { ...SERVICE, facts: facts("10.0.0.1") }, t);

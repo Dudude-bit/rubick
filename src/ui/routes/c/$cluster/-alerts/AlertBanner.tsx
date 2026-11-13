@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import { severityTone } from "@/lib/alerts";
-import { SEVERITY_BANNER, SEVERITY_QUOTE } from "./severity-tone";
+import { SEVERITY_BANNER } from "./severity-tone";
 import { cn, formatAge, formatWhen } from "@/lib/utils";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { useT } from "@/i18n/useT";
@@ -95,12 +95,7 @@ export function AlertBanner({
         </button>
       </div>
       {reading.claim ? (
-        <p
-          className={cn(
-            "mt-1.5 border-l-2 pl-2.5 text-xs text-fg-mid",
-            SEVERITY_QUOTE[tone]
-          )}
-        >
+        <p className="mt-1.5 rounded-[4px] border border-hair bg-hover px-2 py-1 text-xs text-fg-mid">
           {reading.claim}
         </p>
       ) : null}

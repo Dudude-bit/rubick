@@ -39,10 +39,13 @@ import {
   Box,
   FileCode2,
   Globe,
+  Info,
   Network,
   SlidersHorizontal,
+  TriangleAlert,
 } from "lucide-react";
 
+import { Alert } from "@/components/ui/alert";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -836,22 +839,15 @@ function AnnotationLine({ reading }: { reading: AnnotationReading }) {
   const t = useT();
   const snippet = reading.raw === "snippet";
 
-  return (
-    <div
-      className={
-        snippet
-          ? "border-l-2 border-warn pl-2.5"
-          : reading.raw
-            ? "border-l-2 border-hair pl-2.5"
-            : "pl-[10px]"
-      }
-    >
+  const Glyph = snippet ? TriangleAlert : Info;
+  const body = (
+    <>
       <p
         className={
           reading.said
             ? "text-xs text-fg-mut"
             : snippet
-              ? "text-xs text-warn"
+              ? "text-xs text-fg"
               : "text-xs text-fg-fnt"
         }
       >
@@ -874,7 +870,14 @@ function AnnotationLine({ reading }: { reading: AnnotationReading }) {
           </p>
         </>
       )}
-    </div>
+    </>
+  );
+  if (!reading.raw) return <div className="pl-[10px]">{body}</div>;
+  return (
+    <Alert variant={snippet ? "warn" : "info"}>
+      <Glyph aria-hidden />
+      {body}
+    </Alert>
   );
 }
 
@@ -1039,10 +1042,13 @@ function AnnotationsTab({ groups }: { groups: NginxHostGroup[] }) {
         description={t("empty", "annotationsDescription")}
       />
       {raw.length > 0 && (
-        <p className="max-w-[92ch] border-l-2 border-hair pl-2.5 text-xs text-fg-mut">
-          {t("count", "linesShownAsWritten", { n: raw.length })}{" "}
-          {t("empty", "wrongParaphraseNote")}
-        </p>
+        <Alert variant="info" className="max-w-[92ch]">
+          <Info aria-hidden />
+          <p className="text-fg-mut">
+            {t("count", "linesShownAsWritten", { n: raw.length })}{" "}
+            {t("empty", "wrongParaphraseNote")}
+          </p>
+        </Alert>
       )}
       <div className="flex flex-col gap-4">
         {objects.map(([object, entries]) => (

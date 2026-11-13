@@ -476,7 +476,7 @@ export function Sidebar({
                 {group.caption === "network" && <GatewayRows />}
               </div>
             ))}
-            <IntegrationsGroup />
+            <IntegrationsGroup missing={missing} />
           </div>
         </nav>
         <RailMore n={rowsPast} onClick={scrollRail} />
@@ -603,7 +603,7 @@ function GroupCaption({ k, busy = false }: { k: NavKey; busy?: boolean }) {
  * decide their own highlight from the query string rather than letting
  * the router light all of them at once.
  */
-function IntegrationsGroup() {
+function IntegrationsGroup({ missing }: { missing: ScopeMissing }) {
   const t = useT();
   const onCatalog = useRouterState({ select: isCatalogLocation });
   const vendor = useAppSearchValue("vendor") ?? null;
@@ -684,6 +684,7 @@ function IntegrationsGroup() {
       key={page.id}
       item={{ label: page.name, path: page.link, icon: page.icon }}
       value={page.count}
+      scopeGone={page.scoped ? missing : undefined}
       mark={page.tone ?? undefined}
       // Detected but refused: the row is drawn disabled with a vendor
       // reason instead of linking to a page that only errors.
@@ -894,6 +895,7 @@ function NavRow({
   counts,
   missing,
   value,
+  scopeGone,
   mark,
   note,
   lock,
@@ -904,6 +906,8 @@ function NavRow({
   item: NavItem;
   counts?: ShellCounts;
   missing?: ScopeMissing;
+  /** For a row that carries its own count of the scope: where the scope has no namespace, the count is not read. */
+  scopeGone?: ScopeMissing;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
   /**
@@ -977,6 +981,8 @@ function NavRow({
           {lock && <LockMark lock={lock} reason={deniedReason} />}
           {note !== undefined ? (
             <span className="ml-auto text-caption text-fg-fnt">{note}</span>
+          ) : scopeGone?.whole ? (
+            <ScopeMissingMark missing={scopeGone} />
           ) : value === undefined ? (
             counts &&
             (item.count === "events" ? (

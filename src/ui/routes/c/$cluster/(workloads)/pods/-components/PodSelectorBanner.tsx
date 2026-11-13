@@ -1,5 +1,6 @@
 import { Filter, X } from "lucide-react";
 
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useSetSearch } from "@/hooks/useSearchParam";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -24,9 +25,9 @@ export function PodSelectorBanner({ filter }: { filter: PodFilter }) {
     : t("readings", "podFilterEveryNamespace");
 
   return (
-    <div className="flex flex-col gap-1 border-l-2 border-info py-1 pl-2.5 text-xs">
+    <Alert variant="info" className="flex flex-col gap-1 py-1.5">
+      <Filter aria-hidden />
       <div className="flex items-center gap-2">
-        <Filter aria-hidden className="size-3 flex-none text-info" />
         <span className="min-w-0 flex-1 text-fg-mid">
           {parts(
             t("readings", filter.text ? "podFilterMatching" : "podFilterEvery"),
@@ -70,6 +71,6 @@ export function PodSelectorBanner({ filter }: { filter: PodFilter }) {
           </Button>
         </p>
       )}
-    </div>
+    </Alert>
   );
 }

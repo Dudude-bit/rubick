@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, TriangleAlert } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
 
 import { hrefOf, isClusterScoped, objectLink, type AppLink } from "@/lib/links";
 import { formatAge, cn, formatWhen } from "@/lib/utils";
@@ -298,7 +300,7 @@ export function AlertReadingPanel({
       </dl>
 
       {reading.claim ? (
-        <p className="border-l-2 border-hair py-1 pl-2.5 text-xs text-fg-mid">
+        <p className="rounded-[4px] border border-hair bg-hover px-2 py-1 text-xs text-fg-mid">
           {reading.claim}
           <span className="mt-1 block text-caption text-fg-fnt">
             {t("alerts", "theAlertsWords")}
@@ -307,9 +309,10 @@ export function AlertReadingPanel({
       ) : null}
 
       {reading.objects.some((entry) => entry.from.how === "shape") ? (
-        <p className="border-l-2 border-warn/50 py-1 pl-2.5 text-xs text-fg-mut">
-          {t("alerts", "guessedFromShape")}
-        </p>
+        <Alert variant="warn" className="py-1.5">
+          <TriangleAlert aria-hidden />
+          <p className="text-fg-mut">{t("alerts", "guessedFromShape")}</p>
+        </Alert>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 pt-0.5">

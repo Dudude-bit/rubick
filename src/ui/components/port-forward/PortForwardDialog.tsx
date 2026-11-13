@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -293,14 +294,8 @@ function ForwardForm({
         </div>
 
         {problem ? (
-          <div
-            role="alert"
-            className="flex items-start gap-2 border-l-2 border-err py-1.5 pl-2.5 text-xs text-err"
-          >
-            <AlertTriangle
-              className="mt-0.5 h-3.5 w-3.5 flex-none"
-              aria-hidden="true"
-            />
+          <Alert variant="destructive">
+            <AlertTriangle aria-hidden="true" />
             <div className="min-w-0 space-y-1.5">
               <p>{problem.says}</p>
               <Button
@@ -317,18 +312,12 @@ function ForwardForm({
                 })}
               </Button>
             </div>
-          </div>
+          </Alert>
         ) : noPod ? (
-          <div
-            role="alert"
-            className="flex items-start gap-2 border-l-2 border-err py-1.5 pl-2.5 text-xs text-err"
-          >
-            <AlertTriangle
-              className="mt-0.5 h-3.5 w-3.5 flex-none"
-              aria-hidden="true"
-            />
+          <Alert variant="destructive">
+            <AlertTriangle aria-hidden="true" />
             <p>{t("empty", "gwNoReadyPodBehind", { name: target.name })}</p>
-          </div>
+          </Alert>
         ) : (
           localPort !== null &&
           remotePort !== null && (

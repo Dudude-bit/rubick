@@ -718,3 +718,28 @@ describe("a vendor page whose re-read failed over data it already has", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 });
+
+describe("a finding", () => {
+  /**
+   * A finding drew a left rule while every other notice drew the frame
+   * Unknown draws. Fails if a warning stops being the dashed frame, an error
+   * stops being red, or either keeps the left rule.
+   */
+  it("is drawn in the notice frame, dashed for a warning and red for an error", () => {
+    render(
+      <>
+        <Finding tone="warn" title="Could not be listed" verbatim="403" />
+        <Finding tone="err" title="Wrong class field" />
+      </>
+    );
+    const warn = screen
+      .getByText("Could not be listed")
+      .closest("[role=alert]")!;
+    const err = screen.getByText("Wrong class field").closest("[role=alert]")!;
+    expect(warn).toHaveClass("border-dashed", "rounded-md");
+    expect(err).toHaveClass("border-err");
+    expect(err).not.toHaveClass("border-dashed");
+    for (const notice of [warn, err])
+      expect(notice.className).not.toMatch(/border-l-2/);
+  });
+});

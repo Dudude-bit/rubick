@@ -236,6 +236,8 @@ export const en = {
       "Anything that reaches this address gets a connection refused. The Service exists and is wired up; there is simply nothing behind it.",
     headlessNothingBehind:
       "A headless Service has no address of its own. Its DNS name resolves to the IPs of its ready pods, and with no pod behind it, it resolves to nothing.",
+    headlessMakersUnreadNote:
+      "A headless Service has no address of its own. Its DNS name resolves to the IPs of its ready pods, and with none behind it, it resolves to nothing. The Deployments and StatefulSets here could not be read, so whether one is scaled to zero or was refused its pods is not known.",
     stopMakersUnreadNote:
       "Anything that reaches this address gets a connection refused. The Deployments and StatefulSets here could not be read, so whether one is scaled to zero or was refused its pods is not known.",
     endpointsByHandNoneWritten:

@@ -21,7 +21,9 @@ import { useMemo } from "react";
 import { hostsNeedAttention } from "@/lib/two-counts";
 
 import { backingFrom, hostRole, hostSeverity, stopCellLook } from "../ingress";
-import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
+import { DoorOpen, Info, Network, Split, Waypoints } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
@@ -664,7 +666,8 @@ function RawMatches({ matches }: { matches: MatchReading[] }) {
   return (
     <div className="mt-1 flex flex-col gap-1.5">
       {matches.map((match, index) => (
-        <div key={index} className="border-l-2 border-hair pl-2.5">
+        <Alert key={index} variant="info">
+          <Info aria-hidden />
           <p className="text-caption text-fg-mut">
             {match.refused
               ? t("empty", "matchShownAsWrittenBecause", {
@@ -680,7 +683,7 @@ function RawMatches({ matches }: { matches: MatchReading[] }) {
           <pre className="mt-0.5 select-text whitespace-pre-wrap break-all rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-caption text-fg-mid">
             {match.raw}
           </pre>
-        </div>
+        </Alert>
       ))}
     </div>
   );

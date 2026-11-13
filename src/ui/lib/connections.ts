@@ -833,10 +833,13 @@ export function chainStopHop(
   const said = describeStop(stop, t);
   if (
     subject.facts?.kind === "service" &&
-    clusterIpOf(subject.facts.clusterIp).state === "headless" &&
-    said.note === t("nav", "connectionRefusedNothingBehind")
-  )
-    said.note = t("nav", "headlessNothingBehind");
+    clusterIpOf(subject.facts.clusterIp).state === "headless"
+  ) {
+    if (said.note === t("nav", "connectionRefusedNothingBehind"))
+      said.note = t("nav", "headlessNothingBehind");
+    else if (said.note === t("nav", "stopMakersUnreadNote"))
+      said.note = t("nav", "headlessMakersUnreadNote");
+  }
   if (stop.reason === "podsRefused") {
     const others = stop.workloads.filter(
       (workload) => !sameObject(workload, subject)
