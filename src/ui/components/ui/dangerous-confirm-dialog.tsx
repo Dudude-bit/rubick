@@ -1,4 +1,4 @@
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { WriteFailure } from "@/components/ui/write-failure";
 import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 
@@ -51,10 +52,12 @@ export function DangerousConfirmDialog({
   const t = useT();
   const [inputValue, setInputValue] = useState("");
   const [running, setRunning] = useState(false);
+  const [failure, setFailure] = useState<unknown>(null);
   const isLoading = loadingFromCaller || running;
   // Forgotten whenever the dialog is closed, whoever closed it: a caller that
   // flips `open` after a success fires no onOpenChange.
   if (!open && inputValue !== "") setInputValue("");
+  if (!open && failure !== null) setFailure(null);
   // On critical infrastructure the word to type is the cluster's, not the
   // object's: the mistake this guards against is the cluster, and typing a
   // pod's name proves nothing about which cluster the pod is on.
@@ -64,16 +67,20 @@ export function DangerousConfirmDialog({
 
   const isConfirmEnabled = inputValue === expected && !isLoading;
 
-  const handleConfirm = (event: MouseEvent) => {
+  const handleConfirm = (event?: { preventDefault: () => void }) => {
     if (!isConfirmEnabled) return;
     const result = onConfirm();
-    if (!(result instanceof Promise)) return;
-    event.preventDefault();
+    if (!(result instanceof Promise)) {
+      if (!event) onOpenChange(false);
+      return;
+    }
+    event?.preventDefault();
     setRunning(true);
+    setFailure(null);
     result
       .then(
         () => onOpenChange(false),
-        () => undefined
+        (error: unknown) => setFailure(error ?? "")
       )
       .finally(() => setRunning(false));
   };
@@ -119,7 +126,13 @@ export function DangerousConfirmDialog({
             placeholder={confirmationPlaceholder}
             autoComplete="off"
             data-autofocus
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || !isConfirmEnabled) return;
+              event.preventDefault();
+              handleConfirm();
+            }}
           />
+          {failure !== null && <WriteFailure error={failure} />}
         </div>
 
         <AlertDialogFooter>

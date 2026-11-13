@@ -1,6 +1,6 @@
 import type { UseMutationResult } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import {
   describeDeletion,
@@ -45,10 +45,10 @@ export function DeletionDialog({
   served?: ServedResource | null;
   restart?: boolean;
   busy?: boolean;
-  onConfirm: () => void;
+  /** Returns the write's promise, which holds the dialog open until it answers. */
+  onConfirm: () => unknown;
 }) {
   const t = useT();
-  const confirming = useRef(false);
   const copy = restart
     ? describePodRestart(name, namespace ?? null, detail, t)
     : describeDeletion(kind, name, namespace ?? null, detail, t);
@@ -56,11 +56,7 @@ export function DeletionDialog({
   return (
     <DangerousConfirmDialog
       open={open}
-      // The confirm button closes the dialog as it is pressed, before the
-      // delete has answered; only the caller, on success, may close it then.
-      onOpenChange={(next) => {
-        if (!(confirming.current && !next)) onOpenChange(next);
-      }}
+      onOpenChange={onOpenChange}
       title={copy.title}
       description={warned(copy.description, intercept)}
       details={
@@ -77,11 +73,7 @@ export function DeletionDialog({
       confirmationPlaceholder={t("action", "typeNamePlaceholder")}
       confirmLabel={t("action", restart ? "restart" : "delete")}
       isLoading={busy}
-      onConfirm={() => {
-        confirming.current = true;
-        queueMicrotask(() => (confirming.current = false));
-        onConfirm();
-      }}
+      onConfirm={onConfirm}
     />
   );
 }
@@ -150,9 +142,9 @@ export function DeleteAction({
         restart={restart}
         busy={mutation.isPending}
         onConfirm={() =>
-          mutation.mutate(undefined, {
-            onSuccess: () => setOpen(false),
-            onError: (error) => noteDenied("delete", guarded, error),
+          mutation.mutateAsync().catch((error: unknown) => {
+            noteDenied("delete", guarded, error);
+            throw error;
           })
         }
       />

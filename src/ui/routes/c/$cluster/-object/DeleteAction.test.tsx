@@ -31,14 +31,15 @@ vi.mock("@/lib/commands", () => ({
 
 const { DeleteAction } = await import("./DeleteAction");
 
-const mutate = vi.fn();
+const mutateAsync = vi.fn(() => Promise.resolve());
 const mutation = {
-  mutate,
+  mutateAsync,
   isPending: false,
 } as unknown as UseMutationResult<void, Error, void>;
 
 beforeEach(() => {
-  mutate.mockReset();
+  mutateAsync.mockReset();
+  mutateAsync.mockResolvedValue(undefined);
   getResourceConnections.mockReset();
   cascade.now = THREE_PODS;
   useClusterStore.setState({ currentContext: "test", isConnected: true });
@@ -62,7 +63,7 @@ describe("Delete on a detail page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
     expect(await screen.findByText("Also deletes:")).toBeInTheDocument();
-    expect(mutate).not.toHaveBeenCalled();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   /** However long the preview grows, the field to type the name stays on screen. */
@@ -88,7 +89,7 @@ describe("Delete on a detail page", () => {
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "api" } });
     expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
-    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
   });
 
   const confirmDelete = async () => {
@@ -109,16 +110,14 @@ describe("Delete on a detail page", () => {
    * the dialog closes when the delete failed.
    */
   it("stays open when the delete fails", async () => {
-    mutate.mockImplementation((_, options) =>
-      options.onError(new Error("forbidden"))
-    );
+    mutateAsync.mockRejectedValue(new Error("forbidden"));
     await confirmDelete();
+    expect(await screen.findByText("forbidden")).toBeInTheDocument();
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   });
 
   /** The control: once the delete is done the dialog goes. */
   it("closes once the delete succeeds", async () => {
-    mutate.mockImplementation((_, options) => options.onSuccess());
     await confirmDelete();
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
@@ -160,7 +159,7 @@ describe("Restart on a pod's page", () => {
       "Its ReplicaSet cart-75 will start a replacement."
     );
     expect(await screen.findByText("Also deletes:")).toBeInTheDocument();
-    expect(mutate).not.toHaveBeenCalled();
+    expect(mutateAsync).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "cart-1" },
@@ -170,7 +169,7 @@ describe("Restart on a pod's page", () => {
         (button) => button.textContent === "Restart"
       )!
     );
-    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
   });
 });
 

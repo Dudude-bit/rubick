@@ -64,15 +64,23 @@ describe("a confirmation whose action takes time", () => {
     await waitFor(() => expect(openChange).toHaveBeenCalledWith(false));
   });
 
-  /** Fails if a failed action closes the dialog, leaving only a toast to say what happened. */
-  it("stays open when the action fails", async () => {
+  /** Fails if a failed action closes the dialog, or keeps it open without saying why, leaving only a toast. */
+  it("stays open when the action fails and says why inside it", async () => {
     const openChange = vi.fn();
-    render(dialog(() => Promise.reject(new Error("refused")), openChange));
+    render(
+      dialog(
+        () => Promise.reject(new Error("deployments.apps is forbidden")),
+        openChange
+      )
+    );
     fireEvent.click(screen.getByRole("button", { name: "Restart" }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Restart" })).toBeEnabled()
     );
     expect(openChange).not.toHaveBeenCalledWith(false);
+    expect(
+      screen.getByText("deployments.apps is forbidden")
+    ).toBeInTheDocument();
   });
 
   /** Fails if a plain handler no longer closes the dialog the way it always did. */
@@ -168,5 +176,47 @@ describe("a typed confirmation whose action takes time", () => {
       "placeholder",
       "widgets.example.com"
     );
+  });
+
+  /** Fails if a refused delete leaves the typed dialog as it was, the failure only in a toast that invited a second press. */
+  it("says inside the dialog why the action failed", async () => {
+    render(
+      <DangerousConfirmDialog
+        open
+        title="Restart pod"
+        confirmationText="api-6bc99687fc-ssxg2"
+        confirmLabel="Restart"
+        onOpenChange={() => undefined}
+        onConfirm={() => Promise.reject(new Error('pods "api" is forbidden'))}
+      />
+    );
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "api-6bc99687fc-ssxg2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+    expect(
+      await screen.findByText('pods "api" is forbidden')
+    ).toBeInTheDocument();
+  });
+
+  /** Fails if Enter in a field holding the right name does nothing, which made typing the name then pressing Enter a dead end. */
+  it("confirms on Enter once the typed name matches", async () => {
+    const confirm = vi.fn(() => Promise.resolve());
+    render(
+      <DangerousConfirmDialog
+        open
+        title="Restart pod"
+        confirmationText="api-6bc99687fc-ssxg2"
+        confirmLabel="Restart"
+        onOpenChange={() => undefined}
+        onConfirm={confirm}
+      />
+    );
+    const field = screen.getByRole("textbox");
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: "api-6bc99687fc-ssxg2" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
   });
 });

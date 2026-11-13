@@ -478,7 +478,7 @@ export function useObjectActions({
         detail={detail}
         intercept={intercept("Delete")}
         busy={remove.isPending}
-        onConfirm={() => remove.mutate()}
+        onConfirm={() => remove.mutateAsync()}
       />
 
       {kind === "Pod" && (
@@ -492,7 +492,7 @@ export function useObjectActions({
           detail={detail}
           intercept={intercept("Restart")}
           busy={restart.isPending}
-          onConfirm={() => restart.mutate()}
+          onConfirm={() => restart.mutateAsync()}
         />
       )}
 

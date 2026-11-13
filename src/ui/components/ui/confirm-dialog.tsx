@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { WriteFailure } from "@/components/ui/write-failure";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 
@@ -52,6 +53,8 @@ export function ConfirmDialog({
   // what this guards against is not the object but the window it is in.
   const gate = useCriticalGate(open);
   const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState<unknown>(null);
+  if (!open && failure !== null) setFailure(null);
 
   return (
     <AlertDialog
@@ -70,6 +73,7 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         {children}
         {gate.input}
+        {failure !== null && <WriteFailure error={failure} />}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>
             {cancelLabel ?? t("action", "cancel")}
@@ -81,10 +85,11 @@ export function ConfirmDialog({
               if (!(result instanceof Promise)) return;
               event.preventDefault();
               setPending(true);
+              setFailure(null);
               result
                 .then(
                   () => onOpenChange(false),
-                  () => undefined
+                  (error: unknown) => setFailure(error ?? "")
                 )
                 .finally(() => setPending(false));
             }}
