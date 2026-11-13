@@ -439,7 +439,7 @@ export function Sidebar({
   const servedLocks = useLocks(NAV_QUERIES);
 
   return (
-    <aside className="flex w-52 flex-col overflow-hidden border-r border-hair">
+    <aside className="flex w-52 select-none flex-col overflow-hidden border-r border-hair">
       <ClusterRow />
       <div className="relative flex min-h-0 flex-1 flex-col">
         <nav

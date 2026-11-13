@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode, type Ref } from "react";
 
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +15,8 @@ import { ActionWarnings } from "./action-warnings";
 import { AutoscalerBounds } from "./AutoscalerBounds";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
-import { errorToShow } from "@/lib/error-utils";
+import { useHoldWriteToasts } from "@/lib/write-hold";
+import { FailureSlot } from "./FailureSlot";
 import { qualified } from "../-peek/peek-actions";
 
 export interface ScaleDialogProps {
@@ -53,6 +53,7 @@ export function ScaleDialog({
   warnings = [],
 }: ScaleDialogProps) {
   const t = useT();
+  useHoldWriteToasts(busy);
   // Scaling a workload to zero on a cluster the person marked critical is a
   // change to that cluster, so the same typed-name gate the confirm dialogs
   // use guards the Scale button here too — notice and field cannot part ways.
@@ -155,8 +156,8 @@ function ScaleForm({
   const [typed, setTyped] = useState(
     current === undefined ? "" : String(current)
   );
+  const [asked, setAsked] = useState(false);
   const replicas = typed.trim() === "" ? null : Number(typed);
-  const [asked, setAsked] = useState<number | null>(null);
   const counted =
     replicas !== null && Number.isInteger(replicas) && replicas >= 0;
   // A form, so Enter scales as the button does; a disabled submit button
@@ -166,8 +167,8 @@ function ScaleForm({
       className="grid grid-cols-[minmax(0,1fr)] gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        if (counted) {
-          setAsked(replicas);
+        if (counted && !busy) {
+          setAsked(true);
           onSubmit(replicas);
         }
       }}
@@ -189,15 +190,8 @@ function ScaleForm({
               : t("action", "scaleNeedsCount")}
           </p>
         )}
-        {error != null && asked !== null && (
-          <Alert variant="destructive">
-            {t("action", "scaleFailedTo", {
-              n: asked,
-              reason: errorToShow(error),
-            })}
-          </Alert>
-        )}
       </div>
+      <FailureSlot error={asked ? error : null} busy={busy} />
       {gateInput}
       <DialogFooter>
         <Button

@@ -277,7 +277,7 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
   "src/ui/components/cluster/ClusterList.tsx":
     "mod+f focuses the cluster filter, on the front door only",
   "src/ui/routes/c/$cluster/-shell/ScopeTabs.tsx":
-    "mod+click and mod+Enter add a namespace instead of replacing it",
+    "not a shortcut: arrows, Home and End walk the tab bar, which takes one tab stop; mod+click and mod+Enter add a namespace instead of replacing it",
   "src/ui/routes/c/$cluster/-logs/LogList.tsx":
     "mod+a selects the rendered window, not the whole buffer",
   "src/ui/routes/c/$cluster/(workloads)/pods/-components/FilesTab.tsx":

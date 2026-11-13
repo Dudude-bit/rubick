@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 let held = 0;
 
 /**
@@ -15,3 +17,7 @@ export function holdWriteToasts(): () => void {
 }
 
 export const writeToastsHeld = (): boolean => held > 0;
+
+export function useHoldWriteToasts(active: boolean): void {
+  useEffect(() => (active ? holdWriteToasts() : undefined), [active]);
+}

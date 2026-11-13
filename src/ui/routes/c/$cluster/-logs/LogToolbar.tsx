@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { DensityStripMode } from "@/stores/displaySettingsStore";
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/states";
 import {
   ArrowDown,
   Copy,
@@ -205,24 +207,17 @@ export function LogToolbar({
         fields={fields}
       />
 
-      <div className="flex h-6 items-center gap-px rounded-md border border-hair p-px">
-        {VIEW_MODES.map(({ mode, label, hint }) => (
-          <button
-            key={mode}
-            type="button"
-            title={t("action", hint)}
-            aria-pressed={viewMode === mode}
-            onClick={() => onViewModeChange(mode)}
-            className={`flex h-full items-center rounded px-2 text-xs ${
-              viewMode === mode
-                ? "bg-sel text-fg"
-                : "text-fg-mut hover:bg-hover hover:text-fg"
-            }`}
-          >
-            {t("action", label)}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        label={t("columns", "view")}
+        value={viewMode}
+        onChange={onViewModeChange}
+        segments={VIEW_MODES.map(({ mode, label, hint }) => ({
+          value: mode,
+          label: t("action", label),
+          title: t("action", hint),
+        }))}
+        className="h-6 rounded-md border border-hair p-px"
+      />
 
       <ToolbarToggle
         on={collapseRepeats}
@@ -292,8 +287,10 @@ export function LogToolbar({
       </Select>
 
       <div className="ml-auto flex items-center gap-1.5">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           onClick={onToggleStreaming}
           title={
             isConnecting
@@ -304,7 +301,7 @@ export function LogToolbar({
                   ? t("action", "stopStreamHint")
                   : t("action", "startStreamHint")
           }
-          className="flex h-6 items-center gap-1.5 rounded bg-sel px-2 text-xs text-fg hover:bg-hover "
+          className="gap-1.5"
         >
           {isConnecting ? (
             <>
@@ -335,15 +332,19 @@ export function LogToolbar({
                     : t("action", "streamStopped")}
             </>
           )}
-        </button>
+        </Button>
 
         <DropdownMenu>
-          <DropdownMenuTrigger
-            title={t("action", "moreLogActions")}
-            aria-label={t("action", "moreLogActions")}
-            className="flex h-6 w-6 items-center justify-center rounded text-fg-mut hover:bg-hover hover:text-fg"
-          >
-            <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              title={t("action", "moreLogActions")}
+              aria-label={t("action", "moreLogActions")}
+              className="w-6 px-0"
+            >
+              <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {/* Copy is a menu item rather than ctrl+A because the list is
@@ -402,19 +403,16 @@ function ToolbarToggle({
   children: ReactNode;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="sm"
       onClick={onClick}
       title={title}
       aria-pressed={on}
-      className={`flex h-6 items-center gap-1 rounded px-2 text-xs ${
-        on ? "bg-sel text-fg" : "text-fg-mut hover:bg-hover hover:text-fg"
-      }`}
+      className="gap-1 aria-pressed:bg-sel aria-pressed:text-fg"
     >
       {children}
-      <span aria-hidden="true" className={on ? "text-fg-mut" : "opacity-0"}>
-        ✓
-      </span>
-    </button>
+    </Button>
   );
 }

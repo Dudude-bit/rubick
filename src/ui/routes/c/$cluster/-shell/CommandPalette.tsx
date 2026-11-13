@@ -2,6 +2,7 @@ import {
   lazy,
   Suspense,
   useCallback,
+  useDeferredValue,
   useEffect,
   useId,
   useMemo,
@@ -139,6 +140,7 @@ export function CommandPalette() {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const deferredText = useDeferredValue(text);
   const [scope, setScope] = useState<Scope>({ kind: "current" });
   const [wake, setWake] = useState<Wake | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -301,7 +303,7 @@ export function CommandPalette() {
   const searchEntries = useMemo(
     () =>
       buildPaletteEntries({
-        text,
+        text: deferredText,
         scope,
         contexts,
         currentContext,
@@ -309,6 +311,7 @@ export function CommandPalette() {
         marks,
         recentItems,
         isConnected,
+        searching: isSearching,
         error,
         shownClusters,
         hitsByContext,
@@ -326,7 +329,7 @@ export function CommandPalette() {
         t,
       }),
     [
-      text,
+      deferredText,
       scope,
       contexts,
       currentContext,
@@ -334,6 +337,7 @@ export function CommandPalette() {
       marks,
       recentItems,
       isConnected,
+      isSearching,
       error,
       shownClusters,
       hitsByContext,

@@ -3,7 +3,8 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { errorToShow } from "@/lib/error-utils";
+import { useHoldWriteToasts } from "@/lib/write-hold";
+import { FailureSlot } from "./FailureSlot";
 import { Button } from "@/components/ui/button";
 import { RouteLink } from "@/components/ui/route-link";
 import { ReasonedAction } from "@/components/object/detail-blocks";
@@ -64,6 +65,7 @@ export function RestartDialog({
   onConfirm,
 }: RestartDialogProps) {
   const t = useT();
+  useHoldWriteToasts(busy);
   const gate = useCriticalGate(open);
   const words = restartWords(plan, name, t);
   const subject = `${kind} ${qualified(name, namespace)}`;
@@ -127,11 +129,7 @@ export function RestartDialog({
                 </AlertDescription>
               </Alert>
             )}
-          {error != null && (
-            <Alert variant="destructive">
-              {t("action", "restartFailedWith", { reason: errorToShow(error) })}
-            </Alert>
-          )}
+          <FailureSlot error={error} busy={busy} />
           {intercept && <DeliveryInterceptBody intercept={intercept} />}
           {gate.input}
           <DialogFooter>

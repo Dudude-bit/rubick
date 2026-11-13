@@ -502,9 +502,10 @@ function emptyHint({
   if (done.length === 0) {
     return {
       tone: "unread",
-      text: clusters.every(isCold)
-        ? t("empty", "nothingSearchedNoCluster")
-        : t("empty", "nothingSearchedAnywhere"),
+      text:
+        total > 0 && clusters.every(isCold)
+          ? t("empty", "nothingSearchedNoCluster")
+          : t("empty", "nothingSearchedAnywhere"),
     };
   }
   if (loading.size > 0) {
@@ -572,6 +573,8 @@ export interface PaletteState {
   marks: Record<string, ClusterMark>;
   recentItems: RecentItem[];
   isConnected: boolean;
+  /** The search is on its way, whether or not any cluster has been named yet. */
+  searching?: boolean;
   error: string | null;
   /** Cluster rows in the order they were asked, cold ones included. */
   shownClusters: ClusterSearchState[];
@@ -648,6 +651,7 @@ export function buildPaletteEntries({
   marks,
   recentItems,
   isConnected,
+  searching = false,
   error,
   shownClusters,
   hitsByContext,
@@ -666,10 +670,12 @@ export function buildPaletteEntries({
   const scoped = scope.kind !== "current";
   const answered = shownClusters.filter(hasAnswered).length;
   /** At least one cluster is still connecting or listing, right now. */
-  const working = shownClusters.some(
-    (cluster) =>
-      cluster.status === "searching" || cluster.status === "connecting"
-  );
+  const working =
+    searching ||
+    shownClusters.some(
+      (cluster) =>
+        cluster.status === "searching" || cluster.status === "connecting"
+    );
 
   const out: Entry[] = [];
 

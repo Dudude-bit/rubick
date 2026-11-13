@@ -10,6 +10,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ScaleDialog } from "./ScaleDialog";
+import { writeToastsHeld } from "@/lib/write-hold";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -178,9 +179,37 @@ describe("scaling when the write failed", () => {
     const { rerender } = render(scale({ onSubmit: () => {} }));
     await userEvent.click(scaleButton());
     rerender(scale({ error: new Error("deployments/scale is forbidden") }));
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      /Could not scale to 3: .*forbidden/
+    expect(screen.getByRole("alert")).toHaveTextContent(/forbidden/);
+  });
+
+  /** Fails if an unanswered write is drawn red, as if the cluster had refused it. */
+  it("says an unanswered write may have gone through", async () => {
+    const { rerender } = render(scale());
+    await userEvent.click(scaleButton());
+    rerender(
+      scale({
+        error: Object.assign(new Error("timed out"), { code: "NO_ANSWER" }),
+      })
     );
+    expect(screen.getByRole("alert")).toHaveTextContent(/may have done it/);
+  });
+
+  /** Fails if the dialog lets the toast say the same refusal a second time. */
+  it("holds the failure toasts exactly while the write is out", async () => {
+    const { rerender } = render(scale());
+    expect(writeToastsHeld()).toBe(false);
+    rerender(scale({ busy: true }));
+    expect(writeToastsHeld()).toBe(true);
+    rerender(scale({ busy: false }));
+    expect(writeToastsHeld()).toBe(false);
+  });
+
+  /** Fails if Enter in the count field sends a second write while the first is out. */
+  it("does not submit again while a write is out", async () => {
+    const onSubmit = vi.fn();
+    render(scale({ busy: true, onSubmit }));
+    await userEvent.type(screen.getByLabelText(/replicas/i), "{Enter}");
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   /** Fails if an error left from an earlier opening shows before anything was asked. */

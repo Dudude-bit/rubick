@@ -103,9 +103,9 @@ function PeekLoading({ target }: { target: PeekTarget }) {
       onPointerDownOutside={(event) => event.preventDefault()}
       onInteractOutside={(event) => event.preventDefault()}
       aria-describedby={undefined}
-      style={{ width }}
+      style={{ width, minWidth: width }}
       className={cn(
-        "flex max-w-none flex-col gap-0 p-0 sm:max-w-none",
+        "flex max-w-none flex-col gap-0 p-0 transition-transform sm:max-w-none",
         position
       )}
     >

@@ -66,3 +66,34 @@ describe("a folded document", () => {
     expect(screen.getByText(/^JSON · [\d,\s]+ chars$/)).toBeInTheDocument();
   });
 });
+
+describe("a key's wrapping points", () => {
+  /**
+   * `app.kubernetes.io/component` has no break opportunity before the slash,
+   * so the browser cut it inside "component". Fails if a label stops offering
+   * a break after `.`, `/` and `-`.
+   */
+  it("offers a break after each dot, slash and hyphen of a key", () => {
+    const { container } = render(
+      <KeyValueList
+        items={[{ label: "app.kubernetes.io/pod-template-hash", value: "x" }]}
+      />
+    );
+    const key = container.querySelector("dt") as HTMLElement;
+    expect(key.querySelectorAll("wbr")).toHaveLength(5);
+    expect(key).toHaveTextContent("app.kubernetes.io/pod-template-hash");
+  });
+
+  /** Fails if a long plain value loses its full-text tooltip. */
+  it("gives a plain value its full text as a tooltip", () => {
+    const { container } = render(
+      <KeyValueList
+        items={[{ label: "node", value: "ip-10-0-1-2.internal" }]}
+      />
+    );
+    expect(container.querySelector("dd")).toHaveAttribute(
+      "title",
+      "ip-10-0-1-2.internal"
+    );
+  });
+});

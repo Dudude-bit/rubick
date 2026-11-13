@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
@@ -61,5 +61,29 @@ describe("the log toolbar's stream button while the stream connects", () => {
     expect(button).toBeEnabled();
     await userEvent.click(button);
     expect(onToggleStreaming).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the log toolbar's toggles", () => {
+  /**
+   * The view choice was a hand-rolled button row beside two other toggle
+   * styles. Fails if it stops being one grouped choice whose pressed segment
+   * follows the view, or if the toggles lose aria-pressed.
+   */
+  it("draws the view as one group and the toggles as pressed buttons", async () => {
+    await renderWithRouter(
+      toolbar({ viewMode: "table", collapseRepeats: true })
+    );
+    const group = screen.getByRole("group", { name: "View" });
+    expect(
+      within(group).getByRole("button", { name: "Table" })
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(group).getByRole("button", { name: "Compact" })
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /Repeats/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
   });
 });

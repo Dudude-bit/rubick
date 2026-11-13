@@ -35,6 +35,15 @@ export interface KeyValueRowProps {
   className?: string;
 }
 
+function Breakable({ text }: { text: string }) {
+  return text.split(/(?<=[./-])/).map((part, index) => (
+    <React.Fragment key={index}>
+      {index > 0 && <wbr />}
+      {part}
+    </React.Fragment>
+  ));
+}
+
 export function KeyValueRow({
   label,
   mono,
@@ -45,29 +54,27 @@ export function KeyValueRow({
   return (
     <div
       className={cn(
-        "grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0",
+        "grid grid-cols-[minmax(min(min-content,40%),132px)_minmax(0,1fr)] items-baseline gap-3 border-b border-hair py-1 last:border-b-0",
         className
       )}
     >
-      {/* `min-w-0` lets the label shrink to its track and `wrap-break-word`
-       *  breaks inside it. Without both, a grid item keeps its content's
-       *  intrinsic width, and an unhyphenated annotation key such as
-       *  `deployment.kubernetes.io/revision` is drawn straight over the
-       *  value column. */}
+      {/* A key breaks after `.`, `/` and `-` first; `wrap-break-word` is
+       *  only the last resort for a segment wider than the track. */}
       <dt
         className="min-w-0 wrap-break-word text-caption text-fg-fnt"
         // Only a plain label can be its own tooltip; a rendered one carries
         // its own affordances and would announce them twice.
         title={typeof label === "string" ? label : undefined}
       >
-        {label}
+        {typeof label === "string" ? <Breakable text={label} /> : label}
       </dt>
       <dd
         className={cn(
-          "min-w-0 wrap-break-word text-xs",
+          "min-w-0 overflow-x-clip wrap-anywhere text-xs [&>*]:max-w-full",
           mono && "font-mono",
           tone ? TONE_CLASS[tone] : "text-fg"
         )}
+        title={typeof children === "string" ? children : undefined}
       >
         {children}
       </dd>

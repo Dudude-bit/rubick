@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import {
   Fragment,
   useEffect,
@@ -119,8 +120,78 @@ import {
  * whole in the strip or named in the menu beside it, and the tabs in the
  * strip stay put while the open one is among them.
  */
+const BAR_STOPS = "button:not([disabled])";
+
+/**
+ * The bar is one tab stop: Left, Right, Home and End walk its controls and
+ * Tab leaves for the page. The stop follows focus and falls back to the open
+ * tab's first control.
+ */
+function useRovingBar(bar: RefObject<HTMLElement | null>) {
+  const stop = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const root = bar.current;
+    if (!root) return;
+    const stops = () =>
+      [...root.querySelectorAll<HTMLElement>(BAR_STOPS)].filter(
+        (each) => !each.closest("[data-overflow=true]")
+      );
+    const apply = () => {
+      const all = stops();
+      if (!stop.current || !all.includes(stop.current))
+        stop.current =
+          all.find((each) => each.closest("[data-active=true]")) ??
+          all[0] ??
+          null;
+      for (const each of all) each.tabIndex = each === stop.current ? 0 : -1;
+    };
+    const onFocus = (event: FocusEvent) => {
+      const at = (event.target as HTMLElement).closest<HTMLElement>(BAR_STOPS);
+      if (!at || !root.contains(at)) return;
+      stop.current = at;
+      apply();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+      if (!keys.includes(event.key) || event.altKey || event.metaKey) return;
+      const all = stops();
+      const at = all.indexOf(document.activeElement as HTMLElement);
+      if (at === -1) return;
+      event.preventDefault();
+      const last = all.length - 1;
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? last
+            : Math.min(
+                Math.max(at + (event.key === "ArrowRight" ? 1 : -1), 0),
+                last
+              );
+      all[next].focus();
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-active", "data-overflow"],
+    });
+    root.addEventListener("focusin", onFocus);
+    root.addEventListener("keydown", onKey);
+    return () => {
+      observer.disconnect();
+      root.removeEventListener("focusin", onFocus);
+      root.removeEventListener("keydown", onKey);
+    };
+  }, [bar]);
+}
+
 export function ScopeTabs() {
   const t = useT();
+  const barRef = useRef<HTMLDivElement>(null);
+  useRovingBar(barRef);
   const currentContext = useClusterStore((s) => s.currentContext);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const namespaceScope = useClusterStore((s) => s.namespaceScope);
@@ -161,7 +232,10 @@ export function ScopeTabs() {
   });
 
   return (
-    <div className="flex h-[38px] flex-none items-center gap-1 border-b border-hair px-2.5">
+    <div
+      ref={barRef}
+      className="flex h-[38px] flex-none select-none items-center gap-1 border-b border-hair px-2.5"
+    >
       <NewTabButton />
 
       <div
@@ -237,9 +311,9 @@ function useHiddenTabs({
   ids,
   open,
 }: {
-  room: React.RefObject<HTMLDivElement | null>;
-  strip: React.RefObject<HTMLDivElement | null>;
-  menu: React.RefObject<HTMLButtonElement | null>;
+  room: RefObject<HTMLDivElement | null>;
+  strip: RefObject<HTMLDivElement | null>;
+  menu: RefObject<HTMLButtonElement | null>;
   ids: readonly string[];
   open: number;
 }): boolean[] {
@@ -334,7 +408,7 @@ function HiddenScopeTabs({
   tabs: ScopeTab[];
   activeId: string | null;
   namesCluster: boolean;
-  buttonRef: React.RefObject<HTMLButtonElement | null>;
+  buttonRef: RefObject<HTMLButtonElement | null>;
 }) {
   const t = useT();
   const named = useListNamer();
@@ -774,10 +848,7 @@ function ScopeTabItem({
               activeContext={context}
               onSelect={pickCluster}
             >
-              {/* Right, not Down: the strip is walked with Left and Right, but
-                this is the one segment where a menu is the point, and Down
-                is already spoken for by the `+` beside it. */}
-              <ClusterMenu context={context ?? ""} openKeys={["ArrowRight"]}>
+              <ClusterMenu context={context ?? ""}>
                 <button
                   type="button"
                   aria-haspopup="menu"

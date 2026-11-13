@@ -844,6 +844,27 @@ describe("the palette's resource rows", () => {
       "Nothing has been searched: no cluster here is connected yet."
     );
   });
+
+  /** Before the request names any cluster the roster is empty, which is not "none is connected". */
+  it("says it is still reading while the search has not named a cluster yet", () => {
+    const entries = buildPaletteEntries(
+      state({ text: "api", searching: true, shownClusters: [] })
+    );
+
+    expect(hintText(entries)).toBe("Still reading names for “api”…");
+    expect(hintTone(entries)).toBe("loading");
+  });
+
+  /** An empty roster with nothing running is an unread search, never a cold-cluster claim. */
+  it("does not claim no cluster is connected from an empty roster", () => {
+    const entries = buildPaletteEntries(
+      state({ text: "api", searching: false, shownClusters: [] })
+    );
+
+    expect(hintText(entries)).toBe(
+      "Nothing has been searched: the search did not complete on any cluster here."
+    );
+  });
 });
 
 describe("the palette's entries after a bang", () => {

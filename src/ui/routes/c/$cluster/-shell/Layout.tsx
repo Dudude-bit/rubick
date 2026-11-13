@@ -117,7 +117,7 @@ export function Layout({
           event.preventDefault();
           document.getElementById("main-content")?.focus();
         }}
-        className="sr-only rounded bg-canvas px-2 py-1 text-xs text-fg focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:outline-hidden focus:ring-1 focus:ring-info"
+        className="sr-only rounded-md border border-hair bg-raise px-2.5 py-1 text-xs text-fg shadow-md focus:not-sr-only focus:absolute focus:left-[calc(13rem+0.75rem)] focus:top-14 focus:z-50 focus:outline-hidden focus:ring-1 focus:ring-info"
       >
         {t("action", "skipToContent")}
       </a>

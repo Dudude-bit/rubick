@@ -184,8 +184,6 @@ describe("a Restart that was refused", () => {
       />
     );
     const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).getByText(/Could not restart: .*forbidden/)
-    ).toBeInTheDocument();
+    expect(within(dialog).getByText(/forbidden/)).toBeInTheDocument();
   });
 });

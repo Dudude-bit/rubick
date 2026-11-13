@@ -1643,3 +1643,38 @@ describe("the new tab button", () => {
     }
   );
 });
+
+describe("the tab bar as one tab stop", () => {
+  /**
+   * Tab walked every control of every tab before the page. Fails if more than
+   * one control is in the tab order, if the open tab does not hold the stop,
+   * or if the arrow keys stop moving between controls.
+   */
+  it("keeps one control in the tab order and moves between them with the arrows", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", href: "/c/k3d-dev" }),
+        tab({ id: "b", href: "/c/k3d-dev/pods" }),
+      ],
+      activeId: "b",
+      pendingHref: null,
+    });
+    await mount();
+    const bar = tabs()[0].closest<HTMLElement>("div[class*='select-none']")!;
+    const buttons = () => [...bar.querySelectorAll<HTMLElement>("button")];
+    await waitFor(() =>
+      expect(buttons().filter((each) => each.tabIndex === 0)).toHaveLength(1)
+    );
+    const stop = buttons().find((each) => each.tabIndex === 0)!;
+    expect(tabs()[1]).toContainElement(stop);
+
+    stop.focus();
+    fireEvent.keyDown(stop, { key: "ArrowRight" });
+    const next = buttons()[buttons().indexOf(stop) + 1];
+    expect(document.activeElement).toBe(next);
+    expect(next.tabIndex).toBe(0);
+    expect(stop.tabIndex).toBe(-1);
+    fireEvent.keyDown(next, { key: "Home" });
+    expect(document.activeElement).toBe(buttons()[0]);
+  });
+});

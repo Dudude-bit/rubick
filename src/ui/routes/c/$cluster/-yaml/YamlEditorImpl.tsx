@@ -4,6 +4,7 @@ import { yaml as yamlLanguage } from "@codemirror/lang-yaml";
 import { EditorView } from "@codemirror/view";
 import { useThemeStore } from "@/stores/themeStore";
 import { editorTheme } from "./editor-theme";
+import { hangingIndent } from "./hanging-indent";
 import { foldMachineDocuments, machineDocumentFolding } from "./machine-fold";
 
 export interface YamlEditorProps {
@@ -32,6 +33,7 @@ export function YamlEditor({
     () => [
       yamlLanguage(),
       EditorView.lineWrapping,
+      hangingIndent,
       machineDocumentFolding,
       // Last, so it outranks the base setup's fallback highlight style.
       editorTheme(theme === "dark"),
