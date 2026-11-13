@@ -2,6 +2,7 @@ import { toast } from "@/components/ui/use-toast";
 import { translate } from "@/i18n";
 import { errorToShow, isUnanswered } from "@/lib/error-utils";
 import { shownPath } from "@/lib/hide-paths";
+import { writeToastsHeld } from "@/lib/write-hold";
 import { currentLocale } from "@/stores/localeStore";
 
 /** A failure on screen: our title, then the server's words without our framing. */
@@ -20,6 +21,7 @@ export function toastError(title: string, error: unknown) {
  */
 export function toastedUnanswered(error: unknown): boolean {
   if (!isUnanswered(error)) return false;
+  if (writeToastsHeld()) return true;
   const locale = currentLocale();
   toast({
     title: translate(locale, "action", "writeUnanswered"),

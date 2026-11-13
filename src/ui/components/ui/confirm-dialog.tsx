@@ -12,6 +12,7 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { WriteFailure } from "@/components/ui/write-failure";
+import { holdWriteToasts } from "@/lib/write-hold";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 
@@ -81,8 +82,12 @@ export function ConfirmDialog({
           <AlertDialogAction
             className={buttonVariants({ variant: confirmVariant })}
             onClick={(event) => {
+              const release = holdWriteToasts();
               const result = onConfirm();
-              if (!(result instanceof Promise)) return;
+              if (!(result instanceof Promise)) {
+                release();
+                return;
+              }
               event.preventDefault();
               setPending(true);
               setFailure(null);
@@ -91,7 +96,10 @@ export function ConfirmDialog({
                   () => onOpenChange(false),
                   (error: unknown) => setFailure(error ?? "")
                 )
-                .finally(() => setPending(false));
+                .finally(() => {
+                  release();
+                  setPending(false);
+                });
             }}
             disabled={confirmDisabled || gate.blocked || pending}
             aria-busy={pending || undefined}

@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { WriteFailure } from "@/components/ui/write-failure";
+import { holdWriteToasts } from "@/lib/write-hold";
 import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 
@@ -69,8 +70,10 @@ export function DangerousConfirmDialog({
 
   const handleConfirm = (event?: { preventDefault: () => void }) => {
     if (!isConfirmEnabled) return;
+    const release = holdWriteToasts();
     const result = onConfirm();
     if (!(result instanceof Promise)) {
+      release();
       if (!event) onOpenChange(false);
       return;
     }
@@ -82,7 +85,10 @@ export function DangerousConfirmDialog({
         () => onOpenChange(false),
         (error: unknown) => setFailure(error ?? "")
       )
-      .finally(() => setRunning(false));
+      .finally(() => {
+        release();
+        setRunning(false);
+      });
   };
 
   return (
