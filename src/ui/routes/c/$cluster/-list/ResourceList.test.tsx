@@ -328,7 +328,10 @@ describe("a live list while the overview cannot list its kind", () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    client.setQueryData(queryKeys.clusterOverview(null, []), { unread });
+    client.setQueryData(queryKeys.clusterOverview(null, []), {
+      unread,
+      warningsShort: [],
+    });
     return client;
   };
   const watched = (client: QueryClient) =>

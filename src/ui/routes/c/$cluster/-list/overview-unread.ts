@@ -5,8 +5,25 @@ import type { ClusterOverview, OverviewUnread } from "@/generated/types";
 import { readOverview } from "@/hooks/useClusterOverview";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { queryKeys } from "@/lib/query-keys";
-import type { ResourceKind } from "@/lib/resource-registry";
+import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
+
+/** Every read the overview could not do, events included: it keeps a failed events list with the cut ones, not with the other kinds. */
+const unreadOf = (overview: ClusterOverview): OverviewUnread[] => [
+  ...overview.unread,
+  ...overview.warningsShort.flatMap((short) =>
+    short.why === "failed"
+      ? [
+          {
+            kind: ResourceType.Event,
+            namespace: short.namespace,
+            code: short.code,
+            message: short.message,
+          },
+        ]
+      : []
+  ),
+];
 
 /** The overview's read of this kind that failed in this scope, from the answer the shell keeps; never asked for here, and `retry` asks it once. */
 export function useOverviewUnreadOf(kind: ResourceKind | null | undefined) {
@@ -19,7 +36,7 @@ export function useOverviewUnreadOf(kind: ResourceKind | null | undefined) {
     queryKey,
     queryFn: () => readOverview(selection),
     enabled: false,
-    select: (overview: ClusterOverview) => overview.unread,
+    select: unreadOf,
   });
   const unread = useMemo<OverviewUnread | null>(
     () =>

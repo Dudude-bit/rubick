@@ -291,22 +291,38 @@ describe("a feed a watch keeps", () => {
     expect(screen.getByText("live")).toBeInTheDocument();
   }, 30_000);
 
-  const overviewCannotListEvents = (client: {
-    setQueryData: (key: unknown[], data: unknown) => void;
-  }) =>
+  // As the overview answers it: a failed events list sits with the cut ones
+  // in `warningsShort`, never in `unread`.
+  const overviewCannotListEvents = (
+    client: { setQueryData: (key: unknown[], data: unknown) => void },
+    why: "failed" | "capped" = "failed"
+  ) =>
     act(() =>
       client.setQueryData(queryKeys.clusterOverview(null, []), {
         warnings: [],
-        unread: [
-          {
-            kind: "Event",
-            namespace: null,
-            code: "NO_ANSWER",
-            message: "500 Internal Server Error",
-          },
+        unread: [],
+        warningsShort: [
+          why === "failed"
+            ? {
+                why,
+                namespace: null,
+                code: "NO_ANSWER",
+                message: "500 Internal Server Error",
+              }
+            : { why, namespace: null },
         ],
       })
     );
+
+  /** A list cut at the page cap was read, only not to its end: fails if that is drawn as a failing read. */
+  it("keeps the live mark when the overview's events were only cut short", async () => {
+    const { client } = await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    overviewCannotListEvents(client, "capped");
+    expect(screen.queryByText(/A fresh list of events/)).toBeNull();
+    expect(screen.getByText("live")).toBeInTheDocument();
+  });
 
   /**
    * Under an events list answering 500 the page wore "live" while the
