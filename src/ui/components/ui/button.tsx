@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,17 +45,54 @@ export interface ButtonProps
     React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  /** The action is running: a spinner takes the icon's place and the button holds still. */
+  pending?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
+  (
+    {
+      className,
+      variant,
+      size,
+      asChild = false,
+      pending = false,
+      children,
+      ...props
+    },
+    ref
+  ) => {
+    if (asChild)
+      return (
+        <Slot
+          className={cn(buttonVariants({ variant, size, className }))}
+          ref={ref}
+          {...props}
+        >
+          {children}
+        </Slot>
+      );
     return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+      <button
+        className={cn(
+          buttonVariants({ variant, size, className }),
+          pending && "[&>svg:not([data-spinner])]:hidden"
+        )}
         ref={ref}
         {...props}
-      />
+        disabled={props.disabled || pending}
+        aria-busy={pending || undefined}
+      >
+        {pending && (
+          <Spinner
+            data-spinner
+            size="xs"
+            aria-hidden="true"
+            className={cn("flex-none", size !== "icon" && "mr-1.5")}
+          />
+        )}
+        {children}
+      </button>
     );
   }
 );

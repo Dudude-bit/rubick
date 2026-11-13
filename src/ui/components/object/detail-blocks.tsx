@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { None } from "@/components/ui/none";
+import { Spinner } from "@/components/ui/spinner";
 import { conditionRole } from "@/lib/condition-health";
 import { involvedNamespace } from "@/lib/event-incarnation";
 import { withoutCredentials } from "@/lib/hints";
@@ -93,6 +94,7 @@ export function DetailAction({
       }}
       disabled={!blocked && (disabled || busy)}
       aria-disabled={blocked || undefined}
+      aria-busy={busy || undefined}
       className={cn(
         "flex h-6 items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-caption transition-colors disabled:pointer-events-none disabled:opacity-40",
         danger ? "text-err" : "text-fg-mut",
@@ -102,7 +104,11 @@ export function DetailAction({
         className
       )}
     >
-      {Icon && <Icon className={cn("h-3.5 w-3.5", busy && "animate-spin")} />}
+      {busy ? (
+        <Spinner size="xs" aria-hidden="true" className="h-3.5 w-3.5" />
+      ) : (
+        Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
       {label}
     </button>
   );

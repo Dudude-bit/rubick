@@ -15,7 +15,7 @@ export interface UnknownProps {
   /** The failure, as the read returned it. */
   error: unknown;
   /** Ask the same read again. Offered whenever the caller can. */
-  onRetry?: () => void;
+  onRetry?: () => unknown;
   className?: string;
 }
 

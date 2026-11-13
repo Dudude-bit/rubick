@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -24,6 +25,8 @@ export interface QuickAction<T> {
   disabled?: (item: T) => boolean;
   /** Why it cannot run on this item; the button stays, greyed, and says so. */
   reason?: (item: T) => string | undefined;
+  /** Already running on this item: the icon turns and the button takes no second press. */
+  pending?: (item: T) => boolean;
 }
 
 interface QuickActionsProps<T> {
@@ -107,7 +110,8 @@ export function QuickActions<T>({
       onClick={(e) => e.stopPropagation()}
     >
       {visibleActions.map((action) => {
-        const isDisabled = action.disabled?.(item);
+        const isPending = action.pending?.(item) ?? false;
+        const isDisabled = action.disabled?.(item) || isPending;
         const reason = action.reason?.(item);
         const Icon = action.icon;
 
@@ -127,13 +131,18 @@ export function QuickActions<T>({
                 )}
                 aria-label={action.label}
                 aria-disabled={reason ? true : undefined}
+                aria-busy={isPending || undefined}
                 disabled={isDisabled}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!reason) action.onClick(item);
                 }}
               >
-                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                {isPending ? (
+                  <Spinner size="xs" aria-hidden="true" />
+                ) : (
+                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-[260px] text-xs">

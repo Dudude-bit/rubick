@@ -40,4 +40,16 @@ describe("asking a read again", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try the read again" }));
     await waitFor(() => expect(retry).toHaveBeenCalledOnce());
   });
+
+  /** Fails if the button takes a second press while the first read is still out, or stays dead after it lands. */
+  it("holds still until the read it asked for settles", async () => {
+    let land: () => void = () => undefined;
+    const read = new Promise<void>((resolve) => (land = resolve));
+    render(<ReadAgain error={null} onRetry={() => read} />);
+    const button = screen.getByRole("button", { name: "Try the read again" });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toBeDisabled());
+    land();
+    await waitFor(() => expect(button).toBeEnabled());
+  });
 });

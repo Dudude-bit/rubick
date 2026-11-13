@@ -45,7 +45,7 @@ const BAR_FRACTIONS = [0.72, 0.45, 0.6, 0.38, 0.52];
 
 function TableSkeleton({
   widths,
-  columns = widths?.length ?? 4,
+  columns = widths?.length || 4,
   rows = 14,
   showSearch = true,
   compact = false,
