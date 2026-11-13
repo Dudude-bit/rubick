@@ -67,6 +67,8 @@ export interface Finding {
   tone: "err" | "warn" | "neutral";
   title: string;
   detail: string;
+  /** The readings that caused it, for the page to draw inside the sentence. */
+  evidence?: MetricReading[];
 }
 
 const governs = (conns: ResourceConnections) =>
@@ -168,6 +170,19 @@ export function metricReadings(facts: AutoscalerFacts): MetricReading[] {
     target: metric.target,
     current: metric.current,
   }));
+}
+
+const number = (value: string) => Number.parseFloat(value);
+const unit = (value: string) => value.replace(/^[\d.]+/, "");
+
+/** The readings above their target in the same unit: the metric that pushed the count to its ceiling. */
+export function overTarget(facts: AutoscalerFacts): MetricReading[] {
+  return metricReadings(facts).filter(
+    ({ current, target }) =>
+      current !== null &&
+      unit(current) === unit(target) &&
+      number(current) > number(target)
+  );
 }
 
 /** Which of an autoscaler's own conditions is the finding, and how loud. */
@@ -289,6 +304,7 @@ export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
             decided?.message ?? t("readings", "hpaAtCeilingDefault")
           ),
         }),
+        evidence: overTarget(auto.facts),
       };
     case "atRate":
       return {
@@ -315,7 +331,9 @@ export function autoscalerReplicas(facts: AutoscalerFacts, t: T): string {
   ];
   if (facts.lastScaleTime)
     parts.push(
-      t("readings", "hpaLastScaled", { ago: formatAge(facts.lastScaleTime, t) })
+      t("readings", "hpaLastScaled", {
+        ago: formatAge(facts.lastScaleTime, t),
+      })
     );
   return parts.join(" · ");
 }

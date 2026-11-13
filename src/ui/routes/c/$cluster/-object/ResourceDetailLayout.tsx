@@ -50,6 +50,11 @@ import { useDelivery } from "../-delivery/useDelivery";
 import type { Freshness } from "@/hooks/useLiveQuery";
 import type { DeliveryQuery } from "@/integrations";
 import { useT } from "@/i18n/useT";
+import { useClusterStore } from "@/stores/clusterStore";
+import type { Finding } from "@/lib/governance";
+import type { StatusRole } from "@/lib/status-role";
+import { FindingsBlock, WithProblem } from "./ProblemTone";
+import { problemOf, type Problem } from "./problem";
 import { ShareObjectAction } from "@/components/share/ShareAction";
 import type {
   ShareContribution,
@@ -165,6 +170,18 @@ interface ResourceDetailLayoutProps {
   namespaceLink?: AppLink | null;
   createdAt?: string | null;
   statusBadge?: ReactNode;
+  /** The role `statusBadge` is drawn in, so a problem is never drawn in a quieter tone than the badge beside it. */
+  statusRole?: StatusRole;
+  /**
+   * What is live-wrong with the object, worst first. Drawn directly under the
+   * header, and carried by the status chip as its tone and a count, so no
+   * page prints a green word above an amber cause.
+   */
+  findings?: readonly Finding[];
+  /** A page that already prints its own cause (a pod's summary) passes only the chip's part of it. */
+  trouble?: Problem | null;
+  /** Reads beside the object that failed or were refused, by name: the header then says the page is partly unread instead of live. */
+  unread?: readonly string[];
   /** Qualifiers shown beside the name. */
   badges?: ReactNode;
   /**
@@ -262,6 +279,10 @@ export function ResourceDetailLayout({
   namespaceLink,
   createdAt,
   statusBadge,
+  statusRole = "ok",
+  findings = [],
+  trouble,
+  unread,
   badges,
   delivery,
   actions,
@@ -295,17 +316,20 @@ export function ResourceDetailLayout({
   );
   const uid = lineage.data?.uid ?? null;
   useOwnershipKeys(served ?? servedOfKind(resourceKind), title, namespace);
+  const connected = useClusterStore((state) => state.isConnected);
+  const owning = connected && !lineage.data && !lineage.error;
   const tabs = useMemo(
     () =>
-      uid
+      uid || owning
         ? withOwns(pageTabs, {
             id: "owns",
             label: t("owns", "tab"),
             glyph: viewGlyph(Network),
-            content: <OwnsPanel uid={uid} namespace={namespace} />,
+            reading: !uid,
+            content: uid ? <OwnsPanel uid={uid} namespace={namespace} /> : null,
           })
         : pageTabs,
-    [pageTabs, uid, namespace, t]
+    [pageTabs, uid, owning, namespace, t]
   );
   const { deliveries } = useDelivery(delivery ?? null);
   // A page handed where its kind is served is not the registry's page of
@@ -405,6 +429,7 @@ export function ResourceDetailLayout({
   // this object is worth its two lines on a log as much as on the Overview,
   // and it is the tab's own content that grows into what is left.
   const surface = surfaceIsOpen(tabs, activeTab);
+  const problem = trouble ?? problemOf(findings);
 
   return (
     <CaptionScope kind={resourceKind}>
@@ -427,7 +452,13 @@ export function ResourceDetailLayout({
           namespace={namespace}
           namespaceLink={namespaceLink}
           createdAt={createdAt}
-          status={statusBadge}
+          status={
+            statusBadge && (
+              <WithProblem problem={problem} role={statusRole}>
+                {statusBadge}
+              </WithProblem>
+            )
+          }
           meta={
             <>
               {badges}
@@ -442,6 +473,7 @@ export function ResourceDetailLayout({
           slowed={freshness?.slowed}
           stale={freshness?.stale}
           slowRead={freshness?.slowRead}
+          unread={unread}
         />
 
         {/* Above the strip, and so on every tab: both say something about the
@@ -463,6 +495,7 @@ export function ResourceDetailLayout({
           />
         )}
         {summary}
+        <FindingsBlock findings={findings} />
 
         <DetailTabs
           tabs={tabs}

@@ -33,6 +33,7 @@ export function eventsTab(
     id: "events",
     label: t("columns", "events"),
     glyph: kindGlyph(ResourceType.Event),
+    reading: !error && !data,
     mark: error
       ? {
           shows: "unchecked",

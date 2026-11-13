@@ -709,7 +709,11 @@ describe("the breadcrumb's namespace segment", () => {
     // to the native `auxclick` event, so dispatch that one.
     fireEvent(
       segment(),
-      new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 })
+      new MouseEvent("auxclick", {
+        bubbles: true,
+        cancelable: true,
+        button: 1,
+      })
     );
     const { tabs: open, activeId } = useScopeTabStore.getState();
     expect(open).toHaveLength(2);
@@ -1016,5 +1020,145 @@ describe("a detail page whose object could not be read at all", () => {
       screen.getByRole("button", { name: "Try the read again" })
     );
     expect(retry).toHaveBeenCalled();
+  });
+});
+
+const overview: DetailTab[] = [
+  {
+    id: "overview",
+    label: "Overview",
+    glyph: viewGlyph(Info),
+    content: <p>replicas 5 of 5</p>,
+  },
+];
+
+const ceiling = {
+  tone: "warn" as const,
+  title: "web-hpa is at its ceiling of 5",
+  detail: "The desired replica count is more than the maximum.",
+  evidence: [
+    { key: "m", label: "memory", from: null, current: "105%", target: "80%" },
+  ],
+};
+
+/**
+ * A green word above an amber cause was the bug: the header said Ready and
+ * the reason it was not sat three blocks down. Fails if the chip stops
+ * carrying the finding's tone, or the finding moves back under the facts.
+ */
+describe("ResourceDetailLayout leads with the cause", () => {
+  it("draws the status chip in the finding's tone and counts it", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span className="text-ok">Ready</span>}
+        statusRole="ok"
+        findings={[ceiling]}
+      />
+    );
+    const chip = document.querySelector('[data-problem="warn"]');
+    expect(chip).toHaveTextContent("Ready");
+    expect(chip).toHaveTextContent("1 problem");
+    expect(chip?.firstElementChild?.className).toContain("text-warn!");
+  });
+
+  it("puts the finding and the metric that caused it before the strip", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span>Ready</span>}
+        findings={[ceiling]}
+      />
+    );
+    const headline = screen.getByText("web-hpa is at its ceiling of 5");
+    const strip = screen.getByRole("tablist");
+    expect(
+      headline.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getByTestId("finding-evidence")).toHaveTextContent(
+      "memory 105% against a target of 80%"
+    );
+  });
+
+  it("keeps a healthy object's chip plain", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span>Ready</span>}
+        findings={[{ ...ceiling, tone: "neutral", evidence: undefined }]}
+      />
+    );
+    expect(document.querySelector("[data-problem]")).toBeNull();
+  });
+
+  it("does not paint a failing badge quieter than it already is", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span>Failed</span>}
+        statusRole="err"
+        findings={[ceiling]}
+      />
+    );
+    expect(
+      document.querySelector('[data-problem="warn"]')?.firstElementChild
+    ).not.toHaveClass("text-warn!");
+  });
+});
+
+/** A page whose events were refused is not live: fails if the header keeps the freshness chip over a read that never answered. */
+describe("ResourceDetailLayout says when a read beside the object failed", () => {
+  it("replaces the live reading with a partly-unread one naming the read", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        freshness={
+          {
+            dataUpdatedAt: Date.now(),
+            live: true,
+            slowed: false,
+            stale: false,
+            slowRead: false,
+          } as never
+        }
+        unread={["Events"]}
+      />
+    );
+    expect(screen.getByTestId("partly-unread")).toHaveTextContent(
+      "partly unread"
+    );
+    expect(screen.queryByText("live")).toBeNull();
+  });
+
+  it("keeps the live reading while every read answered", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        freshness={
+          {
+            dataUpdatedAt: Date.now(),
+            live: true,
+            slowed: false,
+            stale: false,
+            slowRead: false,
+          } as never
+        }
+        unread={[]}
+      />
+    );
+    expect(screen.queryByTestId("partly-unread")).toBeNull();
+    expect(screen.getByText("live")).toBeInTheDocument();
   });
 });

@@ -60,7 +60,7 @@ export function PeekActions({
 
   return (
     <>
-      <div className="mt-2 flex min-w-0 flex-nowrap items-center gap-1">
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1">
         {onOpenFullPage && (
           <>
             <DetailAction

@@ -33,6 +33,7 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     id: "strategy",
     header: columnHeader("columns", "strategy"),
     meta: {
+      sort: (row: DeploymentInfoWithMetrics) => row.strategy || "RollingUpdate",
       yields: 3,
       floor: () => widestText(["RollingUpdate", "Recreate"], "sans", 6.6) + 20,
       share: (row: DeploymentInfoWithMetrics) =>

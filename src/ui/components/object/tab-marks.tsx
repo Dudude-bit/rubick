@@ -36,7 +36,7 @@ export function TabMark({
     return (
       <span
         className={cn(
-          "flex-none text-caption tabular-nums",
+          "inline-block min-w-[2ch] flex-none text-caption tabular-nums",
           isActive ? "text-fg-mut" : "text-fg-fnt"
         )}
       >
@@ -57,6 +57,17 @@ export function TabMark({
     <span
       aria-hidden="true"
       className={cn(DOT, "animate-tab-live bg-ok motion-reduce:animate-none")}
+    />
+  );
+}
+
+/** A mark's width held empty while it is read, as wide as a two-digit count. */
+export function TabMarkSlot() {
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="tab-mark-slot"
+      className="inline-block min-w-[2ch] flex-none"
     />
   );
 }

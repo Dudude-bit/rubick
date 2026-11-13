@@ -587,8 +587,6 @@ export const ru: Catalogue = {
     role: "Роль",
     version: "Версия",
     internalIp: "Внутренний IP",
-    cpuUsage: "Загрузка CPU",
-    memoryUsage: "Память",
     podCap: "Лимит подов",
     reclaimPolicy: "Освобождение",
     bindingMode: "Режим привязки",
@@ -1662,8 +1660,6 @@ export const ru: Catalogue = {
     clearBuffered: "Очистить буфер",
     reconnect: "Переподключиться",
     startNewShell: "Запустить новую оболочку",
-    scaleFailedTo: "Не удалось масштабировать до {n}: {reason}",
-    restartFailedWith: "Не удалось перезапустить: {reason}",
     followAgain: "Следовать снова",
     followNewRun: "Следовать за новым запуском",
     showCurrentRun: "Показать текущий запуск",
@@ -2174,6 +2170,8 @@ export const ru: Catalogue = {
     notReadService: "Service в {namespace} ({reason})",
     notReadEndpoints: "эндпоинты Service {service} ({reason})",
     notReadLogs: "последние строки {container} ({reason})",
+    noLikelyCauseEventsUnread:
+      "События не удалось прочитать, поэтому вероятная причина не предлагается.",
     notReadEvents: "события этого пода ({reason})",
     eventsHeld:
       "Список стоит на месте, пока здесь указатель, чтобы строка не сдвинулась из-под него",
@@ -2972,6 +2970,8 @@ export const ru: Catalogue = {
     connectPrometheus: "Подключить в настройках",
     unanswered:
       "Подключённый Prometheus не ответил о своих целях: {reason}. Это не значит, что метрики не собираются: это неизвестно.",
+    scrapeUnanswered:
+      "Подключённый Prometheus не ответил о своих целях. Это не значит, что метрики не собираются: это неизвестно.",
     targetsRead: {
       one: "Сбор метрик по данным подключённого Prometheus · {n} цель",
       few: "Сбор метрик по данным подключённого Prometheus · {n} цели",
@@ -3291,6 +3291,8 @@ export const ru: Catalogue = {
       "К этому кластеру не подключён Prometheus. Подхват прочитан из объектов; загружены ли правила и горят ли, не проверено.",
     unanswered:
       "Подключённый Prometheus не ответил про свои правила: {reason}. Горит ли что-то, неизвестно, а не пусто.",
+    rulesUnanswered:
+      "Подключённый Prometheus не ответил про свои правила. Горит ли что-то, неизвестно, а не пусто.",
     rulesLoaded: {
       one: "{n} алертящее правило загружено на подключённом Prometheus",
       few: "{n} алертящих правила загружено на подключённом Prometheus",
@@ -3745,6 +3747,10 @@ export const ru: Catalogue = {
       many: "{n} строк. Чтобы сократить список, сузьте область или поиск",
       other: "{n} строки. Чтобы сократить список, сузьте область или поиск",
     },
+    shownOfTotal: "{shown} из {total}",
+    ungroupedBy: "Без групп",
+    ungroupedByTitle:
+      "Пока список отсортирован по столбцу, строки ранжируются по всем группам сразу",
     listCutAt:
       "Прочитаны только последние {n}. Чтобы увидеть более старые, сузьте область или увеличьте лимит",
     limitWord: "лимит",
@@ -3972,6 +3978,7 @@ export const ru: Catalogue = {
       "{said} По самой нагрузке этого не видно: число реплик, условия и события выглядят ровно так же, как у здорового автомасштабировщика, а значение просто перестаёт меняться.",
     hpaAtCeilingDetail:
       "{said} Пока это так, оба числа реплик выглядят как здоровое устойчивое состояние, и больше ничто на этой странице этого не показывает: вырасти нагрузке позволит увеличение maxReplicas.",
+    hpaMetricOverTarget: "{metric} {current} при цели {target}",
     hpaStuckDetail:
       "Сейчас он действовать не может ({why}), поэтому заданное вами число продержится, пока он не сможет. Тогда он без предупреждения вернёт счёт куда-то между {min} и {max}.",
     logFormatJson: "Структурированный JSON с разобранными полями",
@@ -5160,7 +5167,6 @@ export const ru: Catalogue = {
     metricsShortError: "API метрик отвечает ошибкой",
     metricNotAvailable: "н/д",
     metricNoSampleYet: "замера пока нет",
-    metricNoSample: "нет замера",
     sizeB: "{n} Б",
     sizeKi: "{n} КиБ",
     sizeMi: "{n} МиБ",
@@ -5195,6 +5201,9 @@ export const ru: Catalogue = {
     freshOfflineNote: "Нет подключения. Ничто на этом экране не обновляется.",
     freshStaleNote:
       "Последнее чтение не удалось, поэтому на экране данные последнего успешного чтения.",
+    freshPartlyUnread: "прочитано не всё",
+    freshPartlyUnreadNote:
+      "Сам объект читается, но эти чтения не ответили: {reads}. Того, что они показали бы, на этой странице нет.",
     freshBehind: "ещё читается",
     freshBehindNote:
       "Чтение этого экрана ждёт ответа кластера дольше {slow} с, поэтому на экране последний полученный ответ. Через {deadline} с приложение перестанет ждать и сообщит об этом.",
@@ -5275,6 +5284,10 @@ export const ru: Catalogue = {
       "Всё ещё отказ? Возможно, плагину учётных данных этого контекста сначала нужен свой вход. Для GKE это",
     healthy: "В порядке",
     schedulerHeadroom: "Запас планировщика",
+    undated: "без даты",
+    headroomClusterWide: "по всему кластеру, независимо от области",
+    attentionRowStale:
+      "Последние известные данные: чтение, на котором стоит эта строка, не удалось, она могла измениться",
     headroomLegend:
       "запросы к доступному · засечка показывает текущее потребление",
     headroomLegendNoMetrics:
@@ -6643,6 +6656,9 @@ export const ru: Catalogue = {
       many: "уже {n} перезапусков.",
       other: "уже {n} перезапуска.",
     },
+    probeFailing: "{container}: проба {probe} не проходит",
+    probeLikelyRestartCause:
+      "Скорее всего, поэтому он перезапускается: kubelet убивает контейнер, у которого liveness-проба не проходит.",
     restartedExitUnreported:
       "{container} перезапускался, а о последнем завершении kubelet не сообщает",
     restartsExitUnreportedDetail: {
@@ -6931,6 +6947,9 @@ export const ru: Catalogue = {
       other:
         "Получить этот список не разрешено ни по всему кластеру, ни в пространствах имён {namespaces}.",
     },
+    headroomNeedsReads:
+      "Ёмкость и запас планировщика не показаны: не удалось прочитать {kinds}, а узлы считаются относительно них.",
+    someReads: "часть списков кластера",
     noNodeAccess:
       "У вас нет прав на чтение узлов кластера, поэтому ёмкость и запас планировщика не показаны.",
     controllerLower: "контроллер",
@@ -9564,6 +9583,7 @@ export const ru: Catalogue = {
     },
     typeFilterLeavesRest: "фильтр по типу не показывает остальные события",
     latestKept: "из последних {n}",
+    inThoseStories: "в этих историях",
     podsStayedOnTheNode: {
       one: "На узле остался {n} под.",
       few: "На узле осталось {n} пода.",

@@ -39,12 +39,15 @@ import {
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { useLastPassed } from "@/hooks/useNow";
+import { useAttention } from "@/hooks/useAttention";
 import { useT } from "@/i18n/useT";
 import type { Rollout } from "@/generated/types";
 import { rowsWithStarts, startsOf } from "@/lib/workload-status";
 import {
   PODS_UNREAD,
+  problemOfRow,
   rowCause,
+  rowProblems,
   rowPods,
   rowRefusal,
   type CauseOwner,
@@ -178,6 +181,7 @@ export function createWorkloadListPage<T extends Workload>(
         : read;
     }, [listQuery.data, starts, ranOut]);
 
+    const attention = useAttention();
     const podsFailed = !podsRead && !!podsError;
     const causePods = useMemo(
       () =>
@@ -185,6 +189,10 @@ export function createWorkloadListPage<T extends Workload>(
       [pods, podsRead, podsUnread, podsFailed]
     );
     const causeAt = useLastPassed(causePods?.deadlines ?? []);
+    const problems = useMemo(
+      () => rowProblems(attention?.items ?? []),
+      [attention]
+    );
     const refusalsIn = useScopeRefusals(
       scope.wire,
       config.resourceType !== ResourceType.Deployment
@@ -210,10 +218,16 @@ export function createWorkloadListPage<T extends Workload>(
                 causeAt,
                 refused
               ),
+              problem: problemOfRow(
+                problems,
+                config.resourceType,
+                row.namespace,
+                row.name
+              ),
             };
           }
         ),
-      [rows, pods, causePods, causeAt, refusalsIn]
+      [rows, pods, causePods, causeAt, refusalsIn, problems]
     );
 
     const columns = useMemo(() => config.columns(), []);

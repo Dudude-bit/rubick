@@ -82,6 +82,8 @@ import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { podForwardPorts } from "@/lib/port-forward";
 import { PodNetworkPolicies } from "./PodNetworkPolicies";
 import { usePodReplacementSearch } from "./usePodReplacementSearch";
+import { probeFailure } from "./probe-failure";
+import { unreadOf, type Problem } from "../../../-object/problem";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
@@ -272,6 +274,47 @@ function crashLoop(
   };
 }
 
+/** A container the kubelet keeps restarting while its events say a probe fails: the exit it left and the probe's own words, the link between them named as the guess it is. */
+function probeProblem(
+  pod: PodInfo,
+  events: readonly EventInfo[] | undefined,
+  t: ReturnType<typeof useT>
+): Omit<PodProblem, "tab"> | null {
+  const failure = probeFailure(events);
+  const container = podContainers(pod)
+    .filter((c) => c.restartCount > 0)
+    .sort((a, b) => b.restartCount - a.restartCount)[0];
+  if (!failure || !container) return null;
+  const last = lastTermination(container);
+  return {
+    reason: failure.probe,
+    headline: t("empty", "probeFailing", {
+      container: container.name,
+      probe: failure.probe,
+    }),
+    detail: (
+      <>
+        {last
+          ? parts(
+              t("empty", "crashRestartsWithLastRun", {
+                n: container.restartCount,
+              }),
+              { how: <ExitWords termination={last} between=", " /> }
+            )
+          : t("empty", "crashRestartsNoLastRun", {
+              n: container.restartCount,
+            })}{" "}
+        <ResourceMessage
+          message={failure.message}
+          subject={{ kind: "Pod", name: pod.name, namespace: pod.namespace }}
+        />{" "}
+        {failure.probe === "liveness" && t("empty", "probeLikelyRestartCause")}
+      </>
+    ),
+    tone: "warn",
+  };
+}
+
 /**
  * What is wrong with this pod, in one sentence, or nothing.
  *
@@ -283,6 +326,7 @@ function crashLoop(
 function podProblem(
   pod: PodInfo | null | undefined,
   waiting: boolean,
+  events: readonly EventInfo[] | undefined,
   t: ReturnType<typeof useT>
 ): PodProblem | null {
   if (!pod || pod.status.phase === "Succeeded") return null;
@@ -360,6 +404,9 @@ function podProblem(
       tab: "containers",
     };
   }
+
+  const probing = probeProblem(pod, events, t);
+  if (probing) return { ...probing, tab: "containers" };
 
   const condition = failingCondition(pod.status.conditions, [
     "Ready",
@@ -852,8 +899,24 @@ export function PodDetail() {
     serviceAccountRow(pod?.serviceAccountName, pod?.namespace, t),
   ];
 
-  const problem = useMemo(() => podProblem(pod, waiting, t), [pod, waiting, t]);
+  const eventsRead = podEvents.error ? undefined : podEvents.data;
+  const problem = useMemo(
+    () => podProblem(pod, waiting, eventsRead, t),
+    [pod, waiting, eventsRead, t]
+  );
   const causeSaid = cause && causeWords(cause, t);
+  const toneSaid = causeSaid?.tone ?? problem?.tone;
+  const badgeRole = statusRole(pod?.status.display ?? "");
+  const chipProblem: Problem | null =
+    (toneSaid === "err" || toneSaid === "warn") &&
+    badgeRole !== "err" &&
+    badgeRole !== "warn"
+      ? {
+          tone: toneSaid,
+          n: 1,
+          title: causeSaid?.sentence ?? problem?.headline ?? "",
+        }
+      : null;
 
   // A shell the reader opened and left is invisible the moment they click
   // Logs. The store already knows it is there; the dot is how the tab says so.
@@ -878,6 +941,9 @@ export function PodDetail() {
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.Pod}
+        unread={unreadOf([[t("columns", "events"), podEvents.error]])}
+        trouble={chipProblem}
+        statusRole={badgeRole}
         title={pod?.name || name || "Pod"}
         namespace={pod?.namespace || namespace}
         createdAt={pod?.createdAt}

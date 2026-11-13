@@ -2,6 +2,8 @@ import { afterEach, describe, it, expect } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import { CountBlock } from "./workload-overview";
+import { useGovernanceFindings } from "./use-governance-findings";
+import { FindingsBlock } from "../../-object/ProblemTone";
 import { Composition } from "@/components/object/detail-blocks";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectFacts, ResourceConnections } from "@/generated/types";
@@ -73,20 +75,28 @@ const budget = (over: Partial<Extract<ObjectFacts, { kind: "budget" }>> = {}) =>
 const query = (data: ResourceConnections | undefined) =>
   ({ data }) as ConnectionsQuery;
 
-function renderBlock(governance?: ConnectionsQuery) {
-  return renderWithRouter(
-    <CountBlock title="Replicas" subject="what runs" governance={governance}>
-      <Composition
-        total={3}
-        label="replicas wanted"
-        segments={[{ label: "ready", count: 3, tone: "ok" }]}
-      />
-    </CountBlock>,
-    {
-      at: "/c/prod/statefulsets/k8s-gui-test/stateful-demo",
-      route: "/c/$cluster/$",
-    }
+// The page frame draws the findings above the block; drawn together here as the page does.
+function Overview({ governance }: { governance?: ConnectionsQuery }) {
+  const findings = useGovernanceFindings(governance);
+  return (
+    <>
+      <FindingsBlock findings={findings} />
+      <CountBlock title="Replicas" subject="what runs" governance={governance}>
+        <Composition
+          total={3}
+          label="replicas wanted"
+          segments={[{ label: "ready", count: 3, tone: "ok" }]}
+        />
+      </CountBlock>
+    </>
   );
+}
+
+function renderBlock(governance?: ConnectionsQuery) {
+  return renderWithRouter(<Overview governance={governance} />, {
+    at: "/c/prod/statefulsets/k8s-gui-test/stateful-demo",
+    route: "/c/$cluster/$",
+  });
 }
 
 describe("CountBlock", () => {

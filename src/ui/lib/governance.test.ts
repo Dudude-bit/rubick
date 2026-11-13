@@ -256,6 +256,53 @@ describe("what an autoscaler is worth saying", () => {
     ).toBe("метрика external");
   });
 
+  /**
+   * The metric that pushed an autoscaler to its ceiling sat in another column
+   * as plain text. Fails if the finding stops carrying the readings above
+   * their target, or carries one that is under it or in another unit.
+   */
+  it("hands the ceiling finding the metric that is over its target", () => {
+    const limited = condition(
+      "ScalingLimited",
+      "True",
+      "TooManyReplicas",
+      "the desired replica count is more than the maximum replica count"
+    );
+    const busy = autoscalers(
+      conns([
+        governs(
+          hpa("hpa-busy", {
+            conditions: [limited],
+            metrics: [
+              {
+                name: "memory",
+                source: "resource",
+                target: "80%",
+                current: "105%",
+              },
+              {
+                name: "cpu",
+                source: "resource",
+                target: "80%",
+                current: "40%",
+              },
+              {
+                name: "depth",
+                source: "external",
+                target: "30",
+                current: "12",
+              },
+              { name: "rps", source: "pods", target: "10", current: null },
+            ],
+          })
+        ),
+      ])
+    )[0];
+    expect(
+      autoscalerFinding(busy, t)?.evidence?.map(({ label }) => label)
+    ).toEqual(["memory"]);
+  });
+
   it("calls a ceiling a ceiling and a floor a floor", () => {
     const ceiling = autoscalers(
       conns([

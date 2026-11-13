@@ -50,7 +50,9 @@ import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
+import { useGovernanceFindings } from "../../-components/use-governance-findings";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { unreadOf } from "../../../-object/problem";
 import {
   conditionsMark,
   readCountMark,
@@ -157,6 +159,7 @@ export function DeploymentDetail() {
 
   const chain = useChainAnswer(ResourceType.Deployment, name, namespace);
   const connections = chain.read;
+  const findings = useGovernanceFindings(connections);
 
   const podsKey = queryKeys.ownedPods(ResourceType.Deployment, namespace, name);
   const podsQuery = useLiveQuery({
@@ -560,6 +563,7 @@ export function DeploymentDetail() {
       id: toPlural(ResourceType.Pod),
       label: t("columns", "pods"),
       glyph: kindGlyph(ResourceType.Pod),
+      reading: podsPending,
       mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
       content: (
         <PodListCard
@@ -681,6 +685,13 @@ export function DeploymentDetail() {
         title={deployment?.name || ""}
         namespace={deployment?.namespace}
         createdAt={deployment?.createdAt}
+        findings={findings}
+        statusRole={rollout && workloadRole(rollout)}
+        unread={unreadOf([
+          [t("columns", "events"), events.error],
+          [t("columns", "pods"), podsError],
+          [t("nav", "revisions"), revisionsError],
+        ])}
         statusBadge={rollout && <RolloutBadge rollout={rollout} />}
         badges={
           rollout &&

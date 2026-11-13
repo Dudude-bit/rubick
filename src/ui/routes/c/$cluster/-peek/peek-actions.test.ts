@@ -110,16 +110,20 @@ describe("planPeekActions", () => {
     ]);
   });
 
-  // Five controls or fewer and there is nothing to hide behind.
-  it("leaves a short row whole", () => {
+  /** "Tell me when t" was clipped at the panel's edge with no More beside it. Fails if a row of four goes inline again. */
+  it("folds a four-control row into three at most and a More menu", () => {
     const plan = planPeekActions("Deployment", undefined, t);
-    expect(labels(plan.inline)).toEqual([
-      "Scale",
-      "Restart",
+    expect(plan.inline.length).toBeLessThanOrEqual(3);
+    expect(labels(plan.inline)).toEqual(["Scale", "Restart"]);
+    expect(labels(plan.menu)).toEqual([
       "Delete",
       "Tell me when the rollout finishes",
     ]);
-    expect(plan.menu).toEqual([]);
+  });
+
+  it("leaves a row of three whole", () => {
+    const plan = planPeekActions("DaemonSet", undefined, t);
+    expect(plan.menu.length === 0 || plan.inline.length === 3).toBe(true);
   });
 
   it("offers a plain Delete for a kind with nothing else to do", () => {

@@ -26,7 +26,9 @@ import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
+import { useGovernanceFindings } from "../../-components/use-governance-findings";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { unreadOf } from "../../../-object/problem";
 import {
   conditionsMark,
   kindGlyph,
@@ -78,6 +80,7 @@ import {
   rolloutSettled,
   startOf,
   watchedWorkload,
+  workloadRole,
 } from "@/lib/workload-status";
 import { useT } from "@/i18n/useT";
 
@@ -109,6 +112,7 @@ export function StatefulSetDetail() {
 
   const chain = useChainAnswer(ResourceType.StatefulSet, name, namespace);
   const connections = chain.read;
+  const findings = useGovernanceFindings(connections);
 
   const podsKey = queryKeys.ownedPods(
     ResourceType.StatefulSet,
@@ -399,6 +403,7 @@ export function StatefulSetDetail() {
         id: toPlural(ResourceType.Pod),
         label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
+        reading: podsPending,
         mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
         content: (
           <PodListCard
@@ -505,6 +510,12 @@ export function StatefulSetDetail() {
         title={statefulSet?.name || name || ""}
         namespace={statefulSet?.namespace || namespace}
         createdAt={statefulSet?.createdAt}
+        findings={findings}
+        statusRole={statefulSet && workloadRole(statefulSet.rollout)}
+        unread={unreadOf([
+          [t("columns", "events"), events.error],
+          [t("columns", "pods"), podsError],
+        ])}
         statusBadge={
           statefulSet && <RolloutBadge rollout={statefulSet.rollout} />
         }

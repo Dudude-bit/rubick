@@ -93,7 +93,23 @@ export function MostLikelyPanel({
   // say it could not look. Shown with the not-read line and no guess.
   if (!settings.showPanel) return null;
   if (!trouble && !eventsError) return null;
-  const hint = trouble ? hintFor(trouble, pod, chain) : null;
+  if (!trouble)
+    return (
+      <p
+        className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-fg-mut"
+        data-testid="most-likely-unread"
+      >
+        {t("hints", "noLikelyCauseEventsUnread")}
+        <button
+          type="button"
+          className="text-info hover:underline"
+          onClick={() => onOpenTab("events")}
+        >
+          {t("columns", "events")} →
+        </button>
+      </p>
+    );
+  const hint = hintFor(trouble, pod, chain);
   // A custom engine that is not an absolute URL is not an engine: the
   // search then built `?q=…` out of nothing, `openExternal` refused it and
   // silently put the query on the clipboard, and the line under the button

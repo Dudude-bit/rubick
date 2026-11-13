@@ -613,8 +613,6 @@ export const en = {
     role: "Role",
     version: "Version",
     internalIp: "Internal IP",
-    cpuUsage: "CPU Usage",
-    memoryUsage: "Memory Usage",
     podCap: "Pod Cap",
     reclaimPolicy: "Reclaim Policy",
     bindingMode: "Binding Mode",
@@ -1639,8 +1637,6 @@ export const en = {
     clearBuffered: "Clear what is buffered",
     reconnect: "Reconnect",
     startNewShell: "Start a new shell",
-    scaleFailedTo: "Could not scale to {n}: {reason}",
-    restartFailedWith: "Could not restart: {reason}",
     followAgain: "Follow again",
     followNewRun: "Follow the new run",
     showCurrentRun: "Show the current run",
@@ -2085,6 +2081,8 @@ export const en = {
     notReadService: "the Services of {namespace} ({reason})",
     notReadEndpoints: "the endpoints of Service {service} ({reason})",
     notReadLogs: "the last lines of {container} ({reason})",
+    noLikelyCauseEventsUnread:
+      "Events were not readable, so no likely cause is offered.",
     notReadEvents: "the events of this pod ({reason})",
     eventsHeld: "Held while the pointer is here, so no row moves under it",
     notReadOtherNamespace:
@@ -2822,6 +2820,8 @@ export const en = {
     connectPrometheus: "Connect one in Settings",
     unanswered:
       "The connected Prometheus did not answer for its targets: {reason}. Scraping is unknown, not empty.",
+    scrapeUnanswered:
+      "The connected Prometheus did not answer for its targets. Scraping is unknown, not empty.",
     targetsRead: {
       one: "Scrape truth from the connected Prometheus · {n} target",
       other: "Scrape truth from the connected Prometheus · {n} targets",
@@ -3093,6 +3093,8 @@ export const en = {
       "No Prometheus is connected for this cluster. Pick-up is read from the objects; whether the rules are loaded and firing stays unchecked.",
     unanswered:
       "The connected Prometheus did not answer for its rules: {reason}. Firing is unknown, not empty.",
+    rulesUnanswered:
+      "The connected Prometheus did not answer for its rules. Firing is unknown, not empty.",
     rulesLoaded: {
       one: "{n} alerting rule loaded on the connected Prometheus",
       other: "{n} alerting rules loaded on the connected Prometheus",
@@ -3437,6 +3439,10 @@ export const en = {
       one: "{n} row. To trim the list, narrow the scope or search",
       other: "{n} rows. To trim the list, narrow the scope or search",
     },
+    shownOfTotal: "{shown} of {total}",
+    ungroupedBy: "Ungrouped",
+    ungroupedByTitle:
+      "Rows are ranked across every group while a column is sorted",
     listCutAt:
       "Only the latest {n} were read. To see older ones, narrow the scope or raise the limit",
     limitWord: "limit",
@@ -3639,6 +3645,7 @@ export const en = {
       "{said} Nothing about the workload says so: replica counts, conditions and events all look exactly as they do on a healthy autoscaler, and the number simply stops moving.",
     hpaAtCeilingDetail:
       "{said} Both replica counts read as a healthy steady state while this is true, so nothing else on this page shows it: raising maxReplicas is what would let the workload grow.",
+    hpaMetricOverTarget: "{metric} {current} against a target of {target}",
     hpaStuckDetail:
       "It cannot act right now ({why}), so the number you set will stand until it can. Then it takes the count back to somewhere between {min} and {max} without announcing it.",
     logFormatJson: "Structured JSON log format with parsed fields",
@@ -4599,7 +4606,6 @@ export const en = {
     metricsShortError: "metrics API failing",
     metricNotAvailable: "n/a",
     metricNoSampleYet: "no sample yet",
-    metricNoSample: "no sample",
     sizeB: "{n} B",
     sizeKi: "{n}Ki",
     sizeMi: "{n}Mi",
@@ -4615,6 +4621,7 @@ export const en = {
     spotNodeWarning:
       "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
     unknownAge: "Unknown",
+    undated: "no date",
     freshPolling: "polling",
     freshPollingNote:
       "No watch on this view: it re-reads the cluster on a timer.",
@@ -4635,6 +4642,9 @@ export const en = {
     freshOfflineNote: "Not connected. Nothing on this screen is updating.",
     freshStaleNote:
       "The last read failed, so what is on screen is from the last read that answered.",
+    freshPartlyUnread: "partly unread",
+    freshPartlyUnreadNote:
+      "The object itself is being read, but these reads did not answer: {reads}. What they would show is not on this page.",
     freshBehind: "still reading",
     freshBehindNote:
       "A read of this screen has waited on the cluster for more than {slow} s, so what is on screen is the last answer. After {deadline} s the app stops waiting and says so.",
@@ -4718,6 +4728,9 @@ export const en = {
       "Still refused? The credential plugin this context uses may need a sign-in of its own first. For GKE that is",
     healthy: "Healthy",
     schedulerHeadroom: "Scheduler headroom",
+    headroomClusterWide: "cluster-wide, whatever the scope",
+    attentionRowStale:
+      "Last known: a read behind this row failed, so it may have changed",
     headroomLegend: "requests vs allocatable · tick marks live usage",
     headroomLegendNoMetrics:
       "requests vs allocatable · live usage not available from the metrics API",
@@ -4912,7 +4925,7 @@ export const en = {
     podsUnlisted: "Not listed on their own: {list}",
     podsUnlistedHint:
       "Needs attention names a pod when the pod itself is at fault. A pod that is not ready counts against its workload or Service, a failed Job's failed pods are counted in the Job's row, and a pod being deleted is on its way out.",
-    attentionPartly: "partly checked",
+    attentionPartly: "not all checked",
   },
   settings: {
     installationFailed: "Installation failed",
@@ -5981,6 +5994,9 @@ export const en = {
       one: "{n} restart so far.",
       other: "{n} restarts so far.",
     },
+    probeFailing: "{container} fails its {probe} probe",
+    probeLikelyRestartCause:
+      "Most likely why it restarts: the kubelet kills a container whose liveness probe keeps failing.",
     restartedExitUnreported:
       "{container} restarted, and its last exit is not reported",
     restartsExitUnreportedDetail: {
@@ -6242,6 +6258,9 @@ export const en = {
       other:
         "Listing these was refused across the whole cluster and in {namespaces} too.",
     },
+    headroomNeedsReads:
+      "Capacity and scheduler headroom are not shown: {kinds} could not be read, and the nodes are measured against them.",
+    someReads: "some of the cluster's lists",
     noNodeAccess:
       "You do not have permission to read the cluster's nodes, so capacity and scheduler headroom are not shown.",
     controllerLower: "controller",
@@ -8428,6 +8447,7 @@ export const en = {
     },
     typeFilterLeavesRest: "the type filter leaves the rest out",
     latestKept: "of the latest {n}",
+    inThoseStories: "in those stories",
     podsStayedOnTheNode: {
       one: "One pod stayed on the node.",
       other: "{n} pods stayed on the node.",

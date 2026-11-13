@@ -28,7 +28,6 @@ import type { ReactNode } from "react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { KeyValueList } from "../../-object/detail-kv";
 import { governanceRows } from "./governance";
-import { FindingLine } from "../../-object/FindingLine";
 import type { KeyValue } from "@/components/object/key-values";
 import type { ConnectionsRead } from "@/hooks/useConnections";
 
@@ -116,7 +115,7 @@ export function CountBlock({
   governance,
 }: CountBlockProps) {
   const t = useT();
-  const { rows, findings, sets, guards } = governanceRows(governance?.data, t);
+  const { rows, sets, guards } = governanceRows(governance?.data, t);
 
   return (
     <Section>
@@ -127,9 +126,6 @@ export function CountBlock({
           <KeyValueList items={rows} className="self-start" />
         )}
       </div>
-      {findings.map((finding) => (
-        <FindingLine key={finding.title} finding={finding} />
-      ))}
     </Section>
   );
 }

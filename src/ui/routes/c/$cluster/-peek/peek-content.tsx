@@ -9,6 +9,7 @@ import {
   useRef,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -53,6 +54,11 @@ import { DeliveryMarks, HelmMark } from "../-delivery/delivery";
 import { useDelivery } from "../-delivery/useDelivery";
 import { deliveryOf, deliveryOfKind } from "@/lib/delivery";
 import { ResourceType } from "@/lib/resource-registry";
+import { useObjectConnections } from "@/hooks/useConnections";
+import { governanceFindings } from "@/lib/governance-findings";
+import { statusRole, type StatusRole } from "@/lib/status-role";
+import { WithProblem } from "../-object/ProblemTone";
+import { problemOf } from "../-object/problem";
 import { peekQueryKey, resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
@@ -67,7 +73,7 @@ import { settingUp } from "@/lib/share/pod-status";
 import type { PodInfo } from "@/generated/types";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { usePeekWidth } from "./peek-width";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { Ghost } from "lucide-react";
@@ -160,6 +166,10 @@ export function PeekContent({
           : null
       )
     ) !== null;
+  const governed =
+    builtIn === ResourceType.Deployment ||
+    builtIn === ResourceType.StatefulSet ||
+    builtIn === ResourceType.DaemonSet;
   const summary = useMemo(
     () =>
       data === undefined
@@ -259,9 +269,9 @@ export function PeekContent({
         contentRef.current?.focus({ preventScroll: true });
       }}
       aria-describedby={undefined}
-      style={{ width }}
+      style={{ width, minWidth: width }}
       className={cn(
-        "flex max-w-none flex-col gap-0 p-0 sm:max-w-none",
+        "flex max-w-none flex-col gap-0 p-0 transition-transform sm:max-w-none",
         host.position
       )}
     >
@@ -314,19 +324,26 @@ export function PeekContent({
               compact
             />
           ) : summary?.status ? (
-            <StatusBadge
-              status={summary.status}
-              roleOverride={silence ? "neutral" : summary.statusRole}
-              glyph={silence ? undefined : summary.statusGlyph}
-              title={
-                silence
-                  ? silenceNote(silence, t)
-                  : (summary.statusTitle ??
-                    statusMeaning(builtIn ?? "", summary.status, t))
-              }
+            <GovernedStatus
+              on={governed && !gone && data !== undefined}
+              target={target}
+              namespace={namespace}
+              role={summary.statusRole ?? statusRole(summary.status)}
             >
-              {summary.statusLabel}
-            </StatusBadge>
+              <StatusBadge
+                status={summary.status}
+                roleOverride={silence ? "neutral" : summary.statusRole}
+                glyph={silence ? undefined : summary.statusGlyph}
+                title={
+                  silence
+                    ? silenceNote(silence, t)
+                    : (summary.statusTitle ??
+                      statusMeaning(builtIn ?? "", summary.status, t))
+                }
+              >
+                {summary.statusLabel}
+              </StatusBadge>
+            </GovernedStatus>
           ) : (
             summary?.status === null && <PhaseBadge phase={null} />
           )}
@@ -774,5 +791,61 @@ function PeekEvents({ target }: { target: PeekTarget }) {
         compact
       />
     </>
+  );
+}
+
+/**
+ * The status chip of a kind an autoscaler or a budget can govern, carrying
+ * their worst finding. Mounted only for those kinds: the connections read it
+ * makes has no business in a pod's peek.
+ */
+function GovernedStatus({
+  on,
+  target,
+  namespace,
+  role,
+  children,
+}: {
+  on: boolean;
+  target: PeekTarget;
+  namespace: string | null | undefined;
+  role: StatusRole;
+  children: ReactNode;
+}) {
+  const t = useT();
+  if (!on) return <>{children}</>;
+  return (
+    <GovernedProblem target={target} namespace={namespace} role={role} t={t}>
+      {children}
+    </GovernedProblem>
+  );
+}
+
+function GovernedProblem({
+  target,
+  namespace,
+  role,
+  t,
+  children,
+}: {
+  target: PeekTarget;
+  namespace: string | null | undefined;
+  role: StatusRole;
+  t: T;
+  children: ReactNode;
+}) {
+  const governing = useObjectConnections(
+    target.kind,
+    target.name,
+    namespace ?? null,
+    true
+  );
+  return (
+    <WithProblem
+      problem={problemOf(governanceFindings(governing.data, t))}
+      role={role}
+    >
+      {children}
+    </WithProblem>
   );
 }

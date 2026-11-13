@@ -27,7 +27,9 @@ import { TrafficChain } from "../../../-object/TrafficChain";
 import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
+import { useGovernanceFindings } from "../../-components/use-governance-findings";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { unreadOf } from "../../../-object/problem";
 import {
   conditionsMark,
   kindGlyph,
@@ -130,6 +132,7 @@ export function DaemonSetDetail() {
 
   const chain = useChainAnswer(ResourceType.DaemonSet, name, namespace);
   const connections = chain.read;
+  const findings = useGovernanceFindings(connections);
 
   // The DaemonSet publishes its own selector, in the API's own text form —
   // so a set-based one reaches the API server as written, where rebuilding
@@ -397,6 +400,7 @@ export function DaemonSetDetail() {
         id: toPlural(ResourceType.Pod),
         label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
+        reading: podsPending,
         mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
         content: (
           <PodListCard
@@ -497,6 +501,12 @@ export function DaemonSetDetail() {
         title={daemonSet?.name || name || ""}
         namespace={daemonSet?.namespace || namespace}
         createdAt={daemonSet?.createdAt}
+        findings={findings}
+        statusRole={daemonSet && workloadRole(daemonSet.rollout)}
+        unread={unreadOf([
+          [t("columns", "events"), events.error],
+          [t("columns", "pods"), podsError],
+        ])}
         statusBadge={daemonSet && <RolloutBadge rollout={daemonSet.rollout} />}
         badges={
           daemonSet && (

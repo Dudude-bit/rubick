@@ -60,6 +60,8 @@ export interface DetailTab {
   /** Required: a strip where some tabs carry a glyph and others do not is worse than none. */
   glyph: DetailTabGlyph;
   mark?: DetailTabMark | null;
+  /** Its mark is still being read: the strip holds the mark's width so the labels after it do not move when it lands. */
+  reading?: boolean;
   /**
    * What the tab is made of, which decides the space above it and who owns
    * the page's height.

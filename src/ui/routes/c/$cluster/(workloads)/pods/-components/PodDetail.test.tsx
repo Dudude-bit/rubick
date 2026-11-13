@@ -1092,6 +1092,100 @@ describe("the pod page's Events", () => {
       screen.getByRole("tab", { name: "Events: Could not read events." })
     ).toBeInTheDocument();
   });
+
+  /**
+   * The header said "live" over a page whose events were refused. Fails if
+   * the freshness chip keeps its reading while a read beside the pod failed.
+   */
+  it("says the page is partly unread in the header where the events were refused", async () => {
+    await openEvents(async () => {
+      throw { code: "KUBE_API_ERROR", message: "events is forbidden" };
+    });
+
+    expect(screen.getByTestId("partly-unread")).toHaveTextContent(
+      "partly unread"
+    );
+  });
+});
+
+describe("a running pod that restarts while its probe fails", () => {
+  /**
+   * Two restarts and a failing liveness probe opened on Placement with no
+   * cause. Fails if the overview does not lead with the probe and the last
+   * exit, label the link between them as a guess, and carry the problem in
+   * the status chip.
+   */
+  it("leads with the probe failure and the last exit, and marks the chip", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          containers: [
+            {
+              ...RUNNING,
+              name: "app",
+              restartCount: 2,
+              lastTerminated: {
+                exitCode: 137,
+                signal: null,
+                reason: "Error",
+                message: null,
+                startedAt: null,
+                finishedAt: "2026-10-07T06:20:00Z",
+              },
+            },
+          ],
+        };
+      if (command === "get_replicaset") return REPLICA_SET;
+      if (command === "list_events")
+        return [
+          {
+            ...podEvent("Unhealthy", "Warning", 4),
+            message:
+              "Liveness probe failed: HTTP probe failed with statuscode: 500",
+          },
+        ];
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+
+    expect(
+      screen.getByText("app fails its liveness probe")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Most likely why it restarts/)).toBeInTheDocument();
+    expect(screen.getByText(/2 restarts so far/)).toBeInTheDocument();
+    expect(document.querySelector('[data-problem="warn"]')).toHaveTextContent(
+      "Running"
+    );
+  });
+
+  /** No probe event, no claim: a pod with old restarts and nothing read about why stays unaccused. */
+  it("says nothing of a probe when the events name none", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          containers: [{ ...RUNNING, name: "app", restartCount: 2 }],
+        };
+      if (command === "get_replicaset") return REPLICA_SET;
+      if (command === "list_events") return [podEvent("Pulled", "Normal", 1)];
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+
+    expect(screen.queryByText(/probe/)).toBeNull();
+    expect(document.querySelector("[data-problem]")).toBeNull();
+  });
 });
 
 describe("a pod page whose pod changes between its polls", () => {

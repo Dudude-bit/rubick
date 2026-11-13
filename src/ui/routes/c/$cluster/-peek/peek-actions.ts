@@ -87,11 +87,12 @@ export interface PeekActionContext {
   denied?: Partial<Record<PeekActionId, string>>;
 }
 
-/** Open full page and Copy name; the panel shows them for every kind. */
-const ALWAYS_SHOWN = 2;
-/** Past this the row stops being scannable, so the secondary ones fold away. */
-const INLINE_LIMIT = 5;
-const SECONDARY = new Set<PeekActionId>(["debug", "restart", "delete"]);
+/** Beside Open full page, what a 440px row carries without clipping a label: three, the bell included. */
+const INLINE_LIMIT = 3;
+const SECONDARY = new Set<PeekActionId>(["debug", "delete"]);
+/** A pod's restart is its delete under another name; a workload's is a rolling restart worth a button. */
+const isSecondary = (kind: string, id: PeekActionId) =>
+  SECONDARY.has(id) || (kind === "Pod" && id === "restart");
 
 export function planPeekActions(
   kind: string,
@@ -106,16 +107,20 @@ export function planPeekActions(
     const denied = context.denied?.[action.id];
     return denied ? { ...action, reason: denied } : action;
   });
-  // The bell is asked about a lot less than it is glanced at, so it does not
-  // count towards the fold: a row stays whole with it, and folds without it.
   const tell = tellAction(kind, t, context);
+  const everything = [...actions, ...tell];
 
-  if (ALWAYS_SHOWN + actions.length <= INLINE_LIMIT) {
-    return { inline: [...actions, ...tell], menu: [] };
+  if (everything.length <= INLINE_LIMIT) {
+    return { inline: everything, menu: [] };
   }
+  const primary = actions.filter((action) => !isSecondary(kind, action.id));
   return {
-    inline: actions.filter((action) => !SECONDARY.has(action.id)),
-    menu: [...actions.filter((action) => SECONDARY.has(action.id)), ...tell],
+    inline: primary.slice(0, INLINE_LIMIT),
+    menu: [
+      ...primary.slice(INLINE_LIMIT),
+      ...actions.filter((action) => isSecondary(kind, action.id)),
+      ...tell,
+    ],
   };
 }
 

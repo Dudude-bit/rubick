@@ -11,6 +11,8 @@ import { kubeletWarned, sharedText } from "@/lib/pod-cause";
 import { causeDeadlines, workloadCause } from "@/lib/share/pod-status";
 import { createRefusal, refusalText, refusedUid } from "@/lib/create-refusal";
 import { causeTextPx } from "../../-list/columns";
+import type { AttentionItem } from "@/lib/attention";
+import type { Problem } from "../../-object/problem";
 
 /** What a list row says of the cause its pods share: still reading them, could not read them, or what they told; first, that the API server refuses them. */
 export type RowCause =
@@ -20,7 +22,8 @@ export type RowCause =
   | { says: "read"; shared: SharedCause | null };
 
 /** A workload list's row as its columns read it. */
-export type WorkloadRow<Row> = Row & ResourceMetrics & { podsCause: RowCause };
+export type WorkloadRow<Row> = Row &
+  ResourceMetrics & { podsCause: RowCause; problem: Problem | null };
 
 /**
  * Where a row's verdict leaves its pods' cause: unsaid once it is settled,
@@ -59,6 +62,47 @@ export const PODS_UNREAD: RowPods = {
 
 const ownerKey = (kind: string, namespace: string, name: string) =>
   `${kind}\0${namespace}\0${name}`;
+
+/**
+ * What the shell's problem count holds against a workload through another
+ * object (an autoscaler that cannot scale it), by the workload's key: its own
+ * rollout is already the badge's word, so only what opens it from elsewhere.
+ */
+export function rowProblems(
+  items: readonly AttentionItem[]
+): ReadonlyMap<string, Problem> {
+  const byRow = new Map<string, AttentionItem[]>();
+  for (const item of items) {
+    if (item.kind === item.opens.kind) continue;
+    const key = ownerKey(
+      item.opens.kind,
+      item.opens.namespace ?? "",
+      item.opens.name
+    );
+    byRow.set(key, [...(byRow.get(key) ?? []), item]);
+  }
+  return new Map(
+    [...byRow].map(([key, own]) => {
+      const worst = own.find((item) => item.tone === "err") ?? own[0];
+      const said = worst.detail?.says === "said" ? worst.detail.text : null;
+      return [
+        key,
+        {
+          tone: worst.tone,
+          n: own.length,
+          title: said ? `${worst.reason}: ${said}` : worst.reason,
+        },
+      ];
+    })
+  );
+}
+
+export const problemOfRow = (
+  problems: ReadonlyMap<string, Problem>,
+  kind: string,
+  namespace: string,
+  name: string
+): Problem | null => problems.get(ownerKey(kind, namespace, name)) ?? null;
 
 /** Each pod under the workload Rust read off its owner, as the list's verdicts count them. */
 export function rowPods(

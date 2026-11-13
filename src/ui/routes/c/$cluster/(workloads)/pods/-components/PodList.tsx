@@ -223,6 +223,7 @@ export const columns: ColumnDef<PodRow>[] = [
     header: columnHeader("columns", "node"),
     meta: {
       yields: 2,
+      sort: (pod: PodRow) => pod.nodeName,
       floor: (_t, rows: readonly PodRow[]) =>
         nodeCellPx(rows, (pod) => pod.nodeName),
       share: (pod: PodRow, t) =>
@@ -246,6 +247,7 @@ export const columns: ColumnDef<PodRow>[] = [
     header: columnHeader("columns", "ip"),
     meta: {
       yields: 1,
+      sort: (pod: PodRow) => pod.podIp,
       floor: IPV4_CELL_PX,
       share: (pod: PodRow, t) =>
         pod.podIp

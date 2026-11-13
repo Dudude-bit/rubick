@@ -5,10 +5,15 @@ import type { AppColumnMeta, ColumnDef } from "@/components/ui/table-features";
 import type { Rollout } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
+import type { Problem } from "../../-object/problem";
 import type { RowCause } from "./row-cause";
 import { createRolloutColumn } from "./rollout-column";
 
-type Row = { rollout: Rollout; podsCause: RowCause };
+type Row = {
+  rollout: Rollout;
+  podsCause: RowCause;
+  problem?: Problem | null;
+};
 
 const column = createRolloutColumn<Row>() as ColumnDef<never>;
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -75,5 +80,46 @@ describe("the status a workload list's row says", () => {
       podsCause: { says: "unread" },
     });
     expect(container).not.toHaveTextContent("so why is not known");
+  });
+
+  /**
+   * A Deployment whose autoscaler cannot scale it read plain green Ready in
+   * its row. Fails if the cell stops carrying the problem's tone, its count
+   * and the cause as a hover, or draws them on a row with none.
+   */
+  it("draws a ready row in its problem's tone with the cause on hover", () => {
+    const problem: Problem = {
+      tone: "warn",
+      n: 1,
+      title:
+        "TooManyReplicas: the desired replica count is more than the maximum",
+    };
+    const none: RowCause = { says: "read", shared: null };
+    const { container } = cell({
+      rollout: { state: "ready" },
+      podsCause: none,
+      problem,
+    });
+    const chip = container.querySelector('[data-problem="warn"]');
+    expect(chip).toHaveTextContent("Ready");
+    expect(chip).toHaveTextContent("1 problem");
+    expect(chip).toHaveAttribute("title", problem.title);
+    expect(
+      (column.meta as AppColumnMeta).share?.(
+        { rollout: { state: "ready" }, podsCause: none, problem } as never,
+        t
+      )
+    ).toEqual(
+      expect.objectContaining({
+        text: expect.stringContaining("TooManyReplicas"),
+      })
+    );
+
+    const plain = cell({
+      rollout: { state: "ready" },
+      podsCause: none,
+      problem: null,
+    });
+    expect(plain.container.querySelector("[data-problem]")).toBeNull();
   });
 });

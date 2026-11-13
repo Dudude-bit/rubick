@@ -501,3 +501,27 @@ describe("a page moved to another object", () => {
     expect(screen.queryByText("a live shell")).not.toBeInTheDocument();
   });
 });
+
+describe("DetailTabs holds the place of a mark still being read", () => {
+  /**
+   * Counts arrived after first paint and shifted every label after them.
+   * Fails if a tab being read draws no slot, or keeps one once its mark lands.
+   */
+  it("reserves the mark's width while it is read and gives it to the count", () => {
+    const reading: DetailTab[] = [{ ...tabs[0], reading: true }, tabs[1]];
+    const { rerender } = render(
+      <DetailTabs tabs={reading} activeTab="overview" onTabChange={() => {}} />
+    );
+    expect(screen.getAllByTestId("tab-mark-slot")).toHaveLength(1);
+
+    rerender(
+      <DetailTabs
+        tabs={[{ ...tabs[0], mark: { shows: "count", of: "4" } }, tabs[1]]}
+        activeTab="overview"
+        onTabChange={() => {}}
+      />
+    );
+    expect(screen.queryByTestId("tab-mark-slot")).toBeNull();
+    expect(screen.getByText("4")).toBeInTheDocument();
+  });
+});

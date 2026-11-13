@@ -255,9 +255,12 @@ describe("MostLikelyPanel", () => {
       ],
     } as PodInfo;
     await mount(healthy, "events is forbidden");
-    const panel = await screen.findByTestId("most-likely");
-    expect(panel.textContent).toContain("could not be read");
-    expect(panel.textContent).toContain("forbidden");
+    const line = await screen.findByTestId("most-likely-unread");
+    expect(line).toHaveTextContent(
+      "Events were not readable, so no likely cause is offered."
+    );
+    expect(screen.queryByTestId("most-likely")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Search it/ })).toBeNull();
   });
 
   /**

@@ -4,7 +4,10 @@ import type { EventInfo, PodCause, PodRow } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { scheduledRun } from "@/lib/cron-outcome";
+import type { AttentionItem } from "@/lib/attention";
 import {
+  problemOfRow,
+  rowProblems,
   rowCause,
   rowCauseText,
   rowPods,
@@ -252,6 +255,49 @@ describe("a row whose pods the API server refuses", () => {
     expect(rowCause("shop", web, null, NOW, SAID)).toEqual({
       says: "refused",
       said: SAID,
+    });
+  });
+});
+
+const item = (over: Partial<AttentionItem>): AttentionItem =>
+  ({
+    key: "k",
+    tone: "warn",
+    kind: "HorizontalPodAutoscaler",
+    name: "web",
+    namespace: "shop",
+    reason: "TooManyReplicas",
+    detail: { says: "said", text: "more than the maximum" },
+    opens: { kind: "Deployment", name: "web", namespace: "shop" },
+    ...over,
+  }) as AttentionItem;
+
+/**
+ * The sidebar's problem dot and the list's Ready word read different data.
+ * Fails if a workload's row ignores what another object raises against it,
+ * or counts the workload's own rollout twice.
+ */
+describe("the problems a workload's row carries", () => {
+  it("finds what an autoscaler holds against the workload it opens", () => {
+    const problems = rowProblems([item({})]);
+    expect(problemOfRow(problems, "Deployment", "shop", "web")).toEqual({
+      tone: "warn",
+      n: 1,
+      title: "TooManyReplicas: more than the maximum",
+    });
+    expect(problemOfRow(problems, "Deployment", "shop", "api")).toBeNull();
+  });
+
+  it("takes the loudest tone and counts every item, and skips the workload's own", () => {
+    const problems = rowProblems([
+      item({}),
+      item({ key: "b", tone: "err", reason: "FailedGetScale", detail: null }),
+      item({ key: "c", kind: "Deployment" }),
+    ]);
+    expect(problemOfRow(problems, "Deployment", "shop", "web")).toEqual({
+      tone: "err",
+      n: 2,
+      title: "FailedGetScale",
     });
   });
 });
