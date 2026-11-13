@@ -3024,14 +3024,15 @@ async fn unlistable(client: &Client, scope: Option<&[String]>) -> Vec<OverviewUn
             .map(|error| OverviewUnread::of(kind, reach, &Error::from(error)))
     }
     let reads = reaches(scope).into_iter().map(|reach| async move {
-        let (pods, deployments, sets, daemons, jobs) = tokio::join!(
+        let (pods, deployments, sets, daemons, jobs, events) = tokio::join!(
             probe::<Pod>(client, "Pod", reach),
             probe::<Deployment>(client, "Deployment", reach),
             probe::<StatefulSet>(client, "StatefulSet", reach),
             probe::<DaemonSet>(client, "DaemonSet", reach),
             probe::<Job>(client, "Job", reach),
+            probe::<Event>(client, "Event", reach),
         );
-        [pods, deployments, sets, daemons, jobs]
+        [pods, deployments, sets, daemons, jobs, events]
     });
     join_all(reads)
         .await
@@ -8047,18 +8048,21 @@ mod across_namespaces {
     }
 
     /// A warm store answered "0 problems in backend" beside a Deployments
-    /// list failing there: its watch had not reconnected into the failure.
-    /// Fails if a watched kind that no longer lists in a namespace of the
-    /// scope goes unnamed, or one that does is named.
+    /// list failing there, and Events stayed "live" beside an events list
+    /// failing everywhere: their watches had not reconnected into the
+    /// failure. Fails if a watched kind that no longer lists in a namespace
+    /// of the scope goes unnamed, or one that does is named.
     #[tokio::test]
     async fn a_watched_kind_that_no_longer_lists_in_scope_is_named() {
         let fault = r#"{"kind":"Status","apiVersion":"v1","status":"Failure","message":"etcdserver: request timed out","reason":"InternalError","code":500}"#;
         let healthy = Cluster::new();
-        let failing = Cluster::new().answer(
-            "/apis/apps/v1/namespaces/staging/deployments",
-            500,
-            fault.to_string(),
-        );
+        let failing = Cluster::new()
+            .answer(
+                "/apis/apps/v1/namespaces/staging/deployments",
+                500,
+                fault.to_string(),
+            )
+            .answer("/api/v1/namespaces/prod/events", 500, fault.to_string());
         let scope = [PROD.to_string(), STAGING.to_string()];
         let (client, _) = server(healthy.0).await;
         assert_eq!(unlistable(&client, Some(&scope)).await, []);
@@ -8068,7 +8072,7 @@ mod across_namespaces {
             lost.iter()
                 .map(|entry| (entry.kind.as_str(), entry.namespace.as_deref()))
                 .collect::<Vec<_>>(),
-            [("Deployment", Some(STAGING))],
+            [("Event", Some(PROD)), ("Deployment", Some(STAGING))],
             "{lost:?}"
         );
     }
