@@ -84,8 +84,9 @@ describe("MetricsStatusBanner", () => {
     const banner = bannerOf(
       "Metrics are not readable with this access, so CPU and memory are not shown"
     );
-    expect(banner.className).toContain("border-info");
+    expect(banner.className).toContain("border-dashed");
     expect(banner.className).not.toContain("border-err");
+    expect(banner.querySelector("svg")).toHaveClass("lucide-lock");
   });
 
   /**

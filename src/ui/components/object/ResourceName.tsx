@@ -5,7 +5,7 @@ import { TITLE_SET } from "@/components/ui/title-tooltips";
 import { KindIcon } from "./KindIcon";
 import { kindWords } from "@/lib/links";
 import { splitName, identHue, kindHue } from "@/lib/resource-identity";
-import type { ResourceKind } from "@/lib/resource-registry";
+import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 /**
@@ -224,7 +224,7 @@ export function ResourceName({
   const widths = nameCut({
     name,
     stem,
-    generated: tail !== "",
+    generated: tail !== "" || kind === ResourceType.Node,
     before: namespace ? namespace.length + 1 : 0,
     label: showKind ? kindLabel.length + 1 : 0,
   });

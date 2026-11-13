@@ -19,6 +19,12 @@ vi.mock("@/hooks/useMetrics", () => ({
     podMetrics: [],
     nodeStatus: { isLoading: false, error: null, available: true },
     podStatus: { isLoading: false, error: null, available: true },
+    nodeMetricsQuery: {
+      isPending: false,
+      data: {},
+      error: null,
+      refetch: vi.fn(),
+    },
   })),
 }));
 

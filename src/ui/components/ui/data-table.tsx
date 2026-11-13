@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import { sortableColumn } from "@/components/ui/sortable-columns";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import {
   useColumnWidthsStore,
@@ -134,6 +135,10 @@ interface DataTableProps<TData extends RowData> {
   emptyAction?: React.ReactNode;
   /** Opt in to caption rows above runs of related rows. */
   grouping?: RowGrouping<TData> | null;
+  /** How many rows the first read will bring, where something already knows: the skeleton holds that many, up to a screen. */
+  loadingRows?: number | null;
+  /** The list will group its rows once they arrive: the skeleton holds caption lines. */
+  loadingGrouped?: boolean;
   /** Plural noun for the group caption count, e.g. "pods". */
   rowLabel?: string;
   /** The kind the footer counts, where the label is not a kind the registry knows. */
@@ -209,6 +214,13 @@ const CONTROL_COLUMNS = new Set([ACTIONS_COLUMN_ID, "actions"]);
  * comfortable row whose labels wrap is taller.
  */
 const ESTIMATED_ROW_PX = { compact: 23, comfortable: 33 } as const;
+
+/** The rows a skeleton may draw: what is known, but no more than the window holds under the header. */
+function screenRows(known: number, compact: boolean) {
+  const pitch = ESTIMATED_ROW_PX[compact ? "compact" : "comfortable"];
+  const fits = Math.max(1, Math.floor((window.innerHeight - 200) / pitch));
+  return Math.max(1, Math.min(known, fits));
+}
 
 /** How many rows either side of the viewport stay mounted. */
 const OVERSCAN = 12;
@@ -692,6 +704,8 @@ function DataTableInner<TData extends RowData>({
   emptyMessage,
   emptyAction,
   grouping = null,
+  loadingRows = null,
+  loadingGrouped = false,
   rowLabel,
   rowNoun,
   widthsKey,
@@ -748,7 +762,8 @@ function DataTableInner<TData extends RowData>({
   // Grouping only switches on once the data has enough groups to be worth
   // captioning at all — which is also what keeps an unmanaged cluster's Nodes
   // page exactly the flat list it was.
-  const groupingActive = React.useMemo(() => {
+  const rankedAcrossGroups = sorting.some((sort) => sort.id !== "name");
+  const groupable = React.useMemo(() => {
     if (!grouping) return false;
     const sizes = new Map<string, number>();
     for (const item of data) {
@@ -760,6 +775,7 @@ function DataTableInner<TData extends RowData>({
     ).length;
     return sizes.size >= (grouping.minGroups ?? 1) && full * 2 > sizes.size;
   }, [data, grouping]);
+  const groupingActive = groupable && !rankedAcrossGroups;
 
   // One namespace chosen is the same word on every row, and the scope bar
   // above already says it; several are grouped, and the caption says it.
@@ -908,9 +924,10 @@ function DataTableInner<TData extends RowData>({
   const actionCount = quickActions?.length ?? 0;
   const dataColumns = React.useMemo(
     () =>
-      actionCount === 0
+      (actionCount === 0
         ? columns
-        : columns.filter((col) => !CONTROL_COLUMNS.has(col.id ?? "")),
+        : columns.filter((col) => !CONTROL_COLUMNS.has(col.id ?? ""))
+      ).map(sortableColumn),
     [columns, actionCount]
   );
 
@@ -1552,7 +1569,10 @@ function DataTableInner<TData extends RowData>({
       <TableSkeleton
         widths={table.getVisibleFlatColumns().map((column) => column.getSize())}
         compact={isCompact}
-        grouped={grouping !== null}
+        grouped={loadingGrouped}
+        rows={
+          loadingRows === null ? undefined : screenRows(loadingRows, isCompact)
+        }
       />
     );
   }
@@ -1624,6 +1644,14 @@ function DataTableInner<TData extends RowData>({
                 </span>
               )
             )}
+            {groupable && rankedAcrossGroups && (
+              <span
+                className="text-caption text-fg-fnt"
+                title={t("readings", "ungroupedByTitle")}
+              >
+                {t("readings", "ungroupedBy")}
+              </span>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1680,6 +1708,7 @@ function DataTableInner<TData extends RowData>({
             // A filled table takes its bound from the flex row above; only an
             // unfilled one falls back to the fixed port.
             containerStyle={{
+              scrollbarGutter: "stable",
               ...(shouldVirtualScroll && !fill
                 ? { maxHeight: virtualScrollHeight }
                 : undefined),
@@ -1832,9 +1861,8 @@ function DataTableInner<TData extends RowData>({
                             </p>
                           )}
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="h-7 text-xs"
                             onClick={() => changeSearch("")}
                           >
                             {t("action", "clearSearch")}

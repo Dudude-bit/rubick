@@ -21,6 +21,7 @@ import type { AnyRouter } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
+import { columnHeader } from "@/i18n/column-header";
 import { kindNoun } from "@/lib/resource-registry";
 import { actionsColumnSize } from "./column-shares";
 import { buildTableRows } from "./data-table-rows";
@@ -3110,5 +3111,100 @@ describe("a table offered to the screen's Share", () => {
     expect(a.count).toBeNull();
     expect(b.unread).toBe("Still being read when the report was made.");
     expect(c.partial).toBe("Could not read pods in team-c.");
+  });
+});
+
+describe("sorting a column that is not the name", () => {
+  interface Load {
+    name: string;
+    namespace: string;
+    restarts: number;
+  }
+
+  const LOADS: Load[] = [
+    { name: "a-1", namespace: "alpha", restarts: 0 },
+    { name: "a-2", namespace: "alpha", restarts: 1 },
+    { name: "b-1", namespace: "beta", restarts: 9 },
+    { name: "b-2", namespace: "beta", restarts: 4 },
+  ];
+
+  const loadColumns: ColumnDef<Load>[] = [
+    { accessorKey: "name", header: columnHeader("columns", "name") },
+    {
+      id: "restarts",
+      header: columnHeader("columns", "restarts"),
+      meta: { sort: (row: Load) => row.restarts },
+      cell: ({ row }) => String(row.original.restarts),
+    },
+    { id: "namespace", accessorKey: "namespace", header: "Namespace" },
+  ];
+
+  const byNs = byNamespace<Load>(kindNoun("Pods"));
+
+  const draw = () =>
+    wrap(
+      <DataTable<Load> columns={loadColumns} data={LOADS} grouping={byNs} />
+    );
+
+  const names = () =>
+    screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => row.textContent ?? "");
+
+  /**
+   * The worst restarter sat under its namespace caption instead of on top.
+   * Fails if a sort on another column still ranks only inside each group, or
+   * if a column drawn by a derived cell cannot be sorted at all.
+   */
+  it("ranks every row across the groups and says so", async () => {
+    await draw();
+    expect(screen.getByText(/alpha/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Restarts/ }));
+
+    expect(names()[0]).toContain("b-1");
+    expect(names()[1]).toContain("b-2");
+    expect(screen.queryByText(/alpha ·/)).toBeNull();
+    expect(screen.getByText("Ungrouped")).toBeInTheDocument();
+  });
+
+  /** Fails if sorting by name, which the groups already respect, drops the captions. */
+  it("keeps the groups while the sort is on the name", async () => {
+    await draw();
+    await userEvent.click(screen.getByRole("button", { name: /Name/ }));
+    expect(screen.getByText(/alpha/)).toBeInTheDocument();
+    expect(screen.queryByText("Ungrouped")).toBeNull();
+  });
+});
+
+describe("the loading skeleton", () => {
+  const loading = (props: {
+    loadingRows?: number | null;
+    loadingGrouped?: boolean;
+  }) =>
+    wrap(<DataTable<Item> columns={columns} data={[]} isLoading {...props} />);
+
+  /**
+   * A flat five-row list drew fifteen grouped rows while it loaded, and the
+   * page shrank when the rows came. Fails if the skeleton ignores the count
+   * the sidebar already knows, or captions a list that will not group.
+   */
+  it("holds as many rows as are known, without captions for a flat list", async () => {
+    await loading({ loadingRows: 5, loadingGrouped: false });
+    expect(screen.getAllByTestId("skeleton-row")).toHaveLength(5);
+    expect(screen.queryByTestId("skeleton-caption")).toBeNull();
+  });
+
+  /** Fails if a list that will group loses the caption lines the rows will have. */
+  it("holds caption lines where the list will group", async () => {
+    await loading({ loadingRows: 6, loadingGrouped: true });
+    expect(screen.getAllByTestId("skeleton-caption").length).toBeGreaterThan(0);
+  });
+
+  /** Fails if a thousand-row list draws a thousand placeholders. */
+  it("never draws more rows than the window holds", async () => {
+    await loading({ loadingRows: 5000 });
+    expect(screen.getAllByTestId("skeleton-row").length).toBeLessThan(60);
   });
 });

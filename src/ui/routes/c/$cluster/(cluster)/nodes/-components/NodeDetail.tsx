@@ -151,10 +151,11 @@ export function NodeDetail() {
   const connections = useObjectConnections(ResourceType.Node, name, null);
   const connectionsKey = useConnectionsKey(ResourceType.Node, name, null);
 
-  const { nodeMetrics, nodeStatus, nodeSampledAt } = useMetrics({
-    includePods: false,
-    enabled: !!node,
-  });
+  const { nodeMetrics, nodeStatus, nodeSampledAt, nodeMetricsQuery } =
+    useMetrics({
+      includePods: false,
+      enabled: !!node,
+    });
   const nodeWithMetrics = useMemo(() => {
     if (!node) return null;
     return mergeNodesWithMetrics([node], nodeMetrics)[0] ?? null;
@@ -394,6 +395,11 @@ export function NodeDetail() {
             limitNoun="capacityWord"
             sampledAt={nodeSampledAt}
             status={nodeStatus}
+            reading={{
+              pending: nodeMetricsQuery.isPending,
+              error: nodeMetricsQuery.data ? null : nodeMetricsQuery.error,
+              retry: nodeMetricsQuery.refetch,
+            }}
             history={node?.name ? { kind: "node", node: node.name } : undefined}
           >
             {/* A tally of scheduled pods, not a reading from metrics-server:

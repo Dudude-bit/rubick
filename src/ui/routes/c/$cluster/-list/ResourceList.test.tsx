@@ -439,11 +439,14 @@ describe("the count beside the title", () => {
     expect(counted()).toBeNull();
   });
 
-  /** Fails if the first read, still running, is counted as nothing found. */
-  it("draws no number while the first read is still running", async () => {
+  /** Fails if the first read, still running, is counted as nothing found, or leaves no room for the count so the title jumps when it lands. */
+  it("holds the count's place, without a number, while the first read is still running", async () => {
     await list({ data: [], isLoading: true });
 
-    expect(counted()).toBeNull();
+    expect(counted()).toBe("");
+    expect(
+      screen.getByTestId("section-count").querySelector("[aria-hidden]")
+    ).not.toBeNull();
   });
 
   /** Fails if the rule above swallowed a real zero too. */

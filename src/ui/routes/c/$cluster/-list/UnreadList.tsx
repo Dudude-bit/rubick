@@ -19,7 +19,7 @@ export function UnreadList({
   error: unknown;
   words: string;
   /** Ask again; a refusal too, since rights change. */
-  onRetry?: () => void;
+  onRetry?: () => unknown;
   children?: ReactNode;
 }) {
   const refused = isRefusal(error);

@@ -2,7 +2,7 @@ import { memo } from "react";
 import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
 import { EyeOff, type LucideIcon } from "lucide-react";
 
-import { UnitValue } from "@/components/ui/metric-value";
+import { UnitValue, UnreadMetric } from "@/components/ui/metric-value";
 import {
   Tooltip,
   TooltipContent,
@@ -30,7 +30,6 @@ import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
-import { ABSENCE_SHORT, useMetricsAbsence } from "@/lib/metrics-absence";
 import { TONE_TEXT } from "@/lib/tone";
 
 /**
@@ -367,7 +366,6 @@ const BAR_ROLE = { ok: "bg-info", warn: "bg-warn", err: "bg-err" } as const;
  */
 export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
   const t = useT();
-  const absence = useMetricsAbsence();
   const usedNum = typeof used === "number" ? used : null;
   const totalNum = typeof total === "number" && total > 0 ? total : null;
   const ratio =
@@ -394,16 +392,9 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
       )}
       <span className="whitespace-nowrap text-right text-caption text-fg-mut">
         {usedNum === null ? (
-          // A blank number here is almost never "this object uses
-          // nothing" — it is metrics-server not being installed, which
-          // is a cluster the reader can fix rather than a reading.
-          <span className="text-fg-fnt">
-            {type === "count"
-              ? t("cluster", "countsUnread")
-              : absence === null
-                ? t("cluster", "metricNoSampleYet")
-                : t("cluster", ABSENCE_SHORT[absence])}
-          </span>
+          <UnreadMetric
+            reason={type === "count" ? t("cluster", "countsUnread") : undefined}
+          />
         ) : (
           <UnitValue value={formatQuantity(usedNum, type, unit)} />
         )}

@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { fireEvent, screen } from "@testing-library/react";
 
+const answer = vi.hoisted(() => ({ pending: true }));
+
 vi.mock("../-delivery/useDelivery", async (original) => ({
   ...(await original<typeof import("../-delivery/useDelivery")>()),
   useDeliveries: () => ({
     available: true,
     of: () => [],
-    isPending: false,
+    isPending: answer.pending,
     error: null,
   }),
 }));
@@ -87,5 +89,32 @@ describe("a list a link narrowed to named rows, under its delivery filter", () =
     expect(screen.queryByText("web")).toBeNull();
     expect(screen.queryByText(/not in this list now/)).toBeNull();
     expect(screen.queryByText(/not among the rows/)).toBeNull();
+  });
+});
+
+describe("a list whose controller claims none of its rows", () => {
+  /** Every row said "not delivered" under a filter that could only echo it. Fails if the filter and column stay once the answer is in and nothing is delivered. */
+  it("draws no delivery filter once the answer is in", async () => {
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    answer.pending = false;
+    try {
+      await renderWithRouter(
+        <ResourceList<Item>
+          title="Deployments"
+          kind="Deployment"
+          columns={columns}
+          emptyStateLabel="Deployments"
+          delivery={{ group: "apps", kind: "Deployment" }}
+          data={[{ name: "web", namespace: "shop" }]}
+        />,
+        { at: "/c/prod/deployments", route: "/c/$cluster/$" }
+      );
+      expect(screen.getByText("web")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Not delivered" })
+      ).toBeNull();
+    } finally {
+      answer.pending = true;
+    }
   });
 });

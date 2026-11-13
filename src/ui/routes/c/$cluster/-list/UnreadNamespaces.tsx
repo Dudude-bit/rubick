@@ -15,7 +15,7 @@ export function UnreadNamespaces({
   unread: readonly UnreadNamespace[];
   /** What was not read, as it reads inside a sentence. */
   label: string;
-  onRetry?: () => void;
+  onRetry?: () => unknown;
 }) {
   const t = useT();
   if (unread.length === 0) return null;

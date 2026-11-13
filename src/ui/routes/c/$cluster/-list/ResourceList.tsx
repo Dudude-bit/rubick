@@ -9,6 +9,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { byNamespace, type RowGrouping } from "@/components/ui/row-grouping";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceListHeader } from "./ResourceListHeader";
+import { useKnownCount } from "./known-count";
 import { useResource } from "@/hooks/useResource";
 import { useDeliveries } from "../-delivery/useDelivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -164,7 +165,7 @@ export interface ResourceListProps<
    */
   waitingSince?: number | null;
   /** Re-run the read, for a list whose read this component does not own. */
-  onRetry?: () => void;
+  onRetry?: () => unknown;
   /**
    * Whether picking one namespace would make this read shorter. False for a
    * cluster-scoped kind, where the picker cannot change the answer and
@@ -303,6 +304,7 @@ export function ResourceList<
     [noun, emptyStateLabel]
   );
   const namespaceGroups = useMemo(() => byNamespace<Row>(counted), [counted]);
+  const knownCount = useKnownCount(listKind);
   const screen = useMemo(
     () => ({
       title,
@@ -408,7 +410,13 @@ export function ResourceList<
           name: (row as Row).name,
         })
       : [];
-  const showDelivery = !!delivery && deliveries.available;
+  const showDelivery =
+    !!delivery &&
+    deliveries.available &&
+    (deliveries.isPending ||
+      deliveries.error !== null ||
+      deliveryFilter !== "all" ||
+      resources.some((row) => deliveriesOf(row).length > 0));
   const delivered = showDelivery
     ? resources.filter((row) =>
         matchesDeliveryFilter(deliveryFilter, deliveriesOf(row))
@@ -508,8 +516,15 @@ export function ResourceList<
 
   // A resync with nothing to show is still loading; a resync with rows keeps
   // them, and says so above rather than wearing "live" over them.
-  const showSkeleton =
+  const waiting =
     (loading || resyncing || placeholder) && resources.length === 0 && !failed;
+  const [lastFailure, setLastFailure] = useState<Error | null>(null);
+  if (failed && lastFailure !== failed) setLastFailure(failed);
+  if (!failed && lastFailure && !waiting) setLastFailure(null);
+  const unreadError = failed ?? (waiting ? lastFailure : null);
+  const showSkeleton = waiting && !unreadError;
+  const retry =
+    onRetry ?? (data === undefined ? () => queryResult.refetch() : undefined);
   // How long the skeleton has been one. A clock that only runs while there
   // is a skeleton to time: a list with rows on it is never woken by this.
   const now = useNowSeconds(showSkeleton);
@@ -611,7 +626,17 @@ export function ResourceList<
           // derived from a source the app has just said it could not read
           // is a number about nothing, printed directly above the sentence
           // admitting as much. A namespace unread leaves it no total either.
-          count={partial || nothingRead ? undefined : resources.length}
+          count={
+            partial || nothingRead
+              ? undefined
+              : showDelivery && deliveryFilter !== "all"
+                ? t("readings", "shownOfTotal", {
+                    shown: delivered.length,
+                    total: resources.length,
+                  })
+                : resources.length
+          }
+          countPending={showSkeleton}
           description={
             description ?? (listKind && <KindAbout kind={listKind} />)
           }
@@ -646,10 +671,7 @@ export function ResourceList<
           label={emptyStateLabel.toLowerCase()}
           since={dataUpdatedAt}
           error={failed}
-          onRetry={
-            onRetry ??
-            (data === undefined ? () => void queryResult.refetch() : undefined)
-          }
+          onRetry={retry}
         />
       )}
       <UnreadNamespaces
@@ -657,10 +679,7 @@ export function ResourceList<
         label={emptyStateLabel.toLowerCase()}
         // Not the placeholder query's refetch when the rows come from outside:
         // that asks again under a key the page never reads.
-        onRetry={
-          onRetry ??
-          (data === undefined ? () => void queryResult.refetch() : undefined)
-        }
+        onRetry={retry}
       />
       {showDelivery && (
         <DeliveryFilterControl
@@ -746,20 +765,17 @@ export function ResourceList<
             />
           </div>
         </Alert>
-      ) : failed && resources.length === 0 ? (
+      ) : unreadError && resources.length === 0 ? (
         <UnreadList
-          error={failed}
+          error={unreadError}
           // A refusal is not a failure, and saying "could not read" about
           // one invites a retry that will be refused the same way.
           words={
-            isRefusal(failed)
+            isRefusal(unreadError)
               ? refusalWords
               : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
           }
-          onRetry={
-            onRetry ??
-            (data === undefined ? () => void queryResult.refetch() : undefined)
-          }
+          onRetry={retry}
         >
           <RefusalWayOut refusal={refusal} />
         </UnreadList>
@@ -773,6 +789,15 @@ export function ResourceList<
           pageKeys={!embedded}
           onRowMenu={rowMenu.open}
           isLoading={showSkeleton}
+          loadingRows={knownCount}
+          loadingGrouped={
+            grouping === undefined
+              ? !!listKind &&
+                listQueryFor(listKind).namespaced &&
+                namespaceScope.length !== 1 &&
+                (knownCount ?? 0) >= 6
+              : false
+          }
           searchParam={embedded ? undefined : "q"}
           searchPlaceholder={searchPlaceholder}
           getRowHref={getRowHref}
@@ -816,9 +841,8 @@ export function ResourceList<
           emptyAction={
             filteredToNone && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-7 text-xs"
                 onClick={() => {
                   setDeliveryFilter("all");
                   if (named) setSearch({ names: undefined });

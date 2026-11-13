@@ -91,6 +91,7 @@ export const columns = (
     id: "status",
     header: columnHeader("columns", "status"),
     meta: {
+      sort: (row: NodeInfo) => (nodeReadyWord(row) === "Ready" ? 0 : 1),
       floor: () => badgeCellPx(["NotReady"]),
       share: (row: NodeInfo) => nodeReadyWord(row),
     },
@@ -107,7 +108,10 @@ export const columns = (
     size: 170,
     accessorKey: "roles",
     header: columnHeader("columns", "roles"),
-    meta: { floor: () => widestText(["control-plane"], "sans", 6.6) + 20 },
+    meta: {
+      sort: (row: NodeInfo) => row.roles.join(" "),
+      floor: () => widestText(["control-plane"], "sans", 6.6) + 20,
+    },
     cell: ({ row }) => (
       <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
         {row.original.roles.length === 0 ? (
@@ -140,6 +144,8 @@ export const columns = (
     header: columnHeader("columns", "internalIp"),
     meta: {
       yields: 1,
+      sort: (row: NodeInfo) =>
+        row.status.addresses.find((a) => a.type === "InternalIP")?.address,
       floor: IPV4_CELL_PX,
       share: (row: NodeInfo, t) => ({
         text:
@@ -160,9 +166,10 @@ export const columns = (
   {
     size: 120,
     id: "cpu",
-    header: columnHeader("columns", "cpuUsage"),
+    header: columnHeader("columns", "cpu"),
     meta: {
       yields: 3,
+      sort: (row: NodeInfo) => nodeMetricsByName.get(row.name)?.cpuMillicores,
       floor: metricCellFloor(
         (row: NodeInfo) => nodeMetricsByName.get(row.name)?.cpuMillicores
       ),
@@ -188,9 +195,10 @@ export const columns = (
   {
     size: 140,
     id: "memory",
-    header: columnHeader("columns", "memoryUsage"),
+    header: columnHeader("columns", "memory"),
     meta: {
       yields: 2,
+      sort: (row: NodeInfo) => nodeMetricsByName.get(row.name)?.memoryBytes,
       floor: metricCellFloor(
         (row: NodeInfo) => nodeMetricsByName.get(row.name)?.memoryBytes
       ),
@@ -221,6 +229,10 @@ export const columns = (
     header: columnHeader("columns", "podCap"),
     meta: {
       yields: 4,
+      sort: (row: NodeInfo) => {
+        const pods = Number(row.capacity?.pods);
+        return Number.isNaN(pods) ? undefined : pods;
+      },
       share: (row: NodeInfo, t) =>
         row.capacity?.pods || {
           text: t("empty", "unknownLower"),

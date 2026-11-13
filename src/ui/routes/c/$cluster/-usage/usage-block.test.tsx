@@ -119,6 +119,7 @@ const withClaim = (): ResourceConnections => {
           subPath: null,
           volume: "data",
           projected: false,
+          optional: false,
         },
       ],
     },
@@ -148,8 +149,10 @@ describe("UsageBlock when metrics-server is missing", () => {
         status={{ status: "notInstalled", message: null }}
       />
     );
-    expect(screen.getAllByText("metrics-server not installed")).toHaveLength(2);
-    expect(document.querySelector("svg")).toBeNull();
+    expect(
+      screen.getAllByRole("img", { name: "metrics-server not installed" })
+    ).toHaveLength(2);
+    expect(document.querySelector("svg:not([aria-hidden])")).toBeNull();
   });
 
   /**
@@ -171,9 +174,13 @@ describe("UsageBlock when metrics-server is missing", () => {
       />
     );
     expect(
-      screen.getAllByText("metrics not readable with this access")
+      screen.getAllByRole("img", {
+        name: "metrics not readable with this access",
+      })
     ).toHaveLength(2);
-    expect(screen.queryByText(/metrics-server not installed/)).toBeNull();
+    expect(
+      screen.queryByRole("img", { name: /metrics-server not installed/ })
+    ).toBeNull();
   });
 
   it("offers no range picker when there is nothing to range over", async () => {
@@ -419,13 +426,9 @@ describe("UsageBlock on a node with no metrics-server", () => {
     );
     expect(screen.getByText("against declared capacity")).toBeInTheDocument();
     expect(screen.queryByText(/capacitys/)).toBeNull();
-    const reasons = screen.getAllByText("metrics-server not installed");
-    expect(reasons).toHaveLength(2);
-    for (const reason of reasons) {
-      expect(reason.parentElement).toHaveTextContent(
-        /^metrics-server not installed$/
-      );
-    }
+    expect(
+      screen.getAllByRole("img", { name: "metrics-server not installed" })
+    ).toHaveLength(2);
   });
 });
 

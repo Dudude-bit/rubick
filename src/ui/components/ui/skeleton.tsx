@@ -64,7 +64,7 @@ function TableSkeleton({
   };
 
   const caption = (key: string) => (
-    <div key={key} className="px-2.5 pb-1 pt-3">
+    <div key={key} data-testid="skeleton-caption" className="px-2.5 pb-1 pt-3">
       <Skeleton className="h-2.5 w-24" />
     </div>
   );
@@ -91,6 +91,7 @@ function TableSkeleton({
         ...(grouped && row % 5 === 0 ? [caption(`caption-${row}`)] : []),
         <div
           key={row}
+          data-testid="skeleton-row"
           className={cn("flex items-center border-b border-hair", cellPadding)}
         >
           {Array.from({ length: columns }).map((_, column) => (

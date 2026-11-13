@@ -1,7 +1,6 @@
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Gauge, Lock, X, type LucideIcon } from "lucide-react";
+import { Lock, TriangleAlert, X } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ErrorDetails } from "@/components/ui/error-details";
 import { HeldLines } from "../-list/HeldLines";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
@@ -30,8 +29,6 @@ interface MetricsStatusBannerProps {
 const NOTICE: Record<
   MetricsAbsence,
   {
-    icon: LucideIcon;
-    variant: "info" | "warn";
     title: "metricsNotInstalled" | "metricsForbidden" | "metricsError";
     body:
       | "metricsNotInstalledBody"
@@ -40,23 +37,11 @@ const NOTICE: Record<
   }
 > = {
   notInstalled: {
-    icon: Gauge,
-    variant: "info",
     title: "metricsNotInstalled",
     body: "metricsNotInstalledBody",
   },
-  forbidden: {
-    icon: Lock,
-    variant: "info",
-    title: "metricsForbidden",
-    body: "metricsForbiddenBody",
-  },
-  error: {
-    icon: AlertTriangle,
-    variant: "warn",
-    title: "metricsError",
-    body: "metricsErrorBody",
-  },
+  forbidden: { title: "metricsForbidden", body: "metricsForbiddenBody" },
+  error: { title: "metricsError", body: "metricsErrorBody" },
 };
 
 const NONE_HIDDEN: readonly MetricsAbsence[] = [];
@@ -89,55 +74,63 @@ export function MetricsStatusBanner({
   }
   if (absence !== "error" && hidden.includes(absence)) return null;
 
-  const { icon: Icon, variant, title, body } = NOTICE[absence];
+  const { title, body } = NOTICE[absence];
+  const Glyph = absence === "forbidden" ? Lock : TriangleAlert;
   const details = status.message?.trim();
 
   return (
-    <Alert variant={variant} role="status" className={cn("mb-4", className)}>
-      <Icon className="h-4 w-4" aria-hidden="true" />
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          {/* Above a list, so a peek opening beside it must not wrap them
+    <div
+      role="status"
+      className={cn(
+        "mb-4 flex items-start gap-3 rounded-md border border-dashed border-hair px-3 py-2 text-xs",
+        className
+      )}
+    >
+      <Glyph
+        className="mt-0.5 h-3.5 w-3.5 flex-none text-warn"
+        aria-hidden="true"
+      />
+      <div className="min-w-0 flex-1">
+        {/* Above a list, so a peek opening beside it must not wrap them
               onto more lines and move the rows under the pointer. */}
-          <AlertTitle>
-            <HeldLines>{t("cluster", title)}</HeldLines>
-          </AlertTitle>
-          <AlertDescription className="text-fg-mut">
-            <HeldLines>{t("cluster", body)}</HeldLines>
-          </AlertDescription>
-          <div className="mt-1 flex flex-wrap items-start gap-x-3 gap-y-1">
-            <button
-              type="button"
-              disabled={checking}
-              onClick={() =>
-                void commands.recheckMetrics().finally(
-                  () =>
-                    void queryClient.refetchQueries({
-                      queryKey: queryKeys.metrics.all(),
-                    })
-                )
-              }
-              className="text-caption text-info hover:underline disabled:text-fg-fnt disabled:no-underline"
-            >
-              {checking
-                ? t("cluster", "metricsChecking")
-                : t("cluster", "metricsCheckAgain")}
-            </button>
-            {details && <ErrorDetails text={details} />}
-          </div>
-        </div>
-        {context && absence !== "error" && (
+        <p className="text-fg">
+          <HeldLines>{t("cluster", title)}</HeldLines>
+        </p>
+        <p className="text-fg-mut">
+          <HeldLines>{t("cluster", body)}</HeldLines>
+        </p>
+        <div className="mt-1 flex flex-wrap items-start gap-x-3 gap-y-1">
           <button
             type="button"
-            aria-label={t("cluster", "metricsHideForCluster")}
-            title={t("cluster", "metricsHideForCluster")}
-            onClick={() => hide(context, absence)}
-            className="flex-none rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+            disabled={checking}
+            onClick={() =>
+              void commands.recheckMetrics().finally(
+                () =>
+                  void queryClient.refetchQueries({
+                    queryKey: queryKeys.metrics.all(),
+                  })
+              )
+            }
+            className="text-caption text-info hover:underline disabled:text-fg-fnt disabled:no-underline"
           >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
+            {checking
+              ? t("cluster", "metricsChecking")
+              : t("cluster", "metricsCheckAgain")}
           </button>
-        )}
+          {details && <ErrorDetails text={details} />}
+        </div>
       </div>
-    </Alert>
+      {context && absence !== "error" && (
+        <button
+          type="button"
+          aria-label={t("cluster", "metricsHideForCluster")}
+          title={t("cluster", "metricsHideForCluster")}
+          onClick={() => hide(context, absence)}
+          className="flex-none rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
+    </div>
   );
 }

@@ -182,21 +182,22 @@ describe("UsageRow without a denominator", () => {
   /** A pod tally that could not be read is not a metrics-server problem. */
   it("says a count it could not take is not counted", () => {
     render(<UsageRow label="Pods" used={null} total={110} type="count" />);
-    expect(screen.getByText("not counted")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "not counted" })
+    ).toBeInTheDocument();
   });
 
-  /** In Russian "metrics-server не установлен" broke over two lines in a fixed 150px column; fails if the reason may wrap or its column stops growing to fit it. */
-  it("keeps the reason on one line, widening its column instead", () => {
-    const { container } = render(
+  /** A missing reading is the could-not-look glyph with the reason on hover, never a sentence squeezed into the row. */
+  it("draws a metric nobody could read as a glyph with its reason", () => {
+    render(
       <MetricsAbsenceContext.Provider value="notInstalled">
         <UsageRow label="CPU" used={null} total={200} type="cpu" />
       </MetricsAbsenceContext.Provider>
     );
-    const reason = screen.getByText("metrics-server not installed");
-    expect(reason.closest(".whitespace-nowrap")).not.toBeNull();
-    expect(container.firstElementChild?.className).toContain(
-      "minmax(150px,max-content)"
-    );
+    expect(
+      screen.getByRole("img", { name: "metrics-server not installed" })
+    ).toHaveAttribute("title", "metrics-server not installed");
+    expect(screen.queryByText("metrics-server not installed")).toBeNull();
   });
 
   /**

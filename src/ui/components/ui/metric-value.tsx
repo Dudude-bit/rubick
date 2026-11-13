@@ -7,6 +7,8 @@
  * the number when a limit is known, so "is this close to the edge" is
  * answered without reading a percentage.
  */
+import { Lock, TriangleAlert } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import {
   formatUsage,
@@ -65,6 +67,38 @@ function UsageBar({ ratio, className }: UsageBarProps) {
   );
 }
 
+/**
+ * A metric nobody could read, drawn one way wherever it is missing: the
+ * could-not-look glyph, with the reason on hover. A refusal is the lock.
+ */
+export function UnreadMetric({
+  className,
+  reason: given,
+}: {
+  className?: string;
+  reason?: string;
+}) {
+  const t = useT();
+  const absence = useMetricsAbsence();
+  const Glyph = absence === "forbidden" ? Lock : TriangleAlert;
+  const reason =
+    given ??
+    t(
+      "cluster",
+      absence === null ? "metricNoSampleYet" : ABSENCE_SHORT[absence]
+    );
+  return (
+    <span
+      role="img"
+      aria-label={reason}
+      title={reason}
+      className={cn("inline-flex items-center text-fg-fnt", className)}
+    >
+      <Glyph className="h-3.5 w-3.5" aria-hidden="true" />
+    </span>
+  );
+}
+
 export interface MetricValueProps {
   /** Millicores for `cpu`, bytes for `memory`. */
   used: number | null | undefined;
@@ -89,22 +123,8 @@ export function MetricValue({
   className,
 }: MetricValueProps) {
   const t = useT();
-  const absence = useMetricsAbsence();
   const usedNum = typeof used === "number" ? used : null;
-  if (usedNum === null) {
-    return absence === null ? (
-      <span className="text-fg-fnt" title={t("cluster", "metricNoSampleYet")}>
-        {t("cluster", "metricNoSample")}
-      </span>
-    ) : (
-      <span
-        className="text-fg-fnt"
-        title={t("cluster", ABSENCE_SHORT[absence])}
-      >
-        {t("cluster", "metricNotAvailable")}
-      </span>
-    );
-  }
+  if (usedNum === null) return <UnreadMetric />;
 
   const limitNum = typeof limit === "number" && limit > 0 ? limit : null;
   const requestNum =

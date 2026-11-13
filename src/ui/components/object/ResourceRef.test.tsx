@@ -827,6 +827,27 @@ describe("a name cut short", () => {
     expect(end).toHaveAttribute("data-tail", "-67577558d6");
   });
 
+  /**
+   * Two spot nodes read the same in a column cut at the end, because the
+   * names differ only in their last characters. Fails if a node's name that
+   * the splitter finds no generated tail in is cut at the end again.
+   */
+  it("cuts a node's name in the middle, so the end that tells nodes apart survives", async () => {
+    await wrap(
+      <ResourceRef
+        kind="Node"
+        name="gke-prod-spot-pool-4f2a9c1b-xk7p"
+        showKind={false}
+      />
+    );
+    const end = screen.getByTestId("resource-ref-end").firstElementChild;
+    expect(end).toHaveAttribute(
+      "data-stem",
+      "gke-prod-spot-pool-4f2a9c1b-xk7p"
+    );
+    expect(screen.getByTestId("resource-ref-cut")).toBeInTheDocument();
+  });
+
   /** A ClusterRoleBinding's roleRef and subject ended in an ellipsis in the peek, and the whole name was on the full page only. */
   it("says the whole name on hover", async () => {
     await wrap(

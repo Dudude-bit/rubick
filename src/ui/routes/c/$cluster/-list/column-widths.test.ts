@@ -608,16 +608,16 @@ describe("a value a cell says in words", () => {
 
   const unmeasured = [{ name: "web-0" }];
 
-  /** Lena read "нет зам…" under Память on Nodes: fails if a metric column stops holding the words it says when there is no value. */
+  /** Fails if a metric column stops holding the could-not-look glyph it draws when there is no value. */
   it.each([
     ["Nodes", nodes(new Map())],
     ["Pods", pods],
   ] as const)(
-    "%s holds a metric's no-sample words in Russian",
+    "%s holds a metric's could-not-look glyph in Russian",
     (_page, columns) => {
       for (const id of ["cpu", "memory"])
         expect(floorOf(columns, id, ru, unmeasured)).toBeGreaterThanOrEqual(
-          Math.ceil("нет замера".length * 7.2 + 20)
+          14 + 20
         );
     }
   );
@@ -633,15 +633,13 @@ describe("a value a cell says in words", () => {
     ["Pods", pods],
     ["CronJobs", cronJobs() as Column[]],
   ] as const)(
-    "%s keeps only the room n/a takes where metrics-server is missing",
+    "%s keeps only the room the glyph takes where metrics-server is missing",
     (_page, columns) => {
       for (const id of ["cpu", "memory"]) {
         const column = columns.find((c) => nameOf(c) === id) ?? {};
         expect(
           floorOf(columns, id, en, unmeasured, "notInstalled")
-        ).toBeLessThanOrEqual(
-          Math.max(headerFloor(column, en), Math.ceil("n/a".length * 7.2 + 20))
-        );
+        ).toBeLessThanOrEqual(Math.max(headerFloor(column, en), 14 + 20));
       }
     }
   );

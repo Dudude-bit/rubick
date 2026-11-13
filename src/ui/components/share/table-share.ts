@@ -191,6 +191,7 @@ export function tableSection(
     )
       return true;
     if (!def.accessorKey && !def.accessorFn) return false;
+    if ((def.meta as AppColumnMeta | undefined)?.sortOnly) return false;
     return cellsOf.every((cells) => {
       const value = cells.get(column.id)?.getValue();
       return value === null || value === undefined || textOf(value) !== "";

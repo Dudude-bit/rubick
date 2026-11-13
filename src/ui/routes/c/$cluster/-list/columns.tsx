@@ -9,7 +9,6 @@ import { AgeHeader } from "@/components/ui/sortable-header";
 import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
 import type { T as Translate } from "@/i18n/useT";
-import type { MetricsAbsence } from "@/lib/metrics-absence";
 import { CELL_PADS_PX } from "@/components/ui/column-shares";
 import { widestText, type TextFace } from "@/lib/text-width";
 import { RealtimeAge } from "@/components/ui/realtime";
@@ -130,26 +129,18 @@ export const causeTextPx = (said: readonly string[]) =>
 /** `1.81Gi` (6 glyphs at 7.2px) and a cell's padding; the bar beside a limit is the part that goes first. */
 export const METRIC_CELL_PX = Math.ceil(6 * 7.2 + 20);
 
+/** The could-not-look glyph a metric cell draws in place of a figure. */
+const UNREAD_GLYPH_PX = 14;
+
 /** As wide as what its rows say: a figure where one has one, and the one word the rest say, as `MetricValue` picks it. */
 export const metricCellFloor =
   <Row,>(valueOf: (row: Row) => number | null | undefined) =>
-  (t: Translate, rows: readonly Row[], absence: MetricsAbsence | null) => {
+  (_t: Translate, rows: readonly Row[]) => {
     const figure = rows.some((row) => typeof valueOf(row) === "number");
     const word = rows.some((row) => typeof valueOf(row) !== "number");
     return Math.max(
       figure ? METRIC_CELL_PX : 0,
-      word
-        ? widestText(
-            [
-              t(
-                "cluster",
-                absence === null ? "metricNoSample" : "metricNotAvailable"
-              ),
-            ],
-            "sans",
-            7.2
-          ) + 20
-        : 0
+      word ? UNREAD_GLYPH_PX + CELL_PADS_PX : 0
     );
   };
 
@@ -268,6 +259,7 @@ export function createCpuColumn<
     id: "cpu",
     header: columnHeader("columns", "cpu"),
     meta: {
+      sort: (row: Row) => row.cpuMillicores,
       floor: metricCellFloor((row: Row) => row.cpuMillicores),
       share: (row: Row, t) =>
         typeof row.cpuMillicores === "number"
@@ -301,6 +293,7 @@ export function createMemoryColumn<
     id: "memory",
     header: columnHeader("columns", "memory"),
     meta: {
+      sort: (row: Row) => row.memoryBytes,
       floor: metricCellFloor((row: Row) => row.memoryBytes),
       share: (row: Row, t) =>
         typeof row.memoryBytes === "number"
@@ -348,6 +341,7 @@ export function createAccessModesColumn<
     size: 130,
     accessorKey: "accessModes",
     header: columnHeader("columns", "accessModes"),
+    meta: { sort: (row: Row) => row.accessModes.join(" ") },
     cell: ({ row }) => {
       const modes = row.original.accessModes;
       if (modes.length === 0) return <None />;
@@ -378,6 +372,8 @@ export function createCapacityColumn<
     accessorKey: "capacity",
     header: columnHeader("columns", "capacity"),
     meta: {
+      sort: (row: Row) =>
+        row.capacity ? parseMemory(row.capacity) : undefined,
       share: (row: Row) =>
         row.capacity ? declaredQuantity("storage", row.capacity) : null,
     },
@@ -401,6 +397,8 @@ export function createReplicasColumn<
     id: "replicas",
     header: columnHeader("columns", "replicas"),
     meta: {
+      sort: (row: Row) =>
+        Math.max(0, 1 - row.replicas.ready / Math.max(row.replicas.desired, 1)),
       share: (row: Row) => ({
         text: `${row.replicas.ready}/${row.replicas.desired}`,
         mono: true,
@@ -431,6 +429,7 @@ export function createDataKeysColumn<
     id: "dataKeys",
     header: columnHeader("columns", "keys"),
     meta: {
+      sort: (row: Row) => row.dataKeys?.length,
       share: (row: Row, t) => ({
         text: (row.dataKeys ?? []).join(", ") || t("empty", "noneLower"),
         mono: true,

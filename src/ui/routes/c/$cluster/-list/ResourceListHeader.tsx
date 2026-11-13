@@ -7,6 +7,8 @@ interface ResourceListHeaderProps {
   title: string;
   /** Row count, shown muted beside the heading. */
   count?: ReactNode;
+  /** The count is on its way: its place is held so the title does not move when it lands. */
+  countPending?: boolean;
   description?: ReactNode;
   actions?: ReactNode;
   /** Timestamp when data was last fetched (from React Query's dataUpdatedAt) */
@@ -31,6 +33,7 @@ interface ResourceListHeaderProps {
 export function ResourceListHeader({
   title,
   count,
+  countPending = false,
   description,
   actions,
   dataUpdatedAt,
@@ -43,7 +46,15 @@ export function ResourceListHeader({
   return (
     <SectionHeader
       title={title}
-      count={count}
+      count={
+        count ??
+        (countPending ? (
+          <span
+            aria-hidden="true"
+            className="inline-block h-3 w-5 animate-pulse rounded bg-hover align-middle"
+          />
+        ) : undefined)
+      }
       foldActions
       description={description && <HeldLines>{description}</HeldLines>}
       actions={
