@@ -1,13 +1,28 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { fireEvent, screen } from "@testing-library/react";
 
-const answer = vi.hoisted(() => ({ pending: true }));
+const answer = vi.hoisted(() => ({
+  pending: true,
+  claimed: true,
+}));
 
 vi.mock("../-delivery/useDelivery", async (original) => ({
   ...(await original<typeof import("../-delivery/useDelivery")>()),
   useDeliveries: () => ({
     available: true,
-    of: () => [],
+    of: () =>
+      answer.claimed
+        ? [
+            {
+              state: "claimed",
+              vendor: "Argo CD",
+              vendorId: "argocd",
+              claim: "shop",
+              ownerKind: "Application",
+              owner: null,
+            },
+          ]
+        : [],
     isPending: answer.pending,
     error: null,
   }),
@@ -85,7 +100,7 @@ describe("a list a link narrowed to named rows, under its delivery filter", () =
     );
     expect(screen.getByText("web")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Out of sync" }));
+    fireEvent.click(screen.getByRole("button", { name: "Not delivered" }));
     expect(screen.queryByText("web")).toBeNull();
     expect(screen.queryByText(/not in this list now/)).toBeNull();
     expect(screen.queryByText(/not among the rows/)).toBeNull();
@@ -97,6 +112,7 @@ describe("a list whose controller claims none of its rows", () => {
   it("draws no delivery filter once the answer is in", async () => {
     useClusterStore.setState({ isConnected: true, currentContext: "prod" });
     answer.pending = false;
+    answer.claimed = false;
     try {
       await renderWithRouter(
         <ResourceList<Item>
@@ -115,6 +131,32 @@ describe("a list whose controller claims none of its rows", () => {
       ).toBeNull();
     } finally {
       answer.pending = true;
+      answer.claimed = true;
+    }
+  });
+
+  /** The strip was drawn while the answer was still on its way and taken back, moving the table 70px twice. Fails if it is drawn before the answer says a row is delivered. */
+  it("draws no delivery filter while the answer is still on its way", async () => {
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    answer.claimed = false;
+    try {
+      await renderWithRouter(
+        <ResourceList<Item>
+          title="Deployments"
+          kind="Deployment"
+          columns={columns}
+          emptyStateLabel="Deployments"
+          delivery={{ group: "apps", kind: "Deployment" }}
+          data={[{ name: "web", namespace: "shop" }]}
+        />,
+        { at: "/c/prod/deployments", route: "/c/$cluster/$" }
+      );
+      expect(screen.getByText("web")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Not delivered" })
+      ).toBeNull();
+    } finally {
+      answer.claimed = true;
     }
   });
 });

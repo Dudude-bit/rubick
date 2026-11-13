@@ -1,11 +1,9 @@
 import type { ReactNode } from "react";
-import { CircleX, FolderOpen, Lock } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/useT";
-import { ReadAgain } from "@/components/ui/read-again";
-import { errorToShow, isRefusal } from "@/lib/error-utils";
-import { cn } from "@/lib/utils";
+import { Unknown } from "@/components/ui/unknown";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import type { ListRefusal } from "./useListRefusal";
 
@@ -22,29 +20,9 @@ export function UnreadList({
   onRetry?: () => unknown;
   children?: ReactNode;
 }) {
-  const refused = isRefusal(error);
   return (
     <div className="max-w-[68ch] pb-8" data-testid="unread-list">
-      <p
-        data-read={refused ? "refused" : "failed"}
-        className={cn(
-          "flex items-center gap-1.5 text-xs",
-          refused ? "text-warn" : "text-err"
-        )}
-      >
-        {refused ? (
-          <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-        ) : (
-          <CircleX className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-        )}
-        {words}
-      </p>
-      <p className="mt-1.5 select-text wrap-break-word font-mono text-caption text-fg-fnt">
-        {errorToShow(error)}
-      </p>
-      {onRetry && (
-        <ReadAgain error={error} onRetry={onRetry} className="mt-2" />
-      )}
+      <Unknown question={words} error={error} onRetry={onRetry} />
       {children}
     </div>
   );

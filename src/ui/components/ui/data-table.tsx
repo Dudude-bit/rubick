@@ -135,6 +135,8 @@ interface DataTableProps<TData extends RowData> {
   emptyAction?: React.ReactNode;
   /** Opt in to caption rows above runs of related rows. */
   grouping?: RowGrouping<TData> | null;
+  /** Told how many rows a search leaves, and `null` when none narrows them, so a title can say "5 of 89". */
+  onMatched?: (count: number | null) => void;
   /** How many rows the first read will bring, where something already knows: the skeleton holds that many, up to a screen. */
   loadingRows?: number | null;
   /** The list will group its rows once they arrive: the skeleton holds caption lines. */
@@ -251,6 +253,9 @@ const SIDEWAYS_LANE = { overflowX: "scroll", paddingBottom: 6 } as const;
 const PINNED = "sticky left-0 z-[1] bg-canvas";
 /** The actions cell's right padding, which the table sets: a page's overlay scrollbar reaches over it, a port's laned one does not. */
 const ACTIONS_GUTTER = { paddingRight: "var(--actions-gutter)" };
+const ROW_RING =
+  "bg-hover [&>td]:shadow-[inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)] [&>td:first-child]:shadow-[inset_1px_0_var(--color-info),inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)] [&>td:last-child]:shadow-[inset_-1px_0_var(--color-info),inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)]";
+
 /** Opaque, so the row's own tint and selection ring are drawn again on top of it. */
 const PINNED_ROW_TINT =
   "group-hover:bg-[image:linear-gradient(var(--color-hover),var(--color-hover))] group-aria-selected:bg-[image:linear-gradient(var(--color-hover),var(--color-hover))] group-aria-selected:shadow-[inset_1px_0_var(--color-info),inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)]";
@@ -355,8 +360,9 @@ function BodyRowView<TData extends RowData>({
       tabIndex={keyboard ? (tabStop ? 0 : -1) : undefined}
       className={cn(
         clickable && "cursor-pointer",
-        selected &&
-          "bg-hover after:pointer-events-none after:absolute after:inset-0 after:z-10 after:ring-1 after:ring-inset after:ring-info after:content-['']",
+        // Drawn on the cells: WebKitGTK does not position a row's own
+        // pseudo-element, so a ring there landed on the first cell only.
+        selected && ROW_RING,
         "relative group"
       )}
       onFocus={
@@ -706,6 +712,7 @@ function DataTableInner<TData extends RowData>({
   grouping = null,
   loadingRows = null,
   loadingGrouped = false,
+  onMatched,
   rowLabel,
   rowNoun,
   widthsKey,
@@ -1108,6 +1115,9 @@ function DataTableInner<TData extends RowData>({
   const filteredRows =
     settling && matched === 0 ? table.getCoreRowModel().rows.length : matched;
   const totalRows = data.length;
+  const narrowedTo = searchValue && !settling ? matched : null;
+  React.useEffect(() => onMatched?.(narrowedTo), [onMatched, narrowedTo]);
+  React.useEffect(() => () => onMatched?.(null), [onMatched]);
   const nounsOf = (n: number) =>
     rowNoun ? { n, ...rowNoun } : rowNouns(rowLabel ?? "", n);
 
@@ -1709,6 +1719,11 @@ function DataTableInner<TData extends RowData>({
             // unfilled one falls back to the fixed port.
             containerStyle={{
               scrollbarGutter: "stable",
+              // The lane is always there: one that comes and goes with the
+              // row count moves every column by its width.
+              ...(fill || shouldVirtualScroll
+                ? { overflowY: "scroll" as const }
+                : undefined),
               ...(shouldVirtualScroll && !fill
                 ? { maxHeight: virtualScrollHeight }
                 : undefined),

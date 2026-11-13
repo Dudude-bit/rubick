@@ -608,7 +608,11 @@ export function CronJobDetail() {
         label: "Jobs",
         glyph: kindGlyph(ResourceType.Job),
         mark: jobsError
-          ? readCountMark(null, t("empty", "couldNotReadCronJobRuns"))
+          ? readCountMark(
+              null,
+              t("empty", "couldNotReadCronJobRuns"),
+              jobsError
+            )
           : readCountMark(jobsRead ? jobsRead.length : null, null),
         content: (
           <Section>

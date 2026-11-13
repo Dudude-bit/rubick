@@ -82,6 +82,30 @@ const list = (props: {
     />
   );
 
+describe("a list a search narrows", () => {
+  /**
+   * The footer said "1 of 3" while the title still said "Pods 3". Fails if
+   * the title stops saying how many of the total the search leaves.
+   */
+  it("says how many of the total are left in its title", async () => {
+    await list({
+      data: [
+        { name: "web-1", namespace: "shop" },
+        { name: "web-2", namespace: "shop" },
+        { name: "db-1", namespace: "shop" },
+      ],
+    });
+    expect(screen.getByText("3")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Search..."), "db");
+    expect(await screen.findByText("1 of 3")).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText("Search..."));
+    await waitFor(() => expect(screen.queryByText("1 of 3")).toBeNull());
+    expect(screen.getByText("3")).toBeInTheDocument();
+  });
+});
+
 describe("a list whose rows come from outside", () => {
   /**
    * The regression this exists for. A page that fetches its own rows — one

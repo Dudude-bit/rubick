@@ -50,7 +50,9 @@ describe("the status a workload list's row says", () => {
    */
   it("tells the cause its pods share after the verdict, until the rollout settles", () => {
     cell({ rollout: stalled, podsCause: told });
-    expect(screen.getByText("Stalled").closest(".flex-none")).not.toBeNull();
+    expect(
+      screen.getByText("Stalled").closest("[class*='shrink-']")
+    ).not.toBeNull();
     expect(screen.getByTestId("row-cause")).toHaveTextContent(
       /^1 of 1 pod: app/
     );
@@ -121,5 +123,26 @@ describe("the status a workload list's row says", () => {
       problem: null,
     });
     expect(plain.container.querySelector("[data-problem]")).toBeNull();
+  });
+
+  /**
+   * The Status column did not sort. Fails if trouble stops ranking above a
+   * settled row, or a Ready row carrying a problem ranks with a plain one.
+   */
+  it("sorts trouble above open above settled, a problem lifting a ready row", () => {
+    const sort = (column.meta as AppColumnMeta).sort as (row: Row) => number;
+    const none: RowCause = { says: "read", shared: null };
+    const rank = (rollout: Rollout, problem?: Problem) =>
+      sort({ rollout, podsCause: none, problem });
+    const problem: Problem = { tone: "warn", n: 1, title: "x" };
+    const ready: Rollout = { state: "ready" };
+    const comingUp: Rollout = { state: "comingUp", available: 0, desired: 2 };
+
+    expect(rank(stalled)).toBeGreaterThan(rank(comingUp));
+    expect(rank(comingUp)).toBeGreaterThan(rank(ready));
+    expect(rank(ready, problem)).toBeGreaterThan(rank(ready));
+    expect(rank(ready, { ...problem, tone: "err" })).toBeGreaterThan(
+      rank(ready, problem)
+    );
   });
 });

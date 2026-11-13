@@ -830,6 +830,21 @@ describe("the command palette's object actions", () => {
     ).toHaveAttribute("href", expect.stringMatching(/^\/c\/k3d-stage\//));
   });
 
+  /** The object's kind icon wrapped onto a line above its name. Fails if the two stop sharing one flex row. */
+  it("keeps the page object's icon on the line of its name", async () => {
+    await renderWithRouter(<CommandPalette />, {
+      at: "/c/k3d-dev/pods/shop/burst-demo",
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    window.dispatchEvent(new Event("command-palette-open"));
+    await screen.findByText("Actions on");
+    const name = screen.getByTestId("resource-ref-name");
+    expect(name.parentElement).toHaveClass("flex");
+    expect(name.parentElement).toContainElement(
+      screen.getByTestId("resource-ref-icon")
+    );
+  });
+
   /** On an object's page its own actions are one word away. */
   it("offers the page's own object, and finds its action by name", async () => {
     await renderWithRouter(<CommandPalette />, {

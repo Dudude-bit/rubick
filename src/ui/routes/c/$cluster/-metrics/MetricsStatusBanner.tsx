@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Lock, TriangleAlert, X } from "lucide-react";
 
@@ -61,6 +62,10 @@ export function MetricsStatusBanner({
     NONE_HIDDEN;
   const hide = useMetricsNoticeStore((s) => s.hide);
   const absence = absenceOf(status);
+  const [settled, setSettled] = useState(false);
+  const absent = !!status && absence !== null;
+  if (absent && !checking && !settled) setSettled(true);
+  if (!absent && settled) setSettled(false);
 
   if (!status) return null;
   if (absence === null) {
@@ -73,6 +78,7 @@ export function MetricsStatusBanner({
     ) : null;
   }
   if (absence !== "error" && hidden.includes(absence)) return null;
+  if (!settled) return null;
 
   const { title, body } = NOTICE[absence];
   const Glyph = absence === "forbidden" ? Lock : TriangleAlert;

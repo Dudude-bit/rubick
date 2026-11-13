@@ -29,6 +29,13 @@ type RolloutRow = {
 const verdictOf = (rollout: Rollout): RowVerdict =>
   verdictByRole(workloadRole(rollout), rolloutSettled(rollout));
 
+const SEVERITY: Record<RowVerdict, number> = {
+  settled: 0,
+  open: 1,
+  trouble: 2,
+};
+const PROBLEM_RANK = { warn: 1, err: 2 } as const;
+
 const FLOOR = statusCellPx(14);
 const PROBLEM_PX = Math.ceil(13 * 6.6);
 
@@ -40,6 +47,9 @@ export function createRolloutColumn<Row extends RolloutRow>(): ColumnDef<Row> {
     header: columnHeader("columns", "status"),
     meta: {
       floor: FLOOR,
+      sort: (row: Row) =>
+        SEVERITY[verdictOf(row.rollout)] * 10 +
+        (row.problem ? PROBLEM_RANK[row.problem.tone] : 0),
       ideal: (t, rows: readonly Row[]) =>
         FLOOR +
         (rows.some((row) => row.problem) ? PROBLEM_PX : 0) +

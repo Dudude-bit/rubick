@@ -199,35 +199,38 @@ export function createWorkloadListPage<T extends Workload>(
     );
     const dataWithMetrics = useMemo(
       () =>
-        attachAggregatedPodMetrics<T>(rows, pods, config.matchPods).map(
-          (row): WorkloadRow<T> => {
-            const owner = ownerOf(row);
-            const refused = rowRefusal(
-              row,
+        attachAggregatedPodMetrics<T>(
+          rows,
+          pods,
+          config.matchPods,
+          podsRead
+        ).map((row): WorkloadRow<T> => {
+          const owner = ownerOf(row);
+          const refused = rowRefusal(
+            row,
+            owner,
+            causePods,
+            refusalsIn(row.namespace)
+          );
+          return {
+            ...row,
+            ...(config.refused?.(row, refused) ?? {}),
+            podsCause: rowCause(
+              row.namespace,
               owner,
               causePods,
-              refusalsIn(row.namespace)
-            );
-            return {
-              ...row,
-              ...(config.refused?.(row, refused) ?? {}),
-              podsCause: rowCause(
-                row.namespace,
-                owner,
-                causePods,
-                causeAt,
-                refused
-              ),
-              problem: problemOfRow(
-                problems,
-                config.resourceType,
-                row.namespace,
-                row.name
-              ),
-            };
-          }
-        ),
-      [rows, pods, causePods, causeAt, refusalsIn, problems]
+              causeAt,
+              refused
+            ),
+            problem: problemOfRow(
+              problems,
+              config.resourceType,
+              row.namespace,
+              row.name
+            ),
+          };
+        }),
+      [rows, pods, podsRead, causePods, causeAt, refusalsIn, problems]
     );
 
     const columns = useMemo(() => config.columns(), []);

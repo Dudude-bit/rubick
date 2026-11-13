@@ -8,7 +8,11 @@ import { columns as storageClassColumns } from "../(storage)/storageclasses/-com
 import { columns as namespaceColumns } from "../(cluster)/namespaces/-components/NamespaceList";
 import { columns as nodeColumns } from "../(cluster)/nodes/-components/NodeList";
 import { DataTable } from "@/components/ui/data-table";
-import { createAgeColumn, createDataKeysColumn } from "./columns";
+import {
+  createAgeColumn,
+  createDataKeysColumn,
+  createReplicasColumn,
+} from "./columns";
 import { PortsDisplay } from "../(network)/-components/PortsDisplay";
 import { renderWithProviders, renderWithRouter } from "@/test/render";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -198,5 +202,25 @@ describe("sorting a list by age", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Age/ }));
     expect(order()).toEqual(["old", "new", "unstamped"]);
+  });
+});
+
+describe("the Replicas column's order", () => {
+  /**
+   * It ranked by the ready fraction, so 0/0, 1/1, 2/2 and 5/5 all tied and
+   * the column looked unsorted. Fails if it stops sorting by the desired
+   * count, then the ready count.
+   */
+  it("sorts by desired count, then ready count", () => {
+    const sort = (
+      createReplicasColumn().meta as { sort: (row: never) => number }
+    ).sort;
+    const rank = (ready: number, desired: number) =>
+      sort({ replicas: { ready, desired } } as never);
+    expect(rank(0, 0)).toBeLessThan(rank(1, 1));
+    expect(rank(1, 1)).toBeLessThan(rank(2, 2));
+    expect(rank(2, 2)).toBeLessThan(rank(5, 5));
+    expect(rank(1, 3)).toBeLessThan(rank(2, 3));
+    expect(rank(3, 3)).toBeLessThan(rank(0, 4));
   });
 });

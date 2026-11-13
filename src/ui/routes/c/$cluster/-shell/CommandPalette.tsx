@@ -1312,7 +1312,7 @@ function EntryRow({
         <Row {...shared}>
           <Zap className="h-3.5 w-3.5 flex-none text-info" />
           <span className="flex-none">{t("action", "actionsOn")}</span>
-          <span className="min-w-0">
+          <span className="flex min-w-0 items-center gap-1.5 [&>svg]:flex-none">
             <ResourceName
               kind={entry.target.kind}
               name={entry.target.name}

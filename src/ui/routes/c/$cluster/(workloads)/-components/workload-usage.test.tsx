@@ -150,7 +150,8 @@ describe("WorkloadUsage whose pods were not read", () => {
     expect(screen.queryByText(/None of this Deployment/)).toBeNull();
     const count = screen.getByTestId("section-count");
     expect(count).toHaveTextContent("pods not read");
-    expect(count.querySelector("svg")).toHaveClass("lucide-eye-off");
+    // A refusal wears the lock every could-not-look wears.
+    expect(count.querySelector("svg")).toHaveClass("lucide-lock");
     expect(
       screen.getByText(
         /summed from this Deployment's pods, and they could not be read/

@@ -581,7 +581,7 @@ export function DeploymentDetail() {
       // A count rather than a severity: an old revision at zero is what a
       // rollout leaves behind, not a fault.
       mark: revisionsError
-        ? readCountMark(null, t("empty", "revisionsUnread"))
+        ? readCountMark(null, t("empty", "revisionsUnread"), revisionsError)
         : readCountMark(revisionsRead ? revisionsRead.length : null, null),
       content: revisionsError ? (
         <Unknown

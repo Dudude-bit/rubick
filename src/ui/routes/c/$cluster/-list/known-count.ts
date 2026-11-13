@@ -1,6 +1,7 @@
-import type { ResourceCounts } from "@/generated/types";
+import type { QueryClient } from "@tanstack/react-query";
+import type { ResourceCounts, Scoped } from "@/generated/types";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { readOverview } from "@/hooks/useClusterOverview";
 import { queryKeys } from "@/lib/query-keys";
@@ -25,8 +26,29 @@ const COUNT_KEY: Partial<Record<ResourceKind, keyof ResourceCounts>> = {
   [ResourceType.Secret]: "secrets",
 };
 
-/** The count the sidebar holds for this list's kind, read from the answer it keeps and never asked for here. */
+/** The row count of the newest list of this kind the cache holds, in whatever scope it was read. */
+function lastAnsweredCount(
+  queryClient: QueryClient,
+  kind: ResourceKind | null | undefined
+): number | null {
+  if (!kind) return null;
+  let newest = 0;
+  let count: number | null = null;
+  for (const query of queryClient
+    .getQueryCache()
+    .findAll({ queryKey: queryKeys.lists(kind) })) {
+    const rows = (query.state.data as Scoped<unknown> | undefined)?.rows;
+    if (Array.isArray(rows) && query.state.dataUpdatedAt > newest) {
+      newest = query.state.dataUpdatedAt;
+      count = rows.length;
+    }
+  }
+  return count;
+}
+
+/** The count the sidebar holds for this list's kind, else the last list of it that was read; never asked for here. */
 export function useKnownCount(kind: ResourceKind | null | undefined) {
+  const queryClient = useQueryClient();
   const context = useClusterStore((s) => s.currentContext);
   const scope = useClusterStore((s) => s.namespaceScope);
   const key = kind ? COUNT_KEY[kind] : undefined;
@@ -36,5 +58,5 @@ export function useKnownCount(kind: ResourceKind | null | undefined) {
     enabled: false,
     select: (overview) => (key ? overview.counts[key] : null),
   });
-  return data ?? null;
+  return data ?? lastAnsweredCount(queryClient, kind);
 }

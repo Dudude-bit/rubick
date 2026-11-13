@@ -1434,6 +1434,60 @@ describe("column widths", () => {
   });
 
   /**
+   * Columns moved 4 to 11px when a search dropped the widest row, because
+   * their floors were measured from the rows left. Fails if a floor or an
+   * ideal is read from anything but every row the table holds.
+   */
+  it("keeps every column's width when a search drops the widest row", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(600);
+    try {
+      const wide = (rows: readonly Item[]) =>
+        Math.max(...rows.map((item) => item.name.length)) * 10;
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            columns[0],
+            {
+              ...columns[1],
+              size: 100,
+              meta: {
+                floor: (_t: unknown, rows: readonly never[]) =>
+                  wide(rows as unknown as readonly Item[]),
+                ideal: (_t: unknown, rows: readonly never[]) =>
+                  wide(rows as unknown as readonly Item[]) + 80,
+              },
+            },
+          ]}
+          data={[
+            { name: "short", namespace: "ns" },
+            { name: "a-much-longer-name-than-the-rest", namespace: "ns" },
+          ]}
+        />
+      );
+      const before = [widthOf("Name"), widthOf("Status")];
+      await userEvent.type(search(), "short");
+      await waitFor(() =>
+        expect(
+          screen.queryByText("a-much-longer-name-than-the-rest")
+        ).toBeNull()
+      );
+      expect([widthOf("Name"), widthOf("Status")]).toEqual(before);
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /** A search that leaves few rows took the scrollbar lane away and widened every column by it. Fails if a filled table's port stops keeping its vertical lane. */
+  it("keeps the vertical scrollbar lane of a filled table whatever the row count", async () => {
+    await wrap(<DataTable<Item> columns={columns} data={DATA} fill />);
+    expect(screen.getByRole("table").parentElement?.style.overflowY).toBe(
+      "scroll"
+    );
+  });
+
+  /**
    * A ClusterIP column's share of a 1160px table was 136px, and a 14-digit
    * address ended "10.111.219.1...". Fails if a column's floor stops reaching
    * its header once the table has been measured.

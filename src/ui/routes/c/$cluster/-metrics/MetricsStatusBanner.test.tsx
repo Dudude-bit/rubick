@@ -12,6 +12,7 @@ import { commands } from "@/lib/commands";
 import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useMetricsNoticeStore } from "@/stores/metricsNoticeStore";
+import { queryKeys } from "@/lib/query-keys";
 import { MetricsStatusBanner } from "./MetricsStatusBanner";
 
 const available = { status: "available" as const, message: null };
@@ -155,6 +156,32 @@ describe("MetricsStatusBanner", () => {
     expect(
       vi.mocked(commands.recheckMetrics).mock.invocationCallOrder[0]
     ).toBeLessThan(refetch.mock.invocationCallOrder[0]);
+  });
+
+  /**
+   * The banner drew "Checking…" above a list and then vanished once the
+   * read answered, moving every row 70px twice. Fails if a notice takes room
+   * while the first read is still running, or never comes once it ends.
+   */
+  it("takes no room while the metrics read is still on its way, and says so once it has answered", async () => {
+    const client = new QueryClient();
+    let answer: () => void = () => {};
+    const reading = client.fetchQuery({
+      queryKey: queryKeys.metrics.all(),
+      queryFn: () => new Promise<null>((done) => (answer = () => done(null))),
+    });
+    const { container } = await renderWithRouter(
+      <MetricsStatusBanner status={notInstalled} />,
+      { client }
+    );
+    expect(container).toBeEmptyDOMElement();
+    answer();
+    await reading;
+    expect(
+      await screen.findByText(
+        "metrics-server is not installed, so CPU and memory are not shown"
+      )
+    ).toBeInTheDocument();
   });
 
   /**

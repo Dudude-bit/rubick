@@ -3,6 +3,8 @@ import { columnHeader } from "@/i18n/column-header";
 import type { ColumnDef, RowData } from "@/components/ui/table-features";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { CELL_PADS_PX } from "@/components/ui/column-shares";
+import { widestText } from "@/lib/text-width";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { DataTable } from "@/components/ui/data-table";
@@ -91,6 +93,18 @@ const DELIVERY_COLUMN: ColumnDef<never> = {
   id: "delivery",
   header: columnHeader("columns", "delivery"),
   enableSorting: false,
+  meta: {
+    floor: (t) =>
+      widestText(
+        [
+          t("readings", "delNotDelivered"),
+          t("readings", "delLabelledNotListedShort"),
+          t("readings", "delTwoControllers"),
+        ],
+        "sans",
+        6.2
+      ) + CELL_PADS_PX,
+  },
   cell: ({ row }) => <DeliveryColumnCell row={row.original} />,
 };
 
@@ -315,6 +329,7 @@ export function ResourceList<
   );
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [matched, setMatched] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const rowMenu = useRowMenu<Row>({ kind: listKind, getRowHref, getRowPeek });
   // Where the row menu can delete this kind, a row's Delete button asks
@@ -417,6 +432,10 @@ export function ResourceList<
       deliveries.error !== null ||
       deliveryFilter !== "all" ||
       resources.some((row) => deliveriesOf(row).length > 0));
+  const deliveryKnown =
+    deliveries.error !== null ||
+    deliveryFilter !== "all" ||
+    resources.some((row) => deliveriesOf(row).length > 0);
   const delivered = showDelivery
     ? resources.filter((row) =>
         matchesDeliveryFilter(deliveryFilter, deliveriesOf(row))
@@ -629,12 +648,17 @@ export function ResourceList<
           count={
             partial || nothingRead
               ? undefined
-              : showDelivery && deliveryFilter !== "all"
+              : matched !== null && matched < rows.length
                 ? t("readings", "shownOfTotal", {
-                    shown: delivered.length,
+                    shown: matched,
                     total: resources.length,
                   })
-                : resources.length
+                : showDelivery && deliveryFilter !== "all"
+                  ? t("readings", "shownOfTotal", {
+                      shown: delivered.length,
+                      total: resources.length,
+                    })
+                  : resources.length
           }
           countPending={showSkeleton}
           description={
@@ -681,7 +705,7 @@ export function ResourceList<
         // that asks again under a key the page never reads.
         onRetry={retry}
       />
-      {showDelivery && (
+      {showDelivery && !showSkeleton && deliveryKnown && (
         <DeliveryFilterControl
           value={deliveryFilter}
           onChange={setDeliveryFilter}
@@ -789,6 +813,7 @@ export function ResourceList<
           pageKeys={!embedded}
           onRowMenu={rowMenu.open}
           isLoading={showSkeleton}
+          onMatched={setMatched}
           loadingRows={knownCount}
           loadingGrouped={
             grouping === undefined

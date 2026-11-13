@@ -14,7 +14,8 @@
 import type { EmptyKey } from "../../-usage/usage-chart";
 import { useMemo } from "react";
 
-import { EyeOff } from "lucide-react";
+import { Lock, TriangleAlert } from "lucide-react";
+import { isRefusal } from "@/lib/error-utils";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
@@ -236,7 +237,14 @@ function PodsUnknownUsage({
         count={
           error ? (
             <span className="inline-flex items-center gap-1">
-              <EyeOff className="h-3 w-3" aria-hidden="true" />
+              {isRefusal(error) ? (
+                <Lock className="h-3 w-3 text-warn" aria-hidden="true" />
+              ) : (
+                <TriangleAlert
+                  className="h-3 w-3 text-warn"
+                  aria-hidden="true"
+                />
+              )}
               {t("empty", "podsNotRead")}
             </span>
           ) : (

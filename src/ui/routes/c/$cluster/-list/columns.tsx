@@ -397,8 +397,7 @@ export function createReplicasColumn<
     id: "replicas",
     header: columnHeader("columns", "replicas"),
     meta: {
-      sort: (row: Row) =>
-        Math.max(0, 1 - row.replicas.ready / Math.max(row.replicas.desired, 1)),
+      sort: (row: Row) => row.replicas.desired * 2 ** 20 + row.replicas.ready,
       share: (row: Row) => ({
         text: `${row.replicas.ready}/${row.replicas.desired}`,
         mono: true,

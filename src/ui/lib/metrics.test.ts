@@ -229,4 +229,15 @@ describe("attachAggregatedPodMetrics", () => {
       },
     ]);
   });
+
+  /** Fails if a workload scaled to zero shows the could-not-read mark for usage, when its pods were read and there are none to use anything. */
+  it("says a workload with no pods uses nothing once the pods were read, and stays unknown when they were not", () => {
+    const sets = [{ name: "idle", namespace: "shop" }];
+    expect(
+      attachAggregatedPodMetrics(sets, [], matchStatefulSetPods, true)[0]
+    ).toMatchObject({ cpuMillicores: 0, memoryBytes: 0 });
+    expect(
+      attachAggregatedPodMetrics(sets, [], matchStatefulSetPods)[0]
+    ).toMatchObject({ cpuMillicores: null, memoryBytes: null });
+  });
 });

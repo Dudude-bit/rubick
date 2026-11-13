@@ -116,7 +116,9 @@ export function attachAggregatedPodMetrics<
 >(
   resources: T[],
   pods: PodWithMetrics[],
-  ownerOf: PodOwner
+  ownerOf: PodOwner,
+  /** The pod list answered: a workload with none of them then uses nothing, not an unknown amount. */
+  podsRead = false
 ): Array<T & ResourceMetrics> {
   const byOwner = new Map<string, PodWithMetrics[]>();
   for (const pod of pods) {
@@ -130,7 +132,10 @@ export function attachAggregatedPodMetrics<
 
   return resources.map((resource) => {
     const own = byOwner.get(key(resource.namespace, resource.name)) ?? [];
-    const aggregated = aggregatePodMetrics(own);
+    const aggregated =
+      podsRead && own.length === 0
+        ? { cpuMillicores: 0, memoryBytes: 0 }
+        : aggregatePodMetrics(own);
     return {
       ...resource,
       cpuMillicores: aggregated.cpuMillicores,
