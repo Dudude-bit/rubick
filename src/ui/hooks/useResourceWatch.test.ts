@@ -676,6 +676,69 @@ describe("useResourceWatch", () => {
     expect(rowsIn(client)).toHaveLength(1);
   });
 
+  /** Fails if the watch writes an empty list over a first read that failed, which drew a 500 as "no resources here". */
+  it("leaves a first read that failed failed, not empty", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderHook(
+      () => {
+        useQuery({
+          queryKey: KEY,
+          queryFn: () =>
+            Promise.reject(new Error("etcdserver: request timed out")),
+        });
+        return useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        });
+      },
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() =>
+      expect(client.getQueryState(KEY)?.status).toBe("error")
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    expect(client.getQueryState(KEY)?.status).toBe("error");
+    expect(rowsIn(client)).toBeUndefined();
+  });
+
+  /** Fails if the watch rewrites unchanged rows after a refetch failed, which erased the error and called the rows fresh. */
+  it("keeps a failed refetch's error beside the rows it held", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    seed(client, [{ name: "a", namespace: "default" }]);
+    const heldAt = client.getQueryState(KEY)?.dataUpdatedAt;
+    const hook = renderHook(
+      () => {
+        const query = useQuery({
+          queryKey: KEY,
+          queryFn: () =>
+            Promise.reject(new Error("etcdserver: request timed out")),
+          staleTime: Infinity,
+        });
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        });
+        return query;
+      },
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    await act(async () => {
+      await hook.result.current.refetch();
+    });
+    await waitFor(() =>
+      expect(client.getQueryState(KEY)?.error).not.toBeNull()
+    );
+    expect(client.getQueryState(KEY)?.dataUpdatedAt).toBe(heldAt);
+    expect(rowsIn(client)).toEqual([{ name: "a", namespace: "default" }]);
+  });
+
   it("calls onError on a failed event without mutating the cache", async () => {
     const client = new QueryClient();
     seed(client, [{ name: "a", namespace: "default" }]);
