@@ -32,6 +32,7 @@ import { useLocaleStore } from "@/stores/localeStore";
 import {
   AGE_CELL_PX,
   NAME_CELL_PX,
+  badgeCellPx,
   NODE_CELL_PX,
   statusCellPx,
 } from "./columns";
@@ -280,15 +281,50 @@ describe("the Pods status column", () => {
       "CreateContainerConfigError".length * 7.2 + 14 + 20
     );
   });
+
+  /** Fails if a Running pod with a failing probe draws its problem mark past the column's edge. */
+  it("makes room for a problem's mark beside the status it sits with", () => {
+    const status = pods.find((c) => c.id === "status") ?? {};
+    const troubled = columnFloor(status, en, [
+      {
+        status: { display: "Running" },
+        problem: { tone: "err", n: 1, title: "probe" },
+      },
+    ]);
+    expect(troubled).toBeGreaterThanOrEqual(
+      badgeCellPx(["Running"]) + 6 + Math.ceil(13 * 6.6)
+    );
+  });
 });
 
 describe("the Name column", () => {
-  /** The name is what a reader aims at; fails if a list's Name column can be drawn narrower than a pod's name. */
+  /** The name is what a reader aims at; fails if a list's Name column stops asking for a pod's whole name while the port has room for it. */
   it.each(PAGES)(
-    "%s never draws its Name under the shared floor",
+    "%s asks for the shared width of a Name while the port has room",
     (_page, columns) => {
       const name = columns.find((c) => c.accessorKey === "name");
-      expect(columnFloor(name ?? {}, en)).toBeGreaterThanOrEqual(NAME_CELL_PX);
+      expect(columnIdeal(name ?? {}, en, [])).toBeGreaterThanOrEqual(
+        NAME_CELL_PX
+      );
+    }
+  );
+
+  /**
+   * The Deployments list beside a peek scrolled sideways because its Name
+   * alone held 280px. Fails if a list's Name floor goes back over 20 glyphs
+   * and the icon and copy mark, or under 18 (`argocd-repo-server`) of them.
+   */
+  it.each(PAGES)(
+    "%s lets its Name give way to 20 glyphs beside a peek",
+    (_page, columns) => {
+      const name = columns.find((c) => c.accessorKey === "name") ?? {};
+      const floor = columnFloor(name, en, [{ name: "x".repeat(40) }]);
+      expect(floor).toBeLessThanOrEqual(
+        Math.ceil(20 * 7.2 + 2 * (14 + 4) + 20)
+      );
+      expect(floor).toBeGreaterThanOrEqual(
+        Math.ceil("argocd-repo-server".length * 7.2 + 2 * (14 + 4) + 20)
+      );
     }
   );
 
@@ -893,7 +929,7 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
     expect(columnFloor(name, ru, short)).toBe(
       Math.ceil("recommendations".length * 7.2 + 2 * (14 + 4) + 20)
     );
-    expect(columnFloor(name, ru, [{ name: "x".repeat(60) }, ...short])).toBe(
+    expect(columnIdeal(name, ru, [{ name: "x".repeat(60) }, ...short])).toBe(
       NAME_CELL_PX
     );
   });

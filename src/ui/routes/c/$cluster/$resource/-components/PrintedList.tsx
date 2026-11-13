@@ -8,6 +8,7 @@ import {
   ageOrder,
   createNamespaceColumn,
   nameCellPx,
+  nameFloorPx,
 } from "../../-list/columns";
 import type { Catalogue } from "@/i18n/catalogue";
 import { widestText } from "@/lib/text-width";
@@ -333,7 +334,8 @@ function columnsOf(
       id: `printed-${index}`,
       size: sizeOf(column),
       meta: {
-        floor: named ? nameCellPx : text ? textFloor(index) : undefined,
+        floor: named ? nameFloorPx : text ? textFloor(index) : undefined,
+        ...(named ? { ideal: nameCellPx } : {}),
         yields,
         ...(byAge ? { label: AGE_LABEL } : {}),
       },

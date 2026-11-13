@@ -10,7 +10,7 @@
 
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
-import { Ban, ExternalLink, Unlink } from "lucide-react";
+import { Ban, ChevronRight, ExternalLink, Unlink } from "lucide-react";
 
 import { PerfProfiler } from "@/lib/perf-profiler";
 
@@ -112,6 +112,15 @@ function Outside({ end }: { end: OutsideEnd }) {
   );
 }
 
+function Chevron() {
+  return (
+    <ChevronRight
+      className="h-3 w-3 flex-none transition-transform group-open:rotate-90"
+      aria-hidden="true"
+    />
+  );
+}
+
 const MANY_MISSING = 4;
 const MANY_KEYS = 6;
 
@@ -143,7 +152,8 @@ function MissingKeys({ row }: { row: ConnRow }) {
     return <>{lines}</>;
   return (
     <details className="group text-caption text-fg-fnt">
-      <summary className="cursor-pointer select-none rounded py-0.5 hover:text-fg-mut">
+      <summary className="flex cursor-pointer select-none list-none items-center gap-1 rounded py-0.5 hover:text-fg-mut [&::-webkit-details-marker]:hidden">
+        <Chevron />
         {t("nav", "keysSummaryOptional", {
           n: row.keysReferenced ?? missing.length,
           absent: missing.length,
@@ -162,7 +172,8 @@ function KeysFolded({ row }: { row: ConnRow }) {
   return (
     <>
       <details className="group text-caption text-fg-fnt">
-        <summary className="cursor-pointer select-none rounded py-0.5 hover:text-fg-mut">
+        <summary className="flex cursor-pointer select-none list-none items-center gap-1 rounded py-0.5 hover:text-fg-mut [&::-webkit-details-marker]:hidden">
+          <Chevron />
           {t("count", "keysReferenced", { n: row.keysReferenced ?? 0 })}
           {missing.length > 0 &&
             `, ${t("count", "keysReferencedAbsent", { absent: missing.length })}`}

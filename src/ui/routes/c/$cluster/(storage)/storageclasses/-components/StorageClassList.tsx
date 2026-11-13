@@ -9,6 +9,7 @@ import { widestText } from "@/lib/text-width";
 import {
   createAgeColumn,
   nameCellPx,
+  nameFloorPx,
   wordsFloor,
   yielding,
 } from "../../../-list/columns";
@@ -26,7 +27,7 @@ import { None } from "@/components/ui/none";
 const PROVISIONER_GLYPHS = 32;
 
 /** The longest name, and the default class's with its marker and the 8px before it. */
-const nameFloor = (t: Translate, rows: readonly StorageClassInfo[]) =>
+const nameIdeal = (t: Translate, rows: readonly StorageClassInfo[]) =>
   Math.max(
     nameCellPx(t, rows),
     ...rows
@@ -44,7 +45,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // The name plus the "default" marker that sits beside it.
     size: 300,
     accessorKey: "name",
-    meta: { floor: nameFloor },
+    meta: { floor: nameFloorPx, ideal: nameIdeal },
     header: columnHeader("columns", "name"),
     cell: ({ row }) => (
       <span className="flex items-baseline gap-2">

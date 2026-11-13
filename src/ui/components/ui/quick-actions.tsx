@@ -126,7 +126,7 @@ export function QuickActions<T>({
                   // the last row made a two-row list scroll.
                   TARGET,
                   action.variant === "destructive" &&
-                    "text-err hover:bg-err/16 hover:text-err",
+                    "text-fg-mut hover:bg-err/16 hover:text-err focus-visible:text-err",
                   reason && "cursor-default opacity-40 hover:bg-transparent"
                 )}
                 aria-label={action.label}

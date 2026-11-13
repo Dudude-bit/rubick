@@ -95,6 +95,10 @@ export const nameCellPx = (_t: unknown, rows: readonly { name: string }[]) =>
         longestText(rows, (row) => row.name, 31) * 7.2 + NAME_CHROME_PX
       );
 
+/** The most a name column gives up beside a peek: 20 glyphs, the rest middle-truncated and whole on hover. */
+export const nameFloorPx = (t: unknown, rows: readonly { name: string }[]) =>
+  Math.min(Math.ceil(20 * 7.2 + NAME_CHROME_PX), nameCellPx(t, rows));
+
 /** A column of references as wide as the longest name in it, up to `glyphs`, with the kind's glyph a node's has. */
 export const refCellPx = <Row,>(
   rows: readonly Row[],
@@ -178,7 +182,7 @@ export function createNameColumn<
   return {
     size: 320,
     accessorKey: "name",
-    meta: { floor: nameCellPx },
+    meta: { floor: nameFloorPx, ideal: nameCellPx },
     header: columnHeader("columns", "name"),
     cell: ({ row }) => (
       <span className="group/name inline-flex min-w-0 max-w-full items-center gap-1">
