@@ -219,6 +219,22 @@ describe("the strip at the narrowest window", () => {
   });
 
   /**
+   * The controls moved about 140 px sideways whenever the summary beside them
+   * grew, because they sat left of it. Fails if the controls stop being the
+   * last thing in the strip, where nothing after them can push them.
+   */
+  it("keeps the controls at the edge, after the counts", () => {
+    const footer = strip();
+    expect(footer.lastElementChild).toBe(screen.getByTestId("status-controls"));
+    expect(
+      screen
+        .getByTestId("scope-counts")
+        .compareDocumentPosition(screen.getByTestId("status-controls")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  /**
    * The theme menu listed three choices and marked none, and its modal
    * scrim swallowed the click that closed it. Fails if the current choice
    * is not marked, or the menu stops being non-modal.

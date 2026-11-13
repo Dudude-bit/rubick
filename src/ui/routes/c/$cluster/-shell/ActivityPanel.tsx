@@ -51,6 +51,7 @@ export function ActivityPanel() {
   const tab = useActivityPanelStore((state) => state.tab);
   const setOpen = useActivityPanelStore((state) => state.setOpen);
   const setTab = useActivityPanelStore((state) => state.openOn);
+  const unseen = useActivityPanelStore((state) => state.unseen);
 
   // IMPORTANT: every Zustand selector here returns a *raw* slice
   // (`state.sessions`, `state.jobs`) so its result is reference-stable
@@ -85,7 +86,7 @@ export function ActivityPanel() {
     <Sheet
       open={open}
       onOpenChange={(next) =>
-        next ? setTab(activityNamed(counts) ?? tab) : handleClose()
+        next ? setTab(unseen ?? activityNamed(counts) ?? tab) : handleClose()
       }
     >
       {/* Lives in the status bar, so the trigger is a status-bar line and

@@ -159,3 +159,29 @@ describe("the pick-up step where no Prometheus object exists", () => {
     expect(screen.queryByText(en.monitors.prometheusKindAbsent)).toBeNull();
   });
 });
+
+/**
+ * "Picked up by" repeated the card's sentence word for word. Fails if the
+ * sentence about a selector Kubernetes cannot build is drawn twice.
+ */
+describe("the pick-up step when the card above already says why it is unknown", () => {
+  it("says the unevaluable selector once", async () => {
+    const why = { kind: "unevaluable", prometheus: "kps" } as const;
+    await renderWithRouter(
+      <Detail
+        row={{
+          ...row,
+          pickedUp: { state: "unknown", by: [], why },
+          findings: [{ kind: "pickedUpUnknown", severity: "warn", why }],
+        }}
+        picture={picture({ serviceMonitorSelector: {} })}
+      />,
+      { at: "/c/prod", route: "/c/$cluster" }
+    );
+    const sentence = en.monitors.pickedUpUnevaluable.replace(
+      "{prometheus}",
+      "kps"
+    );
+    expect(document.body.textContent!.split(sentence)).toHaveLength(2);
+  });
+});

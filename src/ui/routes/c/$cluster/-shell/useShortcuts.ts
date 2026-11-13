@@ -11,6 +11,7 @@ import {
   TYPING_MS,
 } from "@/lib/shortcuts";
 import { routeListKey } from "@/lib/list-keys";
+import { backInTab } from "@/stores/scopeTabStore";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
 
 /**
@@ -49,6 +50,20 @@ export function useShortcuts(): void {
     };
 
     const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key === "ArrowLeft" &&
+        event.altKey &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.shiftKey &&
+        !event.defaultPrevented &&
+        !claimedByTarget(event.target) &&
+        !claimedByLayer(event.target)
+      ) {
+        event.preventDefault();
+        backInTab();
+        return;
+      }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       // Help is asked for from anywhere, a field and the help itself included.
       if (event.key === "F1") {

@@ -230,7 +230,6 @@ export default function ArgoCdPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={applications} label="Argo CD" />
       <SectionHeader
         title="Argo CD"
         count={
@@ -245,6 +244,7 @@ export default function ArgoCdPage() {
         }
         description={t("empty", "argoPageDescription")}
       />
+      <StaleRead read={applications} label="Argo CD" />
       <DetailTabs
         tabs={tabs}
         activeTab={tab}

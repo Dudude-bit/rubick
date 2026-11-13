@@ -139,18 +139,7 @@ export function StatusBar({
         </span>
       </div>
 
-      {/* Gives way next, the theme first, so the counts never do. The empty
-          item holds line one, so a control that cannot fit wraps too. */}
-      <div
-        data-testid="status-controls"
-        className="flex h-6 min-w-0 flex-wrap items-center justify-end gap-x-3.5 overflow-hidden"
-      >
-        <span aria-hidden="true" className="-mr-3.5 h-6" />
-        <StallIndicator />
-        <ActivityPanel />
-        <ThemeControl />
-      </div>
-      {/* The app's own chrome to the left, the cluster's health to the right. */}
+      {/* The app's own chrome to the left, the cluster's health beside it, the controls at the edge. */}
       <span aria-hidden="true" className="h-3 w-px flex-none bg-hair" />
 
       {connecting ? (
@@ -333,6 +322,19 @@ export function StatusBar({
       ) : (
         <span>{t("cluster", "notConnectedLower")}</span>
       )}
+      <span aria-hidden="true" className="h-3 w-px flex-none bg-hair" />
+      {/* Last, so the cluster's counts growing or shrinking never moves them.
+          They give way next, the theme first. The empty item holds line one,
+          so a control that cannot fit wraps too. */}
+      <div
+        data-testid="status-controls"
+        className="flex h-6 min-w-0 flex-wrap items-center justify-end gap-x-3.5 overflow-hidden"
+      >
+        <span aria-hidden="true" className="-mr-3.5 h-6" />
+        <StallIndicator />
+        <ActivityPanel />
+        <ThemeControl />
+      </div>
     </footer>
   );
 }

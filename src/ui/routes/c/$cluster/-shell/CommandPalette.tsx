@@ -368,6 +368,9 @@ export function CommandPalette() {
     [actionsOf, hostReport, actionText, t]
   );
   const entries = actionEntries ?? searchEntries;
+  const lastCoverageId = entries
+    .filter((entry) => entry.kind === "coverage")
+    .at(-1)?.id;
 
   const selectable = useMemo(() => entries.filter(isSelectable), [entries]);
   // Selection follows the row, not its position: groups arrive as each
@@ -959,6 +962,7 @@ export function CommandPalette() {
               {entries.map((entry) => (
                 <EntryRow
                   key={entry.id}
+                  pinned={entry.id === lastCoverageId}
                   domId={`${listId}-${entry.id}`}
                   entry={entry}
                   selected={entry.id === activeId}
@@ -1129,9 +1133,12 @@ function EntryRow({
   enterTried,
   onHover,
   onPick,
+  pinned = false,
 }: {
   domId: string;
   entry: Entry;
+  /** The coverage line closing the results stays whole at the bottom edge. */
+  pinned?: boolean;
   selected: boolean;
   /** Tab opens this row's actions. */
   actionable: boolean;
@@ -1173,7 +1180,16 @@ function EntryRow({
   }
 
   if (entry.kind === "coverage") {
-    return <Coverage entry={entry} />;
+    return (
+      <div
+        className={cn(
+          pinned && "sticky -bottom-1 -mx-1 -mb-1 border-t border-hair bg-raise"
+        )}
+        data-pinned={pinned || undefined}
+      >
+        <Coverage entry={entry} />
+      </div>
+    );
   }
 
   if (entry.kind === "target") {

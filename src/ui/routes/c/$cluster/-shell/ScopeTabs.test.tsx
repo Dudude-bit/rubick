@@ -698,6 +698,18 @@ describe("watching several namespaces at once", () => {
     ).toHaveAttribute("href", "/c/k3d-dev/my-access");
   });
 
+  /**
+   * "What can I do in nosuchns?" was offered for a namespace the list does
+   * not have. Fails if the question is offered for a name the cluster's
+   * listed namespaces lack.
+   */
+  it("does not offer the access question for a namespace the list lacks", async () => {
+    const user = userEvent.setup();
+    await draw(["nosuchns"]);
+    await openPicker(user);
+    expect(screen.queryByRole("link", { name: /What can I do/ })).toBeNull();
+  });
+
   it("names the whole selection where a reader cannot see the strip", async () => {
     await draw(["ns-0", "ns-1"]);
     expect(tabs()[0]).toHaveAttribute(

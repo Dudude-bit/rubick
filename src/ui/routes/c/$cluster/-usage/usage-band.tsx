@@ -8,6 +8,7 @@ import {
   Area,
   AreaChart,
   Line,
+  ReferenceArea,
   ReferenceLine,
   Tooltip,
   XAxis,
@@ -73,10 +74,40 @@ interface Row {
   i: number;
   t: number;
   v: number | null;
+  /** Always 0: gives a hover over a gap something to report, since recharts shows no tooltip for an empty payload. */
+  hit: number;
   restart: boolean;
+  /** Where `v` is null: the readings either side of the hole, `null` where there is none. */
+  gap?: { from: number | null; to: number | null };
   /** What was asked for and allowed at this bucket, where a supplier kept it. */
   request?: number | null;
   ceiling?: number | null;
+}
+
+/** The runs of buckets nothing was sampled in, with the rows either side of each. */
+function gapsOf(points: readonly UsagePoint[]): Array<{
+  start: number;
+  end: number;
+  before: number | null;
+  after: number | null;
+}> {
+  const out: ReturnType<typeof gapsOf> = [];
+  let i = 0;
+  while (i < points.length) {
+    if (points[i].v !== null) {
+      i += 1;
+      continue;
+    }
+    const start = i;
+    while (i < points.length && points[i].v === null) i += 1;
+    out.push({
+      start,
+      end: i - 1,
+      before: start > 0 ? start - 1 : null,
+      after: i < points.length ? i : null,
+    });
+  }
+  return out;
 }
 
 export default function Band(props: BandProps) {
@@ -86,7 +117,13 @@ export default function Band(props: BandProps) {
   const gradient = React.useId();
   const [band, width] = useBandWidth();
   const rows: Row[] = React.useMemo(() => {
-    const base = points.map((point, i) => ({ i, ...point }));
+    const base: Row[] = points.map((point, i) => ({ i, hit: 0, ...point }));
+    for (const gap of gapsOf(points)) {
+      const from = gap.before === null ? null : points[gap.before].t;
+      const to = gap.after === null ? null : points[gap.after].t;
+      for (let at = gap.start; at <= gap.end; at += 1)
+        base[at].gap = { from, to };
+    }
     if (!declared) return base;
     const requests = stepAlong(points, declared.request);
     const ceilings = stepAlong(points, declared.limit);
@@ -114,6 +151,7 @@ export default function Band(props: BandProps) {
   const flatLabel =
     declared === null ? ` ${t("readings", "usageNowWord")}` : "";
   const restarts = React.useMemo(() => restartIndices(points), [points]);
+  const gaps = React.useMemo(() => gapsOf(points), [points]);
 
   // A lone reading pins to the right edge: it is the newest one, and the
   // line grows leftward as more arrive.
@@ -179,6 +217,21 @@ export default function Band(props: BandProps) {
           <YAxis hide type="number" domain={[0, max]} />
 
           <ReferenceLine y={0} stroke="hsl(var(--hair))" strokeWidth={1} />
+
+          {gaps.map((gap) => (
+            <ReferenceArea
+              key={`gap-${gap.start}`}
+              data-gap=""
+              x1={gap.before ?? gap.start}
+              x2={gap.after ?? gap.end}
+              fill="currentColor"
+              fillOpacity={0.06}
+              stroke="currentColor"
+              strokeOpacity={0.3}
+              strokeDasharray="2 2"
+              ifOverflow="hidden"
+            />
+          ))}
 
           {restarts.map((index) => (
             <ReferenceLine
@@ -265,11 +318,31 @@ export default function Band(props: BandProps) {
             connectNulls={false}
             // One reading is a point, not a line: a stroke joining nothing
             // would read as a flat trend nobody has measured yet.
-            dot={
-              drawn === 1
-                ? { r: 2.5, fill: "currentColor", strokeWidth: 0 }
-                : false
-            }
+            dot={(dot: {
+              cx?: number;
+              cy?: number;
+              index?: number;
+              payload?: Row;
+            }) => {
+              const at = dot.index ?? -1;
+              const alone =
+                drawn === 1 ||
+                (points[at]?.v != null &&
+                  (at === 0 || points[at - 1].v === null) &&
+                  (at === points.length - 1 || points[at + 1].v === null));
+              return alone && dot.cx !== undefined && dot.cy !== undefined ? (
+                <circle
+                  className="recharts-dot"
+                  key={`dot-${at}`}
+                  cx={dot.cx}
+                  cy={dot.cy}
+                  r={2.5}
+                  fill="currentColor"
+                />
+              ) : (
+                <g key={`dot-${at}`} />
+              );
+            }}
             activeDot={{
               r: 3,
               fill: "currentColor",
@@ -279,6 +352,15 @@ export default function Band(props: BandProps) {
             // The poll is every few seconds and the reader may have asked for
             // less motion; a band that redraws itself on every tick is noise.
             isAnimationActive={false}
+          />
+
+          <Line
+            dataKey="hit"
+            stroke="none"
+            dot={false}
+            activeDot={false}
+            isAnimationActive={false}
+            legendType="none"
           />
 
           <Tooltip
@@ -300,6 +382,7 @@ export default function Band(props: BandProps) {
                 limit={limit}
                 limitNoun={limitNoun}
                 now={now}
+                rows={rows}
               />
             }
           />
@@ -345,9 +428,11 @@ interface UsageTooltipProps {
   limit: number | null;
   limitNoun: "limitWord" | "capacityWord";
   now: number;
+  rows: readonly Row[];
   /** Supplied by recharts. */
   active?: boolean;
   payload?: TooltipPayload[];
+  label?: number | string;
 }
 
 /** A chart you cannot read a number off is decoration. */
@@ -356,12 +441,40 @@ function UsageTooltip({
   limit,
   limitNoun,
   now,
+  rows,
   active,
   payload,
+  label,
 }: UsageTooltipProps) {
   const t = useT();
-  const point = payload?.[0]?.payload;
-  if (!active || !point || point.v === null) return null;
+  const point =
+    payload?.[0]?.payload ??
+    (typeof label === "number" ? rows[label] : undefined);
+  if (!active || !point) return null;
+  if (point.v === null) {
+    if (!point.gap) return null;
+    const { from, to } = point.gap;
+    return (
+      <div
+        className="pointer-events-none w-max rounded-md border border-hair bg-raise px-2 py-1.5 shadow-pop"
+        role="status"
+        data-gap-note=""
+      >
+        <div className="font-mono text-micro tabular-nums text-fg-mid">
+          {from !== null && to !== null
+            ? t("readings", "usageNoSample", {
+                from: clockOf(from),
+                to: clockOf(to),
+              })
+            : from !== null
+              ? t("readings", "usageNoSampleSince", { from: clockOf(from) })
+              : to !== null
+                ? t("readings", "usageNoSampleBefore", { to: clockOf(to) })
+                : t("readings", "usageNoSampleHere")}
+        </div>
+      </div>
+    );
+  }
   const share =
     limit !== null && limit > 0 ? Math.round((point.v / limit) * 100) : null;
   return (

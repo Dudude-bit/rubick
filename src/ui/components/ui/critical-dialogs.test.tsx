@@ -144,7 +144,7 @@ describe("a typed-name delete the cluster refused", () => {
   it("is kept with the writes that did not go through", async () => {
     useWriteLog.setState({ records: [] });
     const refusal = Object.assign(new Error("deployments is forbidden"), {
-      code: "FORBIDDEN",
+      code: "PERMISSION_DENIED",
     });
     render(
       <DangerousConfirmDialog
@@ -162,7 +162,7 @@ describe("a typed-name delete the cluster refused", () => {
     fireEvent.click(confirmButton());
     await waitFor(() =>
       expect(useWriteLog.getState().records).toMatchObject([
-        { title: "Delete payments?", context: PROD },
+        { title: "Delete payments", context: PROD, outcome: "refused" },
       ])
     );
   });

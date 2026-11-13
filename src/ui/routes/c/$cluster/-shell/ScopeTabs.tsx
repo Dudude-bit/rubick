@@ -1503,16 +1503,22 @@ function NamespacePopover({
         >
           {note}
         </p>
-        <Link
-          {...pageLink("my-access", undefined, context ?? undefined)}
-          onClick={() => onOpenChange(false)}
-          className="flex items-center gap-1.5 border-t border-hair px-2.5 py-1.5 text-caption text-info transition-colors hover:bg-hover"
-        >
-          <ShieldUser aria-hidden="true" className="h-3 w-3 flex-none" />
-          {scope.length === 1
-            ? t("cluster", "whatCanIDoIn", { namespace: scope[0] })
-            : t("cluster", "whatCanIDo")}
-        </Link>
+        {!(
+          listed &&
+          scope.length === 1 &&
+          !namespaces.some((ns) => ns.name === scope[0])
+        ) && (
+          <Link
+            {...pageLink("my-access", undefined, context ?? undefined)}
+            onClick={() => onOpenChange(false)}
+            className="flex items-center gap-1.5 border-t border-hair px-2.5 py-1.5 text-caption text-info transition-colors hover:bg-hover"
+          >
+            <ShieldUser aria-hidden="true" className="h-3 w-3 flex-none" />
+            {scope.length === 1
+              ? t("cluster", "whatCanIDoIn", { namespace: scope[0] })
+              : t("cluster", "whatCanIDo")}
+          </Link>
+        )}
       </PopoverContent>
     </Popover>
   );

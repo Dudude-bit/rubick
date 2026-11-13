@@ -411,6 +411,17 @@ describe("the command palette's hits", () => {
   });
 
   /**
+   * The coverage line was cut mid-glyph at the bottom of the results. Fails
+   * if the line that closes the results stops being pinned to the scroller's
+   * bottom edge.
+   */
+  it("pins the coverage line to the bottom of the results", async () => {
+    await open("marco");
+    const line = await screen.findByText(/^Names searched in/);
+    expect(line.closest("[data-pinned]")).toHaveClass("sticky");
+  });
+
+  /**
    * Marco's Ctrl+K said "Names searched in 15 kinds", "47 kinds not
    * searched" and "7 kinds cannot be listed", 69 kinds beside API resources'
    * 82, and named the refused ones without a count. Fails unless the

@@ -456,3 +456,35 @@ describe("UsageChart motion", () => {
     expect(area.style.transition).toBe("");
   });
 });
+
+describe("UsageChart where a sample was missed", () => {
+  const holed = (): UsageSample[] =>
+    [0, 1000, 2000, 3000, 100_000].map((offset, index) => ({
+      t: 1_700_000_000_000 + offset,
+      cpuMillicores: index === 4 ? 60 : 40,
+      memoryBytes: null,
+      restarts: null,
+    }));
+
+  /**
+   * A hole mid-line and lone end dots were drawn with nothing saying a sample
+   * was missed. Fails if buckets nothing was sampled in are not marked as a
+   * gap, or if hovering one does not say which span has no sample.
+   */
+  it("marks the hole and says which span has no sample", async () => {
+    const { container } = await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={holed()}
+        limit={200}
+        current={60}
+      />
+    );
+    expect(
+      container.querySelectorAll(".recharts-reference-area").length
+    ).toBeGreaterThan(0);
+    const tip = await hover(container, 300, /No sample between/);
+    expect(tip.textContent).toMatch(/No sample between \S+ and \S+/);
+  });
+});

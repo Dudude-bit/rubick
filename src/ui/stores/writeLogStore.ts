@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import { errorToShow, isRefusal, isUnanswered } from "@/lib/error-utils";
 import { shownPath } from "@/lib/hide-paths";
+import { useActivityPanelStore } from "@/stores/activityPanelStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
 export type WriteOutcome = "refused" | "failed" | "unanswered";
@@ -47,7 +48,7 @@ export function recordWriteFailure(title: string, error: unknown) {
     id: next++,
     at: Date.now(),
     context: useClusterStore.getState().currentContext,
-    title,
+    title: title.replace(/\s*[?\uFF1F]\s*$/, ""),
     said: shownPath(errorToShow(error)),
     outcome: isUnanswered(error)
       ? "unanswered"
@@ -58,4 +59,5 @@ export function recordWriteFailure(title: string, error: unknown) {
   useWriteLog.setState((state) => ({
     records: [record, ...state.records].slice(0, KEPT),
   }));
+  useActivityPanelStore.getState().markUnseen("writes");
 }

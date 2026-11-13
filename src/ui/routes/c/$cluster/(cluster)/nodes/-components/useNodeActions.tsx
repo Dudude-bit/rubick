@@ -73,8 +73,8 @@ export function useNodeActions(asked: string | null): NodeActions {
       });
     },
     onError: (error, nodeName) => {
-      noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
       toastWriteError(t("action", "cordonFailed", { node: nodeName }), error);
+      noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
     },
   });
 
@@ -88,8 +88,8 @@ export function useNodeActions(asked: string | null): NodeActions {
       });
     },
     onError: (error, nodeName) => {
-      noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
       toastWriteError(t("action", "uncordonFailed", { node: nodeName }), error);
+      noteDenied("patch", guardedOf(ResourceType.Node, null, nodeName), error);
     },
   });
 

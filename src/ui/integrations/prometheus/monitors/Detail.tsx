@@ -480,6 +480,7 @@ function PickedUpStep({
   t: T;
 }) {
   const { pickedUp, monitor } = row;
+  const saidAbove = row.findings[0]?.kind === "pickedUpUnknown";
   const by =
     pickedUp.state === "notJudged"
       ? []
@@ -501,7 +502,9 @@ function PickedUpStep({
           ? t("monitors", "notJudged")
           : pickedUp.by.length > 0
             ? t("monitors", "pickedUpCount", { n: pickedUp.by.length })
-            : null
+            : pickedUp.state === "unknown" && saidAbove
+              ? t("monitors", "notChecked")
+              : null
       }
       last={false}
     >
@@ -578,9 +581,13 @@ function PickedUpStep({
           {t("monitors", "notPickedUp")}
         </p>
       )}
-      {pickedUp.state === "unknown" && pickedUp.by.length === 0 && (
-        <p className="text-xs text-warn">{unknowableWords(pickedUp.why, t)}</p>
-      )}
+      {pickedUp.state === "unknown" &&
+        pickedUp.by.length === 0 &&
+        !saidAbove && (
+          <p className="text-xs text-warn">
+            {unknowableWords(pickedUp.why, t)}
+          </p>
+        )}
       {pickedUp.state === "notJudged" && (
         <p className="text-xs text-fg-mut">
           {t("monitors", NOT_JUDGED[pickedUp.lacks].line)}

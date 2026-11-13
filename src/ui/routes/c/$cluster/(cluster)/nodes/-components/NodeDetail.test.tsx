@@ -730,7 +730,9 @@ describe("the header actions", () => {
   it("keeps a refused cordon with the writes that did not go through", async () => {
     useWriteLog.setState({ records: [] });
     vi.mocked(commands.cordonNode).mockRejectedValueOnce(
-      Object.assign(new Error("nodes is forbidden"), { code: "FORBIDDEN" })
+      Object.assign(new Error("nodes is forbidden"), {
+        code: "PERMISSION_DENIED",
+      })
     );
     vi.mocked(useResourceDetail).mockReturnValue(
       defaultUseResourceDetailReturn(buildNode()) as never

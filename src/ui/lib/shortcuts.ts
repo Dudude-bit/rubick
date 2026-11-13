@@ -207,6 +207,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   },
   { id: "newTab", section: "tabs", keys: ["mod+t"], labelKey: "newTab" },
   { id: "closeTab", section: "tabs", keys: ["mod+w"], labelKey: "closeTab" },
+  { id: "goBack", section: "tabs", keys: ["alt+←"], labelKey: "goBack" },
   { id: "nthTab", section: "tabs", keys: ["mod+1…9"], labelKey: "nthTab" },
 
   {
@@ -230,7 +231,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   {
     id: "treeSiblings",
     section: "tree",
-    keys: ["alt+←", "alt+→"],
+    keys: ["alt+shift+←", "alt+shift+→"],
     labelKey: "treeSiblings",
   },
 
@@ -267,7 +268,7 @@ export const SECTIONS: readonly ShortcutSection[] = [
  */
 export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
   "src/ui/routes/c/$cluster/-shell/useShortcuts.ts":
-    "the central handler: ?, g-chords, page keys",
+    "the central handler: ?, g-chords, page keys, alt+left for Back",
   "src/ui/routes/c/$cluster/-shell/CommandPalette.tsx": "mod+k",
   "src/ui/components/settings/SettingsOverlay.tsx": "mod+,",
   "src/ui/routes/c/$cluster/-shell/useCopyLink.ts": "mod+shift+c",
@@ -283,7 +284,7 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
   "src/ui/routes/c/$cluster/(workloads)/pods/-components/FilesTab.tsx":
     "mod+s downloads, Backspace goes up",
   "src/ui/routes/c/$cluster/-object/ownership-keys.ts":
-    "alt+arrows move along ownership on an object's page",
+    "alt+up, alt+down and alt+shift+arrows move along ownership on an object's page",
   "src/ui/lib/focus-modality.ts":
     "not a shortcut: notices the reader is on the keyboard, so focus rings show, and wraps Tab inside the window",
   "src/ui/lib/window-activity.ts":
