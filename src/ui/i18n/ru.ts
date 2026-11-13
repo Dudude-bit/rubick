@@ -956,8 +956,8 @@ export const ru: Catalogue = {
     nodeDrained: "Узел освобождён",
     nodeDrainedDetail:
       "С узла {name} вытеснены все поды, которые можно перенести.",
-    cordonFailed: "Не удалось закрыть узел для планирования: {error}",
-    uncordonFailed: "Не удалось открыть узел для планирования: {error}",
+    cordonFailed: "Не удалось закрыть {node} для планирования",
+    uncordonFailed: "Не удалось открыть {node} для планирования",
     viewLogs: "Открыть логи",
     shell: "Оболочка",
     unbound: "не привязан",
@@ -1207,7 +1207,7 @@ export const ru: Catalogue = {
     filterByHostServiceObject: "Фильтр по хосту, service или объекту",
     podRestarted: "Pod: перезапуск запущен",
     podRestartingDetail: "Pod {name} перезапускается.",
-    failedToRestartPod: "Не удалось перезапустить под: {error}",
+    failedToRestartPod: "Не удалось перезапустить {name}",
     debugPodStillRunning: "Отладочный под ещё работает",
     debugPodDeleteHint:
       "Удалите его, когда закончите, чтобы освободить ресурсы кластера",
@@ -1383,7 +1383,7 @@ export const ru: Catalogue = {
     error: "Ошибка",
     kindDeleted: "{kind} удалён",
     kindDeletedDetail: "{kind} {name} удалён.",
-    deleteFailed: "Не удалось удалить {kind} {name}: {error}",
+    deleteFailed: "Не удалось удалить {kind} {name}",
     resourceNoun: "ресурс",
     deleteKindQuestion: "Удалить {kind}?",
     willDelete: "Объект {name} будет удалён.",

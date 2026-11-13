@@ -141,11 +141,7 @@ import type {
   PodInfo,
 } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-import {
-  toastedUnanswered,
-  toastError,
-  toastWriteError,
-} from "@/lib/toast-error";
+import { toastError, toastWriteError } from "@/lib/toast-error";
 import { errorToShow } from "@/lib/error-utils";
 import { TONE_TEXT } from "@/lib/tone";
 
@@ -609,16 +605,11 @@ export function PodDetail() {
       });
       refetch();
     },
-    onError: (err) => {
-      if (toastedUnanswered(err)) return;
-      toast({
-        title: t("action", "error"),
-        description: t("action", "failedToRestartPod", {
-          error: errorToShow(err),
-        }),
-        variant: "destructive",
-      });
-    },
+    onError: (err) =>
+      toastWriteError(
+        t("action", "failedToRestartPod", { name: name ?? "" }),
+        err
+      ),
   });
 
   const podKey = `${namespace}/${name}`;
