@@ -76,6 +76,7 @@ import { usePeekWidth } from "./peek-width";
 import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
+import { useHeldRow } from "./peek-held-row";
 import { Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
 import { ServiceHealthView } from "../-object/health-views";
@@ -170,13 +171,18 @@ export function PeekContent({
     builtIn === ResourceType.Deployment ||
     builtIn === ResourceType.StatefulSet ||
     builtIn === ResourceType.DaemonSet;
-  const summary = useMemo(
-    () =>
-      data === undefined
-        ? null
-        : source.summarise(data, target, t, { hasStatus, warned }),
-    [data, source, target, t, hasStatus, warned]
+  const held = useHeldRow(
+    builtIn,
+    namespace,
+    target.name,
+    data === undefined && error !== null
   );
+  const summary = useMemo(() => {
+    const shown = data ?? held?.row;
+    return shown === undefined
+      ? null
+      : source.summarise(shown, target, t, { hasStatus, warned });
+  }, [data, held, source, target, t, hasStatus, warned]);
   // The cache is dropped on every tab switch, so a peek mounted after the pod
   // died may never hold a read of it; the owners outlive that.
   useRememberOwners(target, data);
@@ -425,7 +431,7 @@ export function PeekContent({
                 error={error}
                 gone={gone ? (data === undefined ? lastOwners : owned) : false}
                 isLoading={isLoading}
-                readAt={dataUpdatedAt}
+                readAt={data === undefined && held ? held.at : dataUpdatedAt}
                 onRetry={() => read.refetch()}
               />
             ) : (
@@ -568,6 +574,7 @@ function PeekOverview({
               label={`${target.kind} ${target.name}`}
               since={readAt}
               error={error}
+              onRetry={onRetry}
             />
           )}
           {summary.lead}

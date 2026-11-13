@@ -48,6 +48,7 @@ import { ResourceList } from "./ResourceList";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
 import { renderWithRouter } from "@/test/render";
+import { queryKeys } from "@/lib/query-keys";
 
 interface Item {
   name: string;
@@ -306,6 +307,65 @@ describe("a list whose rows come from outside", () => {
     expect(screen.getByText("read failing")).toBeVisible();
     expect(screen.queryByText("live")).not.toBeInTheDocument();
     expect(screen.queryByText(/in this scope/)).not.toBeInTheDocument();
+  });
+});
+
+describe("a live list while the overview cannot list its kind", () => {
+  const overviewWith = (unread: unknown[]) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(queryKeys.clusterOverview(null, []), { unread });
+    return client;
+  };
+  const watched = (client: QueryClient) =>
+    draw(
+      <ResourceList<Item>
+        title="Deployments"
+        kind="Deployment"
+        columns={columns}
+        emptyStateLabel="Deployments"
+        data={[{ name: "argocd-repo-server", namespace: "argocd" }]}
+        dataUpdatedAt={Date.now()}
+        live
+      />,
+      client
+    );
+
+  /**
+   * Under a Deployments 500 the list wore "live" while the status bar and the
+   * peek said they could not read. Fails if the notice goes, if it drops the
+   * cluster's reason, or if the chip still says live.
+   */
+  it("says the rows come from the watch and names why a fresh list fails", async () => {
+    await watched(
+      overviewWith([
+        {
+          kind: "Deployment",
+          namespace: null,
+          code: "NO_ANSWER",
+          message: "500 Internal Server Error",
+        },
+      ])
+    );
+    expect(screen.getByText("argocd-repo-server")).toBeVisible();
+    expect(
+      screen.getByText(/rows come from the open watch, which is still live/)
+    ).toBeVisible();
+    expect(screen.getByText(/500 Internal Server Error/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /retry|again/i })).toBeVisible();
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+  });
+
+  /** A failing read of another kind says nothing about this list; the notice must not appear for it, nor for an overview with nothing unread. */
+  it("says nothing when the overview read this kind, or only failed on another", async () => {
+    await watched(
+      overviewWith([
+        { kind: "Pod", namespace: null, code: "NO_ANSWER", message: "boom" },
+      ])
+    );
+    expect(screen.queryByText(/open watch/)).toBeNull();
+    expect(screen.getByText("live")).toBeVisible();
   });
 });
 

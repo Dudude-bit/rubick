@@ -806,6 +806,38 @@ describe("PeekPanel", () => {
     expect(screen.getByText(/502 Bad Gateway/)).toBeInTheDocument();
   });
 
+  /**
+   * The list showed argocd-repo-server 2/2 Ready, then the peek for that row
+   * said only "Could not read". Fails if the row the list holds is not drawn
+   * under the stale notice, or if a peek with no such row draws one anyway.
+   */
+  it("draws the list's row under the stale notice when its own read fails", async () => {
+    vi.mocked(commands.getPod).mockRejectedValue(new Error("500 from get"));
+    const pod = buildPod();
+    const listed = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    listed.setQueryData(["pods", "all"], { rows: [pod], unread: [] });
+    await renderWithRouter(<PeekPanel />, {
+      client: listed,
+      at: POD_PEEK,
+      route: "/c/$cluster/$",
+    });
+    expect(await screen.findByText(/500 from get/)).toBeInTheDocument();
+    expect(screen.getByText("10.42.0.46")).toBeInTheDocument();
+    expect(screen.getByText(/Could not read Pod .* just now/)).toBeVisible();
+    expect(screen.queryByText("Could not read this Pod")).toBeNull();
+  });
+
+  /** Fails if a peek with no listed row invents a summary instead of saying it could not read. */
+  it("says only that it could not read when the list holds no row of it", async () => {
+    vi.mocked(commands.getPod).mockRejectedValue(new Error("500 from get"));
+    await wrap(POD_PEEK);
+    expect(await screen.findByText(/500 from get/)).toBeInTheDocument();
+    expect(screen.getByText("Could not read this Pod")).toBeVisible();
+    expect(screen.queryByText("10.42.0.46")).toBeNull();
+  });
+
   it("leaves for the full page and closes behind itself", async () => {
     await wrap(POD_PEEK);
     await userEvent.click(

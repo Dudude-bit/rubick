@@ -12,6 +12,8 @@ import { byNamespace, type RowGrouping } from "@/components/ui/row-grouping";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceListHeader } from "./ResourceListHeader";
 import { useKnownCount } from "./known-count";
+import { useOverviewUnreadOf } from "./overview-unread";
+import { Unknown } from "@/components/ui/unknown";
 import { useResource } from "@/hooks/useResource";
 import { useDeliveries } from "../-delivery/useDelivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -403,6 +405,9 @@ export function ResourceList<
   const dataUpdatedAt = externalDataUpdatedAt ?? queryResult.dataUpdatedAt;
   // Every list, whatever feeds it: rows a failed read kept are said to be old.
   const stale = failed !== null && resources.length > 0;
+  const freshList = useOverviewUnreadOf(listKind);
+  const warm =
+    !!live && !resyncing && !refused && failed === null && !!freshList.unread;
 
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
   const queries = useMemo(
@@ -676,7 +681,7 @@ export function ResourceList<
           // would otherwise still claim they are current.
           live={live && !resyncing && !refused}
           slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
-          stale={stale || (failed !== null && !isRefusal(failed))}
+          stale={stale || warm || (failed !== null && !isRefusal(failed))}
           slowRead={!live && queryResult.freshness.slowRead}
           refusedAt={refused ? refusedAt : undefined}
         />
@@ -696,6 +701,19 @@ export function ResourceList<
           since={dataUpdatedAt}
           error={failed}
           onRetry={retry}
+        />
+      )}
+      {warm && freshList.unread && (
+        <Unknown
+          compact
+          className="mb-2"
+          question={t("empty", "watchLiveListFailing", {
+            label: emptyStateLabel.toLowerCase(),
+          })}
+          error={Object.assign(new Error(freshList.unread.message), {
+            code: freshList.unread.code,
+          })}
+          onRetry={freshList.retry}
         />
       )}
       <UnreadNamespaces
