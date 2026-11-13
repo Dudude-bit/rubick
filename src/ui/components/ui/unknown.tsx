@@ -16,6 +16,8 @@ export interface UnknownProps {
   error: unknown;
   /** Ask the same read again. Offered whenever the caller can. */
   onRetry?: () => unknown;
+  /** One line above content still on screen, so the content does not move down. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -27,13 +29,43 @@ export interface UnknownProps {
  * a fault into a retry. The verdict around it does not move because a
  * button was pressed; only a read that succeeds moves it.
  */
-export function Unknown({ question, error, onRetry, className }: UnknownProps) {
+export function Unknown({
+  question,
+  error,
+  onRetry,
+  compact = false,
+  className,
+}: UnknownProps) {
   const t = useT();
   const copy = useCopyToClipboard();
   const message = errorToShow(error);
   const refused = isRefusal(error);
   const refusal = parseRefusal(message);
   const Glyph = refused ? Lock : TriangleAlert;
+  const said = refused
+    ? t("empty", "unknownRefused", { message })
+    : t("empty", "unknownFault", { message });
+
+  if (compact)
+    return (
+      <div
+        role="status"
+        data-read={refused ? "refused" : "failed"}
+        className={cn(
+          "flex min-h-7 items-center gap-2 rounded-md border border-dashed border-hair px-2.5 py-0.5 text-xs",
+          className
+        )}
+      >
+        <Glyph className="h-3.5 w-3.5 flex-none text-warn" aria-hidden="true" />
+        <span className="min-w-0 flex-none text-fg">{question}</span>
+        <span className="min-w-0 flex-1 truncate text-fg-mut" title={said}>
+          {said}
+        </span>
+        {onRetry && (
+          <ReadAgain error={error} onRetry={onRetry} className="flex-none" />
+        )}
+      </div>
+    );
 
   return (
     <div
@@ -53,11 +85,7 @@ export function Unknown({ question, error, onRetry, className }: UnknownProps) {
         />
         <span className="min-w-0">{question}</span>
       </p>
-      <p className="pl-[22px] text-fg-mut">
-        {refused
-          ? t("empty", "unknownRefused", { message })
-          : t("empty", "unknownFault", { message })}
-      </p>
+      <p className="pl-[22px] text-fg-mut">{said}</p>
       <div className="flex flex-wrap gap-1.5 pl-[22px] pt-0.5">
         {onRetry && <ReadAgain error={error} onRetry={onRetry} />}
         {refusal && (

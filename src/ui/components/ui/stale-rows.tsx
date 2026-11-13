@@ -24,7 +24,7 @@ export function StaleRows({
   label: string;
   since: number;
   error: unknown;
-  onRetry?: () => void;
+  onRetry?: () => unknown;
   object?: boolean;
   shared?: boolean;
   className?: string;
@@ -37,6 +37,7 @@ export function StaleRows({
   );
   return (
     <Unknown
+      compact
       className={className}
       question={t("empty", object ? "staleObject" : "staleRows", {
         label,

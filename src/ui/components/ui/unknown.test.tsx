@@ -46,6 +46,27 @@ describe("Unknown", () => {
     );
   });
 
+  /** Fails if the line over rows still on screen grows into a block, which pushed the table down by 170 px. */
+  it("says it in one line over content that stays, with the whole message on hover", () => {
+    const { container } = render(
+      <Unknown
+        compact
+        question="The rows below are from 10:26:02."
+        error={new Error("etcdserver: request timed out")}
+        onRetry={() => undefined}
+      />
+    );
+    const line = container.querySelector("[data-read]");
+    expect(line).toHaveAttribute("data-read", "failed");
+    expect(line?.querySelectorAll("p")).toHaveLength(0);
+    expect(
+      screen.getByTitle(/etcdserver: request timed out/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
+  });
+
   /** A refusal with no way out leaves the reader exactly where the sentence left them. */
   it("turns a refusal into the rule to ask for", async () => {
     render(
