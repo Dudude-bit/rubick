@@ -478,8 +478,22 @@ export function deploymentSegments(
       unread: true,
       refused: podsRefused,
     }));
+  // Apart and amber: "Ready" alone said nothing of its pods failing a probe.
+  const troubled = read
+    .filter((entry) => entry.troubled > 0)
+    .map(({ reason, troubled: count }): Segment => ({
+      label: rolloutCounted(t)(reason, count) ?? reason,
+      qualifier: t("statusWords", "troubledCounted", { n: count }),
+      count,
+      tone: "warn",
+    }));
   return [
-    ...wordSegments(read, DEPLOYMENT_ORDER, rolloutCounted(t)),
+    ...wordSegments(
+      read.map((entry) => ({ ...entry, count: entry.count - entry.troubled })),
+      DEPLOYMENT_ORDER,
+      rolloutCounted(t)
+    ),
+    ...troubled,
     ...unread,
   ];
 }

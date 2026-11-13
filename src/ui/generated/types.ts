@@ -2166,6 +2166,7 @@ export interface RolloutCount {
   reason: string;
   count: number;
   podsUnread: boolean;
+  troubled: number;
 }
 
 export interface JobCount {

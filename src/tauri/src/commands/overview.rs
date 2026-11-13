@@ -701,6 +701,10 @@ pub struct RolloutCount {
     pub reason: String,
     pub count: usize,
     pub pods_unread: bool,
+    /// Of `count`, the Deployments a Pod row in `problems` belongs to: their
+    /// own word says nothing of a pod failing its probe between restarts.
+    #[serde(default)]
+    pub troubled: usize,
 }
 
 /// What the lists of one kind that answered hold.
@@ -2095,27 +2099,55 @@ fn troubled_pods<'a>(
 }
 
 /// How many verdicts each word covers, a word whose pods went unread counted
-/// apart from the same word with them read.
-fn count_rollouts(rollouts: &[Rollout]) -> Vec<RolloutCount> {
+/// apart from the same word with them read. `troubled` answers positionally,
+/// one per rollout: whether a Pod row names one of its pods.
+fn count_rollouts(rollouts: &[Rollout], troubled: &[bool]) -> Vec<RolloutCount> {
     let mut counts: Vec<RolloutCount> = Vec::new();
-    for rollout in rollouts {
+    for (index, rollout) in rollouts.iter().enumerate() {
         let (reason, pods_unread) = (
             rollout.code(),
             matches!(rollout, Rollout::PodsUnread { .. }),
         );
+        let troubled = usize::from(troubled.get(index).copied().unwrap_or(false));
         match counts
             .iter_mut()
             .find(|entry| entry.reason == reason && entry.pods_unread == pods_unread)
         {
-            Some(entry) => entry.count += 1,
+            Some(entry) => {
+                entry.count += 1;
+                entry.troubled += troubled;
+            }
             None => counts.push(RolloutCount {
                 reason: reason.to_string(),
                 count: 1,
                 pods_unread,
+                troubled,
             }),
         }
     }
     counts
+}
+
+/// Positionally, whether a Pod row in `problems` belongs to each Deployment.
+fn deployments_troubled(deployments: &[Arc<Deployment>], problems: &[ClusterProblem]) -> Vec<bool> {
+    let named: HashSet<(Option<&str>, &str)> = problems
+        .iter()
+        .filter(|p| p.kind == "Pod")
+        .filter_map(|p| {
+            let workload = p.workload.as_ref()?;
+            (workload.kind == "Deployment")
+                .then_some((p.namespace.as_deref(), workload.name.as_str()))
+        })
+        .collect();
+    deployments
+        .iter()
+        .map(|d| {
+            named.contains(&(
+                d.metadata.namespace.as_deref(),
+                d.metadata.name.as_deref().unwrap_or_default(),
+            ))
+        })
+        .collect()
 }
 
 /// Jobs per word. A Pending one where the Warning events were not read to
@@ -2554,6 +2586,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     let problems = with_kubelet_words(problems, events.iter().copied(), input.events_short);
     let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
     let pods_troubled = troubled_pods(refs(input.scoped_pods), &problems, input.now);
+    let deployments_troubled = deployments_troubled(input.deployments, &problems);
     // One namespace's breakdown restates it; several are each the picker's.
     let namespaces = match input.scope {
         None if pods_known => namespace_loads(refs(input.scoped_pods), &problems),
@@ -2606,7 +2639,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
             complete,
         }),
         deployments: census("Deployment").map(|complete| Census {
-            read: count_rollouts(&rollouts),
+            read: count_rollouts(&rollouts, &deployments_troubled),
             complete,
         }),
         namespaces,
@@ -7668,11 +7701,51 @@ mod tests {
             reason: reason.to_string(),
             count,
             pods_unread: false,
+            troubled: 0,
         };
         assert_eq!(
-            count_rollouts(&rollouts),
+            count_rollouts(&rollouts, &[]),
             vec![count("Idle", 2), count("Paused", 1)]
         );
+    }
+
+    /// argocd-repo-server read "Ready" on the Overview while both its pods
+    /// failed their liveness probe. Fails if a Deployment a Pod row names is
+    /// not counted troubled under its word, or one no row names is.
+    #[test]
+    fn a_deployment_whose_pod_a_row_names_is_counted_troubled_under_its_word() {
+        let named = |namespace: &str, name: &str| {
+            Arc::new(Deployment {
+                metadata: ObjectMeta {
+                    name: Some(name.to_string()),
+                    namespace: Some(namespace.to_string()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+        };
+        let deployments = [named("argocd", "repo-server"), named("argocd", "redis")];
+        let problems = [ClusterProblem {
+            severity: ProblemSeverity::Warning,
+            kind: "Pod".to_string(),
+            name: "repo-server-6d99796dd8-rjqwf".to_string(),
+            namespace: Some("argocd".to_string()),
+            reason: UNHEALTHY.to_string(),
+            detail: None,
+            since: None,
+            restarts: None,
+            folded_pods: None,
+            replaced: false,
+            workload: Some(crate::resources::PodWorkload {
+                kind: "Deployment".to_string(),
+                name: "repo-server".to_string(),
+            }),
+        }];
+        let troubled = deployments_troubled(&deployments, &problems);
+        assert_eq!(troubled, vec![true, false]);
+        let ready = || Rollout::Ready;
+        let counts = count_rollouts(&[ready(), ready()], &troubled);
+        assert_eq!((counts[0].count, counts[0].troubled), (2, 1));
     }
 
     /// Marco's ledger: its pods refused, the Overview's Deployments bar drew
@@ -7687,7 +7760,7 @@ mod tests {
             available: 0,
             desired: 1,
         };
-        let counts = count_rollouts(&[unavailable(), unavailable().pods_unread()]);
+        let counts = count_rollouts(&[unavailable(), unavailable().pods_unread()], &[]);
         assert_eq!(
             counts,
             vec![
@@ -7695,11 +7768,13 @@ mod tests {
                     reason: "Unavailable".to_string(),
                     count: 1,
                     pods_unread: false,
+                    troubled: 0,
                 },
                 RolloutCount {
                     reason: "Unavailable".to_string(),
                     count: 1,
                     pods_unread: true,
+                    troubled: 0,
                 },
             ]
         );
@@ -8479,6 +8554,7 @@ mod across_namespaces {
                     reason: "Unavailable".to_string(),
                     count: 1,
                     pods_unread: true,
+                    troubled: 0,
                 }],
                 complete: true,
             })

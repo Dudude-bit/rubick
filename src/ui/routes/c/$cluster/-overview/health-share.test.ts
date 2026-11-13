@@ -7,6 +7,7 @@ import type { T } from "@/i18n/useT";
 import {
   composedDetail,
   cpuRatio,
+  deploymentSegments,
   memoryRatio,
   podSegments,
   schedulerShare,
@@ -176,6 +177,33 @@ describe("the Pods tile", () => {
     expect(drawn).toEqual([
       { label: "Running", qualifier: undefined, count: 7, tone: "ok" },
       { label: "Running", qualifier: "with a problem", count: 2, tone: "warn" },
+    ]);
+  });
+});
+
+describe("the Deployments tile", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+
+  /**
+   * argocd-repo-server counted green "Ready" on the Overview while both its
+   * pods failed their liveness probe. Fails if a Deployment whose pods a row
+   * names stays in the green Ready count, or is counted twice.
+   */
+  it("draws the Ready Deployments whose pods a row names apart, in amber", () => {
+    const drawn = deploymentSegments(
+      [{ reason: "Ready", count: 5, podsUnread: false, troubled: 1 }],
+      t
+    )
+      .filter(({ count }) => count > 0)
+      .map(({ label, qualifier, count, tone }) => ({
+        label,
+        qualifier,
+        count,
+        tone,
+      }));
+    expect(drawn).toEqual([
+      { label: "Ready", qualifier: undefined, count: 4, tone: "ok" },
+      { label: "Ready", qualifier: "with a problem", count: 1, tone: "warn" },
     ]);
   });
 });

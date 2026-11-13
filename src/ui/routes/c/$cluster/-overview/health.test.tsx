@@ -1080,7 +1080,9 @@ describe("a scope one namespace of which refused its pods", () => {
     pods: null,
     jobs: null,
     deployments: {
-      read: [{ reason: "Unavailable", count: 1, podsUnread: true }],
+      read: [
+        { reason: "Unavailable", count: 1, podsUnread: true, troubled: 0 },
+      ],
       complete: true,
     },
     nodes: [],
@@ -1114,8 +1116,8 @@ describe("a scope one namespace of which refused its pods", () => {
     jobs: { read: [{ reason: "Complete", count: 1 }], complete: false },
     deployments: {
       read: [
-        { reason: "Ready", count: 1 },
-        { reason: "Unavailable", count: 2 },
+        { reason: "Ready", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Unavailable", count: 2, podsUnread: false, troubled: 0 },
       ],
       complete: true,
     },
@@ -1617,13 +1619,13 @@ describe("the Deployments tile", () => {
   it("counts every Deployment under the word the list prints", () => {
     const segments = deploymentSegments(
       [
-        { reason: "Idle", count: 2, podsUnread: false },
-        { reason: "Stalled", count: 1, podsUnread: false },
-        { reason: "Ready", count: 4, podsUnread: false },
-        { reason: "Progressing", count: 1, podsUnread: false },
-        { reason: "Paused", count: 1, podsUnread: false },
-        { reason: "Unavailable", count: 2, podsUnread: false },
-        { reason: "Degraded", count: 1, podsUnread: false },
+        { reason: "Idle", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Stalled", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Ready", count: 4, podsUnread: false, troubled: 0 },
+        { reason: "Progressing", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Paused", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Unavailable", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Degraded", count: 1, podsUnread: false, troubled: 0 },
       ],
       t
     );
@@ -1697,11 +1699,11 @@ describe("the census legend in Russian", () => {
     jobs: null,
     deployments: {
       read: [
-        { reason: "Ready", count: 2 },
-        { reason: "Idle", count: 2 },
-        { reason: "Stalled", count: 1 },
-        { reason: "Degraded", count: 2 },
-        { reason: "Unavailable", count: 1 },
+        { reason: "Ready", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Idle", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Stalled", count: 1, podsUnread: false, troubled: 0 },
+        { reason: "Degraded", count: 2, podsUnread: false, troubled: 0 },
+        { reason: "Unavailable", count: 1, podsUnread: false, troubled: 0 },
       ],
       complete: true,
     },
@@ -2293,7 +2295,7 @@ describe("what Needs attention says it checked", () => {
     ]);
     expect(
       deploymentSegments(
-        [{ reason: "Progressing", count: 1, podsUnread: false }],
+        [{ reason: "Progressing", count: 1, podsUnread: false, troubled: 0 }],
         t
       )[0].tone
     ).toBe("pending");
@@ -3279,7 +3281,9 @@ describe("a read that failed or was refused", () => {
             pods: null,
             jobs: null,
             deployments: {
-              read: [{ reason: "Ready", count: 1, podsUnread: false }],
+              read: [
+                { reason: "Ready", count: 1, podsUnread: false, troubled: 0 },
+              ],
               complete: true,
             },
             nodes: [],
