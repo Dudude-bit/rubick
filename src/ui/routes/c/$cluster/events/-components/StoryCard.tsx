@@ -47,7 +47,7 @@ const STATE_LABEL: Record<StoryState, keyof typeof en.readings> = {
 // `done` and `unknown` are drawn neutral, never green: the reassuring colour is the one
 // the reader stops looking at, and nothing here established it.
 const STATE_TONE: Record<StoryState, string> = {
-  stillHappening: "bg-err/15 text-err",
+  stillHappening: "bg-info/15 text-info",
   settled: "bg-fg-fnt/15 text-fg-mut",
   done: "bg-fg-fnt/15 text-fg-mut",
   unknown: "bg-fg-fnt/15 text-fg-mut",
@@ -56,7 +56,7 @@ const STATE_TONE: Record<StoryState, string> = {
 };
 
 const STATE_EDGE: Record<StoryState, string> = {
-  stillHappening: "border-l-2 border-l-err/60",
+  stillHappening: "border-l-2 border-l-info/60",
   settled: "",
   done: "",
   unknown: "",
@@ -65,7 +65,7 @@ const STATE_EDGE: Record<StoryState, string> = {
 };
 
 const STATE_LINE: Record<StoryState, string> = {
-  stillHappening: "text-err",
+  stillHappening: "text-fg",
   settled: "text-fg",
   done: "text-fg",
   unknown: "text-fg-mut",
@@ -276,11 +276,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
             key={`${reason.warning}:${reason.reason}`}
             className={cn(
               "font-mono",
-              reason.warning
-                ? story.state === "stillHappening"
-                  ? "text-err"
-                  : "text-warn"
-                : "text-fg-mut"
+              reason.warning ? "text-warn" : "text-fg-mut"
             )}
           >
             {reason.reason}
@@ -424,7 +420,6 @@ function Timeline({ story }: { story: Story }) {
             showAbout={several}
             now={now}
             dated={dated}
-            burning={story.state === "stillHappening"}
           />
         ))}
       </ol>
@@ -455,23 +450,20 @@ function TimelineRow({
   showAbout,
   now,
   dated,
-  burning,
 }: {
   entry: TimelineEntry;
   showAbout: boolean;
   now: number;
   dated: boolean;
-  burning: boolean;
 }) {
   const t = useT();
-  const tone =
-    entry.fromStatus || (burning && entry.warning)
-      ? entry.warning
-        ? "text-err"
-        : "text-fg-mut"
-      : entry.warning
-        ? "text-warn"
-        : "text-fg-fnt";
+  const tone = entry.fromStatus
+    ? entry.warning
+      ? "text-err"
+      : "text-fg-mut"
+    : entry.warning
+      ? "text-warn"
+      : "text-fg-fnt";
   return (
     <li
       className={cn(

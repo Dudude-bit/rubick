@@ -702,7 +702,9 @@ export function Events() {
                 normalCount,
                 // Beside a peek the list says the cut in its own notice, and
                 // in the header too it pushed the toolbar down a row.
-                windowFull && !(narrow && view === "list") ? eventLimit : null,
+                windowFull && (stale || short || !(narrow && view === "list"))
+                  ? eventLimit
+                  : null,
                 view === "stories" ? { n: stories.length, window } : null,
                 eventType === "all"
                   ? null
@@ -849,7 +851,7 @@ export function Events() {
               }
             />
           )}
-          {short && !showSkeleton && (
+          {short && !stale && !showSkeleton && (
             <p
               className="px-1.5 py-1 text-xs text-warn"
               data-testid="events-feed-short"
@@ -918,7 +920,11 @@ export function Events() {
               showNamespace={!currentNamespace}
               question={[cacheKey, eventType, eventLimit, query].join("\n")}
               held={pointed}
-              cutAt={windowFull && limit !== null ? limit : undefined}
+              cutAt={
+                windowFull && limit !== null && !stale && !short
+                  ? limit
+                  : undefined
+              }
               // A feed filtered down to nothing has not told the reader
               // their scope is quiet — it has told them their query missed.
               // Three states, not two: the scope is quiet, the query

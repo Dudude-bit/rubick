@@ -519,10 +519,11 @@ describe("a story's timeline column", () => {
 
 describe("one story, one tone", () => {
   /**
-   * A story still happening drew its badge and sentence red and its reason
-   * amber. Fails if a burning story's reason goes back to amber.
+   * A story still happening drew its reason red while the header and the
+   * timeline drew the same Warning amber. Fails if an ongoing story turns a
+   * Warning's reason red instead of marking it with its label.
    */
-  it("draws the reasons of a story still happening in the story's red", async () => {
+  it("draws the reason of a story still happening amber, as every Warning is", async () => {
     const options: StoryOptions = {
       now: NOW,
       windowMs: HOUR,
@@ -540,7 +541,7 @@ describe("one story, one tone", () => {
       />
     );
     const reason = screen.getByText("BackOff");
-    expect(reason).toHaveClass("text-err");
-    expect(reason).not.toHaveClass("text-warn");
+    expect(reason).toHaveClass("text-warn");
+    expect(reason).not.toHaveClass("text-err");
   });
 });

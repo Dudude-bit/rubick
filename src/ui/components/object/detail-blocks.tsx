@@ -466,6 +466,8 @@ export interface CompositionProps {
   emptyMessage?: ReactNode;
   /** Why the total is what it is, e.g. "2 at a time · up to 6 retries". */
   note?: ReactNode;
+  /** What stands in the legend when the total is `null`; defaults to the refusal wording. */
+  unreadLegend?: ReactNode;
 }
 
 /**
@@ -482,6 +484,7 @@ export function Composition({
   segments,
   emptyMessage,
   note,
+  unreadLegend,
 }: CompositionProps) {
   const visible = segments.filter((segment) => segment.count > 0);
 
@@ -511,7 +514,7 @@ export function Composition({
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption">
         {total == null ? (
           <span className="text-fg-fnt">
-            <T section="empty" k="notReadableWithAccess" />
+            {unreadLegend ?? <T section="empty" k="notReadableWithAccess" />}
           </span>
         ) : visible.length === 0 ? (
           <span className="text-fg-fnt">
@@ -699,7 +702,11 @@ const EventRow = memo(function EventRow({
           className="mt-[3px] h-2.5 w-2.5 flex-none self-start"
           aria-hidden="true"
         />
-        {event.reason ? <ReasonText reason={event.reason} /> : <None />}
+        {event.reason ? (
+          <ReasonText reason={event.reason} oneLine={compact} />
+        ) : (
+          <None />
+        )}
       </span>
       {/* The row truncates, and an Event has no detail page to open, so the
        *  controller's own sentence is otherwise unreachable. */}
