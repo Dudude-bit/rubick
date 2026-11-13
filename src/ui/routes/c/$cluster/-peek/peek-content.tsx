@@ -309,6 +309,18 @@ export function PeekContent({
             />
           </SheetTitle>
           <CopyName name={target.name} />
+          {/* On the line that never wraps: below, a row it took and gave back
+              moved the actions out from under a press. */}
+          {!gone && (
+            <DataFreshness
+              className="ml-auto"
+              dataUpdatedAt={dataUpdatedAt}
+              slowed={read.freshness.slowed}
+              stale={read.freshness.stale}
+              slowRead={read.freshness.slowRead}
+              reserve={false}
+            />
+          )}
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-fg-mut">
           {/* Three cases, not two. `undefined` is a kind with no phase to
@@ -369,16 +381,6 @@ export function PeekContent({
           )}
           <DeliveryMarks deliveries={deliveries} />
           <HelmMark object={data} />
-          {!gone && (
-            <DataFreshness
-              className="ml-auto"
-              dataUpdatedAt={dataUpdatedAt}
-              slowed={read.freshness.slowed}
-              stale={read.freshness.stale}
-              slowRead={read.freshness.slowRead}
-              reserve={false}
-            />
-          )}
         </div>
         <PeekActions
           target={target}

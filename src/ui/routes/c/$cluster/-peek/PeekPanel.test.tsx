@@ -838,6 +838,27 @@ describe("PeekPanel", () => {
     expect(screen.queryByText("10.42.0.46")).toBeNull();
   });
 
+  /**
+   * The chip took a second row while polling slowed and gave it back on the
+   * next press, so Scale moved out from under the pointer between its down
+   * and its up and the click landed on the tab strip. Fails if the chip
+   * leaves the title's line for the wrapping line above the actions.
+   */
+  it("keeps its freshness on the title's line, clear of the actions", async () => {
+    connected();
+    await wrap(POD_PEEK);
+    const title = await screen.findByRole("heading", {
+      name: /crash-demo-56588f6b8c-8bj9v/,
+    });
+    const chip = await screen.findByText(/^(polling|live|polled less often)/);
+    expect(title.parentElement?.contains(chip)).toBe(true);
+    const actions = screen
+      .getByRole("button", { name: /Open full page/ })
+      .closest("div");
+    expect(actions?.parentElement?.contains(title)).toBe(true);
+    expect(chip.closest("div")?.contains(actions ?? null)).toBe(false);
+  });
+
   it("leaves for the full page and closes behind itself", async () => {
     await wrap(POD_PEEK);
     await userEvent.click(
