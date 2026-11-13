@@ -314,6 +314,29 @@ describe("a feed a watch keeps", () => {
       })
     );
 
+  /** Fails if a refused events list the watch outlives is called "read failing" on the pill beside "refused" words. */
+  it("says refused on the pill when the overview's events list was refused", async () => {
+    const { client } = await watched();
+    burst([dated("prod", 0)]);
+    expect(await screen.findByText("live")).toBeInTheDocument();
+    act(() =>
+      client.setQueryData(queryKeys.clusterOverview(null, []), {
+        warnings: [],
+        unread: [],
+        warningsShort: [
+          {
+            why: "failed",
+            namespace: null,
+            code: "PERMISSION_DENIED",
+            message: "events is forbidden",
+          },
+        ],
+      })
+    );
+    expect(await screen.findByText("refused")).toBeInTheDocument();
+    expect(screen.queryByText("read failing")).toBeNull();
+  });
+
   /** A list cut at the page cap was read, only not to its end: fails if that is drawn as a failing read. */
   it("keeps the live mark when the overview's events were only cut short", async () => {
     const { client } = await watched();
@@ -2378,11 +2401,14 @@ describe("a feed beside a peek", () => {
    * jsdom lays nothing out: the page alone is `width` pixels wide, and its
    * toolbar in one row is `bar`, about what English list controls take.
    */
-  function pageOf(width: number, bar = 620, count = 0) {
+  function pageOf(width: number, bar = 620, count = 0, countRoom = count) {
     const sizes: Array<
       ["clientWidth" | "scrollWidth", Record<string, number>]
     > = [
-      ["clientWidth", { "data-events-page": width }],
+      [
+        "clientWidth",
+        { "data-events-page": width, "data-events-count": countRoom },
+      ],
       ["scrollWidth", { "data-events-bar": bar, "data-events-count": count }],
     ];
     for (const [property, owners] of sizes) {
@@ -2600,6 +2626,19 @@ describe("a feed beside a peek", () => {
    */
   it("folds where its controls in a row leave the count no room", async () => {
     pageOf(900, 760, 160);
+    await mount("list");
+    expect(
+      await screen.findByRole("button", { name: "Feed settings" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The Stories header was cut mid-phrase ("of t...") on a page the fit sum
+   * called wide enough, because the toolbar's own width shrinks as the count
+   * squeezes it. Fails if a count that is drawn cut does not fold the toolbar.
+   */
+  it("folds when the count is drawn cut although the sum fits", async () => {
+    pageOf(1600, 300, 700, 400);
     await mount("list");
     expect(
       await screen.findByRole("button", { name: "Feed settings" })

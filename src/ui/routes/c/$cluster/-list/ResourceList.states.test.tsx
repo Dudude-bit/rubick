@@ -1,10 +1,17 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Trash2 } from "lucide-react";
 
 import type { ColumnDef } from "@/components/ui/table-features";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { ResourceList } from "./ResourceList";
@@ -200,5 +207,43 @@ describe("a list of a namespace the cluster does not have", () => {
       listed.mockRestore();
       useClusterStore.setState({ namespaceScope: [] });
     }
+  });
+});
+
+describe("a live list whose fresh list the overview was refused", () => {
+  /** The notice said "The cluster refused" while the freshness pill said "read failing"; fails if a refusal is drawn as a failure on either. */
+  it("calls the refusal a refusal on the pill, not a failing read", async () => {
+    connected();
+    const { client } = await renderWithRouter(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={[API]}
+        live
+        dataUpdatedAt={Date.now()}
+      />,
+      { at: "/c/prod/pods", route: "/c/$cluster/$" }
+    );
+    act(() =>
+      client.setQueryData(queryKeys.clusterOverview("prod", []), {
+        warnings: [],
+        warningsShort: [],
+        unread: [
+          {
+            kind: "Pod",
+            namespace: null,
+            code: "PERMISSION_DENIED",
+            message: 'pods is forbidden: User "jane" cannot list pods',
+          },
+        ],
+      })
+    );
+    expect(
+      await screen.findByText(/A fresh list of pods is failing/)
+    ).toBeVisible();
+    expect(screen.getByText("refused")).toBeVisible();
+    expect(screen.queryByText("read failing")).toBeNull();
   });
 });

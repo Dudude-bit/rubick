@@ -8,6 +8,9 @@ import { Info, Lock, TriangleAlert, X } from "lucide-react";
 
 import { ErrorDetails } from "@/components/ui/error-details";
 import { ReadAgain } from "@/components/ui/read-again";
+import { CopyRule } from "@/components/ui/unknown";
+import { parseRefusal } from "@/lib/refusal";
+import { formatWhen } from "@/lib/utils";
 import { HeldLines } from "../-list/HeldLines";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
 import { ListUnread } from "../-list/list-unread";
@@ -69,6 +72,32 @@ const NOTICE: Record<
 };
 
 const NONE_HIDDEN: readonly MetricsAbsence[] = [];
+
+const firstSeen = new Map<string, number>();
+
+/**
+ * When this screen first saw the refusal or the failure, kept across visits
+ * and not moved by a cached answer repeating it; let go once metrics answer.
+ */
+function useFirstSeen(
+  context: string | null,
+  absence: MetricsAbsence | null,
+  known: boolean
+): number | null {
+  const key =
+    context && (absence === "forbidden" || absence === "error")
+      ? `${context}:${absence}`
+      : null;
+  const [now] = useState(Date.now);
+  const kept = key ? (firstSeen.get(key) ?? now) : null;
+  useEffect(() => {
+    if (key && kept !== null && !firstSeen.has(key)) firstSeen.set(key, kept);
+    if (!key && context && known)
+      for (const seen of [...firstSeen.keys()])
+        if (seen.startsWith(`${context}:`)) firstSeen.delete(seen);
+  }, [key, kept, context, known]);
+  return kept;
+}
 
 function recheck(queryClient: QueryClient) {
   return commands
@@ -139,6 +168,8 @@ export function MetricsStatusBanner({
   if (reads.checking !== checking)
     setReads({ checking, ended: reads.ended + (checking ? 0 : 1) });
   const details = status?.message?.trim();
+  const since = useFirstSeen(context, absence, !!status);
+  const rule = details ? parseRefusal(details) : null;
   const said = useMemo(
     () =>
       absence &&
@@ -171,7 +202,7 @@ export function MetricsStatusBanner({
       role="status"
       data-read={information ? undefined : absence}
       className={cn(
-        "mb-2 flex max-w-[68ch] items-start gap-2 rounded-md border border-hair px-3 py-2 text-xs",
+        "mb-2 flex items-start gap-2 rounded-md border border-hair px-3 py-2 text-xs",
         !information && "border-dashed",
         className
       )}
@@ -193,11 +224,23 @@ export function MetricsStatusBanner({
           <p className="text-fg-mut">
             <HeldLines>{t("cluster", body)}</HeldLines>
           </p>
+          {since !== null && (
+            <p className="text-caption text-fg-fnt" data-testid="metrics-since">
+              {t(
+                "cluster",
+                absence === "forbidden"
+                  ? "metricsRefusedSince"
+                  : "metricsFailingSince",
+                { time: formatWhen(since, "clock") }
+              )}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-start gap-1.5">
           {said && (
             <ReadAgain error={said} onRetry={() => recheck(queryClient)} />
           )}
+          {rule && <CopyRule refusal={rule} />}
           {details && <ErrorDetails text={details} />}
         </div>
       </div>

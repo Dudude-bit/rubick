@@ -32,7 +32,7 @@ export function useOverviewUnreadOf(kind: ResourceKind | null | undefined) {
   const selection = useClusterStore((s) => s.namespaceScope);
   const scope = useNamespaceScope();
   const queryKey = queryKeys.clusterOverview(context, selection);
-  const { data } = useQuery({
+  const { data, dataUpdatedAt } = useQuery({
     queryKey,
     queryFn: () => readOverview(selection),
     enabled: false,
@@ -55,5 +55,5 @@ export function useOverviewUnreadOf(kind: ResourceKind | null | undefined) {
       queryFn: () => readOverview(selection),
       staleTime: 0,
     });
-  return { unread, retry };
+  return { unread, since: dataUpdatedAt, retry };
 }

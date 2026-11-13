@@ -4,7 +4,7 @@ import { ClipboardCopy, Lock, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
-import { parseRefusal, rbacRule } from "@/lib/refusal";
+import { parseRefusal, rbacRule, type Refusal } from "@/lib/refusal";
 import { ReadAgain } from "@/components/ui/read-again";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
@@ -19,6 +19,27 @@ export interface UnknownProps {
   /** One line above content still on screen, so the content does not move down. */
   compact?: boolean;
   className?: string;
+}
+
+export function CopyRule({ refusal }: { refusal: Refusal }) {
+  const t = useT();
+  const copy = useCopyToClipboard();
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() =>
+        void copy(rbacRule(refusal), t("empty", "unknownRuleCopied"))
+      }
+      className="h-auto min-h-6 items-start whitespace-normal py-0.5 text-left"
+    >
+      <ClipboardCopy
+        className="mr-1.5 mt-0.5 h-3 w-3 flex-none"
+        aria-hidden="true"
+      />
+      {t("empty", "unknownCopyRule")}
+    </Button>
+  );
 }
 
 /**
@@ -37,7 +58,6 @@ export function Unknown({
   className,
 }: UnknownProps) {
   const t = useT();
-  const copy = useCopyToClipboard();
   const message = errorToShow(error);
   const refused = isRefusal(error);
   const refusal = parseRefusal(message);
@@ -52,15 +72,16 @@ export function Unknown({
         role="status"
         data-read={refused ? "refused" : "failed"}
         className={cn(
-          "flex min-h-7 items-center gap-2 rounded-md border border-dashed border-hair px-2.5 py-0.5 text-xs",
+          "flex min-h-7 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border border-dashed border-hair px-2.5 py-0.5 text-xs",
           className
         )}
       >
         <Glyph className="h-3.5 w-3.5 flex-none text-warn" aria-hidden="true" />
-        <span className="min-w-0 shrink truncate text-fg" title={said}>
-          {question}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-fg-mut" title={said}>
+        <span className="min-w-0 text-fg">{question}</span>
+        <span
+          className="min-w-0 flex-1 basis-40 truncate text-fg-mut"
+          title={said}
+        >
           {said}
         </span>
         {onRetry && (
@@ -90,22 +111,7 @@ export function Unknown({
       <p className="pl-[22px] text-fg-mut">{said}</p>
       <div className="flex flex-wrap gap-1.5 pl-[22px] pt-0.5">
         {onRetry && <ReadAgain error={error} onRetry={onRetry} />}
-        {refusal && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              void copy(rbacRule(refusal), t("empty", "unknownRuleCopied"))
-            }
-            className="h-auto min-h-6 items-start whitespace-normal py-0.5 text-left"
-          >
-            <ClipboardCopy
-              className="mr-1.5 mt-0.5 h-3 w-3 flex-none"
-              aria-hidden="true"
-            />
-            {t("empty", "unknownCopyRule")}
-          </Button>
-        )}
+        {refusal && <CopyRule refusal={refusal} />}
       </div>
     </div>
   );

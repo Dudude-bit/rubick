@@ -96,6 +96,51 @@ describe("MetricsStatusBanner", () => {
   });
 
   /**
+   * The metrics notice was the one refusal with no age and no rule to ask
+   * for. Fails if either is missing from a refusal whose message names a rule.
+   */
+  it("says since when a refusal stands and offers the rule to ask for", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner
+        status={{
+          status: "forbidden",
+          message:
+            'pods.metrics.k8s.io is forbidden: User "jane@example.com" cannot list resource "pods" in API group "metrics.k8s.io" at the cluster scope',
+        }}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("metrics-since")).toHaveTextContent(
+        /^Refused since \d/
+      )
+    );
+    expect(
+      screen.getByRole("button", { name: "Copy the rule to ask for" })
+    ).toBeInTheDocument();
+  });
+
+  /** The notice sat at 68ch above a full-width refusal line; fails if it takes a width of its own again. */
+  it("spans the content column like every other notice above a list", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+    );
+    const banner = bannerOf(
+      "Metrics are not readable with this access, so CPU and memory are not shown"
+    );
+    expect(banner.className).not.toMatch(/max-w-/);
+  });
+
+  /** Fails if a refusal with no parseable rule invents a copy action. */
+  it("offers no rule when the refusal names none", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: "nope" }} />
+    );
+    expect(
+      screen.queryByRole("button", { name: "Copy the rule to ask for" })
+    ).toBeNull();
+  });
+
+  /**
    * The banner sat on every page with no way to close it. Fails if hiding it
    * does not hold for the cluster, or if it hides it for every cluster.
    */

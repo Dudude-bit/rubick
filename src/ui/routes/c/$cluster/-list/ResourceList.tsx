@@ -407,6 +407,10 @@ export function ResourceList<
   const freshList = useOverviewUnreadOf(listKind);
   const warm =
     !!live && !resyncing && !refused && failed === null && !!freshList.unread;
+  const warmRefusedAt =
+    warm && freshList.unread && isRefusal(freshList.unread) && freshList.since
+      ? freshList.since
+      : undefined;
 
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
   const queries = useMemo(
@@ -678,7 +682,7 @@ export function ResourceList<
           slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
           stale={stale || warm || (failed !== null && !isRefusal(failed))}
           slowRead={!live && queryResult.freshness.slowRead}
-          refusedAt={refused ? refusedAt : undefined}
+          refusedAt={refused ? refusedAt : warmRefusedAt}
         />
       )}
       {!embedded && <ListedHere kind={listKind} />}

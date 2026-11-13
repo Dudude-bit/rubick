@@ -278,8 +278,31 @@ function useFolded(
     });
     return () => observer.disconnect();
   }, [count]);
+  const [cut, setCut] = useState<{
+    layout: string;
+    width: number;
+    countPx: number;
+  } | null>(null);
+  const cutHere =
+    cut !== null &&
+    cut.layout === layout &&
+    width <= cut.width &&
+    countPx >= cut.countPx;
   const folded =
-    width > 0 && need?.layout === layout && need.px + countPx > width;
+    width > 0 &&
+    ((need?.layout === layout && need.px + countPx > width) || cutHere);
+  useLayoutEffect(() => {
+    if (!count || !page || folded) return;
+    const read = () => {
+      if (count.scrollWidth <= count.clientWidth + 1) return;
+      setCut({ layout, width: page.clientWidth, countPx });
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(read);
+    observer.observe(count);
+    return () => observer.disconnect();
+  }, [count, page, folded, layout, countPx]);
   useLayoutEffect(() => {
     if (!bar || folded) return;
     const read = () => {
@@ -836,7 +859,13 @@ export function Events() {
               slowed={!fromWatch && freshness.slowed}
               slowRead={!fromWatch && freshness.slowRead}
               stale={stale || !!warm || (nothingRead && !isRefusal(failed))}
-              refusedAt={refused ? refusedAt : undefined}
+              refusedAt={
+                refused
+                  ? refusedAt
+                  : warm && isRefusal(warm) && freshList.since
+                    ? freshList.since
+                    : undefined
+              }
             />
             <ShareScreenAction
               screen={{ title: "Events", scope: scope.scope }}

@@ -46,6 +46,22 @@ describe("Unknown", () => {
     );
   });
 
+  /** The question was cut to "A fresh l…" beside a peek; fails if the sentence is truncated again instead of wrapping. */
+  it("lets the question wrap rather than cutting it", () => {
+    render(
+      <Unknown
+        compact
+        question="A fresh list of deployments is failing."
+        error={new Error("etcdserver: request timed out")}
+      />
+    );
+    const question = screen.getByText(
+      "A fresh list of deployments is failing."
+    );
+    expect(question.className).not.toMatch(/truncate/);
+    expect(question).not.toHaveAttribute("title");
+  });
+
   /** Fails if the line over rows still on screen grows into a block, which pushed the table down by 170 px. */
   it("says it in one line over content that stays, with the whole message on hover", () => {
     const { container } = render(
