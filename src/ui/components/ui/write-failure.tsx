@@ -2,7 +2,7 @@ import { CircleX, Hourglass } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { useT } from "@/i18n/useT";
-import { errorToShow, isUnanswered } from "@/lib/error-utils";
+import { errorToShow, isRefusal, isUnanswered } from "@/lib/error-utils";
 import { shownPath } from "@/lib/hide-paths";
 
 /**
@@ -28,7 +28,10 @@ export function WriteFailure({
   return (
     <Alert variant="destructive" className={className}>
       <CircleX aria-hidden="true" />
-      <p className="select-text wrap-break-word">{said}</p>
+      <p className="font-medium">
+        {t("action", isRefusal(error) ? "writeRefusedLead" : "writeFailedLead")}
+      </p>
+      <p className="select-text wrap-break-word text-fg-mid">{said}</p>
     </Alert>
   );
 }

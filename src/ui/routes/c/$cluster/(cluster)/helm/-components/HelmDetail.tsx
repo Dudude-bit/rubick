@@ -338,7 +338,7 @@ export function HelmDetail() {
       label: t("action", "history"),
       glyph: viewGlyph(History),
       mark: historyError
-        ? readCountMark(null, t("empty", "helmHistoryUnread"))
+        ? readCountMark(null, t("empty", "helmHistoryUnread"), historyError)
         : readCountMark(historyRead ? historyRead.length : null, null),
       content: (
         <Section>

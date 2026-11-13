@@ -54,11 +54,15 @@ export function DangerousConfirmDialog({
   const [inputValue, setInputValue] = useState("");
   const [running, setRunning] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
+  // A refused write is not asked again by a second Enter: the button, or
+  // a change to the typed name, asks it again.
+  const [failedOn, setFailedOn] = useState<string | null>(null);
   const isLoading = loadingFromCaller || running;
   // Forgotten whenever the dialog is closed, whoever closed it: a caller that
   // flips `open` after a success fires no onOpenChange.
   if (!open && inputValue !== "") setInputValue("");
   if (!open && failure !== null) setFailure(null);
+  if (!open && failedOn !== null) setFailedOn(null);
   // On critical infrastructure the word to type is the cluster's, not the
   // object's: the mistake this guards against is the cluster, and typing a
   // pod's name proves nothing about which cluster the pod is on.
@@ -83,7 +87,10 @@ export function DangerousConfirmDialog({
     result
       .then(
         () => onOpenChange(false),
-        (error: unknown) => setFailure(error ?? "")
+        (error: unknown) => {
+          setFailure(error ?? "");
+          setFailedOn(inputValue);
+        }
       )
       .finally(() => {
         release();
@@ -134,6 +141,7 @@ export function DangerousConfirmDialog({
             data-autofocus
             onKeyDown={(event) => {
               if (event.key !== "Enter" || !isConfirmEnabled) return;
+              if (failedOn === inputValue) return;
               event.preventDefault();
               handleConfirm();
             }}

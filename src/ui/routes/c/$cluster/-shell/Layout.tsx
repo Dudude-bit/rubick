@@ -117,7 +117,9 @@ export function Layout({
           event.preventDefault();
           document.getElementById("main-content")?.focus();
         }}
-        className="sr-only rounded-md border border-hair bg-raise px-2.5 py-1 text-xs text-fg shadow-md focus:not-sr-only focus:absolute focus:left-[calc(13rem+0.75rem)] focus:top-14 focus:z-50 focus:outline-hidden focus:ring-1 focus:ring-info"
+        // In the flow, not over it: while focused it is a strip above the
+        // window's rows, so it covers nothing a reader needs.
+        className="sr-only flex-none focus:not-sr-only focus:flex focus:h-7 focus:items-center focus:border-b focus:border-hair focus:bg-raise focus:px-3 focus:text-xs focus:text-fg focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-info"
       >
         {t("action", "skipToContent")}
       </a>

@@ -197,6 +197,9 @@ describe("a typed confirmation whose action takes time", () => {
     expect(
       await screen.findByText('pods "api" is forbidden')
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/The cluster refused it:|It did not go through:/)
+    ).toBeInTheDocument();
   });
 
   /** Fails if Enter in a field holding the right name does nothing, which made typing the name then pressing Enter a dead end. */
@@ -218,5 +221,26 @@ describe("a typed confirmation whose action takes time", () => {
     fireEvent.change(field, { target: { value: "api-6bc99687fc-ssxg2" } });
     fireEvent.keyDown(field, { key: "Enter" });
     await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+  });
+
+  /** Fails if a second Enter after a refused delete sends the delete again, as the proxy saw twice. */
+  it("does not ask a refused write again on a second Enter", async () => {
+    const confirm = vi.fn(() => Promise.reject(new Error("forbidden")));
+    render(
+      <DangerousConfirmDialog
+        open
+        title="Delete ConfigMap"
+        confirmationText="app-config"
+        confirmLabel="Delete"
+        onOpenChange={() => undefined}
+        onConfirm={confirm}
+      />
+    );
+    const field = screen.getByRole("textbox");
+    fireEvent.change(field, { target: { value: "app-config" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    await screen.findByText("forbidden");
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(confirm).toHaveBeenCalledOnce();
   });
 });

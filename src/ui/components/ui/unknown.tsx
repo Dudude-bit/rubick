@@ -57,7 +57,9 @@ export function Unknown({
         )}
       >
         <Glyph className="h-3.5 w-3.5 flex-none text-warn" aria-hidden="true" />
-        <span className="min-w-0 flex-none text-fg">{question}</span>
+        <span className="min-w-0 shrink truncate text-fg" title={said}>
+          {question}
+        </span>
         <span className="min-w-0 flex-1 truncate text-fg-mut" title={said}>
           {said}
         </span>

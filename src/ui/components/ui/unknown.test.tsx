@@ -60,7 +60,7 @@ describe("Unknown", () => {
     expect(line).toHaveAttribute("data-read", "failed");
     expect(line?.querySelectorAll("p")).toHaveLength(0);
     expect(
-      screen.getByTitle(/etcdserver: request timed out/)
+      screen.getAllByTitle(/etcdserver: request timed out/)[0]
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Try the read again" })
