@@ -1953,7 +1953,7 @@ describe("stories", () => {
     expect(card.textContent).not.toMatch(/278 events/);
     expect(
       screen.getByText(
-        "1 story in the 1h window · 1 warning event · 2 normal events"
+        "1 story in the 1h window · 1 warning event · 2 normal events · in those stories"
       )
     ).toBeInTheDocument();
   });
@@ -2090,11 +2090,11 @@ describe("stories", () => {
 
       await userEvent.click(screen.getByRole("button", { name: "Истории" }));
       const stories = await screen.findByTitle(
-        /^1 история за 1\sч · 3 предупреждения$/
+        /^1 история за 1\sч · 3 предупреждения · в этих историях$/
       );
       expect(
         within(stories).getByTestId("events-count-drawn").textContent
-      ).toMatch(/^1 история за 1\sч · ▲ 3$/);
+      ).toMatch(/^1 история за 1\sч · ▲ 3 · в этих историях$/);
     } finally {
       useLocaleStore.setState({ choice: null });
     }

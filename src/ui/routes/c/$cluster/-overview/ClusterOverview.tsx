@@ -1,6 +1,7 @@
 import { LayoutDashboard, Lock } from "lucide-react";
 
 import { isRefusal } from "@/lib/error-utils";
+import { getDisplayPlural } from "@/lib/resource-registry";
 import { scopeIn, scopeLabel } from "@/lib/namespace-scope";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -18,6 +19,7 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { Unknown } from "@/components/ui/unknown";
+import { StaleRows } from "@/components/ui/stale-rows";
 import {
   AttentionPanel,
   AttentionPending,
@@ -166,6 +168,9 @@ export function ClusterOverview() {
   if (!overview) return pinned;
 
   const scope = scopeLabel(namespaceScope, t);
+  const refreshFailing = freshness.stale || !!error;
+  const unreadKinds = [...new Set(overview.unread.map((entry) => entry.kind))];
+  const nodesUnread = unreadKinds.includes("Node");
   const screen = {
     title: t("nav", "overview"),
     icon: LayoutDashboard,
@@ -175,16 +180,30 @@ export function ClusterOverview() {
 
   return (
     <div ref={holdsScroll} className="flex flex-col gap-[22px]">
-      <div className="flex items-center justify-end gap-3">
-        <DataFreshness
-          dataUpdatedAt={freshness.dataUpdatedAt}
-          live={following}
-          slowed={freshness.slowed}
-          stale={freshness.stale}
-          slowRead={freshness.slowRead}
+      <SectionHeader
+        title={t("nav", "overview")}
+        actions={
+          <div className="flex items-center gap-3">
+            <DataFreshness
+              dataUpdatedAt={freshness.dataUpdatedAt}
+              live={following}
+              slowed={freshness.slowed}
+              stale={refreshFailing}
+              slowRead={freshness.slowRead}
+            />
+            <ShareScreenAction screen={screen} />
+          </div>
+        }
+      />
+      {refreshFailing && (
+        <StaleRows
+          label={t("nav", "overview").toLowerCase()}
+          shared={false}
+          since={freshness.dataUpdatedAt}
+          error={error}
+          onRetry={() => void refetch()}
         />
-        <ShareScreenAction screen={screen} />
-      </div>
+      )}
       {pinned}
       {attention ? (
         <AttentionPanel
@@ -194,6 +213,7 @@ export function ClusterOverview() {
           podsUnread={overview.unread.filter((entry) => entry.kind === "Pod")}
           nodes={overview.nodes}
           nodesKnown={overview.nodesKnown}
+          refreshFailing={refreshFailing}
         />
       ) : (
         <AttentionPending />
@@ -204,6 +224,7 @@ export function ClusterOverview() {
           <SchedulerPanel
             scheduler={overview.scheduler}
             metricsAvailable={overview.metricsAvailable}
+            scoped={namespaceScope.length > 0}
           />
           <NodesPanel
             nodes={overview.nodes}
@@ -218,7 +239,16 @@ export function ClusterOverview() {
           <SectionHeader title="Nodes" />
           <div className="flex items-center gap-2 py-1">
             <Lock className="h-4 w-4 text-fg-mut" aria-hidden="true" />
-            <p className="text-xs text-fg-mut">{t("empty", "noNodeAccess")}</p>
+            <p className="text-xs text-fg-mut">
+              {nodesUnread
+                ? t("empty", "noNodeAccess")
+                : t("empty", "headroomNeedsReads", {
+                    kinds:
+                      unreadKinds.length > 0
+                        ? unreadKinds.map(getDisplayPlural).join(", ")
+                        : t("empty", "someReads"),
+                  })}
+            </p>
           </div>
         </Section>
       )}

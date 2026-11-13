@@ -1026,6 +1026,8 @@ function summarise(
       type: "Normal",
       n: normal,
     });
+  if (stories !== null && warnings + normal > 0)
+    parts.push({ words: t("count", "inThoseStories") });
   if (parts.length === 0) parts.push({ words: t("empty", "noneInline") });
   if (filter && filter.hidden !== 0)
     parts.push({

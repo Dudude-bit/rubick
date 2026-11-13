@@ -76,8 +76,18 @@ const STATE_LINE: Record<StoryState, string> = {
 /** How many of a story's pods the timeline asks about; the rest is said in words. */
 const STATUS_PODS = 5;
 
+function isToday(ms: number, now: number): boolean {
+  const at = new Date(ms);
+  const today = new Date(now);
+  return (
+    at.getFullYear() === today.getFullYear() &&
+    at.getMonth() === today.getMonth() &&
+    at.getDate() === today.getDate()
+  );
+}
+
 /**
- * A timeline row's own clock, with the date whenever it is not today.
+ * A timeline row's own clock, with the date on every row of a timeline once one row is not today.
  *
  * Time of day alone reads as today: a container that last exited at 14:03
  * three days ago — which the pod still remembers and `withStatusMarks` puts
@@ -87,17 +97,12 @@ const STATUS_PODS = 5;
  * locale, which is why the log viewer built its own 24-hour clock; this is
  * that clock, with a date in front of it where one is needed.
  */
-function clockOf(ms: number, now: number): string {
+function clockOf(ms: number, now: number, dated: boolean): string {
   const at = new Date(ms);
   const time = [at.getHours(), at.getMinutes(), at.getSeconds()]
     .map((part) => String(part).padStart(2, "0"))
     .join(":");
-  const today = new Date(now);
-  const sameDay =
-    at.getFullYear() === today.getFullYear() &&
-    at.getMonth() === today.getMonth() &&
-    at.getDate() === today.getDate();
-  if (sameDay) return time;
+  if (!dated && isToday(ms, now)) return time;
   const day = `${String(at.getDate()).padStart(2, "0")}.${String(at.getMonth() + 1).padStart(2, "0")}`;
   return `${day} ${time}`;
 }
@@ -271,7 +276,11 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
             key={`${reason.warning}:${reason.reason}`}
             className={cn(
               "font-mono",
-              reason.warning ? "text-warn" : "text-fg-mut"
+              reason.warning
+                ? story.state === "stillHappening"
+                  ? "text-err"
+                  : "text-warn"
+                : "text-fg-mut"
             )}
           >
             {reason.reason}
@@ -401,6 +410,9 @@ function Timeline({ story }: { story: Story }) {
   const reading = statuses.filter((s) => s.isPending).length;
   const entries = withStatusMarks(timelineOf(story), marks);
   const several = story.members.length > 1;
+  const dated = entries.some(
+    (entry) => entry.at !== null && !isToday(entry.at, now)
+  );
 
   return (
     <div className="mt-2 border-t border-hair pt-1.5">
@@ -411,6 +423,8 @@ function Timeline({ story }: { story: Story }) {
             entry={entry}
             showAbout={several}
             now={now}
+            dated={dated}
+            burning={story.state === "stillHappening"}
           />
         ))}
       </ol>
@@ -440,23 +454,35 @@ function TimelineRow({
   entry,
   showAbout,
   now,
+  dated,
+  burning,
 }: {
   entry: TimelineEntry;
   showAbout: boolean;
   now: number;
+  dated: boolean;
+  burning: boolean;
 }) {
   const t = useT();
-  const tone = entry.fromStatus
-    ? entry.warning
-      ? "text-err"
-      : "text-fg-mut"
-    : entry.warning
-      ? "text-warn"
-      : "text-fg-fnt";
+  const tone =
+    entry.fromStatus || (burning && entry.warning)
+      ? entry.warning
+        ? "text-err"
+        : "text-fg-mut"
+      : entry.warning
+        ? "text-warn"
+        : "text-fg-fnt";
   return (
-    <li className="grid grid-cols-[64px_8px_minmax(0,1fr)] items-baseline gap-2">
+    <li
+      className={cn(
+        "grid items-baseline gap-2",
+        dated
+          ? "grid-cols-[104px_8px_minmax(0,1fr)]"
+          : "grid-cols-[64px_8px_minmax(0,1fr)]"
+      )}
+    >
       <span className="font-mono text-fg-fnt">
-        {entry.at === null ? "?" : clockOf(entry.at, now)}
+        {entry.at === null ? "?" : clockOf(entry.at, now, dated)}
       </span>
       <span className={cn("text-micro", tone)} aria-hidden="true">
         {entry.fromStatus ? "◆" : entry.warning ? "▲" : "●"}
@@ -491,7 +517,7 @@ function TimelineRow({
           <span className="ml-1 text-fg-fnt">
             ×{entry.count}
             {entry.until !== null
-              ? `, ${clockOf(entry.at ?? entry.until, now)} → ${clockOf(entry.until, now)}`
+              ? `, ${clockOf(entry.at ?? entry.until, now, dated)} → ${clockOf(entry.until, now, dated)}`
               : ""}
           </span>
         ) : null}

@@ -8,6 +8,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { Unknown } from "@/components/ui/unknown";
 import { Eyebrow } from "@/components/ui/states";
 import { Link } from "@tanstack/react-router";
 
@@ -78,9 +79,11 @@ const ICON: Record<RowTone, typeof X> = {
 export function Detail({
   row,
   picture,
+  onRetry,
 }: {
   row: MonitorRow;
   picture: Picture;
+  onRetry?: () => void;
 }) {
   const t = useT();
   const copy = useCopyToClipboard();
@@ -108,6 +111,15 @@ export function Detail({
 
   const verdict = verdictOf(row, since, lastScrapeAgo, t);
   const Icon = ICON[tone];
+  const lead = row.findings[0];
+  const couldNotLook =
+    lead?.kind === "selectionUnread"
+      ? lead.reason
+      : lead?.kind === "pickedUpUnknown"
+        ? lead.why.kind === "unread"
+          ? lead.why.reason
+          : unknowableWords(lead.why, t)
+        : null;
 
   useShareSection("prometheus-monitor-detail", () =>
     monitorDetailSections(
@@ -160,32 +172,40 @@ export function Detail({
         </div>
       </div>
 
-      <div
-        className={cn(
-          "flex items-start gap-2.5 rounded-lg border px-3.5 py-3",
-          CARD[tone]
-        )}
-      >
-        <Icon
-          className={cn("mt-0.5 size-4 flex-none", TONE_TEXT[tone])}
-          aria-hidden
+      {couldNotLook !== null ? (
+        <Unknown
+          question={verdict.head}
+          error={couldNotLook}
+          onRetry={onRetry}
         />
-        <div className="min-w-0">
-          <p
-            className={cn(
-              "text-title font-semibold leading-snug",
-              tone === "mut" ? "text-fg" : TONE_TEXT[tone]
-            )}
-          >
-            {verdict.head}
-          </p>
-          {verdict.body && (
-            <p className="mt-1 text-xs leading-relaxed text-fg-mut">
-              {verdict.body}
-            </p>
+      ) : (
+        <div
+          className={cn(
+            "flex items-start gap-2.5 rounded-lg border px-3.5 py-3",
+            CARD[tone]
           )}
+        >
+          <Icon
+            className={cn("mt-0.5 size-4 flex-none", TONE_TEXT[tone])}
+            aria-hidden
+          />
+          <div className="min-w-0">
+            <p
+              className={cn(
+                "text-title font-semibold leading-snug",
+                tone === "mut" ? "text-fg" : TONE_TEXT[tone]
+              )}
+            >
+              {verdict.head}
+            </p>
+            {verdict.body && (
+              <p className="mt-1 text-xs leading-relaxed text-fg-mut">
+                {verdict.body}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {beat.query !== null && (
         <HeartbeatPanel row={row} beat={beat} since={since} />

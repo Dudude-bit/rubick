@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 
 import type { EventInfo } from "@/generated/types";
 import {
@@ -459,5 +459,88 @@ describe("a story's clock for a static pod", () => {
       "team-a/Service.serving.knative.dev/web",
       "team-a/Service/web",
     ]);
+  });
+});
+
+describe("a story's timeline column", () => {
+  /**
+   * One column mixed "14:03:22" and "12.11 14:03:22": the rows from today
+   * carried no date and the rest did, so the eye could not read them as one
+   * scale. Fails if a row from today drops its date while another has one, or
+   * a timeline of today alone grows one.
+   */
+  it("dates every row once any row is not from today", async () => {
+    const live = Date.now();
+    const options: StoryOptions = {
+      now: live,
+      windowMs: 48 * HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const old = {
+      ...backOff,
+      uid: "old",
+      firstTimestamp: new Date(live - 30 * HOUR).toISOString(),
+      lastTimestamp: new Date(live - 30 * HOUR).toISOString(),
+      count: 1,
+    };
+    const recent = {
+      ...backOff,
+      count: 1,
+      firstTimestamp: new Date(live - 1000).toISOString(),
+      lastTimestamp: new Date(live - 1000).toISOString(),
+    };
+    const rows = async (events: EventInfo[]) => {
+      const [story] = storiesOf(events, options);
+      await renderWithRouter(
+        <StoryCard
+          crd={undefined}
+          story={story}
+          options={options}
+          showNamespace={false}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Timeline/ }));
+      return screen
+        .getAllByRole("listitem")
+        .map((item) => item.firstElementChild?.textContent ?? "");
+    };
+
+    const mixed = await rows([old, recent]);
+    expect(mixed).toHaveLength(2);
+    for (const stamp of mixed)
+      expect(stamp).toMatch(/^\d\d\.\d\d \d\d:\d\d:\d\d$/);
+
+    cleanup();
+    const today = await rows([recent]);
+    expect(today[0]).toMatch(/^\d\d:\d\d:\d\d$/);
+  });
+});
+
+describe("one story, one tone", () => {
+  /**
+   * A story still happening drew its badge and sentence red and its reason
+   * amber. Fails if a burning story's reason goes back to amber.
+   */
+  it("draws the reasons of a story still happening in the story's red", async () => {
+    const options: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const [story] = storiesOf([backOff], options);
+    expect(story.state).toBe("stillHappening");
+    await renderWithRouter(
+      <StoryCard
+        crd={undefined}
+        story={story}
+        options={options}
+        showNamespace={false}
+      />
+    );
+    const reason = screen.getByText("BackOff");
+    expect(reason).toHaveClass("text-err");
+    expect(reason).not.toHaveClass("text-warn");
   });
 });

@@ -41,6 +41,7 @@ import type { ListQuery } from "@/generated/types";
 import { askListAccess } from "@/hooks/useListAccess";
 import { commands } from "@/lib/commands";
 import { pageLink, vendorLink, type AppLink } from "@/lib/links";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import { heldWhileAskedAgain, queryKeys } from "@/lib/query-keys";
 import { useRightsAsked } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -978,6 +979,7 @@ export function useIntegrationPages(): {
   const connections = useConnections();
 
   const context = useClusterStore((state) => state.currentContext);
+  const scope = useClusterStore((state) => state.namespaceScope);
   const isConnected = useClusterStore((state) => state.isConnected);
   const saved = useClusterForwardStore((state) => state.forwards);
   const forwarded = new Set(
@@ -1024,8 +1026,12 @@ export function useIntegrationPages(): {
         // read cluster A's numbers, which is the same rule the detection
         // scan states. A page sharing this cache entry prefixes the same
         // way — see PageCount.
-        queryKey: [context, ...declared.queryKey],
-        queryFn: declared.queryFn,
+        queryKey: [
+          context,
+          ...declared.queryKey,
+          ...(declared.scoped ? [scopeCacheKey(scope)] : []),
+        ],
+        queryFn: () => declared.queryFn(scope),
         staleTime: declared.staleTime,
         select: measureOf(declared),
       } as UseQueryOptions<unknown, Error, Measured>;

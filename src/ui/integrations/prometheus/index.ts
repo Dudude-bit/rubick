@@ -198,6 +198,7 @@ export default defineVendor({
     count: pageCount({
       queryKey: MONITORS_KEY,
       queryFn: readPicture,
+      scoped: true,
       select: monitorCount,
       tone: worstTone,
       staleTime: MONITORS_STALE,

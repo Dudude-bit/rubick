@@ -18,6 +18,7 @@ import {
   VendorReadFailure,
 } from "../../page-kit";
 import { Eyebrow, Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { useShareSection } from "@/components/share/screen-share";
 import { narrowedWords } from "@/lib/report-parts";
 import { usePicture, type Picture } from "../monitors/data";
@@ -191,7 +192,11 @@ export default function Alerts() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <StaleRead read={picture} label="Prometheus" />
-      <Header picture={picture.data} rows={rows} />
+      <Header
+        picture={picture.data}
+        rows={rows}
+        onRetry={() => void picture.refetch()}
+      />
       <div className="flex min-h-0 flex-1 gap-6 border-t border-hair pt-4">
         <Ladder
           rows={rows}
@@ -225,7 +230,15 @@ export default function Alerts() {
   );
 }
 
-function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
+function Header({
+  picture,
+  rows,
+  onRetry,
+}: {
+  picture: Picture;
+  rows: RuleRow[];
+  onRetry: () => void;
+}) {
   const t = useT();
   const read = picture.alertRules;
   const firing = rows.filter((row) => row.group === "firing").length;
@@ -260,7 +273,7 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
         <p className="mt-0.5 text-xs text-fg-mut">{t("alerts", "pageHint")}</p>
       </div>
       {read.state === "notConnected" ? (
-        <Note tone="info">
+        <Note>
           {t("alerts", "notConnected")}{" "}
           <Link
             {...pageLink("integrations", { vendor: "prometheus" })}
@@ -270,9 +283,12 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
           </Link>
         </Note>
       ) : read.state === "unanswered" ? (
-        <Note tone="warn">
-          {t("alerts", "unanswered", { reason: read.reason })}
-        </Note>
+        <Unknown
+          className="max-w-[52ch]"
+          question={t("alerts", "rulesUnanswered")}
+          error={read.reason}
+          onRetry={onRetry}
+        />
       ) : (
         <p className="text-caption text-fg-fnt">
           {t("alerts", "rulesLoaded", { n: read.rules.length })}
@@ -282,22 +298,9 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
   );
 }
 
-function Note({
-  tone,
-  children,
-}: {
-  tone: "info" | "warn";
-  children: React.ReactNode;
-}) {
+function Note({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      className={cn(
-        "max-w-[52ch] rounded-[5px] border px-3 py-2 text-xs leading-relaxed text-fg-mut",
-        tone === "warn"
-          ? "border-warn/45 bg-warn/5"
-          : "border-info/40 bg-info/5"
-      )}
-    >
+    <p className="max-w-[52ch] rounded-[5px] border border-info/40 bg-info/5 px-3 py-2 text-xs leading-relaxed text-fg-mut">
       {children}
     </p>
   );
@@ -398,7 +401,7 @@ function Ladder({
         aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-lane rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden scrollbar-lane rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
       >
         {GROUPS.map((group) => {
           const members = shown.filter((row) => row.group === group);
@@ -472,7 +475,7 @@ function Row({
         "relative mx-1 grid cursor-pointer grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-x-2 rounded-[5px] py-1.5 pl-2.5 pr-2 transition-colors",
         on ? SELECTED[tone] : "hover:bg-hover",
         on &&
-          "after:absolute after:-right-[17px] after:top-1/2 after:size-[9px] after:-translate-y-1/2 after:rotate-45 after:border-r after:border-t after:border-hair after:bg-canvas after:content-['']"
+          "after:absolute after:-right-[5px] after:top-1/2 after:size-[9px] after:-translate-y-1/2 after:rotate-45 after:border-r after:border-t after:border-hair after:bg-canvas after:content-['']"
       )}
     >
       <i

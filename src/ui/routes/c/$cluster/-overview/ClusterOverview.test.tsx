@@ -7,7 +7,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 
 vi.mock("@/lib/commands", () => ({
@@ -27,7 +27,7 @@ import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
-import { renderWithRouter } from "@/test/render";
+import { renderWithRouter, testQueryClient } from "@/test/render";
 vi.mock("@/components/share/ShareAction", async (original) =>
   (await import("@/test/shared-scope")).withSharedScope(original as never)
 );
@@ -36,8 +36,11 @@ import { ClusterOverview } from "./ClusterOverview";
 
 const getClusterOverview = vi.mocked(commands.getClusterOverview);
 
-function mount(ui: ReactElement = <ClusterOverview />) {
-  return renderWithRouter(ui, { at: "/c/prod", route: "/c/$cluster" });
+function mount(
+  ui: ReactElement = <ClusterOverview />,
+  client = testQueryClient()
+) {
+  return renderWithRouter(ui, { at: "/c/prod", route: "/c/$cluster", client });
 }
 
 beforeEach(() => {
@@ -333,5 +336,104 @@ describe("the scope the Overview tells Share", () => {
     expect(await screen.findByTestId("shared-scope")).toHaveTextContent(
       '["shop"]'
     );
+  });
+});
+
+describe("the Overview's header", () => {
+  /**
+   * The page had no title, only a freshness mark and Share floating at the
+   * right over an empty band. Fails if the heading goes, or Share and the
+   * freshness mark leave the header row.
+   */
+  it("carries a title with Share beside it", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    getClusterOverview.mockResolvedValue(FULL_OVERVIEW);
+    await mount();
+    const heading = await screen.findByRole("heading", { name: "Overview" });
+    expect(heading.closest("header, div")?.parentElement).toContainElement(
+      await screen.findByTestId("shared-scope")
+    );
+  });
+
+  /**
+   * Inside a namespace scope the headroom bars still count the whole
+   * cluster. Fails if the panel stops saying so under a scope.
+   */
+  it("says the scheduler headroom is cluster-wide inside a namespace scope", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["shop"],
+    });
+    getClusterOverview.mockResolvedValue(FULL_OVERVIEW);
+    await mount();
+    expect(await screen.findByText(/cluster-wide/)).toBeInTheDocument();
+  });
+});
+
+describe("an overview whose refresh fails over data it has", () => {
+  /**
+   * The rows stay, but a failing read is said at the top and in the header
+   * pill, and the summary stops saying Healthy. Fails if the page goes on
+   * presenting the last answer as current.
+   */
+  it("says the read is failing, keeps the page, and is not Healthy", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    getClusterOverview.mockResolvedValueOnce(FULL_OVERVIEW);
+    const client = testQueryClient();
+    await mount(<ClusterOverview />, client);
+    await screen.findByText("node-a");
+
+    getClusterOverview.mockRejectedValue("etcdserver: request timed out");
+    await act(() => client.invalidateQueries());
+
+    expect(
+      await screen.findByText(/etcdserver: request timed out/)
+    ).toBeInTheDocument();
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+    expect(screen.queryByText("Healthy")).toBeNull();
+    expect(screen.getByText("node-a")).toBeInTheDocument();
+  });
+});
+
+describe("the gap where the nodes are not shown", () => {
+  /**
+   * With pods refused the page said the nodes were forbidden while the Nodes
+   * page read all of them. Fails if the gap is worded from a node refusal
+   * when the read that failed was another kind.
+   */
+  it("names the kind that was not read, not the nodes", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    getClusterOverview.mockResolvedValue({
+      ...FULL_OVERVIEW,
+      nodesKnown: false,
+      unread: [
+        {
+          kind: "Pod",
+          namespace: null,
+          code: "PERMISSION_DENIED",
+          message: "x",
+        },
+      ],
+    });
+    await mount();
+    expect(
+      await screen.findByText(/Pods could not be read/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/permission to read the cluster's nodes/)
+    ).toBeNull();
   });
 });

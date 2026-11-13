@@ -1027,7 +1027,13 @@ export interface Extension {
  */
 export interface PageCount {
   queryKey: readonly unknown[];
-  queryFn: () => Promise<unknown>;
+  /** Called with the window's namespace scope where `scoped`: empty for the whole cluster. */
+  queryFn: (scope: readonly string[]) => Promise<unknown>;
+  /**
+   * The answer is cut to the window's namespace scope, so the key carries it
+   * and the sidebar's dot follows the namespaces the status bar counts.
+   */
+  scoped?: boolean;
   /**
    * How many of the things the page actually lists, which is the same rule
    * the resource rows follow.
@@ -1059,7 +1065,8 @@ export interface PageCount {
  */
 export function pageCount<T>(count: {
   queryKey: readonly unknown[];
-  queryFn: () => Promise<T>;
+  queryFn: (scope: readonly string[]) => Promise<T>;
+  scoped?: boolean;
   select: (data: T) => number | null;
   tone?: (data: T) => "warn" | "err" | "unchecked" | null;
   staleTime: number;

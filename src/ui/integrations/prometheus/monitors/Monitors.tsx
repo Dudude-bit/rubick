@@ -15,6 +15,7 @@ import {
   VendorReadFailure,
 } from "../../page-kit";
 import { Eyebrow, Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { useShareSection } from "@/components/share/screen-share";
 import { narrowedWords } from "@/lib/report-parts";
 import { ladderSection, ladderUnread } from "./share";
@@ -154,7 +155,11 @@ export default function Monitors() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <StaleRead read={picture} label="Prometheus" />
-      <Header picture={picture.data} rows={rows} />
+      <Header
+        picture={picture.data}
+        rows={rows}
+        onRetry={() => void picture.refetch()}
+      />
       <Notices picture={picture.data} />
       <div className="flex min-h-0 flex-1 gap-6 border-t border-hair pt-4">
         <Ladder
@@ -176,6 +181,7 @@ export default function Monitors() {
               key={keyOf(selected)}
               row={selected}
               picture={picture.data}
+              onRetry={() => void picture.refetch()}
             />
           ) : (
             // The list beside this already says why it is empty. Saying it
@@ -190,7 +196,15 @@ export default function Monitors() {
   );
 }
 
-function Header({ picture, rows }: { picture: Picture; rows: MonitorRow[] }) {
+function Header({
+  picture,
+  rows,
+  onRetry,
+}: {
+  picture: Picture;
+  rows: MonitorRow[];
+  onRetry: () => void;
+}) {
   const t = useT();
   const attention = rows.filter((row) => row.worst !== null).length;
   const says = headlineKey(picture, rows);
@@ -211,16 +225,22 @@ function Header({ picture, rows }: { picture: Picture; rows: MonitorRow[] }) {
           {t("monitors", "pageHint")}
         </p>
       </div>
-      <ScrapeTruth targets={picture.targets} />
+      <ScrapeTruth targets={picture.targets} onRetry={onRetry} />
     </div>
   );
 }
 
-function ScrapeTruth({ targets }: { targets: TargetsRead }) {
+function ScrapeTruth({
+  targets,
+  onRetry,
+}: {
+  targets: TargetsRead;
+  onRetry: () => void;
+}) {
   const t = useT();
   if (targets.state === "notConnected") {
     return (
-      <Note tone="info">
+      <Note>
         {t("monitors", "notConnected")}{" "}
         <Link
           {...pageLink("integrations", { vendor: "prometheus" })}
@@ -233,9 +253,12 @@ function ScrapeTruth({ targets }: { targets: TargetsRead }) {
   }
   if (targets.state === "unanswered") {
     return (
-      <Note tone="warn">
-        {t("monitors", "unanswered", { reason: targets.reason })}
-      </Note>
+      <Unknown
+        className="max-w-[52ch]"
+        question={t("monitors", "scrapeUnanswered")}
+        error={targets.reason}
+        onRetry={onRetry}
+      />
     );
   }
   const up = targets.targets.filter((x) => x.health === "up").length;
@@ -322,22 +345,9 @@ function ScrapeTruth({ targets }: { targets: TargetsRead }) {
   );
 }
 
-function Note({
-  tone,
-  children,
-}: {
-  tone: "info" | "warn";
-  children: React.ReactNode;
-}) {
+function Note({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      className={cn(
-        "max-w-[52ch] rounded-[5px] border px-3 py-2 text-xs leading-relaxed text-fg-mut",
-        tone === "warn"
-          ? "border-warn/45 bg-warn/5"
-          : "border-info/40 bg-info/5"
-      )}
-    >
+    <p className="max-w-[52ch] rounded-[5px] border border-info/40 bg-info/5 px-3 py-2 text-xs leading-relaxed text-fg-mut">
       {children}
     </p>
   );
@@ -469,7 +479,7 @@ function Ladder({
         aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-lane outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden scrollbar-lane outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
       >
         {GROUPS.map((group) => {
           const members = shown.filter((row) => groupOf(row) === group);
@@ -577,7 +587,7 @@ function Row({
         "relative mx-1 grid cursor-pointer grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-x-2 rounded-[5px] py-1.5 pl-2.5 pr-2 transition-colors",
         on ? SELECTED[tone] : "hover:bg-hover",
         on &&
-          "after:absolute after:-right-[17px] after:top-1/2 after:size-[9px] after:-translate-y-1/2 after:rotate-45 after:border-r after:border-t after:border-hair after:bg-canvas after:content-['']"
+          "after:absolute after:-right-[5px] after:top-1/2 after:size-[9px] after:-translate-y-1/2 after:rotate-45 after:border-r after:border-t after:border-hair after:bg-canvas after:content-['']"
       )}
     >
       <i
