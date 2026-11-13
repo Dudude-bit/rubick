@@ -987,9 +987,6 @@ export const en = {
     askForLastRange: "Ask for the last {range}",
     rangeNeedsPrometheus:
       "Needs a Prometheus: metrics-server keeps no history to range over",
-    realtimeUnavailable: "Real-time updates unavailable",
-    fallingBackToPolling:
-      "{title}: live updates stopped; the list is read again periodically.",
     dismissJob: "Dismiss {job} {name}",
     closeTerminal: "Close terminal",
     startShellIn: "Start a shell in {container}",
@@ -5633,7 +5630,6 @@ export const en = {
         "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read; raise the limit to search further back.",
     },
     kindCouldNotRead: "Could not read this {kind}",
-    whatIsThisKind: "What is this {kind}?",
     moreFieldsInYaml: {
       one: "{n} more field, in the YAML tab",
       other: "{n} more fields, in the YAML tab",

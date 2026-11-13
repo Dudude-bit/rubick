@@ -984,9 +984,6 @@ export const ru: Catalogue = {
     askForLastRange: "Запросить последние {range}",
     rangeNeedsPrometheus:
       "Нужен Prometheus: metrics-server не хранит историю, по которой можно выбрать интервал",
-    realtimeUnavailable: "Обновления в реальном времени недоступны",
-    fallingBackToPolling:
-      "{title}: живые обновления остановились, список перечитывается периодически.",
     dismissJob: "Убрать {job} {name}",
     closeTerminal: "Закрыть терминал",
     startShellIn: "Запустить оболочку в {container}",
@@ -6253,7 +6250,6 @@ export const ru: Catalogue = {
         "Среди последних {n} событий в {scope} по запросу «{query}» ничего нет. Более старые не читались: увеличьте лимит, чтобы искать глубже.",
     },
     kindCouldNotRead: "Не удалось прочитать этот объект ({kind})",
-    whatIsThisKind: "Что это за объект ({kind})?",
     moreFieldsInYaml: {
       one: "Ещё {n} поле, на вкладке YAML",
       few: "Ещё {n} поля, на вкладке YAML",
