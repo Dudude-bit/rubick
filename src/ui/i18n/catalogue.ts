@@ -6752,9 +6752,9 @@ export const en = {
     couldNotReadKind: "Could not read this {kind}: {error}",
     couldNotReadEvents: "Could not read events.",
     replicaSetWarningsUnread:
-      "The warnings on its ReplicaSets could not be read, so a refusal written there is not shown:",
+      "Could not read the events of its ReplicaSets, where a failure to create its pods is written:",
     jobWarningsUnread:
-      "The warnings on its Jobs could not be read, so a refusal written there is not shown:",
+      "Could not read the events of its Jobs, where a failure to create their pods is written:",
     eventsRefusedHere: "You do not have permission to read these events.",
     eventsNoneReadAt:
       "Read at {time}: none yet. The cluster keeps events for about an hour.",

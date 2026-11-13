@@ -128,7 +128,7 @@ describe("one object's events, live", () => {
       />
     );
     expect(screen.getByTestId("owned-events-unread")).toHaveTextContent(
-      "The warnings on its ReplicaSets could not be read, so a refusal written there is not shown: replicasets.apps is forbidden"
+      "Could not read the events of its ReplicaSets, where a failure to create its pods is written: replicasets.apps is forbidden"
     );
   });
 });
