@@ -253,8 +253,8 @@ function Ranges({
           title={t("action", "readTheLast", { range })}
           className={
             selected === range
-              ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"
-              : "rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
+              ? "rounded bg-sel px-1.5 py-0.5 text-caption text-fg"
+              : "rounded px-1.5 py-0.5 text-caption text-fg-mut hover:bg-hover hover:text-fg"
           }
         >
           {range}
@@ -284,7 +284,7 @@ function Bar({
     <div
       role="status"
       data-testid={testId ?? "log-history"}
-      className={`flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-[11px] ${TONES[tone]}`}
+      className={`flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-caption ${TONES[tone]}`}
     >
       {children}
     </div>

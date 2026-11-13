@@ -440,7 +440,7 @@ export function createDataKeysColumn<
       const keys = row.original.dataKeys ?? [];
       if (keys.length === 0) return <None />;
       return (
-        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-caption">
           {keys.slice(0, maxDisplay).map((key) => (
             <span key={key} className="font-mono text-fg-mut">
               {key}

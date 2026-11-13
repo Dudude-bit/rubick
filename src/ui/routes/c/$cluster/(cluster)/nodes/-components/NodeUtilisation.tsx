@@ -159,7 +159,7 @@ export function NodeUtilisation({
 
   return (
     <div>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-1 pb-2 text-[11px] text-fg-fnt">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-1 pb-2 text-caption text-fg-fnt">
         <span>{t("empty", "trendsSortNote")}</span>
         {power.state === "ready" && (
           <span>
@@ -169,7 +169,7 @@ export function NodeUtilisation({
         )}
         <span className="ml-auto flex items-center gap-0.5">
           {query.isFetching && (
-            <span className="mr-1 text-[10px]">
+            <span className="mr-1 text-micro">
               {t("action", "readingInline")}
             </span>
           )}
@@ -181,8 +181,8 @@ export function NodeUtilisation({
               onClick={() => onRange(candidate)}
               className={
                 candidate === range
-                  ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"
-                  : "rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
+                  ? "rounded bg-sel px-1.5 py-0.5 text-caption text-fg"
+                  : "rounded px-1.5 py-0.5 text-caption text-fg-mut hover:bg-hover hover:text-fg"
               }
             >
               {candidate}
@@ -191,7 +191,7 @@ export function NodeUtilisation({
         </span>
       </div>
       {power.state === "unreachable" && (
-        <p className="px-1 pb-2 text-[11px] text-warn" role="status">
+        <p className="px-1 pb-2 text-caption text-warn" role="status">
           {t("empty", "vendorDidNotAnswer", {
             vendor: power.vendor,
             reason: power.reason,
@@ -199,7 +199,7 @@ export function NodeUtilisation({
         </p>
       )}
       {query.error && (
-        <p className="px-1 pb-2 text-[11px] text-warn" role="status">
+        <p className="px-1 pb-2 text-caption text-warn" role="status">
           {t("empty", "vendorDidNotAnswer", {
             vendor: power.state === "ready" ? power.vendor : "",
             reason: errorToShow(query.error),
@@ -207,7 +207,7 @@ export function NodeUtilisation({
         </p>
       )}
       {power.state === "ready" && fromPods && (
-        <p className="px-1 pb-2 text-[11px] text-fg-mut" role="note">
+        <p className="px-1 pb-2 text-caption text-fg-mut" role="note">
           {t("empty", "nodesFromPods", { vendor: power.vendor })}
         </p>
       )}
@@ -330,12 +330,14 @@ function Row({
         >
           {trend.node.name}
         </Link>
-        {facts && <span className="ml-2 text-[11px] text-fg-fnt">{facts}</span>}
+        {facts && (
+          <span className="ml-2 text-caption text-fg-fnt">{facts}</span>
+        )}
       </TableCell>
       <Lane lane={trend.cpu} blind={trend.blind} quiet={quiet} />
       <Lane lane={trend.memory} blind={trend.blind} quiet={quiet} />
       {note != null && (
-        <TableCell className="text-[11px] text-fg-fnt">{note}</TableCell>
+        <TableCell className="text-caption text-fg-fnt">{note}</TableCell>
       )}
     </TableRow>
   );
@@ -359,7 +361,7 @@ function Lane({
   const t = useT();
   if (lane === null) {
     return (
-      <TableCell className="text-[11px] text-fg-fnt">
+      <TableCell className="text-caption text-fg-fnt">
         {quiet ? <None /> : t("empty", BLIND_SHORT[blind ?? "noSeries"])}
       </TableCell>
     );
@@ -368,7 +370,7 @@ function Lane({
     <TableCell>
       <div className="flex items-center gap-3">
         <Sparkline points={lane.points} />
-        <span className="font-mono text-[11px] tabular-nums text-fg-mut">
+        <span className="font-mono text-caption tabular-nums text-fg-mut">
           {t("readings", "peakAvgPercent", {
             peak: Math.round(lane.peak),
             avg: Math.round(lane.avg),

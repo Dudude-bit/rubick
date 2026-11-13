@@ -50,6 +50,13 @@
   --animate-fade-in-slow: fade-in var(--animation-slow) ease-out;
   --animate-tab-live: tab-live 2.4s ease-out infinite;
 
+  /* The type scale. Sizes set no line-height, so a line inherits its rhythm
+     from the block it sits in, as the arbitrary sizes they replace did. */
+  --text-micro: 10px;
+  --text-caption: 11px;
+  --text-title: 13px;
+  --text-display: 15px;
+
   --font-sans: Inter Variable, Inter, system-ui, sans-serif;
   --font-mono: JetBrains Mono Variable, JetBrains Mono, Consolas, monospace;
 

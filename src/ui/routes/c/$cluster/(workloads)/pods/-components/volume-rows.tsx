@@ -62,7 +62,7 @@ export function VolumeRows({
               {/* The source word already says the kind, so the reference
                   does not repeat it: `configMap app-config`, not
                   `configMap ConfigMap/app-config`. */}
-              <span className="text-[11px] text-fg-fnt">{volume.source}</span>
+              <span className="text-caption text-fg-fnt">{volume.source}</span>
               {volumeSources(volume).map((source, at) =>
                 source.name ? (
                   <ResourceRef
@@ -73,7 +73,7 @@ export function VolumeRows({
                     showKind={false}
                   />
                 ) : (
-                  <span key={at} className="font-mono text-[11px] text-fg-mut">
+                  <span key={at} className="font-mono text-caption text-fg-mut">
                     {source.kind}
                   </span>
                 )
@@ -114,13 +114,13 @@ function Mounts({
     // Declared and read by no container. The YAML does not point at it and
     // nothing fails, so the pod runs without the config somebody added.
     return (
-      <span className="text-[11px] text-warn">
+      <span className="text-caption text-warn">
         {t("empty", "mountedByNothing")}
       </span>
     );
   }
   return (
-    <span className="min-w-0 wrap-break-word text-[11px] text-fg-fnt">
+    <span className="min-w-0 wrap-break-word text-caption text-fg-fnt">
       {groupMounts(volume.mounts).map(({ key, mount, containers }) => {
         const who = mountedBy(containers, t, containerCount);
         return (

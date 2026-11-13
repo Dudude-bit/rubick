@@ -123,7 +123,7 @@ export default function AwsLoadBalancerPage() {
             {t("empty", "readingIngresses")}
           </p>
         ) : groups.length === 0 ? (
-          <p className="max-w-[68ch] text-[11.5px] text-fg-mut">
+          <p className="max-w-[68ch] text-xs text-fg-mut">
             {t("empty", "albNoIngressAsksForClass")}
           </p>
         ) : (

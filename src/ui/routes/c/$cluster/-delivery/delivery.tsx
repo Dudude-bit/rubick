@@ -51,7 +51,7 @@ export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
           </>
         );
         const className = cn(
-          "inline-flex items-center gap-1.5 text-[11px]",
+          "inline-flex items-center gap-1.5 text-caption",
           mark.tone === "warn" ? "text-warn" : "text-fg-fnt"
         );
         return mark.to ? (
@@ -90,7 +90,7 @@ export function HelmMark({ object }: { object: unknown }) {
     <Link
       {...helmReleaseLink({ source: "native", ...release })}
       title={t("empty", "installedByRelease", { name: release.name })}
-      className="inline-flex items-center gap-1.5 text-[11px] text-fg-fnt hover:text-fg-mut"
+      className="inline-flex items-center gap-1.5 text-caption text-fg-fnt hover:text-fg-mut"
     >
       <Package className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span className="font-mono">{release.name}</span>
@@ -204,7 +204,7 @@ export function DeliveryCell({ deliveries }: { deliveries: Delivery[] }) {
   return (
     <span
       className={cn(
-        "text-[11px]",
+        "text-caption",
         cell.tone === "warn" ? "text-warn" : "text-fg-fnt"
       )}
     >

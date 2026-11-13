@@ -1508,7 +1508,7 @@ function DataTableInner<TData extends RowData>({
       >
         <TableCell
           colSpan={visibleColumnCount}
-          className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
+          className="px-2.5 pb-1 pt-3 text-caption text-fg-fnt"
         >
           {pinned ? (
             <span className="sticky left-2.5 inline-block">{item.caption}</span>
@@ -1598,7 +1598,7 @@ function DataTableInner<TData extends RowData>({
               whole is only advice: "why is this list slow" and "why is my
               pod not here" have the same answer often enough. */}
             {cutAt !== undefined ? (
-              <div className="flex items-center gap-1.5 text-[11px] text-fg-mut">
+              <div className="flex items-center gap-1.5 text-caption text-fg-mut">
                 <AlertTriangle
                   className="h-3.5 w-3.5 shrink-0 text-warn"
                   aria-hidden="true"
@@ -1609,7 +1609,7 @@ function DataTableInner<TData extends RowData>({
               </div>
             ) : (
               isLong && (
-                <span className="text-[11px] text-fg-fnt">
+                <span className="text-caption text-fg-fnt">
                   {t("readings", "longListTrim", { n: data.length })}
                 </span>
               )
@@ -1807,13 +1807,13 @@ function DataTableInner<TData extends RowData>({
                             </span>
                           </p>
                           {more && (
-                            <p className="max-w-md text-[11px] text-balance text-fg-fnt">
+                            <p className="max-w-md text-caption text-balance text-fg-fnt">
                               {t("empty", "notAllSearched")}
                             </p>
                           )}
                           {searched && (
                             <p
-                              className="max-w-md text-[11px] text-balance text-fg-fnt"
+                              className="max-w-md text-caption text-balance text-fg-fnt"
                               data-testid="searched-columns"
                             >
                               {t("empty", "searchedColumns", {
@@ -1870,7 +1870,7 @@ function DataTableInner<TData extends RowData>({
           stable page 2 — objects appear and vanish under the reader, so a row
           moves to another page they have to go and find — and Ctrl-F would
           only search the rows on screen. */}
-        <div className="flex flex-none flex-wrap items-center justify-between gap-x-3 text-[11px] text-fg-fnt">
+        <div className="flex flex-none flex-wrap items-center justify-between gap-x-3 text-caption text-fg-fnt">
           <div>
             {/* The noun is the kind's own plural and stays as the cluster
               spells it; only the frame around it is translated. Without one

@@ -79,12 +79,12 @@ function Missing({ title, body }: { title: string; body: string }) {
     <Section className="max-w-[64ch] py-8">
       <div className="flex items-center gap-2">
         <PackageOpen className="size-4 text-fg-fnt" aria-hidden />
-        <h2 className="text-[13px] font-semibold tracking-tight text-fg">
+        <h2 className="text-title font-semibold tracking-tight text-fg">
           {title}
         </h2>
       </div>
       <p className="text-xs text-fg-mut">{body}</p>
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {parts(t("empty", "integrationsPageLists"), {
           link: (
             <Link

@@ -389,7 +389,7 @@ export function ReplicaSetDetail() {
       badges={
         replicaSet &&
         standing !== "unversioned" && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {emptyPods
               ? t("empty", "scaledToZero")
               : t("count", "slashReady", { n: ready, total: desired })}

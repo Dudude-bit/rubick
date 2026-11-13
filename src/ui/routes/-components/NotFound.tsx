@@ -51,7 +51,7 @@ export function EmptyPage({
   return (
     <div className="flex h-full justify-center px-6 py-12">
       <div className="w-full max-w-[420px]">
-        <h2 className="text-[13px] font-semibold tracking-tight text-fg">
+        <h2 className="text-title font-semibold tracking-tight text-fg">
           {title}
         </h2>
         <p className="mt-[3px] text-xs text-fg-mut">{body}</p>

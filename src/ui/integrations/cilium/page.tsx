@@ -302,7 +302,7 @@ function CoverageRow({ one, last }: { one: Coverage; last: boolean }) {
         ))}
       </div>
       {one.unreadable > 0 && (
-        <p className="text-[11.5px] text-warn">
+        <p className="text-xs text-warn">
           {t("readings", "ciliumUnreadablePolicies", {
             n: one.unreadable,
           })}
@@ -356,7 +356,7 @@ function DirectionLine({
     (selecting) => selecting.restricts[direction]
   );
   return (
-    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11.5px]">
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
       <Icon
         aria-hidden
         className={cn("size-3 flex-none self-center", TONE_TEXT[look.tone])}
@@ -410,7 +410,7 @@ function PolicyRef({ selecting }: { selecting: Selecting }) {
         }
       />
       {note && (
-        <span className={cn("text-[10.5px]", TONE_TEXT[note.tone])}>
+        <span className={cn("text-caption", TONE_TEXT[note.tone])}>
           {t("readings", note.word)}
         </span>
       )}

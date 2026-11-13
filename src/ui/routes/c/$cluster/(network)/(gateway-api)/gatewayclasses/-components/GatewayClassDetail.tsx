@@ -236,7 +236,7 @@ export function GatewayClassDetail() {
       createdAt={cls?.createdAt}
       badges={
         cls && (
-          <span className="font-mono text-[11px] text-fg-mut">
+          <span className="font-mono text-caption text-fg-mut">
             {cls.controllerName}
           </span>
         )

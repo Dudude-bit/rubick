@@ -286,7 +286,7 @@ function PrintedTable({
       getRowPeek={targetOf}
       headerContent={
         printed.data?.more ? (
-          <div className="flex items-center gap-3 text-sm text-fg-mut">
+          <div className="flex items-center gap-3 text-xs text-fg-mut">
             <span>
               {t("empty", "printedMore", { count: rows?.length ?? 0 })}
             </span>

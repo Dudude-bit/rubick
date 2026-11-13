@@ -319,7 +319,7 @@ export function HelmDetail() {
             className="max-w-lg"
           />
           {!helmCliAvailable && (
-            <p className="text-[11px] text-warn">
+            <p className="text-caption text-warn">
               {t("empty", "helmCliMissing")}
             </p>
           )}
@@ -385,7 +385,7 @@ export function HelmDetail() {
                       <TableCell className="font-mono text-fg">
                         {rev.revision}
                         {current && (
-                          <span className="ml-1.5 text-[11px] text-fg-fnt">
+                          <span className="ml-1.5 text-caption text-fg-fnt">
                             {t("empty", "revisionCurrentWord")}
                           </span>
                         )}
@@ -475,7 +475,7 @@ export function HelmDetail() {
                       header already says which namespace the release is in,
                       and printing it on every row also claimed a namespace
                       for the cluster-scoped kinds, which have none. */}
-                  <span className="truncate text-[11px] text-fg-fnt">
+                  <span className="truncate text-caption text-fg-fnt">
                     {object.namespace === release?.namespace
                       ? ""
                       : object.namespace}
@@ -574,10 +574,10 @@ export function HelmDetail() {
         badges={
           release && (
             <>
-              <span className="font-mono text-[11px] text-fg-mut">
+              <span className="font-mono text-caption text-fg-mut">
                 {release.chart}:{release.chartVersion}
               </span>
-              <span className="text-[11px] text-fg-fnt">
+              <span className="text-caption text-fg-fnt">
                 {t("columns", "revisionInline", { n: release.revision })}
               </span>
             </>

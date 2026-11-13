@@ -24,7 +24,7 @@ export function Fact({
 }) {
   return (
     <div className="flex items-baseline gap-3">
-      <span className="w-28 flex-none text-[11px] text-fg-fnt">{label}</span>
+      <span className="w-28 flex-none text-caption text-fg-fnt">{label}</span>
       <span className="min-w-0">{children}</span>
     </div>
   );

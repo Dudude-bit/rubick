@@ -65,13 +65,13 @@ function nowValue(facts: AutoscalerFacts, t: T) {
         >
           <span className="font-mono">{metric.label}</span>
           {metric.current === null ? (
-            <span className="text-[11px] text-warn">
+            <span className="text-caption text-warn">
               {t("readings", "govNoReading")}
             </span>
           ) : (
             <span className="font-mono">{metric.current}</span>
           )}
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {t("readings", "govAgainstTarget", { target: metric.target })}
             {metric.from
               ? ` · ${t("readings", "govMetricFrom", { source: metric.from })}`
@@ -79,7 +79,7 @@ function nowValue(facts: AutoscalerFacts, t: T) {
           </span>
         </span>
       ))}
-      {scaled && <span className="text-[11px] text-fg-fnt">{scaled}</span>}
+      {scaled && <span className="text-caption text-fg-fnt">{scaled}</span>}
     </span>
   );
 }

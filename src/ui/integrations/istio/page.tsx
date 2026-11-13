@@ -247,7 +247,7 @@ function MapTab({
   return (
     <div className="flex flex-col gap-2">
       <RoutingMap data={data} />
-      <p className="text-[11px] text-fg-fnt">{t("empty", "restOnNodeHint")}</p>
+      <p className="text-caption text-fg-fnt">{t("empty", "restOnNodeHint")}</p>
     </div>
   );
 }
@@ -275,7 +275,7 @@ function RoutesTab({
         <p className="text-xs text-fg-mut">
           {t("empty", "istioNothingRoutes")}
         </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           {t("empty", "istioNoVirtualServiceHost")}
         </p>
       </div>
@@ -301,7 +301,7 @@ function RoutesTab({
       aside={
         <>
           {backingLoading && (
-            <span className="text-[11px] text-fg-fnt">
+            <span className="text-caption text-fg-fnt">
               {t("empty", "checkingWhatIsBehind")}
             </span>
           )}
@@ -406,7 +406,7 @@ function RuleRow({
 }) {
   const t = useT();
   return (
-    <div className="grid grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
+    <div className="grid grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-baseline gap-x-3 text-xs text-fg-mut">
       <span className="truncate font-mono text-fg-mid">
         {route.matches.length === 0
           ? t("empty", "everyRequest")
@@ -439,7 +439,7 @@ function RuleRow({
                   <span className="font-mono text-fg-fnt">
                     {destination.host}
                   </span>
-                  <span className="rounded-[3px] border border-dashed border-fg-fnt/60 px-1 text-[10px] text-fg-fnt">
+                  <span className="rounded-[3px] border border-dashed border-fg-fnt/60 px-1 text-micro text-fg-fnt">
                     {t("empty", "maybeThisClustersService")}
                   </span>
                 </span>
@@ -502,7 +502,7 @@ function HostChain({
   return (
     <div className="flex flex-col gap-1">
       {group.routes.length > 1 && (
-        <span className="text-[10px] text-fg-fnt">
+        <span className="text-micro text-fg-fnt">
           {t("empty", "theRuleFor")}{" "}
           {route.matches.length === 0
             ? t("empty", "everyRequest")
@@ -553,7 +553,7 @@ function HostChain({
         </Column>
         <Column label="DestinationRule">
           {!destination?.subset ? (
-            <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-[11px] text-fg-fnt opacity-60">
+            <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-caption text-fg-fnt opacity-60">
               {t("empty", "noSubset")}
             </div>
           ) : (
@@ -661,7 +661,7 @@ function RawMatches({ matches }: { matches: MatchReading[] }) {
     <div className="mt-1 flex flex-col gap-1.5">
       {matches.map((match, index) => (
         <div key={index} className="border-l-2 border-hair pl-2.5">
-          <p className="text-[11px] text-fg-mut">
+          <p className="text-caption text-fg-mut">
             {match.refused
               ? t("empty", "matchShownAsWrittenBecause", {
                   reason: match.refused,
@@ -673,7 +673,7 @@ function RawMatches({ matches }: { matches: MatchReading[] }) {
                     .join(", "),
                 })}
           </p>
-          <pre className="mt-0.5 select-text whitespace-pre-wrap break-all rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-[11px] text-fg-mid">
+          <pre className="mt-0.5 select-text whitespace-pre-wrap break-all rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-caption text-fg-mid">
             {match.raw}
           </pre>
         </div>
@@ -887,7 +887,7 @@ function GatewaysTab({
           return (
             <div
               key={`${gateway.namespace}/${gateway.name}`}
-              className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_minmax(0,200px)] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
+              className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_minmax(0,200px)] items-baseline gap-x-3 border-b border-hair py-1.5 text-xs"
             >
               <span className="min-w-0 truncate">
                 <ResourceRef
@@ -1003,7 +1003,7 @@ function SubsetsTab({
             {missing.map((destination, index) => (
               <div
                 key={index}
-                className="flex items-baseline gap-2 border-b border-hair py-1.5 text-[11.5px]"
+                className="flex items-baseline gap-2 border-b border-hair py-1.5 text-xs"
               >
                 <span className="font-mono text-err">
                   {destination.host}/{destination.subset}
@@ -1036,7 +1036,7 @@ function SubsetsTab({
             return (
               <div
                 key={`${rule.namespace}/${rule.name}`}
-                className="grid grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
+                className="grid grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1.5 text-xs"
               >
                 <span className="min-w-0 truncate">
                   <ResourceRef
@@ -1081,7 +1081,7 @@ function SubsetsTab({
           })}
         </div>
         {sources === null && (
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {t("empty", "checkingWhatIsBehind")}
           </p>
         )}

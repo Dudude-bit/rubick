@@ -171,7 +171,7 @@ function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
         className="text-fg-mid"
       />
       {ips.length > 1 && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("count", "plusMore", { n: ips.length - 1 })}
         </span>
       )}

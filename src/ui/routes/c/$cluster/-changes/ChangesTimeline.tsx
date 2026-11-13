@@ -61,7 +61,7 @@ export function ChangesTimeline({
             )}
             data-after-since={after ? "true" : undefined}
           >
-            <span className="font-mono text-[11px] text-fg-fnt">
+            <span className="font-mono text-caption text-fg-fnt">
               {item.kind === "gap" || item.kind === "watched"
                 ? ""
                 : item.at === null
@@ -78,7 +78,7 @@ export function ChangesTimeline({
         );
       })}
       {items.length > drawn.length ? (
-        <li className="px-1.5 py-1 text-[11px] text-fg-fnt">
+        <li className="px-1.5 py-1 text-caption text-fg-fnt">
           {t("changes", "moreRows", { n: items.length - drawn.length })}
         </li>
       ) : null}
@@ -104,7 +104,7 @@ function Row({
         <div
           role="note"
           className={cn(
-            "rounded border border-dashed px-2 py-1 text-[11px]",
+            "rounded border border-dashed px-2 py-1 text-caption",
             item.gap.elsewhere
               ? "border-hair text-fg-mut"
               : "border-warn/60 bg-warn/5 text-warn"
@@ -116,7 +116,7 @@ function Row({
     case "watched": {
       const refused = item.refused && unwatchedWords(item.refused, t, true);
       return (
-        <p className="inline-flex flex-wrap items-center gap-1.5 text-[11px] text-fg-mut">
+        <p className="inline-flex flex-wrap items-center gap-1.5 text-caption text-fg-mut">
           <Eye className="h-3 w-3 flex-none text-fg-fnt" aria-hidden="true" />
           {gapWords(item.gap, t, clock, item.quiet ? "quiet" : "changed")}
           {refused && (
@@ -130,7 +130,7 @@ function Row({
     }
     case "created":
       return (
-        <p className="inline-flex items-center gap-1.5 text-[11px] text-fg-mut">
+        <p className="inline-flex items-center gap-1.5 text-caption text-fg-mut">
           <CirclePlus className="h-3 w-3 text-fg-fnt" aria-hidden="true" />
           {t("changes", "objectCreated")}
         </p>
@@ -146,34 +146,36 @@ function Row({
                 : revision.name}
             </span>
             {revision.current ? (
-              <span className="rounded bg-ok/15 px-1 text-[10px] text-ok">
+              <span className="rounded bg-ok/15 px-1 text-micro text-ok">
                 {t("changes", "revisionCurrent")}
               </span>
             ) : null}
-            <span className="font-mono text-[11px] text-fg-fnt">
+            <span className="font-mono text-caption text-fg-fnt">
               {revision.name}
             </span>
             {onRollback && canRollBackTo(revision) && (
               <RollBackLink
                 onClick={() => onRollback(revision)}
                 denied={rollbackDenied}
-                className="ml-auto text-[11px]"
+                className="ml-auto text-caption"
               />
             )}
           </div>
           {revision.changeCause ? (
             <p className="text-fg-mut">
-              <span className="font-mono text-[11px] text-fg-fnt">
+              <span className="font-mono text-caption text-fg-fnt">
                 {t("changes", "changeCause")}
               </span>{" "}
               {revision.changeCause}
             </p>
           ) : null}
           {item.readopted ? (
-            <p className="text-[11px] text-warn">{t("changes", "readopted")}</p>
+            <p className="text-caption text-warn">
+              {t("changes", "readopted")}
+            </p>
           ) : null}
           {against.state === "compared" && against.missing > 0 ? (
-            <p className="text-[11px] text-warn">
+            <p className="text-caption text-warn">
               {t("changes", "revisionsMissing", { n: against.missing })}
             </p>
           ) : null}
@@ -196,7 +198,7 @@ function Row({
             </span>
           ) : null}
           {item.revision.status ? (
-            <span className="ml-1 font-mono text-[11px] text-fg-mut">
+            <span className="ml-1 font-mono text-caption text-fg-mut">
               {item.revision.status}
             </span>
           ) : null}
@@ -217,7 +219,7 @@ function Row({
                 : item.revision.chart,
             })}
           </span>
-          <span className="ml-1 font-mono text-[11px] text-fg-mut">
+          <span className="ml-1 font-mono text-caption text-fg-mut">
             {item.revision.status}
           </span>
           {item.revision.description ? (
@@ -240,11 +242,11 @@ function Row({
               showNamespace
             />
           ) : null}
-          <span className={cn("font-mono text-[11px]", showObject && "ml-2")}>
+          <span className={cn("font-mono text-caption", showObject && "ml-2")}>
             <Journal item={entry} />
           </span>
           {entry.atRelist ? (
-            <p className="text-[11px] text-warn">
+            <p className="text-caption text-warn">
               {t("changes", "journalSeenAtRelist")}
             </p>
           ) : null}
@@ -258,30 +260,30 @@ export function Against({ against }: { against: Comparison }) {
   const t = useT();
   if (against.state === "oldest")
     return (
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {t("changes", "revisionOldest")}
       </p>
     );
   if (against.state === "unread")
     return (
-      <p className="text-[11px] text-warn">{t("changes", "templateUnread")}</p>
+      <p className="text-caption text-warn">{t("changes", "templateUnread")}</p>
     );
   const { changes, others } = against;
   if (changes.length === 0 && others?.length === 0)
     return (
-      <p className="text-[11px] text-fg-fnt">{t("changes", "sameTemplate")}</p>
+      <p className="text-caption text-fg-fnt">{t("changes", "sameTemplate")}</p>
     );
   return (
     <>
       {changes.length === 0 && others === null && (
-        <p className="text-[11px] text-warn">
+        <p className="text-caption text-warn">
           {t("changes", "comparedUnchangedRestUnread")}
         </p>
       )}
       {changes.length > 0 && (
         <ul className="mt-0.5 flex flex-col gap-px">
           {changes.map((change, index) => (
-            <li key={index} className="font-mono text-[11px]">
+            <li key={index} className="font-mono text-caption">
               <Field change={change} />
             </li>
           ))}
@@ -306,7 +308,7 @@ function OtherFields({ others }: { others: FieldChange[] }) {
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="inline-flex items-center gap-1 rounded text-[11px] text-warn hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+        className="inline-flex items-center gap-1 rounded text-caption text-warn hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
       >
         <Chevron className="h-3 w-3" aria-hidden="true" />
         {t("changes", "otherFieldsDiffer", { n: others.length })}
@@ -314,12 +316,12 @@ function OtherFields({ others }: { others: FieldChange[] }) {
       {open && (
         <ul className="mt-0.5 flex flex-col gap-px border-l border-hair pl-2">
           {others.slice(0, OTHER_FIELDS_SHOWN).map((change, index) => (
-            <li key={index} className="font-mono text-[11px] wrap-break-word">
+            <li key={index} className="font-mono text-caption wrap-break-word">
               <Field change={change} />
             </li>
           ))}
           {others.length > OTHER_FIELDS_SHOWN && (
-            <li className="text-[11px] text-fg-fnt">
+            <li className="text-caption text-fg-fnt">
               {t("changes", "moreOtherFields", {
                 n: others.length - OTHER_FIELDS_SHOWN,
               })}

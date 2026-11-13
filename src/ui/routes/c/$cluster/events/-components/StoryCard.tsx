@@ -225,7 +225,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
         )}
         <span
           className={cn(
-            "rounded px-1.5 py-px text-[10px] font-medium",
+            "rounded px-1.5 py-px text-micro font-medium",
             STATE_TONE[story.state]
           )}
           title={
@@ -242,7 +242,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
         >
           {t("readings", STATE_LABEL[story.state])}
         </span>
-        <span className="ml-auto text-[11px] text-fg-fnt">
+        <span className="ml-auto text-caption text-fg-fnt">
           {[
             t("count", "eventsSeen", { n: story.occurrences }),
             span,
@@ -264,7 +264,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
         title={t("readings", "lastSeenStrip")}
       />
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
         {story.reasons.map((reason) => (
           <span
             key={`${reason.warning}:${reason.reason}`}
@@ -286,14 +286,14 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
           type="button"
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
-          className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
+          className="ml-auto rounded px-1.5 py-0.5 text-caption text-fg-mut hover:bg-hover hover:text-fg"
         >
           {t("action", open ? "hideTimeline" : "showTimeline")}
         </button>
       </div>
 
       {subject.byName ? (
-        <p className="mt-1 text-[11px] text-fg-fnt">
+        <p className="mt-1 text-caption text-fg-fnt">
           {t("readings", "groupedByName")}
         </p>
       ) : null}
@@ -402,7 +402,7 @@ function Timeline({ story }: { story: Story }) {
 
   return (
     <div className="mt-2 border-t border-hair pt-1.5">
-      <ol className="flex flex-col gap-0.5 text-[11px]">
+      <ol className="flex flex-col gap-0.5 text-caption">
         {entries.map((entry, index) => (
           <TimelineRow
             key={index}
@@ -413,7 +413,7 @@ function Timeline({ story }: { story: Story }) {
         ))}
       </ol>
       {unread > 0 ? (
-        <p className="mt-1 text-[11px] text-fg-fnt">
+        <p className="mt-1 text-caption text-fg-fnt">
           {t("readings", "podStatusUnread", { n: unread })}
         </p>
       ) : null}
@@ -421,7 +421,7 @@ function Timeline({ story }: { story: Story }) {
           drew five exits and looked complete; the ones nobody asked about
           are said in the same breath as the ones that refused. */}
       {skipped > 0 ? (
-        <p className="mt-1 text-[11px] text-fg-fnt">
+        <p className="mt-1 text-caption text-fg-fnt">
           {t("readings", "podStatusNotAsked", { n: skipped })}
         </p>
       ) : null}
@@ -451,7 +451,7 @@ function TimelineRow({
       <span className="font-mono text-fg-fnt">
         {entry.at === null ? "?" : clockOf(entry.at, now)}
       </span>
-      <span className={cn("text-[9px]", tone)} aria-hidden="true">
+      <span className={cn("text-micro", tone)} aria-hidden="true">
         {entry.fromStatus ? "◆" : entry.warning ? "▲" : "●"}
       </span>
       <span className="min-w-0">

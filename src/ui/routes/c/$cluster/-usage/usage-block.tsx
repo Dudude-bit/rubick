@@ -283,7 +283,7 @@ export function UsageBlock({
               }
             />
             {absence !== null && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
                 {t("empty", "historyWithoutMetricsServer", {
                   vendor: past.vendor,
                   reason: t("cluster", ABSENCE_SHORT[absence]),
@@ -295,17 +295,17 @@ export function UsageBlock({
              *  "kube-state-metrics is not in this Prometheus" about an
              *  install that is there and answering is the collapse. */}
             {declared === null && declaredKnown && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
                 {t("empty", "declaredNowOnly")}
               </p>
             )}
             {declared === null && !declaredKnown && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
                 {t("empty", "declaredUnknown")}
               </p>
             )}
             {past.window?.basis === "pods" && kept && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-mut">
+              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-mut">
                 {t("empty", "nodesFromPods", { vendor: past.vendor })}
               </p>
             )}
@@ -325,12 +325,12 @@ export function UsageBlock({
               </React.Suspense>
             )}
             {shared && (
-              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+              <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
                 {shared}
               </p>
             )}
             {!live && idleNote && (
-              <p className="px-1.5 pb-1 pt-1 text-[11px] leading-snug text-fg-fnt">
+              <p className="px-1.5 pb-1 pt-1 text-caption leading-snug text-fg-fnt">
                 {idleNote}{" "}
                 {kept === null
                   ? t("empty", "readingWhatVendorKept", {
@@ -395,7 +395,7 @@ function HistoryNote({
   const t = useT();
   if (state.status === "unreachable") {
     return (
-      <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-warn">
+      <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-warn">
         {t("empty", "vendorDidNotAnswer", {
           vendor: state.vendor,
           reason: state.reason,
@@ -405,7 +405,7 @@ function HistoryNote({
   }
   if (state.status === "absent" && state.offerable) {
     return (
-      <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+      <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
         {parts(
           t(
             "empty",
@@ -450,7 +450,7 @@ function RangePicker({
   return (
     <span className="flex items-center gap-0.5">
       {loading && (
-        <span className="mr-1 text-[10px] text-fg-fnt">
+        <span className="mr-1 text-micro text-fg-fnt">
           {t("action", "readingInline")}
         </span>
       )}
@@ -469,9 +469,9 @@ function RangePicker({
           className={
             enabled
               ? selected === range
-                ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"
-                : "rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
-              : "cursor-default rounded px-1.5 py-0.5 text-[11px] text-fg-mut opacity-40"
+                ? "rounded bg-sel px-1.5 py-0.5 text-caption text-fg"
+                : "rounded px-1.5 py-0.5 text-caption text-fg-mut hover:bg-hover hover:text-fg"
+              : "cursor-default rounded px-1.5 py-0.5 text-caption text-fg-mut opacity-40"
           }
         >
           {range}
@@ -663,8 +663,8 @@ function StorageRow({
   return (
     <div className="mt-1 border-t border-hair pt-2">
       <div className="grid grid-cols-[92px_minmax(0,1fr)] items-baseline gap-3 px-1.5">
-        <span className="text-[11px] text-fg-mut">{t("nav", "storage")}</span>
-        <span className="text-[11px] text-fg-mut">
+        <span className="text-caption text-fg-mut">{t("nav", "storage")}</span>
+        <span className="text-caption text-fg-mut">
           {t("count", "volumes", { n: claims.length })}
           {declared && (
             <>
@@ -690,7 +690,7 @@ function StorageRow({
             className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 px-1.5 py-0.5"
           >
             <span />
-            <span className="text-[11px] text-fg-fnt">
+            <span className="text-caption text-fg-fnt">
               <span className="text-fg-mid">{claim.name}</span>
               {[
                 claim.capacity && declaredQuantity("storage", claim.capacity),
@@ -711,7 +711,7 @@ function StorageRow({
        *  for the volumes nothing measured, because "no kubelet scraping"
        *  and "an unprovisioned volume" look identical from here. */}
       {measured < claims.length && (
-        <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
+        <p className="px-1.5 pt-1 text-caption leading-snug text-fg-fnt">
           {measured === 0
             ? t("empty", "declaredSizeNotFullness")
             : t("empty", "declaredSizeForUnreported", {

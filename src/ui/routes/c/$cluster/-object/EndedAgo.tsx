@@ -14,7 +14,7 @@ export function EndedAgo({
   const ago = useRealtimeAge(at);
   return (
     <span
-      className={cn("text-[11px] text-fg-mut", className)}
+      className={cn("text-caption text-fg-mut", className)}
       title={formatDate(at) ?? undefined}
       data-testid="ended-ago"
     >

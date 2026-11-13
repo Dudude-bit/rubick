@@ -154,7 +154,7 @@ function UsageChartInner({
        *  own top margin — any tighter and it reads as a caption on the band
        *  above it. */}
       <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-2">
-        <span className="text-[11px] text-fg-mut">{label}</span>
+        <span className="text-caption text-fg-mut">{label}</span>
         {/* No reading at all draws no band. A band with nothing in it is the
          *  empty plot this replaced, one size larger. */}
         {value === null && drawn === 0 ? (
@@ -175,7 +175,7 @@ function UsageChartInner({
             />
           </React.Suspense>
         )}
-        <span className="text-right text-[11px] text-fg-mut">
+        <span className="text-right text-caption text-fg-mut">
           {value === null ? (
             // The block only draws bands while metrics-server is available,
             // so a missing value here is the server having nothing to say
@@ -217,7 +217,7 @@ function UsageChartInner({
         </span>
       </div>
       {ranged && average !== null && (
-        <p className="-mt-1 pb-1 pr-1.5 text-right font-mono text-[10px] tabular-nums text-fg-fnt">
+        <p className="-mt-1 pb-1 pr-1.5 text-right font-mono text-micro tabular-nums text-fg-fnt">
           {t("readings", "usageAvg", { value: formatQuantity(average, type) })}
           {peak !== null && (
             <>
@@ -249,7 +249,7 @@ function UsageChartInner({
 function Note({ children }: { children?: React.ReactNode }) {
   if (!children) return null;
   return (
-    <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+    <p className="pb-1 pl-[104px] pr-1.5 text-caption leading-snug text-fg-fnt">
       {children}
     </p>
   );

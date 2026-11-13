@@ -223,7 +223,7 @@ function Unread({ kinds, cost }: { kinds: UnreadKind[]; cost: string }) {
           verbatim={kind.reason}
         />
       ))}
-      <p className="text-[11px] text-fg-fnt">{cost}</p>
+      <p className="text-caption text-fg-fnt">{cost}</p>
     </div>
   );
 }
@@ -257,7 +257,7 @@ function CertificatesTab({
         <p className="text-xs text-fg-mut">
           {t("empty", "nothingAskedForCertificate")}
         </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           {parts(t("empty", "noCertificateObjectAnywhere"), {
             annotation: (
               <span className="font-mono">cert-manager.io/cluster-issuer</span>
@@ -382,14 +382,14 @@ function ServingLine({ row }: { row: CertRow }) {
 
   if (!row.use.checked) {
     return (
-      <p className="max-w-[68ch] text-[11px] text-fg-fnt">
+      <p className="max-w-[68ch] text-caption text-fg-fnt">
         {t("empty", "servingNotChecked")}
       </p>
     );
   }
   if (row.use.hosts.length === 0) {
     return (
-      <p className="max-w-[68ch] text-[11px] text-fg-fnt">
+      <p className="max-w-[68ch] text-caption text-fg-fnt">
         {t("empty", "noIngressMountsSecret")
           .split(/(\{namespace\}|\{secret\})/)
           .map((part, i) =>
@@ -412,7 +412,7 @@ function ServingLine({ row }: { row: CertRow }) {
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11.5px]">
+      <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
         <span className="text-fg-fnt">{t("empty", "servingLabel")}</span>
         <span className="flex min-w-0 flex-col gap-0.5">
           {row.use.hosts.map((entry) => (
@@ -474,7 +474,7 @@ function ServingLine({ row }: { row: CertRow }) {
 function Facts({ row }: { row: CertRow }) {
   const t = useT();
   return (
-    <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11.5px]">
+    <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
       <span className="text-fg-fnt">Certificate</span>
       <span className="min-w-0">
         <ResourceRef
@@ -507,7 +507,7 @@ function Facts({ row }: { row: CertRow }) {
           <span className="text-err">{t("empty", "noneNamed")}</span>
         )}
         {row.neverIssued && (
-          <span className="ml-2 text-[11px] text-err">
+          <span className="ml-2 text-caption text-err">
             {t("empty", "secretDoesNotExistYet")}
           </span>
         )}
@@ -579,7 +579,7 @@ function Walk({ steps }: { steps: CertStep[] }) {
   const t = useT();
   return (
     <div className="flex flex-col">
-      <span className="mb-1 text-[9.5px] uppercase tracking-[0.08em] text-fg-fnt">
+      <span className="mb-1 text-micro uppercase tracking-[0.08em] text-fg-fnt">
         {t("empty", "whatItIsWaitingOn")}
       </span>
       {steps.map((step, index) => (
@@ -609,7 +609,7 @@ function Walk({ steps }: { steps: CertStep[] }) {
             className={index < steps.length - 1 ? "min-w-0 pb-2" : "min-w-0"}
           >
             <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-[10px] uppercase tracking-[0.06em] text-fg-fnt">
+              <span className="text-micro uppercase tracking-[0.06em] text-fg-fnt">
                 {step.kind}
               </span>
               <span className="min-w-0 truncate">
@@ -622,13 +622,13 @@ function Walk({ steps }: { steps: CertStep[] }) {
                 />
               </span>
               <span
-                className={`text-[11px] ${step.failed ? "text-err" : "text-fg-mut"}`}
+                className={`text-caption ${step.failed ? "text-err" : "text-fg-mut"}`}
               >
                 {step.state}
               </span>
             </span>
             {step.note && (
-              <p className="mt-0.5 select-text wrap-break-word font-mono text-[11px] text-fg-mut">
+              <p className="mt-0.5 select-text wrap-break-word font-mono text-caption text-fg-mut">
                 {step.note}
               </p>
             )}
@@ -716,7 +716,7 @@ function IssuersTab({
         <p className="text-xs text-fg-mut">
           {t("empty", "noIssuerNoClusterIssuer")}
         </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           {t("empty", "certManagerNeedsIssuer")}
         </p>
       </div>
@@ -769,7 +769,7 @@ function IssuerLine({ row, last }: { row: IssuerRow; last: boolean }) {
       openByDefault={row.ready === false}
       last={last}
     >
-      <p className="text-[11.5px]">
+      <p className="text-xs">
         <ResourceRef
           kind={row.kind}
           name={row.name}
@@ -789,7 +789,7 @@ function IssuerLine({ row, last }: { row: IssuerRow; last: boolean }) {
             t("count", "nothingSignsCanRenew", { n: row.serves })}
         </Finding>
       ) : (
-        <p className="text-[11.5px] text-fg-mut">
+        <p className="text-xs text-fg-mut">
           {row.serves === 0
             ? t("empty", "healthySigningNothing")
             : t("count", "healthyAndSigns", { n: row.serves })}

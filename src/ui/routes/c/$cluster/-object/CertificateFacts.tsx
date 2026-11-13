@@ -46,7 +46,7 @@ export function CertificateLine({
   const t = useT();
   if (!read) {
     return (
-      <span className="text-[11px] text-fg-fnt">
+      <span className="text-caption text-fg-fnt">
         {t("empty", "readingCertificate")}
       </span>
     );
@@ -55,7 +55,7 @@ export function CertificateLine({
     return (
       <span
         className={cn(
-          "block text-[11px]",
+          "block text-caption",
           read.problem?.says === "noSecret" ? "text-err" : "text-warn"
         )}
       >
@@ -73,9 +73,9 @@ export function CertificateLine({
       <span className={cn("text-xs", toneClass(expiry.tone))}>
         {expiryText(expiry, t)}
       </span>
-      <span className="text-[11px] text-fg-fnt">{issuedBy(cert, t)}</span>
+      <span className="text-caption text-fg-fnt">{issuedBy(cert, t)}</span>
       {uncovered.length > 0 && (
-        <span className="text-[11px] text-err">
+        <span className="text-caption text-err">
           {t("empty", "doesNotCover", { names: uncovered.join(", ") })}
         </span>
       )}

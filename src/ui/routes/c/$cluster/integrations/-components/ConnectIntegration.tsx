@@ -165,7 +165,7 @@ function ConnectForm({
               request is made by this app, on this machine — so a Service name
               that works from inside the cluster resolves to nothing here, and
               that is the commonest way to get this field wrong. */}
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {/* One sentence in the catalogue, split here rather than there:
                 a translator moves the example wherever their word order wants
                 it, and the monospace still lands on it. */}
@@ -214,7 +214,7 @@ function ConnectForm({
             />
             <span>
               {t("settings", "openTunnelOnSwitch")}
-              <span className="mt-0.5 block text-[11px] text-fg-fnt">
+              <span className="mt-0.5 block text-caption text-fg-fnt">
                 {parts(t("settings", "forwardingTunnelNote"), {
                   target: (
                     <span className="font-mono">
@@ -260,7 +260,7 @@ function ConnectForm({
             />
             {/* Where it goes, said plainly, because the reader is about to
              *  paste a credential and is owed the truth about the file. */}
-            <p className="text-[11px] leading-snug text-fg-fnt">
+            <p className="text-caption leading-snug text-fg-fnt">
               {t("settings", "credentialStorageNote")}
             </p>
           </div>
@@ -385,7 +385,7 @@ export function InCluster({
       </Button>
 
       {found !== null && found.length === 0 && (
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("settings", "noServiceForVendor", { vendor: vendorName })}
         </p>
       )}
@@ -404,7 +404,7 @@ export function InCluster({
               {candidate.service.namespace}/{candidate.service.name}
               <span className="ml-1.5 text-fg-fnt">:{candidate.port}</span>
             </span>
-            <span className="flex-none text-[11px] text-fg-fnt">
+            <span className="flex-none text-caption text-fg-fnt">
               {busy === key
                 ? t("settings", "forwardingEllipsis")
                 : sayWords(candidate.because, t)}
@@ -415,7 +415,7 @@ export function InCluster({
 
       <ByHand hint={hint} onPicked={onPicked} onFailed={setFailed} />
 
-      {failed && <p className="text-[11px] text-err">{failed}</p>}
+      {failed && <p className="text-caption text-err">{failed}</p>}
     </div>
   );
 }
@@ -486,7 +486,7 @@ function ByHand({
       <button
         type="button"
         onClick={() => void reveal()}
-        className="self-start text-[11px] text-fg-fnt underline underline-offset-2 hover:text-fg"
+        className="self-start text-caption text-fg-fnt underline underline-offset-2 hover:text-fg"
       >
         {t("settings", "pointAtServiceYourself")}
       </button>
@@ -495,7 +495,7 @@ function ByHand({
 
   return (
     <div className="flex flex-col gap-1.5 rounded border border-hair p-2">
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {t("settings", "pointAtServiceHint")}
       </p>
 
@@ -558,7 +558,7 @@ function ByHand({
           placeholder={hint.subpathExample ?? "/prometheus"}
           className="h-7 font-mono text-xs"
         />
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("settings", "subpathHint")}
         </span>
       </div>
@@ -581,14 +581,14 @@ function TestResult({ result }: { result: ProbeResult }) {
   const t = useT();
   if (result.ok) {
     return (
-      <p className="text-[11px] text-ok" role="status">
+      <p className="text-caption text-ok" role="status">
         {t("settings", "probeAnswered", { ms: result.latencyMs })}
         {result.version ? ` · ${result.version}` : ""}
       </p>
     );
   }
   return (
-    <p className="text-[11px] text-err" role="status">
+    <p className="text-caption text-err" role="status">
       {t("settings", "probeDidNotAnswer", {
         reason: sayWords(result.reason, t),
       })}

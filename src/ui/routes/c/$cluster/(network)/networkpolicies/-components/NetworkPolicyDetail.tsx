@@ -54,7 +54,7 @@ function Rule({
   const t = useT();
   return (
     <div className="flex flex-col gap-1 border-b border-hair py-2 last:border-b-0">
-      <div className="flex flex-col gap-0.5 text-[12px]">
+      <div className="flex flex-col gap-0.5 text-xs">
         {rule.peers.length === 0 ? (
           // No peer is not "no source": it is every source, and it is the
           // shape a policy takes when somebody meant to restrict and left the
@@ -76,7 +76,7 @@ function Rule({
           ))
         )}
       </div>
-      <div className="text-[11px] text-fg-fnt">
+      <div className="text-caption text-fg-fnt">
         {rule.ports.length === 0
           ? t("empty", "everyPort")
           : rule.ports.map((port) => portText(port, t)).join(", ")}
@@ -103,7 +103,7 @@ function Direction({
       <SectionHeader title={title} />
       {direction.rules.length === 0 ? (
         <p
-          className={`text-[12px] ${fact.tone === "warn" ? "text-warn" : "text-fg-mut"}`}
+          className={`text-xs ${fact.tone === "warn" ? "text-warn" : "text-fg-mut"}`}
         >
           {fact.value}
         </p>
@@ -216,7 +216,7 @@ export function NetworkPolicyDetail() {
       content: policy && (
         <div className="flex flex-col gap-4">
           {!policy.ingress.governed && !policy.egress.governed ? (
-            <p className="text-[12px] text-fg-mut">
+            <p className="text-xs text-fg-mut">
               <T section="empty" k="governsNeither" />
             </p>
           ) : (
@@ -229,7 +229,7 @@ export function NetworkPolicyDetail() {
                   resolving={resolving}
                 />
               ) : (
-                <p className="text-[12px] text-fg-mut">
+                <p className="text-xs text-fg-mut">
                   {notGovernedSentence(policy, "Ingress", t)}
                 </p>
               )}
@@ -241,7 +241,7 @@ export function NetworkPolicyDetail() {
                   resolving={resolving}
                 />
               ) : (
-                <p className="text-[12px] text-fg-mut">
+                <p className="text-xs text-fg-mut">
                   {notGovernedSentence(policy, "Egress", t)}
                 </p>
               )}
@@ -290,7 +290,7 @@ export function NetworkPolicyDetail() {
           // Each half keeps its own tone: "allows all" is the one verdict
           // the colour exists for, and a fixed muted span dropped it here
           // while the row and the fact below it both painted it.
-          <span className="text-[11px]">
+          <span className="text-caption">
             {[policy.ingress, policy.egress]
               .map((direction) => directionFact(direction, t))
               .map((fact, i) => (

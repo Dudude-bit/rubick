@@ -9,7 +9,7 @@ export function PeekHeading({
   count?: ReactNode;
 }) {
   return (
-    <h3 className="flex items-baseline gap-1.5 pb-1 pt-4 text-[11px] font-semibold text-fg">
+    <h3 className="flex items-baseline gap-1.5 pb-1 pt-4 text-caption font-semibold text-fg">
       {title}
       {count != null && (
         <span className="font-normal text-fg-fnt">

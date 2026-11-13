@@ -96,7 +96,7 @@ export function IngressAccess({
         </div>
       )}
       {plainWhy && (
-        <p className="max-w-[80ch] px-1.5 pb-2 text-[11px] text-warn">
+        <p className="max-w-[80ch] px-1.5 pb-2 text-caption text-warn">
           {plainWhy}
         </p>
       )}
@@ -115,7 +115,7 @@ export function IngressAccess({
               <div key={`${url.host}${url.path}`} className={ACCESS_ROW}>
                 <span
                   className={cn(
-                    "text-[11px] font-medium",
+                    "text-caption font-medium",
                     url.isHttps === null
                       ? TLS_NOT_CHECKED_TONE
                       : noSecret
@@ -172,7 +172,7 @@ export function IngressAccess({
                   )}
                 </span>
                 {noSecret && (
-                  <span className="col-span-3 col-start-2 text-[11px] text-err">
+                  <span className="col-span-3 col-start-2 text-caption text-err">
                     {t("readings", "healthNoTlsSecret", { name: secret })}
                   </span>
                 )}

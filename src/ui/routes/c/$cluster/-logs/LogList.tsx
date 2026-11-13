@@ -408,7 +408,7 @@ function LogListInner({
         <button
           type="button"
           onClick={jumpToBottom}
-          className="absolute bottom-3 right-4 flex items-center gap-1.5 rounded-full border border-hair bg-raise px-2.5 py-1 text-[11px] text-fg-mid shadow-md hover:bg-hover"
+          className="absolute bottom-3 right-4 flex items-center gap-1.5 rounded-full border border-hair bg-raise px-2.5 py-1 text-caption text-fg-mid shadow-md hover:bg-hover"
         >
           <ArrowDown className="h-3 w-3" />
           {t("action", "jumpToLatest")}

@@ -499,7 +499,7 @@ export function DaemonSetDetail() {
         statusBadge={daemonSet && <RolloutBadge rollout={daemonSet.rollout} />}
         badges={
           daemonSet && (
-            <span className="text-[11px] text-fg-mut">
+            <span className="text-caption text-fg-mut">
               {readyBesideBadge(ready, desired, daemonSet.rollout, t)}
             </span>
           )

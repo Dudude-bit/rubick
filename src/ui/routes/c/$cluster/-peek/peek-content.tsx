@@ -307,7 +307,7 @@ export function PeekContent({
           </SheetTitle>
           <CopyName name={target.name} />
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mut">
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-fg-mut">
           {/* Three cases, not two. `undefined` is a kind with no phase to
               report and draws nothing; `null` is a kind that has one and
               whose cluster wrote none, which the list and the detail page
@@ -669,7 +669,7 @@ function BackendPolicies({
           return (
             <p
               key={policy.name}
-              className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-fg-fnt"
+              className="flex flex-wrap items-baseline gap-x-1.5 text-caption text-fg-fnt"
             >
               <ResourceRef
                 kind="BackendTLSPolicy"

@@ -145,13 +145,13 @@ export function SharingSettings() {
           {targets.error ? (
             // The same distinction the dialog makes: a list nobody could
             // read is not a list with nothing in it.
-            <p className="text-[11px] text-warn">
+            <p className="text-caption text-warn">
               {t("share", "targetsUnread", {
                 reason: errorToShow(targets.error),
               })}
             </p>
           ) : (targets.data ?? []).length === 0 && !draft ? (
-            <p className="text-[11px] text-fg-fnt">
+            <p className="text-caption text-fg-fnt">
               {t("share", "targetsEmpty")}
             </p>
           ) : null}
@@ -226,7 +226,7 @@ export function SharingSettings() {
                   {t("share", "targetPublic")}
                 </label>
               </div>
-              <p className="text-[11px] text-fg-fnt">
+              <p className="text-caption text-fg-fnt">
                 {t("share", "targetPublicHint")}
               </p>
               <Input
@@ -322,14 +322,16 @@ function TargetRow({
         className="min-w-0 flex-1 rounded px-0.5 text-left hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
       >
         <span className="text-fg">{target.label}</span>{" "}
-        <span className="font-mono text-[11px] text-fg-fnt">{target.host}</span>
+        <span className="font-mono text-caption text-fg-fnt">
+          {target.host}
+        </span>
         {target.public ? (
-          <span className="ml-1.5 text-[11px] text-err">
+          <span className="ml-1.5 text-caption text-err">
             {t("share", "targetPublic")}
           </span>
         ) : null}
         {!target.hasKey ? (
-          <span className="ml-1.5 text-[11px] text-warn">
+          <span className="ml-1.5 text-caption text-warn">
             {t("share", "targetNoKey")}
           </span>
         ) : null}

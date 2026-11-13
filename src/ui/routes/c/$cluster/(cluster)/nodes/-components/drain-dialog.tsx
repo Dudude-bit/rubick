@@ -172,7 +172,7 @@ function DrainConfirm({
       <div className="flex flex-col gap-1.5">
         <p className="text-xs text-fg-mut">{t("empty", "drainExplained")}</p>
         {query.isPending && node && (
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {t("empty", "readingWhatRefusesToMove")}
           </p>
         )}
@@ -189,7 +189,7 @@ function DrainConfirm({
             {blockers.map(({ budget, pods }) => (
               <p
                 key={`${budget.object.namespace}/${budget.object.name}`}
-                className="text-[11px] text-fg-fnt"
+                className="text-caption text-fg-fnt"
               >
                 <span className="font-mono text-fg-mid">
                   {budget.object.namespace}/{budget.object.name}
@@ -211,7 +211,7 @@ function DrainConfirm({
             ))}
           </div>
         )}
-        <p className="pt-1 text-[11px] text-fg-fnt">
+        <p className="pt-1 text-caption text-fg-fnt">
           {t("empty", "drainKeepsAsking")}
         </p>
         <div className="flex flex-col border-t border-hair pt-1.5">
@@ -243,7 +243,7 @@ function DrainConfirm({
         {node && (
           <Link
             {...objectLink({ kind: ResourceType.Node, name: node })!}
-            className="pt-1 text-[11px] text-info hover:underline"
+            className="pt-1 text-caption text-info hover:underline"
           >
             {t("action", "openTheNodeFirst")}
           </Link>
@@ -289,7 +289,7 @@ function DrainLive({
           <p className="text-xs font-medium text-bad">
             {t("action", "drainFailed")}
           </p>
-          <p className="text-[11px] text-fg-fnt">{state.message}</p>
+          <p className="text-caption text-fg-fnt">{state.message}</p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -331,17 +331,17 @@ function DrainLive({
                 t("count", "waitingOnPods", { n: held.length })}
             </p>
             {report.leaving > 0 && (
-              <p className="text-[11px] text-fg-fnt">
+              <p className="text-caption text-fg-fnt">
                 {t("count", "podsStillLeaving", { n: report.leaving })}
               </p>
             )}
             {state.attempt > 1 && (
-              <p className="text-[11px] text-fg-fnt">
+              <p className="text-caption text-fg-fnt">
                 {t("action", "drainingAttempt", { n: state.attempt })}
               </p>
             )}
             {state.missed && (
-              <p className="text-[11px] text-warn">
+              <p className="text-caption text-warn">
                 {t("empty", "drainReportsMissed")}
               </p>
             )}
@@ -364,26 +364,26 @@ function DrainLive({
 
         <PodLines pods={held} t={t} />
         {held.length > 0 && (
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {t("empty", "notNowExplained")}
           </p>
         )}
         {running && held.length > 0 && (
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {t("empty", "waitingOnTheseExplained")}
           </p>
         )}
 
         <PodLines pods={stuck} t={t} />
         {stuck.length > 0 && !running && (
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {t("empty", "stoppedExplained")}
           </p>
         )}
 
         <Counts report={report} t={t} />
         {!running && state.message && (
-          <p className="text-[11px] text-fg-fnt">{state.message}</p>
+          <p className="text-caption text-fg-fnt">{state.message}</p>
         )}
       </div>
       <DialogFooter>
@@ -408,7 +408,7 @@ function PodLines({ pods, t }: { pods: RefusedPod[]; t: T }) {
       {pods.map((pod) => (
         <p
           key={`${pod.namespace}/${pod.name}`}
-          className="text-[11px] text-fg-fnt"
+          className="text-caption text-fg-fnt"
         >
           <span className="font-mono text-fg-mid">
             {pod.namespace}/{pod.name}
@@ -425,17 +425,17 @@ function Counts({ report, t }: { report: DrainReport; t: T }) {
   return (
     <>
       {report.daemonsetPodsLeft > 0 && (
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("count", "daemonsetPodsStay", { n: report.daemonsetPodsLeft })}
         </p>
       )}
       {report.staticPodsLeft > 0 && (
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("count", "staticPodsStay", { n: report.staticPodsLeft })}
         </p>
       )}
       {report.alreadyGone > 0 && (
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("count", "podsHadAlreadyLeft", { n: report.alreadyGone })}
         </p>
       )}
@@ -464,7 +464,7 @@ function OptIn({
       />
       <span className="flex flex-col gap-0.5">
         <span className="text-xs text-fg-mid">{label}</span>
-        <span className="text-[11px] text-fg-fnt">{explained}</span>
+        <span className="text-caption text-fg-fnt">{explained}</span>
       </span>
     </label>
   );

@@ -201,7 +201,7 @@ export function ScopeTabs() {
         onClick={() =>
           window.dispatchEvent(new CustomEvent("command-palette-open"))
         }
-        className="flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] text-fg-mut transition-colors hover:bg-hover hover:text-fg"
+        className="flex flex-none items-center gap-1 rounded-md px-2 py-1 text-caption leading-[14px] text-fg-mut transition-colors hover:bg-hover hover:text-fg"
       >
         {t("action", "search")}
         <Kbd shortcut="mod+K" className="leading-[13px]" />
@@ -353,7 +353,7 @@ function HiddenScopeTabs({
               : label
           }
           className={cn(
-            "flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] transition-colors hover:bg-hover hover:text-fg",
+            "flex flex-none items-center gap-1 rounded-md px-2 py-1 text-caption leading-[14px] transition-colors hover:bg-hover hover:text-fg",
             open ? "bg-sel text-fg" : "text-fg-mut"
           )}
         >
@@ -521,7 +521,7 @@ function NewTabButton() {
               aria-label={t("action", "newTabAria")}
               aria-haspopup="menu"
               onClick={() => openTab()}
-              className="flex-none rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+              className="flex-none rounded-md px-[7px] py-[3px] text-xs leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
             >
               +
             </button>
@@ -542,7 +542,7 @@ function NewTabButton() {
       >
         <ContextMenuLabel>{t("action", "newTabOn")}</ContextMenuLabel>
         {contexts.length === 0 && (
-          <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
+          <p className="px-[7px] py-2 text-caption text-fg-fnt">
             {t("empty", "noContextsInKubeconfig")}
           </p>
         )}
@@ -695,7 +695,7 @@ function ScopeTabItem({
           closeTab(tab.id);
         }}
         className={cn(
-          "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px]",
+          "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-xs leading-[15px]",
           OVERFLOW
         )}
       >
@@ -761,7 +761,7 @@ function ScopeTabItem({
             // As wide as its label: the strip cuts the parts marked
             // `data-cut`, never the tab, so no tab holds empty room. The
             // label clips as a backstop; the close button sits outside it.
-            "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
+            "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-xs leading-[15px] transition-colors",
             OVERFLOW,
             active ? "bg-sel text-fg-mut" : "text-fg-fnt hover:bg-hover"
           )}
@@ -822,7 +822,7 @@ function ScopeTabItem({
               cannot be made live and nothing about it is going to change
               until the kubeconfig does. */}
             {tab.missing && (
-              <span className="flex-none rounded border border-hair px-1 text-[10px] uppercase leading-[13px] tracking-wider text-fg-fnt">
+              <span className="flex-none rounded border border-hair px-1 text-micro uppercase leading-[13px] tracking-wider text-fg-fnt">
                 {t("cluster", "missingBadge")}
               </span>
             )}
@@ -845,7 +845,7 @@ function ScopeTabItem({
                 <span data-cut={CUT_FLOOR.scope} className="truncate">
                   {scopeLabel(scope, t)}
                 </span>
-                <span aria-hidden="true" className="flex-none text-[9px]">
+                <span aria-hidden="true" className="flex-none text-micro">
                   ▾
                 </span>
               </button>
@@ -952,7 +952,7 @@ function ContextPopover({
           className="max-h-[420px] overflow-auto"
         >
           {contexts.length === 0 && (
-            <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
+            <p className="px-[7px] py-2 text-caption text-fg-fnt">
               {t("empty", "noContextsInKubeconfig")}
             </p>
           )}
@@ -975,7 +975,7 @@ function ContextPopover({
                   selected={selected}
                   meta={
                     <span className="flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase tracking-wider">
+                      <span className="text-micro uppercase tracking-wider">
                         {providerLabel(detectProvider(ctx.name))}
                       </span>
                       {selected ? (
@@ -1405,7 +1405,7 @@ function NamespacePopover({
             <button
               type="button"
               onClick={() => setShowBlocked(true)}
-              className="flex w-full items-center justify-between gap-2 px-[7px] py-1.5 text-left text-[11px] text-fg-fnt"
+              className="flex w-full items-center justify-between gap-2 px-[7px] py-1.5 text-left text-caption text-fg-fnt"
             >
               <span>{t("count", "namespacesHidden", { n: hiddenCount })}</span>
               <span className="underline underline-offset-2">
@@ -1421,7 +1421,7 @@ function NamespacePopover({
           id={noteId}
           aria-live="polite"
           className={cn(
-            "border-t border-hair px-2.5 py-1.5 text-[10px] leading-[13px]",
+            "border-t border-hair px-2.5 py-1.5 text-micro leading-[13px]",
             refused ? "text-warn" : "text-fg-fnt"
           )}
         >
@@ -1430,7 +1430,7 @@ function NamespacePopover({
         <Link
           {...pageLink("my-access", undefined, context ?? undefined)}
           onClick={() => onOpenChange(false)}
-          className="flex items-center gap-1.5 border-t border-hair px-2.5 py-1.5 text-[11px] text-info transition-colors hover:bg-hover"
+          className="flex items-center gap-1.5 border-t border-hair px-2.5 py-1.5 text-caption text-info transition-colors hover:bg-hover"
         >
           <ShieldUser aria-hidden="true" className="h-3 w-3 flex-none" />
           {scope.length === 1
@@ -1527,7 +1527,7 @@ function NamespaceRow({
         {row.label}
       </span>
       {note !== null && (
-        <span className="inline-flex items-center gap-1 text-[11px] text-fg-fnt">
+        <span className="inline-flex items-center gap-1 text-caption text-fg-fnt">
           {row.refused && (
             <Lock aria-hidden="true" className="h-2.5 w-2.5 flex-none" />
           )}
@@ -1536,7 +1536,7 @@ function NamespaceRow({
       )}
       <span
         className={cn(
-          "font-mono text-[11px]",
+          "font-mono text-caption",
           row.podCount !== null && problems ? problems.tone : "text-fg-fnt",
           note !== null && "hidden"
         )}
@@ -1576,7 +1576,7 @@ function ListNote({ state }: { state: Exclude<NamespaceListState, "listed"> }) {
   return (
     <p
       className={cn(
-        "flex items-start gap-1.5 border-b border-hair px-2.5 py-1.5 text-[11px] leading-[14px]",
+        "flex items-start gap-1.5 border-b border-hair px-2.5 py-1.5 text-caption leading-[14px]",
         tone
       )}
     >
@@ -1612,7 +1612,7 @@ function EmptyNote({
     <p
       role={typed !== "" ? "alert" : undefined}
       className={cn(
-        "px-[7px] py-2 text-[11px]",
+        "px-[7px] py-2 text-caption",
         typed !== "" ? "text-warn" : "text-fg-fnt"
       )}
     >

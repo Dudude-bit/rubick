@@ -36,7 +36,7 @@ export function TabMark({
     return (
       <span
         className={cn(
-          "flex-none text-[11px] tabular-nums",
+          "flex-none text-caption tabular-nums",
           isActive ? "text-fg-mut" : "text-fg-fnt"
         )}
       >

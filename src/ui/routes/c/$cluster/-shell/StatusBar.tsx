@@ -108,7 +108,7 @@ export function StatusBar({
   const connecting = isLoading || isAuthenticating;
 
   return (
-    <footer className="@container flex h-6 flex-none items-center gap-3.5 overflow-hidden whitespace-nowrap border-t border-hair px-3 text-[11px] text-fg-fnt">
+    <footer className="@container flex h-6 flex-none items-center gap-3.5 overflow-hidden whitespace-nowrap border-t border-hair px-3 text-caption text-fg-fnt">
       {/* Gives way first. A hint with no room wraps onto the clipped second
           line; reversed, so the note never does. The note keeps its whole
           sentence up to its cap, and the controls give way to it. The empty
@@ -414,7 +414,7 @@ function ThemeControl() {
           aria-label={t("settings", "themeNamed", {
             theme: t("settings", current.k),
           })}
-          className="flex items-center gap-1.5 rounded px-1.5 text-[11px] text-fg-fnt transition-colors hover:text-fg"
+          className="flex items-center gap-1.5 rounded px-1.5 text-caption text-fg-fnt transition-colors hover:text-fg"
         >
           <Icon className="h-3 w-3" />
           {t("settings", current.k).toLowerCase()}

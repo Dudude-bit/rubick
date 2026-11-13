@@ -191,7 +191,7 @@ function Door({ children }: { children: React.ReactNode }) {
 function Heading({ title, sub }: { title: string; sub?: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-[3px]">
-      <h1 className="text-[13px] font-semibold tracking-tight text-fg">
+      <h1 className="text-title font-semibold tracking-tight text-fg">
         {title}
       </h1>
       {sub && <p className="text-xs text-fg-mut">{sub}</p>}
@@ -214,7 +214,7 @@ function Machine({
   return (
     <p
       className={cn(
-        "mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]",
+        "mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-caption",
         tone === "error" ? "text-err" : "text-fg-fnt"
       )}
     >
@@ -261,7 +261,7 @@ function SourceLine({
   const read = readFile(kubeconfig.source);
 
   return (
-    <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-hair pt-2.5 text-[11px] text-fg-fnt">
+    <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-hair pt-2.5 text-caption text-fg-fnt">
       <span>{t("cluster", "readFrom")}</span>
       <span className="break-all font-mono text-fg-mut">
         {read ? show(read) : t("cluster", "defaultLookup")}
@@ -322,7 +322,7 @@ function NoClusters({
             unreadable ? "configWillNotParseSub" : "configHasNoClustersSub"
           )}
         />
-        <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px]">
+        <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption">
           <Act onClick={() => void kubeconfig.choose()}>
             {t("action", "chooseDifferentFile")}
           </Act>
@@ -352,7 +352,7 @@ function NoClusters({
         title={t("empty", "notConnectedYet")}
         sub={t("empty", "noKubeconfigFound")}
       />
-      <p className="mb-1 mt-5 text-[10px] uppercase tracking-[0.06em] text-fg-fnt">
+      <p className="mb-1 mt-5 text-micro uppercase tracking-[0.06em] text-fg-fnt">
         {t("empty", "getOneRunning")}
       </p>
       <Route name="Docker Desktop" hint={t("empty", "dockerDesktopHint")} />
@@ -364,7 +364,7 @@ function NoClusters({
         name={t("empty", "haveOneElsewhere")}
         hint={t("empty", "pointAtConfigHint")}
       />
-      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px]">
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption">
         <Act onClick={() => void kubeconfig.choose()}>
           {t("action", "chooseFile")}
         </Act>
@@ -406,7 +406,7 @@ function Route({ name, hint }: { name: string; hint: string }) {
     <div className="grid grid-cols-[6px_1fr_auto] items-center gap-[9px] px-[7px] py-[5px] text-xs">
       <span className="h-1.5 w-1.5 rounded-full border border-fg-fnt" />
       <span className="truncate text-fg-mid">{name}</span>
-      <span className="whitespace-nowrap text-[11px] text-fg-fnt">{hint}</span>
+      <span className="whitespace-nowrap text-caption text-fg-fnt">{hint}</span>
     </div>
   );
 }
@@ -448,7 +448,7 @@ function Connecting({
           }
         />
       </div>
-      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption text-fg-fnt">
         <Act onClick={onCancel}>{t("action", "cancel")}</Act>
         {startedAt && <span className="font-mono">{elapsed}</span>}
       </div>
@@ -539,7 +539,7 @@ function Failed({
           )}
         />
       </div>
-      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption text-fg-fnt">
         <Act onClick={onRetry}>{t("action", "retry")}</Act>
         {wayBack && (
           <Act onClick={() => onBack(wayBack)}>

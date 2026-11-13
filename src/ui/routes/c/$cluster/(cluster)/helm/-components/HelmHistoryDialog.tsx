@@ -53,7 +53,7 @@ export function HelmHistoryDialog({
         <DialogHeader>
           <DialogTitle>
             {t("action", "history")}
-            <span className="ml-2 font-mono text-[11px] font-normal text-fg-fnt">
+            <span className="ml-2 font-mono text-caption font-normal text-fg-fnt">
               {release.namespace}/{release.name}
             </span>
           </DialogTitle>
@@ -97,14 +97,14 @@ export function HelmHistoryDialog({
                       <TableCell className="font-mono text-fg">
                         {rev.revision}
                         {current && (
-                          <span className="ml-1.5 text-[11px] text-fg-fnt">
+                          <span className="ml-1.5 text-caption text-fg-fnt">
                             {t("empty", "revisionCurrentWord")}
                           </span>
                         )}
                       </TableCell>
                       <TableCell
                         className={cn(
-                          "text-[11px]",
+                          "text-caption",
                           statusRole(rev.status) === "err"
                             ? "text-err"
                             : "text-fg-mut"

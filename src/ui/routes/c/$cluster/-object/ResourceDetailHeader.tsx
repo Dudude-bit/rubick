@@ -249,7 +249,7 @@ export function ResourceDetailHeader({
       {/* Tighter than the row around it: the trail and the name are one path,
           and 10px between a slash and its segment breaks that path into
           separate words. */}
-      <div className="flex min-w-0 items-center gap-x-1.5 text-[11px] text-fg-fnt">
+      <div className="flex min-w-0 items-center gap-x-1.5 text-caption text-fg-fnt">
         {trail}
         <span aria-hidden="true">/</span>
         {title}
@@ -263,7 +263,7 @@ export function ResourceDetailHeader({
       >
         {createdAt && (
           <span
-            className="text-[11px] text-fg-fnt"
+            className="text-caption text-fg-fnt"
             title={formatDate(createdAt) ?? undefined}
           >
             <RealtimeAge timestamp={createdAt} className="text-fg-fnt" />{" "}

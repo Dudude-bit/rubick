@@ -367,7 +367,7 @@ export function FilesTab({
         confirmLabel={t("action", "download")}
         onConfirm={() => void download(true)}
       />
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-hair px-3 py-2 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-hair px-3 py-2 text-caption">
         <span
           className="flex items-center gap-0.5"
           role="tablist"
@@ -454,7 +454,7 @@ export function FilesTab({
       )}
 
       {target !== null && !beforeAnswer && (
-        <div className="flex flex-wrap items-center gap-1 border-b border-hair px-3 py-1.5 font-mono text-[11px]">
+        <div className="flex flex-wrap items-center gap-1 border-b border-hair px-3 py-1.5 font-mono text-caption">
           {crumbs(target.path).map((crumb, i) => (
             <span
               key={crumb.path}
@@ -500,7 +500,7 @@ export function FilesTab({
               onChange={(e) => setFilter(e.target.value)}
               aria-label={filterLabel}
               placeholder={filterLabel}
-              className="ml-auto w-48 rounded border border-hair bg-canvas px-1.5 py-0.5 text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+              className="ml-auto w-48 rounded border border-hair bg-canvas px-1.5 py-0.5 text-caption focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             />
           )}
         </div>
@@ -561,7 +561,7 @@ export function FilesTab({
             role="grid"
             aria-label={t("files", "listingOf", { path })}
           >
-            <div className="grid grid-cols-[minmax(0,1fr)_100px_80px_90px] gap-x-3 border-b border-hair px-3 py-1 text-[11px] text-fg-fnt">
+            <div className="grid grid-cols-[minmax(0,1fr)_100px_80px_90px] gap-x-3 border-b border-hair px-3 py-1 text-caption text-fg-fnt">
               <SortHead
                 k="name"
                 sort={sort}
@@ -626,7 +626,7 @@ export function FilesTab({
                 }
               />
             )}
-            <p className="border-t border-hair px-3 py-1 text-[10px] text-fg-fnt">
+            <p className="border-t border-hair px-3 py-1 text-micro text-fg-fnt">
               {t("files", "keys", { download: formatShortcut("mod+s") })}
             </p>
           </div>
@@ -705,7 +705,7 @@ function Notice({
     <p
       role="status"
       className={cn(
-        "border-b border-hair px-3 py-1.5 text-[11px]",
+        "border-b border-hair px-3 py-1.5 text-caption",
         TONE_TEXT[tone]
       )}
     >
@@ -952,7 +952,7 @@ function Rows({
                 )}
                 {tag && (
                   <span
-                    className="ml-1 truncate rounded border border-hair px-1 text-[10px] text-fg-mut"
+                    className="ml-1 truncate rounded border border-hair px-1 text-micro text-fg-mut"
                     // Every source, because with more than one the badge
                     // deliberately names none of them.
                     title={`${tag.sources
@@ -1034,7 +1034,7 @@ function Failure({
             {t("files", "readMountsInstead")}
           </button>
         </p>
-        <p className="mt-2 text-[11px] text-fg-fnt">
+        <p className="mt-2 text-caption text-fg-fnt">
           {t("files", "debugExplained")}
         </p>
       </div>
@@ -1077,7 +1077,7 @@ function Failure({
   return (
     <div className="px-3 py-6 text-xs">
       <p className="font-medium text-err">{title}</p>
-      <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px] text-fg-mut">
+      <pre className="mt-1 whitespace-pre-wrap font-mono text-caption text-fg-mut">
         {state.stderr.trim() || state.message}
       </pre>
       <button type="button" onClick={onRetry} className={cn("mt-3", link)}>
@@ -1284,7 +1284,7 @@ function Preview({
 
   return (
     <div className="flex w-[46%] min-w-0 flex-col border-l border-hair">
-      <div className="border-b border-hair px-3 py-2 text-[11px]">
+      <div className="border-b border-hair px-3 py-2 text-caption">
         <p className="truncate font-mono text-xs text-fg">{path}</p>
         <p className="mt-0.5 text-fg-fnt">
           {formatBytes(entry.size)}
@@ -1343,7 +1343,7 @@ function Preview({
           </button>
         </p>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto scrollbar-lane px-3 py-2 font-mono text-[11px]">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-lane px-3 py-2 font-mono text-caption">
         {query.isPending ? (
           <span className="text-fg-fnt">{t("action", "readingInline")}</span>
         ) : query.error ? (

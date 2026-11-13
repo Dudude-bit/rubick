@@ -132,7 +132,9 @@ function TabNote({
         {title}
       </p>
       {detail && (
-        <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">{detail}</p>
+        <p className="mt-1 wrap-break-word text-caption text-fg-mut">
+          {detail}
+        </p>
       )}
     </div>
   );
@@ -150,7 +152,7 @@ function TabError({
   return (
     <div className="px-3.5 py-4">
       <p className="text-xs text-warn">{what}</p>
-      <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">
+      <p className="mt-1 wrap-break-word text-caption text-fg-mut">
         {errorToShow(error)}
       </p>
       <ReadAgain error={error} onRetry={onRetry} className="mt-2" />
@@ -167,7 +169,7 @@ function Refreshing({ busy }: { busy: boolean }) {
   const t = useT();
   if (!busy) return null;
   return (
-    <span className="text-[11px] text-fg-fnt">{t("action", "updating")}</span>
+    <span className="text-caption text-fg-fnt">{t("action", "updating")}</span>
   );
 }
 
@@ -576,7 +578,7 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-none items-center gap-2 px-2 py-1">
-        <span className="text-[11px] text-fg-mut">
+        <span className="text-caption text-fg-mut">
           {t("action", "kindManifest", { kind: target.kind })}
         </span>
         <Refreshing busy={isFetching} />

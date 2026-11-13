@@ -65,13 +65,13 @@ export function RollbackDialog({
             </DialogDescription>
           </DialogHeader>
           <div data-testid="rollback-changes">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+            <p className="text-micro font-semibold uppercase tracking-[0.07em] text-fg-fnt">
               {t("action", "rollbackWhatChanges")}
             </p>
             {current ? (
               <Against against={comparisonOf(current, target)} />
             ) : (
-              <p className="text-[11px] text-warn">
+              <p className="text-caption text-warn">
                 {t("action", "rollbackCurrentUnknown")}
               </p>
             )}

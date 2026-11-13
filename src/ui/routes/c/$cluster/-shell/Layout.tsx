@@ -100,7 +100,7 @@ export function Layout({
         <div
           data-window-cluster="accent"
           role="status"
-          className="flex h-5 flex-none items-center justify-center gap-2 bg-err px-3 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-canvas"
+          className="flex h-5 flex-none items-center justify-center gap-2 bg-err px-3 font-mono text-caption font-semibold uppercase tracking-[0.08em] text-canvas"
         >
           <TriangleAlert className="h-3 w-3" aria-hidden="true" />
           {t("cluster", "criticalStripe", { context: currentContext })}

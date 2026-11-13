@@ -33,7 +33,7 @@ const COLOURINGS = [
 ] as const;
 
 const SEGMENT =
-  "flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[11px] font-normal text-fg-mut transition-colors hover:bg-hover peer-data-[state=checked]:bg-sel peer-data-[state=checked]:text-fg peer-focus-visible:ring-1 peer-focus-visible:ring-info";
+  "flex h-6 cursor-pointer items-center gap-1.5 rounded px-1.5 text-caption font-normal text-fg-mut transition-colors hover:bg-hover peer-data-[state=checked]:bg-sel peer-data-[state=checked]:text-fg peer-focus-visible:ring-1 peer-focus-visible:ring-info";
 
 export function AppearanceSettings() {
   const { theme, setTheme } = useThemeStore();

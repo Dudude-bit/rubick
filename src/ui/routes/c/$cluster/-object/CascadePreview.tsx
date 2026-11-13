@@ -276,7 +276,7 @@ function Answer({
             {readHere.map((reading) => (
               <li
                 key={`${reading.group}/${reading.plural}`}
-                className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-[11px]"
+                className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-caption"
               >
                 <KindIcon
                   kind={reading.kind}

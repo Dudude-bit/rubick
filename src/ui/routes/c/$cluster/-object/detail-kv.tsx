@@ -55,7 +55,7 @@ export function KeyValueRow({
        *  `deployment.kubernetes.io/revision` is drawn straight over the
        *  value column. */}
       <dt
-        className="min-w-0 wrap-break-word text-[11px] text-fg-fnt"
+        className="min-w-0 wrap-break-word text-caption text-fg-fnt"
         // Only a plain label can be its own tooltip; a rendered one carries
         // its own affordances and would announce them twice.
         title={typeof label === "string" ? label : undefined}
@@ -96,7 +96,7 @@ function FoldedDocument({ label, text }: { label: string; text: string }) {
   return (
     <div className="flex min-w-0 flex-col">
       <div className="flex items-baseline gap-2">
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {describeDocument(text, t)}
         </span>
         <div className="-my-0.5 ml-auto flex items-center gap-1">
@@ -116,7 +116,7 @@ function FoldedDocument({ label, text }: { label: string; text: string }) {
         </div>
       </div>
       {open && (
-        <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all border-l border-hair pl-3 font-mono text-[11px] text-fg-mid">
+        <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all border-l border-hair pl-3 font-mono text-caption text-fg-mid">
           {expanded}
         </pre>
       )}

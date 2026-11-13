@@ -42,7 +42,7 @@ import { NodeRef } from "./NodeRef";
 import { ResourceType } from "@/lib/resource-registry";
 
 const GROUP_HEADING =
-  "text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt";
+  "text-micro font-semibold uppercase tracking-[0.07em] text-fg-fnt";
 
 function Name({ object }: { object: ObjectRef }) {
   const { crdFor } = useCrdIndex();
@@ -97,7 +97,7 @@ function Outside({ end }: { end: OutsideEnd }) {
           <button
             type="button"
             onClick={() => openExternal(end.link!.url, end.link!.site, t)}
-            className="inline-flex items-baseline gap-0.5 font-mono text-[11px] text-info hover:underline"
+            className="inline-flex items-baseline gap-0.5 font-mono text-caption text-info hover:underline"
           >
             {shortRevision(end.revision)}
             <ExternalLink
@@ -106,7 +106,7 @@ function Outside({ end }: { end: OutsideEnd }) {
             />
           </button>
         ) : (
-          <span className="font-mono text-[11px] text-fg-fnt">
+          <span className="font-mono text-caption text-fg-fnt">
             {shortRevision(end.revision)}
           </span>
         ))}
@@ -125,7 +125,7 @@ function Row({ row }: { row: ConnRow }) {
   const inline = row.ways.length === 1 ? row.ways[0] : null;
   return (
     <div className="grid grid-cols-[minmax(0,148px)_minmax(0,1fr)] items-baseline gap-3 py-[3px]">
-      <span className="min-w-0 wrap-break-word text-[11px] text-fg-fnt">
+      <span className="min-w-0 wrap-break-word text-caption text-fg-fnt">
         {row.label}
       </span>
       <div className="min-w-0">
@@ -135,7 +135,7 @@ function Row({ row }: { row: ConnRow }) {
           {(inline || row.detail) && (
             <span
               className={cn(
-                "min-w-0 text-[11px]",
+                "min-w-0 text-caption",
                 row.object || row.outside ? "text-fg-fnt" : "text-fg-mut"
               )}
             >
@@ -145,7 +145,7 @@ function Row({ row }: { row: ConnRow }) {
           {existence && (
             <span
               className={cn(
-                "text-[11px]",
+                "text-caption",
                 row.object?.existence === "missing" ? "text-err" : "text-fg-fnt"
               )}
             >
@@ -154,14 +154,14 @@ function Row({ row }: { row: ConnRow }) {
           )}
         </span>
         {row.refused && (
-          <p className="flex items-center gap-1 text-[11px] text-err">
+          <p className="flex items-center gap-1 text-caption text-err">
             <Ban className="h-3 w-3 flex-none" aria-hidden="true" />
             {row.refused}
           </p>
         )}
         {!inline &&
           row.ways.map((way) => (
-            <p key={way} className="text-[11px] text-fg-fnt">
+            <p key={way} className="text-caption text-fg-fnt">
               {way}
             </p>
           ))}
@@ -169,7 +169,7 @@ function Row({ row }: { row: ConnRow }) {
           <p
             key={missing.key}
             className={cn(
-              "flex items-center gap-1 text-[11px]",
+              "flex items-center gap-1 text-caption",
               missing.optional ? "text-warn" : "text-err"
             )}
           >
@@ -203,7 +203,7 @@ function Nothing({ subject }: { subject: ResourceConnections["subject"] }) {
       <p className="text-xs text-fg-mut">
         {t("empty", "nothingStatesEdge", { where, kind: subject.kind })}
       </p>
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {t("empty", "everyWorkloadRead", { where })}
       </p>
     </Section>
@@ -276,7 +276,7 @@ function ConnectionsPanelInner({
           <p className={cn(GROUP_HEADING, "pb-1.5")}>
             {group.title}
             {group.caption && (
-              <span className="ml-2 font-normal normal-case tracking-normal text-[11px] text-fg-fnt">
+              <span className="ml-2 font-normal normal-case tracking-normal text-caption text-fg-fnt">
                 {group.caption}
               </span>
             )}

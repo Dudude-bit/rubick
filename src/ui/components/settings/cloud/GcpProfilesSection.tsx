@@ -209,7 +209,7 @@ export function GcpProfilesSection() {
                   <FolderOpen className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              <p className="text-[11px] text-fg-mut">
+              <p className="text-caption text-fg-mut">
                 {t("settings", "adcHint")}
               </p>
             </div>

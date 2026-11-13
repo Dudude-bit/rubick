@@ -160,17 +160,17 @@ export function PersistentVolumeClaimDetail() {
         pvc && (
           <>
             {pvc.capacity && (
-              <span className="font-mono text-[11px] text-fg-mut">
+              <span className="font-mono text-caption text-fg-mut">
                 {declaredQuantity("storage", pvc.capacity)}
               </span>
             )}
-            <span className="text-[11px] text-fg-fnt">
+            <span className="text-caption text-fg-fnt">
               {pvc.accessModes.join(" · ") || t("empty", "noAccessModes")}
             </span>
             {pending && (
               <span
                 className={cn(
-                  "text-[11px]",
+                  "text-caption",
                   ROLE_TEXT[cause ? causeRole(pvc, cause, now) : "warn"]
                 )}
               >

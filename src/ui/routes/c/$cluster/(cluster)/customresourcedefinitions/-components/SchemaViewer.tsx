@@ -177,21 +177,21 @@ function SchemaNode({
         {/* Property name */}
         <span className="font-medium text-fg">{name}</span>
 
-        {required && <span className="text-[10px] text-err">required</span>}
+        {required && <span className="text-micro text-err">required</span>}
 
         {/* Type */}
-        <span className={cn("text-[11px]", getTypeColor(schema.type))}>
+        <span className={cn("text-caption", getTypeColor(schema.type))}>
           {formatType(schema)}
         </span>
 
         {/* Format */}
         {schema.format && (
-          <span className="text-[11px] text-fg-fnt">({schema.format})</span>
+          <span className="text-caption text-fg-fnt">({schema.format})</span>
         )}
 
         {/* Enum values */}
         {schema.enum && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             [{schema.enum.slice(0, 3).join(", ")}
             {schema.enum.length > 3 && "..."}]
           </span>
@@ -199,7 +199,7 @@ function SchemaNode({
 
         {/* Default value */}
         {schema.default !== undefined && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             = {JSON.stringify(schema.default)}
           </span>
         )}
@@ -208,7 +208,7 @@ function SchemaNode({
       {/* Description */}
       {schema.description && (
         <div
-          className="mb-1 ml-8 text-[11px] text-fg-mut"
+          className="mb-1 ml-8 text-caption text-fg-mut"
           style={{ paddingLeft: `${level * 16 + 8}px` }}
         >
           {schema.description}
@@ -222,7 +222,7 @@ function SchemaNode({
         schema.maxLength !== undefined ||
         schema.pattern) && (
         <div
-          className="mb-1 ml-8 flex gap-2 text-[11px] text-fg-fnt"
+          className="mb-1 ml-8 flex gap-2 text-caption text-fg-fnt"
           style={{ paddingLeft: `${level * 16 + 8}px` }}
         >
           {schema.minimum !== undefined && <span>min: {schema.minimum}</span>}
@@ -269,7 +269,7 @@ function SchemaNode({
           {/* Additional properties */}
           {schema.additionalProperties === true && (
             <div
-              className="py-1 text-[11px] text-fg-fnt"
+              className="py-1 text-caption text-fg-fnt"
               style={{ paddingLeft: `${(level + 1) * 16 + 8}px` }}
             >
               (additional properties allowed)
@@ -286,7 +286,7 @@ function SchemaNode({
           {/* x-kubernetes-preserve-unknown-fields */}
           {schema["x-kubernetes-preserve-unknown-fields"] && (
             <div
-              className="py-1 text-[11px] text-fg-fnt"
+              className="py-1 text-caption text-fg-fnt"
               style={{ paddingLeft: `${(level + 1) * 16 + 8}px` }}
             >
               (preserves unknown fields)
@@ -325,14 +325,14 @@ export function SchemaViewer({ schema, title }: SchemaViewerProps) {
   return (
     <div className="flex flex-col gap-2">
       {title && (
-        <h2 className="text-[13px] font-semibold tracking-tight text-fg">
+        <h2 className="text-title font-semibold tracking-tight text-fg">
           {title}
         </h2>
       )}
 
       {specSchema && (
         <section>
-          <div className="border-b border-hair px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+          <div className="border-b border-hair px-1 pb-1 text-micro font-semibold uppercase tracking-[0.07em] text-fg-fnt">
             spec
           </div>
           <div className="py-1">
@@ -363,7 +363,7 @@ export function SchemaViewer({ schema, title }: SchemaViewerProps) {
 
       {statusSchema && (
         <section>
-          <div className="border-b border-hair px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+          <div className="border-b border-hair px-1 pb-1 text-micro font-semibold uppercase tracking-[0.07em] text-fg-fnt">
             status
           </div>
           <div className="py-1">

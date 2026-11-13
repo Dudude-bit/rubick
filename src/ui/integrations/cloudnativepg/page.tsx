@@ -546,7 +546,7 @@ function ClusterRow({
               ))}
             </div>
           )}
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption">
             {actions
               .filter((a) => a.id !== "fence" && a.id !== "unfence")
               .map((action) => (
@@ -790,7 +790,7 @@ function BackupsTab({ companions }: { companions: Companions | undefined }) {
           ))}
         </ul>
       )}
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         <Link
           {...crdInstancesLink(BACKUPS_CRD)}
           className="text-info hover:underline"
@@ -827,7 +827,7 @@ function BackupLine({ backup }: { backup: CustomResourceInfo }) {
       </span>
       <span className="text-fg-fnt">{formatAge(backup.createdAt, t)}</span>
       {typeof error === "string" && error && (
-        <span className="font-mono text-[11px] text-err">{error}</span>
+        <span className="font-mono text-caption text-err">{error}</span>
       )}
     </li>
   );

@@ -131,11 +131,11 @@ export function ServiceCard({
           kind={pin.kind}
           name={pin.name}
           namespace={pin.namespace}
-          className="truncate text-[13px] font-medium text-fg hover:underline"
+          className="truncate text-title font-medium text-fg hover:underline"
         >
           {pin.name}
         </ObjectLink>
-        <span className="truncate font-mono text-[11px] text-fg-fnt">
+        <span className="truncate font-mono text-caption text-fg-fnt">
           {pin.namespace}
         </span>
         <StateWords state={state} verdict={waysVerdict(ways)} t={t} />
@@ -152,7 +152,7 @@ export function ServiceCard({
       {/* The same label track every other block in this app uses, so the
           values line up with the page around the card rather than being
           pushed out by the longest label in it. */}
-      <dl className="mt-1.5 grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
+      <dl className="mt-1.5 grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-caption">
         <dt className="text-fg-fnt">{t("services", "wayIn")}</dt>
         <dd className="min-w-0 text-fg-mut">
           {!ways.known ? (
@@ -268,14 +268,14 @@ function StateWords({
 }) {
   if (state.state === "gone") {
     return (
-      <span className="flex-none font-mono text-[11px] text-err">
+      <span className="flex-none font-mono text-caption text-err">
         {t("services", "gone")}
       </span>
     );
   }
   if (state.state === "reading") {
     return (
-      <span className="flex-none text-[11px] text-fg-fnt">
+      <span className="flex-none text-caption text-fg-fnt">
         {t("services", "reading")}
       </span>
     );
@@ -283,7 +283,7 @@ function StateWords({
   if (state.state === "unread") {
     return (
       <span
-        className="flex-none text-[11px] text-fg-fnt"
+        className="flex-none text-caption text-fg-fnt"
         title={state.why || undefined}
       >
         {t("services", "couldNotRead")}
@@ -293,7 +293,7 @@ function StateWords({
   const count = (
     <span
       className={cn(
-        "flex-none font-mono text-[11px] tabular-nums",
+        "flex-none font-mono text-caption tabular-nums",
         verdict && verdict.says !== "some"
           ? "text-fg-mut"
           : state.state === "ready"
@@ -313,7 +313,7 @@ function StateWords({
       {verdict ? (
         <span
           className={cn(
-            "truncate text-[11px]",
+            "truncate text-caption",
             ROLE_TEXT[VERDICT_ROLE[verdict.says]]
           )}
         >

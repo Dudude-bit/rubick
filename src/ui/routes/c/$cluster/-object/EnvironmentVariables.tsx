@@ -141,7 +141,7 @@ function SourceCell({
   const isSecret = type === "secret" || type === "envFromSecret";
   const isConfigMap = type === "configmap" || type === "envFromConfigMap";
   return (
-    <span className="text-[11px] text-fg-fnt">
+    <span className="text-caption text-fg-fnt">
       {/* The word already says the kind, so the reference does not repeat
           it — `configmap app-config`, not `configmap ConfigMap/app-config`. */}
       {t("readings", SOURCE_LABEL[type])}
@@ -743,7 +743,7 @@ export function EnvironmentVariables({
                       the canvas has no boxed controls. */}
                   <SelectTrigger
                     aria-label={t("action", "filterBySource")}
-                    className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                    className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-caption text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -783,7 +783,7 @@ export function EnvironmentVariables({
                   />
                   <Label
                     htmlFor={`show-secrets-${containerName}`}
-                    className="text-[11px] text-fg-mut"
+                    className="text-caption text-fg-mut"
                   >
                     {t("action", "showSecrets")}
                   </Label>

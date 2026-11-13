@@ -69,7 +69,7 @@ export function ClusterRow({
             >
               {alias}
             </span>
-            <span className="truncate font-mono text-[10px] leading-[13px] text-fg-fnt">
+            <span className="truncate font-mono text-micro leading-[13px] text-fg-fnt">
               {context}
             </span>
           </span>
@@ -85,7 +85,7 @@ export function ClusterRow({
       {meta != null && (
         <span
           className={cn(
-            "whitespace-nowrap text-[11px]",
+            "whitespace-nowrap text-caption",
             failed ? "text-err" : "text-fg-fnt"
           )}
         >

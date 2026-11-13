@@ -6,6 +6,8 @@ const LEGACY_TOKEN =
 const VENDOR_PATH = /(^|\/)integrations\/[^-]/;
 const OVERLAY_SCROLLBAR =
   /(^|[^a-z0-9-])(scrollbar-thin(?![a-z0-9-])|\[scrollbar-width:(?!none\])|\[scrollbar-color:(?!auto\]))/;
+const OFF_SCALE_TEXT =
+  /(^|[^a-z0-9-])text-(\[[0-9.]+(px|rem)\]|sm|base|lg|[2-9]?xl)(?![a-z0-9-])/;
 const INTERVAL_KEY = /^refetchInterval(InBackground)?$/;
 
 /** A rule that reports `message` on every node `test` accepts, for each node type listed. */
@@ -96,6 +98,17 @@ export default {
       ["Literal", "TemplateElement", "Property"],
       overlayScrollbar,
       "Use scrollbar-lane. The thin utility, or any scrollbar-width or scrollbar-color, hands WebKit its overlay scrollbar, which takes the pointer over the last 14 px of the scroller while it is not drawn, so whatever sits there ignores clicks."
+    ),
+    // 942 one-off sizes in eleven steps made sibling lines differ by half a
+    // pixel; the scale has five.
+    "type-scale": guard(
+      ["Literal", "TemplateElement"],
+      (node) => {
+        const text =
+          node.type === "TemplateElement" ? node.value?.raw : node.value;
+        return typeof text === "string" && OFF_SCALE_TEXT.test(text);
+      },
+      "Use the type scale from index.css: text-micro (10px), text-caption (11px), text-xs (12px), text-title (13px), text-display (15px)."
     ),
     // The OS paints it: in a dark window it opens white. Reported an hour
     // after a release.

@@ -118,11 +118,11 @@ export function StorageClassDetail() {
         sc && (
           <>
             {sc.isDefault && (
-              <span className="text-[11px] font-medium text-fg">
+              <span className="text-caption font-medium text-fg">
                 {t("empty", "defaultClassBadge")}
               </span>
             )}
-            <span className="font-mono text-[11px] text-fg-mut">
+            <span className="font-mono text-caption text-fg-mut">
               {sc.provisioner}
             </span>
           </>

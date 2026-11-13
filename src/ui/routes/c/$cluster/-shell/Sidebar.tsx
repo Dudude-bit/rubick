@@ -111,7 +111,7 @@ type NavItem = NavName & {
 const ROW_FOCUS_CLASS =
   "transition-colors hover:bg-hover outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info";
 // The scroll margin outdoes the rail's 24px fades, so a focused row lands clear of them.
-const ROW_BASE_CLASS = `group flex scroll-my-7 items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] ${ROW_FOCUS_CLASS}`;
+const ROW_BASE_CLASS = `group flex scroll-my-7 items-center gap-[9px] rounded-[5px] px-2 py-1 text-xs leading-[15px] ${ROW_FOCUS_CLASS}`;
 const ROW_SHUT_CLASS = "text-fg-mid";
 const ROW_CLASS = `${ROW_BASE_CLASS} ${ROW_SHUT_CLASS}`;
 const ROW_OPEN_CLASS = "bg-sel font-medium text-fg";
@@ -351,7 +351,7 @@ function RailMore({ n, onClick }: { n: number; onClick: () => void }) {
       type="button"
       tabIndex={-1}
       onClick={onClick}
-      className="absolute bottom-0 left-0 right-2 flex h-[18px] items-center justify-end gap-1 bg-canvas px-1.5 text-[10px] leading-[13px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+      className="absolute bottom-0 left-0 right-2 flex h-[18px] items-center justify-end gap-1 bg-canvas px-1.5 text-micro leading-[13px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
     >
       <ChevronsDown className="h-3 w-3" aria-hidden="true" />
       {t("count", "railRowsBelow", { n })}
@@ -503,7 +503,7 @@ function GatewayRows() {
 function GroupCaption({ k, busy = false }: { k: NavKey; busy?: boolean }) {
   const t = useT();
   return (
-    <div className="flex items-center justify-between px-2 pb-1 pt-3 text-[10px] font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
+    <div className="flex items-center justify-between px-2 pb-1 pt-3 text-micro font-semibold uppercase leading-[13px] tracking-[0.07em] text-fg-fnt">
       <T section="nav" k={k} />
       {busy && (
         <Spinner
@@ -641,7 +641,7 @@ function IntegrationsGroup() {
       {operators.length > 0 && <GroupCaption k="operators" />}
       {operators.map(row)}
       {failed && (
-        <p className="px-2 pb-1 text-[10px] leading-snug text-err">{failed}</p>
+        <p className="px-2 pb-1 text-micro leading-snug text-err">{failed}</p>
       )}
       {catalog}
     </div>
@@ -687,7 +687,7 @@ function ClusterRow() {
         style={{ color: "var(--cluster)" }}
       />
       <span className="flex min-w-0 flex-col text-left">
-        <span className="truncate text-[12px] font-semibold leading-[15px] text-fg">
+        <span className="truncate text-xs font-semibold leading-[15px] text-fg">
           {alias ?? currentContext ?? t("cluster", "noCluster")}
         </span>
         {alias && currentContext && (
@@ -698,7 +698,7 @@ function ClusterRow() {
           // prod from staging. `direction: rtl` moves the ellipsis to the
           // start and leaves the run itself in order, because the name is
           // ASCII from end to end.
-          <span className="truncate text-left font-mono text-[10px] leading-[12px] text-fg-fnt [direction:rtl]">
+          <span className="truncate text-left font-mono text-micro leading-[12px] text-fg-fnt [direction:rtl]">
             {currentContext}
           </span>
         )}
@@ -883,7 +883,7 @@ function NavRow({
           </span>
           {lock && <LockMark lock={lock} reason={deniedReason} />}
           {note !== undefined ? (
-            <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
+            <span className="ml-auto text-micro text-fg-fnt">{note}</span>
           ) : value === undefined ? (
             counts &&
             (item.count === "events" ? (
@@ -894,7 +894,7 @@ function NavRow({
           ) : (
             // A count nobody could finish still sits beside a break that was read.
             (value !== null || mark) && (
-              <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
+              <span className="ml-auto flex items-center gap-1.5 text-caption text-fg-fnt">
                 {mark && (
                   // A hollow ring for "could not be checked", the same shape
                   // the tab strip wears: a page that says nobody looked had
@@ -949,7 +949,7 @@ function AttentionCount({
   return (
     <span
       className={cn(
-        "ml-auto flex items-center gap-1 text-[11px]",
+        "ml-auto flex items-center gap-1 text-caption",
         worst ? ATTENTION_TEXT[worst] : "text-fg-fnt",
         behind && HELD_CLASS
       )}
@@ -1058,7 +1058,7 @@ function NavCount({
   }
   return (
     <span
-      className={cn("ml-auto text-[11px] text-fg-fnt", behind)}
+      className={cn("ml-auto text-caption text-fg-fnt", behind)}
       title={[
         age,
         scoped && missing && missing.missing.length > 0
@@ -1100,7 +1100,7 @@ function PartialCountMark({
   return (
     <span
       className={cn(
-        "ml-auto flex items-center gap-1 text-[11px] text-fg-fnt",
+        "ml-auto flex items-center gap-1 text-caption text-fg-fnt",
         className
       )}
       title={[...said, age].filter(Boolean).join("\n")}

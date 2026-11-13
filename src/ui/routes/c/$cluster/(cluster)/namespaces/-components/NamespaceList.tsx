@@ -39,7 +39,7 @@ function NameCell({ row }: CellContext<NamespaceInfo>) {
         showKind={false}
       />
       {row.original.name === currentNamespace && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           <T section="cluster" k="currentScope" />
         </span>
       )}

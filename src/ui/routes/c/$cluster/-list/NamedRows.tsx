@@ -34,7 +34,7 @@ export function NamedRowsBanner({
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 gap-1 text-[11px]"
+          className="h-6 gap-1 text-caption"
           onClick={() => setSearch({ names: undefined })}
         >
           <X aria-hidden className="size-3" />

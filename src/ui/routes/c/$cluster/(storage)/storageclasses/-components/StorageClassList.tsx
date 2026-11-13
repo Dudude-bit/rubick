@@ -56,7 +56,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
         {/* Which class a PVC gets when it names none is worth saying in
          *  words: a gold star said it in colour and shape alone. */}
         {row.original.isDefault && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             <T section="empty" k="defaultClassBadge" />
           </span>
         )}

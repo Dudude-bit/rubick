@@ -168,7 +168,7 @@ export function MostLikelyPanel({
           {words(line, t)}
         </p>
       ))}
-      <p className="mt-1 text-[11px] text-fg-fnt">{t("hints", "notTested")}</p>
+      <p className="mt-1 text-caption text-fg-fnt">{t("hints", "notTested")}</p>
       {(hint?.checks.length ?? 0) > 0 ? (
         <ul className="mt-1.5 flex flex-col gap-0.5">
           {hint!.checks.map((check, index) => (
@@ -182,7 +182,7 @@ export function MostLikelyPanel({
         </ul>
       ) : null}
       {notRead.length > 0 ? (
-        <p className="mt-1.5 text-[11px] text-warn">
+        <p className="mt-1.5 text-caption text-warn">
           {t("count", "notReadList", { list: notRead.join("; ") })}
         </p>
       ) : null}
@@ -200,7 +200,7 @@ export function MostLikelyPanel({
           <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
           {t("hints", "copyForAgent")}
         </Button>
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {searchable
             ? t("hints", "searchOpens", { site })
             : t("hints", "searchNoEngine")}

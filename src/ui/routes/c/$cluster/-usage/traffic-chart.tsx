@@ -88,7 +88,7 @@ export function TrafficChart({ window: data, label }: TrafficChartProps) {
   return (
     <div>
       <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-2">
-        <span className="text-[11px] text-fg-mut">
+        <span className="text-caption text-fg-mut">
           {label ?? t("nav", "network")}
         </span>
         <div
@@ -147,7 +147,7 @@ export function TrafficChart({ window: data, label }: TrafficChartProps) {
             </AreaChart>
           </div>
         </div>
-        <span className="text-right text-[11px] text-fg-mut">
+        <span className="text-right text-caption text-fg-mut">
           <span className="font-mono tabular-nums">
             {throughput(newest?.rx ?? null, t)}
           </span>
@@ -155,7 +155,7 @@ export function TrafficChart({ window: data, label }: TrafficChartProps) {
       </div>
       {/* Identity is never colour alone: the name and the number carry it,
        *  and the swatch only confirms which line is which. */}
-      <div className="flex gap-4 pb-1 pl-[104px] pr-1.5 text-[11px] text-fg-fnt">
+      <div className="flex gap-4 pb-1 pl-[104px] pr-1.5 text-caption text-fg-fnt">
         <Key
           colour={IN_ROLE}
           name={t("columns", "trafficIn")}
@@ -225,11 +225,11 @@ function TrafficTooltip({
       className="pointer-events-none w-max rounded-md border border-hair bg-raise px-2 py-1.5 shadow-pop"
       role="status"
     >
-      <div className="font-mono text-[10px] tabular-nums text-fg-fnt">
+      <div className="font-mono text-micro tabular-nums text-fg-fnt">
         {clockOf(point.t)} ·{" "}
         {t("action", "agoSuffix", { age: formatSince(point.t, now) })}
       </div>
-      <div className="mt-0.5 font-mono text-[11px] tabular-nums text-fg-mid">
+      <div className="mt-0.5 font-mono text-caption tabular-nums text-fg-mid">
         {t("columns", "trafficIn")}{" "}
         {point.rx === null ? (
           <T section="empty" k="unknownLower" />

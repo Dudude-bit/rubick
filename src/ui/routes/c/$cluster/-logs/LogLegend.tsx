@@ -46,7 +46,7 @@ export function LogLegend({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-[11px]"
+      className="flex flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-caption"
       data-testid="log-legend"
     >
       {entries.map(({ key, label, phase, gone, reading }, index) => {
@@ -96,14 +96,14 @@ export function LogLegend({
               />
               {label}
               {phase && PHASE_LABEL[phase] && (
-                <span className="text-[9px] uppercase tracking-[0.04em] text-fg-fnt">
+                <span className="text-micro uppercase tracking-[0.04em] text-fg-fnt">
                   {PHASE_LABEL[phase]}
                 </span>
               )}
               {/* What is held, not what the container wrote — a stream
                   still backfilling counts up, and the cap takes it down. */}
               <span
-                className="font-mono text-[10px] text-fg-fnt"
+                className="font-mono text-micro text-fg-fnt"
                 title={t("count", "legendLinesHeld", {
                   n: count,
                   count: formatCount(count),

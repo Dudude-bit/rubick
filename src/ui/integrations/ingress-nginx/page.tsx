@@ -313,7 +313,7 @@ function MapTab({
   return (
     <div className="flex flex-col gap-2">
       <RoutingMap data={data} />
-      <p className="text-[11px] text-fg-fnt">{t("empty", "restOnNodeHint")}</p>
+      <p className="text-caption text-fg-fnt">{t("empty", "restOnNodeHint")}</p>
     </div>
   );
 }
@@ -385,7 +385,7 @@ function RoutesTab({
         <p className="text-xs text-fg-mut">
           {t("empty", "nginxRunningNothingRoutes")}
         </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           {t("empty", "nginxNoIngressClaimsClass")}
         </p>
       </div>
@@ -411,7 +411,7 @@ function RoutesTab({
       aside={
         <>
           {backingLoading && (
-            <span className="text-[11px] text-fg-fnt">
+            <span className="text-caption text-fg-fnt">
               {t("empty", "checkingWhatIsBehind")}
             </span>
           )}
@@ -539,7 +539,7 @@ function PathRow({
   const decoded = route.annotations.filter((reading) => reading.said !== null);
 
   return (
-    <div className="grid grid-cols-[minmax(0,190px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
+    <div className="grid grid-cols-[minmax(0,190px)_minmax(0,1fr)_auto] items-baseline gap-x-3 text-xs text-fg-mut">
       <span className="truncate font-mono text-fg-mid">
         {route.path}
         {route.pathType && route.pathType !== "Prefix" && (
@@ -581,7 +581,7 @@ function PathRow({
           />
         </span>
       </span>
-      <span className="text-[11px] text-fg-fnt">
+      <span className="text-caption text-fg-fnt">
         {route.service === null
           ? t("empty", "notAService")
           : backing && !backing.known
@@ -678,7 +678,7 @@ function HostChain({
   return (
     <div className="flex flex-col gap-1">
       {group.routes.length > 1 && (
-        <span className="text-[10px] text-fg-fnt">
+        <span className="text-micro text-fg-fnt">
           {t("empty", "pathThroughOn", {
             path: route.path,
             name: route.source.name,
@@ -704,7 +704,7 @@ function HostChain({
         </Column>
         <Column label={t("columns", "annotations")}>
           {route.annotations.length === 0 ? (
-            <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-[11px] text-fg-fnt opacity-60">
+            <div className="rounded-[4px] border border-hair px-2 py-1 font-mono text-caption text-fg-fnt opacity-60">
               {t("empty", "noneLower")}
             </div>
           ) : (
@@ -798,7 +798,7 @@ function HostChain({
         />
       ) : (
         route.tls && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {t("empty", "servedUnderPicked")}
           </span>
         )
@@ -845,10 +845,10 @@ function AnnotationLine({ reading }: { reading: AnnotationReading }) {
       <p
         className={
           reading.said
-            ? "text-[11.5px] text-fg-mut"
+            ? "text-xs text-fg-mut"
             : snippet
-              ? "text-[11.5px] text-warn"
-              : "text-[11.5px] text-fg-fnt"
+              ? "text-xs text-warn"
+              : "text-xs text-fg-fnt"
         }
       >
         {reading.said ??
@@ -856,16 +856,16 @@ function AnnotationLine({ reading }: { reading: AnnotationReading }) {
             ? t("empty", "rawNginxConfig")
             : t("empty", "shownAsWritten"))}
       </p>
-      <p className="mt-0.5 select-text break-all font-mono text-[11px] text-fg-fnt">
+      <p className="mt-0.5 select-text break-all font-mono text-caption text-fg-fnt">
         {reading.key}
         {reading.said ? `: ${reading.value}` : ""}
       </p>
       {!reading.said && (
         <>
-          <pre className="mt-0.5 select-text whitespace-pre-wrap break-all rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-[11px] text-fg-mid">
+          <pre className="mt-0.5 select-text whitespace-pre-wrap break-all rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-caption text-fg-mid">
             {reading.value}
           </pre>
-          <p className="mt-0.5 text-[11px] text-fg-fnt">
+          <p className="mt-0.5 text-caption text-fg-fnt">
             {rawNote(reading.raw!, t)}
           </p>
         </>
@@ -1035,7 +1035,7 @@ function AnnotationsTab({ groups }: { groups: NginxHostGroup[] }) {
         description={t("empty", "annotationsDescription")}
       />
       {raw.length > 0 && (
-        <p className="max-w-[92ch] border-l-2 border-hair pl-2.5 text-[11.5px] text-fg-mut">
+        <p className="max-w-[92ch] border-l-2 border-hair pl-2.5 text-xs text-fg-mut">
           {t("count", "linesShownAsWritten", { n: raw.length })}{" "}
           {t("empty", "wrongParaphraseNote")}
         </p>
@@ -1043,9 +1043,7 @@ function AnnotationsTab({ groups }: { groups: NginxHostGroup[] }) {
       <div className="flex flex-col gap-4">
         {objects.map(([object, entries]) => (
           <div key={object} className="flex flex-col gap-1.5">
-            <span className="font-mono text-[11.5px] text-fg-mid">
-              {object}
-            </span>
+            <span className="font-mono text-xs text-fg-mid">{object}</span>
             <Annotations readings={entries} />
           </div>
         ))}
@@ -1082,7 +1080,7 @@ function SettingsTab({
         <p className="text-xs text-fg-mut">
           {t("empty", "noGlobalNginxSettings")}
         </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           {controller.problem
             ? sayWords(controller.problem, t)
             : t("empty", "controllerNamesNoConfigMap")}
@@ -1100,7 +1098,7 @@ function SettingsTab({
         count={settings.length}
         description={t("empty", "settingsEveryRouteDescription")}
       />
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         <ResourceRef
           kind="ConfigMap"
           name={config.name}
@@ -1112,9 +1110,9 @@ function SettingsTab({
         {t("empty", "namedInConfigmapFlagPost")}
       </p>
       {config.problem ? (
-        <p className="text-[11px] text-warn">{sayWords(config.problem, t)}</p>
+        <p className="text-caption text-warn">{sayWords(config.problem, t)}</p>
       ) : settings.length === 0 ? (
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("empty", "configMapEmptyDefaults")}
         </p>
       ) : (
@@ -1125,25 +1123,23 @@ function SettingsTab({
               className="grid grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1.5"
             >
               <div className="flex min-w-0 flex-col">
-                <span className="truncate font-mono text-[11.5px] text-fg-mid">
+                <span className="truncate font-mono text-xs text-fg-mid">
                   {setting.key}
                 </span>
-                <span className="select-text break-all font-mono text-[11px] text-fg-fnt">
+                <span className="select-text break-all font-mono text-caption text-fg-fnt">
                   {setting.value}
                 </span>
               </div>
               <div className="flex min-w-0 flex-col">
                 <span
                   className={
-                    setting.said
-                      ? "text-[11.5px] text-fg-mut"
-                      : "text-[11.5px] text-fg-fnt"
+                    setting.said ? "text-xs text-fg-mut" : "text-xs text-fg-fnt"
                   }
                 >
                   {setting.said ?? rawNote(setting.raw!, t)}
                 </span>
                 {setting.overridable && (
-                  <span className="text-[11px] text-fg-fnt">
+                  <span className="text-caption text-fg-fnt">
                     {t("empty", "ingressMayOverride")}
                   </span>
                 )}
@@ -1179,7 +1175,7 @@ function ControllerTab({
       }}
       classesNote={
         flag && (
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {parts(t("empty", "startedWithFlag"), {
               flag: (
                 <span className="whitespace-nowrap font-mono">

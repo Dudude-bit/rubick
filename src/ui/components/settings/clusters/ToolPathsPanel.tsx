@@ -143,7 +143,7 @@ export function ToolPathsPanel() {
 
   return (
     <div className="mt-3 border-t border-hair pt-2">
-      <p className="pb-1 text-[11px] text-fg-mut">
+      <p className="pb-1 text-caption text-fg-mut">
         {t("settings", "toolPathsIntro")}
       </p>
       {tools.map((tool) => {
@@ -223,7 +223,7 @@ export function ToolPathsPanel() {
                 <FolderOpen className="h-3.5 w-3.5" />
               </Button>
             </div>
-            <p className="mt-1 text-[11px] text-fg-mut">{tool.note}</p>
+            <p className="mt-1 text-caption text-fg-mut">{tool.note}</p>
           </SettingRow>
         );
       })}

@@ -509,7 +509,7 @@ export function StatefulSetDetail() {
         }
         badges={
           statefulSet && (
-            <span className="text-[11px] text-fg-mut">
+            <span className="text-caption text-fg-mut">
               {readyBesideBadge(ready, desired, statefulSet.rollout, t)}
             </span>
           )

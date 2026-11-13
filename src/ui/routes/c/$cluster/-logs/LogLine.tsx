@@ -39,7 +39,7 @@ const ROW = `${GRID} px-1.5 py-px hover:bg-hover`;
 /** The clock, dim and fixed-width so the messages start on one axis. */
 function Time({ timestamp }: { timestamp: string | null }) {
   return (
-    <span className="text-right text-[11px] tabular-nums text-fg-fnt">
+    <span className="text-right text-caption tabular-nums text-fg-fnt">
       {formatTimestamp(timestamp)}
     </span>
   );
@@ -109,7 +109,7 @@ function Fields({
 function MatchedIn({ fields }: { fields: string[] }) {
   const t = useT();
   return (
-    <span className="ml-2 text-[10px] text-fg-fnt" data-testid="log-matched-in">
+    <span className="ml-2 text-micro text-fg-fnt" data-testid="log-matched-in">
       {fields.length === 0
         ? t("empty", "matchedOutsideMessage")
         : parts(t("empty", "matchedIn"), {
@@ -216,7 +216,7 @@ export const LogLineComponent = memo(function LogLineComponent({
                 key: "level",
                 value: LEVEL_WORDS[level],
               })}
-              className={`mr-2 text-[10px] font-semibold uppercase tracking-wide hover:underline ${LEVEL_COLORS[level]}`}
+              className={`mr-2 text-micro font-semibold uppercase tracking-wide hover:underline ${LEVEL_COLORS[level]}`}
               onClick={() => onLevelClick?.(level)}
             >
               {LEVEL_WORDS[level]}
@@ -280,7 +280,7 @@ function LineDetail({
   const t = useT();
   const level = log.level ?? "unknown";
   return (
-    <div className="ml-16 mr-2 mb-1 mt-0.5 rounded border border-hair bg-hover px-2.5 py-1.5 text-[11px]">
+    <div className="ml-16 mr-2 mb-1 mt-0.5 rounded border border-hair bg-hover px-2.5 py-1.5 text-caption">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fg-fnt">
         <span className="tabular-nums text-fg-mut">
           {formatTimestampPrecise(log.timestamp, t)}
@@ -378,7 +378,7 @@ function LaneLabel({
     <button
       type="button"
       title={t("action", "filterOn", { key: "pod", value: pod })}
-      className="mr-2 text-[10px] font-semibold hover:underline"
+      className="mr-2 text-micro font-semibold hover:underline"
       style={{ color: color ?? "hsl(var(--fg-fnt))" }}
       onClick={() => onFieldClick?.("pod", pod)}
     >
@@ -422,7 +422,7 @@ export const LogRunRow = memo(function LogRunRow({
       <span className="block min-w-0 truncate text-fg-mut">
         {laneLabel !== null && (
           <span
-            className="mr-2 text-[10px] font-semibold"
+            className="mr-2 text-micro font-semibold"
             style={{ color: containerColor ?? "hsl(var(--fg-fnt))" }}
           >
             {laneLabel}

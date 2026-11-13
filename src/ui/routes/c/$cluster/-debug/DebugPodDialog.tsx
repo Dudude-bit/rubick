@@ -411,12 +411,12 @@ export function DebugPodDialog({
                       {t("action", "ephemeralContainerMode")}
                     </span>
                     {!supportsEphemeralContainers && (
-                      <span className="text-[11px] text-fg-fnt">
+                      <span className="text-caption text-fg-fnt">
                         (K8s 1.25+)
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-[11px] text-fg-mut">
+                  <p className="mt-0.5 text-caption text-fg-mut">
                     {t("action", "ephemeralModeHint")}
                   </p>
                   <Refusal reason={denied.ephemeral} />
@@ -448,7 +448,7 @@ export function DebugPodDialog({
                       {t("action", "copyPodMode")}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-fg-mut">
+                  <p className="mt-0.5 text-caption text-fg-mut">
                     {t("action", "copyPodModeHint")}
                   </p>
                   <Refusal reason={denied.copy} />
@@ -501,7 +501,7 @@ export function DebugPodDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-fg-mut">
+              <p className="text-caption text-fg-mut">
                 {t("action", "targetContainerHint")}
               </p>
             </div>
@@ -514,7 +514,7 @@ export function DebugPodDialog({
                 <Label htmlFor="share-processes">
                   {t("action", "shareProcessNamespace")}
                 </Label>
-                <p className="text-[11px] text-fg-mut">
+                <p className="text-caption text-fg-mut">
                   {t("action", "shareProcessNamespaceHint")}
                 </p>
               </div>
@@ -531,7 +531,7 @@ export function DebugPodDialog({
               <Label htmlFor="trace-processes">
                 {t("action", "traceProcesses")}
               </Label>
-              <p className="text-[11px] text-fg-mut">
+              <p className="text-caption text-fg-mut">
                 {t("action", "traceProcessesHint")}
               </p>
             </div>
@@ -544,7 +544,7 @@ export function DebugPodDialog({
 
           {/* Info about ephemeral containers support */}
           {!supportsEphemeralContainers && (
-            <p className="flex items-start gap-2 border-t border-hair pt-2 text-[11px] text-fg-mut">
+            <p className="flex items-start gap-2 border-t border-hair pt-2 text-caption text-fg-mut">
               <Info className="mt-px h-3.5 w-3.5 flex-none text-fg-fnt" />
               {t("action", "ephemeralUnsupported", {
                 version: kubernetesVersion || t("action", "unknownVersion"),
@@ -577,7 +577,7 @@ export function DebugPodDialog({
 export function Refusal({ reason }: { reason?: string }) {
   if (!reason) return null;
   return (
-    <p className="mt-1 flex items-start gap-1.5 text-[11px] text-err">
+    <p className="mt-1 flex items-start gap-1.5 text-caption text-err">
       <Lock className="mt-px h-3 w-3 flex-none" aria-hidden="true" />
       {reason}
     </p>

@@ -214,7 +214,7 @@ export function ContainerRows(props: ContainerRowsProps) {
       {groups.map((group) => (
         <div key={group.phase} className="flex flex-col gap-2.5">
           {grouped && (
-            <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+            <p className="text-micro font-semibold uppercase tracking-[0.07em] text-fg-fnt">
               {group.title}
               <span className="font-normal normal-case tracking-normal">
                 {" · "}
@@ -292,7 +292,7 @@ function probeRows(
       value: (
         <span className="flex flex-col">
           <span>{target}</span>
-          <span className="text-[11px] text-fg-mut">{timing}</span>
+          <span className="text-caption text-fg-mut">{timing}</span>
         </span>
       ),
     };

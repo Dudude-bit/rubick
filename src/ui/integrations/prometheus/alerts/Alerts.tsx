@@ -166,7 +166,7 @@ export default function Alerts() {
       />
     );
   }
-  if (!picture.data) return <p className="text-[11px] text-fg-fnt">…</p>;
+  if (!picture.data) return <p className="text-caption text-fg-fnt">…</p>;
   if (picture.data.rules.state === "unread") {
     return (
       <Finding
@@ -205,7 +205,7 @@ export default function Alerts() {
           ) : (
             // The list beside this already says why it is empty. Saying it
             // again here put the same sentence on the screen twice.
-            <p className="text-[11.5px] text-fg-mut">
+            <p className="text-xs text-fg-mut">
               {rows.length === 0 ? null : t("alerts", "pickOne")}
             </p>
           )}
@@ -235,7 +235,7 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
       <div className="min-w-0 max-w-[60ch]">
-        <p className="text-[13px] font-semibold tracking-tight text-fg">
+        <p className="text-title font-semibold tracking-tight text-fg">
           {alerts === null
             ? t("alerts", "objects", { n: rows.length })
             : alerts > 0
@@ -264,7 +264,7 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
           {t("alerts", "unanswered", { reason: read.reason })}
         </Note>
       ) : (
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("alerts", "rulesLoaded", { n: read.rules.length })}
         </p>
       )}
@@ -282,7 +282,7 @@ function Note({
   return (
     <p
       className={cn(
-        "max-w-[52ch] rounded-[5px] border px-3 py-2 text-[11.5px] leading-relaxed text-fg-mut",
+        "max-w-[52ch] rounded-[5px] border px-3 py-2 text-xs leading-relaxed text-fg-mut",
         tone === "warn"
           ? "border-warn/45 bg-warn/5"
           : "border-info/40 bg-info/5"
@@ -358,7 +358,7 @@ function Ladder({
             onClick={() => onOnly(group)}
             aria-pressed={only === group}
             className={cn(
-              "inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-2 text-[11px] whitespace-nowrap",
+              "inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-2 text-caption whitespace-nowrap",
               only === group
                 ? "border-transparent bg-sel text-fg"
                 : "border-hair text-fg-mut hover:bg-hover"
@@ -395,7 +395,7 @@ function Ladder({
           if (members.length === 0) return null;
           return (
             <div key={group} className="flex flex-col">
-              <p className="flex items-center gap-2 px-2 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-[.07em] text-fg-fnt">
+              <p className="flex items-center gap-2 px-2 pb-0.5 pt-2.5 text-micro font-semibold uppercase tracking-[.07em] text-fg-fnt">
                 {t("alerts", GROUP_KEY[group])}
                 <b className="font-mono font-medium normal-case tracking-normal text-fg-mut">
                   {members.length}
@@ -416,12 +416,12 @@ function Ladder({
           );
         })}
         {shown.length === 0 && (
-          <p className="px-2 py-3 text-[11.5px] text-fg-mut">
+          <p className="px-2 py-3 text-xs text-fg-mut">
             {rows.length === 0 ? t("alerts", "none") : t("alerts", "noneMatch")}
           </p>
         )}
       </div>
-      <p className="mt-auto flex gap-3 border-t border-hair pt-2 text-[10.5px] text-fg-fnt">
+      <p className="mt-auto flex gap-3 border-t border-hair pt-2 text-caption text-fg-fnt">
         <span>{t("monitors", "keysMove")}</span>
         <span>{t("monitors", "keysOpen")}</span>
       </p>
@@ -472,17 +472,17 @@ function Row({
       <div className="min-w-0">
         <p
           className={cn(
-            "truncate font-mono text-[12px] leading-4",
+            "truncate font-mono text-xs leading-4",
             on ? "text-fg" : "text-fg-mid"
           )}
           title={row.object.name}
         >
           {shortName}
         </p>
-        <p className="truncate text-[11px] leading-[15px] text-fg-fnt">
+        <p className="truncate text-caption leading-[15px] text-fg-fnt">
           {row.object.namespace}
           {folded && (
-            <span className="font-mono text-[10px] opacity-70">
+            <span className="font-mono text-micro opacity-70">
               {" · "}
               {prefix.replace(/-$/, "")}
             </span>
@@ -491,12 +491,12 @@ function Row({
       </div>
       <div
         className={cn(
-          "whitespace-nowrap text-right font-mono text-[11px] leading-4",
+          "whitespace-nowrap text-right font-mono text-caption leading-4",
           WORDS[tone]
         )}
       >
         {rowWords(row, t)}
-        <span className="block font-sans text-[10px] leading-[14px] text-fg-fnt">
+        <span className="block font-sans text-micro leading-[14px] text-fg-fnt">
           {t("alerts", "ruleCount", { n: row.object.rules.length })}
         </span>
       </div>
@@ -551,10 +551,10 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
     <div className="flex min-w-0 flex-col gap-4">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="break-all font-mono text-[15px] font-medium tracking-tight text-fg">
+          <span className="break-all font-mono text-display font-medium tracking-tight text-fg">
             {object.name}
           </span>
-          <span className="text-[11.5px] text-fg-fnt">
+          <span className="text-xs text-fg-fnt">
             PrometheusRule ·{" "}
             <span className="font-mono text-fg-mut">{object.namespace}</span>
             {object.recording > 0 &&
@@ -593,7 +593,7 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
         <div className="min-w-0">
           <p
             className={cn(
-              "text-[13px] font-semibold leading-snug",
+              "text-title font-semibold leading-snug",
               tone === "mut" ? "text-fg" : TONE_TEXT[tone]
             )}
           >
@@ -811,7 +811,7 @@ function RuleCard({
         </span>
         <span
           className={cn(
-            "font-mono text-[11px]",
+            "font-mono text-caption",
             state ? (STATE_TONE[state] ?? "text-fg-fnt") : "text-fg-fnt"
           )}
         >
@@ -821,12 +821,12 @@ function RuleCard({
               : t("monitors", "notChecked"))}
         </span>
         {spec.for && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             <Sub>for</Sub> {spec.for}
           </span>
         )}
         {(spec.labels.severity ?? loaded?.labels.severity) && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             <Sub>severity</Sub>{" "}
             {spec.labels.severity ?? loaded?.labels.severity}
           </span>
@@ -835,7 +835,7 @@ function RuleCard({
           <button
             type="button"
             onClick={() => onCopy(spec.expr)}
-            className="inline-flex h-6 items-center gap-1 rounded-[5px] border border-hair px-2 text-[11px] text-fg-mid hover:bg-hover"
+            className="inline-flex h-6 items-center gap-1 rounded-[5px] border border-hair px-2 text-caption text-fg-mid hover:bg-hover"
           >
             <Copy className="size-3" aria-hidden />
             {t("monitors", "copyQuery")}
@@ -844,7 +844,7 @@ function RuleCard({
             <OutLink
               href={`${base}/graph?g0.expr=${encodeURIComponent(spec.expr)}&g0.tab=0`}
               site="Prometheus"
-              className="h-6 rounded-[5px] border border-hair px-2 text-[11px] text-fg-mid hover:bg-hover hover:no-underline"
+              className="h-6 rounded-[5px] border border-hair px-2 text-caption text-fg-mid hover:bg-hover hover:no-underline"
             >
               {t("monitors", "openInPrometheus")}
             </OutLink>
@@ -852,18 +852,18 @@ function RuleCard({
         </span>
       </div>
       {loaded?.health === "err" && loaded.lastError && (
-        <p className="mt-1 select-text break-all font-mono text-[11px] text-err">
+        <p className="mt-1 select-text break-all font-mono text-caption text-err">
           {loaded.lastError}
         </p>
       )}
       {(spec.annotations.summary ?? spec.annotations.description) && (
         // The rule's template, `{{ $labels.job }}` and all — source, like
         // the expression under it; each alert below carries it filled in.
-        <p className="mt-1 select-text font-mono text-[11px] text-fg-mut">
+        <p className="mt-1 select-text font-mono text-caption text-fg-mut">
           {spec.annotations.summary ?? spec.annotations.description}
         </p>
       )}
-      <code className="mt-1.5 block select-text break-all font-mono text-[11px] text-fg-mid">
+      <code className="mt-1.5 block select-text break-all font-mono text-caption text-fg-mid">
         {spec.expr}
       </code>
       {active.length > 0 && (
@@ -877,7 +877,7 @@ function RuleCard({
               >
                 <span
                   className={cn(
-                    "font-mono text-[11px]",
+                    "font-mono text-caption",
                     STATE_TONE[alert.state] ?? "text-fg-fnt"
                   )}
                 >
@@ -917,7 +917,7 @@ function RuleCard({
                     </span>
                   )}
                 </span>
-                <span className="text-[11px] tabular-nums text-fg-fnt">
+                <span className="text-caption tabular-nums text-fg-fnt">
                   {alert.activeAt
                     ? t("alerts", "since", {
                         time: hourMinute(alert.activeAt),
@@ -929,7 +929,7 @@ function RuleCard({
             );
           })}
           {active.length > 8 && (
-            <p className="px-2.5 py-1.5 text-[11px] text-fg-fnt">
+            <p className="px-2.5 py-1.5 text-caption text-fg-fnt">
               {t("alerts", "moreAlerts", { n: active.length - 8 })}
             </p>
           )}

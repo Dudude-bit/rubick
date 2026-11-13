@@ -146,7 +146,7 @@ export function AboutSettings() {
           control={
             canInstall === false ? (
               // No button where pressing it can only end in a failed install.
-              <span className="text-[11px] text-fg-mut">
+              <span className="text-caption text-fg-mut">
                 {t("settings", "managedUpdates")}
               </span>
             ) : available && !downloading ? (
@@ -199,13 +199,13 @@ export function AboutSettings() {
           {downloading && (
             <div className="flex items-center gap-2">
               <Progress value={progress} className="max-w-xs" />
-              <span className="font-mono text-[11px] text-fg-mut">
+              <span className="font-mono text-caption text-fg-mut">
                 {progress}%
               </span>
             </div>
           )}
           {error && (
-            <p className="flex items-center gap-1.5 text-[11px] text-err">
+            <p className="flex items-center gap-1.5 text-caption text-err">
               <AlertCircle className="h-3 w-3 flex-none" aria-hidden="true" />
               {error}
             </p>

@@ -18,7 +18,7 @@ export function StartOnAsk({
 }) {
   return (
     <div className="max-w-[62ch] px-3 pb-12 pt-11" data-testid="start-on-ask">
-      <h3 className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-fg">
+      <h3 className="mb-1.5 flex items-center gap-1.5 text-title font-medium text-fg">
         <Icon
           className="h-3.5 w-3.5 flex-none text-fg-fnt"
           aria-hidden="true"

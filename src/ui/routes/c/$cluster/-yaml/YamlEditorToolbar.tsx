@@ -149,7 +149,7 @@ export function YamlEditorToolbar({
                     {formatWhen(entry.timestamp)}
                   </span>
                   {entry.label && (
-                    <span className="text-sm">{entry.label}</span>
+                    <span className="text-xs">{entry.label}</span>
                   )}
                 </div>
               </DropdownMenuItem>

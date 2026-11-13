@@ -171,7 +171,7 @@ function ScaleForm({
           onChange={(event) => setTyped(event.target.value)}
         />
         {!counted && (
-          <p className="text-[11px] text-fg-mut">
+          <p className="text-caption text-fg-mut">
             {current === undefined && typed === ""
               ? t("action", "scaleCountUnread")
               : t("action", "scaleNeedsCount")}

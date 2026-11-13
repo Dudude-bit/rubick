@@ -331,14 +331,14 @@ export function ShareDialog({
                 </span>
               </li>
             </ul>
-            <p className="text-[11px] text-fg-fnt">
+            <p className="text-caption text-fg-fnt">
               {t("share", "charactersLong", { n: html.length })} ·{" "}
               {shared && carriesLogLines(shared)
                 ? t("share", "noSecretsLogs")
                 : t("share", "noSecrets")}
             </p>
             <p
-              className="truncate font-mono text-[11px] text-fg-fnt"
+              className="truncate font-mono text-caption text-fg-fnt"
               title={report.link}
             >
               {report.link}
@@ -395,7 +395,7 @@ export function ShareDialog({
               <div className="flex items-center gap-2">
                 <WebLink
                   url={link}
-                  className="min-w-0 flex-1 truncate font-mono text-[11px] text-info hover:underline"
+                  className="min-w-0 flex-1 truncate font-mono text-caption text-info hover:underline"
                 />
                 <Button
                   size="sm"
@@ -431,7 +431,7 @@ export function ShareDialog({
                           style={{ background: targetColor(entry) }}
                         />
                         {entry.label}
-                        <span className="font-mono text-[11px] text-fg-fnt">
+                        <span className="font-mono text-caption text-fg-fnt">
                           {entry.host}
                         </span>
                       </span>

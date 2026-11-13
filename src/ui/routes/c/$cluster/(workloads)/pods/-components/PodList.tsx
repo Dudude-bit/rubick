@@ -157,7 +157,7 @@ export const columns: ColumnDef<PodRow>[] = [
           />
         </span>
         {row.original.status.gone === "replaced" && (
-          <span className="truncate text-[11px] text-fg-mut">
+          <span className="truncate text-caption text-fg-mut">
             <T section="cluster" k="attentionReplacedPod" />
           </span>
         )}

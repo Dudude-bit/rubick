@@ -32,7 +32,7 @@ export function ConnectClusterEmptyState({
   return (
     <div className="flex h-full justify-center px-6 py-12">
       <div className="w-full max-w-[420px]">
-        <h2 className="text-[13px] font-semibold tracking-tight text-fg">
+        <h2 className="text-title font-semibold tracking-tight text-fg">
           {t("empty", "noClusterIsConnected")}
         </h2>
         <p className="mt-[3px] text-xs text-fg-mut">
@@ -59,7 +59,7 @@ export function ConnectClusterEmptyState({
             />
           </div>
         ) : (
-          <p className="mt-4 text-[11px] text-fg-fnt">
+          <p className="mt-4 text-caption text-fg-fnt">
             {t("empty", "kubeconfigListsNoClusters")}{" "}
             <Link
               to="/"

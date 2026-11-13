@@ -189,12 +189,12 @@ function ForwardForm({
     }
   };
 
-  const fieldError = "text-[11px] text-err";
+  const fieldError = "text-caption text-err";
 
   return (
     <>
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3 rounded-md border border-hair p-3 text-sm">
+        <div className="flex items-center justify-between gap-3 rounded-md border border-hair p-3 text-xs">
           <span className="text-fg-mut">{t("columns", "target")}</span>
           <span className="min-w-0 truncate">
             <span className="text-fg-fnt">{target.namespace}/</span>
@@ -279,7 +279,7 @@ function ForwardForm({
               className={
                 checked && (localPort === null || localMissingForSave)
                   ? fieldError
-                  : "text-[11px] text-fg-fnt"
+                  : "text-caption text-fg-fnt"
               }
             >
               {checked && localPort === null
@@ -404,14 +404,14 @@ function ForwardForm({
               return (
                 <div
                   key={session.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-hair p-2.5 text-sm"
+                  className="flex items-center justify-between gap-3 rounded-md border border-hair p-2.5 text-xs"
                 >
                   <div className="min-w-0">
                     <div className="truncate font-mono text-xs">
                       localhost:{session.localPort} → {session.pod}:
                       {session.remotePort}
                     </div>
-                    <div className="truncate text-[11px] text-fg-mut">
+                    <div className="truncate text-caption text-fg-mut">
                       {forwardNoteWords(status?.note, t) ??
                         t("activity", "activeFallback")}
                     </div>
@@ -471,7 +471,7 @@ function ToggleRow({
   return (
     <label className="flex items-center justify-between gap-3">
       <span>
-        <span className="block text-sm font-medium">{label}</span>
+        <span className="block text-xs font-medium">{label}</span>
         <span className="block text-xs text-fg-mut">{hint}</span>
       </span>
       <Switch

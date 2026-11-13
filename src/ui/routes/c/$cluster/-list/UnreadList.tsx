@@ -39,7 +39,7 @@ export function UnreadList({
         )}
         {words}
       </p>
-      <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+      <p className="mt-1.5 select-text wrap-break-word font-mono text-caption text-fg-fnt">
         {errorToShow(error)}
       </p>
       {onRetry && (

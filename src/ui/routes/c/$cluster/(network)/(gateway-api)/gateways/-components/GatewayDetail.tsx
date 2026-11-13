@@ -603,7 +603,7 @@ export function GatewayDetail() {
       createdAt={gateway?.createdAt}
       badges={
         gateway && (
-          <span className="text-[11px] text-fg-mut">{gateway.className}</span>
+          <span className="text-caption text-fg-mut">{gateway.className}</span>
         )
       }
       summary={

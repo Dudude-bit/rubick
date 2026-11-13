@@ -261,7 +261,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
           </p>
         ))}
         {Number.isFinite(sinceMs) ? (
-          <p className="px-1.5 pb-1 text-[11px] text-fg-fnt">
+          <p className="px-1.5 pb-1 text-caption text-fg-fnt">
             {items.some((i) => i.at !== null && i.at >= sinceMs)
               ? t("changes", "sinceMarker")
               : t("changes", "sinceNothing", {
@@ -276,7 +276,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
           rollbackDenied={rollback.denied}
         />
         {rollback.dialog}
-        <p className="px-1.5 pt-2 text-[11px] text-fg-fnt">
+        <p className="px-1.5 pt-2 text-caption text-fg-fnt">
           {t("changes", "explained")}
         </p>
       </SectionBody>

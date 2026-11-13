@@ -79,7 +79,7 @@ export function RolloutSummary({
     return header ? (
       <p
         className={cn(
-          "flex min-w-0 items-center gap-1.5 text-[11px]",
+          "flex min-w-0 items-center gap-1.5 text-caption",
           TONE_TEXT[line.tone]
         )}
         data-testid="rollout-summary"
@@ -93,7 +93,7 @@ export function RolloutSummary({
   return (
     <p
       className={cn(
-        "flex items-baseline gap-1.5 text-[11px]",
+        "flex items-baseline gap-1.5 text-caption",
         TONE_TEXT[line.tone],
         className
       )}

@@ -83,7 +83,7 @@ export function DiagnosticsSettings() {
             <CircleX className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
             {t("settings", "diagnosticsUnread")}
           </p>
-          <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+          <p className="mt-1 select-text wrap-break-word font-mono text-caption text-fg-fnt">
             {errorToShow(error)}
           </p>
         </div>
@@ -131,7 +131,7 @@ export function DiagnosticsSettings() {
         {asked && (
           <span
             className={cn(
-              "ml-auto flex items-center gap-1 text-[11px] tabular-nums",
+              "ml-auto flex items-center gap-1 text-caption tabular-nums",
               error ? "text-err" : "text-fg-fnt"
             )}
           >
@@ -146,7 +146,7 @@ export function DiagnosticsSettings() {
           </span>
         )}
       </div>
-      <p className="mt-1.5 text-[11px] text-fg-fnt">
+      <p className="mt-1.5 text-caption text-fg-fnt">
         {t("settings", "redactEverywhere")}
       </p>
 

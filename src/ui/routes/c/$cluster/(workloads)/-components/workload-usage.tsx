@@ -195,7 +195,7 @@ function IdleUsage({ says, exited }: { says: string; exited: boolean }) {
         title={t("columns", "usage")}
         count={t("empty", "nothingRunning")}
       />
-      <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
+      <p className="px-1.5 pt-1 text-caption leading-snug text-fg-fnt">
         {says} {t("empty", exited ? "usageIdleNote" : "usageNoPodsNote")}
       </p>
     </Section>
@@ -221,7 +221,7 @@ function PodsUnknownUsage({ kind, unread }: { kind: string; unread: boolean }) {
         }
       />
       {unread && (
-        <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
+        <p className="px-1.5 pt-1 text-caption leading-snug text-fg-fnt">
           {t("empty", "usagePodsNotRead", { kind })}
         </p>
       )}

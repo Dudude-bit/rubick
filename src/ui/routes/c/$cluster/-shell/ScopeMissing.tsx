@@ -72,7 +72,7 @@ export function ScopeMissingPage({ missing }: { missing: readonly string[] }) {
       data-testid="scope-missing-page"
     >
       <div className="w-full max-w-[460px]">
-        <h2 className="flex items-center gap-1.5 text-[13px] font-semibold tracking-tight text-fg">
+        <h2 className="flex items-center gap-1.5 text-title font-semibold tracking-tight text-fg">
           <CircleOff
             className="h-3.5 w-3.5 flex-none text-warn"
             aria-hidden="true"

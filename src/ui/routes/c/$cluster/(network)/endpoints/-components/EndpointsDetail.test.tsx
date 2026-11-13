@@ -106,7 +106,7 @@ const open = () =>
 /** The header's count, not the Backends tab's heading that says the same. */
 const headerCounts = async () =>
   (await screen.findAllByText("0 ready · 1 not ready")).find((element) =>
-    element.className.includes("text-[11px]")
+    element.className.includes("text-caption")
   );
 
 /**

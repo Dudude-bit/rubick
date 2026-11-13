@@ -126,14 +126,14 @@ export function StreamFailureNotice({
         {(unstarted || restarting) &&
           info?.state.type === "waiting" &&
           info.state.reason && (
-            <p className="mt-0.5 text-[11px] text-fg-mut">
+            <p className="mt-0.5 text-caption text-fg-mut">
               {t("empty", "kubeletHoldingAt")}{" "}
               <span className="font-mono">{info.state.reason}</span>.
             </p>
           )}
         {termination && (
           <p
-            className={`mt-0.5 text-[11px] ${exitTone}`}
+            className={`mt-0.5 text-caption ${exitTone}`}
             data-testid="log-stream-termination"
             title={terminationAt(termination)}
           >
@@ -147,11 +147,11 @@ export function StreamFailureNotice({
         )}
         {unfollowed ? (
           <>
-            <p className="mt-0.5 text-[11px] text-fg-mut">
+            <p className="mt-0.5 text-caption text-fg-mut">
               {t("empty", "stillRunningUnfollowed", { container })}
             </p>
             {failure.message && (
-              <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
+              <p className="mt-0.5 wrap-break-word text-caption text-fg-mut">
                 {parts(t("empty", "nodeSaid"), {
                   said: <span className="font-mono">{failure.message}</span>,
                 })}
@@ -161,7 +161,7 @@ export function StreamFailureNotice({
         ) : (
           !unstarted &&
           !restarting && (
-            <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
+            <p className="mt-0.5 wrap-break-word text-caption text-fg-mut">
               {failure.message}
             </p>
           )
@@ -170,7 +170,7 @@ export function StreamFailureNotice({
             minutes it was down, and everything intake dropped before
             that. Reconnecting closes neither. */}
         {intake && !gone && !absent && !notKept && (
-          <p className="mt-0.5 text-[11px] text-fg-fnt">
+          <p className="mt-0.5 text-caption text-fg-fnt">
             {t("empty", "intakeStillSet")}
           </p>
         )}
@@ -202,7 +202,7 @@ export function StreamFailureNotice({
         </Button>
       ) : (
         !restarting && (
-          <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
+          <span className="shrink-0 whitespace-nowrap pt-0.5 text-caption text-fg-fnt">
             {t("empty", "nothingToReconnectTo")}
           </span>
         )
@@ -237,7 +237,7 @@ export function DroppedNotice({
     <div
       role="status"
       data-testid="log-dropped-notice"
-      className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-[11px]"
+      className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-caption"
     >
       <p className="text-warn">
         {t(
@@ -286,7 +286,7 @@ export function GroupedNotice({
     <div
       role="status"
       data-testid="log-grouped-notice"
-      className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
+      className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-caption text-fg-mut"
     >
       <p>
         {t("count", "rowsStandFor", { n: rows })}{" "}
@@ -343,7 +343,7 @@ export function IntakeQuietNotice({
     <div
       role="status"
       data-testid="log-intake-quiet"
-      className="flex-none border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
+      className="flex-none border-b border-hair px-3 py-1.5 text-caption text-fg-mut"
     >
       <span aria-hidden="true" className="text-info">
         ⇣{" "}
@@ -387,7 +387,7 @@ export function FocusNotice({
     <div
       role="status"
       data-testid="log-focus-notice"
-      className={`flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-[11px] ${
+      className={`flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-caption ${
         split ? "text-fg-mut" : "text-warn"
       }`}
     >
@@ -449,7 +449,7 @@ export function FinishedNotice({ container }: { container: ContainerInfo }) {
     <div
       role="status"
       data-testid="log-finished-notice"
-      className="flex-none border-b border-hair px-3 py-1.5 text-[11px] text-fg-mut"
+      className="flex-none border-b border-hair px-3 py-1.5 text-caption text-fg-mut"
       title={termination ? terminationAt(termination) : undefined}
     >
       {t("empty", "reading")}{" "}
@@ -488,7 +488,7 @@ export function NoEarlierRunNotice({
     <div
       role="status"
       data-testid="log-no-earlier-run"
-      className="flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-[11px] text-warn"
+      className="flex flex-none flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hair px-3 py-1.5 text-caption text-warn"
     >
       <p>
         {t("empty", "noEarlierRunOf")}{" "}

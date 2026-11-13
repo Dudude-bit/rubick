@@ -76,7 +76,7 @@ function images(
           <>
             {container.name}
             {PHASE_LABEL[container.phase] && (
-              <span className="ml-1.5 text-[9px] uppercase tracking-[0.04em] text-fg-fnt">
+              <span className="ml-1.5 text-micro uppercase tracking-[0.04em] text-fg-fnt">
                 {PHASE_LABEL[container.phase]}
               </span>
             )}

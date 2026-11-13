@@ -312,7 +312,7 @@ export function CrdDetail() {
                       onClick={() => setSelectedVersion(v.name)}
                       aria-pressed={activeVersionName === v.name}
                       className={cn(
-                        "h-6 rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
+                        "h-6 rounded px-1.5 font-mono text-caption transition-colors hover:bg-hover",
                         activeVersionName === v.name
                           ? "bg-sel text-fg"
                           : "text-fg-mut hover:text-fg"
@@ -436,11 +436,11 @@ export function CrdDetail() {
         badges={
           crd && (
             <>
-              <span className="flex min-w-0 items-center gap-1 text-[11px] text-fg-mut">
+              <span className="flex min-w-0 items-center gap-1 text-caption text-fg-mut">
                 <KindIcon kind={crd.kind} crd={crd.name} className="h-3 w-3" />
                 <span className="truncate">{crd.kind}</span>
               </span>
-              <span className="text-[11px] text-fg-fnt">
+              <span className="text-caption text-fg-fnt">
                 {t("apiResources", scopeKey(crd.scope))}
               </span>
             </>

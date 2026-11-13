@@ -447,7 +447,7 @@ export function LogDensityStrip({
               that has quietly stopped covering the log. */}
           {intake && (
             <span
-              className="flex-none text-[9px] leading-none text-info"
+              className="flex-none text-micro leading-none text-info"
               title={t("empty", "intakeNotOnBand")}
             >
               <span aria-hidden="true">⇣</span>
@@ -506,7 +506,7 @@ export function LogDensityStrip({
       <div className="flex">{bars}</div>
 
       <div
-        className="mt-0.5 flex items-center justify-between text-[10px] leading-[14px] text-fg-fnt"
+        className="mt-0.5 flex items-center justify-between text-micro leading-[14px] text-fg-fnt"
         style={{ height: AXIS_PX }}
       >
         <span
@@ -790,7 +790,7 @@ function Head({
   const t = useT();
   return (
     <div
-      className="flex items-center gap-2 text-[11px] leading-4 text-fg-fnt"
+      className="flex items-center gap-2 text-caption leading-4 text-fg-fnt"
       style={{ height: HEAD_PX }}
     >
       <span className="text-fg-mut">{left}</span>
@@ -828,14 +828,14 @@ function Placeholder({ children }: { children: React.ReactNode }) {
   return (
     <>
       <div
-        className="flex items-center justify-center text-[11px] text-fg-fnt"
+        className="flex items-center justify-center text-caption text-fg-fnt"
         style={{ height: BARS_PX }}
       >
         {children}
       </div>
       <div
         aria-hidden="true"
-        className="mt-0.5 text-[10px] leading-[14px]"
+        className="mt-0.5 text-micro leading-[14px]"
         style={{ height: AXIS_PX }}
       >
         &nbsp;

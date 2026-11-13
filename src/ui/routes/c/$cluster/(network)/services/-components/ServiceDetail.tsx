@@ -306,7 +306,7 @@ export function ServiceDetail() {
       statusBadge={service && <ServiceVerdict read={read} compact />}
       badges={
         service && (
-          <span className="text-[11px] text-fg-mut">{service.type}</span>
+          <span className="text-caption text-fg-mut">{service.type}</span>
         )
       }
       onBack={goBack}

@@ -60,7 +60,7 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
         <p className="mt-1.5 text-xs text-fg-mut">
           {t("empty", "crdDetectionFailed")}
         </p>
-        <p className="mt-2 text-[11px] text-fg-fnt">{errorToShow(error)}</p>
+        <p className="mt-2 text-caption text-fg-fnt">{errorToShow(error)}</p>
       </div>
     );
   }
@@ -154,7 +154,7 @@ function NothingInstalled({ couldNotLook }: { couldNotLook: boolean }) {
         )}
       </p>
       {!couldNotLook && (
-        <p className="mt-2 text-[11px] text-fg-fnt">
+        <p className="mt-2 text-caption text-fg-fnt">
           {t("empty", "lookedForExtensions", {
             list: sentenceList(EXTENSION_NAMES, t("empty", "listAnd")),
           })}
@@ -227,12 +227,12 @@ function ExtensionRow({
         <div className="text-xs text-fg-mid">
           {vendor.name}
           {version && (
-            <span className="ml-2 font-mono text-[11px] text-fg-fnt">
+            <span className="ml-2 font-mono text-caption text-fg-fnt">
               {version}
             </span>
           )}
         </div>
-        <div className="mt-0.5 text-[11px] text-fg-fnt">
+        <div className="mt-0.5 text-caption text-fg-fnt">
           {installed || configured
             ? t("empty", "gives")
             : t("empty", "wouldGive")}{" "}
@@ -243,7 +243,7 @@ function ExtensionRow({
       <div className="flex items-center gap-2.5">
         <span
           className={cn(
-            "whitespace-nowrap text-[11px]",
+            "whitespace-nowrap text-caption",
             pending
               ? "text-fg-fnt"
               : connection
@@ -274,7 +274,7 @@ function ExtensionRow({
             <Button
               variant="outline"
               size="sm"
-              className="h-6 px-2 text-[11px]"
+              className="h-6 px-2 text-caption"
               onClick={() => setEditing(true)}
             >
               {configured ? t("action", "edit") : t("action", "connect")}
@@ -319,20 +319,20 @@ function Facts({ facts }: { facts: IntegrationStatus["facts"] }) {
   if (facts.state === "none") return null;
   if (facts.state === "loading") {
     return (
-      <p className="mt-1.5 text-[11px] text-fg-fnt">
+      <p className="mt-1.5 text-caption text-fg-fnt">
         {t("action", "readingInline")}
       </p>
     );
   }
   if (facts.state === "failed") {
     return (
-      <p className="mt-1.5 text-[11px] text-warn">
+      <p className="mt-1.5 text-caption text-warn">
         {t("empty", "installedButUnreadable", { reason: facts.reason })}
       </p>
     );
   }
   return (
-    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-caption">
       {facts.facts.map((fact) => (
         <Fact key={factKey(fact)} fact={fact} />
       ))}

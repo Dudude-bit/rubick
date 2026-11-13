@@ -263,7 +263,7 @@ export function IngressDetail() {
                   </span>
                 </p>
                 {behind && (
-                  <p className="max-w-[80ch] text-[11px] text-fg-fnt">
+                  <p className="max-w-[80ch] text-caption text-fg-fnt">
                     {t("count", "ingressProxyHosts", {
                       vendor: behind.vendor,
                       n: behind.hosts,
@@ -306,7 +306,7 @@ export function IngressDetail() {
                     >
                       <TableCell
                         colSpan={3}
-                        className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
+                        className="px-2.5 pb-1 pt-3 text-caption text-fg-fnt"
                       >
                         <span className="font-mono text-fg-mut">
                           {isWildcard ? t("empty", "allHosts") : rule.host}
@@ -484,13 +484,13 @@ export function IngressDetail() {
         badges={
           <>
             {ingress?.className && (
-              <span className="font-mono text-[11px] text-fg-mut">
+              <span className="font-mono text-caption text-fg-mut">
                 {ingress.className}
               </span>
             )}
             <span
               className={cn(
-                "text-[11px]",
+                "text-caption",
                 tls === "no"
                   ? "text-warn"
                   : tls === "unknown"

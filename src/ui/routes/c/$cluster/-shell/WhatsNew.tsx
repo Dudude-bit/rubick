@@ -96,7 +96,7 @@ export function WhatsNew() {
               : (releaseDay(releases[0].date, locale) ?? "")}
           </DialogDescription>
           {locale !== "en" && (
-            <p className="text-[11px] text-fg-fnt">
+            <p className="text-caption text-fg-fnt">
               {t("settings", "whatsNewAsWritten")}
             </p>
           )}
@@ -122,7 +122,7 @@ export function WhatsNew() {
                 )}
                 {release.sections.map((section) => (
                   <div key={section.title}>
-                    <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.07em] text-fg-fnt">
+                    <h4 className="mb-1.5 text-caption font-semibold uppercase tracking-[.07em] text-fg-fnt">
                       {sectionTitle(section.title, t)}
                     </h4>
                     <Items items={section.items} />
@@ -182,7 +182,7 @@ function inline(text: string): ReactNode[] {
       );
     else if (match[2] !== undefined)
       out.push(
-        <code key={match.index} className="font-mono text-[11px] text-fg">
+        <code key={match.index} className="font-mono text-caption text-fg">
           {match[2]}
         </code>
       );

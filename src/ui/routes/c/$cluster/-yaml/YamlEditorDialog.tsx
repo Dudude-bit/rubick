@@ -643,7 +643,7 @@ export function YamlEditorDialog() {
                 </>
               )}
               <p
-                className="text-[11px] text-fg-fnt"
+                className="text-caption text-fg-fnt"
                 role="status"
                 data-testid="dry-run-standing"
               >
@@ -734,7 +734,7 @@ function DryRunSection({
       {outcome.says === "refused" ||
       outcome.says === "liveUnread" ||
       outcome.says === "unanswered" ? (
-        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+        <p className="mt-1 select-text wrap-break-word font-mono text-caption text-fg-fnt">
           {outcome.said}
         </p>
       ) : null}

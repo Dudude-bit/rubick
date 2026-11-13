@@ -94,7 +94,7 @@ export function SourceLine() {
                 setEditing(false);
               }
             }}
-            className="h-6 font-mono text-[11px]"
+            className="h-6 font-mono text-caption"
           />
           <button
             type="button"
@@ -114,21 +114,21 @@ export function SourceLine() {
           <span className="font-mono text-xs text-fg-mid">
             {primary ? show(primary.path) : t("settings", "noKubeconfig")}
           </span>
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {contexts != null && (
               <>· {t("count", "contexts", { n: contexts })} </>
             )}
             · {provenance}
           </span>
           {primary && !primary.exists && (
-            <span className="text-[11px] text-err">
+            <span className="text-caption text-err">
               {t("settings", "fileNotThere")}
             </span>
           )}
           {source?.error && (
-            <span className="text-[11px] text-err">{show(source.error)}</span>
+            <span className="text-caption text-err">{show(source.error)}</span>
           )}
-          <span className="ml-auto flex items-baseline gap-3 text-[11px]">
+          <span className="ml-auto flex items-baseline gap-3 text-caption">
             {kubeconfig.overridePath && (
               <button
                 type="button"
@@ -170,10 +170,10 @@ export function SourceLine() {
                 key={path}
                 className="group flex items-baseline gap-2 rounded px-1 py-0.5 hover:bg-hover"
               >
-                <span className="font-mono text-[11px] text-fg-mid">
+                <span className="font-mono text-caption text-fg-mid">
                   {show(path)}
                 </span>
-                <span className="text-[11px] text-fg-fnt">
+                <span className="text-caption text-fg-fnt">
                   {file && file.contexts.length > 0
                     ? t("count", "contextsFromFile", {
                         n: file.contexts.length,
@@ -181,7 +181,7 @@ export function SourceLine() {
                     : t("settings", "everyContextClaimedElsewhere")}
                 </span>
                 {!file.exists && (
-                  <span className="text-[11px] text-err">
+                  <span className="text-caption text-err">
                     {t("settings", "fileNotThere")}
                   </span>
                 )}
@@ -199,7 +199,7 @@ export function SourceLine() {
               </li>
             );
           })}
-          <li className="px-1 pt-0.5 text-[11px] text-fg-fnt">
+          <li className="px-1 pt-0.5 text-caption text-fg-fnt">
             {t("settings", "mergedFirstWins")}
           </li>
         </ul>

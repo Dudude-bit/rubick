@@ -200,7 +200,7 @@ export function PortForwardConfigDialog({
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="pfc-reconnect" className="font-normal">
                 {t("activity", "autoReconnect")}
-                <span className="mt-0.5 block text-[11px] text-fg-mut">
+                <span className="mt-0.5 block text-caption text-fg-mut">
                   {t("activity", "autoReconnectHint")}
                 </span>
               </Label>
@@ -213,7 +213,7 @@ export function PortForwardConfigDialog({
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="pfc-autostart" className="font-normal">
                 {t("activity", "autoStartLabel")}
-                <span className="mt-0.5 block text-[11px] text-fg-mut">
+                <span className="mt-0.5 block text-caption text-fg-mut">
                   {t("activity", "autoStartHint")}
                 </span>
               </Label>

@@ -76,7 +76,7 @@ export function CredentialsExpired({
     <div className="mx-auto flex max-w-[68ch] flex-col gap-4 py-16">
       <div className="flex items-baseline gap-2.5">
         <KeyRound className="size-4 flex-none translate-y-0.5 text-warn" />
-        <h2 className="text-[13px] font-semibold tracking-tight text-fg">
+        <h2 className="text-title font-semibold tracking-tight text-fg">
           {context
             ? t("cluster", "sessionRefusedNamed", { context })
             : t("cluster", "sessionRefused")}
@@ -93,7 +93,7 @@ export function CredentialsExpired({
 
       {/* The server's own words, never paraphrased. Somebody is going to paste
           this into a search or a ticket. */}
-      <p className="select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+      <p className="select-text wrap-break-word font-mono text-caption text-fg-fnt">
         {verbatim(expired.reason)}
       </p>
 
@@ -113,7 +113,7 @@ export function CredentialsExpired({
         {/* Said only after a press: before one, it would be an instruction to
             do something the reader has not tried yet. */}
         {tried && !isAuthenticating && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {t("cluster", "stillRefusedHint")}{" "}
             <span className="select-text font-mono">gcloud auth login</span>.
           </span>

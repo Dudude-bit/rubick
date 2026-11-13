@@ -127,7 +127,7 @@ export function ChildRows({
                 })
               : t("empty", "couldNotReadInScope", { label: label ?? "" })}
         </p>
-        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+        <p className="mt-1 select-text wrap-break-word font-mono text-caption text-fg-fnt">
           {errorToShow(error)}
         </p>
         {onRetry && (
@@ -218,7 +218,7 @@ function ChildRowItem({ row, reserve }: { row: ChildRow; reserve: number }) {
           showKind={false}
         />
         <span
-          className={cn("flex-none text-[11px]", WORD[role])}
+          className={cn("flex-none text-caption", WORD[role])}
           style={{ minWidth: `${reserve}ch` }}
           title={row.statusTitle}
           data-testid="child-row-status"
@@ -226,11 +226,11 @@ function ChildRowItem({ row, reserve }: { row: ChildRow; reserve: number }) {
           {row.statusLabel ?? row.status}
         </span>
       </span>
-      <span className="text-right text-[11px] tabular-nums text-fg-mut">
+      <span className="text-right text-caption tabular-nums text-fg-mut">
         {row.detail}
       </span>
       <span
-        className="text-right text-[11px] tabular-nums text-fg-fnt"
+        className="text-right text-caption tabular-nums text-fg-fnt"
         title={formatDate(row.timestamp ?? null) ?? undefined}
       >
         {row.timestamp ? age : <None />}

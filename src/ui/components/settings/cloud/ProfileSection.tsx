@@ -38,11 +38,11 @@ export function ProfileSection({
         </Button>
       </div>
       {isLoading ? (
-        <p className="py-2 text-[11px] text-fg-mut">
+        <p className="py-2 text-caption text-fg-mut">
           {t("settings", "loading")}
         </p>
       ) : isEmpty ? (
-        <p className="py-2 text-[11px] text-fg-mut">{emptyMessage}</p>
+        <p className="py-2 text-caption text-fg-mut">{emptyMessage}</p>
       ) : (
         <div className="mt-1">{children}</div>
       )}
@@ -74,10 +74,10 @@ export function ProfileRow({
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="flex items-center gap-2">
           <span className="truncate font-mono text-xs text-fg">{name}</span>
-          {detail && <span className="text-[11px] text-fg-fnt">{detail}</span>}
+          {detail && <span className="text-caption text-fg-fnt">{detail}</span>}
         </span>
         {description && (
-          <span className="truncate text-[11px] text-fg-mut">
+          <span className="truncate text-caption text-fg-mut">
             {description}
           </span>
         )}

@@ -109,7 +109,7 @@ function PodsAhead({ text, role }: { text: string; role: StatusRole }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[11px]",
+        "inline-flex items-center gap-1 text-caption",
         ROLE_TEXT[role]
       )}
       data-testid="pods-ahead"
@@ -685,7 +685,7 @@ export function DeploymentDetail() {
           rollout &&
           replicas && (
             <>
-              <span className="text-[11px] text-fg-mut">
+              <span className="text-caption text-fg-mut">
                 {readyBesideBadge(replicas.ready, replicas.desired, rollout, t)}
               </span>
               {ahead && <PodsAhead {...ahead} />}

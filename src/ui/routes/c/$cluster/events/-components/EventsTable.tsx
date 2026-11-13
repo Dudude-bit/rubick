@@ -55,7 +55,7 @@ function ReasonCell({ row }: { row: { original: EventInfo } }) {
     >
       <span
         className={cn(
-          "w-2.5 flex-none text-center text-[9px]",
+          "w-2.5 flex-none text-center text-micro",
           isWarning ? "text-warn" : "text-fg-fnt"
         )}
         aria-hidden="true"
@@ -146,7 +146,7 @@ function CountCell({ row }: { row: { original: EventInfo } }) {
   const tally = tallyOf(row.original);
   return (
     <span
-      className="font-mono text-[11px] text-fg-fnt"
+      className="font-mono text-caption text-fg-fnt"
       title={tally ? sayWords(tally, t) : undefined}
     >
       {count > 1 ? `×${count}` : ""}

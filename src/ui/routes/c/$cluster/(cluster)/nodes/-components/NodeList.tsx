@@ -322,8 +322,8 @@ export function NodeList() {
           onClick={() => setView(candidate)}
           className={
             view === candidate
-              ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"
-              : "rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
+              ? "rounded bg-sel px-1.5 py-0.5 text-caption text-fg"
+              : "rounded px-1.5 py-0.5 text-caption text-fg-mut hover:bg-hover hover:text-fg"
           }
         >
           {t("columns", candidate === "table" ? "tableView" : "utilisation")}

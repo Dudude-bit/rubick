@@ -192,7 +192,7 @@ function GrantRow({
         )}
         <Where binding={binding} t={t} />
         {grant.reach !== "account" && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-fg-mut">
+          <span className="inline-flex items-center gap-1 text-caption text-fg-mut">
             <Users className="h-3 w-3" aria-hidden />
             {t("rbac", "throughGroup", {
               group: groupName(grant.reach, account),
@@ -263,11 +263,11 @@ function BindingRef({ binding }: { binding: BindingInfo }) {
 
 function Where({ binding, t }: { binding: BindingInfo; t: T }) {
   return binding.namespace ? (
-    <span className="text-[11px] text-fg-fnt">
+    <span className="text-caption text-fg-fnt">
       {t("rbac", "inNamespace", { namespace: binding.namespace })}
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 text-[11px] text-fg-mut">
+    <span className="inline-flex items-center gap-1 text-caption text-fg-mut">
       <Globe className="h-3 w-3" aria-hidden />
       {t("rbac", "clusterWide")}
     </span>
@@ -319,7 +319,7 @@ function Verdict({
 
 function NotLookedAt({ children }: { children: ReactNode }) {
   return (
-    <p className="flex items-start gap-1.5 text-[11px] text-fg-fnt">
+    <p className="flex items-start gap-1.5 text-caption text-fg-fnt">
       <EyeOff className="mt-px h-3 w-3 flex-none" aria-hidden />
       {children}
     </p>
@@ -480,7 +480,7 @@ function Subjects({ binding }: { binding: BindingInfo }) {
             key={`${subject.kind}/${subject.namespace ?? ""}/${subject.name}`}
             className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] items-baseline gap-2 text-xs"
           >
-            <span className="text-[11px] text-fg-fnt">{subject.kind}</span>
+            <span className="text-caption text-fg-fnt">{subject.kind}</span>
             {target ? (
               <ResourceRef
                 kind={target.kind}

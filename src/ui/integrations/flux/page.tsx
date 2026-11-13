@@ -252,7 +252,7 @@ function ReconcilersTab({
         <p className="text-xs text-fg-mut">
           {t("empty", "fluxApplyingNothing")}
         </p>
-        <p className="mt-1.5 text-[11px] text-fg-fnt">
+        <p className="mt-1.5 text-caption text-fg-fnt">
           {t("empty", "fluxNoReconcilers")}
         </p>
       </div>
@@ -448,7 +448,7 @@ function ObjectLinks({ reconciler }: { reconciler: FluxReconciler }) {
     ? crdOf(reconciler.sourceRef.kind)
     : null;
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
+    <div className="flex flex-wrap items-baseline gap-x-3 text-caption text-fg-fnt">
       {crd && (
         <ResourceRef
           kind={reconciler.kind}
@@ -729,7 +729,7 @@ function SourcesTab({
 
   return (
     <div className="flex flex-col">
-      <p className="mb-1 max-w-[92ch] text-[11px] text-fg-fnt">
+      <p className="mb-1 max-w-[92ch] text-caption text-fg-fnt">
         {t("empty", "fluxSourcesDescription")}
       </p>
       {sources.map((source, index) => (
@@ -780,7 +780,7 @@ function SourceRow({
         ) : undefined
       }
     >
-      <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] items-baseline gap-x-3 text-[11.5px] text-fg-mut">
+      <div className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] items-baseline gap-x-3 text-xs text-fg-mut">
         <span className="font-mono text-fg-mid">{t("empty", "mountFrom")}</span>
         <span className="min-w-0 break-all">
           {source.url ? (
@@ -920,11 +920,11 @@ function ControllersTab({ read }: { read: FluxControllers | undefined }) {
         description={t("empty", "fluxWorkloadsDescription")}
       />
       {unread ? (
-        <p className="max-w-[64ch] text-[11px] text-fg-fnt">
+        <p className="max-w-[64ch] text-caption text-fg-fnt">
           {sayWords(unread, t)}
         </p>
       ) : controllers.length === 0 ? (
-        <p className="max-w-[64ch] text-[11px] text-fg-fnt">
+        <p className="max-w-[64ch] text-caption text-fg-fnt">
           {t("empty", "fluxNoControllersPre")}{" "}
           <span className="font-mono">app.kubernetes.io/part-of=flux</span>
           {t("empty", "fluxNoControllersPost")}
@@ -934,7 +934,7 @@ function ControllersTab({ read }: { read: FluxControllers | undefined }) {
           {controllers.map((controller) => (
             <div
               key={`${controller.namespace}/${controller.name}`}
-              className="grid grid-cols-[minmax(0,260px)_minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
+              className="grid grid-cols-[minmax(0,260px)_minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-hair py-1.5 text-xs"
             >
               <span className="truncate">
                 <ResourceRef
@@ -944,14 +944,14 @@ function ControllersTab({ read }: { read: FluxControllers | undefined }) {
                   showKind={false}
                 />
               </span>
-              <span className="truncate font-mono text-[11px] text-fg-fnt">
+              <span className="truncate font-mono text-caption text-fg-fnt">
                 {controller.image ?? ""}
               </span>
               <span
                 className={
                   controller.ready < controller.desired
-                    ? "text-[11px] text-err"
-                    : "text-[11px] text-fg-fnt"
+                    ? "text-caption text-err"
+                    : "text-caption text-fg-fnt"
                 }
               >
                 {t("count", "ofTotalReady", {

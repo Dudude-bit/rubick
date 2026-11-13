@@ -66,7 +66,7 @@ export function VerdictBadge({
   return (
     <span className="flex flex-col items-start gap-0.5">
       {badge}
-      <span className="max-w-[60ch] text-[11px] text-fg-mut">
+      <span className="max-w-[60ch] text-caption text-fg-mut">
         {verdict.cause ? (
           <StopCauseLine cause={verdict.cause} />
         ) : (

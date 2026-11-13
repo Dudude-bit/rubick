@@ -59,7 +59,7 @@ export function YamlTabContent({
           the rhythm, and the line the title used to occupy says something
           the reader did not already know. */}
       <div className="flex flex-none items-center gap-2 pb-2">
-        <p className="min-w-0 text-[11px] text-fg-fnt">
+        <p className="min-w-0 text-caption text-fg-fnt">
           {note ?? t("empty", "yamlNoteDefault")}
         </p>
         <div className="ml-auto flex flex-none items-center gap-1">
@@ -90,7 +90,7 @@ export function YamlTabContent({
           <p
             key={`${at}:${line}`}
             role="note"
-            className="flex-none pb-2 text-[11px] text-fg-mut"
+            className="flex-none pb-2 text-caption text-fg-mut"
           >
             {line}
           </p>

@@ -57,7 +57,7 @@ export function MyAccess() {
               aria-selected={name === namespace}
               onClick={() => setPicked(name)}
               className={cn(
-                "rounded-md border px-2 py-0.5 font-mono text-[11px] transition-colors",
+                "rounded-md border px-2 py-0.5 font-mono text-caption transition-colors",
                 name === namespace
                   ? "border-info bg-sel text-fg"
                   : "border-hair text-fg-mut hover:bg-hover"
@@ -125,7 +125,7 @@ function RulesIn({ namespace }: { namespace: string }) {
                 : t("myAccess", "evaluationError")}
             </p>
             {evaluationError && (
-              <p className="select-text wrap-break-word font-mono text-[11px] text-fg-mut">
+              <p className="select-text wrap-break-word font-mono text-caption text-fg-mut">
                 {evaluationError}
               </p>
             )}
@@ -142,7 +142,7 @@ function RulesIn({ namespace }: { namespace: string }) {
           incomplete ? t("myAccess", "noneListed") : t("myAccess", "none")
         }
       />
-      <p className="flex items-start gap-1.5 text-[11px] text-fg-fnt">
+      <p className="flex items-start gap-1.5 text-caption text-fg-fnt">
         <Info className="mt-px h-3 w-3 flex-none" aria-hidden />
         {t("myAccess", "caveat")}
       </p>

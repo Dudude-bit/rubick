@@ -73,7 +73,7 @@ export function ApiResources() {
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
-              className="w-44 bg-transparent text-[11px] text-fg outline-hidden placeholder:text-fg-fnt"
+              className="w-44 bg-transparent text-caption text-fg outline-hidden placeholder:text-fg-fnt"
             />
           </div>
         }
@@ -88,7 +88,7 @@ export function ApiResources() {
             <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
             {t("apiResources", "unreadTitle")}
           </p>
-          <p className="text-[11px] text-fg-fnt">
+          <p className="text-caption text-fg-fnt">
             {errorToShow(catalog.error)}
           </p>
           <ReadAgain error={catalog.error} onRetry={again} />
@@ -168,7 +168,7 @@ function GroupSection({
     <Section aria-label={groupName(group.group, t)}>
       <h3 className="flex items-baseline gap-2 border-b border-hair pb-1 font-mono text-xs text-fg-mid">
         {groupName(group.group, t)}
-        <span className="font-sans text-[11px] tabular-nums text-fg-fnt">
+        <span className="font-sans text-caption tabular-nums text-fg-fnt">
           {group.entries.length}
         </span>
       </h3>
@@ -224,14 +224,14 @@ function KindRow({ entry }: { entry: CatalogEntry }) {
       <span
         // The group is the section's heading; repeating it pushed the version
         // itself off the end of a long kind's row.
-        className="flex-none font-mono text-[11px] text-fg-fnt"
+        className="flex-none font-mono text-caption text-fg-fnt"
         title={apiVersion}
       >
         {entry.version}
       </span>
       {/* The scope's words give way first, down to their icons, and the
           version never: "ValidatingAdmissionPolicyBinding v." in Russian. */}
-      <span className="ml-auto flex min-w-0 shrink-[100] items-center gap-2 text-[11px]">
+      <span className="ml-auto flex min-w-0 shrink-[100] items-center gap-2 text-caption">
         {!listable(entry) && (
           <span
             className="inline-flex min-w-0 items-center gap-1 text-fg-fnt"
@@ -266,7 +266,7 @@ function UnreadSection({ group }: { group: UnreadGroup }) {
         {group.group}
       </h3>
       <p className="text-xs text-fg-mut">{t("apiResources", "groupUnread")}</p>
-      <p className="font-mono text-[11px] text-fg-fnt">{group.message}</p>
+      <p className="font-mono text-caption text-fg-fnt">{group.message}</p>
     </Section>
   );
 }

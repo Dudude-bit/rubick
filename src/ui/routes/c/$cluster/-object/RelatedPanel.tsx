@@ -25,7 +25,7 @@ import type { RelatedObjects, RelatedRef } from "./useRelatedObjects";
 import { ResourceRef } from "@/components/object/ResourceRef";
 
 const GROUP_HEADING =
-  "text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt";
+  "text-micro font-semibold uppercase tracking-[0.07em] text-fg-fnt";
 
 /** Rows in the order they were produced, grouped by what the relation is. */
 function byRelation(
@@ -55,7 +55,7 @@ function Row({ entry }: { entry: RelatedRef }) {
         />
       </span>
       <span className="flex min-w-0 items-baseline gap-2">
-        <span className="flex-none text-[11px] text-fg-fnt">
+        <span className="flex-none text-caption text-fg-fnt">
           {entry.cluster
             ? t("empty", "namespaceOnCluster", {
                 namespace: entry.namespace ?? t("apiResources", "clusterWide"),
@@ -66,7 +66,7 @@ function Row({ entry }: { entry: RelatedRef }) {
         {entry.note && (
           <span
             className={cn(
-              "min-w-0 wrap-break-word font-mono text-[11px]",
+              "min-w-0 wrap-break-word font-mono text-caption",
               entry.tone === "err"
                 ? "text-err"
                 : entry.tone === "warn"
@@ -104,7 +104,7 @@ export function RelatedPanel({
   return (
     <div className="flex flex-col gap-[18px]">
       {query.error && (
-        <p className="max-w-[64ch] text-[11.5px] text-warn">
+        <p className="max-w-[64ch] text-xs text-warn">
           {t("empty", "relatedShortBy", { kind })}{" "}
           <span className="font-mono text-fg-mut">
             {errorToShow(query.error)}
@@ -133,7 +133,7 @@ export function RelatedPanel({
         will believe whichever is worse.
       */}
       {query.related.length === 0 && (
-        <p className="max-w-[64ch] text-[11.5px] text-fg-mut">
+        <p className="max-w-[64ch] text-xs text-fg-mut">
           {t("empty", query.claimed ? "relatedNothing" : "relatedUnread", {
             kind,
           })}
@@ -141,7 +141,7 @@ export function RelatedPanel({
       )}
 
       {query.related.length > 0 && !query.claimed && (
-        <p className="max-w-[64ch] text-[11.5px] text-fg-fnt">
+        <p className="max-w-[64ch] text-xs text-fg-fnt">
           {t("empty", "relatedOwnerOnly", { kind })}
         </p>
       )}

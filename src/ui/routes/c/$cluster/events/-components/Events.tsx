@@ -230,7 +230,7 @@ function filtersFor(
 const keyOfStory = (story: Story) => story.key;
 
 const TOGGLE =
-  "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover";
+  "h-6 whitespace-nowrap rounded px-1.5 text-caption transition-colors hover:bg-hover";
 
 /** The heading's own word and the gaps either side of the count. */
 const TITLE_PX = 64;
@@ -806,7 +806,7 @@ export function Events() {
                     aria-label={t("action", "filterEventsPlaceholder")}
                     placeholder={t("action", "filterEventsPlaceholder")}
                     className={cn(
-                      "bg-transparent text-[11px] text-fg outline-hidden placeholder:text-fg-fnt",
+                      "bg-transparent text-caption text-fg outline-hidden placeholder:text-fg-fnt",
                       narrow ? "w-24" : "w-36"
                     )}
                   />
@@ -850,7 +850,7 @@ export function Events() {
                     <Select value={eventLimit} onValueChange={setEventLimit}>
                       <SelectTrigger
                         aria-label={t("action", "eventsFetched")}
-                        className="h-6 w-auto shrink-0 gap-1 whitespace-nowrap border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                        className="h-6 w-auto shrink-0 gap-1 whitespace-nowrap border-0 bg-transparent px-1.5 text-caption text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -950,7 +950,7 @@ export function Events() {
                     showNamespace={!currentNamespace}
                   />
                 ))}
-                <p className="px-1 text-[11px] text-fg-fnt">
+                <p className="px-1 text-caption text-fg-fnt">
                   {t("readings", "storiesExplained")}
                 </p>
               </div>
@@ -1117,7 +1117,7 @@ function HeaderCount({
                   part.type === "Warning" && part.n ? "text-warn" : undefined
                 }
               >
-                <span className="text-[9px]">
+                <span className="text-micro">
                   {part.type === "Warning" ? "▲" : "●"}
                 </span>{" "}
                 {formatCount(part.n)}

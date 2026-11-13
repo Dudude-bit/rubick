@@ -159,7 +159,7 @@ export default function GkeIngressPage() {
             {t("empty", "readingIngresses")}
           </p>
         ) : hosts.length === 0 ? (
-          <p className="max-w-[64ch] text-[11.5px] text-fg-mut">
+          <p className="max-w-[64ch] text-xs text-fg-mut">
             {t("empty", "noIngressCarries")}{" "}
             <span className="font-mono">kubernetes.io/ingress.class: gce</span>{" "}
             {t("empty", "orInline")}{" "}
@@ -180,7 +180,7 @@ export default function GkeIngressPage() {
             aside={
               <>
                 {backing.isPending && (
-                  <span className="text-[11px] text-fg-fnt">
+                  <span className="text-caption text-fg-fnt">
                     {t("empty", "checkingWhatIsBehind")}
                   </span>
                 )}

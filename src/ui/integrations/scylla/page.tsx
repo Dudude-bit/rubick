@@ -404,7 +404,7 @@ function ClusterRow({
           )}
           <div className="grid gap-x-6 gap-y-1.5 text-xs md:grid-cols-2">
             <Fact label={t("operators", "conditionsFact")}>
-              <span className="font-mono text-[11px]">
+              <span className="font-mono text-caption">
                 Available {cluster.conditions.available ?? "?"} · Progressing{" "}
                 {cluster.conditions.progressing ?? "?"} · Degraded{" "}
                 {cluster.conditions.degraded ?? "?"}
@@ -495,7 +495,7 @@ function ClusterRow({
               </div>
             ))}
           </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption">
             {actions.map((action, i) => (
               <OperatorActionButton
                 key={`${action.id}:${i}`}

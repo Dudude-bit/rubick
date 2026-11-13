@@ -147,7 +147,7 @@ function Row({
     >
       <span
         className={cn(
-          "justify-self-center text-[9px] leading-none",
+          "justify-self-center text-micro leading-none",
           muted || mesh || (row.serving && !row.servingKnown)
             ? "text-fg-fnt"
             : row.serving
@@ -217,7 +217,7 @@ function Row({
       </span>
       <span
         className={cn(
-          "justify-self-start whitespace-nowrap rounded border px-1 text-[10.5px]",
+          "justify-self-start whitespace-nowrap rounded border px-1 text-caption",
           KIND_TONE[row.kind] ?? "border-hair text-fg-fnt"
         )}
       >
@@ -244,7 +244,7 @@ function Row({
                   kind: row.viaGhost.kind,
                   name: row.viaGhost.name,
                 })}
-                className="relative top-px flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-dashed border-hair text-[9px] leading-none"
+                className="relative top-px flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-dashed border-hair text-micro leading-none"
               >
                 ?
               </span>
@@ -261,7 +261,7 @@ function Row({
           row.via
         )}
       </span>
-      <span className="text-right text-[11px] tabular-nums text-fg-fnt">
+      <span className="text-right text-caption tabular-nums text-fg-fnt">
         <RealtimeAge timestamp={row.createdAt} />
       </span>
     </div>
@@ -280,7 +280,7 @@ function GroupCap({
   return (
     <div
       className={cn(
-        "flex items-baseline gap-1.5 px-0.5 pb-1.5 pt-4 text-[10.5px] font-semibold uppercase tracking-wide",
+        "flex items-baseline gap-1.5 px-0.5 pb-1.5 pt-4 text-caption font-semibold uppercase tracking-wide",
         tone === "err" ? "text-err" : "text-fg-fnt"
       )}
     >
@@ -293,7 +293,7 @@ function UnsettledRows({ rows, why }: { rows: RouteRow[]; why: string }) {
   if (rows.length === 0) return null;
   return (
     <>
-      <p className="px-0.5 pb-1.5 pt-4 text-[11px] text-fg-fnt">{why}</p>
+      <p className="px-0.5 pb-1.5 pt-4 text-caption text-fg-fnt">{why}</p>
       <div className="border-t border-hair">
         {rows.map((row) => (
           <Row
@@ -443,7 +443,9 @@ export function GatewayRoutesList() {
   if (detection && !detection.installed) {
     return (
       <div className="p-6">
-        <h1 className="text-sm font-semibold text-fg">{t("nav", "routes")}</h1>
+        <h1 className="text-title font-semibold text-fg">
+          {t("nav", "routes")}
+        </h1>
         <p className="mt-2 max-w-[64ch] text-xs text-fg-fnt">
           {t("empty", "gwNoCrdsPage")}
         </p>
@@ -581,7 +583,7 @@ export function GatewayRoutesList() {
           key={`${entry.namespace}/${entry.gateway}`}
           className="mt-3 flex items-baseline gap-2 rounded-lg border border-err/45 bg-err/7 px-3 py-1.5 text-xs"
         >
-          <span className="text-[9px] text-err">●</span>
+          <span className="text-micro text-err">●</span>
           <span className="text-fg-mid">
             {parts(t("empty", "gwPulseLine", { say: entry.say }), {
               name: <span className="font-mono text-fg">{entry.gateway}</span>,
@@ -617,7 +619,7 @@ export function GatewayRoutesList() {
             <p className="text-xs text-err">
               {t("empty", "gwCouldNotReadRoutes")}
             </p>
-            <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+            <p className="mt-1.5 select-text wrap-break-word font-mono text-caption text-fg-fnt">
               {errorToShow(error)}
             </p>
           </div>
@@ -634,7 +636,7 @@ export function GatewayRoutesList() {
             <p className="text-xs text-err">
               {t("empty", "gwCouldNotCheckInstall")}
             </p>
-            <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+            <p className="mt-1.5 select-text wrap-break-word font-mono text-caption text-fg-fnt">
               {errorToShow(detectionError)}
             </p>
           </div>

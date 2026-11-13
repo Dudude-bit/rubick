@@ -236,7 +236,7 @@ export function FindingList<F>({
         <Fragment key={index}>{render(finding)}</Fragment>
       ))}
       {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("empty", "andMoreOpenRow", { n: hidden })}
         </span>
       )}
@@ -348,7 +348,7 @@ export function TroubleList<T>({
           label={filterWords.label}
         />
         {summary && (
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {needle !== ""
               ? t("count", "shownOfTotal", {
                   n: shown.length,
@@ -471,10 +471,10 @@ export function TroubleRow({
   );
   const rest = (
     <>
-      <span className="min-w-0 flex-1 truncate text-[11px] text-fg-fnt">
+      <span className="min-w-0 flex-1 truncate text-caption text-fg-fnt">
         {meta}
       </span>
-      <span className={cn("flex-none text-[11px]", toneText(state.tone))}>
+      <span className={cn("flex-none text-caption", toneText(state.tone))}>
         {state.text}
       </span>
     </>
@@ -485,7 +485,7 @@ export function TroubleRow({
       <CopyableValue
         value={copy}
         label={copy}
-        className="truncate font-mono text-[12.5px] text-fg"
+        className="truncate font-mono text-xs text-fg"
       >
         {title}
       </CopyableValue>
@@ -495,7 +495,7 @@ export function TroubleRow({
       // link that renders nothing.
       <ObjectLink
         {...reference}
-        className="min-w-0 truncate rounded-[3px] font-mono text-[12.5px] text-fg hover:bg-hover"
+        className="min-w-0 truncate rounded-[3px] font-mono text-xs text-fg hover:bg-hover"
       >
         {title}
       </ObjectLink>
@@ -537,9 +537,7 @@ export function TroubleRow({
           className="flex w-full items-baseline gap-2 text-left"
         >
           {chevron}
-          <span className="truncate font-mono text-[12.5px] text-fg">
-            {title}
-          </span>
+          <span className="truncate font-mono text-xs text-fg">{title}</span>
           {rest}
         </button>
       )}
@@ -574,14 +572,14 @@ export function Finding({
 }) {
   return (
     <div className={cn("border-l-2 pl-2.5", TONE_BORDER[tone])}>
-      <p className={cn("text-[11.5px]", toneText(tone))}>{title}</p>
+      <p className={cn("text-xs", toneText(tone))}>{title}</p>
       {verbatim && (
-        <p className="mt-0.5 select-text wrap-break-word font-mono text-[11px] text-fg-mut">
+        <p className="mt-0.5 select-text wrap-break-word font-mono text-caption text-fg-mut">
           {withoutCredentials(verbatim)}
         </p>
       )}
       {children != null && (
-        <div className="mt-0.5 text-[11.5px] text-fg-mut">{children}</div>
+        <div className="mt-0.5 text-xs text-fg-mut">{children}</div>
       )}
     </div>
   );
@@ -597,7 +595,7 @@ export function BackingUnread({ error }: { error: string | null }) {
   const t = useT();
   if (!error) return null;
   return (
-    <span className="text-[11px] text-warn" title={error}>
+    <span className="text-caption text-warn" title={error}>
       {t("empty", "behindUnread", { why: error })}
     </span>
   );
@@ -628,7 +626,7 @@ export function ServedUnder({
     />
   );
   return (
-    <span className={cn("text-[11px]", missing ? "text-err" : "text-fg-fnt")}>
+    <span className={cn("text-caption", missing ? "text-err" : "text-fg-fnt")}>
       {missing ? (
         parts(t("empty", "servedUnderDefault"), { secret: ref })
       ) : (
@@ -672,7 +670,7 @@ export function Cell({
   return (
     <div
       className={cn(
-        "rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-[11px] text-fg-mid",
+        "rounded-[4px] border border-hair bg-hover px-2 py-1 font-mono text-caption text-fg-mid",
         unknown && "border-dashed border-fg-fnt/60 text-fg-fnt",
         warn && "border-warn/50 text-warn",
         bad && "border-err/50 text-err"
@@ -682,7 +680,7 @@ export function Cell({
         {children}
       </span>
       {under != null && (
-        <span className="mt-0.5 block truncate font-sans text-[10px] text-fg-fnt">
+        <span className="mt-0.5 block truncate font-sans text-micro text-fg-fnt">
           {under}
         </span>
       )}
@@ -728,7 +726,7 @@ export function Column({
 }) {
   return (
     <div className="flex min-w-0 flex-col pr-3">
-      <span className="mb-1.5 text-[9.5px] uppercase tracking-[0.08em] text-fg-fnt">
+      <span className="mb-1.5 text-micro uppercase tracking-[0.08em] text-fg-fnt">
         {label}
       </span>
       <div className="relative flex flex-col gap-1.5">

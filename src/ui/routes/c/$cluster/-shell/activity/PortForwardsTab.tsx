@@ -111,7 +111,7 @@ function SessionRow({
             />
           )}
         </span>
-        <span className="block truncate font-mono text-[11px] text-fg-fnt">
+        <span className="block truncate font-mono text-caption text-fg-fnt">
           {namesCluster && `${session.context} · `}
           {session.namespace} · :{session.localPort} → :{session.remotePort}
           {status?.status === "reconnecting" &&
@@ -121,7 +121,7 @@ function SessionRow({
         {note && (
           <span
             className={cn(
-              "block truncate text-[11px]",
+              "block truncate text-caption",
               isTroubled ? "text-warn" : "text-fg-mut"
             )}
           >
@@ -169,7 +169,7 @@ function Via({ via }: { via: ForwardVia }) {
   const words = t("activity", "viaInline", { kind, name: via.name });
   return (
     <span
-      className="block truncate font-mono text-[11px] text-fg-fnt"
+      className="block truncate font-mono text-caption text-fg-fnt"
       title={words}
     >
       {words}
@@ -201,12 +201,12 @@ function FailedRow({
       />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-fg-mid">{session.pod}</span>
-        <span className="block truncate font-mono text-[11px] text-fg-fnt">
+        <span className="block truncate font-mono text-caption text-fg-fnt">
           {namesCluster && `${session.context} · `}
           {session.namespace} · :{session.localPort} → :{session.remotePort}
         </span>
         <Via via={session.via} />
-        <span className="block text-[11px] text-err">
+        <span className="block text-caption text-err">
           {forwardNoteWords(failed.note, t) ?? t("cluster", "failedInline")}
         </span>
       </span>
@@ -497,12 +497,12 @@ export function PortForwardsTab() {
                   <span className="block truncate text-fg-mid">
                     {config.name}
                     {config.autoStart && (
-                      <span className="ml-1.5 text-[11px] text-fg-fnt">
+                      <span className="ml-1.5 text-caption text-fg-fnt">
                         {t("activity", "autoStart")}
                       </span>
                     )}
                   </span>
-                  <span className="block truncate font-mono text-[11px] text-fg-fnt">
+                  <span className="block truncate font-mono text-caption text-fg-fnt">
                     <ResourceRef
                       kind={ResourceType.Pod}
                       name={config.pod}

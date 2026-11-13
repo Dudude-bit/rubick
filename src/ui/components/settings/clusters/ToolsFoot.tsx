@@ -53,7 +53,7 @@ export function ToolsFoot({
   return (
     <p
       className={cn(
-        "mt-3.5 max-w-[86ch] text-[11px] leading-[1.7] text-fg-fnt",
+        "mt-3.5 max-w-[86ch] text-caption leading-[1.7] text-fg-fnt",
         !visible && "hidden"
       )}
       hidden={!visible}

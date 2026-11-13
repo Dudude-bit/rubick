@@ -19,7 +19,7 @@ export function ErrorDetails({
   const t = useT();
   const shown = useShownPath()(text);
   return (
-    <details className={cn("group text-[11px]", className)}>
+    <details className={cn("group text-caption", className)}>
       <summary className="inline-flex cursor-pointer select-none list-none items-center gap-1 rounded-sm text-fg-fnt transition-colors hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info [&::-webkit-details-marker]:hidden">
         <ChevronRight
           aria-hidden="true"

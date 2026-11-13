@@ -19,7 +19,7 @@ export default function WithheldCopiesImpl({
     <p
       key={annotation}
       role="note"
-      className={cn("flex-none pb-2 text-[11px] text-fg-mut", className)}
+      className={cn("flex-none pb-2 text-caption text-fg-mut", className)}
     >
       {t("action", "yamlCopyWithheld", { annotation, keys: keys.join(", ") })}
     </p>

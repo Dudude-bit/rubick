@@ -105,7 +105,7 @@ export function ClustersSettings() {
       <SourceLine />
 
       {isLoading ? (
-        <p className="py-6 text-[11px] text-fg-fnt">
+        <p className="py-6 text-caption text-fg-fnt">
           {t("settings", "readingFile")}
         </p>
       ) : ordered.length === 0 ? (
@@ -155,11 +155,11 @@ function ListCaption({ count }: { count: number }) {
   const t = useT();
   return (
     <div className="flex items-baseline justify-between gap-4 pb-1 pt-3">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-fnt">
+      <h3 className="text-caption font-semibold uppercase tracking-[0.07em] text-fg-fnt">
         {t("settings", "contexts")}
       </h3>
       {count > 8 && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("settings", "searchFiltersList", { n: count })}
         </span>
       )}

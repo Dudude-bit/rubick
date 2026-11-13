@@ -215,7 +215,7 @@ export function DataSection({
                 </span>
                 <span
                   className={cn(
-                    "text-[11px]",
+                    "text-caption",
                     refusal || blob ? "text-fg-mut" : "text-fg-fnt"
                   )}
                 >

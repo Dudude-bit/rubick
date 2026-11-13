@@ -448,7 +448,7 @@ export const NETWORK_SOURCES: PeekSources = {
                     )
                   : (address.hostname ?? <None />)}
                 {!ready && (
-                  <span className="text-[11px]">
+                  <span className="text-caption">
                     <ServiceNotReady
                       name={endpoints.name}
                       namespace={target.namespace ?? null}

@@ -65,7 +65,7 @@ export function ObjectEventsBody({
           )}
           {t("empty", eventsUnreadWords(error))}
         </p>
-        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+        <p className="mt-1 select-text wrap-break-word font-mono text-caption text-fg-fnt">
           {errorToShow(error)}
         </p>
         <ReadAgain
@@ -104,7 +104,7 @@ export function ObjectEventsBody({
                 "empty",
                 everyObject ? "noEventsInNamespace" : "noEventsForObject"
               )}
-            <span className="mt-0.5 block text-[11px]">
+            <span className="mt-0.5 block text-caption">
               {t("empty", "eventsNoneReadAt", {
                 time: formatWhen(query.dataUpdatedAt, "clock"),
               })}

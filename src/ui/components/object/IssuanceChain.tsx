@@ -66,12 +66,12 @@ function Step({ step, last }: { step: IssuanceStep; last: boolean }) {
       <div className={cn("min-w-0", last ? "" : "pb-3")}>
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-mono text-xs text-fg">{step.name}</span>
-          <span className="text-[11px] text-fg-fnt">
+          <span className="text-caption text-fg-fnt">
             {step.kind} · {step.state}
           </span>
         </span>
         {step.note && (
-          <p className="text-[11px] text-fg-mut">
+          <p className="text-caption text-fg-mut">
             {stepNoteWords(step.note, t)}
           </p>
         )}
@@ -188,7 +188,7 @@ export function IssuanceSection({
       {story.failure && (
         <p
           className={cn(
-            "mt-2 wrap-break-word font-mono text-[11px]",
+            "mt-2 wrap-break-word font-mono text-caption",
             failed ? "text-err" : "text-warn"
           )}
         >
@@ -219,7 +219,7 @@ export function RenewalNote({
 
   if (!story.inFlight) {
     return (
-      <p className="text-[11px] text-fg-fnt">
+      <p className="text-caption text-fg-fnt">
         {issuerLine(story)}
         {story.renewalTime
           ? ` · ${t("empty", "renewsAutomatically", {
@@ -233,7 +233,7 @@ export function RenewalNote({
   // right on a page and wrong on a chain hop, so the hop says which object
   // has not finished and the Renewal block below carries the words.
   return (
-    <p className="text-[11px] text-warn">
+    <p className="text-caption text-warn">
       {t("empty", "renewalNotFinished")}
       {story.since
         ? `, ${t("empty", "startedWhen", { when: relative(t, story.since) })}`

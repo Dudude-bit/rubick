@@ -41,7 +41,7 @@ export function PodSelectorBanner({ filter }: { filter: PodFilter }) {
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 gap-1 text-[11px]"
+          className="h-6 gap-1 text-caption"
           onClick={() => setSearch({ selector: undefined, in: undefined })}
         >
           <X aria-hidden className="size-3" />
@@ -63,7 +63,7 @@ export function PodSelectorBanner({ filter }: { filter: PodFilter }) {
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 text-[11px]"
+            className="h-6 text-caption"
             onClick={() => void setNamespaceScope(filter.namespaces ?? [])}
           >
             {t("readings", "podFilterLookThere")}

@@ -88,7 +88,7 @@ export function DangerousConfirmDialog({
         </AlertDialogHeader>
 
         <div className="py-4 space-y-2">
-          <Label htmlFor="confirmation-input" className="text-sm">
+          <Label htmlFor="confirmation-input" className="text-xs">
             {t("action", "typeWord")}{" "}
             <code className="rounded bg-err/16 px-1.5 py-0.5 font-mono text-xs text-err">
               {expected}

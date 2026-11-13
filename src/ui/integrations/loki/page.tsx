@@ -129,7 +129,7 @@ export default function LokiPage() {
       />
 
       {asked.length === 0 ? (
-        <p className="max-w-[68ch] text-[11.5px] text-fg-mut">
+        <p className="max-w-[68ch] text-xs text-fg-mut">
           {t("empty", "lokiNoNamespaces")}
         </p>
       ) : found.isPending ? (
@@ -169,7 +169,7 @@ export default function LokiPage() {
           </div>
 
           {skipped > 0 && (
-            <p className="mt-3 text-[11px] text-fg-fnt">
+            <p className="mt-3 text-caption text-fg-fnt">
               {t("count", "namespacesNotAsked", { n: skipped })}
             </p>
           )}

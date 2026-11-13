@@ -117,7 +117,7 @@ export function MetricsStatusBanner({
                     })
                 )
               }
-              className="text-[11px] text-info hover:underline disabled:text-fg-fnt disabled:no-underline"
+              className="text-caption text-info hover:underline disabled:text-fg-fnt disabled:no-underline"
             >
               {checking
                 ? t("cluster", "metricsChecking")

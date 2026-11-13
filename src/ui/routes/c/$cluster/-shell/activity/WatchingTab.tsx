@@ -117,7 +117,7 @@ function Row({
         </span>
         <span
           className={cn(
-            "block break-words font-mono text-[11px]",
+            "block break-words font-mono text-caption",
             detail === null ? "text-fg-fnt" : "text-fg-mut"
           )}
           title={detail ?? undefined}

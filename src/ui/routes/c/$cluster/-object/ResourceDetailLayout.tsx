@@ -99,7 +99,7 @@ export function DetailError({
       ) : (
         <div className="flex items-center gap-2">
           <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
-          <h2 className="text-[13px] font-semibold tracking-tight text-err">
+          <h2 className="text-title font-semibold tracking-tight text-err">
             {t("empty", "kindCouldNotRead", { kind: resourceKind })}
           </h2>
         </div>

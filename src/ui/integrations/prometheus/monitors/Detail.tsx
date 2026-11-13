@@ -120,10 +120,10 @@ export function Detail({
     <div className="flex min-w-0 flex-col gap-4">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="break-all font-mono text-[15px] font-medium tracking-tight text-fg">
+          <span className="break-all font-mono text-display font-medium tracking-tight text-fg">
             {monitor.name}
           </span>
-          <span className="text-[11.5px] text-fg-fnt">
+          <span className="text-xs text-fg-fnt">
             {monitor.kind} ·{" "}
             <span className="font-mono text-fg-mut">{monitor.namespace}</span>
           </span>
@@ -172,7 +172,7 @@ export function Detail({
         <div className="min-w-0">
           <p
             className={cn(
-              "text-[13px] font-semibold leading-snug",
+              "text-title font-semibold leading-snug",
               tone === "mut" ? "text-fg" : TONE_TEXT[tone]
             )}
           >
@@ -279,13 +279,11 @@ export function Detail({
 
       {hint !== null && (
         <div className="rounded-lg border border-info/35 bg-info/6 px-3.5 py-3">
-          <p className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[.07em] text-info">
+          <p className="mb-1 flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[.07em] text-info">
             <Zap className="size-3" aria-hidden />
             {t("monitors", "mostLikely")}
           </p>
-          <p className="text-[12.5px] leading-relaxed text-fg">
-            {hintWhy(hint, t)}
-          </p>
+          <p className="text-xs leading-relaxed text-fg">{hintWhy(hint, t)}</p>
           <p className="mt-1 text-xs leading-relaxed text-fg-mut">
             {hintHow(hint, t)}
           </p>
@@ -315,17 +313,17 @@ export function Detail({
       )}
 
       {beat.query !== null && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-[7px] border border-hair px-3 py-2 text-[11.5px] text-fg-mut">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-[7px] border border-hair px-3 py-2 text-xs text-fg-mut">
           <Search className="size-3 flex-none" aria-hidden />
           <span>{t("monitors", "askedOfPrometheus")}</span>
-          <code className="min-w-0 break-all font-mono text-[11.5px] text-fg">
+          <code className="min-w-0 break-all font-mono text-xs text-fg">
             {beat.query}
           </code>
           <span className="ml-auto flex flex-none gap-1.5">
             <button
               type="button"
               onClick={() => copy(beat.query!)}
-              className="inline-flex h-6 items-center gap-1 rounded-[5px] border border-hair px-2 text-[11px] text-fg-mid hover:bg-hover"
+              className="inline-flex h-6 items-center gap-1 rounded-[5px] border border-hair px-2 text-caption text-fg-mid hover:bg-hover"
             >
               <Copy className="size-3" aria-hidden />
               {t("monitors", "copyQuery")}
@@ -334,7 +332,7 @@ export function Detail({
               <OutLink
                 href={`${base}/graph?g0.expr=${encodeURIComponent(beat.query)}&g0.tab=0`}
                 site="Prometheus"
-                className="h-6 rounded-[5px] border border-hair px-2 text-[11px] text-fg-mid hover:bg-hover hover:no-underline"
+                className="h-6 rounded-[5px] border border-hair px-2 text-caption text-fg-mid hover:bg-hover hover:no-underline"
               >
                 {t("monitors", "openInPrometheus")}
               </OutLink>
@@ -367,7 +365,7 @@ function HeartbeatPanel({
         "grid grid-cols-[92px_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg border border-hair px-3 py-2.5"
       )}
     >
-      <div className="text-[11px] text-fg-fnt">
+      <div className="text-caption text-fg-fnt">
         <b className="block text-xs font-medium text-fg">
           {t("monitors", "lastHour")}
         </b>
@@ -375,11 +373,11 @@ function HeartbeatPanel({
       </div>
       <div className="flex min-w-0 flex-col gap-[3px]">
         {beat.unread !== null ? (
-          <p className="text-[11px] text-warn">
+          <p className="text-caption text-warn">
             {t("monitors", "heartbeatUnread", { reason: beat.unread })}
           </p>
         ) : beat.lanes === null ? (
-          <p className="text-[11px] text-fg-fnt">…</p>
+          <p className="text-caption text-fg-fnt">…</p>
         ) : (
           <>
             {shownLanes.map((lane) => (
@@ -387,14 +385,14 @@ function HeartbeatPanel({
                 key={lane.instance}
                 className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-2"
               >
-                <span className="truncate font-mono text-[10.5px] text-fg-fnt">
+                <span className="truncate font-mono text-caption text-fg-fnt">
                   {lane.instance}
                 </span>
                 <Strip cells={lane.cells} height="h-3" />
               </div>
             ))}
             {lanes.length > shownLanes.length && (
-              <span className="font-mono text-[10.5px] text-fg-fnt">
+              <span className="font-mono text-caption text-fg-fnt">
                 {t("monitors", "moreLanes", {
                   n: lanes.length - shownLanes.length,
                 })}
@@ -403,7 +401,7 @@ function HeartbeatPanel({
             {beat.window !== null && (
               <div className="grid grid-cols-[150px_minmax(0,1fr)] gap-2">
                 <span />
-                <span className="flex justify-between font-mono text-[9.5px] text-fg-fnt">
+                <span className="flex justify-between font-mono text-micro text-fg-fnt">
                   <span>{hourMinute(beat.window.from)}</span>
                   <span>
                     {hourMinute((beat.window.from + beat.window.to) / 2)}
@@ -415,10 +413,10 @@ function HeartbeatPanel({
           </>
         )}
       </div>
-      <div className="text-right text-[11px] leading-snug text-fg-mut">
+      <div className="text-right text-caption leading-snug text-fg-mut">
         {scrape.down > 0 ? (
           <>
-            <b className="block font-mono text-[12.5px] font-medium text-err">
+            <b className="block font-mono text-xs font-medium text-err">
               {t("monitors", "downCount", { n: scrape.down })}
             </b>
             {since !== null &&
@@ -426,7 +424,7 @@ function HeartbeatPanel({
           </>
         ) : (
           <>
-            <b className="block font-mono text-[12.5px] font-medium text-ok">
+            <b className="block font-mono text-xs font-medium text-ok">
               {t("monitors", "upCount", { n: scrape.up })}
             </b>
             {interval && t("monitors", "everyInterval", { interval })}
@@ -499,7 +497,7 @@ function PickedUpStep({
         return (
           <div
             key={instance.uid}
-            className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 rounded-[6px] border border-info/35 bg-info/5 px-2.5 py-2 text-[11.5px] text-fg-mut"
+            className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 rounded-[6px] border border-info/35 bg-info/5 px-2.5 py-2 text-xs text-fg-mut"
           >
             <Link
               {...objectLink({
@@ -514,7 +512,7 @@ function PickedUpStep({
             </Link>
             <span
               className={cn(
-                "font-mono text-[10.5px]",
+                "font-mono text-caption",
                 bad ? "text-err" : "text-fg-fnt"
               )}
             >
@@ -535,12 +533,12 @@ function PickedUpStep({
                 .filter(Boolean)
                 .join(" · ")}
               {bad && instance.availableCondition?.message && (
-                <span className="block font-mono text-[10.5px] text-err">
+                <span className="block font-mono text-caption text-err">
                   {instance.availableCondition.message}
                 </span>
               )}
             </span>
-            <span className="font-mono text-[10.5px] text-fg-fnt">
+            <span className="font-mono text-caption text-fg-fnt">
               {t("monitors", "picksUp")}
             </span>
             <span className="text-fg-mid">
@@ -616,7 +614,7 @@ function TargetsStep({ row, now, t }: { row: MonitorRow; now: number; t: T }) {
       last
     >
       <div className="mt-1 overflow-hidden rounded-[7px] border border-hair">
-        <div className="grid grid-cols-[54px_minmax(0,1.2fr)_110px_minmax(0,1.4fr)] gap-2.5 border-b border-hair bg-hover px-3 py-1.5 text-[10.5px] text-fg-fnt">
+        <div className="grid grid-cols-[54px_minmax(0,1.2fr)_110px_minmax(0,1.4fr)] gap-2.5 border-b border-hair bg-hover px-3 py-1.5 text-caption text-fg-fnt">
           <span>{t("monitors", "health")}</span>
           <span>{t("monitors", "scrapeUrl")}</span>
           <span>{t("monitors", "lastScrape")}</span>
@@ -629,7 +627,7 @@ function TargetsStep({ row, now, t }: { row: MonitorRow; now: number; t: T }) {
           >
             <span
               className={cn(
-                "font-mono text-[11px]",
+                "font-mono text-caption",
                 target.health === "up"
                   ? "text-ok"
                   : target.health === "down"
@@ -639,10 +637,10 @@ function TargetsStep({ row, now, t }: { row: MonitorRow; now: number; t: T }) {
             >
               {target.health}
             </span>
-            <span className="break-all font-mono text-[11.5px] text-fg-mid">
+            <span className="break-all font-mono text-xs text-fg-mid">
               {target.scrapeUrl}
             </span>
-            <span className="text-[11px] tabular-nums text-fg-fnt">
+            <span className="text-caption tabular-nums text-fg-fnt">
               {target.lastScrape
                 ? t("monitors", "scrapedAgo", {
                     ago: formatSince(Date.parse(target.lastScrape), now),
@@ -651,7 +649,7 @@ function TargetsStep({ row, now, t }: { row: MonitorRow; now: number; t: T }) {
             </span>
             <span
               className={cn(
-                "break-all font-mono text-[11px]",
+                "break-all font-mono text-caption",
                 target.lastError ? "text-err" : "text-fg-fnt"
               )}
             >
@@ -660,7 +658,7 @@ function TargetsStep({ row, now, t }: { row: MonitorRow; now: number; t: T }) {
           </div>
         ))}
         {scrape.targets.length > shown.length && (
-          <p className="px-3 py-1.5 text-[11px] text-fg-fnt">
+          <p className="px-3 py-1.5 text-caption text-fg-fnt">
             {t("monitors", "moreTargets", {
               n: scrape.targets.length - shown.length,
             })}

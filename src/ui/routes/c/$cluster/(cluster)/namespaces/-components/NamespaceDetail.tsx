@@ -115,7 +115,9 @@ export function NamespaceDetail() {
       badges={
         ns &&
         ns.status !== "Active" && (
-          <span className="text-[11px] font-medium text-warn">{ns.status}</span>
+          <span className="text-caption font-medium text-warn">
+            {ns.status}
+          </span>
         )
       }
       onBack={goBack}

@@ -522,7 +522,7 @@ export function NodeDetail() {
         statusBadge={node && <StatusBadge status={nodeReadyWord(node)} />}
         badges={[
           ...(node?.roles.map((role) => (
-            <span key={role} className="text-[11px] text-fg-fnt">
+            <span key={role} className="text-caption text-fg-fnt">
               {role}
             </span>
           )) ?? []),

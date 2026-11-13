@@ -78,10 +78,10 @@ function SettingsShell() {
             at the other end of the screen from its label. */}
         <div className="max-w-3xl">
           <div className="flex items-baseline gap-2.5">
-            <h1 className="text-[13px] font-semibold text-fg">
+            <h1 className="text-title font-semibold text-fg">
               {t("settings", active.label)}
             </h1>
-            <span className="text-[11px] text-fg-fnt">
+            <span className="text-caption text-fg-fnt">
               {searching ? (
                 matched === 0 ? (
                   <>{t("settings", "nothingHereMatches", { query })}</>
@@ -99,7 +99,7 @@ function SettingsShell() {
               ) : null}
             </span>
           </div>
-          <p className="mb-4 mt-0.5 max-w-[70ch] text-[11px] text-fg-fnt">
+          <p className="mb-4 mt-0.5 max-w-[70ch] text-caption text-fg-fnt">
             {t("settings", active.description)}
           </p>
 
@@ -210,7 +210,7 @@ function SettingsLayer({ onClose }: { onClose: () => void }) {
             nav's left edge and the close on the pane's right. */}
         <header className="flex h-10 flex-none items-center border-b border-hair px-4">
           <div className="mx-auto flex w-full max-w-5xl items-center">
-            <DialogPrimitive.Title className="text-[13px] font-semibold text-fg">
+            <DialogPrimitive.Title className="text-title font-semibold text-fg">
               {t("nav", "settings")}
             </DialogPrimitive.Title>
             <DialogPrimitive.Close

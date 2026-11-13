@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  cn,
+  TYPE_SCALE,
   formatAge,
   formatDate,
   formatDuration,
@@ -146,5 +148,18 @@ describe("formatWhen", () => {
   it("shows a value that is not a date as it was written", () => {
     expect(formatWhen("soon", "full", "ru")).toBe("soon");
     expect(formatDate("soon", "ru")).toBeNull();
+  });
+});
+
+describe("cn", () => {
+  /** Without the scale in tailwind-merge's theme, `text-caption` reads as a colour and the colour beside it deletes the size. */
+  it.each(TYPE_SCALE)("keeps text-%s beside a colour", (size) => {
+    expect(cn(`text-${size}`, "text-fg-mut")).toBe(`text-${size} text-fg-mut`);
+  });
+
+  /** Two sizes still resolve to the later one, as two colours do. */
+  it("lets a later size replace an earlier one", () => {
+    expect(cn("text-caption", "text-xs")).toBe("text-xs");
+    expect(cn("text-xs text-fg", "text-title")).toBe("text-fg text-title");
   });
 });

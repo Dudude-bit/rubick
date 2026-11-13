@@ -46,7 +46,7 @@ export function StallIndicator() {
               type="button"
               aria-label={t("slow", "panel")}
               className={cn(
-                "flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] transition-colors hover:bg-hover",
+                "flex items-center gap-1.5 rounded px-1.5 py-1 text-caption transition-colors hover:bg-hover",
                 heavy ? "text-warn" : "text-fg-fnt hover:text-fg-mut"
               )}
             >
@@ -80,7 +80,7 @@ export function StallIndicator() {
             }
           />
           <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[.07em] text-fg-fnt">
+            <dt className="text-micro font-semibold uppercase tracking-[.07em] text-fg-fnt">
               {t("slow", "happeningLabel")}
             </dt>
             <dd>
@@ -198,13 +198,13 @@ function StallLine({ stall }: { stall: Stall }) {
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         {stall.where !== null && (
           <span
-            className="truncate font-mono text-[11px] text-fg-mid"
+            className="truncate font-mono text-caption text-fg-mid"
             title={placeOf(stall.where)}
           >
             {placeOf(stall.where)}
           </span>
         )}
-        <span className="flex items-start gap-1 text-[11px] text-fg-mut">
+        <span className="flex items-start gap-1 text-caption text-fg-mut">
           <Icon className="mt-0.5 h-3 w-3 flex-none" aria-hidden />
           <span>{inputWords(stall, t)}</span>
         </span>
@@ -224,11 +224,11 @@ function Fact({
 }) {
   return (
     <div>
-      <dt className="text-[10px] font-semibold uppercase tracking-[.07em] text-fg-fnt">
+      <dt className="text-micro font-semibold uppercase tracking-[.07em] text-fg-fnt">
         {label}
       </dt>
       <dd className="mt-0.5 text-fg">{value}</dd>
-      {note && <dd className="mt-0.5 text-[11px] text-fg-fnt">{note}</dd>}
+      {note && <dd className="mt-0.5 text-caption text-fg-fnt">{note}</dd>}
     </div>
   );
 }

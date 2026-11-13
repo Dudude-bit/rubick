@@ -94,7 +94,7 @@ export function DetailAction({
       disabled={!blocked && (disabled || busy)}
       aria-disabled={blocked || undefined}
       className={cn(
-        "flex h-6 items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors disabled:pointer-events-none disabled:opacity-40",
+        "flex h-6 items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-caption transition-colors disabled:pointer-events-none disabled:opacity-40",
         danger ? "text-err" : "text-fg-mut",
         blocked
           ? "cursor-default opacity-40"
@@ -247,7 +247,10 @@ function ConditionRow({
        *  `MemoryPressure` the word that means met is `False`, and the reader
        *  with `kubectl describe` open beside this needs to see which. */}
       <span
-        className={cn("truncate text-[11px]", satisfied ? "text-fg-fnt" : tone)}
+        className={cn(
+          "truncate text-caption",
+          satisfied ? "text-fg-fnt" : tone
+        )}
       >
         {condition.status}
       </span>
@@ -265,7 +268,7 @@ function ConditionRow({
         )}
       </span>
       {dated && (
-        <span className="text-right text-[11px] text-fg-fnt" title={stamp}>
+        <span className="text-right text-caption text-fg-fnt" title={stamp}>
           {detail && condition.lastTransitionTime ? age : ""}
         </span>
       )}
@@ -320,7 +323,7 @@ export function ProblemSummary({
         aria-hidden="true"
       />
       <div className="min-w-0 flex-1">
-        <p className={cn("text-[13px] font-semibold tracking-tight", color)}>
+        <p className={cn("text-title font-semibold tracking-tight", color)}>
           {headline}
         </p>
         {detail && (
@@ -366,7 +369,7 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
 
   return (
     <div className="grid grid-cols-[92px_minmax(0,1fr)_minmax(150px,max-content)] items-center gap-3 px-1.5 py-1">
-      <span className="text-[11px] text-fg-mut">{label}</span>
+      <span className="text-caption text-fg-mut">{label}</span>
       {/* No track without a ratio to fill it. An empty full-width track
        *  reads as a bar at zero, and neither "declares no limit" nor "no
        *  metrics-server" is a reading of 0%. */}
@@ -383,7 +386,7 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
           />
         </span>
       )}
-      <span className="whitespace-nowrap text-right text-[11px] text-fg-mut">
+      <span className="whitespace-nowrap text-right text-caption text-fg-mut">
         {usedNum === null ? (
           // A blank number here is almost never "this object uses
           // nothing" — it is metrics-server not being installed, which
@@ -484,13 +487,13 @@ export function Composition({
       <div className="flex items-baseline gap-1.5">
         <span
           className={cn(
-            "font-mono text-[15px] font-semibold",
+            "font-mono text-display font-semibold",
             total == null ? "text-fg-fnt" : "text-fg"
           )}
         >
           {total ?? <T section="empty" k="notReadLower" />}
         </span>
-        <span className="text-[11px] text-fg-mut">{label}</span>
+        <span className="text-caption text-fg-mut">{label}</span>
       </div>
       <div className="mb-1.5 mt-[7px] flex h-[3px] overflow-hidden rounded-sm bg-sel">
         {total != null &&
@@ -502,7 +505,7 @@ export function Composition({
             />
           ))}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-caption">
         {total == null ? (
           <span className="text-fg-fnt">
             <T section="empty" k="notReadableWithAccess" />
@@ -548,7 +551,7 @@ export function Composition({
           )
         )}
       </div>
-      {note && <p className="mt-1.5 text-[11px] text-fg-fnt">{note}</p>}
+      {note && <p className="mt-1.5 text-caption text-fg-fnt">{note}</p>}
     </div>
   );
 }
@@ -571,17 +574,17 @@ export interface HeadlineProps {
 export function Headline({ label, value, note, mono, tone }: HeadlineProps) {
   return (
     <div>
-      <div className="text-[11px] text-fg-mut">{label}</div>
+      <div className="text-caption text-fg-mut">{label}</div>
       <div
         className={cn(
-          "mt-1 wrap-break-word text-[15px] font-semibold",
+          "mt-1 wrap-break-word text-display font-semibold",
           mono && "font-mono",
           tone ? TONE_CLASS[tone] : "text-fg"
         )}
       >
         {value}
       </div>
-      {note && <p className="mt-0.5 text-[11px] text-fg-fnt">{note}</p>}
+      {note && <p className="mt-0.5 text-caption text-fg-fnt">{note}</p>}
     </div>
   );
 }
@@ -680,7 +683,7 @@ const EventRow = memo(function EventRow({
        *  stay readable without hue. */}
       <span
         className={cn(
-          "justify-self-center text-[9px]",
+          "justify-self-center text-micro",
           isWarning ? "text-warn" : "text-fg-fnt"
         )}
         aria-hidden="true"
@@ -735,7 +738,7 @@ const EventRow = memo(function EventRow({
       {/* One cell for both, so a row that never repeated hands the count's
        *  width to its message instead of leaving it blank. */}
       <span
-        className="flex items-baseline justify-end gap-2 whitespace-nowrap text-[11px] text-fg-fnt"
+        className="flex items-baseline justify-end gap-2 whitespace-nowrap text-caption text-fg-fnt"
         data-testid="event-when"
       >
         {count > 1 && (

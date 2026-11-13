@@ -352,8 +352,8 @@ export function EndpointsDetail() {
         <span
           className={
             totalNotReady > 0 && !podsUnread
-              ? "text-[11px] text-warn"
-              : "text-[11px] text-fg-mut"
+              ? "text-caption text-warn"
+              : "text-caption text-fg-mut"
           }
         >
           {t("count", "readySummary", { n: totalReady })}

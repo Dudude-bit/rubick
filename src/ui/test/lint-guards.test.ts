@@ -13,12 +13,13 @@ const VIOLATIONS: Record<string, string> = {
   "status-is-a-code": `export const b = <Badge status={t("ready")} />;`,
   "no-native-select": `export const s = <select />;`,
   "no-overlay-scrollbar": `export const c = "overflow-y-auto scrollbar-thin";`,
+  "type-scale": `export const c = "flex text-[11.5px]";`,
 };
 
 const CLEAN = `
 import { useCapability } from "@/integrations";
 import { IntegrationPage } from "./integrations/-components/IntegrationPage";
-export const c = "bg-canvas text-fg-mut border-hair";
+export const c = "bg-canvas text-fg-mut border-hair text-caption text-[0.85em]";
 export const b = <Badge status={code}>{t("ready")}</Badge>;
 export const s = <Select />;
 export const l = "overflow-y-auto scrollbar-lane [scrollbar-width:none]";

@@ -72,7 +72,7 @@ export function LineageTrail({
   return (
     <nav
       aria-label={t("lineage", "label")}
-      className="flex basis-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px]"
+      className="flex basis-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-caption"
     >
       {data.stop && stop && StopIcon && (
         <span

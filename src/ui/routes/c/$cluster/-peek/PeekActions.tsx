@@ -161,7 +161,9 @@ function PeekActionMenu({
             <span className="flex min-w-0 flex-col">
               {action.label}
               {action.reason && (
-                <span className="text-[11px] text-fg-fnt">{action.reason}</span>
+                <span className="text-caption text-fg-fnt">
+                  {action.reason}
+                </span>
               )}
             </span>
           </DropdownMenuItem>

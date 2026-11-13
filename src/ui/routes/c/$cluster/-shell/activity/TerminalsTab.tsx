@@ -151,7 +151,7 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
                   </span>
                 </span>
               </span>
-              <span className="block truncate font-mono text-[11px] text-fg-fnt">
+              <span className="block truncate font-mono text-caption text-fg-fnt">
                 {session.context !== currentContext && `${session.context} · `}
                 {session.namespace} · {session.container} ·{" "}
                 {t("activity", SAYS[session.state])}
@@ -159,7 +159,7 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
             </span>
             <RealtimeAge
               timestamp={session.openedAt}
-              className="flex-none text-[11px] text-fg-fnt"
+              className="flex-none text-caption text-fg-fnt"
             />
             <ActivityAction
               aria-label={t("activity", "endShell", { pod: session.pod })}

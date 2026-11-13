@@ -213,7 +213,7 @@ export function RowMenu<Row extends Listed>({
                 <span className="flex min-w-0 flex-col">
                   {entry.label}
                   {entry.reason && (
-                    <span className="text-[11px] text-fg-fnt">
+                    <span className="text-caption text-fg-fnt">
                       {entry.reason}
                     </span>
                   )}

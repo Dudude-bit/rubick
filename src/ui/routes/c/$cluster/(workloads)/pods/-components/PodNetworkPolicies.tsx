@@ -109,7 +109,7 @@ export function PodNetworkPolicies({ pod }: { pod: PodInfo }) {
         />
       ))}
       {policies.undecided.length > 0 && (
-        <p className="text-[11.5px] text-warn">
+        <p className="text-xs text-warn">
           {t("readings", "podPoliciesUndecided", {
             names: policies.undecided.map((policy) => policy.name).join(", "),
           })}
@@ -164,14 +164,14 @@ function DirectionBlock({
                 namespace={policy.namespace}
               />
               {direction.rules.length === 0 ? (
-                <p className="text-[12px] text-fg-mid">
+                <p className="text-xs text-fg-mid">
                   {t("readings", "podPoliciesDeniesAll", {
                     direction: NAME[which],
                   })}
                 </p>
               ) : (
                 direction.rules.map((rule, i) => (
-                  <div key={i} className="flex flex-col gap-0.5 text-[12px]">
+                  <div key={i} className="flex flex-col gap-0.5 text-xs">
                     {rule.peers.length === 0 ? (
                       <span className="text-warn">
                         {t(
@@ -182,7 +182,7 @@ function DirectionBlock({
                     ) : (
                       <ResolvedPeers peers={rule.peers} home={home} />
                     )}
-                    <span className="text-[11px] text-fg-fnt">
+                    <span className="text-caption text-fg-fnt">
                       {rule.ports.length === 0
                         ? t("empty", "everyPort")
                         : rule.ports

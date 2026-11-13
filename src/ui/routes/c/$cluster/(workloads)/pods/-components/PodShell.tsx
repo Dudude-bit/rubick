@@ -237,7 +237,7 @@ function Hollow({
 }) {
   return (
     <div className="max-w-[62ch] px-3 pb-12 pt-11" data-testid="shell-hollow">
-      <h3 className="mb-1.5 text-[13px] font-medium text-fg">{headline}</h3>
+      <h3 className="mb-1.5 text-title font-medium text-fg">{headline}</h3>
       {children}
     </div>
   );
@@ -407,7 +407,7 @@ export function PodShell({
           role="radiogroup"
           aria-label={t("action", "containerToAttach")}
           data-testid="shell-chooser"
-          className="flex flex-none flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-[11px]"
+          className="flex flex-none flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-caption"
         >
           {containers.map((c) => {
             const why = whyNoShell(c, t);
@@ -443,7 +443,7 @@ export function PodShell({
                   {c.name}
                 </span>
                 {phase && (
-                  <span className="text-[9px] uppercase tracking-[0.04em] text-fg-fnt">
+                  <span className="text-micro uppercase tracking-[0.04em] text-fg-fnt">
                     {phase}
                   </span>
                 )}

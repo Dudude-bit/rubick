@@ -78,7 +78,7 @@ export function DeliveryFilterControl({
 
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="text-[10px] uppercase tracking-[0.08em] text-fg-fnt">
+      <span className="text-micro uppercase tracking-[0.08em] text-fg-fnt">
         {t("columns", "delivery")}
       </span>
       {OPTIONS.map((option) => (
@@ -87,7 +87,7 @@ export function DeliveryFilterControl({
           type="button"
           onClick={() => onChange(option.id)}
           className={cn(
-            "text-[11px] transition-colors",
+            "text-caption transition-colors",
             option.id === value ? "text-fg" : "text-fg-fnt hover:text-fg-mut"
           )}
         >
@@ -95,7 +95,7 @@ export function DeliveryFilterControl({
         </button>
       ))}
       {value === "trouble" && blind.length > 0 && (
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("empty", "blindReconcilers", {
             n: blind.length,
             vendors: blind.join(` ${t("empty", "listAnd")} `),

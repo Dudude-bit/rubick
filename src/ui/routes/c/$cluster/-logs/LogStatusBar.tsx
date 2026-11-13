@@ -109,7 +109,7 @@ export function LogStatusBar({
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-hair px-3 py-1 text-[11px] text-fg-mut">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-hair px-3 py-1 text-caption text-fg-mut">
       <span className="whitespace-nowrap">
         {formatCount(live)}{" "}
         <span className="text-fg-fnt">

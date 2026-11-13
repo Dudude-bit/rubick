@@ -903,13 +903,13 @@ export function PodDetail() {
               // `endsWith`: `Init:CrashLoopBackOff` already ends in the init
               // container's own reason, and both would say it twice.
               !pod?.status.display?.endsWith(problem.reason) && (
-                <span className={`text-[11px] ${TONE_TEXT[problem.tone]}`}>
+                <span className={`text-caption ${TONE_TEXT[problem.tone]}`}>
                   {problem.reason}
                 </span>
               )}
             {pod?.status.failedAt && <EndedAgo at={pod.status.failedAt} />}
             {pod?.status.gone === "replaced" && (
-              <span className="text-[11px] text-fg-mut">
+              <span className="text-caption text-fg-mut">
                 {t("cluster", "attentionReplacedPod")}
               </span>
             )}

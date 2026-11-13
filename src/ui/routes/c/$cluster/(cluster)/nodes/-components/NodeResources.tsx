@@ -57,7 +57,7 @@ export function NodeResources({
         <SectionHeader title={t("columns", "resources")} />
         <div className="rounded-md border border-dashed border-hair px-3 py-2 text-xs">
           <p className="text-fg-mut">{t("empty", "nodeBudgetQuestion")}</p>
-          <p className="mt-1 font-mono text-[11px] text-err">{error}</p>
+          <p className="mt-1 font-mono text-caption text-err">{error}</p>
           <button
             type="button"
             onClick={onRetry}
@@ -137,7 +137,7 @@ export function NodeResources({
                 <TableCell className="font-mono text-xs">
                   {row.name}
                   {row.extended && (
-                    <span className="ml-2 text-[11px] text-fg-fnt">
+                    <span className="ml-2 text-caption text-fg-fnt">
                       {t("columns", "extendedResource")}
                     </span>
                   )}
@@ -184,7 +184,7 @@ export function NodeResources({
         </TableBody>
       </Table>
       {budget?.known && budget.pods !== null && (
-        <p className="mt-2 text-[11px] text-fg-fnt">
+        <p className="mt-2 text-caption text-fg-fnt">
           {t("empty", "nodeBudgetRule", { n: budget.pods })}
         </p>
       )}
@@ -267,7 +267,7 @@ function Figure({
       {pct && (
         <span
           className={cn(
-            "ml-1.5 text-[11px]",
+            "ml-1.5 text-caption",
             value > (of ?? 0) ? "text-warn" : "text-fg-fnt"
           )}
         >

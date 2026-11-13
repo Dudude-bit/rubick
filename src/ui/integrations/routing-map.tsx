@@ -341,7 +341,7 @@ export function RoutingMap({
     // to clip every name on the screen.
     <div className="overflow-x-auto pb-1">
       {namespaces.length > 1 && (
-        <div className="mb-2 flex items-center justify-end gap-1.5 text-[11px] text-fg-fnt">
+        <div className="mb-2 flex items-center justify-end gap-1.5 text-caption text-fg-fnt">
           <label htmlFor="routing-map-namespace">
             {t("columns", "namespace")}
           </label>
@@ -354,7 +354,7 @@ export function RoutingMap({
           >
             <SelectTrigger
               id="routing-map-namespace"
-              className="h-6 w-56 font-mono text-[11px]"
+              className="h-6 w-56 font-mono text-caption"
             >
               <SelectValue />
             </SelectTrigger>
@@ -377,7 +377,7 @@ export function RoutingMap({
             <span
               key={column.label}
               style={{ width: column.width ?? WIDTHS[index] ?? 180 }}
-              className="text-[9.5px] uppercase tracking-[0.08em] text-fg-fnt"
+              className="text-micro uppercase tracking-[0.08em] text-fg-fnt"
             >
               {column.label}
             </span>
@@ -452,7 +452,7 @@ function Node({
       <span className="flex items-baseline gap-1.5">
         <span
           className={cn(
-            "min-w-0 flex-1 truncate font-mono text-[11.5px]",
+            "min-w-0 flex-1 truncate font-mono text-xs",
             node.labelClassName ?? TONE_TEXT[node.tone]
           )}
         >
@@ -461,7 +461,7 @@ function Node({
         {node.tag && (
           <span
             className={cn(
-              "flex-none text-[9.5px] uppercase tracking-wider",
+              "flex-none text-micro uppercase tracking-wider",
               node.tag.className ?? TAG_TEXT[node.tag.tone]
             )}
           >
@@ -470,7 +470,7 @@ function Node({
         )}
       </span>
       {node.sub && (
-        <span className="mt-0.5 block truncate text-[10px] text-fg-fnt">
+        <span className="mt-0.5 block truncate text-micro text-fg-fnt">
           {node.sub}
         </span>
       )}

@@ -164,7 +164,7 @@ export default function AksAddonsPage() {
           // No pod carries the label — unless the pods were not read, and
           // then the finding above says so and nothing here claims more.
           podsKnown && (
-            <p className="max-w-[72ch] text-[11.5px] text-fg-mut">
+            <p className="max-w-[72ch] text-xs text-fg-mut">
               {t("empty", "noPodCarries")}{" "}
               <span className="font-mono">
                 azure.workload.identity/use: true

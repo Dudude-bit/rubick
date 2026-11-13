@@ -33,7 +33,7 @@ export function HelmStatusBanner({
 
   if (minimal) {
     return (
-      <p className={cn("flex items-center gap-1.5 text-[11px]", className)}>
+      <p className={cn("flex items-center gap-1.5 text-caption", className)}>
         <AlertTriangle className="h-3.5 w-3.5 text-warn" aria-hidden="true" />
         <span className="text-warn">{t("empty", "helmCliNotFound")}.</span>
         <button

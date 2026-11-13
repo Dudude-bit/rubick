@@ -857,7 +857,7 @@ export function CommandPalette() {
           <div className="flex items-center gap-2 border-b border-hair px-3 py-2.5 text-fg-fnt">
             <Search className="h-3.5 w-3.5 flex-none" />
             {actionsOf && (
-              <span className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded bg-hover px-1.5 text-[11px] leading-[18px] text-fg-mut">
+              <span className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded bg-hover px-1.5 text-caption leading-[18px] text-fg-mut">
                 <Zap className="h-3 w-3 flex-none" aria-hidden />
                 {actionsOf.target.name}
               </span>
@@ -921,7 +921,7 @@ export function CommandPalette() {
                 }
                 handleKeyDown(event);
               }}
-              className="w-full bg-transparent text-[13px] text-fg outline-hidden placeholder:text-fg-fnt"
+              className="w-full bg-transparent text-title text-fg outline-hidden placeholder:text-fg-fnt"
             />
           </div>
 
@@ -972,7 +972,7 @@ export function CommandPalette() {
             </div>
           )}
 
-          <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-[11px] text-fg-fnt">
+          <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-caption text-fg-fnt">
             {alert !== null ? (
               <>
                 <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
@@ -1088,7 +1088,7 @@ function ScopeChip({
 }) {
   const t = useT();
   return (
-    <span className="inline-flex shrink-0 items-center rounded bg-info/16 font-mono text-[11px] leading-[18px] text-info ring-1 ring-inset ring-info/45">
+    <span className="inline-flex shrink-0 items-center rounded bg-info/16 font-mono text-caption leading-[18px] text-info ring-1 ring-inset ring-info/45">
       <span className="flex items-center gap-1 pl-1.5">
         <span aria-hidden="true">!</span>
         {label}
@@ -1130,7 +1130,7 @@ function EntryRow({
     return (
       <div
         role="presentation"
-        className="px-2 pb-0.5 pt-2 text-[11px] text-fg-fnt first:pt-1"
+        className="px-2 pb-0.5 pt-2 text-caption text-fg-fnt first:pt-1"
       >
         {entry.text}
       </div>
@@ -1161,7 +1161,7 @@ function EntryRow({
     return (
       <div
         role="presentation"
-        className="flex items-center gap-2 px-2 pb-1 pt-1.5 text-[11px] text-fg-fnt"
+        className="flex items-center gap-2 px-2 pb-1 pt-1.5 text-caption text-fg-fnt"
       >
         <span className="min-w-0">
           <ResourceName
@@ -1192,7 +1192,7 @@ function EntryRow({
           <span className="ml-auto h-1.5 w-1.5 flex-none animate-pulse-subtle rounded-full bg-info" />
         ) : (
           <span
-            className="ml-auto min-w-0 truncate text-[11px]"
+            className="ml-auto min-w-0 truncate text-caption"
             title={action.reason}
           >
             {action.reason}
@@ -1232,7 +1232,7 @@ function EntryRow({
           {/* `!*` does not connect to anything on its own: on a laptop
               with fifteen contexts that would be fifteen auth prompts
               from one keystroke. */}
-          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          <span className="ml-auto flex-none text-caption text-fg-fnt">
             {t("action", "alreadyConnectedSearched")}
           </span>
         </Row>
@@ -1255,12 +1255,12 @@ function EntryRow({
               {entry.label}
             </span>
             {entry.sub && (
-              <span className="truncate font-mono text-[10px] leading-[13px] text-fg-fnt">
+              <span className="truncate font-mono text-micro leading-[13px] text-fg-fnt">
                 {entry.sub}
               </span>
             )}
           </span>
-          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          <span className="ml-auto flex-none text-caption text-fg-fnt">
             {entry.meta}
           </span>
         </Row>
@@ -1297,7 +1297,7 @@ function EntryRow({
               {t("action", "hintUseAsScope")}
             </span>
           )}
-          <span className="ml-auto flex flex-none items-center gap-1.5 text-[11px] text-fg-fnt">
+          <span className="ml-auto flex flex-none items-center gap-1.5 text-caption text-fg-fnt">
             {actionable && <Kbd shortcut="tab" />}
             {entry.hit.kind}
           </span>
@@ -1336,7 +1336,7 @@ function EntryRow({
           >
             {entry.action.label}
           </span>
-          <span className="ml-auto min-w-0 truncate text-[11px] text-fg-fnt">
+          <span className="ml-auto min-w-0 truncate text-caption text-fg-fnt">
             {entry.target.name}
           </span>
         </Row>
@@ -1364,7 +1364,7 @@ function EntryRow({
           {entry.namespace && (
             <span className="truncate text-fg-fnt">{entry.namespace}</span>
           )}
-          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          <span className="ml-auto flex-none text-caption text-fg-fnt">
             {entry.resourceKind}
           </span>
         </Row>
@@ -1377,7 +1377,7 @@ function EntryRow({
               n: formatCount(entry.rest),
             })}
           </span>
-          <span className="ml-auto flex flex-none items-center gap-1 text-[11px] text-fg-fnt">
+          <span className="ml-auto flex flex-none items-center gap-1 text-caption text-fg-fnt">
             <Kbd shortcut="↵" /> {t("action", "hintScopeToIt")}
           </span>
         </Row>
@@ -1404,7 +1404,7 @@ function EntryRow({
               ? `${entry.entry.group}/${entry.entry.version}`
               : entry.entry.version}
           </span>
-          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          <span className="ml-auto flex-none text-caption text-fg-fnt">
             {t("action", "hintOpenList")}
           </span>
         </Row>
@@ -1476,7 +1476,7 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
   return (
     <div
       role="presentation"
-      className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-2 pb-1 pt-0.5 text-[11px] text-fg-mut"
+      className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-2 pb-1 pt-0.5 text-caption text-fg-mut"
     >
       <span
         className="flex items-center gap-1"
@@ -1717,7 +1717,7 @@ function ClusterGroup({
           })}
       id={domId}
       className={cn(
-        "mt-1 flex items-center gap-2 rounded-[5px] px-2 py-1 text-[11px] first:mt-0",
+        "mt-1 flex items-center gap-2 rounded-[5px] px-2 py-1 text-caption first:mt-0",
         action !== "none" && "cursor-pointer",
         selected && action !== "none" && "bg-sel"
       )}

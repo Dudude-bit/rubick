@@ -86,7 +86,7 @@ export function ReadingChips({
         return (
           <li
             key={`${reading.group}/${reading.plural}`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-[11px]"
+            className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-caption"
           >
             <KindIcon
               kind={reading.kind}
@@ -112,7 +112,7 @@ export function ReadingChips({
       {groups?.map((group) => (
         <li
           key={`group/${group.group}`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-[11px]"
+          className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-caption"
         >
           <span className="font-mono text-fg">{group.group}</span>
           <span className="inline-flex items-center gap-1 text-err">

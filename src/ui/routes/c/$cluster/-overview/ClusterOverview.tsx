@@ -155,7 +155,7 @@ export function ClusterOverview() {
               <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
             )}
             <h2
-              className={`text-[13px] font-semibold tracking-tight ${
+              className={`text-title font-semibold tracking-tight ${
                 refused ? "text-fg" : "text-err"
               }`}
             >
@@ -173,7 +173,7 @@ export function ClusterOverview() {
                     })}
             </h2>
           </div>
-          <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+          <p className="mt-1 select-text wrap-break-word font-mono text-caption text-fg-fnt">
             {errorToShow(error)}
           </p>
           <div className="flex items-center gap-2 pt-2">

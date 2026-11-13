@@ -329,7 +329,7 @@ function LimitLabel({
       x={x}
       y={y}
       textAnchor="end"
-      className="fill-warn font-mono text-[9px] opacity-90"
+      className="fill-warn font-mono text-micro opacity-90"
     >
       {word} {text}
     </text>
@@ -369,11 +369,11 @@ function UsageTooltip({
       className="pointer-events-none w-max rounded-md border border-hair bg-raise px-2 py-1.5 shadow-pop"
       role="status"
     >
-      <div className="font-mono text-[10px] tabular-nums text-fg-fnt">
+      <div className="font-mono text-micro tabular-nums text-fg-fnt">
         {clockOf(point.t)} ·{" "}
         {t("action", "agoSuffix", { age: formatSince(point.t, now) })}
       </div>
-      <div className="mt-0.5 font-mono text-[11px] tabular-nums text-fg-mid">
+      <div className="mt-0.5 font-mono text-caption tabular-nums text-fg-mid">
         {formatQuantity(point.v, type)}
         {share !== null && (
           <span className="text-fg-fnt">

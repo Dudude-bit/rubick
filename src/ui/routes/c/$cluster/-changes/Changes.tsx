@@ -153,7 +153,7 @@ export function Changes() {
                   aria-pressed={window === candidate}
                   onClick={() => setWindow(candidate)}
                   className={cn(
-                    "h-6 whitespace-nowrap rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
+                    "h-6 whitespace-nowrap rounded px-1.5 font-mono text-caption transition-colors hover:bg-hover",
                     window === candidate ? "bg-sel text-fg" : "text-fg-mut"
                   )}
                 >
@@ -189,7 +189,7 @@ export function Changes() {
           {(items.length > 0 || quiet === null) && (
             <ChangesTimeline items={items} showObject />
           )}
-          <p className="px-1.5 pt-2 text-[11px] text-fg-fnt">
+          <p className="px-1.5 pt-2 text-caption text-fg-fnt">
             {t("changes", "clusterExplained", { kinds: journalKindsWords(t) })}
           </p>
         </SectionBody>

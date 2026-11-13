@@ -162,7 +162,7 @@ function StopWords({ hop }: { hop: ChainHopStop }) {
       )}
       {/* A repair is a paragraph, and a paragraph set to the width of a
           1600px window is one nobody finishes reading. */}
-      <p className={cn("max-w-[92ch] text-[11px]", look.note)}>{hop.note}</p>
+      <p className={cn("max-w-[92ch] text-caption", look.note)}>{hop.note}</p>
     </>
   );
 }
@@ -232,7 +232,7 @@ function Controller({
             : t("empty", "ingressNamesNoClass")}
         </p>
         {!brief && (
-          <p className="max-w-[92ch] text-[11px] text-fg-fnt">
+          <p className="max-w-[92ch] text-caption text-fg-fnt">
             {claimNote(binding, t)}
           </p>
         )}
@@ -261,7 +261,7 @@ function Controller({
             ? t("empty", "noIngressClassNamed", { name: binding.requested })
             : t("empty", "ingressNamesNoClass")}
         </p>
-        <p className="max-w-[92ch] text-[11px] text-err/85">
+        <p className="max-w-[92ch] text-caption text-err/85">
           {t("empty", "nothingPickedIngressUp")}{" "}
           {binding.available.length > 0
             ? t("empty", "clusterHasClasses", {
@@ -289,7 +289,7 @@ function Controller({
         </span>
       </span>
       {binding.controller && (
-        <p className="font-mono text-[11px] text-fg-fnt">
+        <p className="font-mono text-caption text-fg-fnt">
           {binding.controller}
         </p>
       )}
@@ -329,7 +329,7 @@ function EdgeNote({
       {configs.map((config) => (
         <p
           key={`${config.source.kind}/${config.source.name}`}
-          className="text-[11px] text-fg-fnt"
+          className="text-caption text-fg-fnt"
         >
           {config.source.to ? (
             <Link
@@ -367,7 +367,7 @@ function BlindSpots({ spots }: { spots: ChainBlindSpot[] }) {
   return (
     <div className="flex flex-col gap-1.5" data-testid="chain-blind-spots">
       {spots.map((spot) => (
-        <p key={spot.kind} className="max-w-[92ch] text-[11px] text-warn">
+        <p key={spot.kind} className="max-w-[92ch] text-caption text-warn">
           {spot.words}
           <span className="block select-text wrap-break-word font-mono text-fg-mut">
             {spot.said}
@@ -391,13 +391,13 @@ export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
       {shown.map((route) => (
         <p
           key={`${route.host}${route.path}`}
-          className="text-[11px] text-fg-fnt"
+          className="text-caption text-fg-fnt"
         >
           <RouteLine route={route} />
         </p>
       ))}
       {vendors.length > shown.length && (
-        <p className="text-[11px] text-fg-fnt">
+        <p className="text-caption text-fg-fnt">
           {t("count", "andMore", { n: vendors.length - shown.length })}
         </p>
       )}
@@ -512,22 +512,22 @@ function Hop({
                 </span>
               )}
               {hop.object.existence === "notChecked" && !hop.self && (
-                <span className="text-[11px] text-warn">
+                <span className="text-caption text-warn">
                   {describeExistence(hop.object, t)}
                 </span>
               )}
               {hop.self && (
-                <span className="text-[11px] text-fg-fnt">
+                <span className="text-caption text-fg-fnt">
                   {t("action", "thisKindHere", { kind: hop.object.kind })}
                 </span>
               )}
             </span>
-            {hop.via && <p className="text-[11px] text-fg-fnt">{hop.via}</p>}
+            {hop.via && <p className="text-caption text-fg-fnt">{hop.via}</p>}
             {/* The address, on the clipboard: reconstructing it by hand from
                 a host, a path and a guess at the scheme is the errand this
                 view exists to save. */}
             {hop.urls.length > 0 && (
-              <p className="mt-0.5 text-[11px]">
+              <p className="mt-0.5 text-caption">
                 <CopyableAddresses
                   values={hop.urls}
                   label={t("columns", "address")}
@@ -540,7 +540,7 @@ function Hop({
                 `--resolve` or in `/etc/hosts` to check the rest of the chain
                 without waiting for a zone to propagate. */}
             {hop.address?.state === "assigned" && (
-              <p className="text-[11px] text-fg-fnt">
+              <p className="text-caption text-fg-fnt">
                 {t("action", "atInline")}{" "}
                 <CopyableAddresses
                   values={hop.address.addresses}
@@ -550,7 +550,7 @@ function Hop({
             )}
             {/* With no controller, the hop above already says none will come. */}
             {hop.address?.state === "pending" && (
-              <p className="max-w-[92ch] text-[11px] text-warn">
+              <p className="max-w-[92ch] text-caption text-warn">
                 {t("empty", "noAddressYet")}
               </p>
             )}
@@ -579,7 +579,7 @@ function Hop({
             )}
             <span
               className={cn(
-                "text-[11px]",
+                "text-caption",
                 hop.tone === "warn" ? "text-warn" : "text-fg-fnt"
               )}
             >
@@ -730,7 +730,7 @@ export function TrafficChain({
           {routed.unread.map((unread) => (
             <p
               key={`${unread.ingress.namespace ?? ""}/${unread.ingress.name}/${unread.what}`}
-              className="max-w-[92ch] text-[11px] text-warn"
+              className="max-w-[92ch] text-caption text-warn"
             >
               {unread.what === "ingress"
                 ? t("empty", "couldNotReadIngress", {
@@ -747,7 +747,7 @@ export function TrafficChain({
         </div>
       )}
       {routed2.error && (
-        <p className="max-w-[92ch] text-[11px] text-warn">
+        <p className="max-w-[92ch] text-caption text-warn">
           {t("empty", "couldNotAskRoutes")}
           <span className="block select-text wrap-break-word font-mono text-fg-mut">
             {errorToShow(routed2.error)}
@@ -766,7 +766,7 @@ export function TrafficChain({
               classes: unserved.classes.join(", "),
             })}
           </p>
-          <p className="pl-[18px] text-[11px] text-err/85">
+          <p className="pl-[18px] text-caption text-err/85">
             {t("empty", "nothingPickedThemUp")}{" "}
             {unserved.available.length > 0
               ? t("empty", "clusterHasClasses", {

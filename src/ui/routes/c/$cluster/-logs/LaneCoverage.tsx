@@ -82,7 +82,7 @@ export function LaneCoverage({
             type="button"
             aria-pressed={mode === value}
             onClick={() => onModeChange(value)}
-            className={`flex h-full items-center rounded px-1.5 text-[10px] ${
+            className={`flex h-full items-center rounded px-1.5 text-micro ${
               mode === value
                 ? "bg-sel text-fg"
                 : "text-fg-mut hover:bg-hover hover:text-fg"

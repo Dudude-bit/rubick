@@ -401,7 +401,7 @@ function AttentionRow({
           </>
         )}
       </span>
-      <span className="whitespace-nowrap text-right text-[11px] leading-4 text-fg-fnt">
+      <span className="whitespace-nowrap text-right text-caption leading-4 text-fg-fnt">
         {item.since !== null && <RealtimeAge timestamp={item.since} />}
       </span>
     </>
@@ -470,7 +470,7 @@ function MoreRows({
     byKind.set(item.kind, [...(byKind.get(item.kind) ?? []), item]);
   const more = t("cluster", "attentionMore", { n: hidden.length + cut });
   return (
-    <p className="col-span-full flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-[11px] text-fg-fnt">
+    <p className="col-span-full flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-caption text-fg-fnt">
       {onCollapse && (
         <button
           type="button"
@@ -563,7 +563,7 @@ function CheckRow({ check }: { check: AttentionCheck }) {
           </span>
         )}
         {said && !refused && (
-          <span className="font-mono text-[11px] text-fg-fnt">
+          <span className="font-mono text-caption text-fg-fnt">
             {": "}
             {said}
           </span>
@@ -894,7 +894,7 @@ export function AttentionPanel({
             className="col-span-full mt-1 border-t border-hair pt-1.5"
             data-testid="attention-unchecked"
           >
-            <p className="px-1.5 pb-0.5 text-[11px] text-fg-fnt">
+            <p className="px-1.5 pb-0.5 text-caption text-fg-fnt">
               {t("cluster", "attentionNotChecked")}
             </p>
             <ul className="grid grid-cols-[10px_max-content_minmax(0,1fr)] gap-x-2.5 px-1.5">
@@ -1037,7 +1037,7 @@ function PressureRow({
 
   return (
     <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-1">
-      <span className="text-[11px] text-fg-mut">{label}</span>
+      <span className="text-caption text-fg-mut">{label}</span>
       <span className="relative h-[5px] overflow-hidden rounded-[3px] bg-sel">
         <span
           className={cn(
@@ -1055,7 +1055,7 @@ function PressureRow({
           />
         )}
       </span>
-      <span className="text-right font-mono text-[11px] text-fg-mut">
+      <span className="text-right font-mono text-caption text-fg-mut">
         {used}
         <Unit>/</Unit>
         {total}
@@ -1130,16 +1130,16 @@ function NodeRow({ node }: { node: NodeSummary }) {
           showKind={false}
         />
         {node.roles.map((role) => (
-          <span key={role} className="text-[11px] text-fg-fnt">
+          <span key={role} className="text-caption text-fg-fnt">
             {role}
           </span>
         ))}
         {!node.schedulable && (
-          <span className="text-[11px] text-warn">cordoned</span>
+          <span className="text-caption text-warn">cordoned</span>
         )}
-        {!node.ready && <span className="text-[11px] text-err">NotReady</span>}
+        {!node.ready && <span className="text-caption text-err">NotReady</span>}
       </span>
-      <span className="text-right font-mono text-[11px] text-fg-mut">
+      <span className="text-right font-mono text-caption text-fg-mut">
         {node.podCount}
         {node.podCapacity != null && (
           <>
@@ -1315,7 +1315,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
           </span>
         )}
       </span>
-      <span className="text-right text-[11px] text-fg-fnt">
+      <span className="text-right text-caption text-fg-fnt">
         <RealtimeAge timestamp={warning.lastSeen} />
       </span>
     </div>

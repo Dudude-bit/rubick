@@ -176,7 +176,7 @@ export function SecretDetail() {
         )
       }
       badges={
-        <span className="text-[11px] text-fg-fnt">
+        <span className="text-caption text-fg-fnt">
           {t("count", "keys", { n: dataKeys.length })}
         </span>
       }

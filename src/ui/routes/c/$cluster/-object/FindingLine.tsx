@@ -17,7 +17,7 @@ export function FindingLine({ finding }: { finding: Finding }) {
       <p className={cn("text-xs font-medium", FINDING_TONE[finding.tone])}>
         {finding.title}
       </p>
-      <p className="text-[11px] text-fg-fnt">{finding.detail}</p>
+      <p className="text-caption text-fg-fnt">{finding.detail}</p>
     </div>
   );
 }

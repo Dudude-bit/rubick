@@ -300,7 +300,7 @@ export function PodTerminal({
                     target: `${podName}/${containerName}`,
                   })}
             </p>
-            <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
+            <p className="mt-0.5 wrap-break-word text-caption text-fg-mut">
               {failureReason}
             </p>
           </div>
@@ -315,7 +315,7 @@ export function PodTerminal({
               {t("action", "reconnect")}
             </Button>
           ) : (
-            <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
+            <span className="shrink-0 whitespace-nowrap pt-0.5 text-caption text-fg-fnt">
               {t("empty", "nothingLeftToAttachTo")}
             </span>
           )}

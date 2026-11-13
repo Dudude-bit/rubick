@@ -49,7 +49,7 @@ export type ResourceNameSize = "row" | "title";
 // oxlint-disable-next-line react-refresh/only-export-components
 export const RESOURCE_NAME_SIZE: Record<ResourceNameSize, string> = {
   row: "text-xs",
-  title: "text-[13px]",
+  title: "text-title",
 };
 
 export type ResourceNameProps = (
