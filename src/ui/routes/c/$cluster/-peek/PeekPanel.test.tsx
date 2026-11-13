@@ -75,6 +75,20 @@ vi.mock("../-delivery/useDelivery", async (original) => {
   };
 });
 
+// The shell's problems and the lists' watches, absent unless a test names them.
+const shell = vi.hoisted(() => ({
+  items: [] as unknown[],
+  live: new Set<string>(),
+}));
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => (shell.items.length > 0 ? { items: shell.items } : null),
+}));
+vi.mock("@/hooks/useWatchedList", async (original) => ({
+  ...(await original<typeof import("@/hooks/useWatchedList")>()),
+  useListLive: (key: unknown) =>
+    key !== null && shell.live.has(JSON.stringify(key)),
+}));
+
 vi.mock("../-object/AlertsAbout", () => ({
   AlertsAbout: ({ kind, name }: { kind: string; name: string }) => (
     <p>{`alerts about ${kind} ${name}`}</p>
@@ -3644,5 +3658,100 @@ describe("PeekPanel on a pod being set up inside its wait", () => {
     expect(screen.getByText("ContainerCreating").className).toContain(
       "text-info"
     );
+  });
+});
+
+describe("a governed workload's peek beside its list", () => {
+  beforeEach(mockCluster);
+  afterEach(() => {
+    shell.items = [];
+    shell.live.clear();
+  });
+
+  const CART = {
+    name: "cart",
+    namespace: "shop",
+    replicas: { desired: 3, ready: 3, updated: 3, available: 3 },
+    rollout: { state: "ready" },
+    rolloutPlan: { strategy: "rolling", replicas: 3, surge: 1, unavailable: 1 },
+    containers: [],
+    initContainers: [],
+    ownerReferences: [],
+    createdAt: null,
+  };
+  const CEILING = {
+    key: "hpa/shop/cart",
+    tone: "warn",
+    kind: "HorizontalPodAutoscaler",
+    name: "cart",
+    namespace: "shop",
+    reason: "TooManyReplicas",
+    detail: null,
+    since: null,
+    restarts: null,
+    foldedPods: null,
+    replaced: false,
+    opens: { kind: "Deployment", name: "cart", namespace: "shop" },
+  };
+  const LIST_KEY = ["deployments", "all"];
+  const open = (listedAt: number) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    client.setQueryData(
+      LIST_KEY,
+      { rows: [CART], unread: [] },
+      { updatedAt: listedAt }
+    );
+    return renderWithRouter(<PeekPanel />, {
+      client,
+      at: "/c/prod/events?peek=deployments/shop/cart",
+      route: "/c/$cluster/$",
+    });
+  };
+
+  /**
+   * Shots r5-15 and r5-23: under its own failed read the peek said a green
+   * "Ready" beside a row saying "1 problem", and its freshness chip went
+   * away. Fails if the held row's chip drops the list's problem, or the chip
+   * stops saying the read fails and how old the answer on screen is.
+   */
+  it("keeps the row's problem and says the read fails, dated by the list's answer", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockRejectedValue(
+      new Error("500 from get")
+    );
+    vi.mocked(commands.getResourceConnections).mockRejectedValue(
+      new Error("500 from get")
+    );
+    shell.items = [CEILING];
+    await open(Date.now() - 30_000);
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-problem="warn"]')).not.toBeNull()
+    );
+    const chip = document.querySelector('[data-problem="warn"]');
+    expect(chip).toHaveTextContent(/^1 problem·Ready$/);
+    expect(chip).toHaveAttribute("title", "TooManyReplicas");
+    expect(screen.getByText("read failing")).toBeVisible();
+    expect(screen.getByText(/^last answer \d+s ago$/)).toBeVisible();
+  });
+
+  /**
+   * Shot r5-62: the list said "live" and the peek of its row "polling",
+   * though the list's watch reads the peek again at every change it sees.
+   * Fails if the peek ignores that watch, or claims it when none is live.
+   */
+  it("says live while a live list watch holds the object, polling otherwise", async () => {
+    connected();
+    vi.mocked(commands.getDeployment).mockResolvedValue(CART as never);
+    await open(Date.now());
+    expect(await screen.findByText("polling")).toBeVisible();
+    cleanup();
+
+    shell.live.add(JSON.stringify(LIST_KEY));
+    await open(Date.now());
+    expect(await screen.findByText("live")).toBeVisible();
+    expect(screen.queryByText("polling")).toBeNull();
   });
 });

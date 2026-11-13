@@ -32,7 +32,7 @@ import { LIST_DEADLINE_SECONDS, SLOW_READ_MS } from "@/lib/read-deadline";
 import { cn, formatTimeUnit } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { RealtimeAge } from "./realtime-age";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 
 export interface DataFreshnessProps {
@@ -123,12 +123,16 @@ const AGED = new Set<string>([
   "freshRefused",
 ]);
 
-/** "5 с назад", not a bare "5 с" a reader has to guess the meaning of. */
-function AgeOnFace({ stamp }: { stamp: string }) {
+/** How old the age on the face is said to be: a refusal's own, or the last answer's, never a bare "5s ago" read as how long it has been failing. */
+function agedAs(t: T, label: string, age: string) {
+  return label === "freshRefused"
+    ? t("action", "agoSuffix", { age })
+    : t("cluster", "freshAnswerAge", { age });
+}
+
+function AgeOnFace({ stamp, label }: { stamp: string; label: string }) {
   const t = useT();
-  return (
-    <span>{t("action", "agoSuffix", { age: useRealtimeAge(stamp) })}</span>
-  );
+  return <span>{agedAs(t, label, useRealtimeAge(stamp))}</span>;
 }
 
 /** Text drawn by CSS, so a reserve takes room without being read or found. */
@@ -139,7 +143,7 @@ function Ghost({ text }: { text: string }) {
 /** Every reading the face can take, hidden in one cell: a flip never moves its neighbours. */
 function Reserve() {
   const t = useT();
-  const age = t("action", "agoSuffix", { age: formatTimeUnit(59, "minute") });
+  const age = formatTimeUnit(59, "minute");
   return Object.values(STATES).map(({ label, dot }) => (
     <span
       key={label}
@@ -151,7 +155,7 @@ function Reserve() {
       {AGED.has(label) && (
         <>
           <Ghost text="·" />
-          <Ghost text={age} />
+          <Ghost text={agedAs(t, label, age)} />
         </>
       )}
     </span>
@@ -223,7 +227,7 @@ export const DataFreshness = memo(function DataFreshness({
             {AGED.has(label) && stamp !== "" && !folded && (
               <>
                 <span aria-hidden="true">·</span>
-                <AgeOnFace stamp={stamp} />
+                <AgeOnFace stamp={stamp} label={label} />
               </>
             )}
           </span>

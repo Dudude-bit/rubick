@@ -17,7 +17,8 @@
 import { segmentOf } from "@/lib/access-kinds";
 import { builtInKindOf, type AppLink } from "@/lib/links";
 import { useEffect, useMemo, type ReactNode } from "react";
-import { AlertCircle, ArrowLeft, Network, RefreshCw } from "lucide-react";
+import { ArrowLeft, Network, RefreshCw } from "lucide-react";
+import { useParams } from "@tanstack/react-router";
 
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { CaptionScope, Section } from "@/components/ui/section";
@@ -54,7 +55,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { Finding } from "@/lib/governance";
 import type { StatusRole } from "@/lib/status-role";
 import { FindingsBlock, WithProblem } from "./ProblemTone";
-import { problemOf, type Problem } from "./problem";
+import { problemOf, useListedProblem, type Problem } from "./problem";
 import { ShareObjectAction } from "@/components/share/ShareAction";
 import type {
   ShareContribution,
@@ -107,18 +108,8 @@ export function DetailError({
           error={error}
         />
       ) : (
-        <div className="flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
-          <h2 className="text-title font-semibold tracking-tight text-err">
-            {t("empty", "kindCouldNotRead", { kind: resourceKind })}
-          </h2>
-        </div>
-      )}
-      {!isNotFound && (
         <Unknown
-          // The heading already says "could not read this kind"; the box asks
-          // the question the read was, so the same sentence is not stacked twice.
-          question={t("empty", "whatIsThisKind", { kind: resourceKind })}
+          question={t("empty", "kindCouldNotRead", { kind: resourceKind })}
           error={error ?? t("empty", "clusterDidNotAnswer")}
           onRetry={onRetry}
         />
@@ -365,6 +356,29 @@ export function ResourceDetailLayout({
   // No object and no failure is a read still to come, as the peek draws it:
   // a read reset or called off sits there with nothing fetching.
   const reading = isLoading || (!resource && !error);
+  const found = trouble ?? problemOf(findings);
+  // Over an object its own read could not answer for, the reads beside it
+  // are as much in doubt: the chip says what the list's row says.
+  const listed = useListedProblem(
+    builtIn,
+    namespace ?? null,
+    title,
+    !found && !!resource && !!freshness?.stale
+  );
+  // A page names its object from what it read, which an unread one has not.
+  const route = useParams({ strict: false });
+  const bare = (
+    <ResourceDetailHeader
+      name={title || route.name || ""}
+      kind={resourceKind}
+      served={served}
+      listLink={listLink}
+      listLabel={listLabel}
+      namespace={namespace ?? route.namespace}
+      namespaceLink={namespaceLink}
+      onBack={onBack}
+    />
+  );
 
   // The banner belongs above these returns, not below them. An alert that
   // names an object this cluster does not have lands on exactly the error
@@ -389,16 +403,7 @@ export function ResourceDetailLayout({
   if (reading) {
     return (
       <div className="flex flex-col gap-3">
-        <ResourceDetailHeader
-          name={title}
-          kind={resourceKind}
-          served={served}
-          listLink={listLink}
-          listLabel={listLabel}
-          namespace={namespace}
-          namespaceLink={namespaceLink}
-          onBack={onBack}
-        />
+        {bare}
         {banner}
         <DetailSkeleton showHeader={false} tabCount={tabs.length} />
       </div>
@@ -407,7 +412,8 @@ export function ResourceDetailLayout({
 
   if (error || !resource) {
     return (
-      <>
+      <div className="flex flex-col gap-3">
+        {bare}
         {banner}
         <DetailError
           error={error}
@@ -420,7 +426,7 @@ export function ResourceDetailLayout({
           goneNote={goneNote}
           onRetry={retry}
         />
-      </>
+      </div>
     );
   }
 
@@ -429,7 +435,7 @@ export function ResourceDetailLayout({
   // this object is worth its two lines on a log as much as on the Overview,
   // and it is the tab's own content that grows into what is left.
   const surface = surfaceIsOpen(tabs, activeTab);
-  const problem = trouble ?? problemOf(findings);
+  const problem = found ?? listed;
 
   return (
     <CaptionScope kind={resourceKind}>
@@ -492,6 +498,7 @@ export function ResourceDetailLayout({
             label={`${resourceKind} ${title}`}
             since={freshness.dataUpdatedAt}
             error={freshness.failure}
+            onRetry={retry}
           />
         )}
         {summary}

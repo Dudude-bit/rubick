@@ -9,6 +9,12 @@ import { SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { DetailError, ResourceDetailLayout } from "./ResourceDetailLayout";
+
+const shellItems = vi.hoisted(() => ({ items: [] as unknown[] }));
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () =>
+    shellItems.items.length > 0 ? { items: shellItems.items } : null,
+}));
 import { useResourceDetail } from "@/hooks/useResourceDetail";
 import { renderWithRouter } from "@/test/render";
 import { parseAlert } from "@/lib/alerts";
@@ -781,13 +787,13 @@ describe("the breadcrumb's namespace segment", () => {
   });
 });
 
-describe("DetailError does not stack the same sentence twice", () => {
+describe("DetailError says a read it could not do the way every unread is said", () => {
   /**
-   * The red heading already says "could not read this kind"; #128 wired an
-   * Unknown box below it. Passing the heading's own key as the box's question
-   * printed the sentence twice. The box asks the question the read was instead.
+   * Shot r5-74: a refused GET drew a red "Could not read this Deployment"
+   * over an amber lock box asking "What is this Deployment?". Red is the
+   * cluster's or a write's; fails if the sentence is said twice or in red.
    */
-  it("says 'could not read' once, and asks a distinct question", async () => {
+  it("says 'could not read' once, in the warn box, never in red", async () => {
     await wrap(
       <DetailError
         error={
@@ -800,10 +806,117 @@ describe("DetailError does not stack the same sentence twice", () => {
       />
     );
 
-    expect(screen.getAllByText("Could not read this Deployment")).toHaveLength(
-      1
+    const said = screen.getAllByText("Could not read this Deployment");
+    expect(said).toHaveLength(1);
+    expect(said[0].closest('[data-read="refused"]')).not.toBeNull();
+    expect(screen.queryByText("What is this Deployment?")).toBeNull();
+    expect(document.querySelector(".text-err")).toBeNull();
+  });
+
+  /**
+   * The same page had no header, breadcrumbs or way back to its list while
+   * the list beside it held the object. Fails if a failed read with nothing
+   * held drops the header, which names the object from its address.
+   */
+  it("keeps the header, named from the address, over a read that failed", async () => {
+    await renderWithRouter(
+      <ResourceDetailLayout
+        {...base}
+        resource={undefined}
+        title=""
+        resourceKind="Deployment"
+        error={new Error("500 from get")}
+        activeTab="overview"
+        tabs={overview}
+      />,
+      {
+        at: "/c/prod/deployments/argocd/argocd-repo-server",
+        route: "/c/$cluster/deployments/$namespace/$name",
+      }
     );
-    expect(screen.getByText("What is this Deployment?")).toBeInTheDocument();
+    expect(screen.getByText("argocd-repo-server")).toBeInTheDocument();
+    expect(screen.getByText("Could not read this Deployment")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /Try the read again/ })
+    ).toBeVisible();
+  });
+
+  /**
+   * Shot r5-74 with the list's row drawn: its own read and the one that
+   * finds what governs it both failed, and the chip read a clean Ready beside
+   * a list row saying "1 problem". Fails if the chip over a stale object
+   * does not carry the row's problem.
+   */
+  it("carries the list row's problem over an object its own read could not answer for", async () => {
+    shellItems.items = [
+      {
+        tone: "warn",
+        kind: "HorizontalPodAutoscaler",
+        reason: "TooManyReplicas",
+        detail: null,
+        opens: {
+          kind: "Deployment",
+          name: "argocd-repo-server",
+          namespace: "argocd",
+        },
+      },
+    ];
+    try {
+      await wrap(
+        <ResourceDetailLayout
+          {...base}
+          resource={{ name: "argocd-repo-server" }}
+          title="argocd-repo-server"
+          namespace="argocd"
+          resourceKind="Deployment"
+          statusBadge={<span>Ready</span>}
+          activeTab="overview"
+          tabs={overview}
+          freshness={{
+            dataUpdatedAt: Date.now() - 30_000,
+            slowed: false,
+            paused: false,
+            everyMs: 5000,
+            stale: true,
+            slowRead: false,
+            failure: new Error("403 from get"),
+            waitingSince: null,
+          }}
+        />
+      );
+      const chip = document.querySelector('[data-problem="warn"]');
+      expect(chip).toHaveTextContent(/^1 problem·Ready$/);
+      expect(chip).toHaveAttribute("title", "TooManyReplicas");
+    } finally {
+      shellItems.items = [];
+    }
+  });
+
+  /** Fails if the stale line over an object kept from an earlier answer offers no way to ask again. */
+  it("offers to read again over the object an earlier answer left", async () => {
+    const onRetry = vi.fn();
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        onRetry={onRetry}
+        freshness={{
+          dataUpdatedAt: Date.now() - 30_000,
+          slowed: false,
+          paused: false,
+          everyMs: 5000,
+          stale: true,
+          slowRead: false,
+          failure: new Error("500 from get"),
+          waitingSince: null,
+        }}
+      />
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Try the read again/ })
+    );
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1047,7 +1160,12 @@ const ceiling = {
  * carrying the finding's tone, or the finding moves back under the facts.
  */
 describe("ResourceDetailLayout leads with the cause", () => {
-  it("draws the status chip in the finding's tone and counts it", async () => {
+  /**
+   * The list read "⚠ 1 problem · ✓ Ready" and this header "✓ Ready · ⚠ 1
+   * problem", with the word amber. Fails if the mark stops leading in the
+   * problem's tone or the quiet word beside it is drawn in any colour.
+   */
+  it("leads the status chip with the finding's mark and draws the word neutral", async () => {
     await wrap(
       <ResourceDetailLayout
         {...base}
@@ -1059,9 +1177,12 @@ describe("ResourceDetailLayout leads with the cause", () => {
       />
     );
     const chip = document.querySelector('[data-problem="warn"]');
-    expect(chip).toHaveTextContent("Ready");
-    expect(chip).toHaveTextContent("1 problem");
-    expect(chip?.firstElementChild?.className).toContain("text-warn!");
+    expect(chip).toHaveTextContent(/^1 problem·Ready$/);
+    expect(chip?.firstElementChild).toHaveAttribute("data-problem-mark");
+    expect(chip?.firstElementChild?.className).toContain("text-warn");
+    const word = chip?.querySelector("[data-problem-word]");
+    expect(word?.className).toContain("[&_*]:text-fg-mut!");
+    expect(word?.className).not.toContain("text-warn");
   });
 
   it("puts the finding and the metric that caused it before the strip", async () => {
@@ -1081,6 +1202,37 @@ describe("ResourceDetailLayout leads with the cause", () => {
     ).toBeTruthy();
     expect(screen.getByTestId("finding-evidence")).toHaveTextContent(
       "memory 105% against a target of 80%"
+    );
+  });
+
+  /** Two metrics ran together as "80%cpu 86%"; fails if the separator goes. */
+  it("separates the readings of a finding with a middle dot", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        activeTab="overview"
+        tabs={overview}
+        statusBadge={<span>Ready</span>}
+        findings={[
+          {
+            ...ceiling,
+            evidence: [
+              ...ceiling.evidence,
+              {
+                key: "c",
+                label: "cpu",
+                from: null,
+                current: "86%",
+                target: "80%",
+              },
+            ],
+          },
+        ]}
+      />
+    );
+    const [first] = screen.getAllByTestId("finding-evidence");
+    expect(first.parentElement).toHaveTextContent(
+      "memory 105% against a target of 80% · cpu 86% against a target of 80%"
     );
   });
 
@@ -1108,9 +1260,9 @@ describe("ResourceDetailLayout leads with the cause", () => {
         findings={[ceiling]}
       />
     );
-    expect(
-      document.querySelector('[data-problem="warn"]')?.firstElementChild
-    ).not.toHaveClass("text-warn!");
+    const word = document.querySelector("[data-problem-word]");
+    expect(word).toHaveAttribute("data-problem-word", "loud");
+    expect(word?.className).not.toContain("text-fg-mut");
   });
 });
 

@@ -12,7 +12,7 @@ import { causeDeadlines, workloadCause } from "@/lib/share/pod-status";
 import { createRefusal, refusalText, refusedUid } from "@/lib/create-refusal";
 import { causeTextPx } from "../../-list/columns";
 import type { AttentionItem } from "@/lib/attention";
-import type { Problem } from "../../-object/problem";
+import { problemOfItems, type Problem } from "../../-object/problem";
 
 /** What a list row says of the cause its pods share: still reading them, could not read them, or what they told; first, that the API server refuses them. */
 export type RowCause =
@@ -84,25 +84,12 @@ export function rowProblems(
     );
     byRow.set(key, [...(byRow.get(key) ?? []), item]);
   }
-  return new Map(
-    [...byRow].map(([key, own]) => {
-      const worst = own.find((item) => item.tone === "err") ?? own[0];
-      const said =
-        worst.detail?.says === "said"
-          ? worst.detail.text
-          : worst.detail?.says === "probe"
-            ? worst.detail.failure.said
-            : null;
-      return [
-        key,
-        {
-          tone: worst.tone,
-          n: own.length,
-          title: said ? `${worst.reason}: ${said}` : worst.reason,
-        },
-      ];
-    })
-  );
+  const problems = new Map<string, Problem>();
+  for (const [key, own] of byRow) {
+    const problem = problemOfItems(own);
+    if (problem) problems.set(key, problem);
+  }
+  return problems;
 }
 
 export const problemOfRow = (

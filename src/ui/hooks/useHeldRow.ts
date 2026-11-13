@@ -1,12 +1,12 @@
 import { useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 
 import type { Scoped } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 
 /** Kinds whose list answers with the very type `get_*` does, so the row can stand in for the object. */
-const ROW_IS_THE_OBJECT: ReadonlySet<ResourceKind> = new Set([
+const ROW_IS_THE_OBJECT: ReadonlySet<string> = new Set<ResourceKind>([
   ResourceType.Deployment,
   ResourceType.Pod,
   ResourceType.Namespace,
@@ -15,20 +15,28 @@ const ROW_IS_THE_OBJECT: ReadonlySet<ResourceKind> = new Set([
   ResourceType.PersistentVolume,
 ]);
 
-/** The newest cached list row of this object, with when that list was read; `null` unless `wanted` and the kind's list holds it. */
+export interface HeldRow {
+  row: unknown;
+  /** When the list holding it last answered. */
+  at: number;
+  /** The list it was found in. */
+  key: QueryKey;
+}
+
+/** The newest cached list row of this object; `null` unless `wanted` and the kind's list holds it. */
 export function useHeldRow(
-  kind: ResourceKind | null | undefined,
+  kind: string | null | undefined,
   namespace: string | null,
-  name: string,
+  name: string | undefined,
   wanted: boolean
-): { row: unknown; at: number } | null {
+): HeldRow | null {
   const queryClient = useQueryClient();
   return useMemo(() => {
-    if (!wanted || !kind || !ROW_IS_THE_OBJECT.has(kind)) return null;
-    let held: { row: unknown; at: number } | null = null;
+    if (!wanted || !kind || !name || !ROW_IS_THE_OBJECT.has(kind)) return null;
+    let held: HeldRow | null = null;
     for (const query of queryClient
       .getQueryCache()
-      .findAll({ queryKey: queryKeys.lists(kind) })) {
+      .findAll({ queryKey: queryKeys.lists(kind as ResourceKind) })) {
       const rows = (query.state.data as Scoped<unknown> | undefined)?.rows;
       if (!Array.isArray(rows) || query.state.dataUpdatedAt <= (held?.at ?? 0))
         continue;
@@ -36,7 +44,8 @@ export function useHeldRow(
         const item = candidate as { name: string; namespace?: string | null };
         return item.name === name && (item.namespace ?? null) === namespace;
       });
-      if (row) held = { row, at: query.state.dataUpdatedAt };
+      if (row)
+        held = { row, at: query.state.dataUpdatedAt, key: query.queryKey };
     }
     return held;
   }, [queryClient, wanted, kind, namespace, name]);

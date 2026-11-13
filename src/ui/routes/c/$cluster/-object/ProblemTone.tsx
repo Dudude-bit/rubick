@@ -8,74 +8,54 @@ import type { StatusRole } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import { FindingEvidence, FindingLine } from "./FindingLine";
-import type { Problem, ProblemTone } from "./problem";
-
-const RECOLOUR: Record<ProblemTone, string> = {
-  err: "[&_*]:text-err!",
-  warn: "[&_*]:text-warn!",
-};
+import type { Problem } from "./problem";
 
 const TONE_GLYPH = { err: X, warn: TriangleAlert } as const;
 
 /**
- * A status chip that carries the object's worst problem: the word is drawn in
- * the problem's tone and followed by how many there are, so a green "Ready"
- * is never printed above an amber cause. A badge already louder than the
- * problem is left as it is.
+ * A status chip that carries the object's worst problem: the mark leads in
+ * the problem's tone and never shrinks, so a narrow cell cuts the word and
+ * not the mark. A quiet word beside it goes neutral, neither the green that
+ * says all is well nor the problem's colour, which would say the status
+ * itself is bad. A badge already louder than the problem is left as it is.
  */
 export function WithProblem({
   problem,
   role,
-  markFirst = false,
   children,
 }: {
   problem: Problem | null;
   /** The role the wrapped badge is drawn in. */
   role: StatusRole;
-  /** The mark leads and never shrinks, so a narrow cell cuts the word and not the mark. */
-  markFirst?: boolean;
   children: ReactNode;
 }) {
   const t = useT();
   if (!problem) return <>{children}</>;
   const quiet = role !== "warn" && role !== "err";
   const Glyph = TONE_GLYPH[problem.tone];
-  const dot = <span aria-hidden="true">·</span>;
   return (
     <span
       className="inline-flex min-w-0 max-w-full items-baseline gap-1.5"
       title={problem.title}
       data-problem={problem.tone}
     >
-      {markFirst && (
-        <span
-          className={cn(
-            "inline-flex flex-none items-center gap-1 text-caption font-medium",
-            TONE_TEXT[problem.tone]
-          )}
-        >
-          <Glyph className="h-2.5 w-2.5" aria-hidden="true" />
-          {t("cluster", "problemCount", { n: problem.n })}
-          {dot}
-        </span>
-      )}
       <span
-        className={cn("inline-flex min-w-0", quiet && RECOLOUR[problem.tone])}
+        data-problem-mark=""
+        className={cn(
+          "inline-flex flex-none items-center gap-1 text-caption font-medium",
+          TONE_TEXT[problem.tone]
+        )}
+      >
+        <Glyph className="h-2.5 w-2.5" aria-hidden="true" />
+        {t("cluster", "problemCount", { n: problem.n })}
+        <span aria-hidden="true">·</span>
+      </span>
+      <span
+        data-problem-word={quiet ? "quiet" : "loud"}
+        className={cn("inline-flex min-w-0", quiet && "[&_*]:text-fg-mut!")}
       >
         {children}
       </span>
-      {!markFirst && (
-        <span
-          className={cn(
-            "inline-flex flex-none items-center gap-1 text-caption font-medium",
-            TONE_TEXT[problem.tone]
-          )}
-        >
-          {dot}
-          <Glyph className="h-2.5 w-2.5" aria-hidden="true" />
-          {t("cluster", "problemCount", { n: problem.n })}
-        </span>
-      )}
     </span>
   );
 }

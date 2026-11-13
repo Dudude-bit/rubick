@@ -38,6 +38,7 @@ vi.mock("@/lib/logger", () => ({
 
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
+import { markNavigation } from "@/lib/navigation-clock";
 import { logQueryFailure } from "@/lib/query-log";
 import { shareStructure } from "@/lib/watched-rows";
 import { renderWithRouter, testQueryClient } from "@/test/render";
@@ -149,6 +150,70 @@ describe("what a detail page calls an error", () => {
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(result.current.error?.message).toMatch(/forbidden/);
+  });
+});
+
+describe("a detail page whose own read fails while a list holds its object", () => {
+  const listed = (rows: Pod[], at: number) => {
+    const client = testQueryClient();
+    client.setQueryData(
+      ["pods", "all"],
+      {
+        rows: rows.map((row) => ({ ...row, namespace: "default" })),
+        unread: [],
+      },
+      { updatedAt: at }
+    );
+    return client;
+  };
+
+  /**
+   * Shots r5-73/74: the list and the peek both held the Deployment and its
+   * page drew only "Could not read". Fails if the page does not draw the
+   * list's row, or draws it without saying it is from that list's read.
+   */
+  it("draws the list's row, said to be from the list's read", async () => {
+    const at = Date.now() - 30_000;
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockRejectedValue(new Error("500 from get"));
+
+    const { result } = await detail(fetch, listed([{ name: "api-7bcd" }], at));
+    await waitFor(() => expect(result.current.resource).toBeDefined());
+
+    expect(result.current.resource?.name).toBe("api-7bcd");
+    expect(result.current.error).toBeNull();
+    expect(result.current.freshness.stale).toBe(true);
+    expect(result.current.freshness.dataUpdatedAt).toBe(at);
+    expect(String(result.current.freshness.failure)).toContain("500 from get");
+  });
+
+  /** Fails if a row of another object stands in, or the failure stops being the page when nothing is held. */
+  it("says only the failure when the list holds no row of it", async () => {
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockRejectedValue(new Error("500 from get"));
+
+    const { result } = await detail(
+      fetch,
+      listed([{ name: "api-other" }], Date.now())
+    );
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    expect(result.current.resource).toBeUndefined();
+  });
+
+  /** A 404 is the object gone, not a dropped read: fails if the list's older row is drawn over it. */
+  it("never draws the list's row over an object the cluster says is gone", async () => {
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockRejectedValue(NOT_FOUND);
+
+    const { result } = await detail(
+      fetch,
+      listed([{ name: "api-7bcd" }], Date.now())
+    );
+    await waitFor(() => expect(result.current.error).toBe(NOT_FOUND));
+    expect(result.current.resource).toBeUndefined();
   });
 });
 
@@ -329,6 +394,35 @@ describe("a detail page whose object is made again under its name", () => {
 
     await act(async () => release({ name: "api-7bcd" }));
     await waitFor(() => expect(result.current.resource).toBeDefined());
+  });
+
+  /**
+   * The route's loader reads the object when the navigation starts and the
+   * page mounts after its chunk lands, so a 404 can be in before the page
+   * exists. Fails if that answer is treated as one from before the page
+   * opened: asking again puts the query back to loading and the skeleton
+   * waits out a second read for nothing.
+   */
+  it("draws the NotFound its own navigation read before it mounted", async () => {
+    const client = testQueryClient();
+    markNavigation();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await client
+      .fetchQuery({ queryKey: KEY, queryFn: () => Promise.reject(NOT_FOUND) })
+      .catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockReturnValue(new Promise<Pod>(() => {}));
+
+    try {
+      const { result } = await detail(fetch, client);
+      expect(result.current.error).toBe(NOT_FOUND);
+      expect(result.current.isLoading).toBe(false);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      markNavigation(0);
+    }
   });
 
   /**

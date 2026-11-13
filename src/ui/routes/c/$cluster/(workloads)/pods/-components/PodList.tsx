@@ -166,7 +166,6 @@ export const columns: ColumnDef<PodRow>[] = [
         <span className="flex-none">
           <WithProblem
             problem={row.original.problem ?? null}
-            markFirst
             role={statusRole(row.original.status.display)}
           >
             <PodStatusBadge

@@ -79,7 +79,6 @@ export function createRolloutColumn<Row extends RolloutRow>(): ColumnDef<Row> {
       >
         <WithProblem
           problem={row.original.problem ?? null}
-          markFirst
           role={workloadRole(row.original.rollout)}
         >
           <RolloutBadge rollout={row.original.rollout} />

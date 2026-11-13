@@ -5,6 +5,7 @@ import { routeTree } from "@/generated/routeTree.gen";
 import { setRouter } from "@/lib/links";
 import { pagePerObject } from "@/lib/page-remount";
 import { pageScroll } from "@/lib/page-scroll";
+import { trackNavigation } from "@/lib/navigation-clock";
 import { navigationRendered } from "@/lib/perf-navigation";
 
 export function makeRouter(queryClient: QueryClient) {
@@ -18,6 +19,7 @@ export function makeRouter(queryClient: QueryClient) {
     ...pageScroll,
     ...pagePerObject,
   });
+  trackNavigation(router);
   router.subscribe("onRendered", ({ toLocation }) => {
     const match = router.state.matches.at(-1);
     navigationRendered(match?.fullPath ?? toLocation.pathname);

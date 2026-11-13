@@ -30,7 +30,8 @@ import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { toastWriteError } from "@/lib/toast-error";
 import { useRememberOwners } from "./useLastOwners";
 import { useObjectWatch, watchedByName } from "./useObjectWatch";
-import { useStaleNotFound } from "./useStaleNotFound";
+import { useHeldRow } from "./useHeldRow";
+import { asksAgainOnMount, useStaleNotFound } from "./useStaleNotFound";
 import { backInTab } from "@/stores/scopeTabStore";
 
 export interface UseResourceDetailOptions<T> {
@@ -157,6 +158,9 @@ export function useResourceDetail<T>(
     enabled: !!name,
     placeholderData: placeholderData ? keepPreviousData : undefined,
     staleTime,
+    retryOnMount: asksAgainOnMount(
+      queryClient.getQueryState(queryKeys.detail(resourceKind, namespace, name))
+    ),
     refresh,
     // A kind the watch does not follow by name has only its own read to say
     // that an object made again under its name is back.
@@ -184,16 +188,30 @@ export function useResourceDetail<T>(
     errorUpdatedAt,
     isFetching,
   });
-  const resource = reappearing ? undefined : held;
+  const kept = reappearing ? undefined : held;
   const isLoading = reading || reappearing;
-  const holdsThisObject = resource !== undefined && !isPlaceholderData;
+  const holdsThisObject = kept !== undefined && !isPlaceholderData;
+  // The peek's rule: a read that failed with nothing of this object held
+  // draws the list's row of it, said to be from that list's read.
+  const listed = useHeldRow(
+    resourceKind,
+    namespace ?? null,
+    name,
+    !reappearing &&
+      !holdsThisObject &&
+      !!readError &&
+      !isResourceNotFoundError(readError)
+  );
+  const resource = listed ? (listed.row as T) : kept;
   const error =
-    reappearing || (holdsThisObject && !isResourceNotFoundError(readError))
+    reappearing ||
+    listed ||
+    (holdsThisObject && !isResourceNotFoundError(readError))
       ? null
       : readError;
   useRememberOwners(
     { kind: resourceKind, name: name ?? "", namespace },
-    holdsThisObject ? resource : undefined
+    holdsThisObject ? kept : undefined
   );
 
   useRereadWith(
@@ -260,7 +278,18 @@ export function useResourceDetail<T>(
     isLoading,
     error,
     refetch,
-    freshness: live ? { ...freshness, live } : freshness,
+    freshness:
+      listed || live
+        ? {
+            ...freshness,
+            ...(listed && {
+              dataUpdatedAt: listed.at,
+              stale: true,
+              failure: readError,
+            }),
+            ...(live && { live }),
+          }
+        : freshness,
     watched,
     yaml,
     isLoadingYaml,

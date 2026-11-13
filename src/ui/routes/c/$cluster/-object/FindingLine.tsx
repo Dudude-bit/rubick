@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { Finding } from "@/lib/governance";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
@@ -17,18 +18,20 @@ export function FindingEvidence({ finding }: { finding: Finding }) {
   if (!finding.evidence?.length) return null;
   return (
     <>
-      {finding.evidence.map(({ key, label, current, target }) => (
-        <span
-          key={key}
-          data-testid="finding-evidence"
-          className={cn("font-mono font-medium", FINDING_TONE[finding.tone])}
-        >
-          {t("readings", "hpaMetricOverTarget", {
-            metric: label,
-            current: current ?? "",
-            target,
-          })}
-        </span>
+      {finding.evidence.map(({ key, label, current, target }, i) => (
+        <Fragment key={key}>
+          {i > 0 && <span className="text-fg-fnt"> · </span>}
+          <span
+            data-testid="finding-evidence"
+            className={cn("font-mono font-medium", FINDING_TONE[finding.tone])}
+          >
+            {t("readings", "hpaMetricOverTarget", {
+              metric: label,
+              current: current ?? "",
+              target,
+            })}
+          </span>
+        </Fragment>
       ))}
     </>
   );

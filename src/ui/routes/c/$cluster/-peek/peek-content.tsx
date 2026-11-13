@@ -58,7 +58,7 @@ import { useObjectConnections } from "@/hooks/useConnections";
 import { governanceFindings } from "@/lib/governance-findings";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { WithProblem } from "../-object/ProblemTone";
-import { problemOf } from "../-object/problem";
+import { GOVERNED, problemOf, useListedProblem } from "../-object/problem";
 import { peekQueryKey, resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
@@ -76,7 +76,8 @@ import { usePeekWidth } from "./peek-width";
 import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
-import { useHeldRow } from "./peek-held-row";
+import { useHeldRow } from "@/hooks/useHeldRow";
+import { useListLive } from "@/hooks/useWatchedList";
 import { Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
 import { ServiceHealthView } from "../-object/health-views";
@@ -167,15 +168,18 @@ export function PeekContent({
           : null
       )
     ) !== null;
-  const governed =
-    builtIn === ResourceType.Deployment ||
-    builtIn === ResourceType.StatefulSet ||
-    builtIn === ResourceType.DaemonSet;
+  const governed = !!builtIn && GOVERNED.has(builtIn);
   const held = useHeldRow(
     builtIn,
     namespace,
     target.name,
     data === undefined && error !== null
+  );
+  const shownAt = data === undefined && held ? held.at : dataUpdatedAt;
+  // A live watch on a list holding this object reads it again at every
+  // change it sees, as `rowDetail` asks of every list of these kinds.
+  const followed = useListLive(
+    useHeldRow(builtIn, namespace, target.name, data !== undefined)?.key ?? null
   );
   const summary = useMemo(() => {
     const shown = data ?? held?.row;
@@ -314,9 +318,10 @@ export function PeekContent({
           {!gone && (
             <DataFreshness
               className="ml-auto"
-              dataUpdatedAt={dataUpdatedAt}
+              dataUpdatedAt={shownAt}
+              live={followed}
               slowed={read.freshness.slowed}
-              stale={read.freshness.stale}
+              stale={error !== null}
               slowRead={read.freshness.slowRead}
               reserve={false}
             />
@@ -343,7 +348,7 @@ export function PeekContent({
             />
           ) : summary?.status ? (
             <GovernedStatus
-              on={governed && !gone && data !== undefined}
+              on={governed && !gone}
               target={target}
               namespace={namespace}
               role={summary.statusRole ?? statusRole(summary.status)}
@@ -433,7 +438,7 @@ export function PeekContent({
                 error={error}
                 gone={gone ? (data === undefined ? lastOwners : owned) : false}
                 isLoading={isLoading}
-                readAt={data === undefined && held ? held.at : dataUpdatedAt}
+                readAt={shownAt}
                 onRetry={() => read.refetch()}
               />
             ) : (
@@ -849,11 +854,15 @@ function GovernedProblem({
     namespace ?? null,
     true
   );
+  const found = problemOf(governanceFindings(governing.data, t));
+  const listed = useListedProblem(
+    target.kind,
+    namespace ?? null,
+    target.name,
+    !found && governing.error !== null
+  );
   return (
-    <WithProblem
-      problem={problemOf(governanceFindings(governing.data, t))}
-      role={role}
-    >
+    <WithProblem problem={found ?? listed} role={role}>
       {children}
     </WithProblem>
   );
