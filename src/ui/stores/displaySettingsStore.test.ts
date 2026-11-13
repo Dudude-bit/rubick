@@ -12,13 +12,15 @@ import {
 describe("displaySettingsStore", () => {
   beforeEach(() => {
     useDisplaySettingsStore.setState({
-      resourceColouring: "full",
+      resourceColouring: "minimal",
       peekWidth: PEEK_WIDTH_DEFAULT,
     });
   });
 
-  it("defaults resource colouring to full", () => {
-    expect(useDisplaySettingsStore.getState().resourceColouring).toBe("full");
+  it("defaults resource colouring to minimal", () => {
+    expect(useDisplaySettingsStore.getState().resourceColouring).toBe(
+      "minimal"
+    );
   });
 
   it("stores a new choice", () => {
@@ -51,16 +53,29 @@ describe("displaySettingsStore migration", () => {
   it("gives a version-0 install the compact density and the colouring default", () => {
     expect(migrate({ tableDensity: "comfortable" }, 0)).toMatchObject({
       tableDensity: "compact",
-      resourceColouring: "full",
+      resourceColouring: "minimal",
     });
   });
 
   it("gives a version-1 install the colouring default it never had on disk", () => {
     const migrated = migrate({ tableDensity: "comfortable" }, 1);
-    expect(migrated.resourceColouring).toBe("full");
+    expect(migrated.resourceColouring).toBe("minimal");
     // The density migration already ran for this install; re-running it would
     // undo a choice the user made after the last upgrade.
     expect(migrated.tableDensity).toBe("comfortable");
+  });
+
+  /** Fails if the full colouring persist wrote as the old default survives the move to minimal, or if a choice made since is overwritten. */
+  it("moves the old full default to minimal once and keeps a later choice", () => {
+    expect(migrate({ resourceColouring: "full" }, 4).resourceColouring).toBe(
+      "minimal"
+    );
+    expect(migrate({ resourceColouring: "off" }, 4).resourceColouring).toBe(
+      "off"
+    );
+    expect(migrate({ resourceColouring: "full" }, 5).resourceColouring).toBe(
+      "full"
+    );
   });
 
   it("gives every install written before version 3 the default peek width", () => {
@@ -101,8 +116,8 @@ describe("displaySettingsStore migration", () => {
   });
 
   it("survives an empty or missing persisted payload", () => {
-    expect(migrate(undefined, 1).resourceColouring).toBe("full");
-    expect(migrate({}, 2).resourceColouring).toBe("full");
+    expect(migrate(undefined, 1).resourceColouring).toBe("minimal");
+    expect(migrate({}, 2).resourceColouring).toBe("minimal");
   });
 
   // Calling `migrate` directly proves the function; only rehydration proves
@@ -113,7 +128,9 @@ describe("displaySettingsStore migration", () => {
       JSON.stringify({ state: { tableDensity: "comfortable" }, version: 1 })
     );
     await useDisplaySettingsStore.persist.rehydrate();
-    expect(useDisplaySettingsStore.getState().resourceColouring).toBe("full");
+    expect(useDisplaySettingsStore.getState().resourceColouring).toBe(
+      "minimal"
+    );
     expect(useDisplaySettingsStore.getState().tableDensity).toBe("comfortable");
   });
 

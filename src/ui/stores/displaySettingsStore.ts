@@ -54,7 +54,9 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
       // breathing room. Comfortable stays one click away in the toolbar.
       tableDensity: "compact",
       setTableDensity: (density) => set({ tableDensity: density }),
-      resourceColouring: "full",
+      // Colour is for state: a name tinted by its hash beside an amber or red
+      // one makes every row look like it is saying something.
+      resourceColouring: "minimal",
       setResourceColouring: (value) => set({ resourceColouring: value }),
       peekWidth: PEEK_WIDTH_DEFAULT,
       setPeekWidth: (width) =>
@@ -76,7 +78,7 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
       // ever picked it — a bare default change would reach nobody. Bumping
       // the version resets density once; the toolbar toggle puts it back
       // for anyone who did want the roomier rows.
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         const state = persisted as Partial<DisplaySettingsState> | undefined;
         const withDensity =
@@ -89,10 +91,16 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
         // keeps an existing choice intact. Same for the peek width, added in
         // version 3: fill the gap, never overwrite a width someone dragged.
         const storedWidth = withDensity?.peekWidth;
+        // Version 5 moved the default from full to minimal. Persist wrote
+        // full to every install on first launch, so full on disk before 5 is
+        // the old default, not a choice; it moves once, like density did.
+        const colouring = withDensity?.resourceColouring;
         return {
           ...withDensity,
           resourceColouring:
-            withDensity?.resourceColouring ?? ("full" as ResourceColouring),
+            colouring === undefined || (version < 5 && colouring === "full")
+              ? ("minimal" as ResourceColouring)
+              : colouring,
           // Added in version 4, and filled the same way: an install written
           // before it has no strip mode on disk, and persist rehydrates the
           // stored payload over the initialiser's default.

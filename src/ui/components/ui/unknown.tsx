@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ClipboardCopy, TriangleAlert } from "lucide-react";
+import { ClipboardCopy, Lock, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
@@ -33,6 +33,7 @@ export function Unknown({ question, error, onRetry, className }: UnknownProps) {
   const message = errorToShow(error);
   const refused = isRefusal(error);
   const refusal = parseRefusal(message);
+  const Glyph = refused ? Lock : TriangleAlert;
 
   return (
     <div
@@ -42,8 +43,11 @@ export function Unknown({ question, error, onRetry, className }: UnknownProps) {
         className
       )}
     >
-      <p className="flex items-start gap-2 text-fg">
-        <TriangleAlert
+      <p
+        className="flex items-start gap-2 text-fg"
+        data-read={refused ? "refused" : "failed"}
+      >
+        <Glyph
           className="mt-0.5 h-3.5 w-3.5 flex-none text-warn"
           aria-hidden="true"
         />

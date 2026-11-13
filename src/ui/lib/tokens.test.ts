@@ -85,6 +85,18 @@ describe("role tokens", () => {
     expect(alpha(block, "--sel")).toBeGreaterThan(alpha(block, "--hover"));
   });
 
+  /** Fails if the faintest text, which still carries sentences, drops under WCAG's 4.5:1 on either canvas. */
+  it.each([
+    ["dark", dark],
+    ["light", light],
+  ])("keeps every text role legible on the %s canvas", (_n, block) => {
+    const canvas = rgb(hsl(block, "--canvas"));
+    for (const role of ["--fg", "--fg-mid", "--fg-mut", "--fg-fnt"])
+      expect(contrast(rgb(hsl(block, role)), canvas)).toBeGreaterThanOrEqual(
+        4.5
+      );
+  });
+
   it("lifts the overlay surface off the dark canvas", () => {
     // Light does the opposite — its canvas is already near-white, so the
     // lift comes from pure white plus the shadow.

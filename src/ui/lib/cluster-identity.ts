@@ -67,12 +67,6 @@ export function clusterNameParts(context: string): {
  * still the theme's. `--err` is reserved for production and never
  * assigned by the hash, so a red dot always means "be careful".
  */
-const IDENTITY_PALETTE = [
-  "hsl(var(--info))",
-  "hsl(var(--ok))",
-  "hsl(var(--warn))",
-  "hsl(var(--fg-mut))",
-] as const;
 
 export const DANGER_CLUSTER_COLOR = "hsl(var(--err))";
 
@@ -80,17 +74,16 @@ export const DANGER_CLUSTER_COLOR = "hsl(var(--err))";
  * The hues a cluster's colour can be *set* to by hand.
  *
  * The same ring `identHue` draws from, thinned to the rungs that survive
- * being 6px wide on opposite ends of a tab strip. Five, not more: the ring's
- * two greens are a near-miss on each other at that size, and the rung past
- * pink is the magenta that sits next to `--err`, which is what production
- * wears.
+ * being 6px wide on opposite ends of a tab strip. No green: beside `--ok` a
+ * green cluster reads as a healthy one. The rung past pink is the magenta
+ * that sits next to `--err`, which is what production wears.
  *
  * Only the hue is chosen here. Saturation and lightness stay in `--ident-s` /
  * `--ident-l`, which are per-theme and already calibrated for text, so a hue
  * picked on the dark canvas cannot vanish on the near-white one.
  * `tokens.test.ts` holds both themes to that.
  */
-export const CLUSTER_HUES = [132, 184, 224, 274, 318] as const;
+export const CLUSTER_HUES = [184, 224, 274, 318] as const;
 
 /** A chosen hue as a CSS colour, the same shape the rest of the app uses. */
 export function clusterHueColor(hue: number): string {
@@ -138,7 +131,7 @@ export function hashedColor(seed: string): string {
   for (let i = 0; i < seed.length; i++) {
     hash = ((hash << 5) + hash + seed.charCodeAt(i)) | 0;
   }
-  return IDENTITY_PALETTE[Math.abs(hash) % IDENTITY_PALETTE.length];
+  return clusterHueColor(CLUSTER_HUES[Math.abs(hash) % CLUSTER_HUES.length]);
 }
 
 /** True when the context is treated as production. */

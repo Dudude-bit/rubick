@@ -22,6 +22,30 @@ const REFUSED =
 describe("Unknown", () => {
   beforeEach(() => writeText.mockClear());
 
+  /** Fails if a refusal and a fault look alike, which sends the reader to retry what will be refused again. */
+  it("marks a refusal apart from a read that failed", () => {
+    const { container, rerender } = render(
+      <Unknown
+        question="Who is behind this Service?"
+        error={new Error(REFUSED)}
+      />
+    );
+    expect(container.querySelector("[data-read]")).toHaveAttribute(
+      "data-read",
+      "refused"
+    );
+    rerender(
+      <Unknown
+        question="Who is behind this Service?"
+        error={new Error("etcdserver: request timed out")}
+      />
+    );
+    expect(container.querySelector("[data-read]")).toHaveAttribute(
+      "data-read",
+      "failed"
+    );
+  });
+
   /** A refusal with no way out leaves the reader exactly where the sentence left them. */
   it("turns a refusal into the rule to ask for", async () => {
     render(
