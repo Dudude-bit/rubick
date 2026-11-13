@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   skipToken,
   useQuery,
@@ -68,12 +68,18 @@ export function useObjectWatch(
   const rows = useQuery<Scoped<unknown>>({ queryKey, queryFn: skipToken }).data
     ?.rows;
   const listed = rows?.length;
+  // Once per answer of the watch: a watch still listing an object its read
+  // calls gone flipped the page to loading and back on every re-read.
+  const askedFor = useRef<unknown>(null);
   useEffect(() => {
-    if (enabled && listed !== undefined && (gone ? listed > 0 : listed === 0))
+    if (!enabled || rows === undefined || askedFor.current === rows) return;
+    if (gone ? rows.length > 0 : rows.length === 0) {
+      askedFor.current = rows;
       void client.invalidateQueries({
         queryKey: queryKeys.detail(kind, namespace, name),
       });
-  }, [enabled, listed, gone, client, kind, namespace, name]);
+    }
+  }, [enabled, rows, gone, client, kind, namespace, name]);
   const live =
     enabled && failedFor !== queryKey && !resyncing && listed !== undefined;
   return { live, row: live ? rows?.[0] : undefined };

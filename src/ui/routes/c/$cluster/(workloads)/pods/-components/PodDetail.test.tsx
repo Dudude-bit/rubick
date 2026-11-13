@@ -173,6 +173,36 @@ afterEach(() => {
   useClusterStore.setState({ currentContext: null, isConnected: false });
 });
 
+describe("a pod page opened on a pod already gone", () => {
+  /**
+   * Opened from an event about a pod deleted 44 minutes before, the page
+   * said "does not exist" and then flipped back to the full skeleton for 9
+   * of every 10 frames, reading the pod again and again. Fails if the
+   * answer does not hold or the pod is asked for more than the page's own
+   * slow re-check of a gone object.
+   */
+  it("says so once and holds it, without reading the pod in a loop", async () => {
+    gone = true;
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}?tab=events&via=events/shop/${NAME}.18e79a07f17740b9`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+    expect(
+      screen.getByText(/This Pod (does not exist|no longer exists)/)
+    ).toBeInTheDocument();
+    const first = calls("get_pod");
+    for (let step = 0; step < 10; step++) {
+      await advance(700);
+      expect(
+        screen.getByText(/This Pod (does not exist|no longer exists)/)
+      ).toBeInTheDocument();
+    }
+    expect(calls("get_pod") - first).toBeLessThanOrEqual(1);
+  });
+});
+
 describe("a pod page whose pod is deleted while it is open", () => {
   /**
    * The page held its last read over the 404 as if a poll had dropped, and
