@@ -127,7 +127,6 @@ export default function LokiPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={found} label="Loki" />
       <SectionHeader
         title="Loki"
         count={state?.text}
@@ -138,6 +137,7 @@ export default function LokiPage() {
           />
         }
       />
+      <StaleRead read={found} label="Loki" />
 
       {found.isPlaceholderData && <Reading>{t("empty", "lokiAsking")}</Reading>}
       {asked.length === 0 && (isLoading || namespaceList === "pending") ? (

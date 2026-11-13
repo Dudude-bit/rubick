@@ -170,7 +170,6 @@ export default function IstioPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={mesh} label="Istio" />
       <SectionHeader
         title="Istio"
         count={
@@ -180,6 +179,7 @@ export default function IstioPage() {
         }
         description={t("empty", "istioPageDescription")}
       />
+      <StaleRead read={mesh} label="Istio" />
       <DetailTabs
         tabs={tabs}
         activeTab={tab}

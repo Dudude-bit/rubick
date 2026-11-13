@@ -299,7 +299,6 @@ export default function TraefikPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={routeSources} label="Traefik" />
       <SectionHeader
         title="Traefik"
         count={
@@ -309,6 +308,7 @@ export default function TraefikPage() {
         }
         description={t("empty", "traefikPageDescription")}
       />
+      <StaleRead read={routeSources} label="Traefik" />
       {legacyUnconfirmed > 0 && (
         <p className="max-w-[88ch] text-caption text-warn">
           {t("count", "traefikLegacyUnconfirmed", { n: legacyUnconfirmed })}

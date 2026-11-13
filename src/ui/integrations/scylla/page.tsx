@@ -123,7 +123,6 @@ export default function ScyllaPage() {
   const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={clustersQuery} label="Scylla" />
       <SectionHeader
         title="Scylla"
         count={
@@ -138,6 +137,7 @@ export default function ScyllaPage() {
         }
         description={t("operators", "scyllaPageDescription")}
       />
+      <StaleRead read={clustersQuery} label="Scylla" />
       <OperatorStrip
         operator={operator.data}
         pending={operator.isPending}

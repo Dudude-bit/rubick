@@ -156,12 +156,12 @@ export default function Monitors() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <StaleRead read={picture} label="Prometheus" />
       <Header
         picture={picture.data}
         rows={rows}
         onRetry={() => void picture.refetch()}
       />
+      <StaleRead read={picture} label="Prometheus" />
       <Notices picture={picture.data} />
       <div className="flex min-h-0 flex-1 gap-6 border-t border-hair pt-4">
         <Ladder

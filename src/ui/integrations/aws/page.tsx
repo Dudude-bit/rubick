@@ -94,7 +94,6 @@ export default function AwsLoadBalancerPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={sources} label="AWS Load Balancer Controller" />
       <SectionHeader
         title="AWS Load Balancer Controller"
         count={
@@ -109,6 +108,7 @@ export default function AwsLoadBalancerPage() {
           />
         }
       />
+      <StaleRead read={sources} label="AWS Load Balancer Controller" />
 
       {sources.data?.unread.map((kind) => (
         <Finding

@@ -248,7 +248,6 @@ export default function IngressNginxPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={routeSources} label="ingress-nginx" />
       <SectionHeader
         title="ingress-nginx"
         count={
@@ -258,6 +257,7 @@ export default function IngressNginxPage() {
         }
         description={t("empty", "nginxPageDescription")}
       />
+      <StaleRead read={routeSources} label="ingress-nginx" />
       <DetailTabs
         tabs={tabs}
         activeTab={tab}

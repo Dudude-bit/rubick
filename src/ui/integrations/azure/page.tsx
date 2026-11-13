@@ -89,7 +89,6 @@ export default function AksAddonsPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={picture} label="AKS add-ons" />
       <SectionHeader
         title={t("nav", "integrations") === "" ? "" : "AKS add-ons"}
         count={
@@ -104,6 +103,7 @@ export default function AksAddonsPage() {
           />
         }
       />
+      <StaleRead read={picture} label="AKS add-ons" />
 
       {unread.map((read) => (
         <Finding

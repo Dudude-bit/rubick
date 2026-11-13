@@ -168,7 +168,6 @@ export default function CloudNativePgPage() {
   const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={clustersQuery} label="CloudNativePG" />
       <SectionHeader
         title="CloudNativePG"
         count={
@@ -183,6 +182,7 @@ export default function CloudNativePgPage() {
         }
         description={t("operators", "cnpgPageDescription")}
       />
+      <StaleRead read={clustersQuery} label="CloudNativePG" />
       <OperatorStrip operator={operator.data} pending={operator.isPending} />
       <DetailTabs
         tabs={tabs}

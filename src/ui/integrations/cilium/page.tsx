@@ -175,7 +175,6 @@ export default function CiliumPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <StaleRead read={picture} label="Cilium" />
       <Section>
         <SectionHeader
           title="Cilium"
@@ -186,6 +185,7 @@ export default function CiliumPage() {
             />
           }
         />
+        <StaleRead read={picture} label="Cilium" />
         <div className="flex flex-col gap-2">
           {kubernetes && !kubernetes.read && (
             <Finding

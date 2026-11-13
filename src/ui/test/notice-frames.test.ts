@@ -26,3 +26,23 @@ describe("notices", () => {
     expect(ruled).toEqual([]);
   });
 });
+
+describe("a stale read on a vendor page", () => {
+  /**
+   * Argo CD said its failure above its title while every list says it below
+   * theirs. Fails if a vendor page draws its stale line before its heading.
+   */
+  it("is said under the page's title, as lists say it", () => {
+    const root = join(import.meta.dirname, "..", "..", "..");
+    const above = CODE_FILES.filter(
+      (path) =>
+        path.startsWith("src/ui/integrations/") && !path.includes(".test.")
+    ).filter((path) => {
+      const source = readFileSync(join(root, path), "utf8");
+      const stale = source.indexOf("<StaleRead ");
+      const title = source.search(/<(SectionHeader|Header)\b/);
+      return stale !== -1 && title !== -1 && stale < title;
+    });
+    expect(above).toEqual([]);
+  });
+});

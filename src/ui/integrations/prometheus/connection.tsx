@@ -155,13 +155,13 @@ export default function Connection() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={found} label="Prometheus" />
-      <StaleRead read={saved} label={t("monitors", "savedAddressLabel")} />
       <SectionHeader
         title={t("monitors", "tabConnection")}
         count={state?.text}
         description={t("empty", "promPageDescription")}
       />
+      <StaleRead read={found} label="Prometheus" />
+      <StaleRead read={saved} label={t("monitors", "savedAddressLabel")} />
 
       {saved.data && (
         <p className="text-xs text-fg-mut">

@@ -176,7 +176,6 @@ export default function FluxPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={picture} label="Flux" />
       <SectionHeader
         title="Flux"
         count={
@@ -191,6 +190,7 @@ export default function FluxPage() {
         }
         description={t("empty", "fluxPageDescription")}
       />
+      <StaleRead read={picture} label="Flux" />
       {unread.map((read) => (
         <Finding
           key={read.crd}

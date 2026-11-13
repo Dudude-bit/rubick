@@ -104,7 +104,6 @@ export default function GkeIngressPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={sources} label="GKE Ingress" />
       <SectionHeader
         title="GKE Ingress"
         count={
@@ -117,6 +116,7 @@ export default function GkeIngressPage() {
           <ShareScreenAction screen={{ scope: null, title: "GKE Ingress" }} />
         }
       />
+      <StaleRead read={sources} label="GKE Ingress" />
 
       {sources.data?.unread.map((kind) => (
         <Finding

@@ -139,7 +139,6 @@ export default function CertManagerPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <StaleRead read={picture} label="cert-manager" />
       <SectionHeader
         title="cert-manager"
         count={
@@ -151,6 +150,7 @@ export default function CertManagerPage() {
         }
         description={t("empty", "certManagerPageHint")}
       />
+      <StaleRead read={picture} label="cert-manager" />
       <DetailTabs
         tabs={tabs}
         activeTab={tab}
