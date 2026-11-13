@@ -11,6 +11,7 @@
  * families the app's queries are built on.
  */
 
+import { failedWithNothing } from "../kit";
 import { useQuery } from "@tanstack/react-query";
 import { Plug } from "lucide-react";
 
@@ -23,7 +24,15 @@ import { addressOf } from "../address";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER } from "@/lib/report-parts";
-import { Cell, Chain, Column, Finding, VendorReadFailure } from "../page-kit";
+import {
+  Cell,
+  Chain,
+  Column,
+  Finding,
+  StaleRead,
+  VendorReadFailure,
+} from "../page-kit";
+import { Reading } from "@/components/ui/states";
 import { ROUTING_STALE } from "../ingress";
 import { useSavedConnection } from "./saved-connection";
 import { FAMILIES, coverage, verdict } from "./coverage";
@@ -102,7 +111,17 @@ export default function Connection() {
     };
   });
 
-  if (found.error) {
+  if (failedWithNothing(saved)) {
+    return (
+      <VendorReadFailure
+        title={t("monitors", "couldNotReadSavedAddress")}
+        error={saved.error}
+        onRetry={() => void saved.refetch()}
+      />
+    );
+  }
+
+  if (failedWithNothing(found)) {
     return (
       <VendorReadFailure
         title={t("empty", "promCouldNotAsk")}
@@ -136,6 +155,8 @@ export default function Connection() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={found} label="Prometheus" />
+      <StaleRead read={saved} label={t("monitors", "savedAddressLabel")} />
       <SectionHeader
         title={t("monitors", "tabConnection")}
         count={state?.text}
@@ -154,7 +175,7 @@ export default function Connection() {
       )}
 
       {found.isPending ? (
-        <p className="text-xs text-fg-fnt">{t("empty", "promAsking")}</p>
+        <Reading>{t("empty", "promAsking")}</Reading>
       ) : !found.data ? null : (
         <>
           <Section>

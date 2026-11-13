@@ -15,6 +15,8 @@
  * it is an annotation over here and half is a label over there.
  */
 
+import { failedWithNothing } from "../kit";
+import { Reading } from "@/components/ui/states";
 import { useMemo } from "react";
 import { KeyRound } from "lucide-react";
 
@@ -32,6 +34,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
 } from "../page-kit";
 import { accountsKnown, useAksPicture } from "./data";
 import {
@@ -74,7 +77,7 @@ export default function AksAddonsPage() {
     danglingSection(picture.data, picture.error, t)
   );
 
-  if (picture.error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadIdentities")}
@@ -86,6 +89,7 @@ export default function AksAddonsPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={picture} label="AKS add-ons" />
       <SectionHeader
         title={t("nav", "integrations") === "" ? "" : "AKS add-ons"}
         count={
@@ -157,9 +161,7 @@ export default function AksAddonsPage() {
 
       <Section>
         {picture.isPending ? (
-          <p className="text-xs text-fg-fnt">
-            {t("empty", "readingIdentities")}
-          </p>
+          <Reading>{t("empty", "readingIdentities")}</Reading>
         ) : accounts.length === 0 ? (
           // No pod carries the label — unless the pods were not read, and
           // then the finding above says so and nothing here claims more.

@@ -19,6 +19,7 @@
  * answers through the `service.routes` capability.
  */
 
+import { Eyebrow, Reading } from "@/components/ui/states";
 import { applicationsNeedAttention } from "@/lib/two-counts";
 import { useCallback, useMemo } from "react";
 import { Box, GitBranch, Layers, Shield } from "lucide-react";
@@ -40,7 +41,7 @@ import type { CustomResourceInfo } from "@/generated/types";
 import { crdInGroup, crdInstancesLink } from "@/lib/links";
 import { toPlural } from "@/lib/resource-registry";
 import { formatAge } from "@/lib/utils";
-import { getValueByPath, troubleMark } from "../kit";
+import { getValueByPath, troubleMark, failedWithNothing } from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
@@ -51,6 +52,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
   FindingList,
 } from "../page-kit";
 import { useServiceRoutes, type ServiceRoutes } from "@/hooks/useServiceRoutes";
@@ -129,7 +131,7 @@ export default function ArgoCdPage() {
   const ui = shown.url;
   const readingUi = controller.isPending || routed.isPending;
 
-  if (applications.error) {
+  if (failedWithNothing(applications)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadApplications")}
@@ -225,6 +227,7 @@ export default function ArgoCdPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={applications} label="Argo CD" />
       <SectionHeader
         title="Argo CD"
         count={
@@ -286,9 +289,7 @@ function ApplicationsTab({
   );
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingApplications")}</p>
-    );
+    return <Reading>{t("empty", "readingApplications")}</Reading>;
   }
 
   if (apps.length === 0) {
@@ -601,7 +602,7 @@ function Manages({ app }: { app: ArgoApp }) {
         const hidden = group.resources.length - shown.length;
         return (
           <div key={group.kind} className="flex flex-col gap-0.5">
-            <span className="text-micro uppercase tracking-[0.08em] text-fg-fnt">
+            <Eyebrow as="span">
               {group.kind}
               <span className="ml-1.5 normal-case tracking-normal">
                 {group.resources.length}
@@ -612,7 +613,7 @@ function Manages({ app }: { app: ArgoApp }) {
                   </span>
                 )}
               </span>
-            </span>
+            </Eyebrow>
             {shown.map((resource) => (
               <ResourceLine
                 key={`${resource.kind}/${resource.namespace}/${resource.name}`}
@@ -938,7 +939,7 @@ function AppSetsTab({
         onRetry={onRetry}
       />
     ) : (
-      <p className="text-xs text-fg-fnt">{t("action", "readingEllipsis")}</p>
+      <Reading>{t("action", "readingEllipsis")}</Reading>
     );
   }
   if (sets.length === 0) {
@@ -1024,7 +1025,7 @@ function ProjectsTab({
         onRetry={onRetry}
       />
     ) : (
-      <p className="text-xs text-fg-fnt">{t("action", "readingEllipsis")}</p>
+      <Reading>{t("action", "readingEllipsis")}</Reading>
     );
   }
   if (projects.length === 0) {
@@ -1132,11 +1133,7 @@ function ControllerTab({
   const t = useT();
   useShareSection("argocd-controller", () => controllerSection(controller, t));
   if (!controller) {
-    return (
-      <p className="text-xs text-fg-fnt">
-        {t("empty", "readingArgoWorkloads")}
-      </p>
-    );
+    return <Reading>{t("empty", "readingArgoWorkloads")}</Reading>;
   }
 
   return (

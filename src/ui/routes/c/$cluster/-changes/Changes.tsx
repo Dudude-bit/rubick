@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { SegmentedControl } from "@/components/ui/states";
 import { ChangesTimeline } from "./ChangesTimeline";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
@@ -23,7 +24,7 @@ import {
   windowEnd,
 } from "@/lib/changes";
 import { Eye, History, Lock } from "lucide-react";
-import { cn, formatTimeUnit, formatWhen } from "@/lib/utils";
+import { formatTimeUnit, formatWhen } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
@@ -34,7 +35,7 @@ const WINDOWS = {
   "24h": 24 * 60 * 60_000,
   "7d": 7 * 24 * 60 * 60_000,
 } as const;
-type Window = keyof typeof WINDOWS;
+type Range = keyof typeof WINDOWS;
 
 const moment = (ms: number) => formatWhen(ms, "moment");
 
@@ -43,7 +44,7 @@ export function Changes() {
   const t = useT();
   const { isConnected, currentContext } = useClusterStore();
   const scope = useNamespaceScope();
-  const [window, setWindow] = useState<Window>("24h");
+  const [range, setRange] = useState<Range>("24h");
   const now = useNow();
   const entries = useChangeJournalStore((s) => s.entries);
   const spans = useChangeJournalStore((s) => s.spans);
@@ -67,7 +68,7 @@ export function Changes() {
   );
   const end = windowEnd(ours, now);
   const items = useMemo(() => {
-    const from = now - WINDOWS[window];
+    const from = now - WINDOWS[range];
     const timeline = timelineOf({
       revisions: [],
       deliveries: [],
@@ -82,7 +83,7 @@ export function Changes() {
       ...timeline,
       ...watchedStretches(covering, timeline, from, end, scope.scope),
     ].sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity));
-  }, [mine, ours, covering, now, end, window, scope.scope]);
+  }, [mine, ours, covering, now, end, range, scope.scope]);
   const open = ours.find((span) => span.to === null);
   // From the start of the unbroken watch, not of the span: a scope change
   // retires one span and opens the next at the same moment.
@@ -99,7 +100,7 @@ export function Changes() {
     changesScreenSection(
       items,
       t,
-      window === "24h" ? formatTimeUnit(24, "hour") : formatTimeUnit(7, "day")
+      range === "24h" ? formatTimeUnit(24, "hour") : formatTimeUnit(7, "day")
     ),
     watchedSection(watching, ours, items, t),
   ]);
@@ -145,24 +146,19 @@ export function Changes() {
         }
         actions={
           <>
-            <div className="flex items-center gap-0.5" role="group">
-              {(Object.keys(WINDOWS) as Window[]).map((candidate) => (
-                <button
-                  key={candidate}
-                  type="button"
-                  aria-pressed={window === candidate}
-                  onClick={() => setWindow(candidate)}
-                  className={cn(
-                    "h-6 whitespace-nowrap rounded px-1.5 font-mono text-caption transition-colors hover:bg-hover",
-                    window === candidate ? "bg-sel text-fg" : "text-fg-mut"
-                  )}
-                >
-                  {candidate === "24h"
+            <SegmentedControl
+              label={t("changes", "range")}
+              value={range}
+              onChange={setRange}
+              mono
+              segments={(Object.keys(WINDOWS) as Range[]).map((candidate) => ({
+                value: candidate,
+                label:
+                  candidate === "24h"
                     ? formatTimeUnit(24, "hour")
-                    : formatTimeUnit(7, "day")}
-                </button>
-              ))}
-            </div>
+                    : formatTimeUnit(7, "day"),
+              }))}
+            />
             <ShareScreenAction
               screen={{ title: t("changes", "title"), scope: scope.scope }}
             />

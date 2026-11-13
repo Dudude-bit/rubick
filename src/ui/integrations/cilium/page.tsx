@@ -14,6 +14,8 @@
  * under it, with the rejected ones marked.
  */
 
+import { failedWithNothing } from "../kit";
+import { Reading } from "@/components/ui/states";
 import { useMemo } from "react";
 import {
   ShieldAlert,
@@ -40,6 +42,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
 } from "../page-kit";
 import type { RowTone } from "../page-kit";
 import {
@@ -159,7 +162,7 @@ export default function CiliumPage() {
     };
   });
 
-  if (picture.error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadCilium")}
@@ -172,6 +175,7 @@ export default function CiliumPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <StaleRead read={picture} label="Cilium" />
       <Section>
         <SectionHeader
           title="Cilium"
@@ -226,7 +230,7 @@ export default function CiliumPage() {
 
       <Section>
         {picture.isPending ? (
-          <p className="text-xs text-fg-fnt">{t("empty", "readingCilium")}</p>
+          <Reading>{t("empty", "readingCilium")}</Reading>
         ) : coverage.length === 0 ? (
           <p className="max-w-[64ch] text-xs text-fg-mut">
             {everywhere.length === 0

@@ -29,44 +29,6 @@ export type EventFamily =
   | "storage"
   | "node";
 
-/**
- * Hues, on the same terms as `resource-identity`: the number lives here,
- * `--evt-s` / `--evt-l` live in `index.css` so both themes track their own
- * canvas without a `dark:` branch anywhere.
- *
- * Red through yellow (roughly 0-60) is excluded, as it is from the identity
- * ring: that band is `--warn` and `--err`, and a family borrowing it would
- * claim a severity the event does not have. The green around 148 is `--ok`,
- * and `Killing` in success-green is a worse lie than no colour at all.
- *
- * The four families the cluster emits constantly — lifecycle, scheduling,
- * image, controller — take the widest gaps between them (65 degrees and up);
- * the three that appear in bursts fill in between. `health` sits closest to a
- * neighbour on purpose: nearly every reason in it is a Warning, so its hue is
- * the one that renders least.
- */
-const FAMILY_HUE: Record<EventFamily, number> = {
-  controller: 104,
-  health: 172,
-  lifecycle: 198,
-  node: 235,
-  scheduling: 262,
-  storage: 296,
-  image: 330,
-};
-
-/**
- * Shape survives greyscale and the reader who cannot separate the hues, so
- * these differ in outline rather than in theme: a cloud, a power ring, a pin,
- * two arrows, a heart, a platter, a chip.
- *
- * No family gets a triangle — that outline is the severity mark one column to
- * the left and has to stay unambiguous. And none may be an icon
- * `RESOURCE_REGISTRY` already spends on a kind: an event row shows the family
- * glyph and the involved object's kind glyph eight pixels apart, so Package
- * next to Pod's Box, Layers next to Deployment's Layers or Database next to
- * StatefulSet's read as one mark repeated rather than two channels.
- */
 const FAMILY_ICON: Record<EventFamily, LucideIcon> = {
   image: CloudDownload,
   lifecycle: Power,
@@ -214,8 +176,6 @@ const LOOKUP = new Map<string, EventFamily>(
 export interface EventReasonMark {
   family: EventFamily | null;
   Icon: LucideIcon;
-  /** `null` where nothing is known, so the caller falls back to a role token. */
-  color: string | null;
 }
 
 /**
@@ -227,11 +187,10 @@ export interface EventReasonMark {
  */
 export function eventReasonMark(reason: string | null): EventReasonMark {
   const family = reason ? (LOOKUP.get(reason.toLowerCase()) ?? null) : null;
-  if (!family) return { family: null, Icon: CircleDashed, color: null };
+  if (!family) return { family: null, Icon: CircleDashed };
   return {
     family,
     Icon: FAMILY_ICON[family],
-    color: `hsl(${FAMILY_HUE[family]} var(--evt-s) var(--evt-l))`,
   };
 }
 

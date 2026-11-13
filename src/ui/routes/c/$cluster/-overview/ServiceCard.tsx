@@ -18,6 +18,8 @@ import { useRouteTls } from "@/hooks/useRouteTls";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { ROLE_TEXT } from "@/lib/status-role";
 import { cn } from "@/lib/utils";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { RolloutBadge } from "../-object/RolloutSummary";
 import {
@@ -143,11 +145,20 @@ export function ServiceCard({
           type="button"
           aria-label={t("services", "unpin")}
           onClick={onUnpin}
-          className="ml-auto rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+          className="-my-1 -mr-1.5 ml-auto flex h-6 w-6 flex-none items-center justify-center rounded text-fg-fnt transition-colors hover:bg-hover hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           <PinOff aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
       </div>
+
+      {state.state === "unread" && (
+        <Unknown
+          className="mt-1.5"
+          question={t("services", "couldNotRead")}
+          error={connections.error ?? state.why}
+          onRetry={() => void connections.refetch()}
+        />
+      )}
 
       {/* The same label track every other block in this app uses, so the
           values line up with the page around the card rather than being
@@ -155,7 +166,9 @@ export function ServiceCard({
       <dl className="mt-1.5 grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-caption">
         <dt className="text-fg-fnt">{t("services", "wayIn")}</dt>
         <dd className="min-w-0 text-fg-mut">
-          {!ways.known ? (
+          {connections.isPending ? (
+            <Reading>{t("services", "reading")}</Reading>
+          ) : !ways.known ? (
             <span className="text-fg-fnt">{t("services", "notReadYet")}</span>
           ) : ways.entries.length === 0 ? (
             <span>{t("services", "nothingPublishes")}</span>

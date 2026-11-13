@@ -20,6 +20,8 @@
  * verdict's clothes.
  */
 
+import { failedWithNothing } from "../kit";
+import { Reading } from "@/components/ui/states";
 import { joinSayings, sayWords } from "@/i18n/say";
 import { useMemo } from "react";
 
@@ -39,6 +41,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
 } from "../page-kit";
 import { backingFrom, stopCellLook } from "../ingress";
 import { useBacking, useIngressSources } from "./data";
@@ -89,7 +92,7 @@ export default function GkeIngressPage() {
     [sources.data]
   );
 
-  if (sources.error) {
+  if (failedWithNothing(sources)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadIngresses")}
@@ -101,6 +104,7 @@ export default function GkeIngressPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={sources} label="GKE Ingress" />
       <SectionHeader
         title="GKE Ingress"
         count={
@@ -155,9 +159,7 @@ export default function GkeIngressPage() {
 
       <Section>
         {sources.isPending ? (
-          <p className="text-xs text-fg-fnt">
-            {t("empty", "readingIngresses")}
-          </p>
+          <Reading>{t("empty", "readingIngresses")}</Reading>
         ) : hosts.length === 0 ? (
           <p className="max-w-[64ch] text-xs text-fg-mut">
             {t("empty", "noIngressCarries")}{" "}

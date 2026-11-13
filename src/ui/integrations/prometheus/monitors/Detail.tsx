@@ -8,6 +8,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { Eyebrow } from "@/components/ui/states";
 import { Link } from "@tanstack/react-router";
 
 import { ObjectLink } from "@/components/object/ResourceRef";
@@ -16,7 +17,7 @@ import { useT, type T } from "@/i18n/useT";
 import { objectLink } from "@/lib/links";
 import { cn, formatSince } from "@/lib/utils";
 import { hourMinute } from "../../kit";
-import { OutLink } from "../../page-kit";
+import { OutLink, ReadingMark } from "../../page-kit";
 import { useShareSection } from "@/components/share/screen-share";
 import { monitorDetailSections } from "./share";
 import { utcMoment } from "@/lib/report-parts";
@@ -279,10 +280,10 @@ export function Detail({
 
       {hint !== null && (
         <div className="rounded-lg border border-info/35 bg-info/6 px-3.5 py-3">
-          <p className="mb-1 flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[.07em] text-info">
+          <Eyebrow className="mb-1 flex items-center gap-1.5 text-info">
             <Zap className="size-3" aria-hidden />
             {t("monitors", "mostLikely")}
-          </p>
+          </Eyebrow>
           <p className="text-xs leading-relaxed text-fg">{hintWhy(hint, t)}</p>
           <p className="mt-1 text-xs leading-relaxed text-fg-mut">
             {hintHow(hint, t)}
@@ -377,7 +378,7 @@ function HeartbeatPanel({
             {t("monitors", "heartbeatUnread", { reason: beat.unread })}
           </p>
         ) : beat.lanes === null ? (
-          <p className="text-caption text-fg-fnt">…</p>
+          <ReadingMark words />
         ) : (
           <>
             {shownLanes.map((lane) => (

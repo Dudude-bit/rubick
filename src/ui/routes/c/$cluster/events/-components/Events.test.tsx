@@ -366,7 +366,7 @@ describe("a feed a watch keeps", () => {
     burst(Array.from({ length: 5 }, (_, index) => dated("prod", index + 1)));
     await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-1"));
 
-    const header = screen.getByRole("tab", { name: "All events" });
+    const header = screen.getByRole("button", { name: "All events" });
     await userEvent.hover(header);
     send([{ op: "applied", resource: dated("prod", 0) }]);
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1887,8 +1887,8 @@ describe("stories", () => {
     expect(card.textContent).toContain("still happening");
     // Folded by name and honest about it.
     expect(card.textContent).toContain("Grouped by the generated suffix");
-    expect(screen.getByRole("tab", { name: "Stories" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "Stories" })).toHaveAttribute(
+      "aria-pressed",
       "true"
     );
   });
@@ -2010,7 +2010,7 @@ describe("stories", () => {
     await mount("stories");
     await screen.findByText(/across the whole cluster was refused/);
 
-    expect(screen.queryByRole("tab", { name: "Stories" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stories" })).toBeNull();
     expect(screen.queryByPlaceholderText(/filter events/i)).toBeNull();
     expect(
       screen.queryByRole("combobox", { name: "Events fetched" })
@@ -2088,7 +2088,7 @@ describe("stories", () => {
         within(list).getByText("3 предупреждения · 30 обычных событий")
       ).toHaveClass("sr-only");
 
-      await userEvent.click(screen.getByRole("tab", { name: "Истории" }));
+      await userEvent.click(screen.getByRole("button", { name: "Истории" }));
       const stories = await screen.findByTitle(
         /^1 история за 1\sч · 3 предупреждения$/
       );
@@ -2124,7 +2124,7 @@ describe("stories", () => {
     listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
     await mount("stories");
     await screen.findByRole("article", { name: /api/ });
-    await userEvent.click(screen.getByRole("tab", { name: "All events" }));
+    await userEvent.click(screen.getByRole("button", { name: "All events" }));
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
     expect(document.body.textContent).toContain("BackOff");
   });
@@ -2137,16 +2137,16 @@ describe("stories", () => {
   it("opens on the view the reader chose last when the address names none", async () => {
     listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
     const selected = () =>
-      screen
-        .getAllByRole("tab")
-        .find((tab) => tab.getAttribute("aria-selected") === "true")
+      within(screen.getByRole("group", { name: "View" }))
+        .getAllByRole("button")
+        .find((tab) => tab.getAttribute("aria-pressed") === "true")
         ?.textContent;
     const first = await renderWithRouter(<Events />, {
       at: "/c/prod/events",
       route: "/c/$cluster/events",
     });
     await screen.findByRole("article", { name: /api/ });
-    await userEvent.click(screen.getByRole("tab", { name: "All events" }));
+    await userEvent.click(screen.getByRole("button", { name: "All events" }));
     first.unmount();
 
     const again = await renderWithRouter(<Events />, {
@@ -2350,9 +2350,9 @@ describe("a feed beside a peek", () => {
     expect(
       screen.queryByRole("combobox", { name: "Events fetched" })
     ).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Share this screen" })
-    ).not.toHaveTextContent("Share");
+    expect(screen.getByRole("button", { name: /Share/ })).toHaveTextContent(
+      "Share"
+    );
 
     await userEvent.click(
       screen.getByRole("button", { name: "Feed settings" })

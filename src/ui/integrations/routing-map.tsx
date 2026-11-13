@@ -19,6 +19,7 @@
  * green one.
  */
 
+import { Eyebrow } from "@/components/ui/states";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
@@ -377,9 +378,8 @@ export function RoutingMap({
             <span
               key={column.label}
               style={{ width: column.width ?? WIDTHS[index] ?? 180 }}
-              className="text-micro uppercase tracking-[0.08em] text-fg-fnt"
             >
-              {column.label}
+              <Eyebrow as="span">{column.label}</Eyebrow>
             </span>
           ))}
         </div>

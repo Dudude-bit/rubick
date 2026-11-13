@@ -6,16 +6,12 @@ import {
   type ReactNode,
 } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  CircleSlash,
-  EyeOff,
-  Info,
-  Loader2,
-  Lock,
-  TriangleAlert,
-} from "lucide-react";
+import { CircleSlash, EyeOff, Info, Lock, TriangleAlert } from "lucide-react";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
+import { Reading } from "@/components/ui/states";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Composition } from "@/components/object/detail-blocks";
 import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -514,7 +510,7 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   const t = useT();
   const reading = check.state === "reading";
   const refused = checkRefused(check);
-  const Icon = reading ? Loader2 : refused ? Lock : TriangleAlert;
+  const Icon = reading ? Spinner : refused ? Lock : TriangleAlert;
   const said = check.unread.find((entry) => entry.message)?.message ?? null;
   const named = check.unread.some((entry) => entry.namespace);
   // A refusal reads as what was refused and where; the server's sentence is
@@ -918,14 +914,58 @@ export function AttentionPending() {
   return (
     <Section>
       <SectionHeader title={t("action", "needsAttention")} />
-      <p className="flex items-center gap-2 px-1.5 py-[5px] text-xs text-fg-mut">
-        <Loader2
-          className="h-3 w-3 animate-spin text-info"
-          aria-hidden="true"
-        />
+      <Reading className="px-1.5 py-[5px] text-xs text-fg-mut">
         {t("cluster", "attentionStillReading")}
-      </p>
+      </Reading>
     </Section>
+  );
+}
+
+/** The first load, in the panels' own order and heights: Needs attention, Workloads, Scheduler headroom, Nodes. */
+export function OverviewSkeleton() {
+  const t = useT();
+  return (
+    <div
+      className="flex flex-col gap-[22px]"
+      role="status"
+      aria-busy="true"
+      aria-label={t("action", "readingEllipsis")}
+    >
+      <Section>
+        <SectionHeader title={t("action", "needsAttention")} />
+        <div className="flex flex-col gap-2 px-1.5 py-1">
+          <Skeleton className="h-3.5 w-3/5" />
+          <Skeleton className="h-3.5 w-2/5" />
+          <Skeleton className="h-3.5 w-1/2" />
+        </div>
+      </Section>
+      <Section>
+        <SectionHeader title={t("nav", "workloads")} />
+        <div className="flex flex-col gap-3 px-1.5 py-1">
+          <Skeleton className="h-2 w-full" />
+          <div className="flex gap-6">
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3.5 w-24" />
+          </div>
+        </div>
+      </Section>
+      <Section>
+        <SectionHeader title={t("cluster", "schedulerHeadroom")} />
+        <div className="flex flex-col gap-3 px-1.5 py-1">
+          <Skeleton className="h-2 w-full" />
+          <Skeleton className="h-2 w-full" />
+        </div>
+      </Section>
+      <Section>
+        <SectionHeader title="Nodes" />
+        <div className="flex flex-col gap-2 px-1.5 py-1">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+      </Section>
+    </div>
   );
 }
 

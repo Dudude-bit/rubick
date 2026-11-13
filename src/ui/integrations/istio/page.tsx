@@ -15,6 +15,7 @@
  * request.
  */
 
+import { Reading } from "@/components/ui/states";
 import { servingCount } from "@/lib/published";
 import { useMemo } from "react";
 import { hostsNeedAttention } from "@/lib/two-counts";
@@ -45,7 +46,9 @@ import {
   Finding as FindingBlock,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
   FindingList,
+  ReadingMark,
 } from "../page-kit";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
@@ -67,7 +70,7 @@ import {
 } from "./model";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import { troubleMark } from "../kit";
+import { troubleMark, failedWithNothing } from "../kit";
 import { None } from "@/components/ui/none";
 
 const AUTO_OPEN = 8;
@@ -94,7 +97,7 @@ export default function IstioPage() {
     [sources, t]
   );
 
-  if (mesh.error) {
+  if (failedWithNothing(mesh)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadMeshRouting")}
@@ -165,6 +168,7 @@ export default function IstioPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={mesh} label="Istio" />
       <SectionHeader
         title="Istio"
         count={
@@ -234,7 +238,7 @@ function MapTab({
   );
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
+    return <Reading>{t("empty", "readingMesh")}</Reading>;
   }
   if (!data || groups.length === 0) {
     return (
@@ -266,7 +270,7 @@ function RoutesTab({
   const t = useT();
 
   if (loading) {
-    return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
+    return <Reading>{t("empty", "readingMesh")}</Reading>;
   }
 
   if (groups.length === 0) {
@@ -466,7 +470,7 @@ function RuleRow({
             showKind={false}
           />
         </span>
-        {sources === null && <span className="text-fg-fnt">…</span>}
+        {sources === null && <ReadingMark />}
       </span>
     </div>
   );
@@ -616,7 +620,7 @@ function HostChain({
               )}
               title={backing?.error ?? undefined}
             >
-              {backing?.error ? t("empty", "notReadLower") : "…"}
+              {backing?.error ? t("empty", "notReadLower") : <ReadingMark />}
             </Cell>
           ) : backing.stop ? (
             <Cell
@@ -847,8 +851,7 @@ function GatewaysTab({
       body: { type: "findings" as const, items: found },
     };
   });
-  if (loading)
-    return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
+  if (loading) return <Reading>{t("empty", "readingMesh")}</Reading>;
   if (gateways.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
@@ -974,8 +977,7 @@ function SubsetsTab({
       body: { type: "findings" as const, items: found },
     };
   });
-  if (loading)
-    return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
+  if (loading) return <Reading>{t("empty", "readingMesh")}</Reading>;
   if (rules.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">

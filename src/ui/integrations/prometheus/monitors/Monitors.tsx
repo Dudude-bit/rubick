@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { failedWithNothing } from "../../kit";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
@@ -7,7 +8,13 @@ import type { T } from "@/i18n/useT";
 import type { RowTone } from "./words";
 import { objectLink, pageLink } from "@/lib/links";
 import { cn, formatSince } from "@/lib/utils";
-import { Finding, FilterBox, VendorReadFailure } from "../../page-kit";
+import {
+  Finding,
+  FilterBox,
+  StaleRead,
+  VendorReadFailure,
+} from "../../page-kit";
+import { Eyebrow, Reading } from "@/components/ui/states";
 import { useShareSection } from "@/components/share/screen-share";
 import { narrowedWords } from "@/lib/report-parts";
 import { ladderSection, ladderUnread } from "./share";
@@ -131,7 +138,7 @@ export default function Monitors() {
     }
   };
 
-  if (picture.error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("monitors", "couldNotReadMonitors")}
@@ -141,11 +148,12 @@ export default function Monitors() {
     );
   }
   if (!picture.data || !rows) {
-    return <p className="text-caption text-fg-fnt">…</p>;
+    return <Reading>{t("action", "readingEllipsis")}</Reading>;
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
+      <StaleRead read={picture} label="Prometheus" />
       <Header picture={picture.data} rows={rows} />
       <Notices picture={picture.data} />
       <div className="flex min-h-0 flex-1 gap-6 border-t border-hair pt-4">
@@ -468,13 +476,13 @@ function Ladder({
           if (members.length === 0) return null;
           return (
             <div key={group} className="flex flex-col">
-              <p className="flex items-center gap-2 px-2 pb-0.5 pt-2.5 text-micro font-semibold uppercase tracking-[.07em] text-fg-fnt">
+              <Eyebrow className="flex items-center gap-2 px-2 pb-0.5 pt-2.5">
                 {t("monitors", groupKey(group, targets))}
                 <b className="font-mono font-medium normal-case tracking-normal text-fg-mut">
                   {members.length}
                 </b>
                 <i className="h-px flex-1 bg-hair" />
-              </p>
+              </Eyebrow>
               {members.map((row) => (
                 <Row
                   key={row.monitor.uid}

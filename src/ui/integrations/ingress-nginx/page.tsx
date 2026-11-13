@@ -16,6 +16,7 @@
  * own voice rather than going quiet.
  */
 
+import { Reading } from "@/components/ui/states";
 import { servingCount } from "@/lib/published";
 import { sayWords } from "@/i18n/say";
 import { useMemo } from "react";
@@ -70,7 +71,9 @@ import {
   Finding as FindingBlock,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
   FindingList,
+  ReadingMark,
 } from "../page-kit";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { rawNote, type AnnotationReading } from "./annotations";
@@ -102,7 +105,7 @@ import { parts } from "@/i18n/parts";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useDoorAsk } from "@/hooks/useDoorAsk";
 import { useT } from "@/i18n/useT";
-import { troubleMark } from "../kit";
+import { troubleMark, failedWithNothing } from "../kit";
 
 /** Past this many troubled hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -170,7 +173,7 @@ export default function IngressNginxPage() {
     [sources, t]
   );
 
-  if (routeSources.error) {
+  if (failedWithNothing(routeSources)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadRouting")}
@@ -242,6 +245,7 @@ export default function IngressNginxPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={routeSources} label="ingress-nginx" />
       <SectionHeader
         title="ingress-nginx"
         count={
@@ -298,9 +302,7 @@ function MapTab({
   );
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
-    );
+    return <Reading>{t("empty", "readingRoutingTable")}</Reading>;
   }
   if (!data || groups.length === 0) {
     return (
@@ -374,9 +376,7 @@ function RoutesTab({
   const t = useT();
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
-    );
+    return <Reading>{t("empty", "readingRoutingTable")}</Reading>;
   }
 
   if (groups.length === 0) {
@@ -582,17 +582,21 @@ function PathRow({
         </span>
       </span>
       <span className="text-caption text-fg-fnt">
-        {route.service === null
-          ? t("empty", "notAService")
-          : backing && !backing.known
-            ? backing.error
-              ? t("empty", "unknownLower")
-              : "…"
-            : backing?.stop
-              ? t("count", "nPublished", { n: servingCount(backing) })
-              : backing
-                ? t("count", "nReady", { n: backing.ready })
-                : ""}
+        {route.service === null ? (
+          t("empty", "notAService")
+        ) : backing && !backing.known ? (
+          backing.error ? (
+            t("empty", "unknownLower")
+          ) : (
+            <ReadingMark />
+          )
+        ) : backing?.stop ? (
+          t("count", "nPublished", { n: servingCount(backing) })
+        ) : backing ? (
+          t("count", "nReady", { n: backing.ready })
+        ) : (
+          ""
+        )}
       </span>
     </div>
   );
@@ -756,7 +760,7 @@ function HostChain({
               )}
               title={backing.error ?? undefined}
             >
-              {backing.error ? t("empty", "notReadLower") : "…"}
+              {backing.error ? t("empty", "notReadLower") : <ReadingMark />}
             </Cell>
           ) : backing.stop ? (
             <Cell
@@ -1070,9 +1074,7 @@ function SettingsTab({
 }) {
   const t = useT();
   if (!controller) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingController")}</p>
-    );
+    return <Reading>{t("empty", "readingController")}</Reading>;
   }
   if (!controller.config) {
     return (

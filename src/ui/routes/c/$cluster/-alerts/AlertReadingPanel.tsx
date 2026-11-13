@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
 
 import { hrefOf, isClusterScoped, objectLink, type AppLink } from "@/lib/links";
@@ -312,21 +313,23 @@ export function AlertReadingPanel({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 pt-0.5">
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant="outline"
           // No autoFocus: it took focus off the palette's input the instant
           // the panel mounted, and the handler that puts `esc` back on the
           // search box lives there — so `esc` closed the whole palette and
           // ⌘K reopened it on the stale alert instead of the search.
           disabled={link === null || context === null}
           onClick={() => object && open(link, object.kind, object.name)}
-          className="flex items-center gap-1.5 rounded border border-info/40 bg-info/12 px-2.5 py-1 text-xs text-info transition-colors hover:bg-info/20 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+          className="text-info"
         >
           <ExternalLink aria-hidden="true" className="h-3 w-3" />
           {object
             ? t("alerts", "openThis", { kind: object.kind, name: object.name })
             : t("alerts", "openIt")}
-        </button>
+        </Button>
         {object !== null && link === null ? (
           <span className="text-caption text-warn">
             {objectLink({

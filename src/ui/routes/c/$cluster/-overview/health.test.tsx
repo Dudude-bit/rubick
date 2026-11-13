@@ -7,7 +7,12 @@ import { renderWithRouter, testQueryClient } from "@/test/render";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { unreadLines } from "@/lib/report-parts";
-import { AttentionPanel, WarningsPanel, WorkloadsPanel } from "./health";
+import {
+  AttentionPanel,
+  OverviewSkeleton,
+  WarningsPanel,
+  WorkloadsPanel,
+} from "./health";
 import {
   attentionShare,
   uncheckedShare,
@@ -3009,5 +3014,26 @@ describe("Services one NetworkPolicy shuts", () => {
         "NetworkPolicy deny-all-ingress admits no connection to these pods.",
       ],
     ]);
+  });
+});
+
+describe("the overview's first load", () => {
+  /**
+   * The first load drew a header and two stat bars while the loaded page is
+   * four panels, so everything jumped when data landed. Fails if the
+   * placeholder stops holding a heading for each panel, in the loaded order.
+   */
+  it("holds a place for each panel the loaded page has, in order", async () => {
+    await renderWithRouter(<OverviewSkeleton />);
+    const headings = screen
+      .getAllByRole("heading")
+      .map((heading) => heading.textContent);
+    expect(headings).toEqual([
+      "Needs attention",
+      "Workloads",
+      "Scheduler headroom",
+      "Nodes",
+    ]);
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
   });
 });

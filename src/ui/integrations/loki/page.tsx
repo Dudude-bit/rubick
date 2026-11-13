@@ -15,14 +15,23 @@
  * Loki nobody pointed this at.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { failedWithNothing } from "../kit";
+import { Reading } from "@/components/ui/states";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Database } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
-import { Cell, Chain, Column, Finding, VendorReadFailure } from "../page-kit";
+import {
+  Cell,
+  Chain,
+  Column,
+  Finding,
+  VendorReadFailure,
+  StaleRead,
+} from "../page-kit";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
@@ -45,7 +54,7 @@ export default function LokiPage() {
   const context = useClusterStore((state) => state.currentContext);
   const t = useT();
   const scope = useNamespaceScope();
-  const { namespaces } = useClusterSummary();
+  const { namespaces, namespaceList, isLoading } = useClusterSummary();
 
   const asked = [
     ...new Set([...scope.scope, ...namespaces.map((entry) => entry.name)]),
@@ -56,6 +65,7 @@ export default function LokiPage() {
     queryKey: [context, "loki", "coverage", asked.join(",")],
     queryFn: () => coverage(asked),
     enabled: asked.length > 0,
+    placeholderData: keepPreviousData,
     staleTime: ROUTING_STALE,
   });
 
@@ -97,7 +107,7 @@ export default function LokiPage() {
     };
   });
 
-  if (found.error) {
+  if (failedWithNothing(found)) {
     return (
       <VendorReadFailure
         title={t("empty", "lokiCouldNotAsk")}
@@ -117,6 +127,7 @@ export default function LokiPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={found} label="Loki" />
       <SectionHeader
         title="Loki"
         count={state?.text}
@@ -128,12 +139,17 @@ export default function LokiPage() {
         }
       />
 
-      {asked.length === 0 ? (
-        <p className="max-w-[68ch] text-xs text-fg-mut">
+      {found.isPlaceholderData && <Reading>{t("empty", "lokiAsking")}</Reading>}
+      {asked.length === 0 && (isLoading || namespaceList === "pending") ? (
+        <Reading>{t("empty", "lokiReadingNamespaces")}</Reading>
+      ) : asked.length === 0 && namespaceList !== "listed" ? (
+        <Finding tone="warn" title={t("empty", "lokiCouldNotListNamespaces")} />
+      ) : asked.length === 0 ? (
+        <p className="max-w-[64ch] text-xs text-fg-mut">
           {t("empty", "lokiNoNamespaces")}
         </p>
       ) : found.isPending ? (
-        <p className="text-xs text-fg-fnt">{t("empty", "lokiAsking")}</p>
+        <Reading>{t("empty", "lokiAsking")}</Reading>
       ) : !found.data ? null : (
         <Section>
           <SectionHeader

@@ -16,13 +16,6 @@ const SAMPLES: Record<EventFamily, string> = {
 
 const FAMILIES = Object.keys(SAMPLES) as EventFamily[];
 
-function hueOf(reason: string): number {
-  const colour = eventReasonMark(reason).color;
-  const match = colour && /^hsl\((\d+) /.exec(colour);
-  if (!match) throw new Error(`no hue for ${reason}`);
-  return Number(match[1]);
-}
-
 describe("eventReasonMark", () => {
   it("groups the reasons this cluster emits", () => {
     for (const [family, reason] of Object.entries(SAMPLES)) {
@@ -39,7 +32,6 @@ describe("eventReasonMark", () => {
     for (const reason of ["FluxReconcileFailed", "", null]) {
       const mark = eventReasonMark(reason);
       expect(mark.family).toBeNull();
-      expect(mark.color).toBeNull();
     }
   });
 
@@ -62,26 +54,14 @@ describe("eventReasonMark", () => {
     }
   });
 
-  it("keeps every hue clear of the severity bands", () => {
-    for (const family of FAMILIES) {
-      const hue = hueOf(SAMPLES[family]);
-      // 0-60 is --err through --warn; 140-160 is --ok. A family in either
-      // asserts a severity the event type never said.
-      expect(hue).toBeGreaterThan(60);
-      expect(hue < 140 || hue > 160).toBe(true);
+  /**
+   * Pulled pink, Started teal and SuccessfulDelete green made the Normal
+   * reasons the loudest thing in the feed. Fails if a mark carries a colour again.
+   */
+  it("carries no colour: only a Warning's own tone paints a reason", () => {
+    for (const reason of Object.values(SAMPLES)) {
+      expect(eventReasonMark(reason)).not.toHaveProperty("color");
     }
-  });
-
-  it("keeps the families apart on the ring-3", () => {
-    const hues = FAMILIES.map((f) => hueOf(SAMPLES[f])).sort((a, b) => a - b);
-    for (let i = 1; i < hues.length; i++) {
-      expect(hues[i] - hues[i - 1]).toBeGreaterThanOrEqual(25);
-    }
-  });
-
-  it("saturation and lightness stay in CSS so both themes track", () => {
-    expect(eventReasonMark("Pulled").color).toContain("var(--evt-s)");
-    expect(eventReasonMark("Pulled").color).toContain("var(--evt-l)");
   });
 });
 

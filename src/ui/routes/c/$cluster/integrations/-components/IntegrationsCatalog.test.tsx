@@ -401,3 +401,24 @@ describe("facts", () => {
     expect(listCustomResources).not.toHaveBeenCalled();
   });
 });
+
+describe("a detection scan that failed", () => {
+  /**
+   * A scan error drew a bare sentence with no way to try again, and the same
+   * failure after a good scan replaced the whole list. Fails if the failure
+   * is drawn without the retry, or as the empty list's "nothing installed".
+   */
+  it("says it could not look and offers the read again, never an empty list", async () => {
+    detectInClusterExtensions.mockRejectedValue(new Error("connection reset"));
+
+    await wrap(<IntegrationsCatalog />);
+
+    expect(
+      await screen.findByText("Could not read this cluster’s CRDs")
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeVisible();
+    expect(screen.queryByText("detected")).toBeNull();
+  });
+});

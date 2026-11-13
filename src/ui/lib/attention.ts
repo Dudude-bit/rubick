@@ -12,6 +12,7 @@
 import type {
   AutoscalerInfo,
   ClusterOverview,
+  OverviewUnread,
   ClusterProblem,
   EventsShort,
   IngressHealthInput,
@@ -338,10 +339,55 @@ const SERVES_NOBODY: ReadonlySet<ServiceHealth["state"]> = new Set([
   "shut",
 ]);
 
+const NEEDS_PODS_OR_MAKERS: ReadonlySet<string> = new Set([
+  "publishesNothingYet",
+  "selectsNothing",
+  "scaledToZero",
+  "podsBeingMade",
+  "noneReady",
+]);
+
+/** A stop that says no pod stands behind a Service, which a lost Pod or workload read cannot back. */
+const dependsOnLostRead = (
+  group: ServiceHealthInputs["groups"][number],
+  namespace: string,
+  lost: readonly OverviewUnread[]
+) =>
+  group.stop !== undefined &&
+  NEEDS_PODS_OR_MAKERS.has(group.stop.reason) &&
+  lost.some(
+    (entry) => entry.namespace === null || entry.namespace === namespace
+  );
+
+/** The backend kinds whose pods decide a Service's stop, as unread over `overview`. */
+const lostBackend = remember((overview: ClusterOverview) =>
+  overview.unread.filter((entry) => entry.kind !== "Node")
+);
+
+/** The namespaces whose Service verdicts were withheld because a pod or workload read behind them was lost. */
+const withheldIn = (
+  answered: ServiceHealthInputs[],
+  lost: readonly OverviewUnread[]
+): Unread[] =>
+  answered.flatMap(({ namespace, groups }) => {
+    const cause = lost.find(
+      (entry) => entry.namespace === null || entry.namespace === namespace
+    );
+    return cause &&
+      groups.some((group) => dependsOnLostRead(group, namespace, lost))
+      ? [{ namespace, code: cause.code, message: cause.message }]
+      : [];
+  });
+
 const serviceItems = remember(
-  (answered: ServiceHealthInputs[], t: T): AttentionItem[] =>
+  (
+    answered: ServiceHealthInputs[],
+    t: T,
+    lost: readonly OverviewUnread[] = []
+  ): AttentionItem[] =>
     answered.flatMap(({ namespace, groups }) =>
       groups.flatMap((group) => {
+        if (dependsOnLostRead(group, namespace, lost)) return [];
         const health = serviceHealthOf(group, group, null);
         // Some addresses not ready is the workload's verdict to give; a
         // Service with none serving is a fact no other reader reports.
@@ -911,7 +957,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
   );
   const backend = problemItems(overview.problems);
   const ours = [
-    ...serviceItems(services.answered, t),
+    ...serviceItems(services.answered, t, lostBackend(overview)),
     ...ingress.items,
     ...autoscalerItems(input.autoscalers.data?.rows ?? []),
     ...claimItems(
@@ -928,7 +974,11 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
   const servicesUnread =
     services.unread === "reading"
       ? []
-      : [...services.unread, ...shutUncheckedIn(services.answered, t)];
+      : [
+          ...services.unread,
+          ...shutUncheckedIn(services.answered, t),
+          ...withheldIn(services.answered, lostBackend(overview)),
+        ];
   const checks: AttentionCheck[] = [
     ...BACKEND_KINDS.map((kind): AttentionCheck => {
       const unread = overview.unread.filter((entry) => entry.kind === kind);

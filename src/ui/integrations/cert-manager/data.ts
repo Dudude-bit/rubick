@@ -152,6 +152,7 @@ export function usePicture(): {
   data: CertPicture | undefined;
   isPending: boolean;
   error: Error | null;
+  dataUpdatedAt: number;
   refetch: () => void;
 } {
   const t = useT();
@@ -205,6 +206,7 @@ export function usePicture(): {
     data,
     isPending: certificates.isPending || walk.isPending,
     error: certificates.error ?? walk.error,
+    dataUpdatedAt: Math.min(certificates.dataUpdatedAt, walk.dataUpdatedAt),
     refetch: () => {
       void certificates.refetch();
       void walk.refetch();

@@ -13,6 +13,7 @@
  * log, and both are linked from here.
  */
 
+import { Reading } from "@/components/ui/states";
 import { AlertTriangle, Box, GitBranch, Layers } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -30,7 +31,7 @@ import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf } from "@/lib/report-parts";
 import { gitRepoLink } from "../gitops";
-import { troubleMark } from "../kit";
+import { troubleMark, failedWithNothing } from "../kit";
 import {
   Chain,
   Cell,
@@ -40,6 +41,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
   FindingList,
 } from "../page-kit";
 import {
@@ -106,7 +108,7 @@ export default function FluxPage() {
     };
   });
 
-  if (picture.error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadFlux")}
@@ -174,6 +176,7 @@ export default function FluxPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={picture} label="Flux" />
       <SectionHeader
         title="Flux"
         count={
@@ -231,11 +234,7 @@ function ReconcilersTab({
   const t = useT();
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">
-        {t("empty", "readingWhatFluxApplies")}
-      </p>
-    );
+    return <Reading>{t("empty", "readingWhatFluxApplies")}</Reading>;
   }
 
   if (reconcilers.length === 0 && partial) {
@@ -706,9 +705,7 @@ function SourcesTab({
   });
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingSources")}</p>
-    );
+    return <Reading>{t("empty", "readingSources")}</Reading>;
   }
   if (sources.length === 0 && partial) {
     return (
@@ -904,11 +901,7 @@ function ControllersTab({ read }: { read: FluxControllers | undefined }) {
   useShareSection("flux-controllers", () => controllersSection(read, t));
 
   if (!read) {
-    return (
-      <p className="text-xs text-fg-fnt">
-        {t("empty", "readingFluxWorkloads")}
-      </p>
-    );
+    return <Reading>{t("empty", "readingFluxWorkloads")}</Reading>;
   }
   const { controllers, unread } = read;
 

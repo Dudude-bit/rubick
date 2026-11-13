@@ -622,8 +622,11 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   statuses: IntegrationStatus[];
   isPending: boolean;
   error: Error | null;
+  hasScan: boolean;
+  scannedAt: number;
+  rescan: () => unknown;
 } {
-  const { data, isPending, error } = useDetected();
+  const { data, isPending, error, dataUpdatedAt, refetch } = useDetected();
   const connections = useConnections();
   const context = useClusterStore((state) => state.currentContext);
 
@@ -683,6 +686,9 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
     }),
     isPending,
     error,
+    hasScan: data !== undefined,
+    scannedAt: dataUpdatedAt,
+    rescan: refetch,
   };
 }
 
@@ -734,6 +740,8 @@ export function useConnectionEditor(vendorId: string): {
   forget: () => Promise<void>;
   test: (draft: ConnectionDraft) => Promise<ProbeResult>;
   isSaving: boolean;
+  readError: Error | null;
+  reread: () => unknown;
 } {
   const t = useT();
   const context = useClusterStore((state) => state.currentContext);
@@ -771,7 +779,11 @@ export function useConnectionEditor(vendorId: string): {
     },
   });
 
-  const { data: saved = null } = useQuery({
+  const {
+    data: saved = null,
+    error: readError,
+    refetch: reread,
+  } = useQuery({
     queryKey: queryKeys.integrationConnection(vendorId, context),
     queryFn: () => vendor!.connect.read(),
     enabled: vendor !== undefined && context !== null,
@@ -815,6 +827,8 @@ export function useConnectionEditor(vendorId: string): {
             },
           }),
     isSaving: saving.isPending,
+    readError: saved === null ? readError : null,
+    reread,
   };
 }
 
@@ -1140,7 +1154,13 @@ export type IntegrationPageState =
   | { state: "unknown" }
   | { state: "absent"; name: string; icon: LucideIcon }
   /** The scan was refused; neither presence nor absence was established. */
-  | { state: "cannotTell"; name: string; icon: LucideIcon }
+  | {
+      state: "cannotTell";
+      name: string;
+      icon: LucideIcon;
+      error: unknown;
+      retry: () => unknown;
+    }
   | { state: "notConfigured"; name: string; icon: LucideIcon }
   | {
       state: "ready";
@@ -1152,7 +1172,7 @@ export type IntegrationPageState =
 export function useIntegrationPage(
   slug: string | undefined
 ): IntegrationPageState {
-  const { data } = useDetected();
+  const { data, error, refetch } = useDetected();
   const connections = useConnections();
   const vendor = PAGES.find((candidate) => candidate.id === slug);
 
@@ -1167,8 +1187,15 @@ export function useIntegrationPage(
       return { state: "unknown" };
     case "detecting":
       return { state: "detecting" };
-    case "absent":
     case "cannotTell":
+      return {
+        state: decision,
+        name: vendor!.name,
+        icon: vendor!.extension.icon,
+        error,
+        retry: refetch,
+      };
+    case "absent":
     case "notConfigured":
       return {
         state: decision,

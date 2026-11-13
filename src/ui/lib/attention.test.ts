@@ -564,6 +564,60 @@ describe("what Needs attention lists beyond pods", () => {
     ]);
   });
 
+  /**
+   * With Pods refused, three healthy Services turned red with "Nothing is
+   * published behind". Fails if a no-pods verdict is raised while the pod
+   * read behind it was lost, or if the Services check then says it read.
+   */
+  it("withholds a no-pods verdict for a Service while the Pod read is lost and says the check did not finish", () => {
+    const ref = {
+      kind: "Service",
+      name: "ledger",
+      namespace: "shop",
+      existence: "present" as const,
+      facts: null,
+    };
+    const lostPods = [
+      {
+        kind: "Pod",
+        namespace: null,
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ];
+    const answered = {
+      namespace: "shop",
+      networks: [],
+      groups: [
+        {
+          names: ["ledger"],
+          type: "ClusterIP",
+          selectorless: false,
+          targets: [],
+          ready: 0,
+          draining: 0,
+          notReady: 0,
+          unrouted: 0,
+          stop: {
+            reason: "publishesNothingYet" as const,
+            service: ref,
+            selector: "app=ledger",
+            podsUnread: false,
+          },
+        },
+      ],
+    };
+    const listed = attention({
+      overview: overview({ unread: lostPods }),
+      services: { answered: [answered], unread: [] },
+    });
+    expect(listed.items.filter((item) => item.kind === "Service")).toEqual([]);
+    expect(listed.checks.find((check) => check.kind === "Service")?.state).toBe(
+      "unread"
+    );
+    expect(listed.complete).toBe(false);
+  });
+
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */
   it("lists an Ingress no controller serves", () => {
     const backing: NamespaceBacking = new Map([

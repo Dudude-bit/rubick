@@ -9,8 +9,15 @@ import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
 import { objectLink, pageLink } from "@/lib/links";
 import { cn, formatSince } from "@/lib/utils";
-import { hourMinute } from "../../kit";
-import { FilterBox, Finding, OutLink, VendorReadFailure } from "../../page-kit";
+import { hourMinute, failedWithNothing } from "../../kit";
+import {
+  FilterBox,
+  Finding,
+  OutLink,
+  StaleRead,
+  VendorReadFailure,
+} from "../../page-kit";
+import { Eyebrow, Reading } from "@/components/ui/states";
 import { useShareSection } from "@/components/share/screen-share";
 import { narrowedWords } from "@/lib/report-parts";
 import { usePicture, type Picture } from "../monitors/data";
@@ -157,7 +164,7 @@ export default function Alerts() {
     }
   };
 
-  if (picture.error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("alerts", "couldNotRead")}
@@ -166,7 +173,9 @@ export default function Alerts() {
       />
     );
   }
-  if (!picture.data) return <p className="text-caption text-fg-fnt">…</p>;
+  if (!picture.data) {
+    return <Reading>{t("action", "readingEllipsis")}</Reading>;
+  }
   if (picture.data.rules.state === "unread") {
     return (
       <Finding
@@ -181,6 +190,7 @@ export default function Alerts() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
+      <StaleRead read={picture} label="Prometheus" />
       <Header picture={picture.data} rows={rows} />
       <div className="flex min-h-0 flex-1 gap-6 border-t border-hair pt-4">
         <Ladder
@@ -395,13 +405,13 @@ function Ladder({
           if (members.length === 0) return null;
           return (
             <div key={group} className="flex flex-col">
-              <p className="flex items-center gap-2 px-2 pb-0.5 pt-2.5 text-micro font-semibold uppercase tracking-[.07em] text-fg-fnt">
+              <Eyebrow className="flex items-center gap-2 px-2 pb-0.5 pt-2.5">
                 {t("alerts", GROUP_KEY[group])}
                 <b className="font-mono font-medium normal-case tracking-normal text-fg-mut">
                   {members.length}
                 </b>
                 <i className="h-px flex-1 bg-hair" />
-              </p>
+              </Eyebrow>
               {members.map((row) => (
                 <Row
                   key={row.object.uid}

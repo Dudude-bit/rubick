@@ -42,15 +42,13 @@ const subjectOf = (event: EventInfo) => ({
 function ReasonCell({ row }: { row: { original: EventInfo } }) {
   const event = row.original;
   const isWarning = event.type === "Warning";
-  const { family, Icon, color } = eventReasonMark(event.reason ?? null);
-  const familyStyle = isWarning || !color ? undefined : { color };
+  const { family, Icon } = eventReasonMark(event.reason ?? null);
   return (
     <span
       className={cn(
         "inline-flex min-w-0 max-w-full items-baseline gap-1.5 font-mono font-medium",
-        isWarning ? "text-warn" : familyStyle ? undefined : "text-fg-mut"
+        isWarning ? "text-warn" : "text-fg-mut"
       )}
-      style={familyStyle}
       title={event.reason ?? undefined}
     >
       <span

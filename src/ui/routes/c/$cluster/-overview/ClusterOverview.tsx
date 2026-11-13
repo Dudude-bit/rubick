@@ -1,6 +1,6 @@
-import { AlertCircle, LayoutDashboard, Lock } from "lucide-react";
+import { LayoutDashboard, Lock } from "lucide-react";
 
-import { errorToShow, isRefusal } from "@/lib/error-utils";
+import { isRefusal } from "@/lib/error-utils";
 import { scopeIn, scopeLabel } from "@/lib/namespace-scope";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -17,12 +17,12 @@ import { MyServices } from "./MyServices";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
-import { ReadAgain } from "@/components/ui/read-again";
-import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 import {
   AttentionPanel,
   AttentionPending,
   NodesPanel,
+  OverviewSkeleton,
   SchedulerPanel,
   WarningsPanel,
   WorkloadsPanel,
@@ -95,13 +95,7 @@ export function ClusterOverview() {
   const { isConnected, namespaceScope } = useClusterStore();
   const { data: clusterInfo } = useClusterInfo();
 
-  const {
-    data: overview,
-    isLoading,
-    error,
-    refetch,
-    freshness,
-  } = useScopedOverview();
+  const { data: overview, error, refetch, freshness } = useScopedOverview();
   const following = useOverviewFollowed(overview);
   const attention = useAttention({ refresh: "slow" });
   // The list pages name where a refused list can be read; the page that
@@ -125,66 +119,46 @@ export function ClusterOverview() {
 
   // Skeleton only on the first load — a refetch keeps the previous state on
   // screen so the layout never flashes empty while polling.
-  if (isLoading && !overview) {
+  if (!overview && !error) {
     return (
       <div className="flex flex-col gap-[22px]">
         {pinned}
-        <div className="space-y-6">
-          <HeaderSkeleton />
-          <StatsSkeleton count={2} />
-        </div>
+        <OverviewSkeleton />
       </div>
     );
   }
 
-  if (error && !overview) {
+  if (!overview && error) {
     // A refusal is not a failure: point at the fix, since the scoped overview
     // reads each namespace on its own. Rights change, so it may be asked again.
     const refused = isRefusal(error);
     return (
-      <div className="flex flex-col gap-[22px]">
+      <div className="flex flex-col items-start gap-[22px]">
         {pinned}
-        {/* The section arrives after the first render, so a reader who
-            cannot see it is told; `status` rather than `alert`, which is
-            what `Unknown` wears for the same kind of news. */}
-        <Section role="status">
-          <div className="flex items-center gap-2">
-            {refused ? (
-              <Lock className="h-4 w-4 text-fg-mut" aria-hidden="true" />
-            ) : (
-              <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
-            )}
-            <h2
-              className={`text-title font-semibold tracking-tight ${
-                refused ? "text-fg" : "text-err"
-              }`}
-            >
-              {!refused
-                ? t("empty", "couldNotReadClusterState")
-                : namespaceScope.length === 0
-                  ? readableIn.length > 0
-                    ? t("empty", "noClusterOverviewAccessIn", {
-                        n: readableIn.length,
-                        namespaces: readableIn.join(", "),
-                      })
-                    : t("empty", "noClusterOverviewAccess")
-                  : t("empty", "noScopeOverviewAccess", {
-                      scope: scopeIn(namespaceScope, t),
-                    })}
-            </h2>
-          </div>
-          <p className="mt-1 select-text wrap-break-word font-mono text-caption text-fg-fnt">
-            {errorToShow(error)}
-          </p>
-          <div className="flex items-center gap-2 pt-2">
-            {refused && (
-              <Button variant="outline" size="sm" onClick={openNamespacePicker}>
-                {t("action", "chooseNamespace")}
-              </Button>
-            )}
-            <ReadAgain error={error} onRetry={() => void refetch()} />
-          </div>
-        </Section>
+        <Unknown
+          className="w-full"
+          question={
+            !refused
+              ? t("empty", "couldNotReadClusterState")
+              : namespaceScope.length === 0
+                ? readableIn.length > 0
+                  ? t("empty", "noClusterOverviewAccessIn", {
+                      n: readableIn.length,
+                      namespaces: readableIn.join(", "),
+                    })
+                  : t("empty", "noClusterOverviewAccess")
+                : t("empty", "noScopeOverviewAccess", {
+                    scope: scopeIn(namespaceScope, t),
+                  })
+          }
+          error={error}
+          onRetry={() => void refetch()}
+        />
+        {refused && (
+          <Button variant="outline" size="sm" onClick={openNamespacePicker}>
+            {t("action", "chooseNamespace")}
+          </Button>
+        )}
       </div>
     );
   }

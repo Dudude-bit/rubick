@@ -53,7 +53,7 @@ import { registryKindNamed, useNameHolders } from "./name-holders";
 import { useHeldOrder } from "../../-list/held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
-import { StaleRows } from "../../-list/StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { KindAbout } from "@/components/object/KindAbout";
 import { HeldLines } from "../../-list/HeldLines";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -105,6 +105,7 @@ import { eventsUidIn } from "@/hooks/useReadUid";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { formatCount } from "@/lib/count";
+import { SegmentedControl } from "@/components/ui/states";
 
 const TYPE_FILTERS: Array<{
   value: string;
@@ -114,6 +115,8 @@ const TYPE_FILTERS: Array<{
   { value: "Warning", label: "eventsWarnings" },
   { value: "Normal", label: "eventsNormal" },
 ];
+
+const VIEWS = ["stories", "list"] as const;
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
 
@@ -719,76 +722,42 @@ export function Events() {
           >
             {!nothingRead && (
               <>
-                <span
-                  role="tablist"
-                  aria-label={t("columns", "view")}
-                  className="flex items-center gap-0.5"
-                >
-                  {(["stories", "list"] as const).map((candidate) => (
-                    <button
-                      key={candidate}
-                      type="button"
-                      role="tab"
-                      aria-selected={view === candidate}
-                      onClick={() => {
-                        setRemembered(candidate);
-                        setSearch({ view: candidate });
-                      }}
-                      className={cn(
-                        TOGGLE,
-                        view === candidate ? "bg-sel text-fg" : "text-fg-mut"
-                      )}
-                    >
-                      {t(
-                        "action",
-                        candidate === "stories" ? "eventsStories" : "eventsAll"
-                      )}
-                    </button>
-                  ))}
-                </span>
+                <SegmentedControl
+                  label={t("columns", "view")}
+                  value={view}
+                  onChange={(candidate) => {
+                    setRemembered(candidate);
+                    setSearch({ view: candidate });
+                  }}
+                  segments={VIEWS.map((candidate) => ({
+                    value: candidate,
+                    label: t(
+                      "action",
+                      candidate === "stories" ? "eventsStories" : "eventsAll"
+                    ),
+                  }))}
+                />
                 {view === "stories" && !narrow && (
                   <>
-                    <div
-                      className="flex items-center gap-0.5"
-                      role="group"
-                      aria-label={t("action", "storyWindow")}
-                    >
-                      {STORY_WINDOWS.map((candidate) => (
-                        <button
-                          key={candidate}
-                          type="button"
-                          aria-pressed={window === candidate}
-                          onClick={() => setWindow(candidate)}
-                          className={cn(
-                            TOGGLE,
-                            "font-mono",
-                            window === candidate
-                              ? "bg-sel text-fg"
-                              : "text-fg-mut"
-                          )}
-                        >
-                          {windowWords(candidate)}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-0.5" role="group">
-                      {ORDERS.map((candidate) => (
-                        <button
-                          key={candidate.value}
-                          type="button"
-                          aria-pressed={order === candidate.value}
-                          onClick={() => setOrder(candidate.value)}
-                          className={cn(
-                            TOGGLE,
-                            order === candidate.value
-                              ? "bg-sel text-fg"
-                              : "text-fg-mut"
-                          )}
-                        >
-                          {t("action", candidate.label)}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedControl
+                      label={t("action", "storyWindow")}
+                      value={window}
+                      onChange={setWindow}
+                      mono
+                      segments={STORY_WINDOWS.map((candidate) => ({
+                        value: candidate,
+                        label: windowWords(candidate),
+                      }))}
+                    />
+                    <SegmentedControl
+                      label={t("action", "storyOrder")}
+                      value={order}
+                      onChange={setOrder}
+                      segments={ORDERS.map((candidate) => ({
+                        value: candidate.value,
+                        label: t("action", candidate.label),
+                      }))}
+                    />
                   </>
                 )}
                 {/* Same shape as the lists' search box: a text entry, not a
@@ -825,28 +794,15 @@ export function Events() {
                   />
                 ) : (
                   <>
-                    <div
-                      className="flex items-center gap-0.5"
-                      role="group"
-                      aria-label={t("action", "eventType")}
-                    >
-                      {TYPE_FILTERS.map((filter) => (
-                        <button
-                          key={filter.value}
-                          type="button"
-                          aria-pressed={eventType === filter.value}
-                          onClick={() => setEventType(filter.value)}
-                          className={cn(
-                            TOGGLE,
-                            eventType === filter.value
-                              ? "bg-sel text-fg"
-                              : "text-fg-mut"
-                          )}
-                        >
-                          {t("action", filter.label)}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedControl
+                      label={t("action", "eventType")}
+                      value={eventType}
+                      onChange={setEventType}
+                      segments={TYPE_FILTERS.map((filter) => ({
+                        value: filter.value,
+                        label: t("action", filter.label),
+                      }))}
+                    />
                     <Select value={eventLimit} onValueChange={setEventLimit}>
                       <SelectTrigger
                         aria-label={t("action", "eventsFetched")}
@@ -876,7 +832,6 @@ export function Events() {
             />
             <ShareScreenAction
               screen={{ title: "Events", scope: scope.scope }}
-              look={narrow ? "icon" : "button"}
             />
           </div>
         }
@@ -940,7 +895,7 @@ export function Events() {
                       })}
               </p>
             ) : (
-              <div className="flex flex-col gap-2 p-1.5">
+              <div className="flex flex-col">
                 {shownStories.map((story) => (
                   <StoryCard
                     key={story.key}

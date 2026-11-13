@@ -24,6 +24,7 @@ import { hostsNeedAttention } from "@/lib/two-counts";
  * worse than no button.
  */
 
+import { Reading } from "@/components/ui/states";
 import { servingCount } from "@/lib/published";
 import { sayWords } from "@/i18n/say";
 import { Fragment, useMemo, type ReactNode } from "react";
@@ -56,7 +57,7 @@ import {
 } from "@/components/object/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { objectLink } from "@/lib/links";
-import { troubleMark, summariseNames } from "../kit";
+import { troubleMark, summariseNames, failedWithNothing } from "../kit";
 import {
   BackingUnread,
   TroubleList,
@@ -67,7 +68,9 @@ import {
   Finding as FindingBlock,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
   FindingList,
+  ReadingMark,
 } from "../page-kit";
 import { RoutingMap } from "../routing-map";
 import { useFrontingTls } from "../fronting-tls";
@@ -188,7 +191,7 @@ export default function TraefikPage() {
   const groups = useMemo(() => (sources ? hostGroups(sources) : []), [sources]);
   const namers = useOtherNamers(controller.data);
 
-  if (routeSources.error) {
+  if (failedWithNothing(routeSources)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadRouting")}
@@ -286,6 +289,7 @@ export default function TraefikPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={routeSources} label="Traefik" />
       <SectionHeader
         title="Traefik"
         count={
@@ -369,9 +373,7 @@ function MapTab({
   );
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
-    );
+    return <Reading>{t("empty", "readingRoutingTable")}</Reading>;
   }
   if (!data || groups.length === 0) return <NothingRoutes />;
 
@@ -432,9 +434,7 @@ function RoutesTab({
   );
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingRoutingTable")}</p>
-    );
+    return <Reading>{t("empty", "readingRoutingTable")}</Reading>;
   }
 
   if (groups.length === 0) return <NothingRoutes />;
@@ -657,7 +657,7 @@ function PathRow({
           backing.error ? (
             t("empty", "unknownLower")
           ) : (
-            "…"
+            <ReadingMark />
           )
         ) : backing?.stop ? (
           t("count", "nPublished", { n: servingCount(backing) })
@@ -842,7 +842,7 @@ function HostChain({
               )}
               title={backing.error ?? undefined}
             >
-              {backing.error ? t("empty", "notReadLower") : "…"}
+              {backing.error ? t("empty", "notReadLower") : <ReadingMark />}
             </Cell>
           ) : backing.stop ? (
             <Cell
@@ -1158,9 +1158,7 @@ function EntryPointsTab({
     entryPointsSection(controller, groups, t)
   );
   if (!controller) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingTheProxy")}</p>
-    );
+    return <Reading>{t("empty", "readingTheProxy")}</Reading>;
   }
   if (controller.entryPoints.length === 0) {
     return (

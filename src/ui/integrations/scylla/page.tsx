@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { Unknown } from "@/components/ui/unknown";
+import { Reading } from "@/components/ui/states";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Box, HardDrive, Layers } from "lucide-react";
@@ -18,7 +20,13 @@ import { objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatSince } from "@/lib/utils";
-import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
+import {
+  Cell,
+  Finding,
+  TroubleRow,
+  VendorReadFailure,
+  StaleRead,
+} from "../page-kit";
 import { actionsFor, perform, type ScyllaAction } from "./actions";
 import { nodeConfigsSection } from "./share";
 import {
@@ -40,7 +48,7 @@ import {
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
 import { ControllerLine, Fact, OperatorActionButton } from "../operator-kit";
-import { troubleMark, reachWord } from "../kit";
+import { troubleMark, reachWord, failedWithNothing } from "../kit";
 import { toastWriteError } from "@/lib/toast-error";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
@@ -67,7 +75,7 @@ export default function ScyllaPage() {
   // namespace or on one named cluster answers no to.
   const operator = useOperator(clusters);
 
-  if (clustersQuery.error) {
+  if (failedWithNothing(clustersQuery)) {
     return (
       <VendorReadFailure
         title={t("operators", "couldNotReadScyllaClusters")}
@@ -115,6 +123,7 @@ export default function ScyllaPage() {
   const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={clustersQuery} label="Scylla" />
       <SectionHeader
         title="Scylla"
         count={
@@ -129,7 +138,12 @@ export default function ScyllaPage() {
         }
         description={t("operators", "scyllaPageDescription")}
       />
-      <OperatorStrip operator={operator.data} pending={operator.isPending} />
+      <OperatorStrip
+        operator={operator.data}
+        pending={operator.isPending}
+        error={operator.error}
+        onRetry={() => void operator.refetch()}
+      />
       <DetailTabs
         tabs={tabs}
         activeTab={tab}
@@ -156,16 +170,27 @@ export default function ScyllaPage() {
 export function OperatorStrip({
   operator,
   pending,
+  error,
+  onRetry,
 }: {
   operator: OperatorInfo | undefined;
   pending: boolean;
+  error?: unknown;
+  onRetry?: () => unknown;
 }) {
   const t = useT();
   const now = useNow();
-  if (pending || !operator) {
+  if (!operator && error) {
     return (
-      <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
+      <Unknown
+        question={t("operators", "deploymentsUnreadable")}
+        error={error}
+        onRetry={onRetry}
+      />
     );
+  }
+  if (pending || !operator) {
+    return <Reading>{t("action", "readingInline")}</Reading>;
   }
   return (
     <div className="grid gap-x-8 gap-y-2 text-xs md:grid-cols-2">
@@ -267,10 +292,7 @@ function ClustersTab({
       body: { type: "findings" as const, items: found },
     };
   });
-  if (loading)
-    return (
-      <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
-    );
+  if (loading) return <Reading>{t("action", "readingInline")}</Reading>;
   if (clusters.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
@@ -502,6 +524,7 @@ function ClusterRow({
                 action={action}
                 label={scyllaActionLabel(action, t)}
                 busy={busy}
+                running={busy && pending?.id === action.id}
                 onPick={pick}
               />
             ))}
@@ -641,10 +664,7 @@ function NodeConfigsTab({
 }) {
   const t = useT();
   useShareSection("scylla-node-configs", () => nodeConfigsSection(read, t));
-  if (!read)
-    return (
-      <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
-    );
+  if (!read) return <Reading>{t("action", "readingInline")}</Reading>;
   if (!read.ok) {
     return (
       <Finding

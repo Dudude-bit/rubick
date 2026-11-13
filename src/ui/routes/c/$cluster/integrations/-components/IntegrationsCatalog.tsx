@@ -11,7 +11,9 @@ import {
   type VendorFact,
 } from "@/integrations";
 import { cn } from "@/lib/utils";
-import { errorToShow } from "@/lib/error-utils";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -45,23 +47,30 @@ import { ConnectIntegration } from "./ConnectIntegration";
  */
 export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
   const t = useT();
-  const { statuses, isPending, error } = useIntegrations({ facts: active });
+  const { statuses, isPending, error, hasScan, scannedAt, rescan } =
+    useIntegrations({ facts: active });
   // The sidebar sends an extension that owns no screen here rather than
   // nowhere, and a pane of fourteen rows is not an answer to "show me
   // Prometheus" unless it says which row that is.
   const { vendor: asked } = useAppSearch();
 
-  if (error) {
+  if (error && !hasScan) {
     return (
-      <div className="max-w-[64ch] py-8">
-        <h3 className="text-xs font-medium text-fg">
-          {t("empty", "couldNotReadCrds")}
-        </h3>
-        <p className="mt-1.5 text-xs text-fg-mut">
-          {t("empty", "crdDetectionFailed")}
-        </p>
-        <p className="mt-2 text-caption text-fg-fnt">{errorToShow(error)}</p>
-      </div>
+      <Unknown
+        className="max-w-[64ch]"
+        question={
+          <>
+            <span className="block font-medium">
+              {t("empty", "couldNotReadCrds")}
+            </span>
+            <span className="block text-fg-mut">
+              {t("empty", "crdDetectionFailed")}
+            </span>
+          </>
+        }
+        error={error}
+        onRetry={rescan}
+      />
     );
   }
 
@@ -87,6 +96,16 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {error && (
+        <StaleRows
+          label={t("empty", "crdScanLabel")}
+          object
+          since={scannedAt}
+          error={error}
+          onRetry={rescan}
+          className=""
+        />
+      )}
       {configured.length > 0 && (
         <SettingsGroup title={t("cluster", "configuredGroup")}>
           {configured.map((status) => (
@@ -269,12 +288,13 @@ function ExtensionRow({
                   ? t("empty", "couldNotTell")
                   : t("empty", "notInstalled")}
         </span>
-        {connection && !pending && (
+        {connection && (
           <>
             <Button
               variant="outline"
               size="sm"
               className="h-6 px-2 text-caption"
+              disabled={pending}
               onClick={() => setEditing(true)}
             >
               {configured ? t("action", "edit") : t("action", "connect")}
@@ -318,11 +338,7 @@ function Facts({ facts }: { facts: IntegrationStatus["facts"] }) {
   const t = useT();
   if (facts.state === "none") return null;
   if (facts.state === "loading") {
-    return (
-      <p className="mt-1.5 text-caption text-fg-fnt">
-        {t("action", "readingInline")}
-      </p>
-    );
+    return <Reading className="mt-1.5">{t("action", "readingInline")}</Reading>;
   }
   if (facts.state === "failed") {
     return (

@@ -23,6 +23,7 @@
  * place.
  */
 
+import { Eyebrow, Reading } from "@/components/ui/states";
 import { ShieldCheck, Stamp } from "lucide-react";
 
 import { expiryText, overdueBy } from "@/lib/certificates";
@@ -47,6 +48,7 @@ import {
   TroubleList,
   TroubleRow,
   VendorReadFailure,
+  StaleRead,
 } from "../page-kit";
 import { usePicture } from "./data";
 import { issuersSection } from "./share";
@@ -63,7 +65,7 @@ import {
 } from "./model";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import { troubleMark, summariseNames } from "../kit";
+import { troubleMark, summariseNames, failedWithNothing } from "../kit";
 import { parts } from "@/i18n/parts";
 
 /** Past this many troubled certificates, nothing opens itself. */
@@ -72,9 +74,10 @@ const AUTO_OPEN = 8;
 export default function CertManagerPage() {
   const t = useT();
   const [tab, setTab] = useSearchParam("tab", "certificates");
-  const { data, isPending, error, refetch } = usePicture();
+  const picture = usePicture();
+  const { data, isPending, error, refetch } = picture;
 
-  if (error) {
+  if (failedWithNothing(picture)) {
     return (
       <VendorReadFailure
         title={t("empty", "couldNotReadCertificates")}
@@ -136,6 +139,7 @@ export default function CertManagerPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
+      <StaleRead read={picture} label="cert-manager" />
       <SectionHeader
         title="cert-manager"
         count={
@@ -246,9 +250,7 @@ function CertificatesTab({
   const t = useT();
 
   if (loading) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingCertificates")}</p>
-    );
+    return <Reading>{t("empty", "readingCertificates")}</Reading>;
   }
 
   if (rows.length === 0) {
@@ -579,9 +581,9 @@ function Walk({ steps }: { steps: CertStep[] }) {
   const t = useT();
   return (
     <div className="flex flex-col">
-      <span className="mb-1 text-micro uppercase tracking-[0.08em] text-fg-fnt">
+      <Eyebrow as="span" className="mb-1">
         {t("empty", "whatItIsWaitingOn")}
-      </span>
+      </Eyebrow>
       {steps.map((step, index) => (
         <div
           key={`${step.kind}/${step.name}`}
@@ -609,9 +611,7 @@ function Walk({ steps }: { steps: CertStep[] }) {
             className={index < steps.length - 1 ? "min-w-0 pb-2" : "min-w-0"}
           >
             <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-micro uppercase tracking-[0.06em] text-fg-fnt">
-                {step.kind}
-              </span>
+              <Eyebrow as="span">{step.kind}</Eyebrow>
               <span className="min-w-0 truncate">
                 <ResourceRef
                   kind={step.kind}
@@ -698,10 +698,7 @@ function IssuersTab({
   useShareSection("cert-manager-issuers", () =>
     issuersSection(rows, loading, unread, t)
   );
-  if (loading)
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingIssuers")}</p>
-    );
+  if (loading) return <Reading>{t("empty", "readingIssuers")}</Reading>;
 
   // "This cluster has no issuer" is the strongest claim on the page and the
   // only one that would send somebody off to create an object they already

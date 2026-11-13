@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { Reading } from "@/components/ui/states";
 import { useQueries } from "@tanstack/react-query";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -47,7 +48,7 @@ const STATE_LABEL: Record<StoryState, keyof typeof en.readings> = {
 // the reader stops looking at, and nothing here established it.
 const STATE_TONE: Record<StoryState, string> = {
   stillHappening: "bg-err/15 text-err",
-  settled: "bg-warn/15 text-warn",
+  settled: "bg-fg-fnt/15 text-fg-mut",
   done: "bg-ok/15 text-ok",
   unknown: "bg-fg-fnt/15 text-fg-mut",
   earlier: "bg-fg-fnt/15 text-fg-mut",
@@ -55,17 +56,17 @@ const STATE_TONE: Record<StoryState, string> = {
 };
 
 const STATE_EDGE: Record<StoryState, string> = {
-  stillHappening: "border-err/50",
-  settled: "border-warn/50",
-  done: "border-hair",
-  unknown: "border-hair",
-  earlier: "border-hair",
-  gone: "border-hair",
+  stillHappening: "border-l-2 border-l-err/60",
+  settled: "",
+  done: "",
+  unknown: "",
+  earlier: "",
+  gone: "",
 };
 
 const STATE_LINE: Record<StoryState, string> = {
   stillHappening: "text-err",
-  settled: "text-warn",
+  settled: "text-fg",
   done: "text-fg",
   unknown: "text-fg-mut",
   earlier: "text-fg-mut",
@@ -184,7 +185,7 @@ function StoryCardView({ story, crd, options, showNamespace }: StoryCardProps) {
         openPeek(peek);
       }}
       className={cn(
-        "rounded border bg-canvas px-3 py-2",
+        "border-b border-hair bg-canvas px-3 py-2",
         peek && "cursor-pointer hover:bg-hover/40",
         STATE_EDGE[story.state]
       )}
@@ -397,6 +398,7 @@ function Timeline({ story }: { story: Story }) {
     );
   });
   const unread = statuses.filter((s) => s.isError).length;
+  const reading = statuses.filter((s) => s.isPending).length;
   const entries = withStatusMarks(timelineOf(story), marks);
   const several = story.members.length > 1;
 
@@ -412,6 +414,11 @@ function Timeline({ story }: { story: Story }) {
           />
         ))}
       </ol>
+      {reading > 0 ? (
+        <Reading className="mt-1">
+          {t("readings", "podStatusReading", { n: reading })}
+        </Reading>
+      ) : null}
       {unread > 0 ? (
         <p className="mt-1 text-caption text-fg-fnt">
           {t("readings", "podStatusUnread", { n: unread })}

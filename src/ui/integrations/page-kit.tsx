@@ -13,6 +13,7 @@
  * ordering and every sentence in them are each vendor's own.
  */
 
+import { Eyebrow } from "@/components/ui/states";
 import {
   Children,
   cloneElement,
@@ -28,7 +29,10 @@ import { AlertTriangle, ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 export { OutLink } from "@/components/ui/out-link";
 import { Section } from "@/components/ui/section";
+import { failedWithNothing } from "./kit";
+import { Spinner } from "@/components/ui/spinner";
 import { Unknown } from "@/components/ui/unknown";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { cn } from "@/lib/utils";
 import { withoutCredentials } from "@/lib/hints";
 import { CopyableValue } from "@/components/ui/copyable-value";
@@ -199,6 +203,48 @@ export function VendorReadFailure({
         onRetry={onRetry}
       />
     </Section>
+  );
+}
+
+/** A read still on its way inside a cell or a line of words: a spinner, and the words when `words`. */
+export function ReadingMark({ words = false }: { words?: boolean }) {
+  const t = useT();
+  const label = t("action", "readingInline");
+  return (
+    <span
+      role="status"
+      aria-label={words ? undefined : label}
+      className="inline-flex items-center gap-1 text-fg-fnt"
+    >
+      <Spinner size="xs" aria-hidden="true" />
+      {words && label}
+    </span>
+  );
+}
+
+interface ReadOf {
+  error: unknown;
+  data: unknown;
+  dataUpdatedAt: number;
+  refetch: () => unknown;
+}
+
+/**
+ * A failed re-read over a page that already has data: the page stays, and
+ * this line says it is from the last read that answered.
+ */
+export function StaleRead({ read, label }: { read: ReadOf; label: string }) {
+  if (!read.error || failedWithNothing(read)) return null;
+  return (
+    <StaleRows
+      label={label}
+      object
+      shared={false}
+      since={read.dataUpdatedAt}
+      error={read.error}
+      onRetry={() => void read.refetch()}
+      className=""
+    />
   );
 }
 
@@ -726,9 +772,9 @@ export function Column({
 }) {
   return (
     <div className="flex min-w-0 flex-col pr-3">
-      <span className="mb-1.5 text-micro uppercase tracking-[0.08em] text-fg-fnt">
+      <Eyebrow as="span" className="mb-1.5">
         {label}
-      </span>
+      </Eyebrow>
       <div className="relative flex flex-col gap-1.5">
         {/* Decorative: the columns are labelled and ordered, so the join says
             nothing a screen reader is not already told. */}
