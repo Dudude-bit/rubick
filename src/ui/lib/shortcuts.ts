@@ -296,6 +296,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "not a shortcut: bare arrows, Home and End walk the tab strip; a chord passes through",
   "src/ui/lib/native-menu.ts":
     "Menu and shift+F10 open the focused control's context menu",
+  "src/ui/routes/c/$cluster/-shell/Sidebar.tsx":
+    "not a shortcut: arrows, Home and End walk the sidebar's rows, which take one tab stop",
   "src/ui/components/ui/data-table.tsx":
     "not a shortcut: bare left and right walk the focused row's links; a chord passes through",
 };

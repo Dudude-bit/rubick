@@ -1,6 +1,13 @@
-import { beforeEach, describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+const closeTerminal = vi.fn(async (_id: string) => undefined);
+vi.mock("@/lib/commands", () => ({
+  commands: { closeTerminal: (id: string) => closeTerminal(id) },
+}));
 
 import {
+  closeShell,
+  endShell,
   heard,
   scrollbackOf,
   strandedShell,
@@ -112,5 +119,18 @@ describe("what a kept shell printed", () => {
     expect(held.length).toBeGreaterThan(255 * 1024);
     expect(held.startsWith("x".repeat(1023))).toBe(true);
     expect(held.endsWith("\ntail")).toBe(true);
+  });
+});
+
+describe("ending a shell that the backend will not hang up", () => {
+  /**
+   * `endShell` swallowed the backend's refusal, so the Activity panel said
+   * nothing while the shell ran on. Fails if `closeShell` hides the failure,
+   * or if the fire-and-forget callers start to reject.
+   */
+  it("lets closeShell reject while endShell stays quiet", async () => {
+    closeTerminal.mockRejectedValue(new Error("no such session"));
+    await expect(closeShell("term-1")).rejects.toThrow("no such session");
+    await expect(endShell("term-1")).resolves.toBeUndefined();
   });
 });

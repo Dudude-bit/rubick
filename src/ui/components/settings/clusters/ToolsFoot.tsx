@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import { Spinner } from "@/components/ui/spinner";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,7 @@ export function ToolsFoot({
   onManagePaths: () => void;
   onManageProfiles: () => void;
 }) {
-  const { helm, kubectl, ensureDependencies } = useDependenciesStore();
+  const { helm, kubectl, unread, ensureDependencies } = useDependenciesStore();
   const t = useT();
 
   useEffect(() => {
@@ -62,9 +63,15 @@ export function ToolsFoot({
         name="kubectl"
         found={kubectl?.available}
         version={kubectl?.version}
+        unread={unread.kubectl}
       />
       {" · "}
-      <Tool name="helm" found={helm?.available} version={helm?.version} />
+      <Tool
+        name="helm"
+        found={helm?.available}
+        version={helm?.version}
+        unread={unread.helm}
+      />
       {" · "}
       <Foot onClick={onManagePaths} expanded={toolPathsOpen}>
         {t("settings", "manageToolPaths")}
@@ -83,20 +90,33 @@ function Tool({
   name,
   found,
   version,
+  unread,
 }: {
   name: string;
   found: boolean | undefined;
   version: string | null | undefined;
+  unread: string | null;
 }) {
   const t = useT();
   return (
     <span>
       <span className="font-mono text-fg-mut">{name}</span>{" "}
-      {found === undefined
-        ? "…"
-        : found
-          ? (version ?? t("settings", "foundInline"))
-          : t("settings", "notFoundInline")}
+      {unread !== null ? (
+        <span className="text-warn" title={unread}>
+          {t("settings", "notRead")}
+        </span>
+      ) : found === undefined ? (
+        <Spinner
+          size="xs"
+          role="status"
+          aria-label={t("action", "reading")}
+          className="inline"
+        />
+      ) : found ? (
+        (version ?? t("settings", "foundInline"))
+      ) : (
+        t("settings", "notFoundInline")
+      )}
     </span>
   );
 }

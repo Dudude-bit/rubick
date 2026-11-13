@@ -2,6 +2,7 @@ import * as React from "react";
 import { FileText, FolderOpen, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
+import { Unknown } from "@/components/ui/unknown";
 import type { KubeconfigSource } from "@/generated/types";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useShownPath } from "@/lib/hide-paths";
@@ -125,9 +126,6 @@ export function SourceLine() {
               {t("settings", "fileNotThere")}
             </span>
           )}
-          {source?.error && (
-            <span className="text-caption text-err">{show(source.error)}</span>
-          )}
           <span className="ml-auto flex items-baseline gap-3 text-caption">
             {kubeconfig.overridePath && (
               <button
@@ -159,6 +157,16 @@ export function SourceLine() {
             </button>
           </span>
         </>
+      )}
+      {(source?.error || kubeconfig.sourceError) && (
+        <Unknown
+          className="w-full"
+          question={t("settings", "kubeconfigUnreadable")}
+          error={
+            kubeconfig.sourceError ?? (source?.error ? show(source.error) : "")
+          }
+          onRetry={() => kubeconfig.reload()}
+        />
       )}
       {files.length > 1 && (
         <ul className="mt-1 w-full space-y-0.5">

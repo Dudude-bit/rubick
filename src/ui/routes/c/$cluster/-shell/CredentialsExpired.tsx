@@ -30,6 +30,7 @@ import { useState } from "react";
 import { KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { EmptyPage } from "@/components/ui/empty-page";
 import { useClusterInfo } from "@/hooks/useClusterInfo";
 import { useRenewal } from "@/hooks/useCredentialRenewal";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
@@ -73,52 +74,38 @@ export function CredentialsExpired({
   const since = useRealtimeAge(deadline ?? new Date(expired.at).toISOString());
 
   return (
-    <div className="mx-auto flex max-w-[68ch] flex-col gap-4 py-16">
-      <div className="flex items-baseline gap-2.5">
-        <KeyRound className="size-4 flex-none translate-y-0.5 text-warn" />
-        <h2 className="text-title font-semibold tracking-tight text-fg">
-          {context
-            ? t("cluster", "sessionRefusedNamed", { context })
-            : t("cluster", "sessionRefused")}
-        </h2>
-      </div>
-
-      <p className="text-xs text-fg-mut">
-        {deadline
+    <EmptyPage
+      icon={KeyRound}
+      title={
+        context
+          ? t("cluster", "sessionRefusedNamed", { context })
+          : t("cluster", "sessionRefused")
+      }
+      body={`${
+        deadline
           ? t("cluster", "credentialsExpiredAgo", { since })
-          : t("cluster", "credentialsRefusedAgo", { since })}
-        {t("cluster", WHY[renewal])}
-        {t("cluster", "credentialsExpiredBody")}
-      </p>
-
-      {/* The server's own words, never paraphrased. Somebody is going to paste
-          this into a search or a ticket. */}
-      <p className="select-text wrap-break-word font-mono text-caption text-fg-fnt">
-        {verbatim(expired.reason)}
-      </p>
-
-      <div className="flex items-center gap-3">
-        <Button
-          size="sm"
-          disabled={isAuthenticating}
-          onClick={() => {
-            setTried(true);
-            if (context) void connect(context);
-          }}
-        >
-          {isAuthenticating
-            ? t("cluster", "signingIn")
-            : t("cluster", "signInAgain")}
-        </Button>
-        {/* Said only after a press: before one, it would be an instruction to
-            do something the reader has not tried yet. */}
-        {tried && !isAuthenticating && (
-          <span className="text-caption text-fg-fnt">
-            {t("cluster", "stillRefusedHint")}{" "}
-            <span className="select-text font-mono">gcloud auth login</span>.
-          </span>
-        )}
-      </div>
-    </div>
+          : t("cluster", "credentialsRefusedAgo", { since })
+      }${t("cluster", WHY[renewal])}${t("cluster", "credentialsExpiredBody")}`}
+      detail={verbatim(expired.reason)}
+    >
+      <Button
+        size="sm"
+        pending={isAuthenticating}
+        onClick={() => {
+          setTried(true);
+          if (context) void connect(context);
+        }}
+      >
+        {isAuthenticating
+          ? t("cluster", "signingIn")
+          : t("cluster", "signInAgain")}
+      </Button>
+      {tried && !isAuthenticating && (
+        <span className="text-caption text-fg-fnt">
+          {t("cluster", "stillRefusedHint")}{" "}
+          <span className="select-text font-mono">gcloud auth login</span>.
+        </span>
+      )}
+    </EmptyPage>
   );
 }

@@ -6,13 +6,14 @@ import { FolderOpen, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PathInput } from "@/components/ui/path-input";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Unknown } from "@/components/ui/unknown";
 import type { CliAvailability } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { useShownPath } from "@/lib/hide-paths";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { SettingRow } from "../settings-row";
 import { useT, type T } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 
 /** What the row's hint says depends entirely on whether we found the tool. */
 function availabilityHint(
@@ -63,6 +64,7 @@ export function ToolPathsPanel() {
     checkKubectlAvailability,
     recheckAfterPathChange,
     isChecking,
+    unread,
   } = useDependenciesStore();
   // Null means "showing what is saved". The field only takes over once it
   // has been edited, so a re-check that changes the stored path is
@@ -70,10 +72,12 @@ export function ToolPathsPanel() {
   const [typed, setTyped] = useState<Record<string, string | undefined>>({});
   const show = useShownPath();
 
-  const { data: cliPaths } = useQuery({
+  const cliPathsQuery = useQuery({
     queryKey: ["cli-paths"],
     queryFn: commands.getCliPaths,
   });
+  const cliPaths = cliPathsQuery.data;
+  const pathsKnown = cliPathsQuery.isSuccess;
 
   const helmPath = typed.helm ?? cliPaths?.helmPath ?? "";
   const kubectlPath = typed.kubectl ?? cliPaths?.kubectlPath ?? "";
@@ -92,7 +96,8 @@ export function ToolPathsPanel() {
       queryClient.invalidateQueries({ queryKey: ["cli-paths"] });
       await recheckAfterPathChange();
     },
-    onError: (error) => toastError(t("settings", "toolPathsSaveFailed"), error),
+    onError: (error) =>
+      toastWriteError(t("settings", "toolPathsSaveFailed"), error),
   });
 
   const browseFor = async (title: string, setter: (value: string) => void) => {
@@ -127,6 +132,7 @@ export function ToolPathsPanel() {
 
   /** Leaving a field is the commit; the re-check that follows is the answer. */
   const applyOn = (id: string) => (value: string) => {
+    if (!pathsKnown) return;
     const next = {
       helmPath: id === "helm" ? value.trim() : helmPath,
       kubectlPath: id === "kubectl" ? value.trim() : kubectlPath,
@@ -146,33 +152,49 @@ export function ToolPathsPanel() {
       <p className="pb-1 text-caption text-fg-mut">
         {t("settings", "toolPathsIntro")}
       </p>
+      {cliPathsQuery.isError && (
+        <Unknown
+          className="my-1.5"
+          question={t("settings", "toolPathsUnread")}
+          error={cliPathsQuery.error}
+          onRetry={() => cliPathsQuery.refetch()}
+        />
+      )}
       {tools.map((tool) => {
-        const pending = isChecking || tool.state === null;
+        const failed = unread[tool.id];
+        const pending = failed === null && (isChecking || tool.state === null);
         return (
           <SettingRow
             key={tool.id}
             label={tool.label}
             htmlFor={`${tool.id}-path`}
-            hint={availabilityHint(tool.state, show, isChecking, tool.label, t)}
+            hint={
+              failed ??
+              availabilityHint(tool.state, show, isChecking, tool.label, t)
+            }
             control={
               <>
                 <StatusBadge
                   status={
-                    pending
-                      ? t("settings", "checking")
-                      : tool.state?.available
-                        ? t("settings", "available")
-                        : t("settings", "notFound")
+                    failed !== null
+                      ? t("settings", "notRead")
+                      : pending
+                        ? t("settings", "checking")
+                        : tool.state?.available
+                          ? t("settings", "available")
+                          : t("settings", "notFound")
                   }
                   roleOverride={
                     pending ? "pending" : tool.state?.available ? "ok" : "warn"
                   }
                 >
-                  {pending
-                    ? t("settings", "checking")
-                    : tool.state?.available
-                      ? t("settings", "available")
-                      : t("settings", "notFound")}
+                  {failed !== null
+                    ? t("settings", "notRead")
+                    : pending
+                      ? t("settings", "checking")
+                      : tool.state?.available
+                        ? t("settings", "available")
+                        : t("settings", "notFound")}
                 </StatusBadge>
                 <Button
                   variant="ghost"
@@ -181,11 +203,9 @@ export function ToolPathsPanel() {
                     tool: tool.label,
                   })}
                   onClick={() => tool.recheck()}
-                  disabled={isChecking}
+                  pending={isChecking}
                 >
-                  <RefreshCw
-                    className={`h-3.5 w-3.5 ${isChecking ? "animate-spin" : ""}`}
-                  />
+                  <RefreshCw className="h-3.5 w-3.5" />
                 </Button>
               </>
             }
@@ -197,6 +217,7 @@ export function ToolPathsPanel() {
                   tool: tool.id,
                 })}
                 value={tool.path}
+                disabled={!pathsKnown}
                 onChange={(event) => tool.setPath(event.target.value)}
                 onBlur={(event) => applyOn(tool.id)(event.target.value)}
                 onKeyDown={(event) => {
@@ -210,6 +231,7 @@ export function ToolPathsPanel() {
                 aria-label={t("settings", "browseForBinary", {
                   tool: tool.label,
                 })}
+                disabled={!pathsKnown}
                 onClick={() =>
                   browseFor(
                     t("settings", "selectBinaryTitle", { tool: tool.label }),

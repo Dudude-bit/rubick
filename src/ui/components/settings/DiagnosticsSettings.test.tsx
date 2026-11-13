@@ -276,7 +276,7 @@ describe("DiagnosticsSettings before the machine is read", () => {
         "Could not read what this app can see of the machine."
       )
     ).toBeInTheDocument();
-    expect(screen.getByText("spawn failed")).toBeInTheDocument();
+    expect(screen.getByText(/spawn failed/)).toBeInTheDocument();
     expect(screen.queryByText(/No problems found/)).toBeNull();
     refusedWith = null;
   });

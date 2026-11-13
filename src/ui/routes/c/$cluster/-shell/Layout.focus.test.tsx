@@ -78,11 +78,14 @@ beforeEach(() => {
 const word = (cls: string) => new RegExp(`(^|\\s)(${cls})(\\s|$)`);
 const UNSEEN = word("sr-only|opacity-0|invisible|hidden");
 const NO_OUTLINE = word("(focus-visible:|focus:)?outline-(hidden|none)");
-const RING = word("(focus-visible:|data-\\[ring=true\\]:)?ring(-[0-9])?");
+const RING = word(
+  "(focus-visible:|focus:|data-\\[ring=true\\]:)?ring(-[0-9])?"
+);
 
 /** Why a focused stop draws nothing, or null when it shows the focus. */
 function blindness(el: HTMLElement): string | null {
   const cls = el.getAttribute("class") ?? "";
+  if (/(^|\s)focus:not-sr-only(\s|$)/.test(cls) && RING.test(cls)) return null;
   if (UNSEEN.test(cls) || el.closest("[aria-hidden='true']")) return "unseen";
   if (!NO_OUTLINE.test(cls) || RING.test(cls)) return null;
   const field = el.matches("input, textarea");
@@ -123,20 +126,21 @@ describe("the shell's Tab order", () => {
         if (why) blind.push(`${label(el)}: ${why}`);
       }
 
+      expect(stops[0]).toBe('a "Skip to content"');
       expect(stops).toContain('button "Rename or recolour prod"');
       expect(stops.some((stop) => stop.startsWith('tr "web-1'))).toBe(true);
       expect(stops).toContain('button "Theme: Dark"');
       expect(blind).toEqual([]);
-      expect(stops[0]).toBe('button "Rename or recolour prod"');
+      expect(stops[1]).toBe('button "Rename or recolour prod"');
       expect(stops.at(-1)).toBe('button "Theme: Dark"');
     }
   );
 
   /**
-   * Dana's Shift+Tab off the cluster name drew no ring anywhere for one press:
-   * the cluster name is the window's first stop, so the press left the
-   * document and WebKitGTK gave the focus to nothing. Fails if Shift+Tab there
-   * does not land on the status bar's last control, or Tab there on the first.
+   * Dana's Shift+Tab off the window's first stop drew no ring anywhere for one
+   * press: it left the document and WebKitGTK gave the focus to nothing. The
+   * first stop is the skip link. Fails if Shift+Tab there does not land on the
+   * status bar's last control, or Tab there on the first.
    */
   it("wraps between the cluster name and the status bar inside the window", async () => {
     const stop = startFocusWrap();
@@ -147,7 +151,7 @@ describe("the shell's Tab order", () => {
       });
       await act(async () => {});
       const cluster = document.querySelector<HTMLElement>(
-        "[aria-label='Rename or recolour prod']"
+        "a[href='#main-content']"
       )!;
       // A bare keydown, which jsdom gives no default action: what moves the
       // focus is the wrap, as it has to be in a webview that drops it.
@@ -190,7 +194,9 @@ describe("the shell's Tab order", () => {
       await user.click(row("Pods").querySelector("span")!);
       expect(document.activeElement).toBe(row("Pods"));
       fireEvent.keyDown(document.activeElement!, webkitShiftTab);
-      expect(document.activeElement).toBe(row("Changes"));
+      expect(label(document.activeElement!)).toBe(
+        'button "Rename or recolour prod"'
+      );
 
       await user.click(row("Overview").querySelector("span")!);
       fireEvent.keyDown(document.activeElement!, webkitShiftTab);

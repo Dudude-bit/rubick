@@ -111,6 +111,16 @@ export function Layout({
           className="h-0.5 flex-none bg-(--cluster)"
         />
       )}
+      <a
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
+        className="sr-only rounded bg-canvas px-2 py-1 text-xs text-fg focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:outline-hidden focus:ring-1 focus:ring-info"
+      >
+        {t("action", "skipToContent")}
+      </a>
       <div className="flex flex-1 overflow-hidden">
         {!lost && <Sidebar missing={missing} />}
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -120,7 +130,9 @@ export function Layout({
             className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
           >
             <main
-              className="flex-1 overflow-auto scrollbar-lane [scrollbar-gutter:stable] pb-4 pl-4 pr-2"
+              id="main-content"
+              tabIndex={-1}
+              className="flex-1 outline-hidden overflow-auto scrollbar-lane [scrollbar-gutter:stable] pb-4 pl-4 pr-2"
               style={dock}
             >
               {/* `h-full` is what lets a page opt out of the page scroll: a page

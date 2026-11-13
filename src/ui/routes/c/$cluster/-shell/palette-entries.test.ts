@@ -10,6 +10,7 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { hrefOf, setRouter, type AppLink } from "@/lib/links";
 import { Box } from "lucide-react";
+import { getResourceIcon, ResourceType } from "@/lib/resource-registry";
 import {
   buildActionEntries,
   buildPaletteEntries,
@@ -1600,5 +1601,29 @@ describe("kind names on hover", () => {
         { kind: "Event", group: "" },
       ])
     ).toEqual(["ComponentStatus", "Event (core)", "Event (events.k8s.io)"]);
+  });
+});
+
+describe("the quick actions' icons", () => {
+  /**
+   * Pods, Deployments and Helm shared one cube and ConfigMaps and Secrets
+   * one document, so a row could not be told from the next by its mark.
+   * Fails if a kind's quick action stops wearing the icon the sidebar uses.
+   */
+  it("gives each kind the icon the sidebar uses for it", () => {
+    const links = buildPaletteEntries(state({})).flatMap((entry) =>
+      entry.kind === "link" ? [entry] : []
+    );
+    const iconOf = (id: string) => links.find((entry) => entry.id === id)?.icon;
+    expect(iconOf("nav:goToPods")).toBe(getResourceIcon(ResourceType.Pod));
+    expect(iconOf("nav:goToDeployments")).toBe(
+      getResourceIcon(ResourceType.Deployment)
+    );
+    expect(iconOf("nav:goToConfigMaps")).toBe(
+      getResourceIcon(ResourceType.ConfigMap)
+    );
+    expect(iconOf("nav:goToSecrets")).toBe(
+      getResourceIcon(ResourceType.Secret)
+    );
   });
 });

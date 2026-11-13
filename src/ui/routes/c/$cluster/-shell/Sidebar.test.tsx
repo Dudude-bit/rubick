@@ -658,6 +658,31 @@ describe("the keyboard focus in the rail", () => {
   });
 });
 
+describe("the rail as one tab stop", () => {
+  /**
+   * Tab walked through every row, about 35 stops before the content. Fails
+   * if more than one row is in the tab order, or if the arrow keys stop
+   * moving between rows.
+   */
+  it("keeps one row in the tab order and moves between rows with the arrows", async () => {
+    await wrap(<Sidebar />);
+    const nav = screen.getByRole("navigation");
+    await waitFor(() =>
+      expect(nav.querySelectorAll('a[href][tabindex="0"]')).toHaveLength(1)
+    );
+    const rows = [...nav.querySelectorAll<HTMLElement>("a[href]")];
+    expect(rows.filter((row) => row.tabIndex === 0)).toHaveLength(1);
+
+    rows[0].focus();
+    fireEvent.keyDown(rows[0], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(rows[1]);
+    expect(rows[1].tabIndex).toBe(0);
+    expect(rows[0].tabIndex).toBe(-1);
+    fireEvent.keyDown(rows[1], { key: "ArrowUp" });
+    expect(document.activeElement).toBe(rows[0]);
+  });
+});
+
 describe("a rail taller than the window", () => {
   afterEach(() => vi.restoreAllMocks());
 

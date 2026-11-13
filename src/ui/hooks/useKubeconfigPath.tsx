@@ -223,6 +223,8 @@ export function useKubeconfigPath() {
     paths: pinned.data ?? [],
     /** Where the app looked, and what it found. */
     source: source.data,
+    /** The read of the source itself failed, which is not the same as no file. */
+    sourceError: source.isError ? source.error : null,
     isLoading: override.isLoading || source.isLoading || pinned.isLoading,
     isPending: setPath.isPending || clearPath.isPending || setPaths.isPending,
     choose,

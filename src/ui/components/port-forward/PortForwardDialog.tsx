@@ -18,7 +18,7 @@ import { forwardsTo, usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import { usePodDenied } from "@/lib/access";
@@ -126,6 +126,7 @@ function ForwardForm({
   const [autoStart, setAutoStart] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
   const [problem, setProblem] = useState<LocalPortProblem | null>(null);
   const [noPod, setNoPod] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -175,7 +176,7 @@ function ForwardForm({
           autoReconnect,
           autoStart,
         }).catch((error) =>
-          toastError(t("activity", "saveForwardFailed"), error)
+          toastWriteError(t("activity", "saveForwardFailed"), error)
         );
       }
       onDone();
@@ -183,7 +184,7 @@ function ForwardForm({
       const local = localPortProblem(error, localPort, taken, t);
       if (local) setProblem(local);
       else if (errorCode(error) === ERROR_CODES.NO_READY_POD) setNoPod(true);
-      else toastError(t("activity", "startForwardFailed"), error);
+      else toastWriteError(t("activity", "startForwardFailed"), error);
     } finally {
       setBusy(false);
     }
@@ -420,11 +421,24 @@ function ForwardForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      stopSession(session.id).catch((error) =>
-                        toastError(t("activity", "stopForwardFailed"), error)
-                      )
-                    }
+                    pending={stopping.has(session.id)}
+                    onClick={() => {
+                      setStopping((prev) => new Set(prev).add(session.id));
+                      stopSession(session.id)
+                        .catch((error) =>
+                          toastWriteError(
+                            t("activity", "stopForwardFailed"),
+                            error
+                          )
+                        )
+                        .finally(() =>
+                          setStopping((prev) => {
+                            const next = new Set(prev);
+                            next.delete(session.id);
+                            return next;
+                          })
+                        );
+                    }}
                   >
                     <Square className="mr-1 h-3 w-3" aria-hidden="true" />
                     {t("action", "stop")}
@@ -443,7 +457,7 @@ function ForwardForm({
           <Button
             type="button"
             onClick={() => !denied && submit()}
-            disabled={!denied && busy}
+            pending={!denied && busy}
             aria-disabled={denied ? true : undefined}
             className={cn(denied && "cursor-default opacity-40")}
           >

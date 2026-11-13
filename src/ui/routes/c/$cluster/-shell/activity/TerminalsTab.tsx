@@ -1,13 +1,20 @@
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { SquareTerminal, AlertCircle, X } from "lucide-react";
+import { SquareTerminal, X } from "lucide-react";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import {
-  endShell,
+  closeShell,
   tabKeepsShell,
   useKeptShellStore,
 } from "@/stores/keptShellStore";
+import { Spinner } from "@/components/ui/spinner";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
+import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
+import { toastWriteError } from "@/lib/toast-error";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { hrefOf, objectLink } from "@/lib/links";
@@ -55,6 +62,29 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
   const sessions = useTerminalSessionStore((state) => state.sessions);
   const failed = useTerminalSessionStore((state) => state.failed);
   const kept = useKeptShellStore((state) => state.shells);
+  const [ending, setEnding] = useState<ReadonlySet<string>>(new Set());
+
+  const end = (id: string) => {
+    setEnding((prev) => new Set(prev).add(id));
+    void closeShell(id)
+      .catch((error: unknown) =>
+        toastWriteError(t("activity", "endShellFailed"), error)
+      )
+      .finally(() =>
+        setEnding((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        })
+      );
+  };
+
+  const readAgain = () => {
+    const { replace, fail } = useTerminalSessionStore.getState();
+    return commands
+      .listTerminalSessions()
+      .then(replace, (error: unknown) => fail(errorToShow(error)));
+  };
 
   // Back to the page a shell is on, on its Shell tab: its own scope tab when
   // one keeps it, and never by taking a tab that keeps another shell away.
@@ -80,16 +110,17 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
 
   if (sessions === null) {
     return failed ? (
-      <ActivityEmpty
-        icon={AlertCircle}
-        title={t("activity", "terminalsUnread")}
-        hint={failed}
-      />
+      <div className="p-3">
+        <Unknown
+          question={t("activity", "terminalsUnread")}
+          error={failed}
+          onRetry={readAgain}
+        />
+      </div>
     ) : (
-      <ActivityEmpty
-        icon={SquareTerminal}
-        title={t("activity", "readingTerminals")}
-      />
+      <Reading className="justify-center py-10">
+        {t("activity", "readingTerminals")}
+      </Reading>
     );
   }
 
@@ -163,10 +194,14 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
             />
             <ActivityAction
               aria-label={t("activity", "endShell", { pod: session.pod })}
-              disabled={session.state === "closing"}
-              onClick={() => void endShell(session.id)}
+              disabled={session.state === "closing" || ending.has(session.id)}
+              onClick={() => end(session.id)}
             >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              {ending.has(session.id) ? (
+                <Spinner size="xs" aria-hidden="true" />
+              ) : (
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
             </ActivityAction>
           </div>
         ))}

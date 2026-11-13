@@ -16,6 +16,7 @@ import type { ReactElement } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 
+import { perf } from "@/lib/perf";
 import { REPAINT_MS, stallWatch } from "@/lib/stall-watch";
 import { StallIndicator } from "./StallIndicator";
 import { STALL_WARN } from "./useStalls";
@@ -32,6 +33,7 @@ describe("StallIndicator", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     // One process holds one watch, so a test that wants an empty one says so.
     stallWatch.reset();
+    perf.start();
   });
 
   afterEach(() => {
@@ -39,6 +41,7 @@ describe("StallIndicator", () => {
     // and the watch waits for it before scheduling another, for good.
     act(() => vi.runOnlyPendingTimers());
     vi.useRealTimers();
+    perf.stop();
   });
 
   /**
@@ -92,14 +95,39 @@ describe("StallIndicator", () => {
     expect(button.className).not.toMatch(/text-(err|warn)\b/);
   });
 
-  /** Fails if a window that was hard to use stops saying so, or says it in red. */
-  it("turns amber past the threshold, and never red", () => {
+  /** Past the threshold it was amber, which read as a cluster warning. Fails if a long stall takes a status colour. */
+  it("stays grey however long the stall, and never amber or red", () => {
     render(<StallIndicator />);
     stallWatch.noteStall(STALL_WARN.longestMs + 100);
     repaint();
     const button = screen.getByRole("button", { name: "Why slow" });
-    expect(button.className).toContain("text-warn");
-    expect(button.className).not.toContain("text-err");
+    expect(button.className).toContain("text-fg-fnt");
+    expect(button.className).not.toMatch(/text-(err|warn)\b/);
+  });
+
+  /** The chip's numbers are the recorder's. Fails if it is drawn while Diagnostics is not recording. */
+  it("is drawn only while Diagnostics is recording", () => {
+    perf.stop();
+    render(<StallIndicator />);
+    stallWatch.noteStall(320);
+    repaint();
+    expect(screen.queryByRole("button", { name: "Why slow" })).toBeNull();
+    act(() => perf.start());
+    expect(
+      screen.getByRole("button", { name: "Why slow" })
+    ).toBeInTheDocument();
+  });
+
+  /** A stall at the cluster's root printed a lone "/" under its duration. Fails if it comes back. */
+  it("prints no address line for a stall at the cluster's root", () => {
+    window.history.replaceState(null, "", "/c/acme-staging");
+    stallWatch.noteStall(100);
+    render(<StallIndicator />);
+    stallWatch.noteStall(215);
+    repaint();
+    fireEvent.click(screen.getByRole("button", { name: "Why slow" }));
+    expect(screen.queryByTitle("/")).toBeNull();
+    window.history.replaceState(null, "", "/");
   });
 
   /**

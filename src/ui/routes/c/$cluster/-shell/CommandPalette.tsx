@@ -839,7 +839,7 @@ export function CommandPalette() {
     <>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="z-60 max-w-[620px] gap-0 overflow-hidden p-0"
+          className="top-[14vh] z-60 max-h-[calc(100vh-14vh-1rem)] max-w-[620px] translate-y-0 gap-0 overflow-hidden p-0"
           onEscapeKeyDown={(event) => {
             if (!actionsOf) return;
             // Out of one object's actions, back to the search it came from.

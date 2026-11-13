@@ -1,3 +1,4 @@
+import { Eyebrow } from "@/components/ui/states";
 import { useEffect, type ReactNode } from "react";
 
 import changelog from "@/../../CHANGELOG.md?raw";
@@ -122,9 +123,9 @@ export function WhatsNew() {
                 )}
                 {release.sections.map((section) => (
                   <div key={section.title}>
-                    <h4 className="mb-1.5 text-caption font-semibold uppercase tracking-[.07em] text-fg-fnt">
+                    <Eyebrow as="h4" className="mb-1.5">
                       {sectionTitle(section.title, t)}
-                    </h4>
+                    </Eyebrow>
                     <Items items={section.items} />
                   </div>
                 ))}

@@ -1,6 +1,9 @@
 import { ClusterList } from "@/components/cluster/ClusterList";
 import { ErrorDetails } from "@/components/ui/error-details";
 import { Spinner } from "@/components/ui/spinner";
+import { Eyebrow, Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CircleCheck } from "lucide-react";
 
@@ -250,12 +253,36 @@ function Act({
   );
 }
 
-/** The kubeconfig as provenance, with both ways to change it in reach. */
-function SourceLine({
+type Kubeconfig = ReturnType<typeof useKubeconfigPath>;
+
+function ReloadAct({
   kubeconfig,
+  children,
 }: {
-  kubeconfig: ReturnType<typeof useKubeconfigPath>;
+  kubeconfig: Kubeconfig;
+  children: React.ReactNode;
 }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Act
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        void Promise.resolve(kubeconfig.reload())
+          .catch(() => undefined)
+          .finally(() => setBusy(false));
+      }}
+    >
+      {busy && (
+        <Spinner size="xs" aria-hidden className="mr-1 inline align-middle" />
+      )}
+      {children}
+    </Act>
+  );
+}
+
+/** The kubeconfig as provenance, with both ways to change it in reach. */
+function SourceLine({ kubeconfig }: { kubeconfig: Kubeconfig }) {
   const t = useT();
   const show = useShownPath();
   const read = readFile(kubeconfig.source);
@@ -272,9 +299,7 @@ function SourceLine({
       >
         {t("action", "change")}
       </Act>
-      <Act onClick={() => void kubeconfig.reload()}>
-        {t("action", "reload")}
-      </Act>
+      <ReloadAct kubeconfig={kubeconfig}>{t("action", "reload")}</ReloadAct>
       {kubeconfig.overridePath && (
         <Act
           onClick={() => kubeconfig.clearPath()}
@@ -296,11 +321,7 @@ function SourceLine({
  * column where reading stopped. The two call for opposite next moves: point
  * the app somewhere else, or go fix line 6.
  */
-function NoClusters({
-  kubeconfig,
-}: {
-  kubeconfig: ReturnType<typeof useKubeconfigPath>;
-}) {
+function NoClusters({ kubeconfig }: { kubeconfig: Kubeconfig }) {
   const t = useT();
   const source = kubeconfig.source;
   const found = source?.candidates.some((c) => c.exists) ?? false;
@@ -308,6 +329,25 @@ function NoClusters({
   // A file that did not parse was never read, whatever is on disk.
   const unreadable = Boolean(source?.error);
   const show = useShownPath();
+
+  if (kubeconfig.sourceError) {
+    return (
+      <>
+        <Unknown
+          question={t("settings", "kubeconfigUnreadable")}
+          error={kubeconfig.sourceError}
+          onRetry={() => kubeconfig.reload()}
+        />
+        <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-caption">
+          <Act onClick={() => void kubeconfig.choose()}>
+            {t("action", "chooseFile")}
+          </Act>
+        </div>
+      </>
+    );
+  }
+
+  if (!source) return <Reading>{t("cluster", "readingKubeconfig")}</Reading>;
 
   if (found) {
     return (
@@ -326,9 +366,7 @@ function NoClusters({
           <Act onClick={() => void kubeconfig.choose()}>
             {t("action", "chooseDifferentFile")}
           </Act>
-          <Act onClick={() => void kubeconfig.reload()}>
-            {t("action", "reload")}
-          </Act>
+          <ReloadAct kubeconfig={kubeconfig}>{t("action", "reload")}</ReloadAct>
         </div>
         <Machine>
           <span>{t("cluster", "wasRead")}</span>
@@ -352,9 +390,7 @@ function NoClusters({
         title={t("empty", "notConnectedYet")}
         sub={t("empty", "noKubeconfigFound")}
       />
-      <p className="mb-1 mt-5 text-micro uppercase tracking-[0.06em] text-fg-fnt">
-        {t("empty", "getOneRunning")}
-      </p>
+      <Eyebrow className="mb-1 mt-5">{t("empty", "getOneRunning")}</Eyebrow>
       <Route name="Docker Desktop" hint={t("empty", "dockerDesktopHint")} />
       <Route
         name="minikube · kind · k3d"
@@ -368,9 +404,9 @@ function NoClusters({
         <Act onClick={() => void kubeconfig.choose()}>
           {t("action", "chooseFile")}
         </Act>
-        <Act onClick={() => void kubeconfig.reload()}>
+        <ReloadAct kubeconfig={kubeconfig}>
           {t("action", "lookAgain")}
-        </Act>
+        </ReloadAct>
       </div>
       <Machine>
         <span>{t("empty", "lookedAt")}</span>

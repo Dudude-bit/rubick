@@ -24,6 +24,11 @@ const attentions = vi.hoisted(() => ({
   askedCluster: 0,
 }));
 
+const podLocks = vi.hoisted(() => ({ lock: undefined as unknown }));
+vi.mock("@/hooks/useListAccess", () => ({
+  useListLocks: () => (podLocks.lock ? { Pod: podLocks.lock } : {}),
+}));
+
 vi.mock("@/hooks/useAttention", () => ({
   useAttention: ({ scope }: { scope?: readonly string[] } = {}) => {
     if (scope) attentions.askedCluster += 1;
@@ -211,6 +216,20 @@ describe("the strip at the narrowest window", () => {
     const counts = screen.getByTestId("scope-counts");
     expect(controls).not.toContainElement(counts);
     expect(screen.getByTestId("status-hints")).not.toContainElement(counts);
+  });
+
+  /**
+   * The theme menu listed three choices and marked none, and its modal
+   * scrim swallowed the click that closed it. Fails if the current choice
+   * is not marked, or the menu stops being non-modal.
+   */
+  it("marks the current theme in its menu", async () => {
+    strip();
+    await userEvent.click(screen.getByRole("button", { name: /theme/i }));
+    const checked = await screen.findAllByRole("menuitemradio", {
+      checked: true,
+    });
+    expect(checked).toHaveLength(1);
   });
 });
 
@@ -451,6 +470,28 @@ describe("what the problem count counts", () => {
         screen.getAllByText("Could not count again. These are from 15:03:41.")
       ).not.toHaveLength(0)
     );
+  });
+
+  /**
+   * A refused Pods list left "90 pods" drawn as current. Fails if a refusal
+   * leaves the count undimmed or without the sentence saying the last read
+   * failed.
+   */
+  it("dims the counts and says the read failed while the Pods list is refused", async () => {
+    podLocks.lock = { says: "refused" };
+    try {
+      bar();
+      const counts = screen.getByTestId("scope-counts");
+      expect(counts).toHaveClass("opacity-60");
+      await userEvent.hover(counts);
+      await waitFor(() =>
+        expect(
+          screen.getAllByText(/last read of this was refused or failed/)
+        ).not.toHaveLength(0)
+      );
+    } finally {
+      podLocks.lock = undefined;
+    }
   });
 
   /**

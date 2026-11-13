@@ -61,7 +61,7 @@ export function AppearanceSettings() {
               )
             }
           >
-            <SelectTrigger id="setting-language" className="h-7 w-56 text-xs">
+            <SelectTrigger id="setting-language" className="h-6 w-56 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

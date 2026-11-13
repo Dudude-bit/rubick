@@ -27,6 +27,8 @@ const read = vi.hoisted(() => ({
     freshness: { everyMs: 10_000, slowRead: false },
   },
 }));
+vi.mock("@/hooks/useListAccess", () => ({ useListLocks: () => ({}) }));
+
 vi.mock("@/hooks/useClusterSummary", () => ({
   useClusterSummary: () => read.summary,
 }));

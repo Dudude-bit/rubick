@@ -3,7 +3,8 @@ import { CircleOff, History, Monitor, Moon, Sun } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -25,6 +26,8 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { podTotal } from "../-overview/health-share";
 import { ActivityPanel } from "./ActivityPanel";
+import { useListLocks } from "@/hooks/useListAccess";
+import { ResourceType } from "@/lib/resource-registry";
 import { countedAt, useShellCounts } from "./useShellCounts";
 import { NOTHING_MISSING, type ScopeMissing } from "@/hooks/useScopeMissing";
 import { listWords } from "@/i18n/say";
@@ -71,6 +74,8 @@ const SIGN_IN_HINT: Record<
  * left here is the only thing this line knew that they did not: whether
  * the connection behind them is actually up.
  */
+const POD_KINDS = [ResourceType.Pod];
+
 export function StatusBar({
   missing = NOTHING_MISSING,
 }: {
@@ -89,6 +94,10 @@ export function StatusBar({
   const connect = useClusterStore((s) => s.connect);
   const scope = useClusterStore((s) => s.namespaceScope);
   const counts = useShellCounts();
+  const podLock = useListLocks(POD_KINDS)[ResourceType.Pod];
+  const podsRefused =
+    podLock !== undefined &&
+    !(podLock.says === "clusterWide" && podLock.readableIn.length > 0);
   // A placeholder is the last scope's answer, and under this scope's label it
   // would count the wrong namespaces; it has no attention, so it stays out.
   const here =
@@ -217,7 +226,10 @@ export function StatusBar({
                 data-testid="scope-counts"
                 className={cn(
                   "flex cursor-default items-center gap-1.5",
-                  (counts.heldAt !== null || counts.late || counts.failed) &&
+                  (counts.heldAt !== null ||
+                    counts.late ||
+                    counts.failed ||
+                    podsRefused) &&
                     "opacity-60"
                 )}
               >
@@ -297,6 +309,11 @@ export function StatusBar({
             </TooltipTrigger>
             <TooltipContent side="top" align="end" className="max-w-[320px]">
               {counts.heldAt !== null && <HeldAt at={counts.heldAt} />}
+              {podsRefused && (
+                <p className="mb-1 text-warn">
+                  {t("cluster", "countsKindRefused")}
+                </p>
+              )}
               {(counts.late || counts.failed) && counts.readAt !== null && (
                 <p className="mb-1 text-warn">
                   {t(
@@ -407,29 +424,33 @@ function ThemeControl() {
   const Icon = current.icon;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
           aria-label={t("settings", "themeNamed", {
             theme: t("settings", current.k),
           })}
-          className="flex items-center gap-1.5 rounded px-1.5 text-caption text-fg-fnt transition-colors hover:text-fg"
+          className="flex items-center gap-1.5 rounded px-1.5 text-caption text-fg-fnt transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           <Icon className="h-3 w-3" />
           {t("settings", current.k).toLowerCase()}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top">
-        {THEMES.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onClick={() => setTheme(option.value)}
-          >
-            <option.icon className="mr-2 h-4 w-4" />
-            {t("settings", option.k)}
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuRadioGroup
+          value={theme}
+          onValueChange={(value) =>
+            setTheme(value as (typeof THEMES)[number]["value"])
+          }
+        >
+          {THEMES.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              <option.icon className="mr-2 h-3.5 w-3.5" />
+              {t("settings", option.k)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

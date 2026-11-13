@@ -62,6 +62,8 @@ export const en = {
     projectedInto: "projected into {path}",
     envReadsKey: "{env} reads {key}",
     keyNotInSubject: "key {key} is not in this {kind}",
+    optionalNotPresent: "optional · not present",
+    keysSummaryOptional: "Keys referenced: {n}, absent: {absent}, all optional",
     keyNotInSubjectOptional:
       "key {key} is not in this {kind}; it is optional, so the pod still starts",
     // Said on a nav row the authorizer refused, and on the page behind it.
@@ -662,6 +664,8 @@ export const en = {
     sni: "SNI",
     trusts: "Trusts",
     gateway: "Gateway",
+    route: "Route",
+    accepted: "Accepted",
     grantFrom: "From",
     grantTo: "To",
     serves: "Serves",
@@ -1063,6 +1067,9 @@ export const en = {
     copyContextName: "Copy context name",
     openInNewTab: "Open in a new tab",
     copyLink: "Copy link",
+    readingActions: "Reading what this object allows…",
+    actionsNeedRead:
+      "Could not read this object, so some actions are missing. Read again",
     openRow: "Open",
     openInPanel: "Open in side panel",
     copyQualifiedName: "Copy name with namespace",
@@ -1215,6 +1222,7 @@ export const en = {
       other: "{kind} {name} scaled to {n} replicas.",
     },
     failedToScaleKind: "Failed to scale {kind}",
+    outOfSync: "Out of sync",
     needsAttention: "Needs attention",
     all: "All",
     notDelivered: "Not delivered",
@@ -1243,6 +1251,7 @@ export const en = {
     filterClustersPlaceholder: "Filter clusters…",
     change: "Change…",
     reload: "Reload",
+    skipToContent: "Skip to content",
     useTheDefault: "Use the default",
     chooseDifferentFile: "Choose a different file…",
     debugContainerReady: "Debug container ready",
@@ -1387,6 +1396,8 @@ export const en = {
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
     applyUnanswered: "The cluster did not answer",
+    historyUnread: "Could not read the edit history",
+    typeNamePlaceholder: "Type the name to confirm",
     applyDocApplied: "{id} applied",
     applyDocRefused: "{id} refused: {said}",
     applyDocUnanswered:
@@ -1619,12 +1630,17 @@ export const en = {
     edit: "Edit",
     test: "Test",
     testing: "Testing…",
+    saving: "Saving…",
+    disconnecting: "Disconnecting…",
     clear: "Clear",
     import: "Import",
     copyLinesInView: "Copy the lines in view",
     downloadFullLog: "Download the full log",
     clearBuffered: "Clear what is buffered",
     reconnect: "Reconnect",
+    startNewShell: "Start a new shell",
+    scaleFailedTo: "Could not scale to {n}: {reason}",
+    restartFailedWith: "Could not restart: {reason}",
     followAgain: "Follow again",
     followNewRun: "Follow the new run",
     showCurrentRun: "Show the current run",
@@ -1779,6 +1795,11 @@ export const en = {
       "The shell in {target} was ended because its tab moved to another page.",
     readingTerminals: "Reading the open shells",
     terminalsUnread: "Could not read the open shells",
+    forwardsUnread: "Could not read the saved port forwards.",
+    endShellFailed: "Could not end the shell",
+    deleteForwardTitle: "Delete saved forward {name}?",
+    deleteForwardBody:
+      "It is no longer offered to start. A forward already running keeps running until you stop it.",
     jobs: "Jobs",
     portForwards: { one: "{n} port forward", other: "{n} port forwards" },
     terminalCount: { one: "{n} shell", other: "{n} shells" },
@@ -1828,6 +1849,7 @@ export const en = {
   },
   changes: {
     title: "Changes",
+    range: "Range",
     last24h: "Last 24 hours",
     explained:
       "Four records on one clock: the controller's revisions, the delivery owner's history, Helm's history, and what this app watched while it was connected. Where it was not watching, the clock shows a gap.",
@@ -2076,6 +2098,7 @@ export const en = {
     myServices: "My services",
     pin: "Pin",
     unpin: "Unpin",
+    unpinned: "Unpinned {name}",
     noneYetHint:
       "Pin a Deployment, StatefulSet, DaemonSet or CronJob on its page to keep its readiness and last change here. Nothing is pinned in this cluster yet.",
     pickOneToPin: "Find one to pin",
@@ -2143,6 +2166,8 @@ export const en = {
     verified: "{account} · key {key}",
     verifyFailed: "The target did not accept the key",
     removeTarget: "Remove",
+    removeTargetTitle: "Remove target {name}?",
+    removeTargetBody: "It will no longer be offered when you share a report.",
     targetsEmpty: "No targets yet. Reports are saved as files.",
     share: "Share",
     shareThis: "Share this page",
@@ -2156,7 +2181,7 @@ export const en = {
     sectionLogs: "Log lines",
     sectionNotRead: "Not read",
     publishedNoLink: "The target did not say where it put it.",
-    targetsUnread: "The list of targets could not be read: {reason}",
+    targetsUnread: "Could not read the list of targets.",
     targetsReading: "Reading the list of targets…",
     chainStillReading:
       "The app had not finished reading what connects to this when the file was made.",
@@ -2371,6 +2396,10 @@ export const en = {
       "Container {container} is {state}: there is nothing to exec into.",
     listingOf: "Files in {path}",
     findingWorkingDir: "Asking {container} where it works…",
+    execRefused:
+      "This identity may not exec into {container}, so its files cannot be listed.",
+    listFailedNoCode: "The listing did not finish",
+    previewNotRead: "Could not read {name}, so there is no preview.",
     workingDirPlace: "Working directory of {container}",
     mode: "Mode",
     size: "Size",
@@ -2771,6 +2800,8 @@ export const en = {
   monitors: {
     tabMonitors: "Monitors",
     tabConnection: "Connection",
+    couldNotReadSavedAddress: "Could not read the saved Prometheus address.",
+    savedAddressLabel: "the saved address",
     notConnectedShort: "not connected",
     pageHint:
       "Every ServiceMonitor and PodMonitor: what it selects, which Prometheus picks it up, and whether the connected Prometheus is really scraping it.",
@@ -3084,8 +3115,7 @@ export const en = {
       one: "{n} rule not loaded",
       other: "{n} rules not loaded",
     },
-    aboutUnread:
-      "Whether anything is firing about this could not be read: {reason}",
+    aboutUnread: "Whether anything is firing about this could not be read.",
     aboutUnreachable: "The connected Prometheus did not answer: {reason}",
     markUnchecked: {
       one: "{n} rule object not checked",
@@ -3345,6 +3375,10 @@ export const en = {
       "Grouped by the generated suffix of the pod names. No controller event in this window names the owner of these pods.",
     fromPodStatus: "from the pod status, not an event",
     lastSeen: "last {ago} ago",
+    podStatusReading: {
+      one: "Reading the exits of {n} pod…",
+      other: "Reading the exits of {n} pods…",
+    },
     podStatusUnread: {
       one: "The status of {n} pod could not be read; its exits are not on this clock.",
       other:
@@ -3377,6 +3411,14 @@ export const en = {
     rowsWhereAnswered: {
       one: "{n} {kind}, from the namespaces that answered",
       other: "{n} {plural}, from the namespaces that answered",
+    },
+    rowsPreviousScope: {
+      one: "{n} {kind}, from the previous scope while this one is read",
+      other: "{n} {plural}, from the previous scope while this one is read",
+    },
+    rowsBeforeDeadline: {
+      one: "{n} {kind}, from the last read that finished",
+      other: "{n} {plural}, from the last read that finished",
     },
     rowsSoFar: {
       one: "{n} {kind}, from the part of the list read so far",
@@ -4584,6 +4626,8 @@ export const en = {
     freshSlowed: "polled less often",
     freshOffline: "offline",
     freshStale: "read failing",
+    countsKindRefused:
+      "The last read of this was refused or failed, so this number may not be current.",
     freshLiveNote:
       "The cluster is pushing changes to this view as they happen.",
     freshSlowedNote:
@@ -4824,6 +4868,9 @@ export const en = {
     notInKubeconfig: "not in the kubeconfig",
     resultsAsTheyAnswer: "results appear as each one does",
     connectFailed: "connect failed",
+    dotConnected: "connected",
+    dotConnecting: "connecting",
+    dotDisconnected: "disconnected",
     connectFailedRetry: "{failed}, retry",
     chooseCluster: "Choose a cluster",
     signingIn: "Signing in…",
@@ -4981,6 +5028,11 @@ export const en = {
     credentialStorageNote:
       "Stored in plain text in this app’s config file, which only your account can read. It is sent only from the backend and never handed back to this window.",
     lookingEllipsis: "Looking…",
+    readingServices: "Reading services…",
+    couldNotReadSavedConnection:
+      "Could not read what is saved for this integration.",
+    couldNotSaveConnection: "Could not save the connection",
+    couldNotDisconnect: "Could not disconnect",
     findVendorInCluster: "Find {vendor} in this cluster",
     probeAnswered: "Answered in {ms}ms",
     probeDidNotAnswer: "Did not answer: {reason}",
@@ -5179,6 +5231,17 @@ export const en = {
       "No log file this run, so there is nothing on disk to send. This window could not create the folder it writes to.",
     logsMoreDetail: "Start with RUST_LOG=debug for more detail.",
     readingFile: "Reading the file…",
+    bindingUnread: "Could not read which profile this context uses.",
+    profilesUnread: "Could not read the list of profiles.",
+    contextsUnread: "Could not read the contexts from the kubeconfig.",
+    bindingsUnread:
+      "Could not read which profiles the contexts use, so none is shown on its row.",
+    toolPathsUnread:
+      "Could not read the saved tool paths, so the fields stay locked rather than overwrite them.",
+    notRead: "not read",
+    kubeconfigUnreadable: "Could not read the kubeconfig.",
+    deleteProfileTitle: "Delete profile {name}?",
+    deleteProfileBody: "Contexts bound to it go back to the default login.",
     contexts: "Contexts",
     searchFiltersList: "{n} in all; search filters this list",
     kubeconfigFile: "Kubeconfig file",
@@ -5283,8 +5346,7 @@ export const en = {
     notController: "owner, not controller",
     expand: "Show what {name} owns",
     collapse: "Hide what {name} owns",
-    failed: "Could not read what it owns. {error}",
-    retry: "Try again",
+    failed: "Could not read what it owns.",
     groupUnread: "discovery did not answer",
     syncing: "still listing",
     queued: "waiting its turn: too many kinds to watch at once",
@@ -5360,6 +5422,8 @@ export const en = {
     groupUnread:
       "Discovery did not answer for this group, so its kinds cannot be shown.",
     noMatch: "No served kind matches {filter}.",
+    servesNothing:
+      "The cluster answered, and it serves no kind this app can list.",
     noMatchAnswered:
       "No kind in the groups that answered matches {filter}. The groups below did not answer.",
     unreadTitle: "Could not read what this cluster serves",
@@ -6388,6 +6452,9 @@ export const en = {
       "Whether the Loki this cluster is pointed at holds this cluster's logs, which a connection test cannot tell you: an address that answers LogQL says nothing about whose lines are behind it.",
     lokiNoNamespaces:
       "This cluster’s namespaces could not be read, so there is nothing to compare against what Loki holds.",
+    lokiReadingNamespaces: "Reading the cluster's namespaces…",
+    lokiCouldNotListNamespaces:
+      "Could not read the namespace list, so there is nothing to ask Loki about yet.",
     lokiAsking: "Asking it for a line…",
     lokiNamespacesTitle: "Namespaces it has lines for",
     lokiOneLineProof:
@@ -6561,7 +6628,7 @@ export const en = {
     noAddressYet:
       "No address yet: the controller has published none, so nothing reaches this Ingress however its rules read.",
     followingPathIn: "Following the path in…",
-    couldNotReadConnections: "Could not read what connects to this: {reason}",
+    couldNotReadConnections: "Could not read what connects to this.",
     couldNotReadIngress:
       "Could not read Ingress {name}, so nothing below is complete for it",
     couldNotReadIngressController:
@@ -6583,6 +6650,9 @@ export const en = {
     historyLoadedSummary:
       "from {from}, the last {range}. Not live: these lines do not grow and {follow} does not reach them.",
     notReadableWithAccess: "not readable with this access",
+    valueNotRead: "not read",
+    eventsNeedDefinition:
+      "Events are asked for by the kind, and the definition that names it could not be read.",
     couldNotReadIngresses: "Could not read this cluster's Ingresses",
     albPageDescription:
       "One row per ALB rather than per Ingress, because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
@@ -6828,6 +6898,7 @@ export const en = {
     startedInOrder: "Started in order, one at a time",
     noGoverningService: "none: pods have no stable DNS",
     noMatchingRunningPods: "No other running pods with matching labels",
+    crdScanLabel: "the list of installed extensions",
     couldNotReadCrds: "Could not read this cluster’s CRDs",
     crdDetectionFailed:
       "Every extension here is detected by asking the API server for the custom resource definitions it installs, and that request failed, so this list would be a guess rather than an answer.",
@@ -6892,7 +6963,14 @@ export const en = {
     noneInline: "none",
     pendingInline: "pending",
     addressNoController: "none: nothing serves its class to assign one",
+    nodesNotListedForTrends:
+      "Could not list the nodes, so there is nothing to draw trends against.",
     helmCliNotFound: "Helm CLI not found",
+    helmCliChecking: "Checking for the helm CLI…",
+    searchingCharts: "Searching the repositories…",
+    couldNotSearchCharts: "Could not search the repositories for “{keyword}”.",
+    noChartsMatch: "No chart matches “{keyword}”.",
+    couldNotReadRepositories: "Could not read the configured repositories.",
     helmWriteOpsNeedCli:
       "Releases and their details still read over the Kubernetes API. Installing, upgrading, rolling back, uninstalling and managing repositories need the CLI.",
     helmLookedIn: "Looked in: {paths}",
@@ -6929,6 +7007,7 @@ export const en = {
     containerTerminated: "Container terminated · {detail}",
     podNotFound: "Pod not found",
     noShellOn: "No shell on {target}.",
+    shellExited: "The shell on {target} ended.",
     noLongerAvailable: "{target} is no longer available.",
     nothingLeftToAttachTo: "Nothing left to attach to",
     logNotKept:
@@ -7052,6 +7131,10 @@ export const en = {
       "No events yet: no provisioner has picked this claim up.",
     nothingScheduled: "nothing scheduled",
     scaledToZero: "scaled to zero",
+    deliveryFilterMatchesNothing: "No row in this list is “{filter}”.",
+    filtersMatchNothing:
+      "The rows that were read do not pass the filters above.",
+    clearFilters: "Clear filter",
     noResourcesInScope: "No resources of this type in the current scope.",
     nothingMatches: "Nothing matches",
     notAllSearched:
@@ -7078,6 +7161,11 @@ export const en = {
     noneWhereRead: "none where it could be read",
     nothingBroken: "nothing broken",
     nothingRunning: "nothing running",
+    usageMetricsNotRead:
+      "Could not read CPU and memory from metrics-server, so what this uses is not known.",
+    fullnessNotRead:
+      "Could not read how full the volumes are, so only their declared sizes are known.",
+    trafficNotRead: "Network traffic could not be read from {vendor}: {reason}",
     usagePodsNotRead:
       "Usage is summed from this {kind}'s pods, and they could not be read, so what they use is not known.",
     usageIdleNote:
@@ -7154,6 +7242,7 @@ export const en = {
     integrationNotInstalledBody:
       "Its custom resource definitions are not in this API server, so there is nothing for this page to read. Every extension is optional; the cluster works exactly as it does now.",
     integrationNotConnected: "{name} is not connected",
+    connectVendorLink: "Connect {name}",
     integrationNotConnectedBody:
       "It works from an address you give this app, kept per cluster. Give it one and this page comes alive.",
     noProfilesGcp: "No profiles, so Application Default Credentials are used.",
@@ -7402,7 +7491,7 @@ export const en = {
     gwNoRouteNames:
       "No route names this Gateway. Its listeners answer, and every request meets whatever the controller serves for an unmatched host.",
     gwAcceptedWord: "accepted",
-    couldNotReadGateways: "Could not read the gateways: {message}",
+    couldNotReadGateways: "Could not read the gateways.",
     readingGateways: "Reading gateways…",
     gwClassUnused:
       "No Gateway names this class, so deleting it breaks nothing today.",

@@ -6,6 +6,7 @@ import { useNamespaceList } from "@/hooks/useClusterSummary";
 import { listWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 import { openNamespacePicker } from "@/lib/read-deadline";
+import { EmptyPage } from "@/components/ui/empty-page";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /** Namespaces the cluster has whose names hold a missing one, or are held in it: "lena" for lena-sandbox. */
@@ -67,26 +68,14 @@ export function ScopeMissingPage({ missing }: { missing: readonly string[] }) {
   const t = useT();
   const said = { n: missing.length, names: listWords(missing, t) };
   return (
-    <div
-      className="flex h-full justify-center px-6 py-12"
-      data-testid="scope-missing-page"
+    <EmptyPage
+      testId="scope-missing-page"
+      icon={CircleOff}
+      title={t("cluster", "scopeMissingTitle", said)}
+      body={t("cluster", "scopeMissingBody", said)}
     >
-      <div className="w-full max-w-[460px]">
-        <h2 className="flex items-center gap-1.5 text-title font-semibold tracking-tight text-fg">
-          <CircleOff
-            className="h-3.5 w-3.5 flex-none text-warn"
-            aria-hidden="true"
-          />
-          {t("cluster", "scopeMissingTitle", said)}
-        </h2>
-        <p className="mt-[3px] text-xs text-fg-mut">
-          {t("cluster", "scopeMissingBody", said)}
-        </p>
-        <div className="mt-4">
-          <Choices missing={missing} />
-        </div>
-      </div>
-    </div>
+      <Choices missing={missing} />
+    </EmptyPage>
   );
 }
 

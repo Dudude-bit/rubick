@@ -1,13 +1,9 @@
 import type { ReactNode } from "react";
 import {
-  Activity,
-  Box,
-  FileText,
   LayoutDashboard,
   Library,
   Network,
   Package,
-  Server,
   Settings,
   ShieldUser,
   SquareTerminal,
@@ -40,6 +36,7 @@ import {
   isResourceType,
   RESOURCE_REGISTRY,
   ResourceType,
+  getResourceIcon,
   toKind,
 } from "@/lib/resource-registry";
 import { aliasOf, type ClusterMark } from "@/stores/clusterIdentityStore";
@@ -72,43 +69,43 @@ const quickActions: Array<{
     path: clusterLink(),
   },
   {
-    icon: Box,
+    icon: getResourceIcon(ResourceType.Pod),
     label: "goToPods",
     words: "Pod",
     path: listLink(ResourceType.Pod),
   },
   {
-    icon: Box,
+    icon: getResourceIcon(ResourceType.Deployment),
     label: "goToDeployments",
     words: "Deployment",
     path: listLink(ResourceType.Deployment),
   },
   {
-    icon: Network,
+    icon: getResourceIcon(ResourceType.Service),
     label: "goToServices",
     words: "Service",
     path: listLink(ResourceType.Service),
   },
   {
-    icon: Server,
+    icon: getResourceIcon(ResourceType.Node),
     label: "goToNodes",
     words: "Node",
     path: listLink(ResourceType.Node),
   },
   {
-    icon: FileText,
+    icon: getResourceIcon(ResourceType.ConfigMap),
     label: "goToConfigMaps",
     words: "ConfigMap",
     path: listLink(ResourceType.ConfigMap),
   },
   {
-    icon: FileText,
+    icon: getResourceIcon(ResourceType.Secret),
     label: "goToSecrets",
     words: "Secret",
     path: listLink(ResourceType.Secret),
   },
   {
-    icon: Activity,
+    icon: getResourceIcon(ResourceType.Event),
     label: "goToEvents",
     words: "events",
     path: pageLink("events"),

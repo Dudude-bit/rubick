@@ -14,6 +14,7 @@ vi.mock("@/lib/commands", () => ({
       kubectlPath: "/usr/local/bin/kubectl",
     })),
     saveCliPaths: (paths: unknown) => saveCliPaths(paths),
+    forgetDiscovery: vi.fn(async () => undefined),
     checkHelmAvailability: vi.fn(async () => ({
       available: true,
       version: "v3.16.0",
@@ -114,5 +115,33 @@ describe("the tool path fields while names and paths are hidden", () => {
     usePrivacyStore.setState({ hidePaths: false });
     mount();
     expect((await helmField()).value).toBe(HOME_HELM);
+  });
+});
+
+describe("the tool path fields when the saved paths could not be read", () => {
+  /**
+   * An unread `cliPaths` left both fields empty and writable, and editing
+   * one saved the other as empty over the stored value. Fails if the fields
+   * take input before the saved paths have been read.
+   */
+  it("locks both fields and says so instead of offering to overwrite", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.getCliPaths).mockRejectedValueOnce(new Error("locked"));
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ToolPathsPanel />
+      </QueryClientProvider>
+    );
+
+    expect(
+      await screen.findByText(/Could not read the saved tool paths/)
+    ).toBeInTheDocument();
+    for (const field of screen.getAllByRole("textbox"))
+      expect(field).toBeDisabled();
+    expect(saveCliPaths).not.toHaveBeenCalled();
   });
 });

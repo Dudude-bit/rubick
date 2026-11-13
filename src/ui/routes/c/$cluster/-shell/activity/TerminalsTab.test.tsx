@@ -196,7 +196,29 @@ describe("Activity's shells", () => {
     expect(
       await screen.findByText("Could not read the open shells")
     ).toBeInTheDocument();
-    expect(screen.getByText("the bridge is down")).toBeInTheDocument();
+    expect(screen.getByText(/the bridge is down/)).toBeInTheDocument();
+  });
+
+  /**
+   * A list that failed once stayed a bare sentence with no way to ask again.
+   * Fails if the unread list has no retry, or the retry does not replace it.
+   */
+  it("reads the list again from the unread state", async () => {
+    useClusterStore.setState({ currentContext: "acme-staging" });
+    useTerminalSessionStore.setState({ failed: "the bridge is down" });
+    vi.mocked(invoke).mockImplementation(async (command) =>
+      command === "list_terminal_sessions" ? [shell("cart-4f68h")] : undefined
+    );
+    await renderWithRouter(<TerminalsTab />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Try the read again" })
+    );
+
+    expect(
+      await screen.findByRole("link", { name: /app ·/ })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Could not read the open shells")).toBeNull();
   });
 
   /**

@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Bell,
   BellRing,
-  Loader2,
   MoreHorizontal,
   Network,
   Pencil,
@@ -21,6 +20,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Spinner } from "@/components/ui/spinner";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { useToast } from "@/components/ui/use-toast";
 import { PortForwardConfigDialog } from "./PortForwardConfigDialog";
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -45,7 +48,7 @@ import {
 } from "./primitives";
 import { useAsk } from "../../-object/useAsk";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 
 /** `undefined` is closed, `null` is the new-config form. */
 type Editing = PortForwardConfig | null | undefined;
@@ -150,11 +153,7 @@ function SessionRow({
         onClick={onStop}
         disabled={isBusy}
       >
-        {isBusy ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Square className="h-3.5 w-3.5" />
-        )}
+        {isBusy ? <Spinner size="xs" /> : <Square className="h-3.5 w-3.5" />}
       </ActivityAction>
     </div>
   );
@@ -250,13 +249,22 @@ export function PortForwardsTab() {
   const asking = useAsk();
   const [editing, setEditing] = useState<Editing>(undefined);
   const [startingAll, setStartingAll] = useState(false);
+  const [deleting, setDeleting] = useState<PortForwardConfig | null>(null);
 
+  const [loadFailure, setLoadFailure] = useState<{ error: unknown } | null>(
+    null
+  );
+  const loadConfigs = useCallback(
+    () =>
+      refreshConfigs().then(
+        () => setLoadFailure(null),
+        (error: unknown) => setLoadFailure({ error })
+      ),
+    [refreshConfigs]
+  );
   useEffect(() => {
-    if (configsLoaded) return;
-    refreshConfigs().catch((error) => {
-      console.error("Failed to load port-forward configs:", error);
-    });
-  }, [configsLoaded, refreshConfigs]);
+    if (!configsLoaded) void loadConfigs();
+  }, [configsLoaded, loadConfigs]);
 
   const contextConfigs = useMemo(
     () => configs.filter((config) => config.context === currentContext),
@@ -322,7 +330,7 @@ export function PortForwardsTab() {
             variant: "destructive",
           });
         } else {
-          toastError(t("activity", "startForwardFailed"), error);
+          toastWriteError(t("activity", "startForwardFailed"), error);
         }
       }
     });
@@ -332,7 +340,7 @@ export function PortForwardsTab() {
       try {
         await stopSession(sessionId);
       } catch (error) {
-        toastError(t("activity", "stopForwardFailed"), error);
+        toastWriteError(t("activity", "stopForwardFailed"), error);
       }
     });
 
@@ -341,7 +349,7 @@ export function PortForwardsTab() {
       try {
         await removeConfig(config.id);
       } catch (error) {
-        toastError(t("activity", "deleteForwardFailed"), error);
+        toastWriteError(t("activity", "deleteForwardFailed"), error);
       }
     });
 
@@ -359,7 +367,7 @@ export function PortForwardsTab() {
         }),
       });
     } catch (error) {
-      toastError(t("activity", "startAllFailed"), error);
+      toastWriteError(t("activity", "startAllFailed"), error);
     } finally {
       setStartingAll(false);
     }
@@ -375,10 +383,18 @@ export function PortForwardsTab() {
   }
 
   if (!configsLoaded) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <Loader2 className="h-4 w-4 animate-spin text-fg-fnt" />
+    return loadFailure ? (
+      <div className="p-3">
+        <Unknown
+          question={t("activity", "forwardsUnread")}
+          error={loadFailure.error}
+          onRetry={loadConfigs}
+        />
       </div>
+    ) : (
+      <Reading className="justify-center py-10">
+        {t("action", "reading")}
+      </Reading>
     );
   }
 
@@ -526,7 +542,7 @@ export function PortForwardsTab() {
                   disabled={isBusy}
                 >
                   {isBusy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Spinner size="xs" />
                   ) : activeSession ? (
                     <Square className="h-3.5 w-3.5" />
                   ) : (
@@ -553,7 +569,7 @@ export function PortForwardsTab() {
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-err"
-                      onSelect={() => handleDelete(config)}
+                      onSelect={() => setDeleting(config)}
                     >
                       <Trash2 className="mr-2 h-3.5 w-3.5" />
                       {t("action", "delete")}
@@ -565,6 +581,18 @@ export function PortForwardsTab() {
           })
         )}
       </ActivityGroup>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        title={t("activity", "deleteForwardTitle", {
+          name: deleting?.name ?? "",
+        })}
+        description={t("activity", "deleteForwardBody")}
+        confirmLabel={t("action", "delete")}
+        confirmVariant="destructive"
+        onConfirm={() => deleting && handleDelete(deleting)}
+      />
 
       {editing !== undefined && (
         <PortForwardConfigDialog

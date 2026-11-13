@@ -15,6 +15,8 @@ type Tool = "helm" | "kubectl";
 interface DependenciesState {
   helm: CliAvailability | null;
   kubectl: CliAvailability | null;
+  /** Why the last check of a tool could not be answered: a third state, neither found nor not found. */
+  unread: Record<Tool, string | null>;
   isChecking: boolean;
   lastChecked: Date | null;
 
@@ -40,22 +42,26 @@ export const useDependenciesStore = create<DependenciesState>((set, get) => {
     const running = inFlight.get(tool);
     if (running) return running;
     set({ isChecking: true });
-    const run = ask[tool]()
-      .catch((error): CliAvailability => ({
-        available: false,
-        version: null,
-        error: errorToShow(error),
-        path: null,
-        searchedPaths: [],
-      }))
-      .then((result) => {
-        inFlight.delete(tool);
-        set({
-          [tool]: result,
-          isChecking: inFlight.size > 0,
-          lastChecked: new Date(),
-        } as Partial<DependenciesState>);
+    const finish = (patch: Partial<DependenciesState>) => {
+      inFlight.delete(tool);
+      set({
+        ...patch,
+        isChecking: inFlight.size > 0,
+        lastChecked: new Date(),
       });
+    };
+    const run = ask[tool]().then(
+      (result) =>
+        finish({
+          [tool]: result,
+          unread: { ...get().unread, [tool]: null },
+        } as Partial<DependenciesState>),
+      (error: unknown) =>
+        finish({
+          [tool]: null,
+          unread: { ...get().unread, [tool]: errorToShow(error) },
+        } as Partial<DependenciesState>)
+    );
     inFlight.set(tool, run);
     return run;
   };
@@ -76,6 +82,7 @@ export const useDependenciesStore = create<DependenciesState>((set, get) => {
   return {
     helm: null,
     kubectl: null,
+    unread: { helm: null, kubectl: null },
     isChecking: false,
     lastChecked: null,
     checkHelmAvailability: () => check("helm"),

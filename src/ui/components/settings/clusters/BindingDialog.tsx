@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,7 @@ import type { ContextBinding } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useT } from "@/i18n/useT";
-import { toastError } from "@/lib/toast-error";
+import { toastWriteError } from "@/lib/toast-error";
 
 const NONE = "__none__";
 const EMPTY: ContextBinding = {
@@ -57,28 +58,30 @@ export function BindingDialog({
     value: ContextBinding;
   } | null>(null);
 
-  const { data: gcpProfiles } = useQuery({
+  const gcpQuery = useQuery({
     queryKey: queryKeys.gcpProfiles(),
     queryFn: commands.listGcpProfiles,
     enabled: context !== null,
   });
-  const { data: azureProfiles } = useQuery({
+  const azureQuery = useQuery({
     queryKey: queryKeys.azureProfiles(),
     queryFn: commands.listAzureProfiles,
     enabled: context !== null,
   });
-  const { data: existing } = useQuery({
+  const existingQuery = useQuery({
     queryKey: queryKeys.contextBinding(context),
     queryFn: () => commands.getContextBinding(context ?? ""),
     enabled: context !== null,
   });
+  const existing = existingQuery.data;
 
   const binding =
     edited && edited.for === context ? edited.value : (existing ?? EMPTY);
   const setBinding = (next: (prev: ContextBinding) => ContextBinding) =>
     setEdited({ for: context ?? "", value: next(binding) });
 
-  const failed = (error: unknown) => toastError(t("action", "error"), error);
+  const failed = (error: unknown) =>
+    toastWriteError(t("action", "error"), error);
 
   const done = (title: string) => {
     queryClient.invalidateQueries({ queryKey: queryKeys.contextBindings() });
@@ -110,7 +113,7 @@ export function BindingDialog({
       label: t("settings", "gcpProfile"),
       fallback: t("settings", "useAdc"),
       value: binding.gcpProfile,
-      profiles: gcpProfiles,
+      query: gcpQuery,
       set: (value: string | undefined) =>
         setBinding((prev) => ({ ...prev, gcpProfile: value })),
     },
@@ -119,7 +122,7 @@ export function BindingDialog({
       label: t("settings", "azureProfile"),
       fallback: t("settings", "useDefaultAzLogin"),
       value: binding.azureProfile,
-      profiles: azureProfiles,
+      query: azureQuery,
       set: (value: string | undefined) =>
         setBinding((prev) => ({ ...prev, azureProfile: value })),
     },
@@ -135,38 +138,56 @@ export function BindingDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          {clouds.map((cloud) => (
-            <div key={cloud.id} className="space-y-2">
-              <Label>{cloud.label}</Label>
-              <Select
-                value={cloud.value || NONE}
-                onValueChange={(value) =>
-                  cloud.set(value === NONE ? undefined : value)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>{cloud.fallback}</SelectItem>
-                  {cloud.profiles?.map((profile) => (
-                    <SelectItem key={profile.name} value={profile.name}>
-                      {profile.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ))}
+          {existingQuery.isError ? (
+            <Unknown
+              question={t("settings", "bindingUnread")}
+              error={existingQuery.error}
+              onRetry={() => existingQuery.refetch()}
+            />
+          ) : existingQuery.isPending ? (
+            <Reading>{t("action", "reading")}</Reading>
+          ) : (
+            clouds.map((cloud) => (
+              <div key={cloud.id} className="space-y-2">
+                <Label>{cloud.label}</Label>
+                <Select
+                  value={cloud.value || NONE}
+                  onValueChange={(value) =>
+                    cloud.set(value === NONE ? undefined : value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>{cloud.fallback}</SelectItem>
+                    {cloud.query.data?.map((profile) => (
+                      <SelectItem key={profile.name} value={profile.name}>
+                        {profile.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {cloud.query.isError && (
+                  <Unknown
+                    question={t("settings", "profilesUnread")}
+                    error={cloud.query.error}
+                    onRetry={() => cloud.query.refetch()}
+                  />
+                )}
+              </div>
+            ))
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t("action", "cancel")}
           </Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>
-            {save.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
+          <Button
+            onClick={() => save.mutate()}
+            pending={save.isPending}
+            disabled={!existingQuery.isSuccess}
+          >
             {t("action", "save")}
           </Button>
         </DialogFooter>

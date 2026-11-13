@@ -1,3 +1,4 @@
+import { Eyebrow } from "@/components/ui/states";
 import { useEffect, useId, useRef } from "react";
 import { Search } from "lucide-react";
 
@@ -261,11 +262,7 @@ export function ClusterList({
 }
 
 function Caption({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mb-1 mt-5 text-micro uppercase tracking-[0.06em] text-fg-fnt first:mt-0">
-      {children}
-    </p>
-  );
+  return <Eyebrow className="mb-1 mt-5 first:mt-0">{children}</Eyebrow>;
 }
 
 function ClusterListRow({

@@ -1,5 +1,5 @@
 import { Cpu, Keyboard, MousePointerClick, Turtle } from "lucide-react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import {
   Sheet,
@@ -14,6 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { perf } from "@/lib/perf";
 import { STALL_WARN, useStalls } from "./useStalls";
 import type { Stall, StallInput } from "@/lib/stall-watch";
 import { useT, type T } from "@/i18n/useT";
@@ -25,18 +26,21 @@ import { useSettingsStore } from "@/stores/settingsStore";
  * Drawn only while there is something to say: a stall in the last minute.
  * A row that said "no stalls" all day would be the app praising itself.
  *
- * It is about the app, not the cluster, so it never wears the red the
- * problem count beside it does: grey, and amber only past `STALL_WARN`.
+ * It is about the app, not the cluster, so it never wears a status colour:
+ * grey, and only while Diagnostics is recording, since the numbers behind
+ * it are the recorder's.
  */
 export function StallIndicator() {
   const t = useT();
   const report = useStalls();
   const [open, setOpen] = useState(false);
   const openSettings = useSettingsStore((state) => state.openSettings);
-  if (report.stalls.length === 0) return null;
+  const recording = useSyncExternalStore(
+    (listener) => perf.subscribe(listener),
+    () => perf.recording
+  );
+  if (!recording || report.stalls.length === 0) return null;
   const longest = report.longest?.ms ?? 0;
-  const heavy =
-    longest >= STALL_WARN.longestMs || report.stalls.length >= STALL_WARN.count;
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <Tooltip>
@@ -45,10 +49,7 @@ export function StallIndicator() {
             <button
               type="button"
               aria-label={t("slow", "panel")}
-              className={cn(
-                "flex items-center gap-1.5 rounded px-1.5 py-1 text-caption transition-colors hover:bg-hover",
-                heavy ? "text-warn" : "text-fg-fnt hover:text-fg-mut"
-              )}
+              className="flex items-center gap-1.5 rounded px-1.5 py-1 text-caption text-fg-fnt transition-colors hover:bg-hover hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             >
               <Turtle className="h-3 w-3" aria-hidden />
               <span className="tabular-nums">
@@ -61,7 +62,10 @@ export function StallIndicator() {
           {t("slow", "tooltip")}
         </TooltipContent>
       </Tooltip>
-      <SheetContent className="flex w-[400px] flex-col gap-0 p-0 sm:w-[460px]">
+      <SheetContent
+        className="flex w-[400px] flex-col gap-0 p-0 sm:w-[460px]"
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
         <SheetHeader className="flex-none px-3 py-2">
           <SheetTitle>{t("slow", "title")}</SheetTitle>
           <SheetDescription>{t("slow", "hint")}</SheetDescription>
@@ -196,7 +200,7 @@ function StallLine({ stall }: { stall: Stall }) {
         {t("slow", "stallMs", { ms: Math.round(stall.ms) })}
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        {stall.where !== null && (
+        {stall.where !== null && placeOf(stall.where) !== "/" && (
           <span
             className="truncate font-mono text-caption text-fg-mid"
             title={placeOf(stall.where)}

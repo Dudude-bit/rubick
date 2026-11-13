@@ -1,3 +1,4 @@
+import { Eyebrow } from "@/components/ui/states";
 import {
   Dialog,
   DialogContent,
@@ -54,9 +55,9 @@ export function ShortcutsOverlay() {
         <div className="grid gap-x-8 gap-y-4 text-xs sm:grid-cols-2">
           {SECTIONS.map((section) => (
             <section key={section} data-testid={`shortcuts-${section}`}>
-              <h3 className="mb-1.5 text-caption uppercase tracking-wide text-fg-fnt">
+              <Eyebrow as="h3" className="mb-1.5">
                 {t("shortcuts", SECTION_KEY[section])}
-              </h3>
+              </Eyebrow>
               <ul className="flex flex-col gap-1">
                 {SHORTCUTS.filter((entry) => entry.section === section).map(
                   (entry) => (

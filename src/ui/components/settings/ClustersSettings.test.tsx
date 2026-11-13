@@ -40,6 +40,7 @@ vi.mock("@/lib/commands", () => ({
     setKubeconfigPaths: (paths: string[]) => setKubeconfigPaths(paths),
     clearKubeconfigPath: vi.fn(async () => undefined),
     getCliPaths: vi.fn(async () => ({})),
+    forgetDiscovery: vi.fn(async () => undefined),
     listGcpProfiles: vi.fn(async () => [{ name: "deploy", profile: {} }]),
     listAzureProfiles: vi.fn(async () => []),
     checkHelmAvailability: vi.fn(async () => ({
@@ -364,6 +365,31 @@ describe("Clusters settings", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(setKubeconfigPaths).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("a context list that could not be read", () => {
+    /**
+     * A failed `listContexts` rendered "This file names no contexts", which
+     * sent the reader to fix a file that was fine. Fails if the failure
+     * falls through to the empty sentence, or offers no way to ask again.
+     */
+    it("says it could not read them, with a retry, and never that the file names none", async () => {
+      listContexts.mockRejectedValueOnce(new Error("permission denied"));
+      const user = userEvent.setup();
+      renderPane();
+
+      expect(
+        await screen.findByText(
+          "Could not read the contexts from the kubeconfig."
+        )
+      ).toBeInTheDocument();
+      expect(screen.queryByText("This file names no contexts")).toBeNull();
+
+      await user.click(
+        screen.getByRole("button", { name: "Try the read again" })
+      );
+      expect(await screen.findByText("k3d-dev")).toBeInTheDocument();
     });
   });
 });
