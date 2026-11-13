@@ -1440,8 +1440,9 @@ describe("the count beside a namespace", () => {
 
   /**
    * A kind the cluster would not list leaves the count short. Fails if a
-   * short count reads as the whole count, or a namespace nobody could
-   * check reads as one with no problems.
+   * short count reads as the whole count, a namespace nobody could check
+   * reads as one with no problems, or the longer words stop giving way to
+   * the namespace's name (the picker showed rows with no name at all).
    */
   it("says the count is a floor when a kind was not checked there", async () => {
     summary.namespaces = [
@@ -1458,9 +1459,10 @@ describe("the count beside a namespace", () => {
     ];
     const list = await open();
 
-    expect(
-      within(list).getByText("14 · 3 problems · not all checked")
-    ).toBeInTheDocument();
+    const counted = within(list).getByText("14 · 3 problems · not all checked");
+    expect(counted).toHaveClass("truncate");
+    expect(counted).toHaveAttribute("title", "3 problems · not all checked");
+    expect(within(list).getByText("shop")).toBeVisible();
     expect(
       within(list).getByRole("option", { name: /^shop,/ })
     ).toHaveAccessibleName("shop, 14 pods, 3 problems · not all checked");

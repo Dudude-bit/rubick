@@ -1569,7 +1569,7 @@ function NamespaceRow({
           : onReplace()
       }
       className={cn(
-        "grid w-full cursor-default select-none grid-cols-[14px_1fr_auto] items-center gap-[9px] rounded-[5px] px-[7px] py-[5px] text-left text-xs transition-colors",
+        "grid w-full cursor-default select-none grid-cols-[14px_minmax(7rem,1fr)_minmax(0,auto)] items-center gap-[9px] rounded-[5px] px-[7px] py-[5px] text-left text-xs transition-colors",
         active && "bg-hover",
         row.selected && "text-fg"
       )}
@@ -1606,8 +1606,9 @@ function NamespaceRow({
         </span>
       )}
       <span
+        title={problems?.shown}
         className={cn(
-          "font-mono text-caption",
+          "min-w-0 truncate text-caption tabular-nums",
           row.podCount !== null && problems ? problems.tone : "text-fg-fnt",
           note !== null && "hidden"
         )}
