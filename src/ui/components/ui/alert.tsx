@@ -3,20 +3,20 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 /**
- * A notice, not a panel. The old boxed alert was a card with a coloured
- * fill; here the message is carried by a 2px rule down its left edge and
- * by the colour of the text itself, so it sits on the canvas like any
- * other paragraph.
+ * A notice, drawn in the frame `Unknown` draws: a could-not-look notice and a
+ * warning read as one thing, dashed; information is the same frame, solid,
+ * with its glyph in the info hue. The glyph and the text sit where
+ * `Unknown`'s do, so two notices stacked line up.
  */
 const alertVariants = cva(
-  "relative w-full border-l-2 py-1.5 pl-2.5 text-xs [&>svg~*]:pl-6 [&>svg]:absolute [&>svg]:left-2.5 [&>svg]:top-2 [&>svg]:h-3.5 [&>svg]:w-3.5",
+  "relative w-full rounded-md border px-3 py-2 text-xs [&>svg~*]:pl-[22px] [&>svg]:absolute [&>svg]:left-3 [&>svg]:top-2.5 [&>svg]:h-3.5 [&>svg]:w-3.5",
   {
     variants: {
       variant: {
         default: "border-hair text-fg-mid [&>svg]:text-fg-mut",
         destructive: "border-err text-err [&>svg]:text-err",
-        warn: "border-warn text-fg-mid [&>svg]:text-warn",
-        info: "border-info text-fg-mid [&>svg]:text-info",
+        warn: "border-dashed border-hair text-fg-mid [&>svg]:text-warn",
+        info: "border-hair text-fg-mid [&>svg]:text-info",
       },
     },
     defaultVariants: {

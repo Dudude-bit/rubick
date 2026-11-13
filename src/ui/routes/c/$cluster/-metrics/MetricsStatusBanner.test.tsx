@@ -4,7 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { recheckMetrics: vi.fn(async () => undefined) },
+  commands: {
+    recheckMetrics: vi.fn(async () => undefined),
+    forgetDiscovery: vi.fn(async () => undefined),
+  },
 }));
 
 import { commands } from "@/lib/commands";
@@ -14,6 +17,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useMetricsNoticeStore } from "@/stores/metricsNoticeStore";
 import { queryKeys } from "@/lib/query-keys";
 import { MetricsStatusBanner } from "./MetricsStatusBanner";
+import { ListUnread } from "../-list/list-unread";
 
 const available = { status: "available" as const, message: null };
 const notInstalled = {
@@ -25,6 +29,7 @@ const bannerOf = (title: string) =>
   screen.getByText(title).closest('[role="status"]') as HTMLElement;
 
 beforeEach(() => {
+  vi.mocked(commands.recheckMetrics).mockClear();
   useMetricsNoticeStore.setState({ hidden: {} });
   useClusterStore.setState({ currentContext: "acme-staging" });
 });
@@ -141,16 +146,19 @@ describe("MetricsStatusBanner", () => {
 
   /**
    * The backend now answers every metrics read from its five-minute memory,
-   * so Check again that only refetched would read the memory back: a
+   * so a retry that only refetched would read the memory back: a
    * metrics-server installed a minute ago would still say "not installed".
+   * The retry is every could-not-look notice's, in its words.
    */
-  it("makes Check again forget the remembered answer before it reads", async () => {
+  it("makes its retry forget the remembered answer before it reads", async () => {
     const client = new QueryClient();
     const refetch = vi.spyOn(client, "refetchQueries");
     await renderWithRouter(<MetricsStatusBanner status={notInstalled} />, {
       client,
     });
-    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
     await waitFor(() => expect(refetch).toHaveBeenCalled());
     expect(commands.recheckMetrics).toHaveBeenCalledTimes(1);
     expect(
@@ -209,5 +217,65 @@ describe("MetricsStatusBanner", () => {
         .style.webkitLineClamp
     ).toBe("1");
     rects.mockRestore();
+  });
+
+  /**
+   * A refusal had a close X its neighbour, the list's own refusal, did not,
+   * and once put away the lock cells under it went unexplained. Fails if a
+   * refused metrics read can be put away.
+   */
+  it("cannot put away a refusal", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+    );
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Hide for this cluster" })
+    ).toBeNull();
+  });
+
+  /**
+   * The Deployments list kept "Metrics are not readable" for minutes while
+   * the object page opened from it read live usage. Fails if another
+   * reader's answer does not have the remembered refusal asked again.
+   */
+  it("asks again once another reader of the metrics got an answer", async () => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.metrics.pods("argocd"), {
+      status: available,
+      data: [],
+      unread: [],
+    });
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />,
+      { client }
+    );
+    await waitFor(() =>
+      expect(commands.recheckMetrics).toHaveBeenCalledTimes(1)
+    );
+  });
+
+  /** Fails if a remembered refusal is asked again with no reader having answered. */
+  it("keeps the remembered refusal while no reader has answered", async () => {
+    await renderWithRouter(
+      <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+    );
+    expect(commands.recheckMetrics).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Over a list that was refused, the metrics frame stacked full width over
+   * the list's own: two notices for one empty page. Fails if the metrics
+   * notice is drawn where the list under it was not read.
+   */
+  it("says nothing over a list that was not read", async () => {
+    const { container } = await renderWithRouter(
+      <ListUnread.Provider value>
+        <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
+      </ListUnread.Provider>
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 });

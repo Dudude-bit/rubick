@@ -1,15 +1,23 @@
-import { useState } from "react";
-import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { Lock, TriangleAlert, X } from "lucide-react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useIsFetching,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
+import { Info, Lock, TriangleAlert, X } from "lucide-react";
 
 import { ErrorDetails } from "@/components/ui/error-details";
+import { ReadAgain } from "@/components/ui/read-again";
 import { HeldLines } from "../-list/HeldLines";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
+import { ListUnread } from "../-list/list-unread";
 import { cn } from "@/lib/utils";
 import { commands } from "@/lib/commands";
+import { ERROR_CODES } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 import { absenceOf, type MetricsAbsence } from "@/lib/metrics-absence";
 import { queryKeys } from "@/lib/query-keys";
+import { REFUSAL_RECHECK_MS } from "../-list/useRecheckRefusal";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useMetricsNoticeStore } from "@/stores/metricsNoticeStore";
 import type { MetricsStatus, UnreadNamespace } from "@/generated/types";
@@ -24,8 +32,9 @@ interface MetricsStatusBannerProps {
 
 /**
  * A missing or refused metrics API is a fact about the cluster that only an
- * admin can change, so it is said calmly, once per cluster if the reader
- * wants, and never in the red a broken workload wears.
+ * admin can change, so it is said calmly and never in the red a broken
+ * workload wears. A refused or failing read is drawn as every could-not-look
+ * is; a missing install is information, and only it may be put away.
  */
 const NOTICE: Record<
   MetricsAbsence,
@@ -35,17 +44,74 @@ const NOTICE: Record<
       | "metricsNotInstalledBody"
       | "metricsForbiddenBody"
       | "metricsErrorBody";
+    glyph: typeof Lock;
+    code: string;
   }
 > = {
   notInstalled: {
     title: "metricsNotInstalled",
     body: "metricsNotInstalledBody",
+    glyph: Info,
+    code: ERROR_CODES.NOT_FOUND,
   },
-  forbidden: { title: "metricsForbidden", body: "metricsForbiddenBody" },
-  error: { title: "metricsError", body: "metricsErrorBody" },
+  forbidden: {
+    title: "metricsForbidden",
+    body: "metricsForbiddenBody",
+    glyph: Lock,
+    code: ERROR_CODES.PERMISSION,
+  },
+  error: {
+    title: "metricsError",
+    body: "metricsErrorBody",
+    glyph: TriangleAlert,
+    code: ERROR_CODES.UNKNOWN,
+  },
 };
 
 const NONE_HIDDEN: readonly MetricsAbsence[] = [];
+
+function recheck(queryClient: QueryClient) {
+  return commands
+    .recheckMetrics()
+    .finally(
+      () =>
+        void queryClient.refetchQueries({ queryKey: queryKeys.metrics.all() })
+    );
+}
+
+const answeredSomewhere = (queryClient: QueryClient) =>
+  queryClient
+    .getQueryCache()
+    .findAll({ queryKey: queryKeys.metrics.all() })
+    .some(
+      (query) =>
+        (query.state.data as { status?: MetricsStatus } | undefined)?.status
+          ?.status === "available"
+    );
+
+/**
+ * The backend keeps a refusal or a missing install for minutes, and answers
+ * every read of it from there, so a list kept its lock while the object page
+ * opened from it read live usage. Another reader's answer asks again, at most
+ * once a minute: a namespace-only role is refused across the cluster again.
+ */
+function useYieldToAnswer(unserved: boolean) {
+  const queryClient = useQueryClient();
+  const asked = useRef(0);
+  const [answered, setAnswered] = useState(false);
+  useEffect(() => {
+    if (!unserved) return;
+    const look = () => setAnswered(answeredSomewhere(queryClient));
+    look();
+    return queryClient.getQueryCache().subscribe(look);
+  }, [queryClient, unserved]);
+  useEffect(() => {
+    if (!unserved || !answered) return;
+    if (Date.now() - asked.current < REFUSAL_RECHECK_MS) return;
+    asked.current = Date.now();
+    void recheck(queryClient);
+  }, [queryClient, unserved, answered]);
+}
 
 export function MetricsStatusBanner({
   status,
@@ -55,6 +121,7 @@ export function MetricsStatusBanner({
 }: MetricsStatusBannerProps) {
   const t = useT();
   const queryClient = useQueryClient();
+  const listUnread = useContext(ListUnread);
   const checking = useIsFetching({ queryKey: queryKeys.metrics.all() }) > 0;
   const context = useClusterStore((s) => s.currentContext);
   const hidden =
@@ -66,8 +133,24 @@ export function MetricsStatusBanner({
   const absent = !!status && absence !== null;
   if (absent && !checking && !settled) setSettled(true);
   if (!absent && settled) setSettled(false);
+  useYieldToAnswer(absence === "forbidden" || absence === "notInstalled");
+  // A new answer each time a read ends, so the retry is busy until one has.
+  const [reads, setReads] = useState({ checking, ended: 0 });
+  if (reads.checking !== checking)
+    setReads({ checking, ended: reads.ended + (checking ? 0 : 1) });
+  const details = status?.message?.trim();
+  const said = useMemo(
+    () =>
+      absence &&
+      Object.assign(new Error(details || t("cluster", NOTICE[absence].body)), {
+        code: NOTICE[absence].code,
+        ended: reads.ended,
+      }),
+    [absence, details, t, reads.ended]
+  );
 
-  if (!status) return null;
+  // The list under it was not read: there is no CPU column to explain.
+  if (!status || listUnread) return null;
   if (absence === null) {
     return unread?.length ? (
       <UnreadNamespaces
@@ -77,56 +160,48 @@ export function MetricsStatusBanner({
       />
     ) : null;
   }
-  if (absence !== "error" && hidden.includes(absence)) return null;
+  if (absence === "notInstalled" && hidden.includes(absence)) return null;
   if (!settled) return null;
 
-  const { title, body } = NOTICE[absence];
-  const Glyph = absence === "forbidden" ? Lock : TriangleAlert;
-  const details = status.message?.trim();
+  const { title, body, glyph: Glyph } = NOTICE[absence];
+  const information = absence === "notInstalled";
 
   return (
     <div
       role="status"
+      data-read={information ? undefined : absence}
       className={cn(
-        "mb-4 flex items-start gap-3 rounded-md border border-dashed border-hair px-3 py-2 text-xs",
+        "mb-2 flex max-w-[68ch] items-start gap-2 rounded-md border border-hair px-3 py-2 text-xs",
+        !information && "border-dashed",
         className
       )}
     >
       <Glyph
-        className="mt-0.5 h-3.5 w-3.5 flex-none text-warn"
+        className={cn(
+          "mt-0.5 h-3.5 w-3.5 flex-none",
+          information ? "text-info" : "text-warn"
+        )}
         aria-hidden="true"
       />
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         {/* Above a list, so a peek opening beside it must not wrap them
               onto more lines and move the rows under the pointer. */}
-        <p className="text-fg">
-          <HeldLines>{t("cluster", title)}</HeldLines>
-        </p>
-        <p className="text-fg-mut">
-          <HeldLines>{t("cluster", body)}</HeldLines>
-        </p>
-        <div className="mt-1 flex flex-wrap items-start gap-x-3 gap-y-1">
-          <button
-            type="button"
-            disabled={checking}
-            onClick={() =>
-              void commands.recheckMetrics().finally(
-                () =>
-                  void queryClient.refetchQueries({
-                    queryKey: queryKeys.metrics.all(),
-                  })
-              )
-            }
-            className="text-caption text-info hover:underline disabled:text-fg-fnt disabled:no-underline"
-          >
-            {checking
-              ? t("cluster", "metricsChecking")
-              : t("cluster", "metricsCheckAgain")}
-          </button>
+        <div>
+          <p className="text-fg">
+            <HeldLines>{t("cluster", title)}</HeldLines>
+          </p>
+          <p className="text-fg-mut">
+            <HeldLines>{t("cluster", body)}</HeldLines>
+          </p>
+        </div>
+        <div className="flex flex-wrap items-start gap-1.5">
+          {said && (
+            <ReadAgain error={said} onRetry={() => recheck(queryClient)} />
+          )}
           {details && <ErrorDetails text={details} />}
         </div>
       </div>
-      {context && absence !== "error" && (
+      {context && information && (
         <button
           type="button"
           aria-label={t("cluster", "metricsHideForCluster")}

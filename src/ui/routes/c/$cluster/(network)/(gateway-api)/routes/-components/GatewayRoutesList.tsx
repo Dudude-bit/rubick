@@ -439,7 +439,6 @@ export function GatewayRoutesList() {
     subscribe: subscribeEveryPod,
     queryKey: EVERY_POD,
     detail: POD_DETAIL,
-    reportFailure: toPlural(ResourceType.Pod),
   });
   const pods = useLiveQuery({
     queryKey: EVERY_POD,

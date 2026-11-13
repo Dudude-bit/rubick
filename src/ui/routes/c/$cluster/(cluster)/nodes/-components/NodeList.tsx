@@ -278,7 +278,6 @@ export function NodeList() {
     subscribe: subscribeNodes,
     queryKey,
     detail: NODE_DETAIL,
-    reportFailure: toPlural(ResourceType.Node),
   });
 
   // In the URL, so a deep link can open the view and a reload keeps it.

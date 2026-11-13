@@ -5,11 +5,13 @@ const SCOPED_PAGES = new Set(["", "events", "changes", "helm"]);
 
 /**
  * Whether the page at `pathname` draws what the window's namespaces hold: the
- * Overview, Events, Changes, Helm and every list of a namespaced kind. An
- * object's own page names its namespace in the address and reads that one.
+ * Overview, Events, Changes, Helm, an integration's page and every list of a
+ * namespaced kind. An object's own page names its namespace in the address
+ * and reads that one.
  */
 export function readsScope(pathname: string): boolean {
   const [, , page = "", ...rest] = pathname.split("/").filter(Boolean);
+  if (page === "integrations") return rest.length === 1;
   if (rest.length > 0) return false;
   if (SCOPED_PAGES.has(page)) return true;
   const kind = toKind(page);

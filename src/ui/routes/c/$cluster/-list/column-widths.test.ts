@@ -37,6 +37,8 @@ import {
   statusCellPx,
 } from "./columns";
 
+import { DELIVERY_COLUMN } from "./delivery-list-column";
+
 import { configMapColumns } from "../(config)/configmaps/-components/ConfigMapList";
 import { columns as cronJobs } from "../(workloads)/cronjobs/-components/CronJobList";
 import { columns as daemonSets } from "../(workloads)/daemonsets/-components/DaemonSetList";
@@ -1033,7 +1035,7 @@ describe("the Ingresses list beside a cause", () => {
         size: c.size ?? 150,
         floor: columnFloor(c, en, rows),
         ideal: columnIdeal(c, en, rows),
-        yields: c.meta?.yields,
+        yields: (c as Column).meta?.yields,
       }));
       const hidden = yieldedColumns(specs, port);
       const kept = specs.filter((spec) => !hidden.includes(spec.id));
@@ -1250,6 +1252,51 @@ describe("the NetworkPolicies list beside the peek", () => {
           );
         }
       }
+    }
+  );
+});
+
+describe("the Deployments list beside the peek", () => {
+  const rows = [
+    "argocd-applicationset-controller",
+    "argocd-notifications-controller",
+    "kube-dns-autoscaler",
+  ].map((name) => ({ name, namespace: "argo-rollouts" }));
+
+  /**
+   * Beside the peek the table scrolled sideways onto a Delivery column the
+   * "Hidden at this width" footer did not name, and cut "Ready" at the edge.
+   * Fails if Deployments with its Delivery and Namespace columns scrolls at
+   * the peek's width rather than hide a column, or hides one that is not
+   * among what `yieldedColumns` hid, which is what the footer names.
+   */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)(
+    "hides Delivery and names it rather than scroll in %s",
+    (_language, t) => {
+      const base = deployments() as Column[];
+      const columns = [
+        ...base.slice(0, -1),
+        DELIVERY_COLUMN as Column,
+        ...base.slice(-1),
+      ];
+      const folded = { size: 1, meta: { floor: actionsColumnSize(1, 10) } };
+      const specs = [...columns, folded].map((c, index) => ({
+        id: index < columns.length ? nameOf(c) : "actions",
+        size: c.size ?? 150,
+        floor: columnFloor(c, t, rows),
+        yields: (c as Column).meta?.yields,
+      }));
+      for (const port of [560, 640]) {
+        const hidden = yieldedColumns(specs, port);
+        const kept = specs.filter((spec) => !hidden.includes(spec.id));
+        expect(tableLayout(kept, port).scrolls, `at ${port}`).toBe(false);
+      }
+      expect(yieldedColumns(specs, 560)).toEqual(
+        expect.arrayContaining(["delivery", "namespace"])
+      );
     }
   );
 });

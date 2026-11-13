@@ -384,7 +384,6 @@ export function IngressList() {
     subscribe,
     queryKey,
     detail: INGRESS_DETAIL,
-    reportFailure: toPlural(ResourceType.Ingress),
   });
 
   // A second observer on the list's own cache entry, so the rows cost one

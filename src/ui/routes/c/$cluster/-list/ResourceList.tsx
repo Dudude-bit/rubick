@@ -1,22 +1,21 @@
 import { ReactNode, useMemo, useState } from "react";
-import { columnHeader } from "@/i18n/column-header";
-import type { ColumnDef, RowData } from "@/components/ui/table-features";
+import type { ColumnDef } from "@/components/ui/table-features";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { CELL_PADS_PX } from "@/components/ui/column-shares";
-import { widestText } from "@/lib/text-width";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { DataTable } from "@/components/ui/data-table";
 import { byNamespace, type RowGrouping } from "@/components/ui/row-grouping";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceListHeader } from "./ResourceListHeader";
-import { useKnownCount } from "./known-count";
+import { useCountedAt, useKnownCount } from "./known-count";
 import { useOverviewUnreadOf } from "./overview-unread";
 import { Unknown } from "@/components/ui/unknown";
 import { useResource } from "@/hooks/useResource";
 import { useDeliveries } from "../-delivery/useDelivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { useScopeMissing } from "@/hooks/useScopeMissing";
+import { listWords } from "@/i18n/say";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   DELIVERY_FILTER_LABEL,
@@ -49,10 +48,10 @@ import {
   type ResourceKind,
 } from "@/lib/resource-registry";
 import {
-  DeliveryColumnCell,
   DeliveryFilterControl,
   DeliveryRowsProvider,
 } from "../-delivery/delivery-column";
+import { deliveryColumn } from "./delivery-list-column";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
@@ -73,6 +72,7 @@ import { useSetSearch } from "@/hooks/useSearchParam";
 import { rowName } from "@/lib/links";
 import { StaleRows } from "@/components/ui/stale-rows";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
+import { ListUnread } from "./list-unread";
 import { useListRefusal } from "./useListRefusal";
 import { useRowDenial } from "@/lib/access";
 import { KindAbout } from "@/components/object/KindAbout";
@@ -83,35 +83,6 @@ import type { PeekTarget } from "@/hooks/usePeek";
 
 const NOTHING_UNREAD: UnreadNamespace[] = [];
 const NO_ROWS: never[] = [];
-
-/**
- * The column, built once because every list that has one gets exactly this one
- * — and because `flexRender` treats a cell renderer as a React element type.
- * A renderer rebuilt per render remounts its cell on every watch tick; see
- * `RowActions` in `data-table.tsx` for what that cost the row's buttons.
- */
-const DELIVERY_COLUMN: ColumnDef<never> = {
-  size: 150,
-  id: "delivery",
-  header: columnHeader("columns", "delivery"),
-  enableSorting: false,
-  meta: {
-    floor: (t) =>
-      widestText(
-        [
-          t("readings", "delNotDelivered"),
-          t("readings", "delLabelledNotListedShort"),
-          t("readings", "delTwoControllers"),
-        ],
-        "sans",
-        6.2
-      ) + CELL_PADS_PX,
-  },
-  cell: ({ row }) => <DeliveryColumnCell row={row.original} />,
-};
-
-const deliveryColumn = <Row extends RowData>() =>
-  DELIVERY_COLUMN as ColumnDef<Row>;
 
 export interface ResourceDeleteConfig<Row> {
   /** Function to delete a resource */
@@ -373,36 +344,65 @@ export function ResourceList<
   // a resync follows.
   // Asked of the query, not of `data`: rows from outside are undefined
   // exactly when their read failed, and that error is the caller's.
-  const failed = (shouldUseQuery ? queryResult.error : externalError) ?? null;
+  const lastFailed =
+    (shouldUseQuery ? queryResult.error : externalError) ?? null;
+  const lastRefused = lastFailed !== null && isRefusal(lastFailed);
+  const keptAt = useRefusedAt(lastRefused ? lastFailed : null);
+  // The kept refusal is let go while a visit asks again; the query still
+  // knows when the cluster said it, and the screen says how long ago.
+  const refusalAt = !lastRefused
+    ? null
+    : (keptAt ??
+      (shouldUseQuery && queryResult.errorUpdatedAt > 0
+        ? queryResult.errorUpdatedAt
+        : null));
+  // Asked of the cluster, not answered by the kept refusal as a poll is.
+  const askingAgain =
+    refusalAt !== null && keptAt === null && queryResult.isFetching;
+  const countedAt = useCountedAt(listKind);
+  // The sidebar read this list since it was refused: while it is asked again,
+  // the old refusal is not drawn as this visit's answer.
+  const outlived =
+    askingAgain &&
+    refusalAt !== null &&
+    countedAt !== null &&
+    countedAt > refusalAt;
+  const failed = outlived ? null : lastFailed;
   // A refusal is about who asks now, so rows an earlier read showed go with it.
   const refused = failed !== null && isRefusal(failed);
-  const refusedAt = useRefusedAt(refused ? failed : null);
-  useRecheckRefusal(refusedAt, () =>
+  const refusedAt = refused ? refusalAt : null;
+  useRecheckRefusal(refused ? keptAt : null, () =>
     onRetry ? onRetry() : data === undefined && queryResult.refetch()
   );
 
   // The answer is already the selection's; narrowing guards a caller whose
   // `data` is wider than it.
   const scope = useNamespaceScope();
+  const scopeMissing = useScopeMissing();
+  // Not a quiet namespace: a list of one the cluster does not have read
+  // nothing, and its empty sentence and count would say there is none.
+  const scopeGone = !embedded && narrowingHelps && scopeMissing.whole;
   // The last scope's answer, held while this one is read: its unread
   // namespaces are not this scope's, and its rows are not this scope's total.
   const placeholder = shouldUseQuery
     ? queryResult.isPlaceholderData
     : externalPlaceholder;
   const resources = useMemo(() => {
-    if (refused) return NO_ROWS;
+    if (refused || outlived) return NO_ROWS;
     const rows = data ?? queryResult.data?.rows ?? [];
     // A row the last scope read stands in only where this scope reaches it.
     return placeholder
       ? rows.filter((row) => scope.matches(row.namespace))
       : scope.narrow(rows);
-  }, [refused, data, queryResult.data, scope, placeholder]);
+  }, [refused, outlived, data, queryResult.data, scope, placeholder]);
   const unread = placeholder
     ? NOTHING_UNREAD
     : ((shouldUseQuery ? queryResult.data?.unread : externalUnread) ??
       NOTHING_UNREAD);
-  const loading = isLoading ?? queryResult.isLoading;
-  const dataUpdatedAt = externalDataUpdatedAt ?? queryResult.dataUpdatedAt;
+  const loading = (isLoading ?? queryResult.isLoading) || outlived;
+  const dataUpdatedAt = outlived
+    ? 0
+    : (externalDataUpdatedAt ?? queryResult.dataUpdatedAt);
   // Every list, whatever feeds it: rows a failed read kept are said to be old.
   const stale = failed !== null && resources.length > 0;
   const freshList = useOverviewUnreadOf(listKind);
@@ -544,7 +544,7 @@ export function ResourceList<
     (loading || resyncing || placeholder) && resources.length === 0 && !failed;
   const [lastFailure, setLastFailure] = useState<Error | null>(null);
   if (failed && lastFailure !== failed) setLastFailure(failed);
-  if (!failed && lastFailure && !waiting) setLastFailure(null);
+  if (!failed && lastFailure && (!waiting || outlived)) setLastFailure(null);
   const unreadError = failed ?? (waiting ? lastFailure : null);
   const showSkeleton = waiting && !unreadError;
   const retry =
@@ -651,7 +651,7 @@ export function ResourceList<
           // is a number about nothing, printed directly above the sentence
           // admitting as much. A namespace unread leaves it no total either.
           count={
-            partial || nothingRead
+            partial || nothingRead || scopeGone
               ? undefined
               : matched !== null && matched < rows.length
                 ? t("readings", "shownOfTotal", {
@@ -694,7 +694,9 @@ export function ResourceList<
           whole={failed === null && !partial}
         />
       )}
-      {headerContent}
+      <ListUnread.Provider value={!!unreadError && resources.length === 0}>
+        {headerContent}
+      </ListUnread.Provider>
       {stale && (
         <StaleRows
           label={emptyStateLabel.toLowerCase()}
@@ -818,6 +820,7 @@ export function ResourceList<
               : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
           }
           onRetry={retry}
+          askedAgainAfter={refused && askingAgain ? refusedAt : null}
         >
           <RefusalWayOut refusal={refusal} />
         </UnreadList>
@@ -866,20 +869,28 @@ export function ResourceList<
           // "None in the scope" is a claim about the namespaces that did not
           // answer too; with any unread, it names the ones that did.
           emptyMessage={
-            filteredToNone
-              ? !named && showDelivery
-                ? t("empty", "deliveryFilterMatchesNothing", {
-                    filter: t("action", DELIVERY_FILTER_LABEL[deliveryFilter]),
-                  })
-                : t("empty", "filtersMatchNothing")
-              : unread.length > 0
-                ? noneWhereAnswered(
-                    t,
-                    emptyStateLabel.toLowerCase(),
-                    scope.scope,
-                    unread
-                  )
-                : emptyMessage
+            scopeGone
+              ? t("cluster", "scopeMissingTitle", {
+                  n: scopeMissing.missing.length,
+                  names: listWords(scopeMissing.missing, t),
+                })
+              : filteredToNone
+                ? !named && showDelivery
+                  ? t("empty", "deliveryFilterMatchesNothing", {
+                      filter: t(
+                        "action",
+                        DELIVERY_FILTER_LABEL[deliveryFilter]
+                      ),
+                    })
+                  : t("empty", "filtersMatchNothing")
+                : unread.length > 0
+                  ? noneWhereAnswered(
+                      t,
+                      emptyStateLabel.toLowerCase(),
+                      scope.scope,
+                      unread
+                    )
+                  : emptyMessage
           }
           emptyAction={
             filteredToNone && (

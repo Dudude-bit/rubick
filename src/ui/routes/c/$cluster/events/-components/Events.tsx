@@ -356,7 +356,6 @@ export function Events() {
     subscribe,
     queryKey: watchKey,
     detail: NO_DETAIL,
-    reportFailure: toPlural(ResourceType.Event),
     order: newerEvent,
     keep: whole ? undefined : EVENTS_KEPT,
     // The overview counts events too, and re-reading it on every one of them

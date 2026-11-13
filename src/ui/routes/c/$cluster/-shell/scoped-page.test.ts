@@ -3,8 +3,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { readsScope } from "./scoped-page";
 
 describe("which pages read the window's namespaces", () => {
-  /** Fails if a page that draws a namespace's contents is left to read a missing one as empty. */
-  it("counts the Overview, Events, Changes and every namespaced list", () => {
+  /** Fails if a page that draws a namespace's contents is left to read a missing one as empty: Prometheus drew "0 monitors" for one. */
+  it("counts the Overview, Events, Changes, an integration's page and every namespaced list", () => {
     for (const path of [
       "/c/prod",
       "/c/prod/",
@@ -13,6 +13,7 @@ describe("which pages read the window's namespaces", () => {
       "/c/prod/helm",
       "/c/prod/pods",
       "/c/prod/persistentvolumeclaims",
+      "/c/prod/integrations/prometheus",
     ])
       expect(readsScope(path), path).toBe(true);
   });
@@ -26,6 +27,7 @@ describe("which pages read the window's namespaces", () => {
       "/c/prod/api-resources",
       "/c/prod/pods/shop/cart-1",
       "/c/prod/my-access",
+      "/c/prod/integrations",
     ])
       expect(readsScope(path), path).toBe(false);
   });

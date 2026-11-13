@@ -60,3 +60,20 @@ export function useKnownCount(kind: ResourceKind | null | undefined) {
   });
   return data ?? lastAnsweredCount(queryClient, kind);
 }
+
+/**
+ * When the sidebar's count of this kind in the window's scope last answered,
+ * or `null` where it has not: a read of the same list that came back.
+ */
+export function useCountedAt(kind: ResourceKind | null | undefined) {
+  const context = useClusterStore((s) => s.currentContext);
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const key = kind ? COUNT_KEY[kind] : undefined;
+  const { data: counted, dataUpdatedAt } = useQuery({
+    queryKey: queryKeys.clusterOverview(context, scope),
+    queryFn: () => readOverview(scope),
+    enabled: false,
+    select: (overview) => key !== undefined && overview.counts[key] !== null,
+  });
+  return counted ? dataUpdatedAt : null;
+}

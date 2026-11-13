@@ -49,6 +49,7 @@ import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
 import { renderWithRouter } from "@/test/render";
 import { queryKeys } from "@/lib/query-keys";
+import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 
 interface Item {
   name: string;
@@ -56,6 +57,14 @@ interface Item {
 }
 
 const columns: ColumnDef<Item>[] = [{ accessorKey: "name", header: "Name" }];
+
+const namespace = (name: string) => ({
+  name,
+  uid: name,
+  status: "Active",
+  labels: {},
+  createdAt: null,
+});
 
 const draw = (ui: ReactElement, client?: QueryClient) =>
   renderWithRouter(ui, { client, at: "/c/prod/pods", route: "/c/$cluster/$" });
@@ -174,6 +183,9 @@ describe("a list whose rows come from outside", () => {
           allowed: namespaces[0] === "team-checkout",
         }))
       );
+    const listed = vi
+      .spyOn(commands, "listNamespaces")
+      .mockResolvedValue([namespace("team-checkout")]);
     await list({ data: [], error: new Error("pods is forbidden: RBAC") });
 
     expect(
@@ -189,6 +201,7 @@ describe("a list whose rows come from outside", () => {
       ["team-checkout"]
     );
     asked.mockRestore();
+    listed.mockRestore();
     store.state.currentContext = null;
     store.state.contexts = [];
   });
@@ -1210,5 +1223,143 @@ describe("a list a link narrowed to the rows it named", () => {
     expect(collect!()[0].caption).toBe(
       "Pods matching app=web in shop Showing only the 1 row the Overview listed as needing attention."
     );
+  });
+});
+
+describe("a refusal remembered from an earlier visit", () => {
+  const refusal = () =>
+    Object.assign(new Error("pods is forbidden: RBAC"), {
+      code: "PERMISSION_DENIED",
+    });
+  /**
+   * A query client holding the list as a return to the page finds it: rows
+   * read twenty minutes ago, then refused seven minutes ago. A query with no
+   * rows drops its error when asked again, and has nothing to say this about.
+   */
+  const refusedEarlier = (queryKey: string[]) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client
+      .getQueryCache()
+      .build(client, { queryKey })
+      .setState({
+        status: "error",
+        data: { rows: [{ name: "api-1", namespace: "shop" }], unread: [] },
+        dataUpdatedAt: Date.now() - 20 * 60_000,
+        error: refusal(),
+        errorUpdatedAt: Date.now() - 7 * 60_000,
+        fetchStatus: "idle",
+      });
+    return client;
+  };
+  const visit = (queryKey: string[], client: QueryClient) =>
+    draw(
+      <ResourceList<Item>
+        title="Pods"
+        kind="Pod"
+        columns={columns}
+        emptyStateLabel="Pods"
+        queryKey={queryKey}
+        queryFn={() => new Promise<Scoped<Item>>(() => {})}
+      />,
+      client
+    );
+
+  /**
+   * Back on Pods six minutes after a 403 cleared, the page drew the old
+   * refusal with a "refused" pill and no age while it asked again. Fails if
+   * a refusal being asked again is not dated, or not said to be asked again.
+   */
+  it("dates the refusal and says it is asked again until the answer lands", async () => {
+    const queryKey = ["pods-remembered"];
+    await visit(queryKey, refusedEarlier(queryKey));
+
+    expect(
+      await screen.findByText("Refused 7m ago; asking the cluster again.")
+    ).toBeVisible();
+    expect(screen.getByText("refused")).toBeVisible();
+    expect(screen.getByText("7m ago")).toBeVisible();
+  });
+
+  /**
+   * The sidebar said "Pods 99" from a read after the refusal, while the page
+   * beside it said the list was refused. Fails if a refusal older than the
+   * sidebar's answer is drawn while the list is asked again.
+   */
+  it("draws no refusal the sidebar has read past while it asks again", async () => {
+    store.state.currentContext = "prod";
+    const queryKey = ["pods-outlived"];
+    const client = refusedEarlier(queryKey);
+    client.setQueryData(
+      queryKeys.clusterOverview("prod", []),
+      { counts: { pods: 99 } },
+      { updatedAt: Date.now() - 60_000 }
+    );
+    try {
+      await visit(queryKey, client);
+      expect(screen.queryByText(/refused/i)).toBeNull();
+      expect(screen.queryByTestId("unread-list")).toBeNull();
+      expect(screen.queryByText("api-1")).toBeNull();
+    } finally {
+      store.state.currentContext = null;
+    }
+  });
+});
+
+describe("the namespaces a refused list offers instead", () => {
+  const refusedAcross = async (listed: () => Promise<unknown>) => {
+    store.state.currentContext = "prod";
+    store.state.contexts = [{ name: "prod", namespace: "team-checkout" }];
+    useNamespaceRecencyStore.setState({ recent: { prod: ["all"] } });
+    const asked = vi
+      .spyOn(commands, "checkListAccess")
+      .mockImplementation(async (queries) =>
+        queries.map((query) => ({ resource: query.resource, allowed: true }))
+      );
+    const names = vi
+      .spyOn(commands, "listNamespaces")
+      .mockImplementation(listed as never);
+    await list({ data: [], error: new Error("pods is forbidden: RBAC") });
+    return () => {
+      asked.mockRestore();
+      names.mockRestore();
+      useNamespaceRecencyStore.setState({ recent: {} });
+      store.state.currentContext = null;
+      store.state.contexts = [];
+    };
+  };
+
+  /**
+   * "You can list them in all, argocd" offered a namespace typed earlier that
+   * the cluster does not have. Fails if a recent name the namespace list
+   * lacks is offered as a way out.
+   */
+  it("offers only namespaces the cluster's list has", async () => {
+    const done = await refusedAcross(async () => [namespace("team-checkout")]);
+    try {
+      expect(
+        await screen.findByText("You can list them in team-checkout.")
+      ).toBeVisible();
+      expect(screen.queryByText(/\ball\b/)).toBeNull();
+    } finally {
+      done();
+    }
+  });
+
+  /** Fails if names the namespace list could not check are offered as if they were checked. */
+  it("says the names went unchecked when the namespace list could not be read", async () => {
+    const done = await refusedAcross(async () => {
+      throw new Error("etcdserver: request timed out");
+    });
+    try {
+      expect(
+        await screen.findByText(
+          "You can list them in team-checkout, all, if those exist: the list of namespaces could not be read to check."
+        )
+      ).toBeVisible();
+    } finally {
+      done();
+    }
   });
 });

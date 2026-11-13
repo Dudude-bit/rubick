@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { Trash2 } from "lucide-react";
 
 import type { ColumnDef } from "@/components/ui/table-features";
+import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { ResourceList } from "./ResourceList";
@@ -153,5 +154,51 @@ describe("deleting from a list row", () => {
         })
       ).toBeEnabled()
     );
+  });
+});
+
+describe("a list of a namespace the cluster does not have", () => {
+  /**
+   * In a scope typed as "all", which no namespace is called, a list drew
+   * "0" and "none in this scope" beside a sidebar that said not read. Fails
+   * if a namespaced list of a wholly missing scope says none, or counts 0.
+   */
+  it("says the namespace is not there rather than that it holds none", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["all"],
+    });
+    const listed = vi.spyOn(commands, "listNamespaces").mockResolvedValue([
+      {
+        name: "argocd",
+        uid: "argocd",
+        status: "Active",
+        labels: {},
+        createdAt: null,
+      },
+    ]);
+    try {
+      await renderWithRouter(
+        <ResourceList<Item>
+          title="Rollouts"
+          kind={null}
+          columns={columns}
+          emptyStateLabel="Rollouts"
+          data={[]}
+        />,
+        { at: "/c/prod/rollouts", route: "/c/$cluster/$" }
+      );
+      expect(
+        await screen.findByText(
+          "There is no namespace named all in this cluster"
+        )
+      ).toBeVisible();
+      expect(screen.queryByText(/in this scope|current scope/)).toBeNull();
+      expect(screen.queryByText("0")).toBeNull();
+    } finally {
+      listed.mockRestore();
+      useClusterStore.setState({ namespaceScope: [] });
+    }
   });
 });

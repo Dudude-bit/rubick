@@ -230,7 +230,6 @@ export function CustomResourceList({
       ],
       [crdName]
     ),
-    reportFailure: crdKind,
   });
 
   const noun = useMemo(

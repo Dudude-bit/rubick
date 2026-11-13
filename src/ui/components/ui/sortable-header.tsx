@@ -46,8 +46,8 @@ export function SortableHeader({
       // difference between sorting a column and selecting its label.
       className={cn(
         "-mx-1 inline-flex min-h-[28px] max-w-full items-center gap-1 rounded px-1",
-        "transition-colors hover:bg-hover focus-visible:bg-hover",
-        "focus-visible:outline-none",
+        "transition-colors hover:bg-hover",
+        "focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
         sorted ? "text-fg" : "text-fg-mut"
       )}
       // A narrow column cuts "Готовность" to "Готов…"; hovering has it whole.

@@ -147,7 +147,6 @@ export function createWorkloadListPage<T extends Workload>(
       subscribe,
       queryKey,
       detail,
-      reportFailure: config.title,
     });
 
     // Under a live watch, a namespace this read missed keeps the rows the

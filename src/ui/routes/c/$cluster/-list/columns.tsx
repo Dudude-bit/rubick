@@ -198,6 +198,9 @@ export function createNameColumn<
   };
 }
 
+/** Where a column every list adds yields: after the ones the list itself hides. */
+export const YIELDS_AFTER_THE_LIST = 100;
+
 /** The column, hidden in that order by a port too narrow for every column's floor. */
 export const yielding = <Row extends RowData>(
   column: ColumnDef<Row>,
@@ -214,7 +217,9 @@ export function createNamespaceColumn<
     size: 190,
     accessorKey: "namespace",
     header: columnHeader("columns", "namespace"),
-    meta: { floor: NAMESPACE_CELL_PX },
+    // Last of all: beside a peek, which names the row's namespace, it is
+    // that or a sideways scroll.
+    meta: { floor: NAMESPACE_CELL_PX, yields: YIELDS_AFTER_THE_LIST + 1 },
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">{row.original.namespace}</span>
     ),

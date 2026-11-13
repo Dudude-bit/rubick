@@ -48,7 +48,10 @@ export function DeepLinkBanner() {
   if (arrival.status === "live") return null;
 
   return (
-    <Alert variant="warn" className="border-b border-hair bg-hover py-2 pr-4">
+    <Alert
+      variant="warn"
+      className="rounded-none border-x-0 border-t-0 border-solid bg-hover py-2 pr-4"
+    >
       <TriangleAlert aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <p className="text-fg">

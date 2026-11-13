@@ -48,7 +48,7 @@ export function HelmStatusBanner({
   }
 
   return (
-    <Alert className={cn("border-warn text-warn", className)}>
+    <Alert variant="warn" className={className}>
       <AlertTriangle className="text-warn" />
       <AlertTitle className="flex items-center gap-2">
         {t("empty", "helmCliNotFound")}

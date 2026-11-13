@@ -21,7 +21,6 @@ import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 import { objectLink } from "@/lib/links";
 import { isResourceType, toKind } from "@/lib/resource-registry";
-import { cn } from "@/lib/utils";
 
 const viaOf = (resource: string, namespace: string | undefined, name: string) =>
   [resource, namespace, name].filter(Boolean).join("/");
@@ -64,24 +63,23 @@ export function AttachedGate({
 /** Why an object stayed on its own page, drawn: every reason has its mark. */
 const STAY: Record<
   Stay["says"],
-  { icon: LucideIcon; tone: string; rule: string }
+  { icon: LucideIcon; tone: string; variant: "warn" | "info" | "destructive" }
 > = {
-  targetMissing: { icon: Unlink, tone: "text-warn", rule: "border-warn" },
-  targetUnread: { icon: EyeOff, tone: "text-warn", rule: "border-warn" },
-  targetContested: { icon: Swords, tone: "text-err", rule: "border-err" },
-  siblingsUnread: { icon: EyeOff, tone: "text-warn", rule: "border-warn" },
-  noService: { icon: Info, tone: "text-info", rule: "border-info" },
-  noOwner: { icon: Info, tone: "text-info", rule: "border-info" },
-  involvedGone: { icon: Unlink, tone: "text-warn", rule: "border-warn" },
-  involvedReplaced: { icon: History, tone: "text-warn", rule: "border-warn" },
+  targetMissing: { icon: Unlink, tone: "text-warn", variant: "warn" },
+  targetUnread: { icon: EyeOff, tone: "text-warn", variant: "warn" },
+  targetContested: { icon: Swords, tone: "text-err", variant: "destructive" },
+  siblingsUnread: { icon: EyeOff, tone: "text-warn", variant: "warn" },
+  noService: { icon: Info, tone: "text-info", variant: "info" },
+  noOwner: { icon: Info, tone: "text-info", variant: "info" },
+  involvedGone: { icon: Unlink, tone: "text-warn", variant: "warn" },
+  involvedReplaced: { icon: History, tone: "text-warn", variant: "warn" },
 };
-
 function StayNote({ stay }: { stay: Stay }) {
   const t = useT();
   const look = STAY[stay.says];
   const Icon = look.icon;
   return (
-    <Alert role="status" className={cn("mb-3", look.rule)}>
+    <Alert role="status" variant={look.variant} className="mb-3">
       <Icon className={look.tone} />
       <span>{t("attached", stay.says, stay)}</span>
     </Alert>
@@ -122,7 +120,7 @@ function OpenedFrom({
   const crd = isResourceType(resource) ? undefined : resource;
   const own = objectLink({ kind, name, namespace, crd }, { view: "own" });
   return (
-    <Alert role="status" className="mb-3 border-info">
+    <Alert role="status" variant="info" className="mb-3">
       <CornerDownRight className="text-info" />
       <span>
         {parts(t("attached", "openedFrom"), {

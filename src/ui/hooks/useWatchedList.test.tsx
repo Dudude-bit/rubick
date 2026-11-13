@@ -23,10 +23,7 @@ import { useListFollowed, useListLive, useWatchedList } from "./useWatchedList";
 
 const POD_DETAIL = queryKeys.rowDetail("Pod");
 
-const watched = (
-  enabled = true,
-  reportFailure: string | ((m: string) => void) = "Pods"
-) =>
+const watched = (enabled = true, reportFailure?: (m: string) => void) =>
   renderHook(() =>
     useWatchedList({
       enabled,
@@ -52,11 +49,11 @@ describe("a list kept current by a watch", () => {
   });
 
   /**
-   * A refused watch left the list frozen, claiming to be live. Nine copies
-   * of the fallback each did this in their own way; a burst of failures must
-   * still say so once.
+   * A refused watch left the list frozen, claiming to be live; the toast that
+   * said so sat over the last rows. Fails if a broken watch does not fall
+   * back to polling, or toasts beside the freshness mark that already says it.
    */
-  it("polls and says so once when the watch fails", () => {
+  it("polls without a toast over the rows when the watch fails", () => {
     const { result } = watched();
     act(() => {
       callbacks.onError?.("watch stream failed: connection reset");
@@ -67,7 +64,7 @@ describe("a list kept current by a watch", () => {
       refresh: "resourceList",
       watchFailed: true,
     });
-    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toast).not.toHaveBeenCalled();
   });
 
   /**
@@ -136,27 +133,17 @@ describe("a list kept current by a watch", () => {
     expect(callbacks.enabled).toBe(false);
   });
 
-  /** Fails if the cluster's own words reach the toast again. */
-  it("says the fallback in the app's words, not the cluster's", () => {
-    watched();
-    act(() =>
-      callbacks.onError?.(
-        "watch stream failed: ApiError: too old resource version: Expired"
-      )
-    );
-    const { description } = toast.mock.calls[0][0];
-    expect(description).toBe(
-      "Pods: live updates stopped; the list is read again periodically."
-    );
-  });
-
-  it("stops polling when the watch recovers, and speaks up at the next failure", () => {
+  /** Fails if a recovered watch keeps the list polling, or a second failure after it is not noticed. */
+  it("stops polling when the watch recovers, and polls again at the next failure", () => {
     const { result } = watched();
     act(() => callbacks.onError?.("gone"));
     act(() => callbacks.onRecovered?.());
     expect(result.current).toMatchObject({ live: true, refresh: false });
     act(() => callbacks.onError?.("gone again"));
-    expect(toast).toHaveBeenCalledTimes(2);
+    expect(result.current).toMatchObject({
+      live: false,
+      refresh: "resourceList",
+    });
   });
 
   /** A list no watch can run for is polled, and must not read as live. */
@@ -181,7 +168,6 @@ describe("a list kept current by a watch", () => {
           subscribe: () => Promise.resolve("stream"),
           queryKey,
           detail: POD_DETAIL,
-          reportFailure: "Pods",
         }),
       { initialProps: { queryKey: ["pods", "a,b"] } }
     );
@@ -190,7 +176,7 @@ describe("a list kept current by a watch", () => {
     rerender({ queryKey: ["pods", "c"] });
     expect(result.current).toMatchObject({ live: true, refresh: false });
     act(() => callbacks.onError?.("c: connection reset"));
-    expect(toast).toHaveBeenCalledTimes(2);
+    expect(result.current.live).toBe(false);
   });
 
   /**
@@ -245,7 +231,6 @@ describe("a list kept current by a watch", () => {
         subscribe: () => Promise.resolve("stream"),
         queryKey: ["pods"],
         detail: POD_DETAIL,
-        reportFailure: "Pods",
         recount: false,
       })
     );
@@ -275,7 +260,6 @@ describe("a list kept current by a watch", () => {
         subscribe: () => Promise.resolve("stream"),
         queryKey: ["events", null, "watch"],
         detail: () => [],
-        reportFailure: "events",
         recount: false,
       })
     );

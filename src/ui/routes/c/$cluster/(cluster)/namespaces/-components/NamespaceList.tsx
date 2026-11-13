@@ -19,7 +19,7 @@ import { hrefOf, objectLink } from "@/lib/links";
 import { whole } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { ResourceType } from "@/lib/resource-registry";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -127,7 +127,6 @@ export function NamespaceList() {
     subscribe: subscribeNamespaces,
     queryKey,
     detail: NAMESPACE_DETAIL,
-    reportFailure: toPlural(ResourceType.Namespace),
   });
 
   const podCounts = useMemo(

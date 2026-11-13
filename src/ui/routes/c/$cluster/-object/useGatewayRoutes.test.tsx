@@ -101,12 +101,9 @@ describe("every route in scope, one query per served kind", () => {
     expect(result.current.unread).toEqual([]);
   });
 
-  /**
-   * The toaster holds one toast at a time. Each kind's watch said so on its
-   * own, every toast replaced the last, and the one left named one kind while
-   * every route list on the page had fallen back to polling.
-   */
-  it("names every route kind whose watch fell back in the one notice left", async () => {
+  /** A list's fallback is said by its freshness mark; a toast for it sat over the last rows. Fails if a broken route watch toasts. */
+  it("leaves a broken route watch to the page's freshness mark", async () => {
+    toast.mockClear();
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -120,9 +117,7 @@ describe("every route in scope, one query per served kind", () => {
     act(() => watches.get("httproutes")?.onError?.("watch stream failed"));
     act(() => watches.get("tcproutes")?.onError?.("watch stream failed"));
 
-    const shown = toast.mock.calls.at(-1)?.[0].description as string;
-    expect(shown).toContain("httproutes");
-    expect(shown).toContain("tcproutes");
+    expect(toast).not.toHaveBeenCalled();
   });
 
   /** Fails if a refused route watch is toasted beside the page's own refusal. */

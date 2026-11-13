@@ -24,6 +24,7 @@ import {
 } from "@/lib/query-keys";
 import { useRightsAsked } from "@/lib/refusals";
 import { seedScope } from "@/lib/namespace-scope";
+import { useNamespaceList } from "@/hooks/useClusterSummary";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 import { listQueryFor, type ResourceKind } from "@/lib/resource-registry";
@@ -154,7 +155,12 @@ export interface Reach {
 
 const UNASKED: Reach = { readableIn: [], refusedIn: [], unasked: true };
 
-/** The namespaces the app can name without listing them: the kubeconfig's, then the recent ones. */
+/**
+ * The namespaces the app can name: the kubeconfig's, then the recent ones,
+ * and of those only what the cluster's list of namespaces has. A recent name
+ * was typed, and may be one that is not there; with no list read, the names
+ * go unchecked and the screen says so.
+ */
 const NAMEABLE = 3;
 const NO_RECENT: readonly string[] = [];
 
@@ -167,7 +173,15 @@ function useNameableNamespaces(): string[] {
     useNamespaceRecencyStore((s) =>
       context ? s.recent[context] : undefined
     ) ?? NO_RECENT;
-  return [...new Set([...seedScope(named), ...recent])].slice(0, NAMEABLE);
+  const list = useNamespaceList();
+  const names = [...new Set([...seedScope(named), ...recent])];
+  if (list.state === "pending") return [];
+  const listed = list.state === "listed" ? list.data : undefined;
+  const there = listed && new Set(listed.map((ns) => ns.name));
+  return (there ? names.filter((name) => there.has(name)) : names).slice(
+    0,
+    NAMEABLE
+  );
 }
 
 /**
