@@ -131,6 +131,7 @@ export function NetworkPolicyDetail() {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<NetworkPolicyInfo>({
     resourceKind: ResourceType.NetworkPolicy,
     fetchResource: (name, namespace) =>
@@ -272,6 +273,7 @@ export function NetworkPolicyDetail() {
       share={share}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.NetworkPolicy}
       title={policy?.name || name || ""}
       createdAt={policy?.createdAt}

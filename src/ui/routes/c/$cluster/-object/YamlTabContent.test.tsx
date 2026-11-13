@@ -1,9 +1,19 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { WITHHELD_MARKER } from "@/lib/withheld";
 import { renderWithProviders } from "@/test/render";
 import { YamlTabContent } from "./YamlTabContent";
+
+const manifest = vi.hoisted(() => ({ read: vi.fn() }));
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    getManifest: manifest.read,
+    forgetDiscovery: () => Promise.resolve(),
+  },
+}));
 
 vi.mock("../-yaml", () => ({
   YamlEditor: ({ value }: { value: string }) => (
@@ -100,5 +110,61 @@ describe("the YAML tab", () => {
     expect(copy).toHaveClass("whitespace-nowrap");
     expect(copy.parentElement).toHaveClass("flex-none");
     expect(screen.getByText(/as you would apply it/)).toHaveClass("min-w-0");
+  });
+
+  /**
+   * A manifest that was refused or failed drew as a skeleton with Copy
+   * disabled for ever. Fails if the tab says nothing of the failed read, draws
+   * the editor, or offers no way to ask again.
+   */
+  it("says the manifest could not be read and asks again on request", async () => {
+    const onRetry = vi.fn();
+    renderWithProviders(
+      <YamlTabContent
+        yaml={undefined}
+        error={new Error("etcd timeout")}
+        onRetry={onRetry}
+        onCopy={() => {}}
+      />
+    );
+
+    expect(
+      await screen.findByText("Could not read the manifest")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/etcd timeout/)).toBeInTheDocument();
+    expect(screen.queryByTestId("yaml-editor")).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(onRetry).toHaveBeenCalled();
+  });
+
+  /**
+   * The ~25 pages built on `useResourceDetail` hand the tab no error: it
+   * asks the manifest read itself. Fails if a page that passes only a kind
+   * and a name keeps the skeleton when that read fails, or never shows the
+   * text once a second read answers.
+   */
+  it("asks the manifest read itself when the page gave it no error", async () => {
+    manifest.read.mockRejectedValueOnce(new Error("forbidden"));
+    manifest.read.mockResolvedValueOnce(APPLIABLE);
+    renderWithProviders(
+      <YamlTabContent
+        yaml={undefined}
+        resourceKind="Deployment"
+        resourceName="legacy-billing"
+        namespace="platform"
+        onCopy={() => {}}
+      />
+    );
+
+    expect(await screen.findByText(/forbidden/)).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(await screen.findByTestId("yaml-editor")).toHaveTextContent(
+      "legacy-billing"
+    );
   });
 });

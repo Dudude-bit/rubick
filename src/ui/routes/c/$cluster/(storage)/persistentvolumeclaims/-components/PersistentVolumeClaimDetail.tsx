@@ -47,6 +47,7 @@ export function PersistentVolumeClaimDetail() {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<PersistentVolumeClaimInfo>({
     resourceKind: ResourceType.PersistentVolumeClaim,
     fetchResource: (name, ns) => commands.getPersistentVolumeClaim(name, ns),
@@ -151,6 +152,7 @@ export function PersistentVolumeClaimDetail() {
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.PersistentVolumeClaim}
       title={pvc?.name || name || ""}
       namespace={pvc?.namespace || namespace}

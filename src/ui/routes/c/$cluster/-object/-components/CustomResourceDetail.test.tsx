@@ -17,6 +17,8 @@ const answers = vi.hoisted(() => ({
   resource: {} as unknown,
   /** The object's read where a test answers it otherwise than with `resource`. */
   read: null as null | (() => Promise<unknown>),
+  yaml: null as null | (() => Promise<unknown>),
+  crdRead: null as null | (() => Promise<unknown>),
   events: vi.fn((_filter: { involved_object_kind: string | null }) =>
     Promise.resolve([])
   ),
@@ -26,10 +28,11 @@ const answers = vi.hoisted(() => ({
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    getCrd: () => Promise.resolve(answers.crd),
+    getCrd: () => answers.crdRead?.() ?? Promise.resolve(answers.crd),
     getCustomResource: () =>
       answers.read?.() ?? Promise.resolve(answers.resource),
-    getCustomResourceYaml: () => Promise.resolve(""),
+    getCustomResourceYaml: () =>
+      answers.yaml?.() ?? Promise.resolve("kind: Widget\n"),
     listEvents: answers.events,
     getDeploymentReplicasets: answers.replicaSets,
     getResourceConnections: answers.connections,
@@ -82,6 +85,8 @@ const open = (crdName: string, tab = "overview") =>
 beforeEach(() => {
   useClusterStore.setState({ currentContext: "test", isConnected: true });
   answers.read = null;
+  answers.yaml = null;
+  answers.crdRead = null;
   answers.events.mockClear();
   answers.replicaSets.mockClear();
   answers.connections.mockClear();
@@ -165,8 +170,10 @@ describe("the page of a custom resource named like a built-in", () => {
       await screen.findByRole("button", { name: "Delete" })
     );
     const dialog = await screen.findByRole("alertdialog");
-    expect(dialog).toHaveTextContent("Delete Service.serving.knative.dev?");
-    expect(dialog).toHaveTextContent("“storefront/frontend” will be removed");
+    expect(dialog).toHaveTextContent(
+      "Delete Service.serving.knative.dev storefront/frontend?"
+    );
+    expect(dialog).not.toHaveTextContent("removes its address");
   });
 
   /**
@@ -228,8 +235,9 @@ describe("Back on a custom resource's page", () => {
     answers.crd = crd("serving.knative.dev", "Service", "services");
     answers.resource = object("serving.knative.dev/v1", "Service");
     await open("services.serving.knative.dev");
+    await screen.findByRole("button", { name: "Delete" });
 
-    await userEvent.click(await screen.findByRole("button", { name: "Back" }));
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
 
     expect(useScopeTabStore.getState().pendingHref).toBe(
       "/c/test/services.serving.knative.dev"
@@ -261,5 +269,70 @@ describe("the page of a custom resource still reconciling", () => {
 
     expect(await screen.findByText("Progressing")).toBeVisible();
     expect(screen.queryByText("NotReady")).toBeNull();
+  });
+});
+
+describe("what a custom resource's page could not read", () => {
+  /**
+   * A manifest that failed to load drew as an empty editor and Copy copied
+   * nothing. Fails if the YAML tab says nothing about the failed read or
+   * offers no way to ask again.
+   */
+  it("says the manifest could not be read, and offers to read it again", async () => {
+    answers.crd = crd("example.dev", "Widget", "widgets");
+    answers.resource = object("example.dev/v1", "Widget");
+    answers.yaml = () => Promise.reject(new Error("etcd timeout"));
+    await open("widgets.example.dev", "yaml");
+
+    expect(
+      await screen.findByText("Could not read the manifest")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/etcd timeout/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeDisabled();
+  });
+
+  /**
+   * Events are asked for by the CRD's kind: with the CRD unread the tab
+   * waited on a disabled query for ever. Fails if the Events tab does not
+   * say which read it is waiting on.
+   */
+  it("says why its events were not asked for when the definition was not read", async () => {
+    answers.crd = crd("example.dev", "Widget", "widgets");
+    answers.resource = object("example.dev/v1", "Widget");
+    answers.crdRead = () => Promise.reject(new Error("crd forbidden"));
+    await open("widgets.example.dev", "events");
+
+    expect(
+      await screen.findByText(/the definition that names it could not be read/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/crd forbidden/)).toBeInTheDocument();
+    expect(answers.events).not.toHaveBeenCalled();
+  });
+
+  /**
+   * One dropped poll threw away a page the reader was working in. Fails if
+   * a failed re-read of an object already on screen replaces the page with
+   * the error card.
+   */
+  it("keeps the object on screen when a re-read of it fails", async () => {
+    answers.crd = crd("example.dev", "Widget", "widgets");
+    answers.resource = object("example.dev/v1", "Widget");
+    await open("widgets.example.dev");
+    await screen.findByRole("heading", { level: 1 });
+
+    answers.read = () => Promise.reject(new Error("token expired"));
+    act(() => useWindowActivity.setState({ focused: false }));
+    act(() => useWindowActivity.setState({ focused: true }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/token expired/)).toBeInTheDocument()
+    );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "frontend"
+    );
+    expect(screen.queryByText(/Could not read this Widget/)).toBeNull();
   });
 });

@@ -27,7 +27,8 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
-import { errorToShow } from "@/lib/error-utils";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import {
   endpointAddress,
   endpointState,
@@ -75,18 +76,15 @@ export function PublishedEndpoints({
   const { data, isPending, error } = query;
 
   if (isPending) {
-    return (
-      <p className="text-xs text-fg-fnt">
-        {t("empty", "readingWhatServicePublishes")}
-      </p>
-    );
+    return <Reading>{t("empty", "readingWhatServicePublishes")}</Reading>;
   }
   if (error || !data) {
     return (
-      <p className="text-xs text-err">
-        {t("empty", "couldNotReadWhatServicePublishes")}{" "}
-        {error ? errorToShow(error) : t("empty", "noAnswer")}
-      </p>
+      <Unknown
+        question={t("empty", "couldNotReadWhatServicePublishes")}
+        error={error ?? t("empty", "noAnswer")}
+        onRetry={() => query.refetch()}
+      />
     );
   }
   const published = publishedFor(data, data.subject);

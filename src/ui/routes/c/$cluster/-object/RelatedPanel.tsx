@@ -19,13 +19,11 @@
 import { useT } from "@/i18n/useT";
 import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Eyebrow } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { cn } from "@/lib/utils";
-import { errorToShow } from "@/lib/error-utils";
 import type { RelatedObjects, RelatedRef } from "./useRelatedObjects";
 import { ResourceRef } from "@/components/object/ResourceRef";
-
-const GROUP_HEADING =
-  "text-micro font-semibold uppercase tracking-[0.07em] text-fg-fnt";
 
 /** Rows in the order they were produced, grouped by what the relation is. */
 function byRelation(
@@ -104,17 +102,17 @@ export function RelatedPanel({
   return (
     <div className="flex flex-col gap-[18px]">
       {query.error && (
-        <p className="max-w-[64ch] text-xs text-warn">
-          {t("empty", "relatedShortBy", { kind })}{" "}
-          <span className="font-mono text-fg-mut">
-            {errorToShow(query.error)}
-          </span>
-        </p>
+        <Unknown
+          question={t("empty", "relatedShortBy", { kind })}
+          error={query.error}
+          onRetry={query.refetch}
+          className="max-w-[64ch]"
+        />
       )}
 
       {byRelation(query.related).map(([relation, rows]) => (
         <Section key={relation}>
-          <span className={GROUP_HEADING}>{t("readings", relation)}</span>
+          <Eyebrow>{t("readings", relation)}</Eyebrow>
           <div className="mt-1 flex flex-col">
             {rows.map((entry) => (
               <Row
@@ -132,7 +130,7 @@ export function RelatedPanel({
         is an admission about the app, and a reader who cannot tell them apart
         will believe whichever is worse.
       */}
-      {query.related.length === 0 && (
+      {query.related.length === 0 && !query.error && (
         <p className="max-w-[64ch] text-xs text-fg-mut">
           {t("empty", query.claimed ? "relatedNothing" : "relatedUnread", {
             kind,

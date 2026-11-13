@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { CircleX, Loader2, Lock } from "lucide-react";
 
 import { ROLE_DOT, statusRole, type StatusRole } from "@/lib/status-role";
 import { objectLink } from "@/lib/links";
@@ -12,10 +11,11 @@ import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
-import { errorToShow, isRefusal } from "@/lib/error-utils";
+import { isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import { None } from "@/components/ui/none";
-import { ReadAgain } from "@/components/ui/read-again";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { ownStatusWord } from "@/lib/status-words";
 import { RollBackLink } from "../-changes/RollBackLink";
 
@@ -105,49 +105,29 @@ export function ChildRows({
   if (rows.length === 0 && error) {
     const refused = isRefusal(error);
     return (
-      <div className="px-1.5 py-1">
-        <p
-          data-read={refused ? "refused" : "failed"}
-          className={cn(
-            "flex items-center gap-1.5 text-xs",
-            refused ? "text-warn" : "text-err"
-          )}
-        >
-          {refused ? (
-            <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-          ) : (
-            <CircleX className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-          )}
-          {refused
-            ? t("nav", "noListAccess")
-            : isReadDeadline(error)
-              ? t("empty", "readDeadlineShort", {
-                  label: label ?? "",
-                  seconds: LIST_DEADLINE_SECONDS,
-                })
-              : t("empty", "couldNotReadInScope", { label: label ?? "" })}
-        </p>
-        <p className="mt-1 select-text wrap-break-word font-mono text-caption text-fg-fnt">
-          {errorToShow(error)}
-        </p>
-        {onRetry && (
-          <ReadAgain error={error} onRetry={onRetry} className="mt-1.5" />
-        )}
+      <div data-read={refused ? "refused" : "failed"} className="px-1.5 py-1">
+        <Unknown
+          question={
+            refused
+              ? t("nav", "noListAccess")
+              : isReadDeadline(error)
+                ? t("empty", "readDeadlineShort", {
+                    label: label ?? "",
+                    seconds: LIST_DEADLINE_SECONDS,
+                  })
+                : t("empty", "couldNotReadInScope", { label: label ?? "" })
+          }
+          error={error}
+          onRetry={onRetry}
+        />
       </div>
     );
   }
   if (rows.length === 0 && pending) {
     return (
-      <p
-        data-read="reading"
-        className="flex items-center gap-1.5 px-1.5 py-1 text-xs text-fg-mut"
-      >
-        <Loader2
-          className="h-3 w-3 flex-none animate-spin text-info"
-          aria-hidden="true"
-        />
+      <Reading className="px-1.5 py-1 text-xs text-fg-mut">
         {t("action", "readingInline")}
-      </p>
+      </Reading>
     );
   }
   if (rows.length === 0) {

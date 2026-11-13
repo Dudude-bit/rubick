@@ -364,6 +364,7 @@ describe("Delete when the access review cannot answer", () => {
     await waitFor(() => expect(checkAccess).toHaveBeenCalled());
     allowed = false;
     await refused;
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
       expect(deleteButton()).toHaveAttribute("aria-disabled", "true")
     );
@@ -391,6 +392,7 @@ describe("Delete when the access review cannot answer", () => {
       ).toBe(true)
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(deleteButton()).not.toHaveAttribute("aria-disabled");
   });
 });

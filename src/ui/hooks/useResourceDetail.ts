@@ -26,8 +26,8 @@ import { useRereadWith } from "./useRereadWith";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
-import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
-import { toastedUnanswered } from "@/lib/toast-error";
+import { ERROR_CODES, errorCode } from "@/lib/error-utils";
+import { toastWriteError } from "@/lib/toast-error";
 import { useRememberOwners } from "./useLastOwners";
 import { useObjectWatch, watchedByName } from "./useObjectWatch";
 import { useStaleNotFound } from "./useStaleNotFound";
@@ -65,7 +65,7 @@ export interface UseResourceDetailResult<T> {
   resource: T | undefined;
   isLoading: boolean;
   error: Error | null;
-  refetch: () => void;
+  refetch: () => Promise<unknown>;
   /** What the header's freshness reading is drawn from. */
   freshness: Freshness;
   /** The object the page's own watch last delivered, while it feeds the page: built from the object alone, in the shape `subscribe_object_watch` gives the kind. */
@@ -74,6 +74,7 @@ export interface UseResourceDetailResult<T> {
   // YAML data
   yaml: string | undefined;
   isLoadingYaml: boolean;
+  yamlError: Error | null;
   copyYaml: () => void;
   refetchYaml: () => Promise<unknown>;
 
@@ -208,6 +209,7 @@ export function useResourceDetail<T>(
   const {
     data: yaml,
     isLoading: isLoadingYaml,
+    error: yamlError,
     refetch: refetchYaml,
   } = useResourceYaml(resourceKind, name, namespace, activeTab);
 
@@ -241,18 +243,14 @@ export function useResourceDetail<T>(
         goBack();
       }
     },
-    onError: (err) => {
-      if (toastedUnanswered(err)) return;
-      toast({
-        title: t("action", "error"),
-        description: t("action", "deleteFailed", {
-          kind: resourceKind,
+    onError: (err) =>
+      toastWriteError(
+        t("action", "couldNotDo", {
+          action: t("action", "delete").toLowerCase(),
           name: name ?? "",
-          error: errorToShow(err),
         }),
-        variant: "destructive",
-      });
-    },
+        err
+      ),
   });
 
   return {
@@ -266,6 +264,7 @@ export function useResourceDetail<T>(
     watched,
     yaml,
     isLoadingYaml,
+    yamlError,
     copyYaml,
     refetchYaml,
     activeTab,

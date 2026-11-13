@@ -3,6 +3,7 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { errorToShow } from "@/lib/error-utils";
 import { Button } from "@/components/ui/button";
 import { RouteLink } from "@/components/ui/route-link";
 import { ReasonedAction } from "@/components/object/detail-blocks";
@@ -39,6 +40,8 @@ export interface RestartDialogProps {
   /** The pods ready now, as the workload was last read; absent where it was not. */
   readiness?: Readiness | null;
   busy: boolean;
+  /** What the last write answered, drawn under the description. */
+  error?: unknown;
   onConfirm: () => void;
 }
 
@@ -57,6 +60,7 @@ export function RestartDialog({
   intercept,
   readiness,
   busy,
+  error,
   onConfirm,
 }: RestartDialogProps) {
   const t = useT();
@@ -123,6 +127,11 @@ export function RestartDialog({
                 </AlertDescription>
               </Alert>
             )}
+          {error != null && (
+            <Alert variant="destructive">
+              {t("action", "restartFailedWith", { reason: errorToShow(error) })}
+            </Alert>
+          )}
           {intercept && <DeliveryInterceptBody intercept={intercept} />}
           {gate.input}
           <DialogFooter>
@@ -130,11 +139,12 @@ export function RestartDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={busy}
               data-autofocus
             >
               {t("action", "cancel")}
             </Button>
-            <Button type="submit" disabled={busy || gate.blocked}>
+            <Button type="submit" pending={busy} disabled={gate.blocked}>
               {intercept?.confirmLabel ?? t("action", "restart")}
             </Button>
           </DialogFooter>
@@ -151,7 +161,10 @@ export function RestartDialog({
 export function RestartAction({
   mutation,
   ...dialog
-}: Omit<RestartDialogProps, "open" | "onOpenChange" | "busy" | "onConfirm"> & {
+}: Omit<
+  RestartDialogProps,
+  "open" | "onOpenChange" | "busy" | "error" | "onConfirm"
+> & {
   mutation: UseMutationResult<void, Error, void>;
 }) {
   const t = useT();
@@ -163,7 +176,10 @@ export function RestartAction({
       <ReasonedAction
         label={t("action", "restart")}
         icon={RefreshCw}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          mutation.reset();
+          setOpen(true);
+        }}
         busy={mutation.isPending}
         reason={denied}
       />
@@ -172,6 +188,7 @@ export function RestartAction({
         open={open}
         onOpenChange={setOpen}
         busy={mutation.isPending}
+        error={mutation.isError ? mutation.error : null}
         onConfirm={() =>
           mutation.mutate(undefined, {
             onSuccess: () => setOpen(false),

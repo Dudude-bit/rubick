@@ -721,10 +721,15 @@ describe("PeekPanel", () => {
     );
     vi.mocked(commands.listEvents).mockRejectedValue(refusal);
     const refused = await wrap(POD_PEEK);
-    const words = await screen.findByText(
-      "You do not have permission to read these events."
+    expect(
+      await screen.findByText(
+        "You do not have permission to read these events."
+      )
+    ).toBeVisible();
+    expect(screen.getByTestId("events-unread")).toHaveAttribute(
+      "data-read",
+      "refused"
     );
-    expect(words).toHaveAttribute("data-read", "refused");
     expect(screen.queryByText("No events for this object")).toBeNull();
     vi.mocked(commands.listEvents).mockResolvedValue([]);
     await userEvent.click(
@@ -742,7 +747,8 @@ describe("PeekPanel", () => {
       new Error("connection refused")
     );
     await wrap(POD_PEEK);
-    expect(await screen.findByText("Could not read events.")).toHaveAttribute(
+    expect(await screen.findByText("Could not read events.")).toBeVisible();
+    expect(screen.getByTestId("events-unread")).toHaveAttribute(
       "data-read",
       "failed"
     );
@@ -3323,7 +3329,7 @@ describe("restarting a managed workload from the peek on critical infrastructure
     const button = within(confirm).getByRole("button", { name: /^Restart$/ });
     expect(button).toBeDisabled();
 
-    await userEvent.type(screen.getByPlaceholderText(PROD), PROD);
+    await userEvent.type(within(confirm).getByRole("textbox"), PROD);
     expect(button).toBeEnabled();
 
     await userEvent.click(button);
@@ -3380,8 +3386,9 @@ describe("a peek block whose read was refused", () => {
 
     expect(await screen.findByText("Traffic path")).toBeInTheDocument();
     expect(
-      screen.getByText(`Could not read what connects to this: ${FORBIDDEN}`)
+      screen.getByText("Could not read what connects to this.")
     ).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(FORBIDDEN))).toBeInTheDocument();
   });
 
   /** "reading…" forever beside a refused list, and "none" beside a read one. */
@@ -3429,7 +3436,7 @@ describe("a peek block whose read was refused", () => {
       await screen.findByText(/Could not ask the integrations/)
     ).toBeInTheDocument();
     expect(
-      screen.getByText("ingressroutes.traefik.io is forbidden")
+      screen.getByText(/ingressroutes.traefik.io is forbidden/)
     ).toBeInTheDocument();
   });
 });

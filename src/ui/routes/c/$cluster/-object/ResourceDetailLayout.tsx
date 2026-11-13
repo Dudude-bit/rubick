@@ -22,6 +22,8 @@ import { AlertCircle, ArrowLeft, Network, RefreshCw } from "lucide-react";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { CaptionScope, Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { useLastOwners, type KnownOwners } from "@/hooks/useLastOwners";
 import { GoneNotice } from "./gone";
@@ -40,7 +42,7 @@ import {
   type DetailTab,
 } from "@/components/object/detail-tab";
 import { OwnsPanel } from "./Owns";
-import { StaleRows } from "../-list/StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { servedOfKind, useLineage } from "./ownership";
 import { useOwnershipKeys } from "./ownership-keys";
 import type { ServedResource } from "./served";
@@ -70,6 +72,8 @@ interface DetailErrorProps {
   additionalMessage?: string;
   /** What else ended with an object that is gone. */
   goneNote?: ReactNode;
+  /** Asks the read again, for an object that could not be read at all. */
+  onRetry?: () => unknown;
 }
 
 export function DetailError({
@@ -82,6 +86,7 @@ export function DetailError({
   isSearching,
   additionalMessage,
   goneNote,
+  onRetry,
 }: DetailErrorProps) {
   const t = useT();
   const isNotFound = isResourceNotFoundError(error);
@@ -110,6 +115,7 @@ export function DetailError({
           // the question the read was, so the same sentence is not stacked twice.
           question={t("empty", "whatIsThisKind", { kind: resourceKind })}
           error={error ?? t("empty", "clusterDidNotAnswer")}
+          onRetry={onRetry}
         />
       )}
       {isNotFound && goneNote}
@@ -201,6 +207,8 @@ interface ResourceDetailLayoutProps {
   isSearchingReplacement?: boolean;
   /** What else ended with the object, said under the gone notice. */
   goneNote?: ReactNode;
+  /** Reads the object again; without it the page refetches `queryKeys.detail`. */
+  onRetry?: () => unknown;
 
   /**
    * What is wrong with the object, in the two or three lines that say it.
@@ -262,6 +270,7 @@ export function ResourceDetailLayout({
   onFindReplacement,
   isSearchingReplacement,
   goneNote,
+  onRetry,
   summary,
   headerNote,
   freshness,
@@ -272,6 +281,13 @@ export function ResourceDetailLayout({
   served,
 }: ResourceDetailLayoutProps) {
   const t = useT();
+  const queryClient = useQueryClient();
+  const retry =
+    onRetry ??
+    (() =>
+      queryClient.refetchQueries({
+        queryKey: queryKeys.detail(resourceKind, namespace, title),
+      }));
   const lineage = useLineage(
     served ?? servedOfKind(resourceKind),
     title,
@@ -348,10 +364,20 @@ export function ResourceDetailLayout({
 
   if (reading) {
     return (
-      <>
+      <div className="flex flex-col gap-3">
+        <ResourceDetailHeader
+          name={title}
+          kind={resourceKind}
+          served={served}
+          listLink={listLink}
+          listLabel={listLabel}
+          namespace={namespace}
+          namespaceLink={namespaceLink}
+          onBack={onBack}
+        />
         {banner}
-        <DetailSkeleton />
-      </>
+        <DetailSkeleton showHeader={false} tabCount={tabs.length} />
+      </div>
     );
   }
 
@@ -368,6 +394,7 @@ export function ResourceDetailLayout({
           onFindReplacement={onFindReplacement}
           isSearching={isSearchingReplacement}
           goneNote={goneNote}
+          onRetry={retry}
         />
       </>
     );

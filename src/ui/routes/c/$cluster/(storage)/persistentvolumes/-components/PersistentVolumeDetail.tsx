@@ -39,6 +39,7 @@ export function PersistentVolumeDetail() {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<PersistentVolumeInfo>({
     resourceKind: ResourceType.PersistentVolume,
     isClusterScoped: true,
@@ -156,6 +157,7 @@ export function PersistentVolumeDetail() {
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.PersistentVolume}
       title={pv?.name || name || ""}
       statusBadge={pv && <PhaseBadge phase={pv.status} />}

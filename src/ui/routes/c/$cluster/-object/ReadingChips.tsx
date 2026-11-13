@@ -16,6 +16,7 @@ import {
 import type { KindReading, NotRead, Reading } from "@/generated/types";
 import { KindIcon } from "@/components/object/KindIcon";
 import { segmentOf } from "@/lib/access-kinds";
+import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n/useT";
 import { cn, formatWhen } from "@/lib/utils";
 import { leftOut, listing } from "./ownership";
@@ -191,7 +192,7 @@ export function ReadingProgress({ notRead }: { notRead: NotRead }) {
   return (
     <details className="group text-xs">
       <summary className="inline-flex cursor-pointer select-none flex-wrap items-center gap-x-1.5 rounded-md px-1 py-0.5 text-info hover:bg-hover">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <Spinner size="xs" aria-hidden="true" />
         <span className="tabular-nums">
           {t("count", "kindsReadOf", {
             n: total - listing(notRead),

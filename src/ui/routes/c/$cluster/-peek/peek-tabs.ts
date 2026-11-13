@@ -127,7 +127,10 @@ export function peekTabsFor(
     middle.push({
       id: "children",
       // The word the same tab has on the object's own page.
-      label: child === ResourceType.Job ? "Jobs" : t("columns", "pods"),
+      label:
+        child === ResourceType.Job
+          ? t("activity", "jobs")
+          : t("columns", "pods"),
       glyph: kindGlyph(child),
     });
   }

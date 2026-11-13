@@ -36,6 +36,7 @@ export function StorageClassDetail() {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<StorageClassInfo>({
     resourceKind: ResourceType.StorageClass,
     isClusterScoped: true,
@@ -112,6 +113,7 @@ export function StorageClassDetail() {
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.StorageClass}
       title={sc?.name || name || ""}
       badges={

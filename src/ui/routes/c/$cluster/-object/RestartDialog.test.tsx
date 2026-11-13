@@ -6,11 +6,12 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import { renderWithProviders } from "@/test/render";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
-import { RestartAction } from "./RestartDialog";
+import { RestartAction, RestartDialog } from "./RestartDialog";
 
 function mutation() {
   return {
     mutate: vi.fn(),
+    reset: vi.fn(),
     isPending: false,
   } as unknown as UseMutationResult<void, Error, void>;
 }
@@ -102,6 +103,7 @@ describe("a Restart on a cluster marked critical", () => {
       mutate: vi.fn((_: void, options?: { onSuccess?: () => void }) =>
         options?.onSuccess?.()
       ),
+      reset: vi.fn(),
       isPending: false,
     } as unknown as UseMutationResult<void, Error, void>;
     renderWithProviders(
@@ -135,5 +137,55 @@ describe("a Restart on a cluster marked critical", () => {
 
     useClusterIdentityStore.setState({ marks: {} });
     useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+});
+
+describe("a Restart while the write is in flight", () => {
+  /** Fails if the Restart button stops showing it is working, or Cancel stays pressable mid-write. */
+  it("shows Restart working and holds Cancel", async () => {
+    renderWithProviders(
+      <RestartDialog
+        open
+        onOpenChange={() => {}}
+        kind="Deployment"
+        name="cart"
+        namespace="shop"
+        plan={undefined}
+        intercept={null}
+        busy
+        onConfirm={() => {}}
+      />
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("button", { name: "Restart" })
+    ).toHaveAttribute("aria-busy", "true");
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" })
+    ).toBeDisabled();
+  });
+});
+
+describe("a Restart that was refused", () => {
+  /** Fails if the refusal is only a toast and the dialog gives no sign of it. */
+  it("says why inline under the description", async () => {
+    renderWithProviders(
+      <RestartDialog
+        open
+        onOpenChange={() => {}}
+        kind="Deployment"
+        name="cart"
+        namespace="shop"
+        plan={undefined}
+        intercept={null}
+        busy={false}
+        error={new Error("deployments is forbidden")}
+        onConfirm={() => {}}
+      />
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText(/Could not restart: .*forbidden/)
+    ).toBeInTheDocument();
   });
 });

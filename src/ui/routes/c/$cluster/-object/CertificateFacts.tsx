@@ -10,6 +10,7 @@
  */
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { Reading } from "@/components/ui/states";
 import { cn, formatWhen } from "@/lib/utils";
 import {
   expiryOf,
@@ -45,11 +46,7 @@ export function CertificateLine({
 }) {
   const t = useT();
   if (!read) {
-    return (
-      <span className="text-caption text-fg-fnt">
-        {t("empty", "readingCertificate")}
-      </span>
-    );
+    return <Reading>{t("empty", "readingCertificate")}</Reading>;
   }
   if (!read.certificate) {
     return (

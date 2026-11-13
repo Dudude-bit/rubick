@@ -28,7 +28,6 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
-  Loader2,
   Lock,
   Unlink,
 } from "lucide-react";
@@ -48,6 +47,7 @@ import {
 import { MaskedValue } from "@/components/ui/masked-value";
 import { T } from "@/i18n/T";
 import { parts } from "@/i18n/parts";
+import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
 import { withheldWords } from "@/lib/certificates";
@@ -190,7 +190,7 @@ function RefState({
   if (verdict.verdict === "reading") {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-fg-fnt">
-        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        <Spinner size="xs" aria-hidden="true" />
         {t("settings", "loading")}
       </span>
     );
@@ -764,9 +764,7 @@ export function EnvironmentVariables({
 
               {hasSecrets && (
                 <div className="flex items-center gap-2 ml-2">
-                  {loadingSecrets && (
-                    <Loader2 className="h-4 w-4 animate-spin text-fg-mut" />
-                  )}
+                  {loadingSecrets && <Spinner size="xs" aria-hidden="true" />}
                   <Switch
                     id={`show-secrets-${containerName}`}
                     checked={showSecrets}

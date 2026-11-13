@@ -454,12 +454,16 @@ export function useObjectActions({
       {scaleCommand && (
         <ScaleDialog
           open={dialog === "scale"}
-          onOpenChange={(open) => setDialog(open ? "scale" : null)}
+          onOpenChange={(open) => {
+            if (open) scale.reset();
+            setDialog(open ? "scale" : null);
+          }}
           kind={kind}
           name={name}
           namespace={namespace}
           current={(detail as ScalableInfo | undefined)?.replicas.desired}
           busy={scale.isPending}
+          error={scale.isError ? scale.error : null}
           warnings={scaleWarnings(governance, intercept("Scale"), t)}
           onSubmit={(replicas) => scale.mutate(replicas)}
         />
@@ -495,7 +499,10 @@ export function useObjectActions({
       {restartRollsOut(kind) && (
         <RestartDialog
           open={confirming === "rolling"}
-          onOpenChange={(open) => setConfirming(open ? "rolling" : null)}
+          onOpenChange={(open) => {
+            if (open) restart.reset();
+            setConfirming(open ? "rolling" : null);
+          }}
           kind={kind}
           name={name}
           namespace={namespace}
@@ -505,6 +512,7 @@ export function useObjectActions({
           readiness={readinessOf(detail)}
           intercept={intercept("Restart")}
           busy={restart.isPending}
+          error={restart.isError ? restart.error : null}
           onConfirm={() => restart.mutate()}
         />
       )}

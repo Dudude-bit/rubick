@@ -27,6 +27,8 @@ import {
   CopyableValue,
 } from "@/components/ui/copyable-value";
 import { Section, SectionHeader } from "@/components/ui/section";
+import { Reading } from "@/components/ui/states";
+import { Unknown } from "@/components/ui/unknown";
 import { yamlTab } from "../../../../-object/yaml-tab";
 import { eventsTab } from "../../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
@@ -291,6 +293,7 @@ export function GatewayDetail() {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<GatewayInfo>({
     resourceKind: ResourceType.Gateway,
     fetchResource: (name, ns) => commands.getGateway(name, ns),
@@ -457,7 +460,11 @@ export function GatewayDetail() {
       glyph: viewGlyph(Info),
       content: (
         <>
-          <KeyValueSection title="Gateway" items={facts} className="max-w-lg" />
+          <KeyValueSection
+            title={t("columns", "gateway")}
+            items={facts}
+            className="max-w-lg"
+          />
           {gateway && <ListenerRows gateway={gateway} />}
         </>
       ),
@@ -486,17 +493,19 @@ export function GatewayDetail() {
             }
           />
           {detectionQuery.isLoading ? (
-            <p className="text-xs text-fg-fnt">{t("empty", "readingRoutes")}</p>
+            <Reading>{t("empty", "readingRoutes")}</Reading>
           ) : routeKinds.length === 0 ? (
             <p className="text-xs text-fg-fnt">
               {t("empty", "gwNoRouteKinds")}
             </p>
           ) : routes.isLoading ? (
-            <p className="text-xs text-fg-fnt">{t("empty", "readingRoutes")}</p>
+            <Reading>{t("empty", "readingRoutes")}</Reading>
           ) : routes.isError ? (
-            <p className="text-xs text-err">
-              {t("empty", "gwRoutesUnreadable")}
-            </p>
+            <Unknown
+              question={t("empty", "gwRoutesUnreadable")}
+              error={routes.error}
+              onRetry={() => routes.refetch()}
+            />
           ) : attached.length === 0 ? (
             <p className="text-xs text-fg-fnt">
               {t("empty", "gwNoRouteNames")}
@@ -506,9 +515,9 @@ export function GatewayDetail() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("columns", "kind")}</TableHead>
-                  <TableHead>Route</TableHead>
+                  <TableHead>{t("columns", "route")}</TableHead>
                   <TableHead>{t("columns", "hostnames")}</TableHead>
-                  <TableHead>Accepted</TableHead>
+                  <TableHead>{t("columns", "accepted")}</TableHead>
                   <TableHead>{t("columns", "rules")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -597,6 +606,7 @@ export function GatewayDetail() {
       share={share}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.Gateway}
       title={gateway?.name || ""}
       namespace={gateway?.namespace}

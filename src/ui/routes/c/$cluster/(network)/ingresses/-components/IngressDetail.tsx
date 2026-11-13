@@ -74,6 +74,7 @@ export function IngressDetail() {
     setActiveTab,
     goBack,
     freshness,
+    refetch,
     deleteMutation,
   } = useResourceDetail<IngressInfo>({
     resourceKind: ResourceType.Ingress,
@@ -477,6 +478,7 @@ export function IngressDetail() {
         share={share}
         isLoading={isLoading}
         error={error}
+        onRetry={refetch}
         resourceKind={ResourceType.Ingress}
         title={ingress?.name || name || ""}
         namespace={ingress?.namespace || namespace}

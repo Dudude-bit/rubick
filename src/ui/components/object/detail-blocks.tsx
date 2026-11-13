@@ -668,7 +668,7 @@ const EventRow = memo(function EventRow({
   const isWarning = event.type === "Warning";
   const count = event.count ?? 0;
   const tally = tallyOf(event);
-  const { family, Icon, color } = eventReasonMark(event.reason ?? null);
+  const { family, Icon } = eventReasonMark(event.reason ?? null);
   // Almost every name a controller writes is in its own namespace and it
   // does not say so; the involved object is the one thing that knows which.
   const subject = {
@@ -676,12 +676,7 @@ const EventRow = memo(function EventRow({
     name: event.involvedObject.name,
     namespace: involvedNamespace(event),
   };
-  // Two independent channels, one per column: the left mark is severity, the
-  // mark on the reason is family. Where they meet severity takes the colour
-  // outright — a Warning is amber end to end or the warnings in a feed cannot
-  // be counted — and the family keeps only its shape, so a FailedMount is an
-  // amber platter and a FailedScheduling an amber pin.
-  const familyStyle = isWarning || !color ? undefined : { color };
+  // Only a Warning carries a tone; a Normal reason stays muted.
 
   return (
     <div className={compact ? EVENT_ROW_COMPACT : EVENT_ROW}>
@@ -699,9 +694,8 @@ const EventRow = memo(function EventRow({
       <span
         className={cn(
           "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
-          isWarning ? "text-warn" : familyStyle ? undefined : "text-fg-mut"
+          isWarning ? "text-warn" : "text-fg-mut"
         )}
-        style={familyStyle}
         title={event.reason ?? undefined}
       >
         <span className="sr-only">

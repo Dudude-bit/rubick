@@ -2,6 +2,8 @@ import { Info, Link2, Network } from "lucide-react";
 import { useMemo } from "react";
 
 import { EmptyPage } from "../../../-components/NotFound";
+import { AlertBanner } from "../-alerts/AlertBanner";
+import { StaleRows } from "@/components/ui/stale-rows";
 import { KeyValueSection } from "./detail-kv";
 import { objectFacets, objectFinding } from "./facets";
 import { OwnsPanel } from "./Owns";
@@ -23,14 +25,15 @@ import { DetailTabs } from "@/components/object/DetailTabs";
 import { ProblemSummary } from "@/components/object/detail-blocks";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
-import { errorCode, errorToShow } from "@/lib/error-utils";
-import { resourceListLink } from "@/lib/links";
+import { errorCode } from "@/lib/error-utils";
+import { builtInKindOf, resourceListLink } from "@/lib/links";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { isResourceType, ResourceType, toKind } from "@/lib/resource-registry";
@@ -132,8 +135,12 @@ export function GenericObjectPage({
   const activeTab = useAppSearch().tab ?? "overview";
   const setSearch = useSetSearch();
 
+  const stale = yaml.freshness.stale || object.freshness.stale;
+
   const manifest = yamlTab({
     yaml: yaml.data,
+    error: yaml.data === undefined ? yaml.error : null,
+    onRetry: () => yaml.refetch(),
     resourceKind: registryKind ?? undefined,
     resourceName: name,
     namespace,
@@ -177,8 +184,14 @@ export function GenericObjectPage({
           </Section>
         )}
       </div>
+    ) : object.isError ? (
+      <Unknown
+        question={t("empty", "objectUnread")}
+        error={object.error}
+        onRetry={() => object.refetch()}
+      />
     ) : (
-      <DetailSkeleton />
+      <DetailSkeleton showHeader={false} tabCount={0} />
     ),
   };
   // An autoscaler's peek names what it scales on Connections; its page says the same.
@@ -223,7 +236,7 @@ export function GenericObjectPage({
   ];
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full flex-col gap-3">
       <ResourceDetailHeader
         kind={kind}
         name={name}
@@ -244,8 +257,29 @@ export function GenericObjectPage({
         onBack={backInTab}
         dataUpdatedAt={yaml.dataUpdatedAt}
         slowed={yaml.freshness.slowed}
-        stale={yaml.freshness.stale || object.freshness.stale}
+        stale={stale}
+        slowRead={yaml.freshness.slowRead || object.freshness.slowRead}
       />
+      <AlertBanner
+        kind={builtInKindOf({ kind, crd }) ?? ""}
+        name={name}
+        namespace={namespace ?? null}
+        now={
+          facets?.status && (
+            <StatusBadge status={facets.status}>{facets.status}</StatusBadge>
+          )
+        }
+        readAt={yaml.dataUpdatedAt}
+        reading={object.isLoading}
+      />
+      {stale && (
+        <StaleRows
+          object
+          label={`${kind} ${name}`}
+          since={yaml.dataUpdatedAt}
+          error={object.freshness.failure ?? yaml.freshness.failure}
+        />
+      )}
       {object.isError &&
       yaml.isError &&
       // A failed re-read keeps the object it had, as the lists keep rows.
@@ -257,6 +291,7 @@ export function GenericObjectPage({
           resource={resource}
           kind={kind}
           name={name}
+          onRetry={() => Promise.all([object.refetch(), yaml.refetch()])}
           t={t}
         />
       ) : (
@@ -295,6 +330,7 @@ function Unread({
   resource,
   kind,
   name,
+  onRetry,
   t,
 }: {
   error: unknown;
@@ -302,11 +338,16 @@ function Unread({
   resource: string;
   kind: string;
   name: string;
+  onRetry: () => unknown;
   t: ReturnType<typeof useT>;
 }) {
   if (errorCode(error) !== "NOT_FOUND" || served.state === "reading")
     return (
-      <EmptyPage title={t("empty", "objectUnread")} body={errorToShow(error)} />
+      <Unknown
+        question={t("empty", "objectUnread")}
+        error={error}
+        onRetry={onRetry}
+      />
     );
   if (served.state === "absent" || served.state === "unknown")
     return <Unserved served={served} resource={resource} />;

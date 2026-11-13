@@ -4,7 +4,9 @@ import { Copy, Eye, EyeOff, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Section, SectionHeader } from "@/components/ui/section";
+import { Reading } from "@/components/ui/states";
 import { Textarea } from "@/components/ui/textarea";
+import { Unknown } from "@/components/ui/unknown";
 import { useCopyToClipboard } from "@/hooks";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
@@ -53,6 +55,11 @@ export interface DataSectionProps {
    */
   binary?: Record<string, BinaryValue>;
   isLoading?: boolean;
+  /** Why the values could not be read. Keys the object named stay, with no values and no claim about why. */
+  error?: unknown;
+  onRetry?: () => unknown;
+  /** What was being read, as "Secret" or "ConfigMap", for the question. */
+  kind?: string;
   emptyMessage?: string;
   /**
    * Write one key back, where the surface allows it.
@@ -79,6 +86,9 @@ export function DataSection({
   withheld = {},
   binary = {},
   isLoading = false,
+  error,
+  onRetry,
+  kind = "",
   emptyMessage,
   onEditKey,
   editDenied,
@@ -144,15 +154,27 @@ export function DataSection({
     );
   };
 
+  const unread = error ? (
+    <Unknown
+      className="mb-2"
+      question={t("empty", "couldNotReadKindData", { kind })}
+      error={error}
+      onRetry={onRetry}
+    />
+  ) : null;
+
   if (entries.length === 0) {
     return (
       <Section>
         <SectionHeader title={title ?? t("columns", "data")} count={0} />
-        <p className="py-1 text-xs text-fg-fnt">
-          {isLoading
-            ? t("action", "readingEllipsis")
-            : (emptyMessage ?? <T section="empty" k="noDataKeys" />)}
-        </p>
+        {unread ??
+          (isLoading ? (
+            <Reading>{t("action", "readingEllipsis")}</Reading>
+          ) : (
+            <p className="py-1 text-xs text-fg-fnt">
+              {emptyMessage ?? <T section="empty" k="noDataKeys" />}
+            </p>
+          ))}
       </Section>
     );
   }
@@ -201,6 +223,7 @@ export function DataSection({
           )
         }
       />
+      {unread}
       <div className="flex flex-col">
         {entries.map(({ key, value, refusal, blob }) => {
           const isRevealed = !sensitive || revealed.has(key);
@@ -228,7 +251,9 @@ export function DataSection({
                       : value === undefined
                         ? isLoading
                           ? t("action", "readingInline")
-                          : t("empty", "notReadableWithAccess")
+                          : error
+                            ? t("empty", "valueNotRead")
+                            : t("empty", "notReadableWithAccess")
                         : t("count", "chars", { n: value.length })}
                 </span>
                 {(value !== undefined || blob) && (

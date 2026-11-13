@@ -35,12 +35,7 @@ import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
-import {
-  builtInKindOf,
-  listLink,
-  objectLink,
-  resourceSegment,
-} from "@/lib/links";
+import { builtInKindOf, objectLink, resourceSegment } from "@/lib/links";
 import { servedOf, useServed } from "../-object/served";
 import { STALE_TIMES } from "@/lib/refresh";
 import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
@@ -51,21 +46,13 @@ import { KeyValueList } from "../-object/detail-kv";
 import { WordTable } from "../-object/WordTable";
 import { AccessPanel } from "../-object/AccessPanel";
 import { accessSegment } from "@/lib/access-kinds";
-import type { KeyValue } from "@/components/object/key-values";
 import { ResourceRef } from "@/components/object/ResourceRef";
-import { RESOURCE_NAME_SHELL } from "@/components/object/ResourceName";
 import { PeekActions } from "./PeekActions";
 import { CopyName } from "../-object/CopyName";
 import { DeliveryMarks, HelmMark } from "../-delivery/delivery";
 import { useDelivery } from "../-delivery/useDelivery";
 import { deliveryOf, deliveryOfKind } from "@/lib/delivery";
-import {
-  getResourceDefinition,
-  ResourceType,
-  type ResourceKind,
-} from "@/lib/resource-registry";
-import { kindHue } from "@/lib/resource-identity";
-import { useClusterStore } from "@/stores/clusterStore";
+import { ResourceType } from "@/lib/resource-registry";
 import { peekQueryKey, resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
@@ -76,26 +63,26 @@ import { usePeekHost } from "./peek-dock";
 import { usePodWatch } from "@/hooks/usePodWatch";
 import { useCauseWarnings } from "../-object/useCauseEvidence";
 import { kubeletWarned } from "@/lib/pod-cause";
-import { settingUp, withKubeletWarned } from "@/lib/share/pod-status";
-import { useWarnedPods } from "@/hooks/useClusterOverview";
+import { settingUp } from "@/lib/share/pod-status";
 import type { PodInfo } from "@/generated/types";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
-import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
-import { EyeOff, Ghost } from "lucide-react";
+import { ERROR_CODES, errorCode } from "@/lib/error-utils";
+import { Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
 import { ServiceHealthView } from "../-object/health-views";
-import { StaleRows } from "../-list/StaleRows";
+import { StaleRows } from "@/components/ui/stale-rows";
+import { Unknown } from "@/components/ui/unknown";
+import { NamespaceContents } from "../-object/NamespaceContents";
+import { DataFreshness } from "@/components/ui/realtime";
 import {
   ownersOf,
   useLastOwners,
   useRememberOwners,
   type KnownOwners,
 } from "@/hooks/useLastOwners";
-import { attentionOf, rowsWithStarts, startsOf } from "@/lib/workload-status";
-import { useLastPassed } from "@/hooks/useNow";
 import { useStaleNotFound } from "@/hooks/useStaleNotFound";
 
 export function PeekContent({
@@ -359,6 +346,16 @@ export function PeekContent({
           )}
           <DeliveryMarks deliveries={deliveries} />
           <HelmMark object={data} />
+          {!gone && (
+            <DataFreshness
+              className="ml-auto"
+              dataUpdatedAt={dataUpdatedAt}
+              slowed={read.freshness.slowed}
+              stale={read.freshness.stale}
+              slowRead={read.freshness.slowRead}
+              reserve={false}
+            />
+          )}
         </div>
         <PeekActions
           target={target}
@@ -412,6 +409,7 @@ export function PeekContent({
                 gone={gone ? (data === undefined ? lastOwners : owned) : false}
                 isLoading={isLoading}
                 readAt={dataUpdatedAt}
+                onRetry={() => read.refetch()}
               />
             ) : (
               <PeekTabBody
@@ -419,6 +417,8 @@ export function PeekContent({
                 target={target}
                 detail={data}
                 isDetailLoading={isLoading}
+                detailError={error}
+                onRetryDetail={() => read.refetch()}
               />
             )}
           </TabsContent>
@@ -509,6 +509,7 @@ function PeekOverview({
   gone,
   isLoading,
   readAt,
+  onRetry,
 }: {
   target: PeekTarget;
   summary: PeekSummary | null;
@@ -518,11 +519,12 @@ function PeekOverview({
   isLoading: boolean;
   /** When the object on screen was read. */
   readAt: number;
+  onRetry: () => unknown;
 }) {
   const t = useT();
   const builtIn = builtInKindOf(target);
   return (
-    <div className="h-full overflow-y-auto scrollbar-lane [scrollbar-gutter:stable] pb-5 pl-3.5 pr-1.5">
+    <div className="h-full overflow-y-auto overflow-x-hidden scrollbar-lane [scrollbar-gutter:stable] pb-5 pl-3.5 pr-1.5">
       {error && gone !== false ? (
         <GoneNotice
           className="mt-4"
@@ -532,12 +534,12 @@ function PeekOverview({
           error={error}
         />
       ) : error && !summary ? (
-        <p className="pt-4 text-xs text-warn">
-          {t("empty", "couldNotReadKind", {
-            kind: target.kind,
-            error: errorToShow(error),
-          })}
-        </p>
+        <Unknown
+          className="mt-4"
+          question={t("empty", "kindCouldNotRead", { kind: target.kind })}
+          error={error}
+          onRetry={onRetry}
+        />
       ) : isLoading || !summary ? (
         <PeekSkeleton />
       ) : (
@@ -592,6 +594,7 @@ function PeekOverview({
 
 /** What is read about the object as it is now, which a gone one has no answer to. */
 function LiveReads({ target }: { target: PeekTarget }) {
+  const { close } = usePeek();
   const kind = builtInKindOf(target);
   return (
     <>
@@ -603,7 +606,13 @@ function LiveReads({ target }: { target: PeekTarget }) {
           service={{ name: target.name, namespace: target.namespace }}
         />
       )}
-      {kind === "Namespace" && <NamespaceContents namespace={target.name} />}
+      {kind === "Namespace" && (
+        <NamespaceContents
+          namespace={target.name}
+          heading={(title) => <PeekHeading title={title} />}
+          onOpen={close}
+        />
+      )}
       {target.crd !== undefined &&
         target.crd === accessSegment(target.kind) && (
           <AccessPanel
@@ -646,12 +655,13 @@ function BackendPolicies({
     return (
       <div>
         <PeekHeading title={t("nav", "policies")} />
-        <p className="py-1 text-xs text-warn">
-          {t("empty", "couldNotReadInScope", { label: "BackendTLSPolicies" })}{" "}
-          <span className="text-fg-fnt">
-            {errorToShow(policiesQuery.error)}
-          </span>
-        </p>
+        <Unknown
+          question={t("empty", "couldNotReadInScope", {
+            label: "BackendTLSPolicies",
+          })}
+          error={policiesQuery.error}
+          onRetry={() => policiesQuery.refetch()}
+        />
       </div>
     );
   }
@@ -706,164 +716,6 @@ function BackendPolicies({
           );
         })}
       </div>
-    </div>
-  );
-}
-
-/**
- * What actually lives in a namespace — the question its peek exists for.
- * Three cheap namespace-scoped lists; a count alone would hide the part
- * worth peeking for, so the pods row splits out what is not ready.
- */
-function NamespaceContents({ namespace }: { namespace: string }) {
-  const t = useT();
-  const navigate = useNavigate();
-  const switchNamespace = useClusterStore((s) => s.switchNamespace);
-  const { close } = usePeek();
-
-  /** The kind's own icon and hue in the resource shell, as a door: click
-   *  scopes the window to this namespace and opens the kind's list. */
-  const kindDoor = (kind: ResourceKind) => {
-    const definition = getResourceDefinition(kind);
-    const Icon = definition.icon;
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          void switchNamespace(namespace);
-          close();
-          navigate(listLink(kind));
-        }}
-        title={t("action", "openScopedTo", {
-          plural: definition.displayPlural,
-          namespace,
-        })}
-        className={cn(
-          RESOURCE_NAME_SHELL,
-          "hover:bg-hover focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
-        )}
-      >
-        <Icon
-          className="h-2.5 w-2.5 flex-none self-center"
-          style={{
-            color: `hsl(${kindHue(kind)} var(--kind-s) var(--kind-l))`,
-          }}
-          aria-hidden="true"
-        />
-        <span className="truncate">{definition.displayPlural}</span>
-      </button>
-    );
-  };
-
-  const filters = {
-    namespace,
-    labelSelector: null,
-    fieldSelector: null,
-    limit: null,
-  };
-  const pods = useLiveQuery({
-    queryKey: queryKeys.resources(ResourceType.Pod, namespace),
-    queryFn: () =>
-      commands.listPods({
-        ...filters,
-        statusFilter: null,
-        selector: null,
-        nodeName: null,
-      }),
-    staleTime: STALE_TIMES.resourceDetail,
-    refresh: "resourceDetail",
-    retry: false,
-  });
-  const deployments = useLiveQuery({
-    queryKey: ["peek-ns-deployments", namespace],
-    queryFn: () => commands.listDeployments(filters),
-    staleTime: STALE_TIMES.resourceDetail,
-    refresh: false,
-    retry: false,
-  });
-  const services = useLiveQuery({
-    queryKey: ["peek-ns-services", namespace],
-    queryFn: () => commands.listServices({ ...filters, serviceType: null }),
-    staleTime: STALE_TIMES.resourceDetail,
-    refresh: false,
-    retry: false,
-  });
-
-  const notReady =
-    pods.data?.filter(
-      (pod) => !pod.status.ready && pod.status.display !== "Terminating"
-    ).length ?? 0;
-  const warned = useWarnedPods();
-  const starts = useMemo(
-    () => (pods.data ? startsOf(withKubeletWarned(pods.data, warned)) : null),
-    [pods.data, warned]
-  );
-  const ranOut = useLastPassed(starts?.deadlines ?? []);
-  const verdicts = useMemo(
-    () =>
-      deployments.data &&
-      attentionOf(
-        rowsWithStarts("Deployment", deployments.data, starts, ranOut).map(
-          (deployment) => deployment.rollout
-        )
-      ),
-    [deployments.data, starts, ranOut]
-  );
-
-  const count = (
-    { data, error }: { data: unknown[] | undefined; error: Error | null },
-    kind: ResourceKind,
-    trouble?: string,
-    unchecked?: string
-  ): KeyValue => ({
-    label: kindDoor(kind),
-    value: error ? (
-      <span className="break-words">
-        {t("services", "couldNotRead")}{" "}
-        <span className="text-fg-fnt">{errorToShow(error)}</span>
-      </span>
-    ) : data === undefined ? (
-      t("action", "readingInline")
-    ) : data.length === 0 ? (
-      t("empty", "noneCount")
-    ) : (
-      <span className="inline-flex flex-wrap items-baseline gap-x-1 tabular-nums">
-        {data.length}
-        {trouble && <span className="text-err">({trouble})</span>}
-        {unchecked && (
-          <span className="inline-flex items-baseline gap-1 text-fg-mut">
-            <EyeOff className="h-2.5 w-2.5 self-center" aria-hidden="true" />
-            {unchecked}
-          </span>
-        )}
-      </span>
-    ),
-    tone: error ? ("warn" as const) : trouble ? ("err" as const) : undefined,
-  });
-
-  return (
-    <div>
-      <PeekHeading title={t("nav", "contents")} />
-      <KeyValueList
-        items={[
-          count(
-            pods,
-            "Pod",
-            notReady > 0 ? t("count", "nNotReady", { n: notReady }) : undefined
-          ),
-          count(
-            deployments,
-            "Deployment",
-            verdicts && verdicts.attention > 0
-              ? t("count", "needAttention", { n: verdicts.attention })
-              : undefined,
-            verdicts && verdicts.unconfirmed > 0
-              ? t("count", "unconfirmedByPods", { n: verdicts.unconfirmed })
-              : undefined
-          ),
-          count(services, "Service"),
-        ]}
-      />
     </div>
   );
 }

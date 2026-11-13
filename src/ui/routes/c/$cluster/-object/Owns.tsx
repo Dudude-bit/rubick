@@ -9,11 +9,10 @@ import { useState } from "react";
 
 import type { Dependent, Dependents, NotRead } from "@/generated/types";
 import { ResourceRef } from "@/components/object/ResourceRef";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { TextSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 import { useT } from "@/i18n/useT";
-import { errorToShow } from "@/lib/error-utils";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { cn } from "@/lib/utils";
 import { segmentOf } from "@/lib/access-kinds";
@@ -39,12 +38,11 @@ export function OwnsPanel({
 
   if (owned.isError && !owned.data)
     return (
-      <Alert variant="destructive">
-        {t("owns", "failed", { error: errorToShow(owned.error) })}{" "}
-        <Button variant="link" size="sm" onClick={() => void owned.refetch()}>
-          {t("owns", "retry")}
-        </Button>
-      </Alert>
+      <Unknown
+        question={t("owns", "failed")}
+        error={owned.error}
+        onRetry={() => owned.refetch()}
+      />
     );
   if (!owned.data) return <TextSkeleton lines={3} />;
 
@@ -147,6 +145,7 @@ function Children({
   uid: string;
   namespace: string | null;
 }) {
+  const t = useT();
   const [page, setPage] = useState(0);
   const owned = useDependents(uid, true, page);
   return (
@@ -167,6 +166,14 @@ function Children({
             <Pager owned={owned.data} onPage={setPage} />
           </li>
         </>
+      ) : owned.isError ? (
+        <li role="none" className="py-1 pl-8">
+          <Unknown
+            question={t("owns", "failed")}
+            error={owned.error}
+            onRetry={() => owned.refetch()}
+          />
+        </li>
       ) : (
         <li className="py-1 pl-8">
           <TextSkeleton lines={1} />

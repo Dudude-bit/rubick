@@ -11,7 +11,7 @@ describe("TabMark", () => {
    * Fails if a tab nobody could check is drawn with a mark of its own again,
    * or with a coloured one.
    */
-  it("marks a tab nobody could check with the not-read eye, uncoloured", () => {
+  it("marks a tab nobody could check with the warning triangle `Unknown` uses", () => {
     const { container } = render(
       <TabMark
         mark={{ shows: "unchecked", says: "Could not read these pods." }}
@@ -19,8 +19,19 @@ describe("TabMark", () => {
       />
     );
     const mark = container.querySelector("svg");
-    expect(mark).toHaveClass("lucide-eye-off");
-    expect(mark).toHaveClass("text-fg-fnt");
+    expect(mark).toHaveClass("lucide-triangle-alert");
+    expect(mark).toHaveClass("text-warn");
+  });
+
+  /** A refused read wears the lock, as `Unknown` draws a refusal; fails if refused and failed look alike. */
+  it("marks a refused read with the lock", () => {
+    const { container } = render(
+      <TabMark
+        mark={{ shows: "unchecked", says: "Refused.", refused: true }}
+        isActive={false}
+      />
+    );
+    expect(container.querySelector("svg")).toHaveClass("lucide-lock");
   });
 });
 

@@ -1,5 +1,5 @@
 import type { UseMutationResult } from "@tanstack/react-query";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type {
@@ -25,6 +25,7 @@ vi.mock("@/lib/commands", () => ({
     objectLineage: () =>
       Promise.resolve({ uid: "d", ancestors: [], others: [], stop: null }),
     previewCascade: () => Promise.resolve(cascade.now),
+    checkAccess: () => Promise.resolve([]),
   },
 }));
 
@@ -88,6 +89,38 @@ describe("Delete on a detail page", () => {
     expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
     expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
+  const confirmDelete = async () => {
+    await renderDelete();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "api" } });
+    fireEvent.click(
+      Array.from(dialog.querySelectorAll("button")).find(
+        (button) => button.textContent === "Delete"
+      )!
+    );
+  };
+
+  /**
+   * The page's dialog closed on any settle while the peek's stayed up on a
+   * failure, so a refused delete lost the name the reader had typed. Fails if
+   * the dialog closes when the delete failed.
+   */
+  it("stays open when the delete fails", async () => {
+    mutate.mockImplementation((_, options) =>
+      options.onError(new Error("forbidden"))
+    );
+    await confirmDelete();
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  /** The control: once the delete is done the dialog goes. */
+  it("closes once the delete succeeds", async () => {
+    mutate.mockImplementation((_, options) => options.onSuccess());
+    await confirmDelete();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
 });
 

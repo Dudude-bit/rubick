@@ -1,4 +1,4 @@
-import { Copy, ExternalLink, MoreHorizontal } from "lucide-react";
+import { ExternalLink, MoreHorizontal } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -7,7 +7,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Kbd } from "@/components/ui/kbd";
-import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { cn } from "@/lib/utils";
 import { builtInKindOf } from "@/lib/links";
 import type { PeekTarget } from "@/hooks/usePeek";
@@ -51,7 +50,6 @@ export function PeekActions({
   onClose,
 }: PeekActionsProps) {
   const t = useT();
-  const copy = useCopyToClipboard();
   const { plan, busy, run, dialogs } = useObjectActions({
     kind: builtInKindOf(target),
     name: target.name,
@@ -62,7 +60,7 @@ export function PeekActions({
 
   return (
     <>
-      <div className="mt-2 flex flex-wrap items-center gap-1">
+      <div className="mt-2 flex min-w-0 flex-nowrap items-center gap-1">
         {onOpenFullPage && (
           <>
             <DetailAction
@@ -73,13 +71,6 @@ export function PeekActions({
             <Kbd shortcut="enter" />
           </>
         )}
-        <DetailAction
-          label={t("action", "copyName")}
-          icon={Copy}
-          onClick={() =>
-            copy(target.name, t("action", "nameCopied", { name: target.name }))
-          }
-        />
         {!gone &&
           plan.inline.map((action) => (
             <PeekActionButton
@@ -143,6 +134,7 @@ function PeekActionMenu({
           label={t("action", "more")}
           icon={MoreHorizontal}
           onClick={() => {}}
+          busy={Object.values(busy).some(Boolean)}
           aria-label={t("action", "moreActions")}
         />
       </DropdownMenuTrigger>

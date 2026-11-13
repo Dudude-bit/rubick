@@ -11,5 +11,5 @@
  * node is *not* spot, because on most clusters nothing knows.
  */
 export function SpotMark({ says }: { says: string }) {
-  return <span className="text-caption text-warn">{says}</span>;
+  return <span className="text-caption text-fg-mut">{says}</span>;
 }

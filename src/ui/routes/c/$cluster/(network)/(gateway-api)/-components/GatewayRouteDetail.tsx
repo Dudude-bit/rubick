@@ -198,6 +198,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<RouteInfo>({
     resourceKind: kind,
     fetchResource: (name, ns) => commands.getGatewayRoute(kind, name, ns),
@@ -296,6 +297,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
         share={share}
         isLoading={isLoading}
         error={error}
+        onRetry={refetch}
         resourceKind={kind}
         title={route?.name || ""}
         namespace={route?.namespace}

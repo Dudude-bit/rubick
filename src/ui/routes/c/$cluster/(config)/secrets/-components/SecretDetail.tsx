@@ -44,6 +44,7 @@ export function SecretDetail() {
     goBack,
     deleteMutation,
     freshness,
+    refetch,
   } = useResourceDetail<SecretInfo>({
     resourceKind: ResourceType.Secret,
     fetchResource: (name, ns) => commands.getSecret(name, ns),
@@ -61,7 +62,12 @@ export function SecretDetail() {
     namespace
   );
 
-  const { data: secretData, isLoading: isDataLoading } = useQuery({
+  const {
+    data: secretData,
+    error: secretDataError,
+    isLoading: isDataLoading,
+    refetch: refetchData,
+  } = useQuery({
     queryKey: queryKeys.secretData(namespace, name),
     queryFn: () => commands.getSecretData(name!, namespace ?? null),
     enabled: !!name && !!namespace,
@@ -118,6 +124,9 @@ export function SecretDetail() {
             keys={dataKeys}
             sensitive
             isLoading={isDataLoading}
+            error={secretDataError}
+            onRetry={refetchData}
+            kind="Secret"
             emptyMessage={t("empty", "kindHoldsNoKeys", { kind: "Secret" })}
           />
         </>
@@ -164,6 +173,7 @@ export function SecretDetail() {
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.Secret}
       title={secret?.name || name || ""}
       namespace={secret?.namespace || namespace}

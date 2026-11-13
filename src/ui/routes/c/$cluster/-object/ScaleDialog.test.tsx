@@ -154,3 +154,38 @@ describe("a count read after the dialog opened", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("scaling while the write is in flight", () => {
+  /**
+   * The submit was disabled with no sign of why and Cancel stayed live,
+   * closing the dialog over a write that was still running. Fails if the
+   * button stops showing it is working, or Cancel stays pressable.
+   */
+  it("shows the scale button working and holds Cancel", () => {
+    render(scale({ busy: true }));
+    expect(scaleButton()).toBeDisabled();
+    expect(scaleButton()).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  });
+});
+
+describe("scaling when the write failed", () => {
+  /**
+   * A failure was a toast over a dialog that looked unchanged. Fails if the
+   * dialog stops saying inline which count could not be set, and why.
+   */
+  it("says under the count what could not be set and why", async () => {
+    const { rerender } = render(scale({ onSubmit: () => {} }));
+    await userEvent.click(scaleButton());
+    rerender(scale({ error: new Error("deployments/scale is forbidden") }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Could not scale to 3: .*forbidden/
+    );
+  });
+
+  /** Fails if an error left from an earlier opening shows before anything was asked. */
+  it("shows no error before a count was submitted", () => {
+    render(scale({ error: new Error("old failure") }));
+    expect(screen.queryByText(/old failure/)).toBeNull();
+  });
+});

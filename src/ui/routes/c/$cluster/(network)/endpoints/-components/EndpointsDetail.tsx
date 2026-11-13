@@ -57,6 +57,7 @@ export function EndpointsDetail() {
     setActiveTab,
     goBack,
     freshness,
+    refetch,
     deleteMutation,
   } = useResourceDetail<EndpointsInfo>({
     resourceKind: ResourceType.Endpoints,
@@ -343,6 +344,7 @@ export function EndpointsDetail() {
       share={share}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.Endpoints}
       title={endpoints?.name || name || ""}
       namespace={endpoints?.namespace || namespace}

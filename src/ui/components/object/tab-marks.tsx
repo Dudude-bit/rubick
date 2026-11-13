@@ -7,7 +7,7 @@
  * a tab that opens onto Pods is the same tab in both, so it is drawn here
  * once and both ask for it.
  */
-import { EyeOff } from "lucide-react";
+import { Lock, TriangleAlert } from "lucide-react";
 
 import { kindMark } from "@/lib/resource-identity";
 import { cn } from "@/lib/utils";
@@ -47,9 +47,8 @@ export function TabMark({
   // The mark every other screen gives what nobody could read: present,
   // uncoloured, clearly not an answer.
   if (mark.shows === "unchecked") {
-    return (
-      <EyeOff aria-hidden="true" className="h-3 w-3 flex-none text-fg-fnt" />
-    );
+    const Glyph = mark.refused ? Lock : TriangleAlert;
+    return <Glyph aria-hidden="true" className="h-3 w-3 flex-none text-warn" />;
   }
   if (mark.shows === "severity") {
     return <span aria-hidden="true" className={cn(DOT, TONE_BG[mark.tone])} />;

@@ -671,7 +671,7 @@ describe("size", () => {
     expect(sizes.length).toBeGreaterThan(0);
     for (const [size, className] of sizes) {
       expect(className, `size "${size}" names no font-size`).toMatch(
-        /^text-(xs|sm|base|\[\d+(\.\d+)?px\])$/
+        /^text-(micro|caption|xs|title|display|sm|base)$/
       );
     }
   });

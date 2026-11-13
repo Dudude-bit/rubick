@@ -68,6 +68,7 @@ export function ServiceDetail() {
     setActiveTab,
     goBack,
     freshness,
+    refetch,
     deleteMutation,
   } = useResourceDetail<ServiceInfo>({
     resourceKind: ResourceType.Service,
@@ -299,6 +300,7 @@ export function ServiceDetail() {
       share={share}
       isLoading={isLoading}
       error={error}
+      onRetry={refetch}
       resourceKind={ResourceType.Service}
       title={service?.name || ""}
       namespace={service?.namespace}

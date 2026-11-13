@@ -969,4 +969,52 @@ describe("ResourceDetailLayout before any read has answered", () => {
     expect(screen.queryByTestId("detail-skeleton")).toBeNull();
     expect(faded()).toHaveLength(0);
   });
+
+  /**
+   * The skeleton replaced the whole page, so the name, the breadcrumb and
+   * Back, all known from the address, vanished until the read answered. Fails
+   * if the placeholder stands in for the header instead of sitting under it.
+   */
+  it("keeps the header with the name and Back while the body loads", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        resource={undefined}
+        isLoading
+        activeTab="overview"
+        tabs={[]}
+      />
+    );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "pv-demo"
+    );
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
+  });
+});
+
+describe("a detail page whose object could not be read at all", () => {
+  /**
+   * The error card named the cause and offered no way out: no page passed a
+   * retry. Fails if a failed read has no Read again button, or the button
+   * does not ask the page's read once more.
+   */
+  it("offers to read the object again", async () => {
+    const retry = vi.fn();
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        resource={undefined}
+        error={new Error("connection reset")}
+        onRetry={retry}
+        activeTab="overview"
+        tabs={[]}
+      />
+    );
+    expect(screen.getByText(/connection reset/)).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(retry).toHaveBeenCalled();
+  });
 });

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Bell } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
-import { errorToShow } from "@/lib/error-utils";
+import { Unknown } from "@/components/ui/unknown";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
@@ -67,11 +67,12 @@ export function AlertsAbout({
   if (!speaks) return null;
   if (alerts.error)
     return (
-      <p className={cn("text-xs text-warn", className)}>
-        {t("alerts", "aboutUnread", {
-          reason: errorToShow(alerts.error),
-        })}
-      </p>
+      <Unknown
+        className={className}
+        question={t("alerts", "aboutUnread")}
+        error={alerts.error}
+        onRetry={() => alerts.refetch()}
+      />
     );
   if (power.state === "unreachable")
     return (

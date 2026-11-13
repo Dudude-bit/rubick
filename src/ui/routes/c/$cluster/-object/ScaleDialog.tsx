@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode, type Ref } from "react";
 
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +16,7 @@ import { ActionWarnings } from "./action-warnings";
 import { AutoscalerBounds } from "./AutoscalerBounds";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
+import { errorToShow } from "@/lib/error-utils";
 import { qualified } from "../-peek/peek-actions";
 
 export interface ScaleDialogProps {
@@ -27,6 +29,8 @@ export interface ScaleDialogProps {
   /** Where the field starts: the replica count, undefined until it is read. */
   current: number | undefined;
   busy: boolean;
+  /** What the last write answered, drawn under the count it was asked for. */
+  error?: unknown;
   onSubmit: (replicas: number) => void;
   /**
    * Everything that will move this number back, soonest first. The dialog
@@ -44,6 +48,7 @@ export function ScaleDialog({
   namespace,
   current,
   busy,
+  error,
   onSubmit,
   warnings = [],
 }: ScaleDialogProps) {
@@ -102,6 +107,7 @@ export function ScaleDialog({
           countRef={claimFocus}
           current={current}
           busy={busy}
+          error={error}
           blocked={gate.blocked}
           gateInput={gate.input}
           confirmLabel={
@@ -126,6 +132,7 @@ function ScaleForm({
   countRef,
   current,
   busy,
+  error,
   blocked,
   gateInput,
   confirmLabel,
@@ -135,6 +142,7 @@ function ScaleForm({
   countRef: Ref<HTMLInputElement>;
   current: number | undefined;
   busy: boolean;
+  error?: unknown;
   /** True while the critical-cluster name has not been typed back. */
   blocked: boolean;
   /** The typed-name field, rendered next to the button it guards. */
@@ -148,6 +156,7 @@ function ScaleForm({
     current === undefined ? "" : String(current)
   );
   const replicas = typed.trim() === "" ? null : Number(typed);
+  const [asked, setAsked] = useState<number | null>(null);
   const counted =
     replicas !== null && Number.isInteger(replicas) && replicas >= 0;
   // A form, so Enter scales as the button does; a disabled submit button
@@ -157,7 +166,10 @@ function ScaleForm({
       className="grid grid-cols-[minmax(0,1fr)] gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        if (counted) onSubmit(replicas);
+        if (counted) {
+          setAsked(replicas);
+          onSubmit(replicas);
+        }
       }}
     >
       <div className="space-y-2">
@@ -177,13 +189,26 @@ function ScaleForm({
               : t("action", "scaleNeedsCount")}
           </p>
         )}
+        {error != null && asked !== null && (
+          <Alert variant="destructive">
+            {t("action", "scaleFailedTo", {
+              n: asked,
+              reason: errorToShow(error),
+            })}
+          </Alert>
+        )}
       </div>
       {gateInput}
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={busy}
+        >
           {t("action", "cancel")}
         </Button>
-        <Button type="submit" disabled={busy || blocked || !counted}>
+        <Button type="submit" pending={busy} disabled={blocked || !counted}>
           {confirmLabel}
         </Button>
       </DialogFooter>

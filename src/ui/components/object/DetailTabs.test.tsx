@@ -295,7 +295,7 @@ describe("a tab strip wider than its row", () => {
    * see. Fails if a picked tab stays in the menu while the strip could show
    * it, or the tabs it displaces are not offered in its place.
    */
-  it("brings a picked tab into the strip and offers what it displaced", async () => {
+  it("keeps the strip as it was when a tab is picked from the menu, and names the pick on the menu button", async () => {
     rowOf(() => 260);
     render(<Page />);
     await userEvent.click(screen.getByRole("button", { name: /do not fit/ }));
@@ -304,11 +304,14 @@ describe("a tab strip wider than its row", () => {
     expect(screen.getByText("the yaml panel")).toBeInTheDocument();
     expect(["Overview", "Logs", "Events", "YAML"].map(inStrip)).toEqual([
       true,
-      false,
-      false,
       true,
+      false,
+      false,
     ]);
-    expect(await menuItems()).toEqual(["Logs", "Events"]);
+    expect(screen.getByRole("button", { name: /YAML/ })).toHaveTextContent(
+      "YAML"
+    );
+    expect(await menuItems()).toEqual(["Events", "YAML"]);
   });
 
   /**

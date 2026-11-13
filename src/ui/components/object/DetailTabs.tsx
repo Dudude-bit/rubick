@@ -180,7 +180,7 @@ function useFittedTabs({
         room: box.clientWidth,
         gap: GAP_PX,
         menu: menu.current?.getBoundingClientRect().width || MENU_PX,
-        open: tabs.findIndex((tab) => tab.dataset.tab === open),
+        open: -1,
       });
       const next: Fit = {
         hidden: tabs
@@ -256,7 +256,11 @@ function HiddenTabs({
             open ? "border-fg font-medium text-fg" : "border-hair text-fg-mut"
           )}
         >
-          {t("action", "tabsMore", { n: tabs.length })}
+          {open ? (
+            <span className="max-w-[16ch] truncate">{open.label}</span>
+          ) : (
+            t("action", "tabsMore", { n: tabs.length })
+          )}
           <ChevronDown className="h-3 w-3" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>

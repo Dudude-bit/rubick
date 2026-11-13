@@ -57,7 +57,8 @@ import {
 import { useAsk } from "../-object/useAsk";
 import { askableKind } from "@/lib/tell-me-when";
 import { AlertTriangle, Play, FileCheck } from "lucide-react";
-import { ERROR_CODES, errorToShow } from "@/lib/error-utils";
+import { ERROR_CODES, errorToShow, isUnanswered } from "@/lib/error-utils";
+import { toastWriteError } from "@/lib/toast-error";
 import { credentialsExpired } from "@/lib/credentials";
 import { currentConnection } from "@/lib/refusals";
 
@@ -385,12 +386,12 @@ export function YamlEditorDialog() {
       // The command itself failed: nothing was sent, or the session is over.
       const errorMessage = errorToShow(error);
       if (mine())
-        setApplyResult({ verdict: "failed", stdout: "", stderr: errorMessage });
-      toast({
-        title: t("action", "applyFailed"),
-        description: errorMessage,
-        variant: "destructive",
-      });
+        setApplyResult({
+          verdict: isUnanswered(error) ? "unanswered" : "failed",
+          stdout: "",
+          stderr: errorMessage,
+        });
+      toastWriteError(t("action", "applyFailed"), error);
     } finally {
       if (mine()) setIsApplying(false);
     }

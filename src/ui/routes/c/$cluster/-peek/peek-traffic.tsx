@@ -35,7 +35,7 @@ import {
 import { PeekHeading } from "./peek-heading";
 import { ChainWatches } from "../-object/ChainWatches";
 import { useT } from "@/i18n/useT";
-import { errorToShow } from "@/lib/error-utils";
+import { Unknown } from "@/components/ui/unknown";
 import { queryKeys } from "@/lib/query-keys";
 
 /**
@@ -430,24 +430,27 @@ function TrafficPath({
     <div>
       <PeekHeading title={t("nav", "trafficPath")} />
       {conns.error && (
-        <p className="py-1 text-xs text-warn">
-          {t("empty", "couldNotReadConnections", {
-            reason: errorToShow(conns.error),
-          })}
-        </p>
+        <Unknown
+          className="my-1"
+          question={t("empty", "couldNotReadConnections")}
+          error={conns.error}
+          onRetry={() => conns.refetch()}
+        />
       )}
       {routed.error && (
-        <p className="py-1 text-xs text-warn">
-          {t("empty", "couldNotAskRoutes")}{" "}
-          <span className="text-fg-fnt">{errorToShow(routed.error)}</span>
-        </p>
+        <Unknown
+          className="my-1"
+          question={t("empty", "couldNotAskRoutes")}
+          error={routed.error}
+        />
       )}
       {gatewaysQuery.error && (
-        <p className="py-1 text-xs text-warn">
-          {t("empty", "couldNotReadGateways", {
-            message: errorToShow(gatewaysQuery.error),
-          })}
-        </p>
+        <Unknown
+          className="my-1"
+          question={t("empty", "couldNotReadGateways")}
+          error={gatewaysQuery.error}
+          onRetry={() => gatewaysQuery.refetch()}
+        />
       )}
       <div className="pb-1">
         {levels.map((level, index) => {

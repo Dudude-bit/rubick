@@ -15,6 +15,7 @@ import { Ban, ExternalLink, Unlink } from "lucide-react";
 import { PerfProfiler } from "@/lib/perf-profiler";
 
 import { Section } from "@/components/ui/section";
+import { Eyebrow, Reading } from "@/components/ui/states";
 import { Unknown } from "@/components/ui/unknown";
 import { PATH_PATIENCE_MS, useOverdue } from "./useOverdue";
 import { shortRevision } from "@/integrations";
@@ -40,9 +41,6 @@ import type { ObjectRef, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { NodeRef } from "./NodeRef";
 import { ResourceType } from "@/lib/resource-registry";
-
-const GROUP_HEADING =
-  "text-micro font-semibold uppercase tracking-[0.07em] text-fg-fnt";
 
 function Name({ object }: { object: ObjectRef }) {
   const { crdFor } = useCrdIndex();
@@ -114,6 +112,41 @@ function Outside({ end }: { end: OutsideEnd }) {
   );
 }
 
+const MANY_MISSING = 4;
+
+function MissingKeys({ row }: { row: ConnRow }) {
+  const t = useT();
+  const missing = row.missingKeys ?? [];
+  const lines = missing.map((key) => (
+    <p
+      key={key.key}
+      className={cn(
+        "flex items-center gap-1 text-caption",
+        key.optional ? "text-fg-fnt" : "text-err"
+      )}
+    >
+      <Unlink className="h-3 w-3 flex-none" aria-hidden="true" />
+      {t("nav", key.optional ? "keyNotInSubjectOptional" : "keyNotInSubject", {
+        key: key.key,
+        kind: key.from,
+      })}
+    </p>
+  ));
+  if (missing.length < MANY_MISSING || !missing.every((key) => key.optional))
+    return <>{lines}</>;
+  return (
+    <details className="group text-caption text-fg-fnt">
+      <summary className="cursor-pointer select-none rounded py-0.5 hover:text-fg-mut">
+        {t("nav", "keysSummaryOptional", {
+          n: row.keysReferenced ?? missing.length,
+          absent: missing.length,
+        })}
+      </summary>
+      {lines}
+    </details>
+  );
+}
+
 function Row({ row }: { row: ConnRow }) {
   const t = useT();
   const existence = row.object
@@ -146,10 +179,14 @@ function Row({ row }: { row: ConnRow }) {
             <span
               className={cn(
                 "text-caption",
-                row.object?.existence === "missing" ? "text-err" : "text-fg-fnt"
+                row.object?.existence === "missing" && !row.optionalOnly
+                  ? "text-err"
+                  : "text-fg-fnt"
               )}
             >
-              {existence}
+              {row.object?.existence === "missing" && row.optionalOnly
+                ? t("nav", "optionalNotPresent")
+                : existence}
             </span>
           )}
         </span>
@@ -165,22 +202,7 @@ function Row({ row }: { row: ConnRow }) {
               {way}
             </p>
           ))}
-        {row.missingKeys?.map((missing) => (
-          <p
-            key={missing.key}
-            className={cn(
-              "flex items-center gap-1 text-caption",
-              missing.optional ? "text-warn" : "text-err"
-            )}
-          >
-            <Unlink className="h-3 w-3 flex-none" aria-hidden="true" />
-            {t(
-              "nav",
-              missing.optional ? "keyNotInSubjectOptional" : "keyNotInSubject",
-              { key: missing.key, kind: missing.from }
-            )}
-          </p>
-        ))}
+        <MissingKeys row={row} />
       </div>
     </div>
   );
@@ -248,9 +270,7 @@ function ConnectionsPanelInner({
   if (isPending) {
     return (
       <Section>
-        <p className="text-xs text-fg-fnt">
-          {t("empty", "readingWhatConnects")}
-        </p>
+        <Reading>{t("empty", "readingWhatConnects")}</Reading>
       </Section>
     );
   }
@@ -273,14 +293,14 @@ function ConnectionsPanelInner({
     <Section className="gap-[18px]">
       {groups.map((group) => (
         <div key={group.key} className="flex flex-col">
-          <p className={cn(GROUP_HEADING, "pb-1.5")}>
+          <Eyebrow className="pb-1.5">
             {group.title}
             {group.caption && (
               <span className="ml-2 font-normal normal-case tracking-normal text-caption text-fg-fnt">
                 {group.caption}
               </span>
             )}
-          </p>
+          </Eyebrow>
           {group.rows.map((row) => (
             <Row key={`${group.key}/${row.key}`} row={row} />
           ))}

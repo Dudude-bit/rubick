@@ -5,7 +5,6 @@ import {
   Filter,
   Hourglass,
   Inbox,
-  Loader2,
   Trash2,
   Unlink,
   XCircle,
@@ -16,6 +15,7 @@ import { KindIcon } from "@/components/object/KindIcon";
 import { segmentOf } from "@/lib/access-kinds";
 import { drawnCrd } from "@/lib/links";
 import { RouteLink } from "@/components/ui/route-link";
+import { Spinner } from "@/components/ui/spinner";
 import { useT } from "@/i18n/useT";
 import { useConnections } from "@/hooks/useConnections";
 import { dependentsOf, referencesUnread } from "@/lib/connections";
@@ -68,7 +68,7 @@ export function CascadePreview({
 
   return (
     <div
-      className="mt-3 flex flex-col gap-2.5 rounded-md border border-hair bg-raise p-3 text-xs"
+      className="mt-3 flex min-h-24 flex-col gap-2.5 rounded-md border border-hair bg-raise p-3 text-xs"
       aria-live="polite"
     >
       {failure ? (
@@ -125,7 +125,7 @@ function Dependents({
   if (!conns.data)
     return (
       <p className="flex items-center gap-2 text-fg-mut">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <Spinner size="xs" aria-hidden="true" />
         {t("cascade", "dependentsWorking")}
       </p>
     );
@@ -183,7 +183,7 @@ function Working() {
   const t = useT();
   return (
     <p className="flex items-center gap-2 text-fg-mut">
-      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      <Spinner size="xs" aria-hidden="true" />
       {t("cascade", "working")}
     </p>
   );

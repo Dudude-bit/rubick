@@ -1,6 +1,6 @@
 import type { UseMutationResult } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   describeDeletion,
@@ -48,6 +48,7 @@ export function DeletionDialog({
   onConfirm: () => void;
 }) {
   const t = useT();
+  const confirming = useRef(false);
   const copy = restart
     ? describePodRestart(name, namespace ?? null, detail, t)
     : describeDeletion(kind, name, namespace ?? null, detail, t);
@@ -55,7 +56,11 @@ export function DeletionDialog({
   return (
     <DangerousConfirmDialog
       open={open}
-      onOpenChange={onOpenChange}
+      // The confirm button closes the dialog as it is pressed, before the
+      // delete has answered; only the caller, on success, may close it then.
+      onOpenChange={(next) => {
+        if (!(confirming.current && !next)) onOpenChange(next);
+      }}
       title={copy.title}
       description={warned(copy.description, intercept)}
       details={
@@ -69,9 +74,14 @@ export function DeletionDialog({
         ) : null
       }
       confirmationText={name}
+      confirmationPlaceholder={t("action", "typeNamePlaceholder")}
       confirmLabel={t("action", restart ? "restart" : "delete")}
       isLoading={busy}
-      onConfirm={onConfirm}
+      onConfirm={() => {
+        confirming.current = true;
+        queueMicrotask(() => (confirming.current = false));
+        onConfirm();
+      }}
     />
   );
 }
@@ -141,7 +151,7 @@ export function DeleteAction({
         busy={mutation.isPending}
         onConfirm={() =>
           mutation.mutate(undefined, {
-            onSettled: () => setOpen(false),
+            onSuccess: () => setOpen(false),
             onError: (error) => noteDenied("delete", guarded, error),
           })
         }

@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { CircleX, Lock } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 
 import { useT } from "@/i18n/useT";
 import { EventRows } from "@/components/object/detail-blocks";
-import { ReadAgain } from "@/components/ui/read-again";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TextSkeleton } from "@/components/ui/skeleton";
+import { Unknown } from "@/components/ui/unknown";
 import type { EventInfo } from "@/generated/types";
 import {
   aboutAnother,
@@ -12,7 +12,7 @@ import {
   type ObjectEventsQuery,
 } from "@/hooks/useObjectEvents";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
-import { cn, formatWhen } from "@/lib/utils";
+import { formatWhen } from "@/lib/utils";
 import { useHeldRows } from "../-list/held-rows";
 import { HeldUpdates } from "../-list/HeldUpdates";
 
@@ -47,40 +47,23 @@ export function ObjectEventsBody({
     ? (rows[0]?.namespace ?? "")
     : `${subject.kind}/${subject.namespace}/${subject.name}`;
   const held = useHeldRows(rows, pointed && rows.length > 0, about);
-  if (error) {
-    const refused = isRefusal(error);
+  if (error)
     return (
-      <div className="py-1" data-testid="events-unread">
-        <p
-          data-read={refused ? "refused" : "failed"}
-          className={cn(
-            "flex items-center gap-1.5 text-xs",
-            refused ? "text-warn" : "text-err"
-          )}
-        >
-          {refused ? (
-            <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-          ) : (
-            <CircleX className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-          )}
-          {t("empty", eventsUnreadWords(error))}
-        </p>
-        <p className="mt-1 select-text wrap-break-word font-mono text-caption text-fg-fnt">
-          {errorToShow(error)}
-        </p>
-        <ReadAgain
+      <div
+        data-testid="events-unread"
+        data-read={isRefusal(error) ? "refused" : "failed"}
+      >
+        <Unknown
+          question={t("empty", eventsUnreadWords(error))}
           error={error}
-          onRetry={() => void query.refetch()}
-          className="mt-1.5"
+          onRetry={() => query.refetch()}
         />
       </div>
     );
-  }
   if (!data)
     return (
-      <div className="flex flex-col gap-1.5" data-testid="events-reading">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-3/4" />
+      <div data-testid="events-reading">
+        <TextSkeleton lines={2} />
       </div>
     );
   return (
@@ -119,20 +102,13 @@ export function ObjectEventsBody({
       )}
       {query.ownedUnread && (
         <p
-          className={cn(
-            "mt-1.5 flex items-start gap-1.5 text-xs",
-            isRefusal(query.ownedUnread.error) ? "text-warn" : "text-err"
-          )}
+          className="mt-1.5 flex items-start gap-1.5 text-xs text-warn"
           data-testid="owned-events-unread"
         >
-          {isRefusal(query.ownedUnread.error) ? (
-            <Lock className="mt-0.5 h-3.5 w-3.5 flex-none" aria-hidden="true" />
-          ) : (
-            <CircleX
-              className="mt-0.5 h-3.5 w-3.5 flex-none"
-              aria-hidden="true"
-            />
-          )}
+          <TriangleAlert
+            className="mt-0.5 h-3.5 w-3.5 flex-none"
+            aria-hidden="true"
+          />
           <span>
             {t("empty", query.ownedUnread.unread)}{" "}
             <span className="font-mono text-fg-fnt">

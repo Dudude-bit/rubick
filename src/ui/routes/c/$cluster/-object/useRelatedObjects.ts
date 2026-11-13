@@ -51,6 +51,8 @@ export interface RelatedObjects {
   isPending: boolean;
   /** A vendor that claims the kind and could not answer. */
   error: Error | null;
+  /** Asks the vendors again. */
+  refetch?: () => unknown;
 }
 
 const NONE: RelatedObject[] = [];
@@ -154,6 +156,7 @@ export function useRelatedObjects(
     related,
     isPending: enabled && query.isPending,
     error: (query.error as Error) ?? query.data?.short ?? null,
+    refetch: query.refetch,
   };
 }
 

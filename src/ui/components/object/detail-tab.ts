@@ -49,7 +49,7 @@ export type DetailTabMark =
    * count: a tab whose page says "nobody looked" wore a plain number, which
    * is the page's third state collapsing into its second on the way out.
    */
-  | { shows: "unchecked"; says: string }
+  | { shows: "unchecked"; says: string; refused?: boolean }
   /** A session is attached inside. The only animated mark in the strip, so it means one thing. */
   | { shows: "live"; says: string };
 

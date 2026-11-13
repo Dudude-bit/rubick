@@ -1750,6 +1750,10 @@ export interface ConnRow {
   unasked?: boolean;
   /** Keys this row reads that the subject was read and found not to hold. */
   missingKeys?: { key: string; optional: boolean; from: string }[];
+  /** How many keys of the object this row's usages name, for a summary of the missing ones. */
+  keysReferenced?: number;
+  /** Every way the subject draws on the object is optional: its absence stops nothing. */
+  optionalOnly?: boolean;
 }
 
 export interface ConnGroup {
@@ -2048,6 +2052,11 @@ function needsToRun(conns: ResourceConnections, t: T): ConnRow[] {
       ...rowFor(needLabel(edge, t), edge.to, t),
       ways: describeUsages(edge.relation.usages, t),
       missingKeys: missingKeysOf(edge.relation.usages, edge.to.kind),
+      keysReferenced: edge.relation.usages.filter((use) => use.how === "env")
+        .length,
+      optionalOnly:
+        edge.relation.usages.length > 0 &&
+        edge.relation.usages.every((use) => use.how === "env" && use.optional),
       verifiable: true,
       rank: needRank(edge),
     }));
