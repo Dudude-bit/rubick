@@ -2,7 +2,7 @@
  * The words for flows: an end, a cell, a source's own line. Every map from
  * a state to words is a `Record` the compiler holds total.
  */
-import type { FlowEnd, Measure } from "@/generated/types";
+import type { FlowEnd, Measure, PolicyRef } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { formatShare } from "@/lib/cost";
 import { formatQuantity } from "@/lib/metric-format";
@@ -175,8 +175,6 @@ export function sourceLines(line: SourceLine, t: T): string[] {
     out.push(t("traffic", "panelEvents", { v: rate(events) }));
   const drops = value("drops");
   if (drops !== null) out.push(t("traffic", "panelDrops", { v: rate(drops) }));
-  for (const reason of line.reasons)
-    out.push(`${reason.reason}: ${rate(reason.rate)}/s`);
   if (line.protocols.length > 0)
     out.push(
       t("traffic", "panelProtocols", { list: line.protocols.join(", ") })
@@ -204,3 +202,9 @@ export function edgeSub(row: FlowRow, t: T): string {
   if (source) parts.push(source);
   return parts.join(" · ");
 }
+
+/** The policies that denied a drop, as the source named them. */
+export const policyWords = (policies: readonly PolicyRef[]) =>
+  policies
+    .map((p) => `${p.kind} ${p.namespace ? `${p.namespace}/` : ""}${p.name}`)
+    .join(", ");

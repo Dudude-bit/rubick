@@ -7,7 +7,45 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/useT";
 import type { FlowRow } from "@/lib/traffic";
-import { endLabel, endSub, sourceLines } from "./traffic-words";
+import { Link } from "@tanstack/react-router";
+
+import type { PolicyRef } from "@/generated/types";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
+import { parts } from "@/i18n/parts";
+import { crdInGroup, objectLink } from "@/lib/links";
+import {
+  endLabel,
+  endSub,
+  policyWords,
+  rate,
+  sourceLines,
+} from "./traffic-words";
+
+/** Each policy that denied a drop, opening the policy where the app can. */
+function Policies({ policies }: { policies: readonly PolicyRef[] }) {
+  const { crdFor } = useCrdIndex();
+  return policies.map((policy, at) => {
+    const link = objectLink({
+      kind: policy.kind,
+      name: policy.name,
+      namespace: policy.namespace,
+      crd: crdInGroup(policy, crdFor) ?? undefined,
+    });
+    const words = policyWords([policy]);
+    return (
+      <span key={words}>
+        {at > 0 && ", "}
+        {link ? (
+          <Link {...link} className="font-mono text-info hover:underline">
+            {words}
+          </Link>
+        ) : (
+          <span className="font-mono">{words}</span>
+        )}
+      </span>
+    );
+  });
+}
 
 export function FlowPanel({
   row,
@@ -68,6 +106,24 @@ export function FlowPanel({
             ) : (
               <p className="text-fg-fnt">{t("traffic", "panelNothing")}</p>
             )}
+            {line.reasons.map((reason) => (
+              <p
+                key={`${reason.reason}:${policyWords(reason.policies ?? [])}`}
+                className="text-[11.5px] text-warn"
+              >
+                <span className="font-mono">
+                  {reason.reason}: {rate(reason.rate)}/s
+                </span>
+                {(reason.policies ?? []).length > 0 && (
+                  <>
+                    {" · "}
+                    {parts(t("traffic", "panelDenied"), {
+                      policies: <Policies policies={reason.policies ?? []} />,
+                    })}
+                  </>
+                )}
+              </p>
+            ))}
           </section>
         );
       })}

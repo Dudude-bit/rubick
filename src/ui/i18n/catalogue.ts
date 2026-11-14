@@ -2016,6 +2016,27 @@ export const en = {
     needBeyla:
       "Beyla: its network metrics (features: network), scraped by this Prometheus.",
     needCaretta: "Caretta: its DaemonSet, scraped by this Prometheus.",
+    needRelay:
+      "Hubble Relay: Cilium with hubble.relay.enabled, read live through a port-forward; no Prometheus needed.",
+    modeWindow: "Window",
+    modeLive: "Live",
+    lastMinute: "last minute",
+    liveConnecting: "Connecting to Hubble Relay…",
+    liveVia: "Live from Hubble Relay {namespace}/{service}, through pod {pod}.",
+    liveNotEnabled:
+      "Hubble Relay is not enabled in this cluster: no Service carries k8s-app=hubble-relay. Enable it with hubble.relay.enabled=true, or cilium hubble enable --relay.",
+    liveNotLooked: "Could not look for Hubble Relay: {said}",
+    liveServesTls:
+      "Hubble Relay in {namespace} serves TLS, and Rubick reads only a relay serving plaintext gRPC (the chart's default).",
+    liveNoPod: "No pod behind {namespace}/{service} is ready.",
+    liveRelayEnded: "Hubble Relay closed the stream.",
+    liveUnsubscribed:
+      "The live stream was not listened to in time and stopped.",
+    liveFailed: "Hubble Relay could not be read: {said}",
+    liveLost: "Hubble reports {lost} lost before they reached the relay.",
+    liveUntracked:
+      "{untracked} fell outside the pairs held at once and are not drawn.",
+    panelDenied: "denied by {policies}",
     window5m: "last 5 minutes",
     window15m: "last 15 minutes",
     window1h: "last hour",
@@ -8308,6 +8329,7 @@ export const en = {
     policiesSelecting: { one: "{n} policy", other: "{n} policies" },
     mapObjects: { one: "{n} object", other: "{n} objects" },
     flows: { one: "{n} flow", other: "{n} flows" },
+    events: { one: "{n} flow event", other: "{n} flow events" },
     ofWorkloads: { one: "of {n} workload", other: "of {n} workloads" },
     itsPods: { one: "its {n} pod", other: "its {n} pods" },
     mapGroups: { one: "{n} group", other: "{n} groups" },

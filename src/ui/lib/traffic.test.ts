@@ -2,9 +2,17 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { Flow, FlowEnd, Measure, QueryRead } from "@/generated/types";
+import type {
+  Flow,
+  FlowEnd,
+  LivePair,
+  Measure,
+  QueryRead,
+} from "@/generated/types";
 import {
   flowTone,
+  liveRow,
+  LiveRows,
   MAX_FLOW_ROWS,
   MEASURES,
   pairRows,
@@ -215,5 +223,64 @@ describe("the budget both sides of IPC hold", () => {
     ) as { maxFlowRows: number; measures: string[] };
     expect(budget.maxFlowRows).toBe(MAX_FLOW_ROWS);
     expect(budget.measures).toEqual([...MEASURES]);
+  });
+});
+
+describe("a live pair as a row", () => {
+  const pair = (over: Partial<LivePair> = {}): LivePair => ({
+    from: workload("cart"),
+    to: workload("pay"),
+    forwarded: 3,
+    dropped: 0.5,
+    drops: [
+      {
+        reason: "POLICY_DENIED",
+        rate: 0.5,
+        policies: [
+          {
+            group: "networking.k8s.io",
+            kind: "NetworkPolicy",
+            namespace: "shop",
+            name: "deny-all",
+          },
+        ],
+      },
+    ],
+    requests: null,
+    errors: null,
+    p50: null,
+    p95: null,
+    p99: null,
+    protocols: [],
+    ...over,
+  });
+
+  /**
+   * Hubble sees HTTP only where L7 visibility is on: a pair it saw no HTTP
+   * on has its requests not measured, never 0.
+   */
+  it("says HTTP not measured where Hubble saw none, and keeps drops with their policy", () => {
+    const row = liveRow(pair());
+    expect(row.requests.state).toBe("notMeasured");
+    expect(row.errorShare.state).toBe("notMeasured");
+    expect(row.events).toEqual({
+      value: 3,
+      source: "Hubble Relay",
+      state: "measured",
+    });
+    expect(row.reasons[0].policies?.[0].name).toBe("deny-all");
+    expect(flowTone(row)).toBe("warn");
+    const http = liveRow(pair({ requests: 10, errors: 1, p95: 12 }));
+    expect(http.errorShare.value).toBe(0.1);
+    expect(http.p95.value).toBe(12);
+  });
+
+  /** A pair object the stream did not resend keeps its row, so it does not redraw. */
+  it("keeps a row for as long as its pair object", () => {
+    const rows = new LiveRows();
+    const one = pair();
+    const [first] = rows.rows([one]);
+    expect(rows.rows([one])[0]).toBe(first);
+    expect(rows.rows([pair()])[0]).not.toBe(first);
   });
 });

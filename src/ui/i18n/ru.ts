@@ -2092,6 +2092,26 @@ export const ru: Catalogue = {
       "Beyla: её сетевые метрики (features: network), которые собирает этот Prometheus.",
     needCaretta:
       "Caretta: её DaemonSet, метрики которого собирает этот Prometheus.",
+    needRelay:
+      "Hubble Relay: Cilium с hubble.relay.enabled, читается вживую через проброс порта; Prometheus не нужен.",
+    modeWindow: "Окно",
+    modeLive: "Вживую",
+    lastMinute: "последняя минута",
+    liveConnecting: "Подключаемся к Hubble Relay…",
+    liveVia: "Вживую из Hubble Relay {namespace}/{service}, через Pod {pod}.",
+    liveNotEnabled:
+      "Hubble Relay в этом кластере не включён: ни у одного Service нет метки k8s-app=hubble-relay. Включите его через hubble.relay.enabled=true или cilium hubble enable --relay.",
+    liveNotLooked: "Не удалось проверить, есть ли Hubble Relay: {said}",
+    liveServesTls:
+      "Hubble Relay в {namespace} отдаёт TLS, а Rubick читает только relay с открытым gRPC (так по умолчанию в чарте).",
+    liveNoPod: "За {namespace}/{service} нет ни одного готового пода.",
+    liveRelayEnded: "Hubble Relay закрыл поток.",
+    liveUnsubscribed: "Поток не начали слушать вовремя, и он остановлен.",
+    liveFailed: "Не удалось прочитать Hubble Relay: {said}",
+    liveLost: "Hubble сообщает: {lost} потеряно, не дойдя до relay.",
+    liveUntracked:
+      "{untracked} не уместились в число пар, которые держатся одновременно, и не показаны.",
+    panelDenied: "запрещено: {policies}",
     window5m: "последние 5 минут",
     window15m: "последние 15 минут",
     window1h: "последний час",
@@ -9154,6 +9174,12 @@ export const ru: Catalogue = {
       few: "{n} политики",
       many: "{n} политик",
       other: "{n} политики",
+    },
+    events: {
+      one: "{n} событие потока",
+      few: "{n} события потоков",
+      many: "{n} событий потоков",
+      other: "{n} события потоков",
     },
     flows: {
       one: "{n} поток",

@@ -10,6 +10,7 @@ import {
 } from "vite-plus/test";
 
 import type { FlowEnd, Measure } from "@/generated/types";
+import type { LiveSnapshot } from "@/hooks/useLiveTraffic";
 import type { TrafficState } from "@/hooks/useTraffic";
 import {
   MEASURES,
@@ -21,11 +22,22 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 
 const traffic = vi.fn<() => TrafficState>();
+const live = vi.fn<() => LiveSnapshot | null>(() => null);
+const liveCapability = vi.fn<() => unknown>(() => null);
 const stream = vi.hoisted(() => ({ opened: 0, closed: 0 }));
 
 vi.mock("@/hooks/useTraffic", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useTraffic")>()),
   useTraffic: () => traffic(),
+}));
+vi.mock("@/hooks/useLiveTraffic", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useLiveTraffic")>()),
+  useLiveTraffic: () => live(),
+}));
+vi.mock("@/integrations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/integrations")>()),
+  useCapability: (key: string) =>
+    key === "traffic.live" ? liveCapability() : null,
 }));
 vi.mock("../-map/useTopology", () => ({
   useTopology: () => {
@@ -216,5 +228,105 @@ describe("the Traffic page", () => {
         /Istio saw no flows in any namespace in the last 5 minutes/
       ).length
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("the Traffic page, live", () => {
+  const snapshot = (over: Partial<LiveSnapshot>): LiveSnapshot => ({
+    phase: "live",
+    pairs: new Map(),
+    relay: {
+      namespace: "kube-system",
+      service: "hubble-relay",
+      pod: "relay-1",
+    },
+    lost: 0,
+    untracked: 0,
+    end: null,
+    error: null,
+    ...over,
+  });
+
+  beforeEach(() => liveCapability.mockReturnValue({ open: () => () => {} }));
+  afterEach(() => {
+    liveCapability.mockReturnValue(null);
+    live.mockReturnValue(null);
+  });
+
+  /**
+   * With nothing windowed to read and Hubble Relay to read from, the page
+   * reads it live instead of stopping at the list of sources.
+   */
+  it("reads live where no windowed source is there", async () => {
+    traffic.mockReturnValue({ says: "absent" });
+    live.mockReturnValue(
+      snapshot({
+        pairs: new Map([
+          [
+            "a",
+            {
+              from: workload("cart"),
+              to: workload("pay"),
+              forwarded: 4,
+              dropped: 0,
+              drops: [],
+              requests: null,
+              errors: null,
+              p50: null,
+              p95: null,
+              p99: null,
+              protocols: [],
+            },
+          ],
+        ]),
+      })
+    );
+    await open();
+    expect(screen.getByTestId("canvas").textContent).toContain(
+      "4 flow events/s · Hubble Relay"
+    );
+    expect(
+      screen.getByText(/Live from Hubble Relay kube-system\/hubble-relay/)
+    ).toBeTruthy();
+    expect(screen.queryByText(/Rubick installs none of them/)).toBeNull();
+  });
+
+  /**
+   * Not enabled, not looked for and serving TLS are three sentences, and
+   * none of them is "no flows".
+   */
+  it("says not enabled, could not look and serves TLS apart, never as no flows", async () => {
+    traffic.mockReturnValue({ says: "absent" });
+    const said = async (end: LiveSnapshot["end"]) => {
+      live.mockReturnValue(snapshot({ phase: "ended", end, relay: null }));
+      const page = await open();
+      const text = screen.getByTestId("traffic-stopped").textContent ?? "";
+      page.unmount();
+      return text;
+    };
+    const off = await said({ says: "notEnabled" });
+    const unread = await said({
+      says: "notLooked",
+      said: "services is forbidden",
+    });
+    const tls = await said({ says: "servesTls", namespace: "kube-system" });
+    expect(off).toContain("Hubble Relay is not enabled");
+    expect(unread).toContain(
+      "Could not look for Hubble Relay: services is forbidden"
+    );
+    expect(tls).toContain("serves TLS");
+    for (const text of [off, unread, tls])
+      expect(text).not.toMatch(/saw no flows/);
+  });
+
+  /** Without anything live to read, there is no live switch to offer. */
+  it("offers the live switch only where something reads live", async () => {
+    traffic.mockReturnValue(read({ requests: 1 }));
+    const page = await open();
+    expect(screen.getByRole("button", { name: "Live" })).toBeTruthy();
+    page.unmount();
+    liveCapability.mockReturnValue(null);
+    await open();
+    expect(screen.queryByRole("button", { name: "Live" })).toBeNull();
   });
 });

@@ -59,7 +59,12 @@ import type {
 } from "@/generated/types";
 import type { AppLink } from "@/lib/links";
 import type { CostReading, Prices } from "@/lib/cost";
-import type { FlowSource, FlowWindow, TrafficReading } from "@/lib/traffic";
+import type {
+  FlowSource,
+  FlowWindow,
+  LiveListener,
+  TrafficReading,
+} from "@/lib/traffic";
 import type { WorkloadFold, WorkloadKey } from "@/generated/types";
 import type { UsageSample } from "@/lib/usage-history";
 import type {
@@ -668,6 +673,16 @@ export interface Capabilities {
    * workload block is not drawn. A failed read throws, so "no flows" is
    * never said over a query that did not answer.
    */
+  /**
+   * Flows as they happen, from the cluster's own observer rather than from
+   * a store of metrics. `open` starts one stream for the scope and returns
+   * how to stop it; the listener hears batches until exactly one end.
+   *
+   * Absent, the Traffic page reads only the windowed source.
+   */
+  "traffic.live": {
+    open: (scope: string[] | null, listener: LiveListener) => () => void;
+  };
   "traffic.flows": {
     sources: () => Promise<FlowSource[]>;
     read: (input: {

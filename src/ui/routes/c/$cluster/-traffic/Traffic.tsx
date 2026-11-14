@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Maximize } from "lucide-react";
 
@@ -6,8 +6,10 @@ import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { SectionHeader } from "@/components/ui/section";
-import type { FlowEnd } from "@/generated/types";
+import type { FlowEnd, UnreadNamespace } from "@/generated/types";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
+import { useLiveTraffic } from "@/hooks/useLiveTraffic";
+import { useCapability } from "@/integrations";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { usePeek } from "@/hooks/usePeek";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
@@ -17,6 +19,8 @@ import { useT } from "@/i18n/useT";
 import { crdInGroup, objectLink, pageLink } from "@/lib/links";
 import {
   FLOW_WINDOWS,
+  LIVE_SOURCE,
+  LiveRows,
   MAX_FLOW_ROWS,
   windowOf,
   type FlowRow,
@@ -40,6 +44,7 @@ import { flowColumns } from "./columns";
 import { FlowPanel } from "./FlowPanel";
 import { trafficModel } from "./model";
 import { SourceRail } from "./SourceRail";
+import { liveStopped } from "./live-words";
 import { WINDOW_WORD } from "./traffic-words";
 
 /** Who talks to whom, from the series a connected Prometheus holds. */
@@ -56,6 +61,8 @@ export function Traffic() {
   );
 }
 
+type Mode = "window" | "live";
+
 function TrafficScreen() {
   const t = useT();
   const scope = useNamespaceScope();
@@ -63,45 +70,83 @@ function TrafficScreen() {
   const setSearch = useSetSearch();
   const window = windowOf(search.range);
   const state = useTraffic({ scope: scope.wire, window, refresh: "scraped" });
+  const liveAvailable = useCapability("traffic.live") !== null;
+  // Live where it was asked for, or where nothing windowed is there to read.
+  const mode: Mode =
+    liveAvailable &&
+    (search.view === "live" ||
+      (search.view !== "window" &&
+        (state.says === "absent" || state.says === "noSource")))
+      ? "live"
+      : "window";
   const windowWords = t("traffic", WINDOW_WORD[window]);
+  const toggle = (
+    choices: readonly string[],
+    current: string,
+    pick: (each: string) => void,
+    words: (each: string) => string
+  ) => (
+    <div className="flex items-center rounded-md border border-hair p-0.5 text-[11px]">
+      {choices.map((each) => (
+        <button
+          key={each}
+          type="button"
+          aria-pressed={current === each}
+          className={cn(
+            "rounded-[4px] px-2 py-0.5",
+            current === each ? "bg-sel text-fg" : "text-fg-mut hover:text-fg"
+          )}
+          onClick={() => pick(each)}
+        >
+          {words(each)}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="flex h-full flex-col gap-2">
       <SectionHeader
         title={t("traffic", "title")}
         count={
-          state.says === "read"
-            ? `${t("count", "flows", { n: state.rows.length })} · ${windowWords}`
-            : windowWords
+          mode === "live"
+            ? t("traffic", "lastMinute")
+            : state.says === "read"
+              ? `${t("count", "flows", { n: state.rows.length })} · ${windowWords}`
+              : windowWords
         }
         actions={
-          <div className="flex items-center rounded-md border border-hair p-0.5 text-[11px]">
-            {FLOW_WINDOWS.map((each) => (
-              <button
-                key={each}
-                type="button"
-                aria-pressed={window === each}
-                className={cn(
-                  "rounded-[4px] px-2 py-0.5",
-                  window === each
-                    ? "bg-sel text-fg"
-                    : "text-fg-mut hover:text-fg"
-                )}
-                onClick={() =>
+          <>
+            {liveAvailable &&
+              toggle(
+                ["window", "live"],
+                mode,
+                (each) =>
+                  setSearch(
+                    { view: each === "live" ? "live" : "window" },
+                    { replace: true }
+                  ),
+                (each) =>
+                  t("traffic", each === "live" ? "modeLive" : "modeWindow")
+              )}
+            {mode === "window" &&
+              toggle(
+                FLOW_WINDOWS,
+                window,
+                (each) =>
                   setSearch(
                     { range: each === "5m" ? undefined : each },
                     { replace: true }
-                  )
-                }
-              >
-                {each}
-              </button>
-            ))}
-          </div>
+                  ),
+                (each) => each
+              )}
+          </>
         }
       />
-      {state.says === "read" ? (
-        <TrafficMap
+      {mode === "live" ? (
+        <LiveView scope={scope.wire} scopeWords={scope.inWords} />
+      ) : state.says === "read" ? (
+        <WindowView
           state={state}
           scope={scope.wire}
           scopeWords={scope.inWords}
@@ -171,7 +216,13 @@ export function Stopped({
         {state.says === "absent" && (
           <ul className="mt-2 flex list-disc flex-col gap-1 pl-4">
             {(
-              ["needIstio", "needHubble", "needBeyla", "needCaretta"] as const
+              [
+                "needIstio",
+                "needHubble",
+                "needBeyla",
+                "needCaretta",
+                "needRelay",
+              ] as const
             ).map((need) => (
               <li key={need}>{t("traffic", need)}</li>
             ))}
@@ -182,16 +233,39 @@ export function Stopped({
   );
 }
 
-function TrafficMap({
-  state,
+interface Note {
+  text: string;
+  tone: "err" | "warn" | "mute";
+}
+
+const NOTE_TONE: Record<Note["tone"], string> = {
+  err: "text-err",
+  warn: "text-warn",
+  mute: "text-fg-mut",
+};
+
+/** One reading, from either source, as a map over a table. */
+function FlowsView({
+  rows,
   scope,
-  scopeWords,
-  windowWords,
+  rail,
+  notes,
+  unread,
+  quiet,
+  panelWindow,
+  cut,
+  sharePartial,
 }: {
-  state: Extract<TrafficState, { says: "read" }>;
+  rows: readonly FlowRow[];
   scope: string[] | null;
-  scopeWords: string;
-  windowWords: string;
+  rail: ReactNode;
+  notes: readonly Note[];
+  unread: readonly UnreadNamespace[];
+  /** What the page says where there is not a flow to draw. */
+  quiet: string;
+  panelWindow: string;
+  cut: boolean;
+  sharePartial: string | null;
 }) {
   const t = useT();
   const navigate = useNavigate();
@@ -200,7 +274,6 @@ function TrafficMap({
   const search = useAppSearch();
   const canvas = useRef<GraphCanvasHandle>(null);
   const map = useTopology(scope);
-  const { reading, rows, sources } = state;
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(
     new Map()
   );
@@ -291,31 +364,20 @@ function TrafficMap({
   const columns = useMemo(() => flowColumns(t), [t]);
   const openRow = rows.find((row) => row.id === opened) ?? null;
 
-  const notes = notesOf(reading, sources, t);
-  const quiet = rows.length === 0;
-
   return (
     <>
-      {(notes.length > 0 || state.lastFailed !== null) && (
+      {notes.length > 0 && (
         <div className="flex flex-col gap-0.5 px-1 text-[11.5px]">
-          {state.lastFailed !== null && (
-            <p className="text-err">
-              {t("traffic", "lastFailed", { said: state.lastFailed })}
-            </p>
-          )}
           {notes.map((note) => (
-            <p key={note} className="text-warn">
-              {note}
+            <p key={note.text} className={NOTE_TONE[note.tone]}>
+              {note.text}
             </p>
           ))}
         </div>
       )}
-      <UnreadNamespaces
-        unread={reading.answer.podsUnread}
-        label={t("traffic", "podsLabel")}
-      />
+      <UnreadNamespaces unread={unread} label={t("traffic", "podsLabel")} />
       <div className="flex min-h-0 flex-1 gap-2">
-        <SourceRail sources={sources} reading={reading} />
+        {rail}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <div className="relative min-h-0 flex-[3] overflow-hidden rounded-lg border border-hair">
             <GraphCanvas
@@ -338,19 +400,15 @@ function TrafficMap({
             >
               <Maximize className="h-3.5 w-3.5" aria-hidden />
             </Button>
-            {quiet && (
+            {rows.length === 0 && (
               <p className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-fg-mut">
-                {t("traffic", "nothingInWindow", {
-                  sources: reading.sources.map((each) => each.name).join(", "),
-                  scope: scopeWords,
-                  window: windowWords,
-                })}
+                {quiet}
               </p>
             )}
             {openRow && (
               <FlowPanel
                 row={openRow}
-                window={windowWords}
+                window={panelWindow}
                 onClose={() => setOpened(null)}
               />
             )}
@@ -364,22 +422,152 @@ function TrafficMap({
               searchPlaceholder={t("traffic", "searchPlaceholder")}
               getRowId={(row) => row.id}
               onRowClick={(row) => setOpened(row.id)}
-              partial={reading.answer.cut > 0}
-              share={{
-                title: t("traffic", "title"),
-                partial: partialOf(reading, sources, t),
-              }}
-              emptyMessage={t("traffic", "nothingInWindow", {
-                sources: reading.sources.map((each) => each.name).join(", "),
-                scope: scopeWords,
-                window: windowWords,
-              })}
+              partial={cut}
+              share={{ title: t("traffic", "title"), partial: sharePartial }}
+              emptyMessage={quiet}
               widthsKey="traffic-flows"
             />
           </div>
         </div>
       </div>
     </>
+  );
+}
+
+/** A window of a connected Prometheus's series. */
+function WindowView({
+  state,
+  scope,
+  scopeWords,
+  windowWords,
+}: {
+  state: Extract<TrafficState, { says: "read" }>;
+  scope: string[] | null;
+  scopeWords: string;
+  windowWords: string;
+}) {
+  const t = useT();
+  const { reading, rows, sources } = state;
+  const notes: Note[] = [
+    ...(state.lastFailed !== null
+      ? [
+          {
+            text: t("traffic", "lastFailed", { said: state.lastFailed }),
+            tone: "err" as const,
+          },
+        ]
+      : []),
+    ...notesOf(reading, sources, t).map((text) => ({
+      text,
+      tone: "warn" as const,
+    })),
+  ];
+  return (
+    <FlowsView
+      rows={rows}
+      scope={scope}
+      rail={<SourceRail sources={sources} reading={reading} />}
+      notes={notes}
+      unread={reading.answer.podsUnread}
+      quiet={t("traffic", "nothingInWindow", {
+        sources: reading.sources.map((each) => each.name).join(", "),
+        scope: scopeWords,
+        window: windowWords,
+      })}
+      panelWindow={windowWords}
+      cut={reading.answer.cut > 0}
+      sharePartial={partialOf(reading, sources, t)}
+    />
+  );
+}
+
+/** Flows as Hubble Relay sees them, over the last minute. */
+function LiveView({
+  scope,
+  scopeWords,
+}: {
+  scope: string[] | null;
+  scopeWords: string;
+}) {
+  const t = useT();
+  const live = useLiveTraffic(scope, true);
+  const [held] = useState(() => new LiveRows());
+  const pairs = live?.pairs;
+  const rows = useMemo(
+    () => (pairs ? held.rows(pairs.values()) : []),
+    [held, pairs]
+  );
+  if (!live) return null;
+  const stopped = liveStopped(live, t);
+  if (stopped !== null)
+    return (
+      <div className="flex min-h-0 flex-1 gap-2" data-testid="traffic-stopped">
+        <SourceRail sources={[LIVE_SOURCE]} reading={null} />
+        <p
+          className={cn(
+            "max-w-[72ch] px-1 py-4 text-xs",
+            live.phase === "ended" ? "text-err" : "text-fg-mut"
+          )}
+        >
+          {stopped}
+        </p>
+      </div>
+    );
+  const lastMinute = t("traffic", "lastMinute");
+  const caveats: Note[] = [
+    ...(live.lost > 0
+      ? [
+          {
+            text: t("traffic", "liveLost", {
+              lost: t("count", "events", { n: live.lost }),
+            }),
+            tone: "warn" as const,
+          },
+        ]
+      : []),
+    ...(live.untracked > 0
+      ? [
+          {
+            text: t("traffic", "liveUntracked", {
+              untracked: t("count", "events", { n: live.untracked }),
+            }),
+            tone: "warn" as const,
+          },
+        ]
+      : []),
+  ];
+  return (
+    <FlowsView
+      rows={rows}
+      scope={scope}
+      rail={<SourceRail sources={[LIVE_SOURCE]} reading={null} />}
+      notes={[
+        ...(live.relay
+          ? [
+              {
+                text: t("traffic", "liveVia", {
+                  namespace: live.relay.namespace,
+                  service: live.relay.service,
+                  pod: live.relay.pod,
+                }),
+                tone: "mute" as const,
+              },
+            ]
+          : []),
+        ...caveats,
+      ]}
+      unread={[]}
+      quiet={t("traffic", "nothingInWindow", {
+        sources: LIVE_SOURCE.name,
+        scope: scopeWords,
+        window: lastMinute,
+      })}
+      panelWindow={lastMinute}
+      cut={live.untracked > 0}
+      sharePartial={
+        caveats.length > 0 ? caveats.map((note) => note.text).join(" ") : null
+      }
+    />
   );
 }
 

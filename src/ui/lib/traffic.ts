@@ -6,10 +6,15 @@
  */
 
 import type {
-  DropRate,
   Flow,
   FlowEnd,
+  LiveDrop,
+  LiveEnd,
+  LiveKey,
+  LivePair,
   Measure,
+  PolicyRef,
+  RelayAt,
   TrafficAnswer,
   WorkloadKey,
 } from "@/generated/types";
@@ -81,11 +86,18 @@ export interface Cell {
   state: CellState;
 }
 
+/** Why flows were dropped, and the policies that denied them where the source says. */
+export interface Reason {
+  reason: string;
+  rate: number;
+  policies?: readonly PolicyRef[];
+}
+
 /** One source's own numbers on a pair, for the panel. */
 export interface SourceLine {
   source: FlowSource;
   values: readonly (number | null)[];
-  reasons: readonly DropRate[];
+  reasons: readonly Reason[];
   protocols: readonly string[];
 }
 
@@ -104,7 +116,7 @@ export interface FlowRow {
   bytes: Cell;
   events: Cell;
   drops: Cell;
-  reasons: readonly DropRate[];
+  reasons: readonly Reason[];
   seenBy: readonly string[];
   by: readonly SourceLine[];
 }
@@ -366,4 +378,117 @@ export function weights(rows: readonly FlowRow[]): Map<string, number> {
     );
   }
   return out;
+}
+
+/** What a live stream sends: the pairs whose last minute changed, and those it emptied. */
+export interface LiveBatch {
+  pairs: readonly LivePair[];
+  gone: readonly LiveKey[];
+  relay: RelayAt | null;
+  lost: number;
+  untracked: number;
+}
+
+export interface LiveListener {
+  batch: (batch: LiveBatch) => void;
+  ended: (end: LiveEnd) => void;
+  failed: (error: unknown) => void;
+}
+
+/** The one source a live stream is: drawn and said like any other. */
+export const LIVE_SOURCE: FlowSource = {
+  id: "live",
+  name: "Hubble Relay",
+  state: { says: "present" },
+  measures: ["requests", "errors", "p50", "p95", "p99", "events", "drops"],
+  found: [],
+  need: "needRelay",
+  marks: false,
+  nodeAgent: false,
+};
+
+export const livePairId = (pair: { from: FlowEnd; to: FlowEnd }) =>
+  `${endId(pair.from)}>${endId(pair.to)}`;
+
+const measured = (value: number | null, source: string): Cell =>
+  value === null
+    ? { value: null, source: null, state: "measured" }
+    : { value, source, state: "measured" };
+
+/**
+ * A live pair as a row. Hubble sees HTTP only where L7 visibility is on, so
+ * a pair with none is "not measured" there, never 0 requests.
+ */
+export function liveRow(pair: LivePair): FlowRow {
+  const name = LIVE_SOURCE.name;
+  const http = pair.requests !== null;
+  const unmeasured: Cell = { value: null, source: null, state: "notMeasured" };
+  const values = MEASURES.map((measure) => {
+    switch (measure) {
+      case "requests":
+        return pair.requests;
+      case "errors":
+        return pair.errors;
+      case "p50":
+        return pair.p50;
+      case "p95":
+        return pair.p95;
+      case "p99":
+        return pair.p99;
+      case "bytes":
+        return null;
+      case "events":
+        return pair.forwarded;
+      case "drops":
+        return pair.dropped;
+    }
+  });
+  const reasons = pair.drops.map((drop: LiveDrop) => ({
+    reason: drop.reason,
+    rate: drop.rate,
+    policies: drop.policies,
+  }));
+  return {
+    id: livePairId(pair),
+    fromId: endId(pair.from),
+    toId: endId(pair.to),
+    from: pair.from,
+    to: pair.to,
+    requests: http ? measured(pair.requests, name) : unmeasured,
+    errorShare: http
+      ? measured(
+          pair.requests && pair.errors !== null
+            ? pair.errors / pair.requests
+            : null,
+          name
+        )
+      : unmeasured,
+    p50: http ? measured(pair.p50, name) : unmeasured,
+    p95: http ? measured(pair.p95, name) : unmeasured,
+    p99: http ? measured(pair.p99, name) : unmeasured,
+    bytes: unmeasured,
+    events: measured(pair.forwarded, name),
+    drops: measured(pair.dropped, name),
+    reasons,
+    seenBy: [name],
+    by: [{ source: LIVE_SOURCE, values, reasons, protocols: pair.protocols }],
+  };
+}
+
+/** Live pairs as rows, each row kept for as long as its pair object is. */
+export class LiveRows {
+  private kept = new WeakMap<LivePair, FlowRow>();
+
+  rows(pairs: Iterable<LivePair>): FlowRow[] {
+    const out: FlowRow[] = [];
+    for (const pair of pairs) {
+      let row = this.kept.get(pair);
+      if (!row) {
+        row = liveRow(pair);
+        this.kept.set(pair, row);
+      }
+      out.push(row);
+    }
+    return out;
+  }
 }
