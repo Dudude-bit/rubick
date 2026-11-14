@@ -2,7 +2,8 @@
 //! functions the Audit page reads. Never starts the index: where it is
 //! running and reads the object's namespace, its answer is the page's;
 //! otherwise one read of the object and the five kinds its rules need,
-//! the five kept a little while per namespace.
+//! the five kept a little while per namespace, and the discovery of the
+//! groups its deprecated versions were in.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -24,18 +25,6 @@ use crate::state::AppState;
 /// How long a namespace's neighbours, read for a detail page, are kept.
 const KEPT_FOR: Duration = Duration::from_secs(30);
 
-fn why(error: &Error) -> Why {
-    if error.is_refusal() {
-        Why::Refused {
-            message: error.said(),
-        }
-    } else {
-        Why::Failed {
-            message: error.said(),
-        }
-    }
-}
-
 /// A namespace's Services, budgets, autoscalers, `LimitRanges` and default
 /// `ServiceAccount`, read at once: five calls.
 async fn read_beside(client: &Client, namespace: &str) -> Beside {
@@ -52,7 +41,7 @@ async fn read_beside(client: &Client, namespace: &str) -> Beside {
         limits.list(&params),
         accounts.get_opt("default"),
     );
-    let read = |error: kube::Error| why(&Error::from(error));
+    let read = |error: kube::Error| super::why_of(&Error::from(error));
     Beside {
         namespace: namespace.to_string(),
         services: services.map_err(read).map(|list| {
@@ -186,7 +175,7 @@ pub async fn object_audit(
     };
 
     let client = (*here.client).clone();
-    let (own, facts, replicas, system) = if kind == "Pod" {
+    let (own, facts, replicas, system, fields) = if kind == "Pod" {
         let pods: Api<Pod> = Api::namespaced(client.clone(), namespace);
         let pod = pods.get(name).await?;
         match controller_of(&pod.metadata) {
@@ -235,6 +224,7 @@ pub async fn object_audit(
             judged.facts,
             Replicated(None),
             super::is_system(&subject, None),
+            pod.metadata.managed_fields.unwrap_or_default(),
         )
     } else {
         let Some(resource) = resource else {
@@ -254,6 +244,7 @@ pub async fn object_audit(
                 return Ok(elsewhere(subject, on));
             }
         }
+        let fields = object.metadata.managed_fields.clone().unwrap_or_default();
         let Some(entry) = entry_of(kind, object, minor) else {
             return Err(Error::InvalidInput(format!(
                 "{kind} {name} could not be read"
@@ -262,11 +253,14 @@ pub async fn object_audit(
         let Body::Workload { facts, replicas } = entry.body else {
             return Err(Error::InvalidInput(format!("{kind} has no pod template")));
         };
-        (entry.own, facts, replicas, entry.system)
+        (entry.own, facts, replicas, entry.system, fields)
     };
     let ns = beside_in(state, &here.context, &client, namespace).await;
     let (mut findings, mut unchecked) = beside(kind, name, &facts, replicas, &ns);
     findings.extend(own);
+    let (written, blind) = super::upgrade::written_of(&here, minor, &subject, &fields).await;
+    findings.extend(written);
+    unchecked.extend(blind);
     findings.sort_by_key(|f| (f.severity, f.rule));
     unchecked.sort_by_key(|u| u.rule);
     Ok(ObjectAudit {

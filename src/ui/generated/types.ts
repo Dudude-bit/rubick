@@ -2125,6 +2125,12 @@ export interface AuditFinding {
   what: What[];
 }
 
+export interface Removal {
+  removed: string;
+  replacement: string | null;
+  since: string | null;
+}
+
 export interface At {
   list: ContainerList;
   container: string;
@@ -2162,6 +2168,12 @@ export interface AuditSummary {
   reading: number;
   unattributed: number;
   enforced: Enforced[];
+  upgrade: UpgradeRead;
+}
+
+export interface UpgradeRead {
+  read: string | null;
+  server: string | null;
 }
 
 export interface Enforced {
@@ -2204,6 +2216,7 @@ export interface ByCategory {
   security: number;
   reliability: number;
   efficiency: number;
+  upgrade: number;
 }
 
 export interface AuditQuery {
@@ -3261,7 +3274,9 @@ export type RuleId =
   | "autoscaler-pinned"
   | "autoscaler-target-missing"
   | "no-cpu-request"
-  | "no-memory-request";
+  | "no-memory-request"
+  | "removed-api-in-helm-release"
+  | "deprecated-api-writer";
 
 export type What =
   | { says: "set"; at: At | null; field: string; value: string }
@@ -3285,7 +3300,24 @@ export type What =
   | { says: "range"; min: number; max: number }
   | { says: "target"; kind: string; name: string }
   | { says: "pods"; pods: number }
-  | { says: "traffic"; by: TrafficBy };
+  | { says: "traffic"; by: TrafficBy }
+  | { says: "revision"; revision: number; status: string }
+  | {
+      says: "stored";
+      kind: string;
+      name: string;
+      api: string;
+      served: boolean;
+      removal: Removal | null;
+    }
+  | {
+      says: "written";
+      manager: string;
+      operation: string;
+      time: string | null;
+      api: string;
+      removal: Removal;
+    };
 
 export type TrafficBy =
   | { says: "service"; name: string }
@@ -3320,7 +3352,7 @@ export type AuditRow =
   | { row: "found"; subject: Subject; finding: AuditFinding }
   | { row: "blind"; subject: Subject; unchecked: Unchecked };
 
-export type Category = "security" | "reliability" | "efficiency";
+export type Category = "security" | "reliability" | "efficiency" | "upgrade";
 
 export type Grouping = "rule" | "object";
 

@@ -14,6 +14,7 @@ use super::{
 };
 use crate::feeds::FeedState;
 use crate::ownership::{ClusterIndex, KindKey, SlotKey};
+use crate::state::perf::{wire_len, IPC_TARGET_BYTES};
 
 /// The most rows one answer carries.
 pub const PAGE_LIMIT: u32 = 200;
@@ -71,6 +72,7 @@ pub struct ByCategory {
     pub security: u32,
     pub reliability: u32,
     pub efficiency: u32,
+    pub upgrade: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,6 +128,16 @@ pub struct SystemPart {
     pub findings: u32,
 }
 
+/// Where the upgrade rules stand: when their last pass over the scope
+/// ended, and the version the cluster said it runs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpgradeRead {
+    /// `None` while the first pass over this scope is still reading.
+    pub read: Option<String>,
+    pub server: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditSummary {
@@ -144,6 +156,7 @@ pub struct AuditSummary {
     pub unattributed: u32,
     /// Namespaces that enforce a Pod Security level, where it was read.
     pub enforced: Vec<Enforced>,
+    pub upgrade: UpgradeRead,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -215,9 +228,11 @@ pub struct World {
     pub late: Vec<Late>,
     pub reading: u32,
     pub unattributed: u32,
+    /// When the upgrade rules' last pass over this scope ended.
+    pub upgrade_read: Option<String>,
 }
 
-fn in_scope(namespace: Option<&str>, scope: Option<&[String]>) -> bool {
+pub(super) fn in_scope(namespace: Option<&str>, scope: Option<&[String]>) -> bool {
     match (scope, namespace) {
         (None, _) => true,
         (Some(names), Some(namespace)) => names.iter().any(|name| name == namespace),
@@ -403,6 +418,7 @@ pub(super) fn world(
     );
     network_policies(&mut world, owners, &slots, &namespaces, &policies);
     readings(&mut world, &slots, owners, scope);
+    super::upgrade::merge(&mut world, index.upgrade.read().as_deref(), scope);
     for object in &mut world.objects {
         object.findings.sort_by_key(|f| (f.severity, f.rule));
         object.unchecked.sort_by_key(|u| u.rule);
@@ -755,6 +771,10 @@ fn summary(world: &World, enforced: Vec<Enforced>) -> AuditSummary {
         reading: world.reading,
         unattributed: world.unattributed,
         enforced,
+        upgrade: UpgradeRead {
+            read: world.upgrade_read.clone(),
+            server: None,
+        },
         ..AuditSummary::default()
     };
     let mut rules: BTreeMap<RuleId, RuleCount> = BTreeMap::new();
@@ -780,6 +800,7 @@ fn summary(world: &World, enforced: Vec<Enforced>) -> AuditSummary {
                     Category::Security => summary.categories.security += 1,
                     Category::Reliability => summary.categories.reliability += 1,
                     Category::Efficiency => summary.categories.efficiency += 1,
+                    Category::Upgrade => summary.categories.upgrade += 1,
                 }
             }
         }
@@ -967,10 +988,22 @@ pub fn page(
     let total = rows.len() as u32;
     let limit = query.limit.unwrap_or(PAGE_LIMIT).clamp(1, PAGE_LIMIT);
     let start = query.offset.min(total);
-    let end = start.saturating_add(limit).min(total);
+    let summary = summary(world, enforced);
+    // A row may carry a release's whole list of objects: the page ends
+    // where the next row would take the message past its budget.
+    let mut room = IPC_TARGET_BYTES.saturating_sub(wire_len(&summary) + 256);
+    let mut end = start;
+    for row in &rows[start as usize..start.saturating_add(limit).min(total) as usize] {
+        let len = wire_len(row) + 1;
+        if end > start && len > room {
+            break;
+        }
+        room = room.saturating_sub(len);
+        end += 1;
+    }
     AuditPage {
         revision,
-        summary: summary(world, enforced),
+        summary,
         rows: rows[start as usize..end as usize].to_vec(),
         total,
         next: (end < total).then_some(end),

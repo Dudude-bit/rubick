@@ -17,6 +17,7 @@ pub enum Category {
     Security,
     Reliability,
     Efficiency,
+    Upgrade,
 }
 
 /// The Pod Security Standards profile a control belongs to.
@@ -68,6 +69,8 @@ pub enum RuleId {
     AutoscalerTargetMissing,
     NoCpuRequest,
     NoMemoryRequest,
+    RemovedApiInHelmRelease,
+    DeprecatedApiWriter,
 }
 
 pub struct Rule {
@@ -96,7 +99,7 @@ const fn rule(
 }
 
 use AuditSeverity::{High, Low, Medium};
-use Category::{Efficiency, Reliability, Security};
+use Category::{Efficiency, Reliability, Security, Upgrade};
 use RuleId as R;
 const BASELINE: Option<Standard> = Some(Standard::Baseline);
 const RESTRICTED: Option<Standard> = Some(Standard::Restricted);
@@ -164,6 +167,8 @@ pub const RULES: &[Rule] = &[
     ),
     rule(R::NoCpuRequest, Efficiency, Medium, None, &[LIMIT_RANGE]),
     rule(R::NoMemoryRequest, Efficiency, Medium, None, &[LIMIT_RANGE]),
+    rule(R::RemovedApiInHelmRelease, Upgrade, High, None, &[]),
+    rule(R::DeprecatedApiWriter, Upgrade, Medium, None, &[]),
 ];
 
 pub const POD: &str = "Pod";
@@ -211,5 +216,6 @@ mod tests {
             assert_eq!(needs, rule.needs, "{id:?}");
             assert_eq!(id.rule().id, id, "RULES is out of the enum's order");
         }
+        assert_eq!(contract["helmRelease"], super::super::HELM_RELEASE);
     }
 }

@@ -13,6 +13,7 @@ mod names;
 mod objects;
 pub mod rules;
 mod template;
+mod upgrade;
 
 use std::time::{Duration, Instant};
 
@@ -25,11 +26,12 @@ use crate::state::AppState;
 
 pub use answer::{
     AuditPage, AuditQuery, AuditRow, AuditSummary, Enforced, Grouping, KindChecked, NotChecked,
-    ObjectAudit, RuleCount,
+    ObjectAudit, RuleCount, UpgradeRead,
 };
 pub use detail::object_audit;
 pub use index::AuditIndexes;
 pub use rules::{AuditSeverity, Category, RuleId, Standard};
+pub use upgrade::{Removal, HELM_RELEASE};
 
 /// Which list of a pod spec a container is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -149,6 +151,30 @@ pub enum What {
     Traffic {
         by: TrafficBy,
     },
+    /// The revision of a Helm release an upgrade builds from, and its
+    /// status as Helm wrote it.
+    Revision {
+        revision: i32,
+        status: String,
+    },
+    /// An object a release's stored manifest names at `api`, whether this
+    /// cluster serves that, and when Kubernetes removes it where the guide says.
+    Stored {
+        kind: String,
+        name: String,
+        api: String,
+        served: bool,
+        removal: Option<Removal>,
+    },
+    /// A field manager last wrote the object through `api`, which a later
+    /// Kubernetes removes.
+    Written {
+        manager: String,
+        operation: String,
+        time: Option<String>,
+        api: String,
+        removal: Removal,
+    },
 }
 
 /// One rule an object breaks, and where.
@@ -190,6 +216,19 @@ pub enum Why {
     NotAudited,
     /// A kind this cluster does not serve.
     Unserved,
+}
+
+/// Why a read did not answer: refused, or failed in the server's words.
+fn why_of(error: &crate::error::Error) -> Why {
+    if error.is_refusal() {
+        Why::Refused {
+            message: error.said(),
+        }
+    } else {
+        Why::Failed {
+            message: error.said(),
+        }
+    }
 }
 
 /// A rule that could not answer for one object.
@@ -325,10 +364,15 @@ pub async fn audit_page(
         .await?;
     let seen = answer::world(&index, owners.as_ref().map(AsRef::as_ref), scope.as_deref());
     let enforced = enforced(state, &here, scope.as_deref()).await;
-    Ok(answer::page(
+    let mut page = answer::page(
         &seen,
         query,
         index.revision.load(std::sync::atomic::Ordering::Relaxed),
         enforced,
-    ))
+    );
+    page.summary.upgrade.server = state
+        .sessions
+        .get(&here.context)
+        .map(|session| session.info.server_version.clone());
+    Ok(page)
 }

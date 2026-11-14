@@ -42,6 +42,8 @@ const IDLE_AFTER: Duration = Duration::from_mins(3);
 const REAP_EVERY: Duration = Duration::from_secs(30);
 /// The fastest the page is told to read again under churn.
 const ANNOUNCE_EVERY: Duration = Duration::from_secs(1);
+/// How often the upgrade rules read again while the page is open.
+const UPGRADE_EVERY: Duration = Duration::from_mins(2);
 
 /// The kinds Audit reads whole, and whether each lives in a namespace.
 pub(super) fn audited() -> Vec<(ApiResource, bool)> {
@@ -416,6 +418,10 @@ pub struct AuditIndex {
     /// `controller/<uid>`; `None` while the read is on its way.
     pub(super) pods: Mutex<HashMap<String, Option<PodJudged>>>,
     pod_reads: Arc<Semaphore>,
+    /// The upgrade rules' last pass; `None` before the first ends.
+    pub(super) upgrade: RwLock<Option<Arc<super::upgrade::Read>>>,
+    /// The scope moved: the upgrade rules read again at once.
+    rescoped: Notify,
 }
 
 impl AuditIndex {
@@ -443,6 +449,8 @@ impl AuditIndex {
             changed: Arc::new(Notify::new()),
             pods: Mutex::new(HashMap::new()),
             pod_reads: Arc::new(Semaphore::new(4)),
+            upgrade: RwLock::new(None),
+            rescoped: Notify::new(),
         }
     }
 
@@ -641,6 +649,9 @@ impl AuditIndexes {
                     lease.rescope(scope);
                 }
             }
+            if moved {
+                index.rescoped.notify_one();
+            }
             return Ok(index);
         }
         let index = Arc::new(AuditIndex::new(
@@ -675,6 +686,7 @@ impl AuditIndexes {
         *lease = Some(subscription.lease);
         drop(lease);
         spawn_reader(index.clone(), subscription.updates);
+        spawn_upgrade(index.clone(), state.client_manager.clone());
         spawn_announcer(index.clone(), self.events.clone());
         spawn_reaper(self.clusters.clone(), context, index.clone());
         Ok(index)
@@ -717,6 +729,38 @@ fn spawn_reader(index: Arc<AuditIndex>, mut updates: mpsc::Receiver<Update>) {
                     Some(update) => index.take(update),
                     None => break,
                 },
+            }
+        }
+    });
+}
+
+/// Reads the upgrade rules' kinds on start, every few minutes after, and
+/// at once when the scope moves.
+fn spawn_upgrade(index: Arc<AuditIndex>, clients: Arc<crate::client::K8sClientManager>) {
+    tokio::spawn(async move {
+        let mut decoded = super::upgrade::Decoded::default();
+        loop {
+            let scope = index.scope.lock().clone();
+            let pass = super::upgrade::read(
+                &index.client,
+                clients.served(),
+                &index.context,
+                scope.as_deref(),
+                index.minor,
+                &mut decoded,
+            );
+            let read = tokio::select! {
+                biased;
+                () = index.stop.cancelled() => break,
+                read = pass => read,
+            };
+            *index.upgrade.write() = Some(Arc::new(read));
+            index.changed();
+            tokio::select! {
+                biased;
+                () = index.stop.cancelled() => break,
+                () = index.rescoped.notified() => {}
+                () = tokio::time::sleep(UPGRADE_EVERY) => {}
             }
         }
     });
