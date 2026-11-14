@@ -8,7 +8,13 @@ import type {
 } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { modelOf, notLookedAt, OWNERLESS, type ModelSettings } from "./model";
+import {
+  modelOf,
+  newMemo,
+  notLookedAt,
+  OWNERLESS,
+  type ModelSettings,
+} from "./model";
 import { topologySection } from "./topology-share";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -123,6 +129,29 @@ describe("the cluster map's model", () => {
       "store",
       "shop · no app label",
     ]);
+  });
+
+  /** A batch that replaced one object redraws that one: every other node stays the object the canvas memoised, or a pod restarting redraws the cluster. */
+  it("keeps the drawing of every node a batch did not replace", () => {
+    const memo = newMemo();
+    const cart = node("Deployment", "cart");
+    const web = node("Service", "web");
+    const read = (nodes: TopologyNode[]) =>
+      modelOf(
+        new Map(nodes.map((each) => [each.id, each])),
+        new Map(),
+        new Map(),
+        settings(),
+        () => "mute",
+        t,
+        memo
+      );
+    const first = read([cart, web]);
+    const again = read([cart, { ...web, app: "shop" }]);
+    const drawn = (model: typeof first, id: string) =>
+      model.nodes.find((each) => each.id === id);
+    expect(drawn(again, cart.id)).toBe(drawn(first, cart.id));
+    expect(drawn(again, web.id)).not.toBe(drawn(first, web.id));
   });
 
   /** The pods nothing owns are one node, named as such rather than as a pod called "*". */

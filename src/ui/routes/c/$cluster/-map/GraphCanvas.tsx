@@ -54,7 +54,12 @@ import {
 
 import { useT } from "@/i18n/useT";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
-import { MapContext, type MapActions } from "./map-context";
+import {
+  LightContext,
+  MapContext,
+  type MapActions,
+  type MapLight,
+} from "./map-context";
 import { GroupCard, GroupFrame, MapEdge, ObjectNode } from "./map-parts";
 import { mapSvg, themeColours } from "./svg";
 import type {
@@ -123,6 +128,11 @@ function Canvas({
   );
   const placement = useLayout(groups, drawn.nodes, drawn.edges);
   const [active, setActive] = useState<string | null>(null);
+  // A node's data object lives as long as the node handed in does, so a
+  // memoised node is drawn again only when what it shows changed.
+  const [dataOf] = useState(
+    () => new WeakMap<GraphNode, { node: GraphNode }>()
+  );
 
   const neighbours = useMemo(() => {
     if (active === null) return null;
@@ -173,28 +183,47 @@ function Canvas({
     centre(focus);
   }, [focus, placement, centre]);
 
+  const reveal = useCallback(
+    (id: string) => {
+      const node = drawn.nodes.find((each) => each.id === id);
+      const at = node && absolute(node);
+      if (!at) return;
+      const { x, y, zoom } = flow.getViewport();
+      const { width, height } = store.getState();
+      const left = at.x * zoom + x;
+      const top = at.y * zoom + y;
+      if (
+        left < 0 ||
+        top < 0 ||
+        left + NODE_W * zoom > width ||
+        top + NODE_H * zoom > height
+      )
+        centre(id);
+    },
+    [drawn.nodes, absolute, flow, store, centre]
+  );
+
+  // Read through a ref from the handlers alone, so the actions stay one
+  // object while the data under them changes.
+  const latest = useRef({ onOpen, onOpenEdge, onToggleGroup, reveal });
+  useEffect(() => {
+    latest.current = { onOpen, onOpenEdge, onToggleGroup, reveal };
+  });
+  const edgesOpen = onOpenEdge !== undefined;
   const actions = useMemo<MapActions>(
     () => ({
-      open: onOpen,
-      openEdge: onOpenEdge,
-      toggle: onToggleGroup,
+      open: (node, how) => latest.current.onOpen(node, how),
+      openEdge: edgesOpen
+        ? (edge) => latest.current.onOpenEdge?.(edge)
+        : undefined,
+      toggle: (id) => latest.current.onToggleGroup(id),
       setActive,
-      reveal: (id) => {
-        const node = drawn.nodes.find((each) => each.id === id);
-        const at = node && absolute(node);
-        if (!at) return;
-        const { x, y, zoom } = flow.getViewport();
-        const { width, height } = store.getState();
-        const left = at.x * zoom + x;
-        const top = at.y * zoom + y;
-        if (
-          left < 0 ||
-          top < 0 ||
-          left + NODE_W * zoom > width ||
-          top + NODE_H * zoom > height
-        )
-          centre(id);
-      },
+      reveal: (id) => latest.current.reveal(id),
+    }),
+    [edgesOpen]
+  );
+  const light = useMemo<MapLight>(
+    () => ({
       lit: (id) => {
         if (neighbours) return neighbours.has(id);
         if (highlight) return highlight.has(id);
@@ -203,22 +232,15 @@ function Canvas({
       touched: (edge) =>
         active !== null && (edge.from === active || edge.to === active),
     }),
-    [
-      onOpen,
-      onOpenEdge,
-      onToggleGroup,
-      drawn.nodes,
-      absolute,
-      flow,
-      store,
-      centre,
-      neighbours,
-      highlight,
-      active,
-    ]
+    [neighbours, highlight, active]
   );
 
   const flowNodes = useMemo(() => {
+    const held = (node: GraphNode) => {
+      const data = dataOf.get(node) ?? { node };
+      dataOf.set(node, data);
+      return data;
+    };
     const out: Node[] = [];
     for (const group of groups) {
       const box = placement.groups.get(group.id);
@@ -247,7 +269,7 @@ function Canvas({
         position:
           node.group === null ? { x: box.x + at.x, y: box.y + at.y } : at,
         parentId: node.group === null ? undefined : cardId(node.group),
-        data: { node },
+        data: held(node),
         width: NODE_W,
         height: NODE_H,
         draggable: false,
@@ -257,7 +279,7 @@ function Canvas({
       });
     }
     return out;
-  }, [groups, drawn.nodes, placement]);
+  }, [groups, drawn.nodes, placement, dataOf]);
 
   const flowEdges = useMemo<Edge[]>(
     () =>
@@ -320,41 +342,46 @@ function Canvas({
 
   return (
     <MapContext.Provider value={actions}>
-      <div
-        className="map-canvas h-full w-full"
-        role="group"
-        aria-label={ariaLabel}
-        data-paused={visible ? undefined : ""}
-      >
-        <ReactFlow
-          nodes={flowNodes}
-          edges={flowEdges}
-          nodeTypes={NODE_TYPES}
-          edgeTypes={EDGE_TYPES}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          nodesFocusable={false}
-          edgesFocusable={false}
-          elementsSelectable={false}
-          zoomOnDoubleClick={false}
-          onlyRenderVisibleElements={drawn.nodes.length > MOUNT_ALL_UP_TO}
-          minZoom={0.05}
-          maxZoom={2}
-          fitView
-          fitViewOptions={{ padding: 0.08 }}
-          ariaLabelConfig={{
-            "node.a11yDescription.default": t("topology", "nodeKeys"),
-            "node.a11yDescription.keyboardDisabled": t("topology", "nodeKeys"),
-          }}
+      <LightContext.Provider value={light}>
+        <div
+          className="map-canvas h-full w-full"
+          role="group"
+          aria-label={ariaLabel}
+          data-paused={visible ? undefined : ""}
         >
-          <Background
-            variant={BackgroundVariant.Dots}
-            gap={18}
-            size={1}
-            color="hsl(var(--hair))"
-          />
-        </ReactFlow>
-      </div>
+          <ReactFlow
+            nodes={flowNodes}
+            edges={flowEdges}
+            nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            nodesFocusable={false}
+            edgesFocusable={false}
+            elementsSelectable={false}
+            zoomOnDoubleClick={false}
+            onlyRenderVisibleElements={drawn.nodes.length > MOUNT_ALL_UP_TO}
+            minZoom={0.05}
+            maxZoom={2}
+            fitView
+            fitViewOptions={{ padding: 0.08 }}
+            ariaLabelConfig={{
+              "node.a11yDescription.default": t("topology", "nodeKeys"),
+              "node.a11yDescription.keyboardDisabled": t(
+                "topology",
+                "nodeKeys"
+              ),
+            }}
+          >
+            <Background
+              variant={BackgroundVariant.Dots}
+              gap={18}
+              size={1}
+              color="hsl(var(--hair))"
+            />
+          </ReactFlow>
+        </div>
+      </LightContext.Provider>
     </MapContext.Provider>
   );
 }

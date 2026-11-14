@@ -235,13 +235,33 @@ export function refusedWhole(read: NamespaceRead | undefined): boolean {
   );
 }
 
+/**
+ * What was drawn of each object the stream sent, kept by the object's own
+ * identity: a batch that replaced one node costs that node's words and tone,
+ * and every other node keeps the drawing it had. Valid for one grouping, one
+ * overlay, one language and one set of tone inputs; the caller starts a new
+ * one when any of them changes.
+ */
+export interface ModelMemo {
+  nodes: WeakMap<TopologyNode, GraphNode>;
+  edges: WeakMap<TopologyEdge, { graph: GraphEdge; ends: string }>;
+}
+
+export const newMemo = (): ModelMemo => ({
+  nodes: new WeakMap(),
+  edges: new WeakMap(),
+});
+
+const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 export function modelOf(
   nodes: ReadonlyMap<string, TopologyNode>,
   edges: ReadonlyMap<string, TopologyEdge>,
   reads: ReadonlyMap<string, NamespaceRead>,
   settings: ModelSettings,
   toneOf: (node: TopologyNode) => MapTone,
-  t: T
+  t: T,
+  memo: ModelMemo = newMemo()
 ): Model {
   const drawn: GraphNode[] = [];
   const tones = new Map<string, MapTone>();
@@ -251,34 +271,37 @@ export function modelOf(
     const kind = node.ref.kind;
     if (settings.hidden.has(kind)) continue;
     if (kind === "NetworkPolicy" && !settings.policies) continue;
-    const group = groupIdOf(node, settings.grouping);
-    const tone = toneOf(node);
-    tones.set(node.id, tone);
-    groupOf.set(node.id, group);
-    if (group !== null) {
-      const list = members.get(group);
-      if (list) list.push(node);
-      else members.set(group, [node]);
+    let graph = memo.nodes.get(node);
+    if (!graph) {
+      graph = {
+        id: node.id,
+        group: groupIdOf(node, settings.grouping),
+        kind,
+        label:
+          node.ref.name === OWNERLESS && kind === "Pod"
+            ? t("topology", "ownerlessPods")
+            : node.ref.name,
+        sub: subOf(node, t),
+        tone: toneOf(node),
+        badge: settings.policies ? coverBadge(node, t) : undefined,
+        rank: RANK[kind] ?? WORKLOAD_RANK,
+      };
+      memo.nodes.set(node, graph);
     }
-    drawn.push({
-      id: node.id,
-      group,
-      kind,
-      label:
-        node.ref.name === OWNERLESS && kind === "Pod"
-          ? t("topology", "ownerlessPods")
-          : node.ref.name,
-      sub: subOf(node, t),
-      tone,
-      badge: settings.policies ? coverBadge(node, t) : undefined,
-      rank: RANK[kind] ?? WORKLOAD_RANK,
-    });
+    tones.set(node.id, graph.tone);
+    groupOf.set(node.id, graph.group);
+    if (graph.group !== null) {
+      const list = members.get(graph.group);
+      if (list) list.push(node);
+      else members.set(graph.group, [node]);
+    }
+    drawn.push(graph);
   }
   drawn.sort(
     (a, b) =>
       (a.rank ?? 0) - (b.rank ?? 0) ||
-      a.kind.localeCompare(b.kind) ||
-      a.label.localeCompare(b.label)
+      byName(a.kind, b.kind) ||
+      byName(a.label, b.label)
   );
 
   const ids = new Set(
@@ -345,14 +368,20 @@ export function modelOf(
     const to = nodes.get(edge.to);
     if (!from || !to || !groupOf.has(edge.from) || !groupOf.has(edge.to))
       continue;
-    const ends = [from.ref.existence, to.ref.existence];
-    graphEdges.push({
+    const ends = `${from.ref.existence}>${to.ref.existence}`;
+    const held = memo.edges.get(edge);
+    if (held?.ends === ends) {
+      graphEdges.push(held.graph);
+      continue;
+    }
+    const existence = [from.ref.existence, to.ref.existence];
+    const graph: GraphEdge = {
       id: edge.id,
       from: edge.from,
       to: edge.to,
-      tone: ends.includes("missing")
+      tone: existence.includes("missing")
         ? "err"
-        : ends.includes("notChecked")
+        : existence.includes("notChecked")
           ? "unknown"
           : "ok",
       label: edge.relations.map((relation) => relationWords(relation, t))[0],
@@ -361,7 +390,9 @@ export function modelOf(
           ? t("topology", "moreRelations", { n: edge.relations.length - 1 })
           : undefined,
       reversed: edge.relations[0]?.verb === "attachesTo",
-    });
+    };
+    memo.edges.set(edge, { graph, ends });
+    graphEdges.push(graph);
   }
   return { groups, nodes: drawn, edges: graphEdges, groupOf, summaries };
 }

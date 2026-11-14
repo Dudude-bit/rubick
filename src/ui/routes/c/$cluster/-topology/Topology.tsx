@@ -38,6 +38,7 @@ import {
   OWNERLESS,
   countOf,
   modelOf,
+  newMemo,
   notLookedAt,
   readingOf,
   type Grouping,
@@ -122,6 +123,11 @@ function TopologyMap() {
   );
 
   const several = scope.wire === null || scope.wire.length > 1;
+  // What each object was drawn as, kept while nothing that decides it moves.
+  const memo = useMemo(
+    () => ({ for: [toneInputs, t, policies, grouping], drawn: newMemo() }),
+    [toneInputs, t, policies, grouping]
+  ).drawn;
   const collapsedAtFirst =
     several && (map.phase !== "ready" || map.nodes.size > COLLAPSE_ABOVE);
   const model = useMemo(
@@ -132,9 +138,20 @@ function TopologyMap() {
         map.reads,
         { grouping, hidden, policies, toggled, collapsedAtFirst },
         (node) => toneOf(node, toneInputs),
-        t
+        t,
+        memo
       ),
-    [map, grouping, hidden, policies, toggled, collapsedAtFirst, toneInputs, t]
+    [
+      map,
+      grouping,
+      hidden,
+      policies,
+      toggled,
+      collapsedAtFirst,
+      toneInputs,
+      t,
+      memo,
+    ]
   );
 
   const openServices = useMemo(() => {

@@ -15,7 +15,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
-import { useActions } from "./map-context";
+import { useActions, useLight } from "./map-context";
 import { EDGE_TEXT, NODE_BORDER, TONE_TEXT } from "./tone-classes";
 import type { GraphEdge, GraphGroup, GraphNode } from "./types";
 
@@ -48,8 +48,9 @@ export const ObjectNode = memo(function ObjectNode({
   data,
 }: NodeProps<ObjectNodeType>) {
   const actions = useActions();
+  const light = useLight();
   const { node } = data;
-  const lit = actions.lit(id);
+  const lit = light.lit(id);
   const onKey = (event: KeyboardEvent) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -214,6 +215,7 @@ export const MapEdge = memo(function MapEdge({
   data,
 }: EdgeProps<MapEdgeType>) {
   const actions = useActions();
+  const light = useLight();
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -224,9 +226,8 @@ export const MapEdge = memo(function MapEdge({
   });
   if (!data) return null;
   const { edge } = data;
-  const touched = actions.touched(edge);
-  const quiet =
-    actions.lit(edge.from) === false && actions.lit(edge.to) === false;
+  const touched = light.touched(edge);
+  const quiet = light.lit(edge.from) === false && light.lit(edge.to) === false;
   const width = 1 + 3 * Math.min(1, Math.max(0, edge.weight ?? 0));
   const words = [edge.label, edge.sub].filter(Boolean);
   return (

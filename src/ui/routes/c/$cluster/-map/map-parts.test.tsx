@@ -24,8 +24,6 @@ function draw() {
     toggle: vi.fn(),
     setActive: vi.fn(),
     reveal: vi.fn(),
-    lit: () => null,
-    touched: () => false,
   };
   const Node = ObjectNode as unknown as (props: {
     id: string;
