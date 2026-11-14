@@ -207,7 +207,7 @@ describe("which sources a Prometheus holds", () => {
       {
         source: 1,
         containers: ["istio-proxy"],
-        annotations: ["ambient.istio.io/redirection"],
+        annotated: ["ambient.istio.io/redirection"],
       },
     ]);
   });

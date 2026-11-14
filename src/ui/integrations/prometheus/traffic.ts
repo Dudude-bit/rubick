@@ -493,7 +493,7 @@ export const DEFINITIONS: readonly Definition[] = [
     queries: istioQueries,
     marker: {
       containers: ["istio-proxy"],
-      annotations: ["ambient.istio.io/redirection"],
+      annotated: ["ambient.istio.io/redirection"],
     },
   },
   {

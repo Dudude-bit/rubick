@@ -364,15 +364,6 @@ function TrafficMap({
               searchPlaceholder={t("traffic", "searchPlaceholder")}
               getRowId={(row) => row.id}
               onRowClick={(row) => setOpened(row.id)}
-              getRowPeek={(row) =>
-                row.to.is === "workload"
-                  ? {
-                      kind: row.to.key.kind,
-                      name: row.to.key.name,
-                      namespace: row.to.key.namespace,
-                    }
-                  : null
-              }
               partial={reading.answer.cut > 0}
               share={{
                 title: t("traffic", "title"),

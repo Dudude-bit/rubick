@@ -122,7 +122,7 @@ pub struct FlowQuery {
 pub struct PodMarker {
     pub source: u8,
     pub containers: Vec<String>,
-    pub annotations: Vec<String>,
+    pub annotated: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -346,12 +346,15 @@ fn namespaces_to_read(
     Some(names.into_iter().collect())
 }
 
+/// `(namespace, name)` to every workload a bare name could mean there.
+type NameIndex = HashMap<(String, String), BTreeSet<WorkloadKey>>;
+
 /// Every pod's workload, and every name a bare name could mean.
 struct Pods<'a> {
     of: HashMap<(&'a str, &'a str), WorkloadKey>,
-    pods: Vec<(&'a Pod, WorkloadKey)>,
+    listed: Vec<(&'a Pod, WorkloadKey)>,
     unread: BTreeSet<&'a str>,
-    names: HashMap<Option<String>, HashMap<(String, String), BTreeSet<WorkloadKey>>>,
+    names: HashMap<Option<String>, NameIndex>,
     read: bool,
 }
 
@@ -376,7 +379,7 @@ impl<'a> Pods<'a> {
         }
         Self {
             of,
-            pods,
+            listed: pods,
             unread,
             names: HashMap::new(),
             read: read.is_some(),
@@ -404,9 +407,9 @@ impl<'a> Pods<'a> {
     }
 
     fn named(&mut self, namespace: &str, name: &str, label: Option<&String>) -> FlowEnd {
-        let pods = &self.pods;
+        let pods = &self.listed;
         let index = self.names.entry(label.cloned()).or_insert_with(|| {
-            let mut index: HashMap<(String, String), BTreeSet<WorkloadKey>> = HashMap::new();
+            let mut index = NameIndex::new();
             for (pod, key) in pods {
                 let ns = key.namespace.clone();
                 let mut by = |name: &str| {
@@ -442,7 +445,7 @@ impl<'a> Pods<'a> {
 
     fn workload(&self, namespace: &str, kind: &str, name: &str) -> FlowEnd {
         let group = facts_of(kind).map(|f| f.group.clone()).or_else(|| {
-            self.pods
+            self.listed
                 .iter()
                 .map(|(_, key)| key)
                 .find(|k| k.namespace == namespace && k.kind == kind && k.name == name)
@@ -548,7 +551,7 @@ fn marks(pod: &Pod, marker: &PodMarker) -> bool {
         .flatten()
         .any(|c| marker.containers.contains(&c.name));
     named
-        || marker.annotations.iter().any(|mark| {
+        || marker.annotated.iter().any(|mark| {
             let (key, want) = mark
                 .split_once('=')
                 .map_or((mark.as_str(), None), |(k, v)| (k, Some(v)));
@@ -701,13 +704,16 @@ pub(crate) fn fold(
         })
         .collect();
 
-    let in_scope_pod =
-        |key: &WorkloadKey| scope.is_none_or(|s| s.iter().any(|n| *n == key.namespace));
+    let in_scope_pod = |key: &WorkloadKey| scope.is_none_or(|s| s.contains(&key.namespace));
     let observed = subject.filter(|_| pods.read).map(|subject| {
         markers
             .iter()
             .map(|marker| {
-                let mine: Vec<_> = pods.pods.iter().filter(|(_, key)| key == subject).collect();
+                let mine: Vec<_> = pods
+                    .listed
+                    .iter()
+                    .filter(|(_, key)| key == subject)
+                    .collect();
                 Observed {
                     source: marker.source,
                     pods: u32::try_from(mine.len()).unwrap_or(u32::MAX),
@@ -724,7 +730,7 @@ pub(crate) fn fold(
             .iter()
             .map(|marker| {
                 let mut by: BTreeMap<&WorkloadKey, (u32, u32)> = BTreeMap::new();
-                for (pod, key) in pods.pods.iter().filter(|(_, key)| in_scope_pod(key)) {
+                for (pod, key) in pods.listed.iter().filter(|(_, key)| in_scope_pod(key)) {
                     let tally = by.entry(key).or_default();
                     tally.0 += 1;
                     tally.1 += u32::from(marks(pod, marker));
@@ -798,7 +804,7 @@ mod tests {
         }
     }
 
-    /// A Deployment's pod, through its ReplicaSet, as the cluster writes it.
+    /// A `Deployment`'s pod, through its `ReplicaSet`, as the cluster writes it.
     fn deployed(ns: &str, deployment: &str, suffix: &str) -> Arc<Pod> {
         pod(
             ns,
@@ -1294,7 +1300,7 @@ mod tests {
         let marker = PodMarker {
             source: 0,
             containers: vec!["istio-proxy".into()],
-            annotations: vec!["ambient.istio.io/redirection=enabled".into()],
+            annotated: vec!["ambient.istio.io/redirection=enabled".into()],
         };
         let asked = [by_name(0, Measure::Requests)];
         let seen = |name: &str| {

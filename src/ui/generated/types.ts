@@ -2552,7 +2552,7 @@ export interface DropRate {
 export interface PodMarker {
   source: number;
   containers: string[];
-  annotations: string[];
+  annotated: string[];
 }
 
 export interface FlowQuery {
