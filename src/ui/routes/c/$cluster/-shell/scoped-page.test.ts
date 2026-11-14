@@ -18,6 +18,19 @@ describe("which pages read the window's namespaces", () => {
       expect(readsScope(path), path).toBe(true);
   });
 
+  /**
+   * Topology, Traffic, Audit and Cost each draw what the window's namespaces
+   * hold, so a namespace that is not there must be said to be missing on
+   * them too, not drawn as empty. Fails if any of them is left out.
+   */
+  it.each(["topology", "traffic", "audit", "cost"])(
+    "counts the %s page",
+    (page) => {
+      expect(readsScope(`/c/prod/${page}`)).toBe(true);
+      expect(readsScope(`/c/prod/${page}/`)).toBe(true);
+    }
+  );
+
   /** Fails if a page that never reads the scope is taken over for a namespace it does not use. */
   it("leaves cluster-wide lists and an object's own page alone", () => {
     for (const path of [
