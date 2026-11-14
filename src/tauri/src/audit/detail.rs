@@ -123,6 +123,21 @@ fn elsewhere(subject: Subject, on: Subject) -> ObjectAudit {
     }
 }
 
+/// Refuses a name that would leave its place in an API path. A deprecated
+/// API the server was asked for is named `group/version resource` and is
+/// only ever looked up in the page's own answer, never asked of the API.
+fn checked_name(kind: &str, namespace: Option<&str>, name: &str) -> Result<()> {
+    if let Some(namespace) = namespace {
+        crate::validation::validate_namespace(namespace)?;
+    }
+    match kind {
+        "Namespace" => crate::validation::validate_namespace(name),
+        super::DEPRECATED_API if namespace.is_none() && !name.is_empty() => Ok(()),
+        // A role's name may hold a colon, which no DNS name does.
+        _ => crate::validation::validate_path_segment(name),
+    }
+}
+
 /// One object's findings, for its page and its peek, or for a row the
 /// Audit page opens. `namespace` is `None` for a cluster-scoped object and
 /// for a namespace's own findings.
@@ -132,15 +147,7 @@ pub async fn object_audit(
     namespace: Option<&str>,
     name: &str,
 ) -> Result<ObjectAudit> {
-    if let Some(namespace) = namespace {
-        crate::validation::validate_namespace(namespace)?;
-    }
-    if kind == "Namespace" {
-        crate::validation::validate_namespace(name)?;
-    } else {
-        // A role's name may hold a colon, which no DNS name does.
-        crate::validation::validate_path_segment(name)?;
-    }
+    checked_name(kind, namespace, name)?;
     let here = state.here()?;
     let minor = super::minor_of(state, &here.context);
     let subject = Subject {
@@ -270,4 +277,22 @@ pub async fn object_audit(
         unchecked,
         judged_on: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A row for a deprecated API the server was asked for opens, though its
+    /// name holds a slash; any other kind's name with one is still refused
+    /// before it reaches a path. Would break if opening that row said the
+    /// name could not be an object's, or the exception reached a real kind.
+    #[test]
+    fn a_requested_api_opens_by_its_name_and_no_real_kind_takes_a_slash() {
+        let api = "extensions/v1beta1 ingresses";
+        assert!(checked_name(super::super::DEPRECATED_API, None, api).is_ok());
+        assert!(checked_name("Deployment", Some("shop"), "web/../x").is_err());
+        assert!(checked_name("ClusterRole", None, api).is_err());
+        assert!(checked_name(super::super::DEPRECATED_API, Some("shop"), api).is_err());
+    }
 }
