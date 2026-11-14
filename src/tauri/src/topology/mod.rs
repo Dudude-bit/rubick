@@ -5,13 +5,13 @@
 //! [`ClusterMap`]; every stream drawing that cluster reads its lists from
 //! here and rebuilds a namespace when a feed touched it.
 
+mod feed;
 mod stream;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
 use k8s_openapi::api::autoscaling::v2::HorizontalPodAutoscaler;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
@@ -28,29 +28,11 @@ use crate::commands::connections::map::{Held, Named};
 use crate::resources::topology::{MapKindReading, MapKindState};
 use crate::resources::{GatewayInfo, ListenerSetInfo, OtherPolicies, RouteInfo, UnexploredKind};
 
+pub use feed::{ask, pump, types_of};
 pub use stream::{run, Drawn, Opening};
 
-/// How one slot of a kind is being read: the whole cluster, or one namespace.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Reading {
-    Syncing {
-        since: DateTime<Utc>,
-    },
-    Synced,
-    Refused {
-        said: String,
-    },
-    /// Failed before it ever answered.
-    Failed {
-        said: String,
-        since: DateTime<Utc>,
-    },
-    /// Answered once and broke; what it holds is from `since`.
-    Blind {
-        said: String,
-        since: DateTime<Utc>,
-    },
-}
+/// How one slot of a kind is being read, as the watch layer says it.
+pub use crate::feeds::FeedState as Reading;
 
 /// What a source hands the map, in order.
 #[derive(Debug, Clone)]
@@ -405,18 +387,27 @@ impl Stores {
             return Answer::Read;
         }
         if let Some(here) = self.reads.get(&(kind, Some(namespace.to_string()))) {
-            return match here {
-                Reading::Synced | Reading::Blind { .. } => Answer::Read,
-                Reading::Refused { said } => Answer::Unread(said.clone(), REFUSED),
-                Reading::Failed { said, .. } => Answer::Unread(said.clone(), UNANSWERED),
-                Reading::Syncing { .. } => Answer::Unread(String::new(), UNANSWERED),
-            };
+            return Self::answer_of(kind, here);
         }
         match cluster {
-            Some(Reading::Refused { said }) => Answer::Unread(said.clone(), REFUSED),
-            Some(Reading::Failed { said, .. }) => Answer::Unread(said.clone(), UNANSWERED),
+            Some(reading) => Self::answer_of(kind, reading),
             None if kind.optional() => Answer::NotServed,
-            _ => Answer::Unread(String::new(), UNANSWERED),
+            None => Answer::Unread(String::new(), UNANSWERED),
+        }
+    }
+
+    /// A slot's reading as an answer. A kind the cluster does not serve is
+    /// none of it only where that is a finding: Gateway API not installed.
+    /// An `EndpointSlice` a cluster does not serve is a list not read.
+    fn answer_of(kind: Kind, reading: &Reading) -> Answer {
+        match reading {
+            Reading::Synced | Reading::Blind { .. } => Answer::Read,
+            Reading::Refused { message } => Answer::Unread(message.clone(), REFUSED),
+            Reading::Failed { message } => Answer::Unread(message.clone(), UNANSWERED),
+            Reading::Unserved if kind.optional() => Answer::NotServed,
+            Reading::Unserved | Reading::Syncing | Reading::Queued => {
+                Answer::Unread(String::new(), UNANSWERED)
+            }
         }
     }
 
@@ -562,7 +553,7 @@ impl Stores {
     pub fn syncing(&self) -> bool {
         self.reads
             .values()
-            .any(|reading| matches!(reading, Reading::Syncing { .. }))
+            .any(|reading| matches!(reading, Reading::Syncing | Reading::Queued))
     }
 
     /// How each kind is read, for the rail.
@@ -591,66 +582,40 @@ impl Stores {
             .collect();
         match self.reads.get(&(kind, None)) {
             Some(Reading::Synced) => MapKindReading::Live,
-            Some(Reading::Blind { said, since }) => MapKindReading::Stale {
-                since: since.to_rfc3339(),
-                said: said.clone(),
+            Some(Reading::Blind { since }) => MapKindReading::Stale {
+                since: since.clone(),
             },
-            Some(Reading::Syncing { since }) => MapKindReading::Syncing {
-                since: since.to_rfc3339(),
-            },
-            Some(Reading::Refused { said }) if !read_in.is_empty() => {
+            Some(Reading::Queued) => MapKindReading::Queued,
+            Some(Reading::Refused { message }) if !read_in.is_empty() => {
                 MapKindReading::NamespacesOnly {
                     namespaces: read_in,
-                    said: said.clone(),
+                    said: message.clone(),
                 }
             }
-            Some(Reading::Refused { said }) => MapKindReading::Refused { said: said.clone() },
-            Some(Reading::Failed { said, .. }) => MapKindReading::Failed { said: said.clone() },
+            Some(Reading::Refused { message }) => MapKindReading::Refused {
+                said: message.clone(),
+            },
+            Some(Reading::Failed { message }) => MapKindReading::Failed {
+                said: message.clone(),
+            },
+            Some(Reading::Unserved) if kind.optional() => MapKindReading::NotServed,
+            Some(Reading::Unserved) => MapKindReading::Unserved,
             None if !read_in.is_empty() => MapKindReading::NamespacesOnly {
                 namespaces: read_in,
                 said: String::new(),
             },
             None if kind.optional() => MapKindReading::NotServed,
-            None => MapKindReading::Syncing {
-                since: String::new(),
-            },
+            Some(Reading::Syncing) | None => MapKindReading::Syncing,
         }
     }
 }
 
-/// What feeds a cluster's map: the watches of the kinds it reads.
-pub trait Source: Send + Sync {
-    /// Starts feeding `map` for `context`. Feeding stops when the lease is
-    /// dropped, which is when the map is let go.
-    fn attach(&self, context: &str, map: &Arc<ClusterMap>) -> Lease;
-}
-
-/// Held for as long as a source feeds one map.
-pub struct Lease(Option<Box<dyn FnOnce() + Send + Sync>>);
-
-impl Lease {
-    #[must_use]
-    pub fn on_drop(release: impl FnOnce() + Send + Sync + 'static) -> Self {
-        Self(Some(Box::new(release)))
-    }
-}
-
-impl Drop for Lease {
-    fn drop(&mut self) {
-        if let Some(release) = self.0.take() {
-            release();
-        }
-    }
-}
-
-/// One cluster's map: its stores, where their changes are told, the token
-/// that ends every stream on it when its client is replaced, and the lease
-/// of whatever feeds it.
+/// One stream's map: its stores, where their changes are told, and the
+/// token that ends every stream on it when what feeds it stops.
 pub struct ClusterMap {
     stores: RwLock<Stores>,
     changes: broadcast::Sender<Touched>,
-    replaced: CancellationToken,
-    lease: parking_lot::Mutex<Option<Lease>>,
+    ended: CancellationToken,
 }
 
 impl Default for ClusterMap {
@@ -658,8 +623,7 @@ impl Default for ClusterMap {
         Self {
             stores: RwLock::new(Stores::default()),
             changes: broadcast::channel(256).0,
-            replaced: CancellationToken::new(),
-            lease: parking_lot::Mutex::new(None),
+            ended: CancellationToken::new(),
         }
     }
 }
@@ -688,61 +652,14 @@ impl ClusterMap {
         self.changes.subscribe()
     }
 
+    /// Fires when what feeds the map stopped: the cluster was let go.
     #[must_use]
-    pub fn replaced(&self) -> CancellationToken {
-        self.replaced.clone()
-    }
-}
-
-/// Every connected cluster's map.
-pub struct TopologyCache {
-    clusters: DashMap<String, Arc<ClusterMap>>,
-    source: RwLock<Option<Arc<dyn Source>>>,
-}
-
-impl Default for TopologyCache {
-    fn default() -> Self {
-        Self {
-            clusters: DashMap::new(),
-            source: RwLock::new(None),
-        }
-    }
-}
-
-impl TopologyCache {
-    /// What feeds every map made from now on.
-    pub fn feed_from(&self, source: Arc<dyn Source>) {
-        *self.source.write() = Some(source);
+    pub fn ended(&self) -> CancellationToken {
+        self.ended.clone()
     }
 
-    /// The cluster's map, made and handed to the source on first use.
-    #[must_use]
-    pub fn cluster(&self, context: &str) -> Arc<ClusterMap> {
-        let mut made = false;
-        let map = self
-            .clusters
-            .entry(context.to_string())
-            .or_insert_with(|| {
-                made = true;
-                Arc::new(ClusterMap::default())
-            })
-            .clone();
-        if made {
-            let source = self.source.read().clone();
-            if let Some(source) = source {
-                *map.lease.lock() = Some(source.attach(context, &map));
-            }
-        }
-        map
-    }
-
-    /// Lets the cluster's map go: its source stops feeding it, every stream
-    /// on it ends as replaced, and the next one opened starts from nothing.
-    pub fn forget(&self, context: &str) {
-        if let Some((_, map)) = self.clusters.remove(context) {
-            drop(map.lease.lock().take());
-            map.replaced.cancel();
-        }
+    pub fn end(&self) {
+        self.ended.cancel();
     }
 }
 

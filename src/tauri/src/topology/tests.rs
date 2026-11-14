@@ -37,7 +37,9 @@ fn a_kind_refused_across_the_cluster_is_read_in_the_namespaces_that_answered() {
     stores.apply(read(
         Kind::Deployment,
         None,
-        Reading::Refused { said: SAID.into() },
+        Reading::Refused {
+            message: SAID.into(),
+        },
     ));
     stores.apply(read(Kind::Deployment, Some("shop"), Reading::Synced));
     stores.apply(Feed::Applied(deployment("shop", "cart")));
@@ -69,7 +71,7 @@ fn a_kind_refused_across_the_cluster_is_read_in_the_namespaces_that_answered() {
 #[test]
 fn a_kind_still_listing_is_unread_rather_than_empty() {
     let mut stores = Stores::default();
-    stores.apply(read(Kind::Pod, None, Reading::Syncing { since: now() }));
+    stores.apply(read(Kind::Pod, None, Reading::Syncing));
     assert!(stores
         .held("shop", OtherPolicies::none(), now())
         .pods
@@ -80,7 +82,7 @@ fn a_kind_still_listing_is_unread_rather_than_empty() {
         .into_iter()
         .find(|k| k.kind == "Pod")
         .expect("listed");
-    assert!(matches!(pods.reading, MapKindReading::Syncing { .. }));
+    assert_eq!(pods.reading, MapKindReading::Syncing);
 }
 
 /// A cluster that serves no Gateway API is not a cluster whose routes were
@@ -153,6 +155,7 @@ fn opening(
             map,
             events: events.clone(),
             cancel: cancel.clone(),
+            lease: None,
         },
         cancel,
     )
@@ -210,62 +213,127 @@ async fn a_stream_draws_its_scope_then_only_what_a_feed_changed() {
     cancel.cancel();
     assert_eq!(task.await.expect("ends"), TopologyEnd::Closed);
 
-    let cache = TopologyCache::default();
-    cache.clusters.insert("kind".into(), map.clone());
-    let (open, _) = opening(map, &events);
+    let (open, _) = opening(map.clone(), &events);
     let task = tokio::spawn(stream::run(open));
     while next(&mut rx).await != vec!["ready"] {}
-    cache.forget("kind");
+    map.end();
     assert_eq!(task.await.expect("ends"), TopologyEnd::Replaced);
 }
 
-/// A source that feeds one Deployment and counts what it was asked.
-struct Fake {
-    attached: Arc<std::sync::atomic::AtomicUsize>,
-    released: Arc<std::sync::atomic::AtomicUsize>,
+fn dynamic(value: serde_json::Value) -> Arc<kube::api::DynamicObject> {
+    Arc::new(serde_json::from_value(value).expect("a dynamic object"))
 }
 
-impl Source for Fake {
-    fn attach(&self, _context: &str, map: &Arc<ClusterMap>) -> Lease {
-        self.attached
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        map.feed([
-            read(Kind::Deployment, None, Reading::Synced),
-            Feed::Applied(deployment("shop", "cart")),
-        ]);
-        let released = self.released.clone();
-        Lease::on_drop(move || {
-            released.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        })
+fn slot(kind: Kind, namespace: Option<&str>) -> crate::ownership::SlotKey {
+    crate::ownership::SlotKey {
+        kind: kind.key(),
+        namespace: namespace.map(str::to_string),
     }
 }
 
-/// A map is fed once however many streams draw it, and a replaced client
-/// stops the feeding: a lease kept past `forget` would go on watching with
-/// credentials the cluster no longer takes.
+/// The layer hands list items over without `apiVersion` or `kind`, as the
+/// API server lists them; the map must still read them as their kind, and
+/// keep of a `ConfigMap` its name and labels and never its data.
 #[test]
-fn a_map_is_fed_once_and_its_feeding_ends_with_it() {
-    use std::sync::atomic::Ordering;
-    let attached = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let released = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let cache = TopologyCache::default();
-    cache.feed_from(Arc::new(Fake {
-        attached: attached.clone(),
-        released: released.clone(),
+fn a_layer_update_is_kept_as_the_map_keeps_its_kind() {
+    let types = std::collections::BTreeMap::new();
+    let deployment = dynamic(json!({
+        "metadata": { "name": "cart", "namespace": "shop", "uid": "cart",
+                      "annotations": { "kubectl.kubernetes.io/last-applied-configuration": "{}" } },
+        "spec": { "selector": { "matchLabels": { "app": "cart" } }, "template": { "metadata": {} } },
     }));
-    let map = cache.cluster("kind");
-    let _again = cache.cluster("kind");
-    assert_eq!(attached.load(Ordering::SeqCst), 1);
+    let config = dynamic(json!({
+        "metadata": { "name": "cart-config", "namespace": "shop", "labels": { "app": "cart" } },
+        "data": { "password": "kept by nobody" },
+    }));
+    let feeds = feed::feeds_of(
+        crate::feeds::Update::Whole {
+            slot: slot(Kind::Deployment, None),
+            why: crate::feeds::Whole::Fresh,
+            objects: vec![deployment],
+        },
+        &types,
+    );
+    let Some(Feed::Relisted { objects, .. }) = feeds.first() else {
+        panic!("a relist, not {feeds:?}");
+    };
+    let Some(Object::Deployment(read)) = objects.first() else {
+        panic!("a Deployment, not {objects:?}");
+    };
+    assert!(read
+        .metadata
+        .annotations
+        .clone()
+        .unwrap_or_default()
+        .is_empty());
+    let feeds = feed::feeds_of(
+        crate::feeds::Update::Applied {
+            slot: slot(Kind::ConfigMap, None),
+            object: config,
+        },
+        &types,
+    );
+    let Some(Feed::Applied(Object::ConfigMap(named))) = feeds.first() else {
+        panic!("a ConfigMap, not {feeds:?}");
+    };
+    assert_eq!(named.name, "cart-config");
+    assert_eq!(named.labels.get("app").map(String::as_str), Some("cart"));
+}
+
+/// "Not installed" is the layer's own `Unserved`, and it is a finding only
+/// for the Gateway API kinds: an `EndpointSlice` the cluster does not serve
+/// is a list not read, never one with nothing in it.
+#[test]
+fn unserved_is_not_installed_for_gateway_kinds_and_unread_for_the_others() {
+    let types = std::collections::BTreeMap::new();
+    let mut stores = Stores::default();
+    for kind in [Kind::HttpRoute, Kind::EndpointSlice] {
+        for feed in feed::feeds_of(
+            crate::feeds::Update::State {
+                slot: slot(kind, None),
+                state: Reading::Unserved,
+            },
+            &types,
+        ) {
+            stores.apply(feed);
+        }
+    }
+    let kinds = stores.kinds();
+    let reading = |kind: &str| {
+        kinds
+            .iter()
+            .find(|state| state.kind == kind)
+            .map(|state| state.reading.clone())
+    };
+    assert_eq!(reading("HTTPRoute"), Some(MapKindReading::NotServed));
+    assert_eq!(reading("EndpointSlice"), Some(MapKindReading::Unserved));
+    let held = stores.held("shop", OtherPolicies::none(), now());
+    assert!(held.gateway_unread.is_empty());
+    assert!(held.slices.is_err());
+}
+
+/// The layer closing the channel is the cluster let go: the map ends, and
+/// every stream on it ends with it rather than drawing a cluster nobody
+/// reads any more.
+#[tokio::test]
+async fn a_map_ends_when_the_layer_closes_its_channel() {
+    let (tx, rx) = tokio::sync::mpsc::channel(8);
+    let map = Arc::new(ClusterMap::default());
+    let pumping = tokio::spawn(pump(rx, map.clone(), std::collections::BTreeMap::new()));
+    tx.send(crate::feeds::Update::State {
+        slot: slot(Kind::Deployment, None),
+        state: Reading::Synced,
+    })
+    .await
+    .expect("sent");
+    drop(tx);
+    pumping.await.expect("the pump ends");
+    assert!(map.ended().is_cancelled());
     assert_eq!(
         map.stores()
             .held("shop", OtherPolicies::none(), now())
             .deployments
-            .map(|l| l.len()),
-        Ok(1)
+            .map(|list| list.len()),
+        Ok(0)
     );
-    cache.forget("kind");
-    assert_eq!(released.load(Ordering::SeqCst), 1);
-    assert!(map.replaced().is_cancelled());
-    let _ = cache.cluster("kind");
-    assert_eq!(attached.load(Ordering::SeqCst), 2);
 }

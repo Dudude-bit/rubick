@@ -2794,12 +2794,14 @@ export type TopologyPiece =
 
 export type MapKindReading =
   | { says: "live" }
-  | { says: "syncing"; since: string }
+  | { says: "syncing" }
+  | { says: "queued" }
   | { says: "namespacesOnly"; namespaces: string[]; said: string }
   | { says: "refused"; said: string }
   | { says: "failed"; said: string }
-  | { says: "stale"; since: string; said: string }
-  | { says: "notServed" };
+  | { says: "stale"; since: string }
+  | { says: "notServed" }
+  | { says: "unserved" };
 
 export type Unread =
   | { says: "unanswered"; version: string; said: string }

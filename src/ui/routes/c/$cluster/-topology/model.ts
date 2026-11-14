@@ -438,6 +438,10 @@ export function readingWords(
       return null;
     case "syncing":
       return t("topology", "readingSyncing");
+    case "queued":
+      return t("topology", "readingQueued");
+    case "unserved":
+      return t("topology", "readingUnserved");
     case "namespacesOnly":
       return t("topology", "readingOnlyIn", {
         namespaces: reading.namespaces.join(", "),
@@ -491,7 +495,8 @@ export function notLookedAt(kinds: readonly MapKindState[], t: T): NotLooked[] {
       !words ||
       reading.says === "live" ||
       reading.says === "notServed" ||
-      reading.says === "syncing"
+      reading.says === "syncing" ||
+      reading.says === "queued"
     )
       return [];
     const said = "said" in reading && reading.said ? `: ${reading.said}` : "";

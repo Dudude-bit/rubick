@@ -1864,6 +1864,8 @@ export const en = {
     readingFailed: "no answer",
     readingStale: "as of {time}: the read broke",
     readingNotServed: "not installed",
+    readingQueued: "waiting its turn: too many kinds to watch at once",
+    readingUnserved: "this cluster does not serve it",
     groupNamespace: "By namespace",
     groupApp: "By app",
     hiddenKinds: "hidden: {kinds}",

@@ -288,7 +288,9 @@ function TopologyMap() {
   ];
 
   const notLooked = useMemo(() => notLookedAt(map.kinds, t), [map.kinds, t]);
-  const syncing = map.kinds.filter((kind) => kind.reading.says === "syncing");
+  const syncing = map.kinds.filter(
+    (kind) => kind.reading.says === "syncing" || kind.reading.says === "queued"
+  );
 
   const others = useMemo(() => {
     if (!policies) return [];

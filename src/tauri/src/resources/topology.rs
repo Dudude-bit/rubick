@@ -155,10 +155,10 @@ pub struct NamespaceRead {
 #[serde(tag = "says", rename_all = "camelCase")]
 pub enum MapKindReading {
     Live,
-    /// Its first list has not answered since `since`.
-    Syncing {
-        since: String,
-    },
+    /// Its first list has not answered yet.
+    Syncing,
+    /// Waiting for a watch: the app holds as many open as it allows itself.
+    Queued,
     /// Refused across the cluster and read in `namespaces` instead.
     NamespacesOnly {
         namespaces: Vec<String>,
@@ -174,10 +174,12 @@ pub enum MapKindReading {
     /// The read broke at `since`; what is drawn of it is from then.
     Stale {
         since: String,
-        said: String,
     },
     /// The cluster does not serve it: Gateway API not installed.
     NotServed,
+    /// A kind the map needs that the cluster does not serve: an
+    /// `EndpointSlice` on a cluster older than 1.21.
+    Unserved,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

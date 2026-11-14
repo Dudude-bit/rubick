@@ -21,6 +21,10 @@ use crate::state::AppEvent;
 /// it are gathered into the next drawing, never dropped.
 const REDRAW_EVERY: Duration = Duration::from_secs(1);
 
+/// How often an open stream tells the watch layer it is still on screen:
+/// well inside the three minutes it lets an untouched page go after.
+const TOUCH_EVERY: Duration = Duration::from_mins(1);
+
 /// How long the first drawing waits for kinds still listing. Past it the
 /// map is drawn with them named as still listing, and drawn again when
 /// they answer.
@@ -201,6 +205,9 @@ pub struct Opening {
     pub map: Arc<ClusterMap>,
     pub events: broadcast::Sender<AppEvent>,
     pub cancel: CancellationToken,
+    /// The watch layer's hold on what feeds `map`, touched while the stream
+    /// is open: a page subscription nobody touches is let go.
+    pub lease: Option<crate::feeds::Lease>,
 }
 
 impl Opening {
@@ -236,7 +243,7 @@ impl Opening {
 /// Runs a stream to its end, which it returns; the caller sends it.
 pub async fn run(opening: Opening) -> TopologyEnd {
     let mut changes = opening.map.changes();
-    let replaced = opening.map.replaced();
+    let replaced = opening.map.ended();
     let ended = |cancel: &CancellationToken| {
         if replaced.is_cancelled() {
             Some(TopologyEnd::Replaced)
@@ -270,12 +277,19 @@ pub async fn run(opening: Opening) -> TopologyEnd {
     });
 
     let mut last = tokio::time::Instant::now();
+    let mut touch = tokio::time::interval(TOUCH_EVERY);
     loop {
         let mut touched = Touched::default();
         tokio::select! {
             biased;
             () = opening.cancel.cancelled() => return TopologyEnd::Closed,
             () = replaced.cancelled() => return TopologyEnd::Replaced,
+            _ = touch.tick() => {
+                if let Some(lease) = &opening.lease {
+                    lease.touch();
+                }
+                continue;
+            }
             change = changes.recv() => match change {
                 Ok(change) => touched.merge(change),
                 Err(broadcast::error::RecvError::Lagged(_)) => touched.all = true,

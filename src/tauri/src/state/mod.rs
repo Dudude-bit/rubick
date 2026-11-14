@@ -175,8 +175,6 @@ pub struct AppState {
     pub ownership: Arc<crate::ownership::OwnershipIndexes>,
     /// One watch per cluster and kind, for every backend reader that follows one.
     pub feeds: Arc<crate::feeds::Feeds>,
-    /// The cluster map's held lists, per context.
-    pub topology: Arc<crate::topology::TopologyCache>,
     /// Cluster maps being drawn.
     pub topology_streams: streams::Streams,
 }
@@ -229,7 +227,6 @@ impl AppState {
             metrics_unserved: crate::metrics::Unserved::default(),
             feeds: Arc::new(crate::feeds::Feeds::new(ownership.budget())),
             ownership,
-            topology: Arc::new(crate::topology::TopologyCache::default()),
             topology_streams: streams::Streams::default(),
         })
     }
@@ -442,7 +439,6 @@ impl AppState {
     pub fn client_replaced(&self, context: &str) {
         self.overview_cache.forget(context);
         self.ownership.forget(context);
-        self.topology.forget(context);
         self.feeds
             .client_replaced(context, self.client_of(context).ok().map(|c| (*c).clone()));
         self.metrics_unserved.forget_refusals(context);

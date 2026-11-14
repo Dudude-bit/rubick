@@ -1910,6 +1910,8 @@ export const ru: Catalogue = {
     readingFailed: "нет ответа",
     readingStale: "на {time}: чтение прервалось",
     readingNotServed: "не установлено",
+    readingQueued: "ждёт очереди: слишком много видов для слежения сразу",
+    readingUnserved: "этот кластер его не обслуживает",
     groupNamespace: "По пространствам имён",
     groupApp: "По приложениям",
     hiddenKinds: "скрыто: {kinds}",
