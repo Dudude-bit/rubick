@@ -180,6 +180,8 @@ export interface TopologyNode {
   app: string | null;
   pods: PodTally | null;
   cover: PolicyCover | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
 }
 
 export interface PodTally {

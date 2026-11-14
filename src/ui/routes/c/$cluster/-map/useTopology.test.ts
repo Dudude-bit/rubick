@@ -24,6 +24,8 @@ const node = (name: string, phase: string | null): TopologyNode => ({
   app: null,
   pods: null,
   cover: null,
+  labels: {},
+  annotations: {},
 });
 
 beforeEach(() => vi.stubGlobal("requestAnimationFrame", undefined));

@@ -1,6 +1,8 @@
 //! What the cluster map carries across IPC: objects as the Connections tab
 //! names them, each with the input its own page's verdict reads.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -27,6 +29,10 @@ pub struct TopologyNode {
     pub pods: Option<PodTally>,
     /// Which `NetworkPolicies` select it, on a workload.
     pub cover: Option<PolicyCover>,
+    /// What a delivery tool reads to say who applied the object; the
+    /// annotations pass the one door every annotation leaves Rust by.
+    pub labels: BTreeMap<String, String>,
+    pub annotations: BTreeMap<String, String>,
 }
 
 /// What a node's own page reads to give it a verdict, kind by kind.
@@ -243,7 +249,7 @@ pub fn verb_of(relation: &Relation) -> &'static str {
 
 /// The app an object belongs to, by the recommended labels in order.
 #[must_use]
-pub fn app_of(labels: &std::collections::BTreeMap<String, String>) -> Option<String> {
+pub fn app_of(labels: &BTreeMap<String, String>) -> Option<String> {
     [
         "app.kubernetes.io/part-of",
         "app.kubernetes.io/instance",

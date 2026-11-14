@@ -1841,6 +1841,10 @@ export const en = {
     verbRunsOn: "runs on",
     verbBinds: "binds",
     verbGoverns: "acts on",
+    verbDelivers: "delivers",
+    deliveryUnread: "Who delivered these objects was not read: {said}",
+    routesUnread:
+      "The routes vendors keep into these Services were not read: {said}",
     notRead: "not read",
     missing: "missing",
     noPolicyBadge: "no policy",

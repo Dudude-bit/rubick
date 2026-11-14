@@ -49,6 +49,8 @@ const node = (object: ObjectRef, verdict: NodeVerdict): TopologyNode => ({
   app: null,
   pods: null,
   cover: null,
+  labels: {},
+  annotations: {},
 });
 
 const ROLLOUTS: Rollout[] = [

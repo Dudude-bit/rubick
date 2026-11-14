@@ -103,6 +103,8 @@ describe("the map stream", () => {
         app: null,
         pods: null,
         cover: null,
+        labels: {},
+        annotations: {},
       },
     });
     act(() => {

@@ -44,6 +44,7 @@ import {
 } from "./model";
 import { toneOf, type ToneInputs } from "./tone";
 import { topologySection } from "./topology-share";
+import { useVendorLayers } from "./vendor-layers";
 
 /** Past this many nodes in a scope of several namespaces, every group starts collapsed. */
 export const COLLAPSE_ABOVE = 400;
@@ -136,11 +137,44 @@ function TopologyMap() {
     [map, grouping, hidden, policies, toggled, collapsedAtFirst, toneInputs, t]
   );
 
-  const matches = useMemo(() => {
+  const openServices = useMemo(() => {
+    const open = new Set(
+      model.groups.filter((group) => !group.collapsed).map((group) => group.id)
+    );
+    return model.nodes
+      .filter(
+        (node) =>
+          node.kind === "Service" && node.group !== null && open.has(node.group)
+      )
+      .flatMap((node) => {
+        const held = map.nodes.get(node.id);
+        return held?.ref.namespace
+          ? [{ namespace: held.ref.namespace, name: held.ref.name }]
+          : [];
+      });
+  }, [model, map]);
+  const groupIds = useMemo(
+    () => new Set(model.groups.map((group) => group.id)),
+    [model.groups]
+  );
+  const vendorGroup = useCallback(
+    (namespace: string) =>
+      grouping === "namespace" && groupIds.has(namespace) ? namespace : null,
+    [grouping, groupIds]
+  );
+  const vendor = useVendorLayers(map.nodes, openServices, vendorGroup, t);
+  const shownVendor = vendor.nodes.filter(
+    (each) => !hidden.has(each.node.kind)
+  );
+  const allNodes = [...model.nodes, ...shownVendor.map((each) => each.node)];
+  const allEdges = [...model.edges, ...vendor.edges];
+
+  // Read every render: the vendor layers are, and this is one pass over memory.
+  const matches = (() => {
     const asked = query.trim().toLowerCase();
     if (!asked) return null;
     return new Set(
-      model.nodes
+      allNodes
         .filter(
           (node) =>
             node.label.toLowerCase().includes(asked) ||
@@ -148,7 +182,7 @@ function TopologyMap() {
         )
         .map((node) => node.id)
     );
-  }, [model.nodes, query]);
+  })();
 
   const goTo = useCallback(
     (id: string) => {
@@ -180,6 +214,12 @@ function TopologyMap() {
 
   const onOpen = useCallback(
     (drawn: GraphNode, how: "peek" | "page") => {
+      const added = vendor.nodes.find((each) => each.node.id === drawn.id);
+      if (added) {
+        if (how === "peek" && added.peek) peek(added.peek);
+        else if (added.page) void navigate(added.page);
+        return;
+      }
       const node = map.nodes.get(drawn.id);
       if (!node || node.ref.name === OWNERLESS) return;
       const object = {
@@ -193,7 +233,7 @@ function TopologyMap() {
       if (how === "page") void navigate(link);
       else peek(object);
     },
-    [map.nodes, crdOf, navigate, peek]
+    [map.nodes, vendor.nodes, crdOf, navigate, peek]
   );
 
   const onToggleGroup = useCallback(
@@ -207,20 +247,28 @@ function TopologyMap() {
     [model.groups, collapsedAtFirst]
   );
 
-  const rail = useMemo<RailRow[]>(
-    () =>
-      MAP_KINDS.map((kind) => {
-        const { count, used } = countOf(kind, map.reads, map.nodes);
-        return {
-          kind,
-          count,
-          used,
-          reading: readingOf(kind, map.kinds),
-          hidden: hidden.has(kind) || (kind === "NetworkPolicy" && !policies),
-        };
-      }),
-    [map, hidden, policies]
-  );
+  const vendorKinds = [
+    ...new Set(vendor.nodes.map((each) => each.node.kind)),
+  ].filter((kind) => !(MAP_KINDS as readonly string[]).includes(kind));
+  const rail: RailRow[] = [
+    ...MAP_KINDS.map((kind) => {
+      const { count, used } = countOf(kind, map.reads, map.nodes);
+      return {
+        kind,
+        count,
+        used,
+        reading: readingOf(kind, map.kinds),
+        hidden: hidden.has(kind) || (kind === "NetworkPolicy" && !policies),
+      };
+    }),
+    ...vendorKinds.map((kind) => ({
+      kind,
+      count: vendor.nodes.filter((each) => each.node.kind === kind).length,
+      used: null,
+      reading: null,
+      hidden: hidden.has(kind),
+    })),
+  ];
 
   const notLooked = useMemo(() => notLookedAt(map.kinds, t), [map.kinds, t]);
   const syncing = map.kinds.filter((kind) => kind.reading.says === "syncing");
@@ -368,6 +416,7 @@ function TopologyMap() {
       />
       {(notLooked.length > 0 ||
         others.length > 0 ||
+        vendor.unread.length > 0 ||
         matches !== null ||
         map.error !== null) && (
         <div
@@ -393,6 +442,11 @@ function TopologyMap() {
                 {t("topology", "edgesAbsent", { kind: entry.kind })}
               </p>
             ))}
+          {vendor.unread.map((line) => (
+            <p key={line} className="text-warn">
+              {line}
+            </p>
+          ))}
           {others.length > 0 && (
             <p className="text-fg-mut">
               {t("topology", "otherEngines", { kinds: others.join(", ") })}
@@ -427,8 +481,8 @@ function TopologyMap() {
           <GraphCanvas
             ref={canvas}
             groups={model.groups}
-            nodes={model.nodes}
-            edges={model.edges}
+            nodes={allNodes}
+            edges={allEdges}
             onToggleGroup={onToggleGroup}
             onOpen={onOpen}
             highlight={matches}

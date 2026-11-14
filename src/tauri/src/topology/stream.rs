@@ -332,6 +332,8 @@ mod tests {
             app: None,
             pods: None,
             cover: None,
+            labels: std::collections::BTreeMap::new(),
+            annotations: std::collections::BTreeMap::new(),
         }
     }
 

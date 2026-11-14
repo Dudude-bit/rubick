@@ -81,6 +81,7 @@ struct Workload {
     subject: ObjectRef,
     labels: BTreeMap<String, String>,
     template_labels: BTreeMap<String, String>,
+    annotations: BTreeMap<String, String>,
     /// The template as its pods run it, by [`as_run`].
     spec: Option<PodSpec>,
     owners: Vec<OwnerReference>,
@@ -151,6 +152,8 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 app: app_of(&workload.labels).or_else(|| app_of(template)),
                 pods: pods_read.then(|| tally(&own)),
                 cover: Some(cover_of(template, &snapshot, ns)),
+                labels: workload.labels.clone(),
+                annotations: workload.annotations.clone(),
             },
         );
     }
@@ -190,6 +193,8 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 app: app_of(svc.labels()),
                 pods: None,
                 cover: None,
+                labels: svc.labels().clone(),
+                annotations: crate::resources::annotations_of(&svc.metadata),
             },
         );
     }
@@ -211,6 +216,8 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 app: app_of(ing.labels()),
                 pods: None,
                 cover: None,
+                labels: ing.labels().clone(),
+                annotations: crate::resources::annotations_of(&ing.metadata),
             },
         );
     }
@@ -242,6 +249,8 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 app: app_of(&route.labels),
                 pods: None,
                 cover: None,
+                labels: BTreeMap::new(),
+                annotations: BTreeMap::new(),
             },
         );
     }
@@ -265,6 +274,8 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 app: None,
                 pods: None,
                 cover: None,
+                labels: BTreeMap::new(),
+                annotations: BTreeMap::new(),
             },
         );
     }
@@ -322,6 +333,8 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
                 app,
                 pods: None,
                 cover: None,
+                labels: meta.labels.clone().unwrap_or_default(),
+                annotations: crate::resources::annotations_of(meta),
             },
         );
     }
@@ -411,6 +424,7 @@ fn workloads_of(
         found.push(Workload {
             subject,
             labels: meta.labels.clone().unwrap_or_default(),
+            annotations: crate::resources::annotations_of(meta),
             spec: template
                 .spec
                 .as_ref()
@@ -723,6 +737,8 @@ fn folded_owners(
                 app: None,
                 pods: Some(tally(&pods)),
                 cover: None,
+                labels: BTreeMap::new(),
+                annotations: BTreeMap::new(),
             },
         );
     }
@@ -809,6 +825,8 @@ fn named_nodes(
                     app: labels.and_then(app_of),
                     pods: None,
                     cover: None,
+                    labels: labels.cloned().unwrap_or_default(),
+                    annotations: BTreeMap::new(),
                 },
             );
         }

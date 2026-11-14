@@ -1887,6 +1887,10 @@ export const ru: Catalogue = {
     verbRunsOn: "работает на",
     verbBinds: "привязан к",
     verbGoverns: "действует на",
+    verbDelivers: "доставляет",
+    deliveryUnread: "Не прочитано, кто доставил эти объекты: {said}",
+    routesUnread:
+      "Не прочитаны маршруты, которые ведут к этим Services инструменты вендоров: {said}",
     notRead: "не прочитано",
     missing: "отсутствует",
     noPolicyBadge: "без политик",

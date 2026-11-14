@@ -26,6 +26,8 @@ const node = (
   app,
   pods: null,
   cover: null,
+  labels: {},
+  annotations: {},
 });
 
 const read = (namespace: string, refused = false): NamespaceRead => ({
