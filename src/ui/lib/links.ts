@@ -313,6 +313,7 @@ export function pageLink(
     | "events"
     | "changes"
     | "topology"
+    | "traffic"
     | "cost"
     | "integrations"
     | "routes"

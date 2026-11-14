@@ -1,0 +1,206 @@
+/**
+ * The words for flows: an end, a cell, a source's own line. Every map from
+ * a state to words is a `Record` the compiler holds total.
+ */
+import type { FlowEnd, Measure } from "@/generated/types";
+import type { T } from "@/i18n/useT";
+import { formatShare } from "@/lib/cost";
+import { formatQuantity } from "@/lib/metric-format";
+import type {
+  Cell,
+  CellState,
+  FlowRow,
+  FlowSourceState,
+  FlowWindow,
+  SourceLine,
+  TrafficWord,
+} from "@/lib/traffic";
+import { MEASURES } from "@/lib/traffic";
+import { formatRate } from "@/lib/utils";
+
+export const WINDOW_WORD = {
+  "5m": "window5m",
+  "15m": "window15m",
+  "1h": "window1h",
+} as const satisfies Record<FlowWindow, TrafficWord>;
+
+export const MEASURE_WORD = {
+  requests: "measureRequests",
+  errors: "measureErrors",
+  p50: "measureP50",
+  p95: "measureP95",
+  p99: "measureP99",
+  bytes: "measureBytes",
+  events: "measureEvents",
+  drops: "measureDrops",
+} as const satisfies Record<Measure, TrafficWord>;
+
+export const SOURCE_STATE_WORD = {
+  present: "railPresent",
+  absent: "railAbsent",
+  unpaired: "railUnpaired",
+  failed: "railFailed",
+} as const satisfies Record<FlowSourceState["says"], TrafficWord>;
+
+/** An end's name, as the source or the cluster wrote it. */
+export function endLabel(end: FlowEnd): string {
+  switch (end.is) {
+    case "workload":
+      return end.key.name;
+    case "ambiguous":
+    case "notListed":
+    case "service":
+    case "node":
+      return end.name;
+    case "address":
+      return end.address;
+    case "unidentified":
+      return end.word || "?";
+  }
+}
+
+/** What an end is, under its name. */
+export function endSub(end: FlowEnd, t: T): string {
+  switch (end.is) {
+    case "workload":
+      return end.key.namespace;
+    case "ambiguous":
+      return t("traffic", "endAmbiguous", { kinds: end.kinds.join(", ") });
+    case "notListed":
+      return end.why === "podsUnread"
+        ? t("traffic", "endPodsUnread", { namespace: end.namespace })
+        : t("traffic", "endNotListed", { namespace: end.namespace });
+    case "service":
+      return end.namespace
+        ? t("traffic", "endService", { namespace: end.namespace })
+        : t("traffic", "endServiceNowhere");
+    case "node":
+      return t("traffic", "endNode");
+    case "address":
+      return t("traffic", "endAddress");
+    case "unidentified":
+      return t("traffic", "endUnidentified");
+  }
+}
+
+/** The kind an end is drawn as. */
+export function endKind(end: FlowEnd): string {
+  switch (end.is) {
+    case "workload":
+      return end.key.kind;
+    case "notListed":
+      return end.kind ?? "Workload";
+    case "service":
+      return "Service";
+    case "node":
+      return "Node";
+    case "ambiguous":
+    case "address":
+    case "unidentified":
+      return "";
+  }
+}
+
+export const rate = (value: number) => formatRate(value);
+export const bytesRate = (value: number) => formatQuantity(value, "throughput");
+export const ms = (value: number, t: T) =>
+  t("traffic", "milliseconds", { v: rate(value) });
+
+export type CellKind = "rate" | "bytes" | "share" | "ms";
+
+/** A cell's text: its number, or why there is none. */
+export function cellText(cell: Cell, kind: CellKind, t: T): string {
+  if (cell.value === null) return CELL_EMPTY[cell.state](t);
+  switch (kind) {
+    case "rate":
+      return rate(cell.value);
+    case "bytes":
+      return bytesRate(cell.value);
+    case "share":
+      return formatShare(cell.value);
+    case "ms":
+      return ms(cell.value, t);
+  }
+}
+
+const CELL_EMPTY: Record<CellState, (t: T) => string> = {
+  measured: (t) => t("traffic", "cellNone"),
+  notMeasured: () => "",
+  notRead: (t) => t("traffic", "cellNotRead"),
+};
+
+/** Where a cell's number came from, or why it has none, for its title. */
+export function cellTitle(cell: Cell, row: FlowRow, t: T): string {
+  switch (cell.state) {
+    case "measured":
+      return cell.source
+        ? t("traffic", "cellFrom", { source: cell.source })
+        : "";
+    case "notMeasured":
+      return t("traffic", "cellNotMeasured", {
+        sources: row.seenBy.join(", "),
+      });
+    case "notRead":
+      return t("traffic", "cellNotReadBy", { source: cell.source ?? "" });
+  }
+}
+
+const at = (measure: Measure) => MEASURES.indexOf(measure);
+
+/** One source's own numbers on a pair, each said as what it counted. */
+export function sourceLines(line: SourceLine, t: T): string[] {
+  const value = (measure: Measure) => line.values[at(measure)] ?? null;
+  const out: string[] = [];
+  const requests = value("requests");
+  if (requests !== null) {
+    out.push(t("traffic", "panelRequests", { v: rate(requests) }));
+    const errors = value("errors");
+    if (errors !== null && requests > 0)
+      out.push(
+        t("traffic", "panelErrors", { share: formatShare(errors / requests) })
+      );
+  }
+  const quantiles = (["p50", "p95", "p99"] as const)
+    .map((measure) => {
+      const v = value(measure);
+      return v === null ? null : `${measure} ${ms(v, t)}`;
+    })
+    .filter((part): part is string => part !== null);
+  if (quantiles.length > 0) out.push(quantiles.join(" · "));
+  const bytes = value("bytes");
+  if (bytes !== null)
+    out.push(t("traffic", "panelBytes", { v: bytesRate(bytes) }));
+  const events = value("events");
+  if (events !== null)
+    out.push(t("traffic", "panelEvents", { v: rate(events) }));
+  const drops = value("drops");
+  if (drops !== null) out.push(t("traffic", "panelDrops", { v: rate(drops) }));
+  for (const reason of line.reasons)
+    out.push(`${reason.reason}: ${rate(reason.rate)}/s`);
+  if (line.protocols.length > 0)
+    out.push(
+      t("traffic", "panelProtocols", { list: line.protocols.join(", ") })
+    );
+  return out;
+}
+
+/** The edge's second line: the row's own numbers, and whose they are. */
+export function edgeSub(row: FlowRow, t: T): string {
+  const parts: string[] = [];
+  if (row.requests.value !== null)
+    parts.push(t("traffic", "subRequests", { v: rate(row.requests.value) }));
+  else if (row.bytes.value !== null) parts.push(bytesRate(row.bytes.value));
+  else if (row.events.value !== null)
+    parts.push(t("traffic", "subEvents", { v: rate(row.events.value) }));
+  if (row.errorShare.value !== null)
+    parts.push(
+      t("traffic", "subErrors", { share: formatShare(row.errorShare.value) })
+    );
+  if (row.p95.value !== null) parts.push(`p95 ${ms(row.p95.value, t)}`);
+  if ((row.drops.value ?? 0) > 0)
+    parts.push(t("traffic", "subDrops", { v: rate(row.drops.value ?? 0) }));
+  const source =
+    row.requests.source ?? row.bytes.source ?? row.events.source ?? null;
+  if (source) parts.push(source);
+  return parts.join(" · ");
+}

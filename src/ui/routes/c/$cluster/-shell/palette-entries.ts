@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   Activity,
+  ArrowRightLeft,
   Box,
   Coins,
   FileText,
@@ -120,6 +121,12 @@ const quickActions: Array<{
     label: "goToTopology",
     words: "topology",
     path: pageLink("topology"),
+  },
+  {
+    icon: ArrowRightLeft,
+    label: "goToTraffic",
+    words: "traffic",
+    path: pageLink("traffic"),
   },
   { icon: Package, label: "goToHelm", words: "helm", path: pageLink("helm") },
   { icon: Coins, label: "goToCost", words: "cost", path: pageLink("cost") },

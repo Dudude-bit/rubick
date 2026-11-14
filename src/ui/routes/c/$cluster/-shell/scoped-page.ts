@@ -1,7 +1,14 @@
 import { narrowingHelps, toKind } from "@/lib/resource-registry";
 
 /** The cluster's own pages that read the window's namespaces, beside the lists of namespaced kinds. */
-const SCOPED_PAGES = new Set(["", "events", "changes", "topology", "helm"]);
+const SCOPED_PAGES = new Set([
+  "",
+  "events",
+  "changes",
+  "topology",
+  "traffic",
+  "helm",
+]);
 
 /**
  * Whether the page at `pathname` draws what the window's namespaces hold: the
