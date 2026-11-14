@@ -2,6 +2,7 @@
 //! cluster refused the kind across it. With no watch free a kind is read by
 //! that watch's list alone, a turn at a time, until one is.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -10,6 +11,8 @@ use kube::api::{Api, DynamicObject};
 use kube::core::PartialObjectMeta;
 use kube::discovery::ApiResource;
 use kube::runtime::watcher::{self, Event};
+use parking_lot::Mutex;
+use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use tracing::Level;
 
@@ -25,7 +28,7 @@ const PAGE_SIZE: u32 = 500;
 /// How long one page of a list may take, body included. The client's own
 /// deadline ends at the response head, so a body that stalled part-way kept
 /// its kind listing, and the turn it was listed on, for good.
-const PAGE_WITHIN: Duration = crate::client::READ_DEADLINE;
+pub(crate) const PAGE_WITHIN: Duration = crate::client::READ_DEADLINE;
 
 type Meta = PartialObjectMeta<DynamicObject>;
 
@@ -42,16 +45,64 @@ fn spawn_relisting(
     relist_every: Duration,
     page_within: Duration,
 ) {
-    let known = index.refusals.lock().get(&slot).cloned();
+    spawn_slot(index, slot, resource, relist_every, page_within);
+}
+
+/// Where one kind's watch writes, and what it shares with every other.
+///
+/// The ownership index is one host, holding metadata; Audit is another,
+/// holding whole objects. Both draw on the same watches and turns, so a
+/// screen that adds a host does not add to what the process holds open.
+pub(crate) trait SlotHost: Send + Sync + 'static {
+    type Object: kube::Resource
+        + Clone
+        + serde::de::DeserializeOwned
+        + std::fmt::Debug
+        + Send
+        + 'static;
+
+    fn api(&self, slot: &SlotKey, resource: &ApiResource) -> Api<Self::Object>;
+    /// The host's own stop, which every slot's is a child of.
+    fn stop(&self) -> &CancellationToken;
+    fn watches(&self) -> &Arc<Semaphore>;
+    fn turns(&self) -> &Arc<Semaphore>;
+    fn slots(&self) -> &Mutex<BTreeMap<SlotKey, SlotState>>;
+    fn stops(&self) -> &Mutex<BTreeMap<SlotKey, CancellationToken>>;
+    /// What this connection was refused here before, not asked again.
+    fn known_refusal(&self, slot: &SlotKey) -> Option<String>;
+    fn told_refused(&self, slot: &SlotKey) {
+        told_refused(slot);
+    }
+    fn saw(
+        &self,
+        slot: &SlotKey,
+        resource: &ApiResource,
+        event: Event<Self::Object>,
+        stop: &CancellationToken,
+    );
+    fn listed(&self, slot: &SlotKey, stop: &CancellationToken);
+    fn failed(&self, slot: &SlotKey, message: String, stop: &CancellationToken);
+    fn refused(self: &Arc<Self>, slot: &SlotKey, message: String, stop: Option<&CancellationToken>);
+    fn retire(&self, kind: &super::KindKey);
+}
+
+pub(crate) fn spawn_slot<H: SlotHost>(
+    index: &Arc<H>,
+    slot: SlotKey,
+    resource: ApiResource,
+    relist_every: Duration,
+    page_within: Duration,
+) {
+    let known = index.known_refusal(&slot);
     if let Some(message) = known {
         index.refused(&slot, message, None);
         return;
     }
-    let stop = index.stop.child_token();
-    let mut watch = index.watches.clone().try_acquire_owned().ok();
+    let stop = index.stop().child_token();
+    let mut watch = index.watches().clone().try_acquire_owned().ok();
     {
-        let mut slots = index.slots.lock();
-        let mut stops = index.stops.lock();
+        let mut slots = index.slots().lock();
+        let mut stops = index.stops().lock();
         if stops.contains_key(&slot) {
             return;
         }
@@ -65,10 +116,7 @@ fn spawn_relisting(
     }
     let index = index.clone();
     tokio::spawn(async move {
-        let api: Api<Meta> = match &slot.namespace {
-            Some(namespace) => Api::namespaced_with(index.client.clone(), namespace, &resource),
-            None => Api::all_with(index.client.clone(), &resource),
-        };
+        let api = index.api(&slot, &resource);
         let config = watcher::Config::default()
             .page_size(PAGE_SIZE)
             .timeout(WATCH_TIMEOUT_SECS);
@@ -84,11 +132,11 @@ fn spawn_relisting(
                 tokio::select! {
                     biased;
                     () = stop.cancelled() => break,
-                    Ok(freed) = index.watches.clone().acquire_owned() => {
+                    Ok(freed) = index.watches().clone().acquire_owned() => {
                         watch = Some(freed);
                         None
                     }
-                    Ok(turn) = index.turns.clone().acquire_owned() => Some(turn),
+                    Ok(turn) = index.turns().clone().acquire_owned() => Some(turn),
                     else => break,
                 }
             };
@@ -127,7 +175,7 @@ fn spawn_relisting(
                         Some(Err(error)) => {
                             let message = watch_failure(&error);
                             if refused(&error) {
-                                told_refused(&slot);
+                                index.told_refused(&slot);
                                 index.refused(&slot, message, Some(&stop));
                                 break 'list;
                             }
@@ -153,7 +201,7 @@ fn spawn_relisting(
             tokio::select! {
                 biased;
                 () = stop.cancelled() => break,
-                Ok(freed) = index.watches.clone().acquire_owned(), if watch.is_none() => {
+                Ok(freed) = index.watches().clone().acquire_owned(), if watch.is_none() => {
                     watch = Some(freed);
                 }
                 () = tokio::time::sleep(wait) => {}
@@ -265,6 +313,72 @@ fn node_of(meta: &Meta, resource: &ApiResource) -> Option<(String, Node)> {
             owners,
         },
     ))
+}
+
+impl SlotHost for ClusterIndex {
+    type Object = Meta;
+
+    fn api(&self, slot: &SlotKey, resource: &ApiResource) -> Api<Meta> {
+        match &slot.namespace {
+            Some(namespace) => Api::namespaced_with(self.client.clone(), namespace, resource),
+            None => Api::all_with(self.client.clone(), resource),
+        }
+    }
+
+    fn stop(&self) -> &CancellationToken {
+        &self.stop
+    }
+
+    fn watches(&self) -> &Arc<Semaphore> {
+        &self.watches
+    }
+
+    fn turns(&self) -> &Arc<Semaphore> {
+        &self.turns
+    }
+
+    fn slots(&self) -> &Mutex<BTreeMap<SlotKey, SlotState>> {
+        &self.slots
+    }
+
+    fn stops(&self) -> &Mutex<BTreeMap<SlotKey, CancellationToken>> {
+        &self.stops
+    }
+
+    fn known_refusal(&self, slot: &SlotKey) -> Option<String> {
+        self.refusals.lock().get(slot).cloned()
+    }
+
+    fn saw(
+        &self,
+        slot: &SlotKey,
+        resource: &ApiResource,
+        event: Event<Meta>,
+        stop: &CancellationToken,
+    ) {
+        ClusterIndex::saw(self, slot, resource, event, stop);
+    }
+
+    fn listed(&self, slot: &SlotKey, stop: &CancellationToken) {
+        ClusterIndex::listed(self, slot, stop);
+    }
+
+    fn failed(&self, slot: &SlotKey, message: String, stop: &CancellationToken) {
+        ClusterIndex::failed(self, slot, message, stop);
+    }
+
+    fn refused(
+        self: &Arc<Self>,
+        slot: &SlotKey,
+        message: String,
+        stop: Option<&CancellationToken>,
+    ) {
+        ClusterIndex::refused(self, slot, message, stop);
+    }
+
+    fn retire(&self, kind: &super::KindKey) {
+        ClusterIndex::retire(self, kind);
+    }
 }
 
 impl ClusterIndex {
