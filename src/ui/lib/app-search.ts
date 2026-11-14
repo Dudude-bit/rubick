@@ -29,6 +29,8 @@ export interface AppSearch {
   listOf?: string;
   /** The rows a list is narrowed to, comma-separated `<namespace>/<name>`, an empty namespace for a cluster-scoped one. */
   names?: string;
+  /** `on` where the cluster map marks which workloads a NetworkPolicy selects. */
+  policies?: string;
 }
 
 export const APP_SEARCH_KEYS: ReadonlyArray<keyof AppSearch> = [
@@ -50,6 +52,7 @@ export const APP_SEARCH_KEYS: ReadonlyArray<keyof AppSearch> = [
   "namespace",
   "listOf",
   "names",
+  "policies",
 ];
 
 export function appSearch(raw: Record<string, unknown>): AppSearch {

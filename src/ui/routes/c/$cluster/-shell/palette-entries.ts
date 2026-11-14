@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldUser,
   SquareTerminal,
+  Waypoints,
 } from "lucide-react";
 
 import type { ActivityTab } from "@/stores/activityPanelStore";
@@ -112,6 +113,12 @@ const quickActions: Array<{
     label: "goToEvents",
     words: "events",
     path: pageLink("events"),
+  },
+  {
+    icon: Waypoints,
+    label: "goToTopology",
+    words: "topology",
+    path: pageLink("topology"),
   },
   { icon: Package, label: "goToHelm", words: "helm", path: pageLink("helm") },
   {

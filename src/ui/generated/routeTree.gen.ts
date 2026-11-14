@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from "./../routes/index";
 import { Route as CClusterRouteRouteImport } from "./../routes/c/$cluster/route";
 import { Route as CClusterIndexRouteImport } from "./../routes/c/$cluster/index";
 import { Route as CClusterChangesRouteImport } from "./../routes/c/$cluster/changes";
+import { Route as CClusterTopologyRouteImport } from "./../routes/c/$cluster/topology";
 import { Route as CClusterResourceIndexRouteImport } from "./../routes/c/$cluster/$resource/index";
 import { Route as CClusterResourceNameRouteImport } from "./../routes/c/$cluster/$resource/$name";
 import { Route as CClusterApiResourcesIndexRouteImport } from "./../routes/c/$cluster/api-resources/index";
@@ -95,6 +96,11 @@ const CClusterIndexRoute = CClusterIndexRouteImport.update({
 const CClusterChangesRoute = CClusterChangesRouteImport.update({
   id: "/changes",
   path: "/changes",
+  getParentRoute: () => CClusterRouteRoute,
+} as any);
+const CClusterTopologyRoute = CClusterTopologyRouteImport.update({
+  id: "/topology",
+  path: "/topology",
   getParentRoute: () => CClusterRouteRoute,
 } as any);
 const CClusterResourceIndexRoute = CClusterResourceIndexRouteImport.update({
@@ -476,6 +482,7 @@ export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/c/$cluster": typeof CClusterRouteRouteWithChildren;
   "/c/$cluster/changes": typeof CClusterChangesRoute;
+  "/c/$cluster/topology": typeof CClusterTopologyRoute;
   "/c/$cluster/": typeof CClusterIndexRoute;
   "/c/$cluster/$resource/$name": typeof CClusterResourceNameRoute;
   "/c/$cluster/integrations/$vendor": typeof CClusterIntegrationsVendorRoute;
@@ -544,6 +551,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/c/$cluster/changes": typeof CClusterChangesRoute;
+  "/c/$cluster/topology": typeof CClusterTopologyRoute;
   "/c/$cluster": typeof CClusterIndexRoute;
   "/c/$cluster/$resource/$name": typeof CClusterResourceNameRoute;
   "/c/$cluster/integrations/$vendor": typeof CClusterIntegrationsVendorRoute;
@@ -614,6 +622,7 @@ export interface FileRoutesById {
   "/": typeof IndexRoute;
   "/c/$cluster": typeof CClusterRouteRouteWithChildren;
   "/c/$cluster/changes": typeof CClusterChangesRoute;
+  "/c/$cluster/topology": typeof CClusterTopologyRoute;
   "/c/$cluster/": typeof CClusterIndexRoute;
   "/c/$cluster/$resource/$name": typeof CClusterResourceNameRoute;
   "/c/$cluster/integrations/$vendor": typeof CClusterIntegrationsVendorRoute;
@@ -685,6 +694,7 @@ export interface FileRouteTypes {
     | "/"
     | "/c/$cluster"
     | "/c/$cluster/changes"
+    | "/c/$cluster/topology"
     | "/c/$cluster/"
     | "/c/$cluster/$resource/$name"
     | "/c/$cluster/integrations/$vendor"
@@ -753,6 +763,7 @@ export interface FileRouteTypes {
   to:
     | "/"
     | "/c/$cluster/changes"
+    | "/c/$cluster/topology"
     | "/c/$cluster"
     | "/c/$cluster/$resource/$name"
     | "/c/$cluster/integrations/$vendor"
@@ -822,6 +833,7 @@ export interface FileRouteTypes {
     | "/"
     | "/c/$cluster"
     | "/c/$cluster/changes"
+    | "/c/$cluster/topology"
     | "/c/$cluster/"
     | "/c/$cluster/$resource/$name"
     | "/c/$cluster/integrations/$vendor"
@@ -921,6 +933,13 @@ declare module "@tanstack/react-router" {
       path: "/changes";
       fullPath: "/c/$cluster/changes";
       preLoaderRoute: typeof CClusterChangesRouteImport;
+      parentRoute: typeof CClusterRouteRoute;
+    };
+    "/c/$cluster/topology": {
+      id: "/c/$cluster/topology";
+      path: "/topology";
+      fullPath: "/c/$cluster/topology";
+      preLoaderRoute: typeof CClusterTopologyRouteImport;
       parentRoute: typeof CClusterRouteRoute;
     };
     "/c/$cluster/$resource/": {
@@ -1369,6 +1388,7 @@ declare module "@tanstack/react-router" {
 
 interface CClusterRouteRouteChildren {
   CClusterChangesRoute: typeof CClusterChangesRoute;
+  CClusterTopologyRoute: typeof CClusterTopologyRoute;
   CClusterIndexRoute: typeof CClusterIndexRoute;
   CClusterResourceNameRoute: typeof CClusterResourceNameRoute;
   CClusterIntegrationsVendorRoute: typeof CClusterIntegrationsVendorRoute;
@@ -1437,6 +1457,7 @@ interface CClusterRouteRouteChildren {
 
 const CClusterRouteRouteChildren: CClusterRouteRouteChildren = {
   CClusterChangesRoute: CClusterChangesRoute,
+  CClusterTopologyRoute: CClusterTopologyRoute,
   CClusterIndexRoute: CClusterIndexRoute,
   CClusterResourceNameRoute: CClusterResourceNameRoute,
   CClusterIntegrationsVendorRoute: CClusterIntegrationsVendorRoute,

@@ -16,6 +16,7 @@ import {
   ShieldUser,
   type LucideIcon,
   History,
+  Waypoints,
 } from "lucide-react";
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
@@ -166,6 +167,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       { labelKey: "overview", path: clusterLink(), icon: LayoutDashboard },
       resource(ResourceType.Event, "events"),
       { labelKey: "changes", path: pageLink("changes"), icon: History },
+      { labelKey: "topology", path: pageLink("topology"), icon: Waypoints },
     ],
   },
   {
