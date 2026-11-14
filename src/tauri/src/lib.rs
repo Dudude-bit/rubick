@@ -38,6 +38,7 @@ pub mod config;
 pub mod diagnostics;
 pub mod drain;
 pub mod error;
+pub mod feeds;
 pub mod files;
 pub mod integrations;
 pub mod logs;

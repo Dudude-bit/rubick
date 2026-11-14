@@ -13,7 +13,7 @@
 //! does not exist.
 
 mod graph;
-mod slots;
+pub(crate) mod slots;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -32,8 +32,8 @@ use crate::commands::catalog::{CatalogEntry, UnreadGroup};
 use crate::error::Result;
 use crate::state::AppState;
 
-pub use graph::{Dependent, KindCount, KindKey, DEPENDENTS_PAGE};
-use graph::{Graph, SlotKey};
+use graph::Graph;
+pub use graph::{Dependent, KindCount, KindKey, SlotKey, DEPENDENTS_PAGE};
 
 /// Watches nobody has asked anything of for this long are stopped.
 const IDLE_AFTER: Duration = Duration::from_mins(3);
@@ -79,7 +79,7 @@ const LISTED_FOR: Duration = RELIST_EVERY.saturating_mul(3);
 
 /// How one kind is being read, across the cluster or in one namespace.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum SlotState {
+pub(crate) enum SlotState {
     /// No watch is free, and its first turn to be listed has not come.
     Queued,
     Syncing,
@@ -392,6 +392,12 @@ impl OwnershipIndexes {
             }
             held == context
         });
+    }
+
+    /// The watches and list turns every index shares, for another reader
+    /// that holds watches of its own.
+    pub(crate) fn budget(&self) -> (Arc<Semaphore>, Arc<Semaphore>) {
+        (self.watches.clone(), self.turns.clone())
     }
 
     /// A context's index where one is already running; none is started.
