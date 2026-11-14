@@ -234,7 +234,7 @@ pub(crate) fn spawn(
     let stop = CancellationToken::new();
     let (control, mut controls) = mpsc::unbounded_channel();
     let Subscription { mut updates, lease } = subscription;
-    let mut recorder = Recorder::new(timeline, scope.clone().unwrap_or_default());
+    let mut recorder = Recorder::new(timeline, scope.unwrap_or_default());
     // Every kind asked for holds the span shut until its watch has spoken.
     for kind in followed_kinds() {
         if let Some(name) = followed_name(&kind) {
@@ -268,13 +268,14 @@ pub(crate) fn spawn(
                     Some(Control::Meta(rx)) => meta = Some(rx),
                     None => break,
                 },
-                news = next_news(&mut meta) => match news {
-                    Some(news) => hear(&mut recorder, news),
-                    None => {
+                news = next_news(&mut meta) => {
+                    if let Some(news) = news {
+                        hear(&mut recorder, news);
+                    } else {
                         meta = None;
                         recorder.meta_ended();
                     }
-                },
+                }
                 _ = beat.tick() => recorder.heartbeat(),
             }
         }

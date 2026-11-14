@@ -271,7 +271,7 @@ impl Recorder {
     pub fn state(&mut self, source: Source, slot: Slot, state: SlotState, since: Option<i64>) {
         let was = self.cover(source);
         self.slots.insert((source, slot), state);
-        self.settle(source, was, since);
+        self.settle(source, was.as_ref(), since);
     }
 
     /// How one watch stands, as last told.
@@ -286,12 +286,12 @@ impl Recorder {
         let was = self.cover(source);
         self.slots
             .retain(|(of, slot), _| !(*of == source && slot.kind == kind));
-        self.settle(source, was, None);
+        self.settle(source, was.as_ref(), None);
     }
 
-    fn settle(&mut self, source: Source, was: Option<Cover>, since: Option<i64>) {
+    fn settle(&mut self, source: Source, was: Option<&Cover>, since: Option<i64>) {
         let now = self.cover(source);
-        if was == now {
+        if was == now.as_ref() {
             return;
         }
         self.timeline.spans(|spans, at| match now {

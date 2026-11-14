@@ -1505,7 +1505,7 @@ mod listed_for_a_reader {
         (timelines, cluster, recorder)
     }
 
-    /// The layer keeps no ConfigMap or Secret, so a reader that fell behind
+    /// The layer keeps no `ConfigMap` or `Secret`, so a reader that fell behind
     /// is listed them again while their changes wait. The watch never broke:
     /// fails if that list draws a gap, or loses what moved meanwhile.
     #[test]
