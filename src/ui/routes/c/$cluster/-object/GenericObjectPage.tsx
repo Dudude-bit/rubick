@@ -1,3 +1,4 @@
+import { changesTab } from "../-changes/changes-tab";
 import { Info, Link2, Network } from "lucide-react";
 import { useMemo } from "react";
 
@@ -219,6 +220,18 @@ export function GenericObjectPage({
         ]
       : []),
     eventsTab(events, t, { kind, name }),
+    changesTab(
+      object.data
+        ? {
+            kind: kind,
+            group: target.group,
+            name: name,
+            namespace: namespace ?? null,
+            createdAt: facets?.createdAt ?? null,
+          }
+        : null,
+      t
+    ),
     manifest,
   ];
 

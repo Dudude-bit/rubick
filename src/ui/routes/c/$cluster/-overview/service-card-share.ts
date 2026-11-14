@@ -1,6 +1,6 @@
 import { Pin } from "lucide-react";
 
-import { journalWords, type JournalEntry } from "@/lib/changes";
+import { rowWords, type ChangeRow } from "@/lib/changes";
 import { iconSvg } from "@/lib/icon-svg";
 import { rolloutVerdict } from "@/lib/workload-status";
 import type { ReportValue } from "@/lib/report";
@@ -107,7 +107,8 @@ export function pinShare(
   state: ServiceState,
   ways: { entries: EntryPoint[]; known: boolean },
   unread: readonly UnexploredKind[],
-  latest: JournalEntry | null,
+  /** The newest change, `null` for none seen, `undefined` where the timeline was not read. */
+  latest: ChangeRow | null | undefined,
   waiting: readonly Watch[],
   t: T
 ): PlacedSection {
@@ -136,7 +137,12 @@ export function pinShare(
       label: t("services", "lastChange"),
       values: [
         {
-          text: latest ? journalWords(latest, t) : t("services", "nothingSeen"),
+          text:
+            latest === undefined
+              ? t("services", "notReadYet")
+              : latest
+                ? rowWords(latest, t)
+                : t("services", "nothingSeen"),
         },
       ],
     },

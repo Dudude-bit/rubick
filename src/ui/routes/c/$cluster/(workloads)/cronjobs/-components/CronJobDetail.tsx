@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback, useMemo, useState } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import {
@@ -649,6 +650,17 @@ export function CronJobDetail() {
         ),
       },
       eventsTab(events, t, { kind: ResourceType.CronJob, name: name ?? "" }),
+      changesTab(
+        cronJob
+          ? {
+              kind: "CronJob",
+              name: cronJob.name,
+              namespace: cronJob.namespace,
+              createdAt: cronJob.createdAt,
+            }
+          : null,
+        t
+      ),
       yamlTab({
         yaml,
         onCopy: copyYaml,

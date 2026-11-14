@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import {
   Table,
   TableBody,
@@ -326,6 +327,17 @@ export function EndpointsDetail() {
       ),
     },
     eventsTab(events, t, { kind: ResourceType.Endpoints, name: name ?? "" }),
+    changesTab(
+      endpoints
+        ? {
+            kind: "Endpoints",
+            name: endpoints.name,
+            namespace: endpoints.namespace,
+            createdAt: endpoints.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Endpoints" }),
       yaml: endpointsYaml,

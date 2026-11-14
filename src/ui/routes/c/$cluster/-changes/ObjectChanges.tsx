@@ -1,7 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
-import { ChangesTimeline } from "../../-changes/ChangesTimeline";
+import { ChangesTimeline } from "./ChangesTimeline";
+import { ShowFilter } from "./ShowFilter";
+import { keepingWords } from "./changes-share";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
+import type { HelmRevision, Show } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
@@ -11,41 +14,61 @@ import {
   helmReleaseOf,
   revisionOfController,
   revisionOfReplicaSet,
+  REVISED_KINDS,
   spansCovering,
+  spansFor,
   spansWatching,
   timelineOf,
   windowEnd,
   type Revision,
-  CHANGES_KINDS,
 } from "@/lib/changes";
 import { deliveryOfKind } from "@/lib/delivery";
-import {
-  useDeliveries,
-  useDeliveryIntercept,
-} from "../../-delivery/useDelivery";
-import { useRollback } from "../../-object/useRollback";
+import { useDeliveries, useDeliveryIntercept } from "../-delivery/useDelivery";
+import { useRollback } from "../-object/useRollback";
 import { useHeldRead } from "@/hooks/useHeldRead";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useAppSearch } from "@/hooks/useSearchParam";
+import { useTimeline } from "@/hooks/useTimeline";
 import {
   useCapabilities,
   type DeliveryOwner,
   type DeliveryRevision,
 } from "@/integrations";
-import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 
 const WINDOW_MS = 7 * 24 * 60 * 60_000;
 
-export interface ChangesSubject {
-  kind: (typeof CHANGES_KINDS)[number];
+/** The object a Changes tab is about. */
+export interface ObjectChangesSubject {
+  kind: string;
+  /** Where a kind's name alone does not say which kind it is. */
+  group?: string | null;
   name: string;
-  namespace: string;
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
+  namespace: string | null;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
   createdAt: string | null;
+}
+
+type RevisedKind = (typeof REVISED_KINDS)[number];
+
+const isRevised = (kind: string): kind is RevisedKind =>
+  (REVISED_KINDS as readonly string[]).includes(kind);
+
+/**
+ * One object's Changes tab: what the timeline recorded of it and the
+ * cluster's events about it, and for a workload its controller's revisions,
+ * its delivery owner's history and Helm's beside them, on one clock.
+ */
+export function ObjectChanges({ subject }: { subject: ObjectChangesSubject }) {
+  const revised = subject.kind;
+  return isRevised(revised) ? (
+    <RevisedChanges subject={{ ...subject, kind: revised }} />
+  ) : (
+    <ChangesPanel subject={subject} />
+  );
 }
 
 /**
@@ -64,7 +87,7 @@ interface Claim {
 
 function ownersOf(
   deliveries: ReturnType<typeof useDeliveries>,
-  subject: ChangesSubject
+  subject: ObjectChangesSubject
 ): Claim[] {
   const query = deliveryOfKind(subject.kind, subject);
   if (!query) return [];
@@ -73,7 +96,7 @@ function ownersOf(
     .of({
       group: query.group,
       kind: subject.kind,
-      namespace: subject.namespace,
+      namespace: subject.namespace ?? "",
       name: subject.name,
     })
     .flatMap((delivery) => {
@@ -87,19 +110,20 @@ function ownersOf(
     });
 }
 
-export function ChangesTab({ subject }: { subject: ChangesSubject }) {
+function RevisedChanges({
+  subject,
+}: {
+  subject: ObjectChangesSubject & { kind: RevisedKind };
+}) {
   const t = useT();
-  const { since } = useAppSearch();
-  const sinceMs = since ? Date.parse(since) : NaN;
-  const now = useNow();
   const context = useClusterStore((s) => s.currentContext);
-
+  const namespace = subject.namespace ?? "";
   const revisionsKey = [
     context,
     "changes",
     "revisions",
     subject.kind,
-    subject.namespace,
+    namespace,
     subject.name,
   ];
   const revisionsRead = useLiveQuery({
@@ -112,14 +136,14 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
         if (subject.kind === "Deployment") {
           const list = await commands.getDeploymentReplicasets(
             subject.name,
-            subject.namespace
+            namespace
           );
           return list.map(revisionOfReplicaSet);
         }
         const list = await commands.getControllerRevisions(
           subject.kind,
           subject.name,
-          subject.namespace
+          namespace
         );
         return list.map(revisionOfController);
       } catch (error) {
@@ -129,20 +153,30 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
   });
   const revisions = useHeldRead(
     subject.kind,
-    subject.namespace,
+    namespace,
     subject.name,
     revisionsRead,
     revisionsKey
   );
 
+  const delivered = useMemo(
+    () => ({
+      kind: subject.kind,
+      name: subject.name,
+      namespace,
+      labels: subject.labels ?? {},
+      annotations: subject.annotations ?? {},
+    }),
+    [subject.kind, subject.name, namespace, subject.labels, subject.annotations]
+  );
   const deliveryQuery = useMemo(
-    () => deliveryOfKind(subject.kind, subject),
-    [subject]
+    () => deliveryOfKind(subject.kind, delivered),
+    [subject.kind, delivered]
   );
   const deliveries = useDeliveries(deliveryQuery ? [deliveryQuery] : []);
   const intercept = useDeliveryIntercept(deliveryQuery);
   const rollback = useRollback({
-    subject,
+    subject: { kind: subject.kind, name: subject.name, namespace },
     revisions: revisions.data ?? [],
     intercept: intercept(t("action", "rollBack")),
   });
@@ -168,7 +202,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     })),
   });
 
-  const release = helmReleaseOf(subject.annotations, subject.namespace);
+  const release = helmReleaseOf(subject.annotations ?? {}, namespace);
   // Under the prefix every Helm mutation invalidates. A second key for the
   // same fact is a copy that invalidation cannot reach.
   const helm = useLiveQuery({
@@ -177,42 +211,6 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     queryFn: () => commands.getHelmHistory(release!.name, release!.namespace),
     enabled: release !== null,
   });
-
-  const journal = useChangeJournalStore((s) => s.entries);
-  const spans = useChangeJournalStore((s) => s.spans);
-
-  const items = useMemo(() => {
-    const ours = context ? (spans[context] ?? []) : [];
-    return timelineOf({
-      revisions: revisions.data ?? [],
-      deliveries: histories.data.flatMap((h) => h ?? []),
-      helm: helm.data ?? [],
-      journal: journal.filter(
-        (entry) =>
-          entry.context === context &&
-          entry.kind === subject.kind &&
-          entry.namespace === subject.namespace &&
-          entry.name === subject.name
-      ),
-      spans: spansCovering(ours, {
-        kinds: [subject.kind],
-        namespaces: [subject.namespace],
-      }),
-      watching: spansWatching(ours, [subject.kind]),
-      scope: [subject.namespace],
-      window: { from: now - WINDOW_MS, to: windowEnd(ours, now) },
-      createdAt: subject.createdAt,
-    });
-  }, [
-    revisions.data,
-    histories.data,
-    helm.data,
-    journal,
-    spans,
-    context,
-    subject,
-    now,
-  ]);
 
   const unread: string[] = [];
   if (revisions.error)
@@ -249,13 +247,111 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     );
 
   return (
+    <ChangesPanel
+      subject={subject}
+      revisions={revisions.data}
+      deliveries={histories.data}
+      helm={helm.data}
+      unread={unread}
+      onRollback={rollback.offer}
+      rollbackDenied={rollback.denied}
+      dialog={rollback.dialog}
+    />
+  );
+}
+
+const NO_REVISIONS: Revision[] = [];
+const NO_HELM: HelmRevision[] = [];
+const NO_LINES: string[] = [];
+
+/** One object's timeline, with whatever records the kind adds beside it. */
+function ChangesPanel({
+  subject,
+  revisions = NO_REVISIONS,
+  deliveries,
+  helm = NO_HELM,
+  unread = NO_LINES,
+  onRollback,
+  rollbackDenied,
+  dialog,
+}: {
+  subject: ObjectChangesSubject;
+  revisions?: Revision[];
+  deliveries?: (DeliveryRevision[] | undefined)[];
+  helm?: HelmRevision[];
+  unread?: string[];
+  onRollback?: (revision: Revision) => void;
+  rollbackDenied?: string;
+  dialog?: ReactNode;
+}) {
+  const t = useT();
+  const { since } = useAppSearch();
+  const sinceMs = since ? Date.parse(since) : NaN;
+  const now = useNow();
+  const [show, setShow] = useState<Show>("all");
+  const read = useTimeline({
+    subject: {
+      kind: subject.kind,
+      group: subject.group ?? null,
+      namespace: subject.namespace,
+      name: subject.name,
+    },
+    windowMs: WINDOW_MS,
+    show,
+  });
+  const spans = spansFor(read.spans, subject.kind);
+  const scope = useMemo(
+    () => (subject.namespace ? [subject.namespace] : []),
+    [subject.namespace]
+  );
+  const items = useMemo(
+    () =>
+      timelineOf({
+        revisions,
+        deliveries: (deliveries ?? []).flatMap((history) => history ?? []),
+        helm,
+        journal: read.rows,
+        spans: spansCovering(spans, {
+          kinds: [subject.kind],
+          namespaces: scope,
+        }),
+        watching: spansWatching(spans, [subject.kind]),
+        scope,
+        window: { from: now - WINDOW_MS, to: windowEnd(spans, now) },
+        createdAt: subject.createdAt,
+        show,
+        letGo: read.letGo,
+        readFrom: read.readFrom,
+      }),
+    [
+      revisions,
+      deliveries,
+      helm,
+      read.rows,
+      read.letGo,
+      read.readFrom,
+      spans,
+      subject.kind,
+      subject.createdAt,
+      scope,
+      now,
+      show,
+    ]
+  );
+  const watching = spans.find((span) => span.to === null);
+  const lines = [...keepingWords(read, t), ...unread];
+
+  return (
     <Section>
       <SectionHeader
         title={t("changes", "title")}
         count={changesCount(items, t) || undefined}
+        actions={
+          <ShowFilter show={show} onShow={setShow} watching={watching} />
+        }
       />
       <SectionBody>
-        {unread.map((line) => (
+        {lines.map((line) => (
           <p key={line} className="px-1.5 py-1 text-xs text-warn">
             {line}
           </p>
@@ -269,13 +365,26 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
                 })}
           </p>
         ) : null}
-        <ChangesTimeline
-          items={items}
-          since={Number.isFinite(sinceMs) ? sinceMs : null}
-          onRollback={rollback.offer}
-          rollbackDenied={rollback.denied}
-        />
-        {rollback.dialog}
+        {read.isPending ? (
+          <p className="px-1.5 py-1 text-xs text-fg-fnt">
+            {t("changes", "readingKept")}
+          </p>
+        ) : (
+          <ChangesTimeline
+            items={items}
+            since={Number.isFinite(sinceMs) ? sinceMs : null}
+            onRollback={onRollback}
+            rollbackDenied={rollbackDenied}
+            revisions={revisions}
+            onEnd={read.readFrom === null ? undefined : read.loadOlder}
+            empty={
+              show === "warnings"
+                ? t("changes", "noWarningsInWindow")
+                : undefined
+            }
+          />
+        )}
+        {dialog}
         <p className="px-1.5 pt-2 text-[11px] text-fg-fnt">
           {t("changes", "explained")}
         </p>

@@ -147,6 +147,7 @@ describe("the palette's entries with nothing typed", () => {
       "nav:goToConfigMaps",
       "nav:goToSecrets",
       "nav:goToEvents",
+      "nav:goToChanges",
       "nav:goToHelm",
       "nav:goToApiResources",
       "nav:goToMyAccess",
@@ -168,6 +169,7 @@ describe("the palette's entries with nothing typed", () => {
       "/c/k3d-dev/configmaps",
       "/c/k3d-dev/secrets",
       "/c/k3d-dev/events",
+      "/c/k3d-dev/changes",
       "/c/k3d-dev/helm",
       "/c/k3d-dev/api-resources",
       "/c/k3d-dev/my-access",
@@ -223,6 +225,30 @@ describe("the palette's entries while typing", () => {
     ).toEqual(["nav:goToHelm"]);
     expect(entries.some((entry) => entry.kind === "settings")).toBe(false);
     expect(entries.some((entry) => entry.kind === "panel")).toBe(false);
+  });
+
+  /**
+   * The Changes page is what people know as the timeline or the history.
+   * Fails if it is not found by those words, in either language.
+   */
+  it("finds the Changes page by timeline and history, in English and Russian", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const asked = [
+      ["timeline", t],
+      ["history", t],
+      ["хронология", ru],
+      ["таймлайн", ru],
+      ["timeline", ru],
+    ] as const;
+    for (const [text, said] of asked) {
+      const entries = buildPaletteEntries(
+        state({ text, t: said, shownClusters: [cluster("k3d-dev")] })
+      );
+      expect(
+        entries.filter((entry) => entry.kind === "link").map((e) => e.id)
+      ).toEqual(["nav:goToChanges"]);
+    }
   });
 
   /**

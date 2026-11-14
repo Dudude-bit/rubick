@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { ResourceConnections } from "@/generated/types";
+import type { ResourceConnections, TimelineRow } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { changesCount, timelineOf, type JournalEntry } from "./changes";
+import { changesCount, timelineOf, type ObservedSpan } from "./changes";
 import { VALUE_CLOSE, VALUE_OPEN } from "./report";
 import {
   changesSection,
+  changesTargets,
   conditionsSection,
   eventsSection,
   narrowedWords,
@@ -507,53 +508,69 @@ describe("changesSection", () => {
   const at = Date.parse("2026-09-21T17:14:55Z");
   const AT = "2026-09-21T18:00:00Z";
   /** Watched the whole window, so no gap rows get in the way of the others. */
-  const WATCHED = [
+  const WATCHED: ObservedSpan[] = [
     {
       from: Date.parse(AT) - 8 * 24 * 60 * 60_000,
       seenAt: Date.parse(AT),
       to: null,
+      unwatched: [],
+      unwatchedIn: [],
+      scope: [],
+      kinds: ["Deployment", "DaemonSet"],
     },
   ];
-  const entry = (over: Partial<JournalEntry>): JournalEntry =>
-    ({
-      id: String(Math.random()),
-      at,
-      context: "prod-eu",
-      namespace: "shop",
-      kind: "Deployment",
-      name: "payments",
-      field: "image",
-      key: "app",
-      from: "a",
-      to: "b",
-      ...over,
-    }) as JournalEntry;
+  let seq = 0;
+  const row = (over: Partial<TimelineRow> = {}): TimelineRow => ({
+    id: String((seq += 1)),
+    seq,
+    at,
+    kind: "Deployment",
+    group: "apps",
+    namespace: "shop",
+    name: "payments",
+    what: {
+      says: "changed",
+      fields: [
+        {
+          says: "moved",
+          path: "spec.template.spec.containers[app].image",
+          from: "a",
+          to: "b",
+        },
+      ],
+      more: 0,
+      before: null,
+    },
+    atRelist: false,
+    ...over,
+  });
+  const read = (rows: TimelineRow[], followed = WATCHED) => ({
+    rows,
+    spans: { followed, meta: [] },
+    letGo: undefined,
+  });
+  const payments = [
+    { kind: "Deployment", name: "payments", namespace: "shop" },
+  ];
+  const podTargets = changesTargets(
+    { kind: "Pod", name: subject.name, namespace: "shop" },
+    owned.owners
+  );
 
-  /**
-   * The journal is global. A session spent watching another cluster made it
-   * non-empty, and the hedge that says this app was never watching here
-   * disappeared.
-   */
-  it("still says it was not watching when the journal is another cluster's", () => {
-    const section = changesSection(
-      { entries: [entry({ context: "staging-eu" })], spans: [] },
-      "prod-eu",
-      owned,
-      AT,
-      t
-    );
+  /** Nothing recorded and no span over the object is not "nothing changed". */
+  it("says it was not watching when nothing was recorded and nothing watched", () => {
+    const section = changesSection(read([], []), payments, AT, t);
     expect(section?.body).toMatchObject({
       type: "changes",
-      changes: [{ at: null }],
+      changes: [{ at: null, parts: [{ text: "share.journalEmpty" }] }],
     });
   });
 
   /** A span the cluster refused DaemonSets in watched no DaemonSet; drawn quiet, it hid that. */
   it("says it was not watching a kind the span was refused", () => {
     const section = changesSection(
-      { entries: [], spans: [{ ...WATCHED[0], unwatched: ["DaemonSet"] }] },
-      "prod-eu",
-      { kind: "DaemonSet", name: "agent", namespace: "shop", owners: [] },
+      read([], [{ ...WATCHED[0], unwatched: ["DaemonSet"] }]),
+      [{ kind: "DaemonSet", name: "agent", namespace: "shop" }],
       AT,
       t
     );
@@ -566,9 +583,8 @@ describe("changesSection", () => {
   /** Hours scoped to another namespace are not hours this object was watched. */
   it("says it was not watching an object outside the span's namespaces", () => {
     const section = changesSection(
-      { entries: [], spans: [{ ...WATCHED[0], scope: ["kube-system"] }] },
-      "prod-eu",
-      owned,
+      read([], [{ ...WATCHED[0], scope: ["kube-system"] }]),
+      podTargets,
       AT,
       t
     );
@@ -585,20 +601,20 @@ describe("changesSection", () => {
   it("says the app watched other namespaces while it watched only another one", () => {
     const end = Date.parse(AT);
     const section = changesSection(
-      {
-        entries: [],
-        spans: [
+      read(
+        [],
+        [
           { ...WATCHED[0], seenAt: end - 60 * 60_000, to: end - 60 * 60_000 },
           {
+            ...WATCHED[0],
             from: end - 60 * 60_000,
             seenAt: end,
             to: null,
             scope: ["kube-system"],
           },
-        ],
-      },
-      "prod-eu",
-      owned,
+        ]
+      ),
+      podTargets,
       AT,
       t
     );
@@ -608,24 +624,31 @@ describe("changesSection", () => {
   });
 
   /**
-   * One rollout wrote two journal rows with one stamp, and the file printed
-   * both with the full image reference twice: the tag that changed was the
-   * last twelve characters of a hundred.
+   * One rollout's image change printed the full reference twice: the tag
+   * that changed was the last twelve characters of a hundred. Fails if the
+   * moment splits, or the image is not cut to its tags.
    */
   it("puts one rollout under one time, the image first and only its tags", () => {
     const section = changesSection(
-      {
-        entries: [
-          entry({ field: "generation", key: null, from: "84", to: "86" }),
-          entry({
-            from: "registry.example/shop/payments:2.19.0",
-            to: "registry.example/shop/payments:2.21.0",
-          }),
-        ],
-        spans: WATCHED,
-      },
-      "prod-eu",
-      owned,
+      read([
+        row({
+          what: {
+            says: "changed",
+            fields: [
+              {
+                says: "moved",
+                path: "spec.template.spec.containers[app].image",
+                from: "registry.example/shop/payments:2.19.0",
+                to: "registry.example/shop/payments:2.21.0",
+              },
+            ],
+            more: 0,
+            before: "84",
+          },
+        }),
+        row({ what: { says: "generation", from: 84, to: 86 } }),
+      ]),
+      payments,
       AT,
       t
     );
@@ -637,8 +660,8 @@ describe("changesSection", () => {
       stem: "payments",
     });
     expect(changes[0].parts.map((part) => values(part.text))).toEqual([
-      "changes.journalImage(container=app,from=[2.19.0],to=[2.21.0])",
-      "changes.journalGeneration(from=[84],to=[86])",
+      "spec.template.spec.containers[app].image [2.19.0] → [2.21.0]",
+      "changes.nameOnlyGeneration(from=84,to=86)",
     ]);
   });
 
@@ -649,37 +672,19 @@ describe("changesSection", () => {
    * stops being the number of changes the tab says it saw.
    */
   it("counts the changes the Changes tab saw, not the moments they fell in", () => {
-    const entries = [
-      entry({ field: "generation", key: null, from: "1", to: "2" }),
-      entry({ field: "replicas", key: null, from: "1", to: "2" }),
-      entry({
-        at: at + 60_000,
-        field: "generation",
-        key: null,
-        from: "2",
-        to: "3",
-      }),
-      entry({
-        at: at + 60_000,
-        field: "replicas",
-        key: null,
-        from: "2",
-        to: "1",
-      }),
-      entry({ at: at + 120_000, field: "image" }),
+    const rows = [
+      row({ at: at + 120_000 }),
+      row({ at: at + 60_000 }),
+      row({ at: at + 60_000 }),
+      row(),
+      row(),
     ];
-    const section = changesSection(
-      { entries, spans: WATCHED },
-      "prod-eu",
-      { kind: "Deployment", name: "payments", namespace: "shop", owners: [] },
-      AT,
-      t
-    );
+    const section = changesSection(read(rows), payments, AT, t);
     const tab = timelineOf({
       revisions: [],
       deliveries: [],
       helm: [],
-      journal: entries,
+      journal: rows,
       spans: WATCHED,
       window: {
         from: Date.parse(AT) - 7 * 24 * 60 * 60_000,
@@ -687,40 +692,64 @@ describe("changesSection", () => {
       },
       createdAt: null,
     });
-    const rows = section?.body.type === "changes" ? section.body.changes : [];
-    expect(rows).toHaveLength(3);
+    const drawn = section?.body.type === "changes" ? section.body.changes : [];
+    expect(drawn).toHaveLength(3);
     expect(section?.count).toBe(5);
     expect(changesCount(tab, t)).toBe(
       "count.changesSeen(n=" + String(section?.count) + ")"
     );
   });
 
-  /** The object itself, not only what owns it: a Deployment's page shares its own journal. */
-  it("reads the subject's own entries when the subject is the watched kind", () => {
+  /** A ConfigMap is followed now: its own changes are its report's. */
+  it("reads the subject's own changes, whatever kind it is", () => {
     const section = changesSection(
-      { entries: [entry({})], spans: WATCHED },
-      "prod-eu",
-      { kind: "Deployment", name: "payments", namespace: "shop", owners: [] },
+      read([row({ kind: "ConfigMap", group: "", name: "settings" })]),
+      changesTargets(
+        { kind: "ConfigMap", name: "settings", namespace: "shop" },
+        []
+      ),
       AT,
       t
     );
     expect(section?.count).toBe(1);
   });
 
-  /**
-   * The journal watches three kinds. A ConfigMap's report said "What
-   * changed — Nothing here.", a claim about an object nobody was watching.
-   */
-  it("says nothing about changes to an object no watched workload owns", () => {
-    expect(
-      changesSection(
-        { entries: [entry({})], spans: WATCHED },
-        "prod-eu",
-        { kind: "ConfigMap", name: "payments", namespace: "shop", owners: [] },
-        AT,
-        t
-      )
-    ).toBeNull();
+  /** One of the cluster's events is the Events section's, not a change. */
+  it("leaves the cluster's events to their own section", () => {
+    const event = row({ what: { says: "created" } });
+    const section = changesSection(
+      read([
+        event,
+        {
+          ...row(),
+          what: {
+            says: "event",
+            event: {
+              name: "e",
+              namespace: "shop",
+              uid: "e",
+              type: "Warning",
+              reason: "BackOff",
+              message: null,
+              source: null,
+              involvedObject: {
+                kind: "Deployment",
+                name: "payments",
+                namespace: "shop",
+                uid: null,
+              },
+              count: 2,
+              firstTimestamp: null,
+              lastTimestamp: null,
+            },
+          },
+        },
+      ]),
+      payments,
+      AT,
+      t
+    );
+    expect(section?.count).toBe(1);
   });
 
   /**
@@ -730,20 +759,11 @@ describe("changesSection", () => {
    */
   it("reads the owner from ownerReferences, not from a name that starts the same", () => {
     const section = changesSection(
-      {
-        entries: [
-          entry({ name: "web", from: "web:1", to: "web:2" }),
-          entry({ name: "web-worker", from: "worker:1", to: "worker:2" }),
-        ],
-        spans: WATCHED,
-      },
-      "prod-eu",
-      {
-        kind: "Pod",
-        name: "web-worker-7d9f8b6c4-x2x9z",
-        namespace: "shop",
-        owners: [{ kind: "ReplicaSet", name: "web-worker-7d9f8b6c4" }],
-      },
+      read([row({ name: "web" }), row({ name: "web-worker" })]),
+      changesTargets(
+        { kind: "Pod", name: "web-worker-7d9f8b6c4-x2x9z", namespace: "shop" },
+        [{ kind: "ReplicaSet", name: "web-worker-7d9f8b6c4" }]
+      ),
       AT,
       t
     );
@@ -762,18 +782,18 @@ describe("changesSection", () => {
    */
   it("draws a stretch the app was not watching as a row of its own", () => {
     const section = changesSection(
-      {
-        entries: [entry({})],
-        spans: [
+      read(
+        [row()],
+        [
           {
+            ...WATCHED[0],
             from: Date.parse(AT) - 2 * 60 * 60_000,
             seenAt: Date.parse(AT) - 60 * 60_000,
             to: Date.parse(AT) - 60 * 60_000,
           },
-        ],
-      },
-      "prod-eu",
-      owned,
+        ]
+      ),
+      payments,
       AT,
       t
     );
@@ -784,6 +804,32 @@ describe("changesSection", () => {
           )
         : [];
     expect(texts.some((text) => text.startsWith("changes.notObserved("))).toBe(
+      true
+    );
+  });
+
+  /** Changes let go at the bound are said in the file as on the tab: fails if their stretch reads as quiet. */
+  it("says where older changes were let go", () => {
+    const section = changesSection(
+      {
+        ...read([row()]),
+        letGo: {
+          changes: { before: at - 60_000, cleared: false },
+          warnings: null,
+          normal: null,
+        },
+      },
+      payments,
+      AT,
+      t
+    );
+    const texts =
+      section?.body.type === "changes"
+        ? section.body.changes.flatMap((change) =>
+            change.parts.map((part) => part.text)
+          )
+        : [];
+    expect(texts.some((text) => text.startsWith("changes.letGoChanges("))).toBe(
       true
     );
   });

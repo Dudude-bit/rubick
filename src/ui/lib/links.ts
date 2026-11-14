@@ -192,6 +192,25 @@ export function objectLink(
   } as AppLink;
 }
 
+/**
+ * An object's Changes tab, marked from `since` on: `since` is read by that
+ * tab and nothing else, so it travels with the tab. `null` where the object
+ * cannot be addressed.
+ */
+export function changesLink(
+  ref: ObjectRef,
+  since: number | null,
+  cluster?: string
+): AppLink | null {
+  const link = objectLink(ref, { tab: "changes", cluster });
+  if (!link) return null;
+  if (since === null) return link;
+  return {
+    ...link,
+    search: { tab: "changes", since: new Date(since).toISOString() },
+  } as AppLink;
+}
+
 /** The page that lists this kind. */
 export function listLink(
   kind: string,

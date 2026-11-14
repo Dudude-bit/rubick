@@ -79,13 +79,20 @@ describe("the times a shared Changes report prints", () => {
 
   /** Fails if the file's quiet line speaks for a kind the running watch was refused everywhere. */
   it("names only the kinds the running watch watches as quiet", () => {
-    const span = { from, seenAt: to, to: null, unwatched: ["DaemonSet"] };
+    const kinds = ["Deployment", "StatefulSet", "DaemonSet"];
+    const span = {
+      from,
+      seenAt: to,
+      to: null,
+      unwatched: ["DaemonSet"],
+      kinds,
+    };
     const section = watchedSection(span, [span], [], t);
     if (section.body.type !== "text") throw new Error("expected text");
     expect(section.body.text).toContain(
       "of the Deployments and StatefulSets this app watches here"
     );
-    const whole = { from, seenAt: to, to: null };
+    const whole = { from, seenAt: to, to: null, kinds };
     const all = watchedSection(whole, [whole], [], t);
     expect(all.body.type === "text" && all.body.text).toContain(
       "of the Deployments, StatefulSets, and DaemonSets this app watches here"
@@ -108,5 +115,78 @@ describe("the times a shared Changes report prints", () => {
     expect(changesScreenSection([], t, "7d").caption).toBe(
       "What changed in the last 7d."
     );
+  });
+});
+
+describe("what the shared Changes report says beyond the changes", () => {
+  /** An event is the cluster's words, with its object and its count. Fails if a series loses either in the file. */
+  it("carries an event with its object and its count", () => {
+    const section = changesScreenSection(
+      [
+        {
+          kind: "event",
+          at: to,
+          row: {
+            id: "e",
+            seq: 1,
+            at: to,
+            kind: "Pod",
+            group: "",
+            namespace: "shop",
+            name: "api-1",
+            what: { says: "created" },
+            atRelist: false,
+          },
+          event: {
+            name: "api-1.1",
+            namespace: "shop",
+            uid: "e",
+            type: "Warning",
+            reason: "BackOff",
+            message: "Back-off restarting failed container",
+            source: null,
+            involvedObject: {
+              kind: "Pod",
+              name: "api-1",
+              namespace: "shop",
+              uid: null,
+            },
+            count: 3,
+            firstTimestamp: null,
+            lastTimestamp: null,
+          },
+        },
+      ],
+      t,
+      "24h",
+      "warnings"
+    );
+    if (section.body.type !== "changes") throw new Error("expected changes");
+    expect(section.body.changes[0]).toMatchObject({
+      ref: { kind: "Pod" },
+      parts: [
+        { text: "Warning · BackOff · Back-off restarting failed container ×3" },
+      ],
+    });
+    expect(section.caption).toBe(
+      "What changed in the last 24h. · Warnings only"
+    );
+    expect(section.count).toBe(1);
+  });
+
+  /** A session-only timeline is not one that was kept: fails if the file says nothing of it, or does not warn. */
+  it("says the timeline was kept for this session only, as a warning", () => {
+    const span = { from, seenAt: to, to: null };
+    const section = watchedSection(span, [span], [], t, {
+      keeping: { says: "off" },
+      unreadable: 0,
+      error: null,
+      letGo: undefined,
+    });
+    if (section.body.type !== "text") throw new Error("expected text");
+    expect(section.body.text).toContain(
+      "Kept for this session only: keeping between restarts is off in Settings."
+    );
+    expect(section.body.role).toBe("warn");
   });
 });

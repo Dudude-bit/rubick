@@ -3,6 +3,7 @@ import {
   Activity,
   Box,
   FileText,
+  History,
   LayoutDashboard,
   Library,
   Network,
@@ -112,6 +113,12 @@ const quickActions: Array<{
     label: "goToEvents",
     words: "events",
     path: pageLink("events"),
+  },
+  {
+    icon: History,
+    label: "goToChanges",
+    words: "changes",
+    path: pageLink("changes"),
   },
   { icon: Package, label: "goToHelm", words: "helm", path: pageLink("helm") },
   {

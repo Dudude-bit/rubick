@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterContextProvider } from "@tanstack/react-router";
+import type { TimelineQuery, TimelineRow } from "@/generated/types";
 
 const listEvents = vi.fn<(...args: unknown[]) => Promise<unknown[]>>(
   async () => []
@@ -19,6 +20,22 @@ const listNodes = vi.fn<(...args: unknown[]) => Promise<unknown[]>>(
 const getDeploymentReplicasets = vi.fn<
   (...args: unknown[]) => Promise<unknown[]>
 >(async () => []);
+/** What the timeline recorded, answered for the subject each read asks about. */
+let recorded: TimelineRow[] = [];
+const timelineRead = async (query: TimelineQuery) => ({
+  rows: recorded.filter(
+    (row) =>
+      row.kind === query.subject?.kind &&
+      row.name === query.subject.name &&
+      row.namespace === query.subject.namespace
+  ),
+  more: false,
+  newest: recorded.length,
+  spans: { followed: [], meta: [] },
+  letGo: { changes: null, warnings: null, normal: null },
+  keeping: { says: "kept" },
+  unreadable: 0,
+});
 vi.mock("@/lib/commands", () => ({
   commands: {
     getAppInfo: vi.fn(async () => ({ version: "4.20.1" })),
@@ -27,6 +44,7 @@ vi.mock("@/lib/commands", () => ({
     getResourceConnections: (...args: unknown[]) =>
       getResourceConnections(...args),
     listNodes: (...args: unknown[]) => listNodes(...args),
+    timelineRead: (query: TimelineQuery) => timelineRead(query),
     getDeploymentReplicasets: (...args: unknown[]) =>
       getDeploymentReplicasets(...args),
   },
@@ -43,7 +61,6 @@ import {
   ScreenShareProvider,
   useShareCaveat,
 } from "@/components/share/screen-share";
-import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { testRouter } from "@/test/render";
@@ -545,29 +562,37 @@ describe("the report of any object", () => {
   });
 
   /**
-   * The journal is of the built-in workloads this app watches. Fails if an
-   * OpenKruise StatefulSet's report, or the report of a pod one owns, carries
-   * the changes of the built-in StatefulSet of the same name, or if a pod the
+   * A StatefulSet's changes are the built-in's. Fails if an OpenKruise
+   * StatefulSet's report, or the report of a pod one owns, carries the
+   * changes of the built-in StatefulSet of the same name, or if a pod the
    * built-in one owns loses them.
    */
   it("carries the changes of the built-in workload only, never a namesake's", async () => {
-    useChangeJournalStore.setState({
-      entries: [
-        {
-          id: "1",
-          context: "prod-eu",
-          kind: "StatefulSet",
-          namespace: "shop",
-          name: "web",
-          at: Date.now() - 60_000,
-          field: "image",
-          key: "app",
-          from: "web:1",
-          to: "web:2",
+    recorded = [
+      {
+        id: "1",
+        seq: 1,
+        at: Date.now() - 60_000,
+        kind: "StatefulSet",
+        group: "apps",
+        namespace: "shop",
+        name: "web",
+        what: {
+          says: "changed",
+          fields: [
+            {
+              says: "moved",
+              path: "spec.template.spec.containers[app].image",
+              from: "web:1",
+              to: "web:2",
+            },
+          ],
+          more: 0,
+          before: null,
         },
-      ],
-      spans: {},
-    });
+        atRelist: false,
+      },
+    ];
     const changesOf = async (
       subject: Parameters<typeof useObjectReport>[0],
       resource: unknown
@@ -599,9 +624,7 @@ describe("the report of any object", () => {
           { apiVersion: "apps.kruise.io/v1beta1" }
         )
       ).toBeNull();
-      expect(
-        await changesOf(pod, ownedBy("apps.kruise.io/v1beta1"))
-      ).toBeNull();
+      expect(await changesOf(pod, ownedBy("apps.kruise.io/v1beta1"))).toBe(0);
       expect(await changesOf(pod, ownedBy("apps/v1"))).toBe(1);
       expect(
         await changesOf(
@@ -610,7 +633,7 @@ describe("the report of any object", () => {
         )
       ).toBe(1);
     } finally {
-      useChangeJournalStore.setState({ entries: [], spans: {} });
+      recorded = [];
     }
   });
 

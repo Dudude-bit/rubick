@@ -8,10 +8,13 @@ import { cn } from "@/lib/utils";
 export function RollBackLink({
   onClick,
   denied,
+  label,
   className,
 }: {
   onClick: () => void;
   denied?: string;
+  /** Its own words where it rolls back to the revision before a change. */
+  label?: string;
   className?: string;
 }) {
   const t = useT();
@@ -28,7 +31,7 @@ export function RollBackLink({
         )}
       >
         <Undo2 className="h-3 w-3" aria-hidden="true" />
-        {t("action", "rollBackToThis")}
+        {label ?? t("action", "rollBackToThis")}
       </button>
     </ReasonTip>
   );

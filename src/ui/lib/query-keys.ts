@@ -284,6 +284,29 @@ export const queryKeys = {
     scopeCacheKey(namespaces ?? []) ?? EVERY_NAMESPACE,
   ],
 
+  /**
+   * One timeline surface: the cluster's, or one object's, in a window and a
+   * filter. The context is the second element, as the overview's is.
+   */
+  timeline: (
+    context: string | null,
+    subject: { kind: string; namespace: string | null; name: string } | null,
+    namespaces: readonly string[],
+    windowMs: number,
+    show: string
+  ): (string | number | null)[] => [
+    "timeline",
+    context,
+    subject
+      ? `${subject.kind}/${home(subject.namespace) ?? ""}/${subject.name}`
+      : null,
+    scopeCacheKey(namespaces) ?? EVERY_NAMESPACE,
+    windowMs,
+    show,
+  ],
+  /** What is kept on disk, for Settings. */
+  timelineKept: (): string[] => ["timeline-kept"],
+
   appInfo: (): string[] => ["app-info"],
 
   // Contexts and what is bound to them

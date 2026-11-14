@@ -6,6 +6,7 @@
  * what the reader deletes with it.
  */
 
+import { changesTab } from "../../../../-changes/changes-tab";
 import { Info, Tag } from "lucide-react";
 import { DeleteAction } from "../../../../-object/DeleteAction";
 import { errorToShow } from "@/lib/error-utils";
@@ -213,6 +214,18 @@ export function GatewayClassDetail() {
       ),
     },
     eventsTab(events, t, { kind: ResourceType.GatewayClass, name: name ?? "" }),
+    changesTab(
+      cls
+        ? {
+            kind: "GatewayClass",
+            group: "gateway.networking.k8s.io",
+            name: cls.name,
+            namespace: null,
+            createdAt: cls.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: "GatewayClass YAML",
       yaml,

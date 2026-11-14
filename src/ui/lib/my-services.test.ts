@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   CARD_REFRESH,
-  changesFor,
   entryPointsOf,
   MAX_PINNED_PER_CONTEXT,
   isPinned,
@@ -16,7 +15,6 @@ import {
 } from "./my-services";
 import { REFRESH_INTERVALS } from "./refresh";
 import type { ChainHop, ChainPath } from "./connections";
-import type { JournalEntry } from "./changes";
 import type { Watch } from "./tell-me-when";
 import type {
   ObjectRef,
@@ -910,38 +908,6 @@ describe("what is still open", () => {
     ).toEqual([]);
   });
 
-  it("keeps only this service's journal entries, newest first", () => {
-    const entry = (name: string, at: number): JournalEntry => ({
-      id: `${name}-${at}`,
-      context: "prod",
-      kind: "Deployment",
-      namespace: "shop",
-      name,
-      at,
-      field: "image",
-      key: "0",
-      from: "a",
-      to: "b",
-    });
-    const mine = changesFor(
-      [
-        entry("payments", 1),
-        entry("carts", 2),
-        entry("payments", 3),
-        // A Job of the same name in the same namespace is another object,
-        // and its image change is not this card's history.
-        { ...entry("payments", 4), kind: "Job" },
-      ],
-      {
-        context: "prod",
-        kind: "Deployment",
-        namespace: "shop",
-        name: "payments",
-      }
-    );
-    expect(mine.map((item) => item.at)).toEqual([3, 1]);
-  });
-
   it("keeps only the open questions asked about this service", () => {
     const watch = (name: string, status: Watch["status"]): Watch => ({
       id: name,
@@ -983,8 +949,8 @@ describe("what is still open", () => {
   /**
    * A Deployment and a Job of the same name in the same namespace are two
    * objects. The match was on context, namespace and name alone, so one's
-   * wait was shown on the other's card — while both its neighbours,
-   * `changesFor` and `pinKey`, match on the kind too.
+   * wait was shown on the other's card — while its neighbour `pinKey`, and
+   * the timeline the card reads its last change from, match on the kind too.
    */
   it("does not show one kind's wait on another kind's card", () => {
     const job: Watch = {

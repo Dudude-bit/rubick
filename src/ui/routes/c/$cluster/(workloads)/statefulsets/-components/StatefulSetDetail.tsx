@@ -3,14 +3,7 @@ import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useRefusal } from "@/hooks/useRefusals";
-import {
-  AlignLeft,
-  BadgeCheck,
-  History,
-  Info,
-  Layers2,
-  Scale,
-} from "lucide-react";
+import { AlignLeft, BadgeCheck, Info, Layers2, Scale } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
 import { useAsk } from "../../../-object/useAsk";
@@ -34,7 +27,7 @@ import {
   viewGlyph,
 } from "@/components/object/detail-tab";
 import { ContainerRows } from "../../../-object/container-rows";
-import { ChangesTab } from "../../-components/ChangesTab";
+import { changesTab } from "../../../-changes/changes-tab";
 import { deliveryOfKind } from "@/lib/delivery";
 import { RestartAction } from "../../../-object/RestartDialog";
 import { readinessOf, restartedWords } from "@/lib/restart-plan";
@@ -377,23 +370,19 @@ export function StatefulSetDetail() {
         glyph: viewGlyph(Layers2),
         content: <ContainerRows template={statefulSet} namespace={namespace} />,
       },
-      {
-        id: "changes",
-        label: t("changes", "title"),
-        glyph: viewGlyph(History),
-        content: statefulSet ? (
-          <ChangesTab
-            subject={{
+      changesTab(
+        statefulSet
+          ? {
               kind: "StatefulSet",
               name: statefulSet.name,
               namespace: statefulSet.namespace,
               labels: statefulSet.labels,
               annotations: statefulSet.annotations,
               createdAt: statefulSet.createdAt,
-            }}
-          />
-        ) : null,
-      },
+            }
+          : null,
+        t
+      ),
       {
         id: toPlural(ResourceType.Pod),
         label: t("columns", "pods"),

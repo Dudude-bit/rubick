@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { useCallback } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { useQuery } from "@tanstack/react-query";
@@ -146,6 +147,17 @@ export function SecretDetail() {
       ),
     },
     eventsTab(events, t, { kind: ResourceType.Secret, name: name ?? "" }),
+    changesTab(
+      secret
+        ? {
+            kind: "Secret",
+            name: secret.name,
+            namespace: secret.namespace,
+            createdAt: secret.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Secret" }),
       yaml: secretYaml,

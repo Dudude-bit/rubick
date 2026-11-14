@@ -1,3 +1,4 @@
+import { changesTab } from "../../../-changes/changes-tab";
 import { ArrowDownToLine, Info } from "lucide-react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 
@@ -254,6 +255,17 @@ export function NetworkPolicyDetail() {
       kind: ResourceType.NetworkPolicy,
       name: name ?? "",
     }),
+    changesTab(
+      policy
+        ? {
+            kind: "NetworkPolicy",
+            name: policy.name,
+            namespace: policy.namespace,
+            createdAt: policy.createdAt,
+          }
+        : null,
+      t
+    ),
     yamlTab({
       title: t("action", "kindYaml", { kind: "NetworkPolicy" }),
       yaml,

@@ -11,7 +11,7 @@ import { AuthTerminal } from "@/components/terminal/AuthTerminal";
 import { usePortForwardEvents } from "@/hooks/usePortForwardEvents";
 import { useDrainEndings } from "@/hooks/useDrainEndings";
 import { useTellMeWhen } from "@/hooks/useTellMeWhen";
-import { useChangeJournal } from "@/hooks/useChangeJournal";
+import { forgetOldJournal } from "@/hooks/useTimeline";
 import { usePortForwardAutoStart } from "@/hooks/usePortForwardAutoStart";
 import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { useDeepLinks } from "@/hooks/useDeepLinks";
@@ -53,7 +53,7 @@ export default function App() {
   useDrainEndings();
   useWatchForRenewals();
   useTellMeWhen();
-  useChangeJournal();
+  useEffect(forgetOldJournal, []);
   usePortForwardAutoStart();
   useAutoUpdater();
   // At the root: a link can arrive at the front door or on a cluster the
