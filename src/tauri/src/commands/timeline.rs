@@ -25,6 +25,14 @@ pub async fn timeline_read(
     .await
 }
 
+/// A timeline surface for `context` is on screen: what is read by name only
+/// is held open while the window keeps saying so.
+#[tauri::command]
+pub async fn timeline_hold(context: String, state: State<'_, AppState>) -> Result<bool> {
+    state.timeline.hold(&context);
+    Ok(true)
+}
+
 /// How much is kept on disk, and whether keeping is on.
 #[tauri::command]
 pub async fn timeline_kept(state: State<'_, AppState>) -> Result<Kept> {

@@ -35,7 +35,7 @@ import type { Show } from "@/generated/types";
 import { cn, formatTimeUnit, formatWhen } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { useTimeline } from "@/hooks/useTimeline";
+import { useTimeline, useTimelineHold } from "@/hooks/useTimeline";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 
@@ -57,6 +57,7 @@ export function Changes() {
   const [window, setWindow] = useState<Window>("24h");
   const [show, setShow] = useState<Show>("all");
   const now = useNow();
+  useTimelineHold(isConnected);
   const read = useTimeline({
     scope: scope.scope,
     windowMs: WINDOWS[window],

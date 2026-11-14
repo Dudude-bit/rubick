@@ -11,6 +11,7 @@ import type {
   TimelineRow,
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { listenEvent } from "@/lib/events";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -208,3 +209,18 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
 }
 
 const NO_SCOPE: readonly string[] = [];
+
+/**
+ * While a timeline is on screen the backend holds open what it reads by name
+ * only, and lets it go once no screen says so: said again at the steady rate,
+ * which stops when the surface is out of sight.
+ */
+export function useTimelineHold(enabled = true): void {
+  const context = useClusterStore((s) => s.currentContext);
+  useLiveQuery({
+    refresh: "steady",
+    queryKey: queryKeys.timelineHold(context),
+    queryFn: () => commands.timelineHold(context ?? ""),
+    enabled: enabled && context !== null,
+  });
+}

@@ -38,6 +38,10 @@ pub const KEEP_FOR_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 /// How often what was recorded is written and the window told of it.
 const FLUSH_EVERY: Duration = Duration::from_secs(1);
 
+/// How long a timeline surface's word that it is on screen lasts: the window
+/// says it again every 30 s while one is, and stops when none is.
+pub const HELD_FOR: Duration = Duration::from_secs(75);
+
 /// One row of the timeline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -323,6 +327,9 @@ pub struct Timelines {
     clusters: DashMap<String, Arc<ClusterTimeline>>,
     events: broadcast::Sender<AppEvent>,
     writer: OnceLock<()>,
+    /// When a timeline surface last said it was on screen, per context: what
+    /// is read by name only is held open for it, and only for it.
+    holds: DashMap<String, std::time::Instant>,
 }
 
 impl Timelines {
@@ -335,7 +342,23 @@ impl Timelines {
             clusters: DashMap::new(),
             events,
             writer: OnceLock::new(),
+            holds: DashMap::new(),
         }
+    }
+
+    /// A timeline surface for `context` is on screen now.
+    pub fn hold(&self, context: &str) {
+        self.holds
+            .insert(context.to_string(), std::time::Instant::now());
+    }
+
+    /// Whether a timeline surface for `context` was on screen within
+    /// [`HELD_FOR`] of `now`.
+    #[must_use]
+    pub fn held(&self, context: &str, now: std::time::Instant) -> bool {
+        self.holds
+            .get(context)
+            .is_some_and(|at| now.saturating_duration_since(*at) < HELD_FOR)
     }
 
     /// Where this machine keeps timelines, beside nothing else.

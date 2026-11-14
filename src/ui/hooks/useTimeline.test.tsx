@@ -12,7 +12,12 @@ import type {
 } from "@/generated/types";
 import { forgetChannels } from "@/lib/events";
 import { useClusterStore } from "@/stores/clusterStore";
-import { forgetOldJournal, useTimeline, withNewer } from "./useTimeline";
+import {
+  forgetOldJournal,
+  useTimeline,
+  useTimelineHold,
+  withNewer,
+} from "./useTimeline";
 
 const row = (id: string, at: number, seq = at): TimelineRow => ({
   id,
@@ -162,5 +167,25 @@ describe("the 5.0 journal", () => {
     localStorage.setItem("change-journal", "{}");
     forgetOldJournal();
     expect(localStorage.getItem("change-journal")).toBeNull();
+  });
+});
+
+describe("a timeline on screen", () => {
+  /** Fails if a surface does not tell the backend it is on screen, or names another cluster. */
+  it("tells the backend which cluster it is on screen for", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    const held: unknown[] = [];
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "timeline_hold") held.push(args);
+      return true;
+    });
+    renderHook(() => useTimelineHold(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+    await waitFor(() => expect(held).toEqual([{ context: "prod" }]));
   });
 });

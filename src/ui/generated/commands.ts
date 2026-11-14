@@ -2204,3 +2204,7 @@ export async function timelineSetKeep(keep: boolean): Promise<void> {
 export async function timelineClear(): Promise<void> {
   return invoke<void>("timeline_clear");
 }
+
+export async function timelineHold(context: string): Promise<boolean> {
+  return invoke<boolean>("timeline_hold", { context });
+}

@@ -547,12 +547,13 @@ fn a_scope_keeps_cluster_rows_and_the_namespaces_own() {
         T0,
     );
     store.record(change("5", T0 + 4, "ConfigMap", Some("shop"), "y"), T0);
+    store.record(change("6", T0 + 5, "Secret", Some("shop"), "y"), T0);
     let (rows, _) = store.page(&TimelineQuery {
         scope: Some(vec!["shop".into()]),
         ..query(Show::All)
     });
     let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
-    assert_eq!(ids, ["5", "2", "1"]);
+    assert_eq!(ids, ["6", "5", "2", "1"]);
     let (one, _) = store.page(&TimelineQuery {
         subject: Some(Subject {
             kind: "ConfigMap".into(),
@@ -948,4 +949,17 @@ fn what_a_followed_object_costs() {
         );
         assert!(held > 0);
     }
+}
+
+/// What is read by name only is held open for a timeline on screen and no
+/// longer. Fails if a word from the window holds it for good, or not at all.
+#[test]
+fn a_surface_on_screen_holds_its_cluster_for_a_while_and_no_longer() {
+    let (timelines, _rx) = holder(None, false);
+    let now = std::time::Instant::now();
+    assert!(!timelines.held("kind", now));
+    timelines.hold("kind");
+    assert!(timelines.held("kind", std::time::Instant::now()));
+    assert!(!timelines.held("other", std::time::Instant::now()));
+    assert!(!timelines.held("kind", std::time::Instant::now() + HELD_FOR));
 }

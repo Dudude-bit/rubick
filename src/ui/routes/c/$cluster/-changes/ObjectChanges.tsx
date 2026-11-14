@@ -29,7 +29,7 @@ import { useHeldRead } from "@/hooks/useHeldRead";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useAppSearch } from "@/hooks/useSearchParam";
-import { useTimeline } from "@/hooks/useTimeline";
+import { useTimeline, useTimelineHold } from "@/hooks/useTimeline";
 import {
   useCapabilities,
   type DeliveryOwner,
@@ -289,6 +289,7 @@ function ChangesPanel({
   const sinceMs = since ? Date.parse(since) : NaN;
   const now = useNow();
   const [show, setShow] = useState<Show>("all");
+  useTimelineHold();
   const read = useTimeline({
     subject: {
       kind: subject.kind,

@@ -306,6 +306,11 @@ export const queryKeys = {
   ],
   /** What is kept on disk, for Settings. */
   timelineKept: (): string[] => ["timeline-kept"],
+  /** A timeline surface saying it is on screen. */
+  timelineHold: (context: string | null): (string | null)[] => [
+    "timeline-hold",
+    context,
+  ],
 
   appInfo: (): string[] => ["app-info"],
 
