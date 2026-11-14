@@ -1,0 +1,51 @@
+[
+  {
+    "kind": "Deployment",
+    "name": "web",
+    "namespace": "shop",
+    "group": null,
+    "id": "apps/Deployment/shop/web"
+  },
+  {
+    "kind": "Service",
+    "name": "web",
+    "namespace": "shop",
+    "group": null,
+    "id": "/Service/shop/web"
+  },
+  {
+    "kind": "Ingress",
+    "name": "front",
+    "namespace": "shop",
+    "group": null,
+    "id": "networking.k8s.io/Ingress/shop/front"
+  },
+  {
+    "kind": "HTTPRoute",
+    "name": "api",
+    "namespace": "shop",
+    "group": "gateway.networking.k8s.io",
+    "id": "gateway.networking.k8s.io/HTTPRoute/shop/api"
+  },
+  {
+    "kind": "Rollout",
+    "name": "checkout",
+    "namespace": "shop",
+    "group": "argoproj.io",
+    "id": "argoproj.io/Rollout/shop/checkout"
+  },
+  {
+    "kind": "Node",
+    "name": "kind-control-plane",
+    "namespace": null,
+    "group": null,
+    "id": "/Node//kind-control-plane"
+  },
+  {
+    "kind": "Pod",
+    "name": "*",
+    "namespace": "shop",
+    "group": null,
+    "id": "/Pod/shop/*"
+  }
+]

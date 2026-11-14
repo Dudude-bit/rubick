@@ -37,6 +37,8 @@ export interface AppSearch {
   open?: string;
   /** Which part of Audit is shown: `system` for the system's own namespaces and roles. */
   part?: string;
+  /** `on` where the cluster map marks which workloads a NetworkPolicy selects. */
+  policies?: string;
 }
 
 export const APP_SEARCH_KEYS: ReadonlyArray<keyof AppSearch> = [
@@ -62,6 +64,7 @@ export const APP_SEARCH_KEYS: ReadonlyArray<keyof AppSearch> = [
   "category",
   "open",
   "part",
+  "policies",
 ];
 
 export function appSearch(raw: Record<string, unknown>): AppSearch {

@@ -36,6 +36,7 @@ mod selector;
 mod serialization;
 mod storage;
 mod tls;
+pub mod topology;
 mod types;
 mod workloads;
 

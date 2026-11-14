@@ -52,6 +52,10 @@ const NOT_SHOWN = new Map([
   ["/src/ui/lib/query-log.ts", "logged"],
   ["/src/ui/integrations/cloudnativepg/page.tsx", "compared with sentinels"],
   ["/src/ui/workers/diff.worker.ts", "a worker's own failure, not a command's"],
+  [
+    "/src/ui/workers/layout.worker.ts",
+    "a worker's own failure, not a command's",
+  ],
   ["/src/ui/stores/updaterStore.ts", "the updater plugin's, not a command's"],
   ["/src/ui/App.tsx", "a render error, not a command's"],
   [

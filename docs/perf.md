@@ -83,6 +83,11 @@ Record each one on the rig, before and after a change, from a release build
 6. Open a Deployment's YAML and type for ten seconds.
 7. Diff two 10 000-line YAML documents.
 8. Open Logs on a producer pod from `perf-rig.py logs` and type in the filter.
+9. `perf-rig.py up --shape map` (60 namespaces, 500 Deployments of 20 pods),
+   then Topology over every namespace: the first batches
+   (`topologyBatch (apply)`), `topologyLayout (worker)` with the groups
+   collapsed and again after expanding them, a pan of five seconds, and the
+   batch after `kubectl -n perf-map-3 delete pod -l app=d-003 --wait=false`.
 
 Quote p95 and max per command, the long-task count, the largest IPC
 message, and the achieved churn rate.

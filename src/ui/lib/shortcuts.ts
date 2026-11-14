@@ -20,7 +20,8 @@ export type ShortcutSection =
   | "tabs"
   | "table"
   | "tree"
-  | "logs";
+  | "logs"
+  | "map";
 
 export interface Shortcut {
   id: string;
@@ -225,6 +226,10 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "rowClear", section: "table", keys: ["esc"], labelKey: "rowClear" },
   { id: "rowFilter", section: "table", keys: ["/"], labelKey: "rowFilter" },
 
+  { id: "mapFind", section: "map", keys: ["/"], labelKey: "mapFind" },
+  { id: "mapOpen", section: "map", keys: ["enter"], labelKey: "mapOpen" },
+  { id: "mapPeek", section: "map", keys: ["space"], labelKey: "mapPeek" },
+
   { id: "treeUp", section: "tree", keys: ["alt+↑"], labelKey: "treeUp" },
   { id: "treeDown", section: "tree", keys: ["alt+↓"], labelKey: "treeDown" },
   {
@@ -256,6 +261,7 @@ export const SECTIONS: readonly ShortcutSection[] = [
   "table",
   "tree",
   "logs",
+  "map",
 ];
 
 /**
@@ -298,6 +304,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "Menu and shift+F10 open the focused control's context menu",
   "src/ui/components/ui/data-table.tsx":
     "not a shortcut: bare left and right walk the focused row's links; a chord passes through",
+  "src/ui/routes/c/$cluster/-topology/Topology.tsx":
+    "/ goes to the map's search",
 };
 
 export function chordsOf(): Shortcut[] {
