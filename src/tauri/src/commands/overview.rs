@@ -1106,7 +1106,7 @@ fn trouble_cause(
 
 /// The pods inside their wait whose kubelet has already warned it cannot set
 /// them up: the warning is the evidence the wait would otherwise stand in for.
-fn warned_pods<'a>(
+pub(crate) fn warned_pods<'a>(
     pods: impl IntoIterator<Item = &'a Pod>,
     events: &[&Event],
     now: DateTime<Utc>,

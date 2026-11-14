@@ -93,138 +93,136 @@ pub(super) async fn fetch_template(
     kind: &str,
     name: &str,
 ) -> Result<(Template, Option<String>)> {
-    macro_rules! from_workload {
-        ($ty:ty, $obj:ident, $labels:expr, $selector:expr, $spec:expr, $replicas:expr, $ready:expr, $rollout:expr, $claims:expr) => {{
-            let $obj: $ty = got(ctx.namespaced_api().get(name).await, kind, ns, name)?;
-            let uid = $obj.uid();
-            (
-                Template {
-                    labels: $labels,
-                    selector: $selector,
-                    spec: $spec,
-                    owners: $obj.owner_references().to_vec(),
-                    replicas: $replicas,
-                    ready_replicas: $ready,
-                    rollout: $rollout,
-                    claims: $claims,
-                },
-                uid,
-            )
+    macro_rules! got_template {
+        ($ty:ty, $of:path) => {{
+            let obj: $ty = got(ctx.namespaced_api().get(name).await, kind, ns, name)?;
+            ($of(&obj), obj.uid())
         }};
     }
-
     Ok(match kind {
-        "Deployment" => from_workload!(
-            Deployment,
-            obj,
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.template.metadata.as_ref())
-                .and_then(|m| m.labels.clone())
-                .unwrap_or_default(),
-            obj.spec.as_ref().map(|s| s.selector.clone()),
-            obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
-            obj.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
-            obj.status
-                .as_ref()
-                .and_then(|s| s.ready_replicas)
-                .unwrap_or(0),
-            Some(crate::resources::deployment_rollout(&obj)),
-            Vec::new()
-        ),
-        "StatefulSet" => from_workload!(
-            StatefulSet,
-            obj,
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.template.metadata.as_ref())
-                .and_then(|m| m.labels.clone())
-                .unwrap_or_default(),
-            obj.spec.as_ref().map(|s| s.selector.clone()),
-            obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
-            obj.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
-            obj.status
-                .as_ref()
-                .and_then(|s| s.ready_replicas)
-                .unwrap_or(0),
-            Some(crate::resources::statefulset_rollout(&obj)),
-            set_claims(&obj)
-        ),
-        "DaemonSet" => from_workload!(
-            DaemonSet,
-            obj,
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.template.metadata.as_ref())
-                .and_then(|m| m.labels.clone())
-                .unwrap_or_default(),
-            obj.spec.as_ref().map(|s| s.selector.clone()),
-            obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
-            obj.status
-                .as_ref()
-                .map_or(0, |s| s.desired_number_scheduled),
-            obj.status.as_ref().map_or(0, |s| s.number_ready),
-            Some(crate::resources::daemonset_rollout(&obj)),
-            Vec::new()
-        ),
-        "ReplicaSet" => from_workload!(
-            ReplicaSet,
-            obj,
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.template.as_ref())
-                .and_then(|t| t.metadata.as_ref())
-                .and_then(|m| m.labels.clone())
-                .unwrap_or_default(),
-            obj.spec.as_ref().map(|s| s.selector.clone()),
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.template.as_ref())
-                .and_then(|t| t.spec.clone()),
-            obj.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
-            obj.status
-                .as_ref()
-                .and_then(|s| s.ready_replicas)
-                .unwrap_or(0),
-            None,
-            Vec::new()
-        ),
-        "Job" => from_workload!(
-            Job,
-            obj,
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.template.metadata.as_ref())
-                .and_then(|m| m.labels.clone())
-                .unwrap_or_default(),
-            obj.spec.as_ref().and_then(|s| s.selector.clone()),
-            obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
-            obj.status.as_ref().and_then(|s| s.active).unwrap_or(0),
-            obj.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0),
-            None,
-            Vec::new()
-        ),
-        "CronJob" => from_workload!(
-            CronJob,
-            obj,
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.job_template.spec.as_ref())
-                .and_then(|s| s.template.metadata.as_ref())
-                .and_then(|m| m.labels.clone())
-                .unwrap_or_default(),
-            None,
-            obj.spec
-                .as_ref()
-                .and_then(|s| s.job_template.spec.as_ref())
-                .and_then(|s| s.template.spec.clone()),
-            0,
-            0,
-            None,
-            Vec::new()
-        ),
+        "Deployment" => got_template!(Deployment, Template::of_deployment),
+        "StatefulSet" => got_template!(StatefulSet, Template::of_stateful_set),
+        "DaemonSet" => got_template!(DaemonSet, Template::of_daemon_set),
+        "ReplicaSet" => got_template!(ReplicaSet, Template::of_replica_set),
+        "Job" => got_template!(Job, Template::of_job),
+        "CronJob" => got_template!(CronJob, Template::of_cron_job),
         _ => unreachable!("fetch_template is only called for workload kinds"),
     })
+}
+
+fn template_labels(
+    template: Option<&k8s_openapi::api::core::v1::PodTemplateSpec>,
+) -> BTreeMap<String, String> {
+    template
+        .and_then(|t| t.metadata.as_ref())
+        .and_then(|m| m.labels.clone())
+        .unwrap_or_default()
+}
+
+impl Template {
+    pub(super) fn of_deployment(obj: &Deployment) -> Self {
+        let spec = obj.spec.as_ref();
+        Self {
+            labels: template_labels(spec.map(|s| &s.template)),
+            selector: spec.map(|s| s.selector.clone()),
+            spec: spec.and_then(|s| s.template.spec.clone()),
+            owners: obj.owner_references().to_vec(),
+            replicas: spec.and_then(|s| s.replicas).unwrap_or(1),
+            ready_replicas: obj
+                .status
+                .as_ref()
+                .and_then(|s| s.ready_replicas)
+                .unwrap_or(0),
+            rollout: Some(crate::resources::deployment_rollout(obj)),
+            claims: Vec::new(),
+        }
+    }
+
+    pub(super) fn of_stateful_set(obj: &StatefulSet) -> Self {
+        let spec = obj.spec.as_ref();
+        Self {
+            labels: template_labels(spec.map(|s| &s.template)),
+            selector: spec.map(|s| s.selector.clone()),
+            spec: spec.and_then(|s| s.template.spec.clone()),
+            owners: obj.owner_references().to_vec(),
+            replicas: spec.and_then(|s| s.replicas).unwrap_or(1),
+            ready_replicas: obj
+                .status
+                .as_ref()
+                .and_then(|s| s.ready_replicas)
+                .unwrap_or(0),
+            rollout: Some(crate::resources::statefulset_rollout(obj)),
+            claims: set_claims(obj),
+        }
+    }
+
+    pub(super) fn of_daemon_set(obj: &DaemonSet) -> Self {
+        let spec = obj.spec.as_ref();
+        Self {
+            labels: template_labels(spec.map(|s| &s.template)),
+            selector: spec.map(|s| s.selector.clone()),
+            spec: spec.and_then(|s| s.template.spec.clone()),
+            owners: obj.owner_references().to_vec(),
+            replicas: obj
+                .status
+                .as_ref()
+                .map_or(0, |s| s.desired_number_scheduled),
+            ready_replicas: obj.status.as_ref().map_or(0, |s| s.number_ready),
+            rollout: Some(crate::resources::daemonset_rollout(obj)),
+            claims: Vec::new(),
+        }
+    }
+
+    pub(super) fn of_replica_set(obj: &ReplicaSet) -> Self {
+        let spec = obj.spec.as_ref();
+        let template = spec.and_then(|s| s.template.as_ref());
+        Self {
+            labels: template_labels(template),
+            selector: spec.map(|s| s.selector.clone()),
+            spec: template.and_then(|t| t.spec.clone()),
+            owners: obj.owner_references().to_vec(),
+            replicas: spec.and_then(|s| s.replicas).unwrap_or(1),
+            ready_replicas: obj
+                .status
+                .as_ref()
+                .and_then(|s| s.ready_replicas)
+                .unwrap_or(0),
+            rollout: None,
+            claims: Vec::new(),
+        }
+    }
+
+    pub(super) fn of_job(obj: &Job) -> Self {
+        let spec = obj.spec.as_ref();
+        Self {
+            labels: template_labels(spec.map(|s| &s.template)),
+            selector: spec.and_then(|s| s.selector.clone()),
+            spec: spec.and_then(|s| s.template.spec.clone()),
+            owners: obj.owner_references().to_vec(),
+            replicas: obj.status.as_ref().and_then(|s| s.active).unwrap_or(0),
+            ready_replicas: obj.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0),
+            rollout: None,
+            claims: Vec::new(),
+        }
+    }
+
+    pub(super) fn of_cron_job(obj: &CronJob) -> Self {
+        let template = obj
+            .spec
+            .as_ref()
+            .and_then(|s| s.job_template.spec.as_ref())
+            .map(|s| &s.template);
+        Self {
+            labels: template_labels(template),
+            selector: None,
+            spec: template.and_then(|t| t.spec.clone()),
+            owners: obj.owner_references().to_vec(),
+            replicas: 0,
+            ready_replicas: 0,
+            rollout: None,
+            claims: Vec::new(),
+        }
+    }
 }
 
 pub(super) async fn workload_connections(

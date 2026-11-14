@@ -126,8 +126,6 @@ pub(super) fn gateway_traffic_into(
     gateways: Option<&[crate::resources::GatewayInfo]>,
     out: &mut Neighbourhood,
 ) {
-    use crate::resources::{programmed, verdict_of, Verdict, GATEWAY_API_GROUP};
-
     for route in routes {
         let backends: Vec<_> = route
             .rules
@@ -164,125 +162,143 @@ pub(super) fn gateway_traffic_into(
             );
         }
 
-        for parent in &route.parent_refs {
-            // A route may name a `ListenerSet` instead of the Gateway; the set
-            // carries its own `spec.parentRef`, and `GatewayInfo` keeps the
-            // ones that named it. Skipping those here left the chain with no
-            // `attachesTo` edge, so the peek panel called the route mesh while
-            // the routes list traced it to a Gateway — one object, two answers.
-            let via_set = parent.kind == "ListenerSet" && parent.group == GATEWAY_API_GROUP;
-            if !via_set && (parent.kind != "Gateway" || parent.group != GATEWAY_API_GROUP) {
-                continue;
-            }
-            let gw_ns = parent
-                .namespace
-                .clone()
-                .unwrap_or_else(|| route.namespace.clone());
-            // Absent list means nobody asked, which is a different answer
-            // from "asked, and it is not there" — and only the second one
-            // may be drawn as a break in the chain.
-            let found = gateways
-                .and_then(|list| {
-                    list.iter().find(|g| {
-                        if via_set {
-                            // The set's own namespace resolution, then the
-                            // Gateway it named.
-                            g.listener_sets
-                                .iter()
-                                .any(|set| set.name == parent.name && set.namespace == gw_ns)
-                        } else {
-                            g.name == parent.name && g.namespace == gw_ns
-                        }
-                    })
-                })
-                .map(Some);
-            // Only when the sets were actually read: an unlisted ListenerSet
-            // makes every set-parented route look orphaned.
-            let resolvable =
-                !via_set || gateways.is_some_and(|list| list.iter().all(|g| g.listener_sets_known));
-            let gw_ref = match found {
-                Some(Some(g)) => ObjectRef::new(
-                    "Gateway",
-                    &g.name,
-                    Some(g.namespace.clone()),
-                    Existence::Present,
-                )
-                .with_facts(ObjectFacts::Gateway {
-                    class_name: g.class_name.clone(),
-                    listeners: g.listeners.clone(),
-                }),
-                // Unresolved: point at what the route actually named. Calling
-                // a ListenerSet a Gateway would put the set's name under the
-                // wrong kind, and the reader would go looking for a Gateway
-                // that was never supposed to exist.
-                _ => ObjectRef::new(
-                    if via_set { "ListenerSet" } else { "Gateway" },
-                    &parent.name,
-                    Some(gw_ns.clone()),
-                    if gateways.is_some() && resolvable {
-                        Existence::Missing
-                    } else {
-                        Existence::NotChecked
-                    },
-                ),
-            };
-            // Only when the sets were actually read: an unlisted ListenerSet
-            // makes every set-parented route look orphaned, and a break drawn
-            // from that is this app's blind spot, not the cluster's state.
-            let resolvable =
-                !via_set || gateways.is_some_and(|list| list.iter().all(|g| g.listener_sets_known));
-            if found.is_none() && gateways.is_some() && resolvable {
-                out.stops.push(ChainStop::GatewayMissing {
-                    route: route_ref.clone(),
-                    gateway: gw_ref.clone(),
-                });
-            }
-            if let Some(said) = found
-                .flatten()
-                .and_then(|g| programmed(&g.conditions))
-                .filter(|said| said.status == "False")
-            {
-                out.stops.push(ChainStop::GatewayNotProgrammed {
-                    route: route_ref.clone(),
-                    gateway: gw_ref.clone(),
-                    condition_type: said.type_.clone(),
-                    condition_reason: said.reason.clone(),
-                    message: said.message.clone(),
-                });
-            }
-            out.edge(
-                route_ref.clone(),
-                gw_ref.clone(),
-                Relation::AttachesTo {
-                    section_name: parent.section_name.clone(),
-                    port: parent.port,
-                    listener_set: via_set.then(|| crate::resources::ObjectName {
-                        name: parent.name.clone(),
-                        namespace: gw_ns.clone(),
-                    }),
-                },
-            );
+        route_parents(route, &route_ref, gateways, out);
+    }
+}
 
-            // Every entry for this attachment, read by the one rule the
-            // trace and the Gateway page read it by.
-            let entries = route.statuses_for(parent);
-            if let Verdict::False(said) = verdict_of(&entries, "Accepted") {
-                out.stops.push(ChainStop::RouteNotAccepted {
-                    route: route_ref.clone(),
-                    gateway: gw_ref.clone(),
-                    condition_reason: said.reason.clone(),
-                    message: said.message.clone(),
-                });
-            }
-            if let Verdict::False(said) = verdict_of(&entries, "ResolvedRefs") {
-                out.stops.push(ChainStop::RouteRefsUnresolved {
-                    route: route_ref.clone(),
-                    condition_reason: said.reason.clone(),
-                    message: said.message.clone(),
-                });
-            }
+/// A route's `parentRefs[]`: the Gateway above it, and every stop its status
+/// names about each parent.
+pub(super) fn route_parents(
+    route: &crate::resources::RouteInfo,
+    route_ref: &ObjectRef,
+    gateways: Option<&[crate::resources::GatewayInfo]>,
+    out: &mut Neighbourhood,
+) {
+    use crate::resources::{programmed, verdict_of, Verdict, GATEWAY_API_GROUP};
+
+    for parent in &route.parent_refs {
+        // A route may name a `ListenerSet` instead of the Gateway; the set
+        // carries its own `spec.parentRef`, and `GatewayInfo` keeps the
+        // ones that named it. Skipping those here left the chain with no
+        // `attachesTo` edge, so the peek panel called the route mesh while
+        // the routes list traced it to a Gateway — one object, two answers.
+        let via_set = parent.kind == "ListenerSet" && parent.group == GATEWAY_API_GROUP;
+        if !via_set && (parent.kind != "Gateway" || parent.group != GATEWAY_API_GROUP) {
+            continue;
+        }
+        let gw_ns = parent
+            .namespace
+            .clone()
+            .unwrap_or_else(|| route.namespace.clone());
+        // Absent list means nobody asked, which is a different answer
+        // from "asked, and it is not there" — and only the second one
+        // may be drawn as a break in the chain.
+        let found = gateways
+            .and_then(|list| {
+                list.iter().find(|g| {
+                    if via_set {
+                        // The set's own namespace resolution, then the
+                        // Gateway it named.
+                        g.listener_sets
+                            .iter()
+                            .any(|set| set.name == parent.name && set.namespace == gw_ns)
+                    } else {
+                        g.name == parent.name && g.namespace == gw_ns
+                    }
+                })
+            })
+            .map(Some);
+        // Only when the sets were actually read: an unlisted ListenerSet
+        // makes every set-parented route look orphaned.
+        let resolvable =
+            !via_set || gateways.is_some_and(|list| list.iter().all(|g| g.listener_sets_known));
+        let gw_ref = match found {
+            Some(Some(g)) => gateway_ref(g),
+            // Unresolved: point at what the route actually named. Calling
+            // a ListenerSet a Gateway would put the set's name under the
+            // wrong kind, and the reader would go looking for a Gateway
+            // that was never supposed to exist.
+            _ => ObjectRef::new(
+                if via_set { "ListenerSet" } else { "Gateway" },
+                &parent.name,
+                Some(gw_ns.clone()),
+                if gateways.is_some() && resolvable {
+                    Existence::Missing
+                } else {
+                    Existence::NotChecked
+                },
+            ),
+        };
+        // Only when the sets were actually read: an unlisted ListenerSet
+        // makes every set-parented route look orphaned, and a break drawn
+        // from that is this app's blind spot, not the cluster's state.
+        let resolvable =
+            !via_set || gateways.is_some_and(|list| list.iter().all(|g| g.listener_sets_known));
+        if found.is_none() && gateways.is_some() && resolvable {
+            out.stops.push(ChainStop::GatewayMissing {
+                route: route_ref.clone(),
+                gateway: gw_ref.clone(),
+            });
+        }
+        if let Some(said) = found
+            .flatten()
+            .and_then(|g| programmed(&g.conditions))
+            .filter(|said| said.status == "False")
+        {
+            out.stops.push(ChainStop::GatewayNotProgrammed {
+                route: route_ref.clone(),
+                gateway: gw_ref.clone(),
+                condition_type: said.type_.clone(),
+                condition_reason: said.reason.clone(),
+                message: said.message.clone(),
+            });
+        }
+        out.edge(
+            route_ref.clone(),
+            gw_ref.clone(),
+            Relation::AttachesTo {
+                section_name: parent.section_name.clone(),
+                port: parent.port,
+                listener_set: via_set.then(|| crate::resources::ObjectName {
+                    name: parent.name.clone(),
+                    namespace: gw_ns.clone(),
+                }),
+            },
+        );
+
+        // Every entry for this attachment, read by the one rule the
+        // trace and the Gateway page read it by.
+        let entries = route.statuses_for(parent);
+        if let Verdict::False(said) = verdict_of(&entries, "Accepted") {
+            out.stops.push(ChainStop::RouteNotAccepted {
+                route: route_ref.clone(),
+                gateway: gw_ref.clone(),
+                condition_reason: said.reason.clone(),
+                message: said.message.clone(),
+            });
+        }
+        if let Verdict::False(said) = verdict_of(&entries, "ResolvedRefs") {
+            out.stops.push(ChainStop::RouteRefsUnresolved {
+                route: route_ref.clone(),
+                condition_reason: said.reason.clone(),
+                message: said.message.clone(),
+            });
         }
     }
+}
+
+/// A Gateway as the chain draws it.
+pub(super) fn gateway_ref(g: &crate::resources::GatewayInfo) -> ObjectRef {
+    ObjectRef::new(
+        "Gateway",
+        &g.name,
+        Some(g.namespace.clone()),
+        Existence::Present,
+    )
+    .with_facts(ObjectFacts::Gateway {
+        class_name: g.class_name.clone(),
+        listeners: g.listeners.clone(),
+    })
 }
 
 /// The Ingresses whose backend names this Service.

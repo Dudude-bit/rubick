@@ -49,6 +49,7 @@ use crate::utils::Moment;
 
 mod governance;
 mod kinds;
+pub(crate) mod map;
 mod owners;
 mod snapshot;
 mod traffic;
