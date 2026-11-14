@@ -62,6 +62,11 @@ pub(crate) trait SlotHost: Send + Sync + 'static {
         + 'static;
 
     fn api(&self, slot: &SlotKey, resource: &ApiResource) -> Api<Self::Object>;
+    /// What the list and watch of `slot` are narrowed by, beyond the page size
+    /// and the timeout every slot shares.
+    fn narrowed(&self, _slot: &SlotKey, config: watcher::Config) -> watcher::Config {
+        config
+    }
     /// The host's own stop, which every slot's is a child of.
     fn stop(&self) -> &CancellationToken;
     fn watches(&self) -> &Arc<Semaphore>;
@@ -117,9 +122,12 @@ pub(crate) fn spawn_slot<H: SlotHost>(
     let index = index.clone();
     tokio::spawn(async move {
         let api = index.api(&slot, &resource);
-        let config = watcher::Config::default()
-            .page_size(PAGE_SIZE)
-            .timeout(WATCH_TIMEOUT_SECS);
+        let config = index.narrowed(
+            &slot,
+            watcher::Config::default()
+                .page_size(PAGE_SIZE)
+                .timeout(WATCH_TIMEOUT_SECS),
+        );
         let mut failures = Streak::default();
         // After a failure the kind is listed afresh: kube's resumed watch says
         // nothing when it succeeds, so the slot stayed stale for good.
