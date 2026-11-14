@@ -23,16 +23,16 @@ pub struct ObservedSpan {
     pub seen_at: i64,
     pub to: Option<i64>,
     /// Kinds refused, or not read, everywhere it asked.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub unwatched: Vec<String>,
     /// Kinds refused in some namespaces only, as `<kind>/<namespace>`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub unwatched_in: Vec<String>,
     /// The namespaces it watched; empty for the whole cluster.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub scope: Vec<String>,
     /// The kinds it followed, so a quiet stretch names what it speaks for.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub kinds: Vec<String>,
 }
 

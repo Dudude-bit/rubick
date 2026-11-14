@@ -57,7 +57,7 @@ pub struct TimelineRow {
     pub what: RowSays,
     /// Found by comparing a list with what was seen before a break, not
     /// watched happening: `at` is when it was noticed.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default)]
     pub at_relist: bool,
 }
 

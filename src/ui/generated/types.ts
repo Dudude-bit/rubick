@@ -3286,6 +3286,12 @@ export type AppEvent =
       context: string;
       namespaces: string[];
       cluster: boolean;
+    }
+  | {
+      channel: "timeline-changed";
+      context: string;
+      rows: boolean;
+      spans: boolean;
     };
 
 export type ListingFailure =
@@ -3367,3 +3373,102 @@ export interface Beside {
   previous: Dependent | null;
   next: Dependent | null;
 }
+
+export interface Kept {
+  keep: boolean;
+  bytes: number;
+  clusters: number;
+}
+
+export interface TimelinePage {
+  rows: TimelineRow[];
+  more: boolean;
+  newest: number;
+  spans: SpanSets;
+  letGo: LetGoes;
+  keeping: Keeping;
+  unreadable: number;
+}
+
+export interface LetGoes {
+  changes: LetGo | null;
+  warnings: LetGo | null;
+  normal: LetGo | null;
+}
+
+export interface LetGo {
+  before: number;
+  cleared: boolean;
+}
+
+export interface SpanSets {
+  followed: ObservedSpan[];
+  meta: ObservedSpan[];
+}
+
+export interface ObservedSpan {
+  from: number;
+  seenAt: number;
+  to: number | null;
+  unwatched: string[];
+  unwatchedIn: string[];
+  scope: string[];
+  kinds: string[];
+}
+
+export interface TimelineRow {
+  id: string;
+  seq: number;
+  at: number;
+  kind: string;
+  group: string;
+  namespace: string | null;
+  name: string;
+  what: RowSays;
+  atRelist: boolean;
+}
+
+export interface TimelineQuery {
+  context: string;
+  subject: Subject | null;
+  scope: string[] | null;
+  from: number;
+  show: Show;
+  after: number | null;
+  before: Cursor | null;
+}
+
+export interface Cursor {
+  at: number;
+  seq: number;
+}
+
+export interface Subject {
+  kind: string;
+  group: string | null;
+  namespace: string | null;
+  name: string;
+}
+
+export type Keeping =
+  | { says: "kept" }
+  | { says: "off" }
+  | { says: "failed"; message: string };
+
+export type RowSays =
+  | { says: "created" }
+  | { says: "deleted" }
+  | {
+      says: "changed";
+      fields: FieldMove[];
+      more: number;
+      before: string | null;
+    }
+  | { says: "generation"; from: number | null; to: number | null }
+  | { says: "event"; event: EventInfo };
+
+export type FieldMove =
+  | { says: "moved"; path: string; from: string | null; to: string | null }
+  | { says: "notKept"; path: string; was: boolean; is: boolean };
+
+export type Show = "all" | "changes" | "warnings";
