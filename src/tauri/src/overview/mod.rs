@@ -710,17 +710,41 @@ fn strip_container(container: &mut Container) {
     container.security_context = None;
 }
 
+/// Where a stored pod keeps the claims it mounts. A `Volume` is 3 KB inline
+/// whatever it holds, so the names ride in this one annotation instead,
+/// which no cluster writes and nothing else reads.
+pub const KEPT_CLAIMS: &str = "rubick.internal/claims";
+
 /// What the overview never reads, dropped before the object is stored: the
 /// store holds every pod in the cluster, and a pod's env, mounts and probes
 /// are most of its bytes. The readiness probe stays: a not-Ready pod's cause
 /// quotes it, and without it every one read as declaring none. So does a
-/// static pod's mirror annotation, the uid its events carry (`events_uid`).
+/// static pod's mirror annotation, the uid its events carry (`events_uid`),
+/// and the names of its claims, which the cost page bills to the pod's
+/// workload ([`KEPT_CLAIMS`]).
 pub fn strip_pod(pod: &mut Pod) {
     pod.metadata.managed_fields = None;
+    let claims: Vec<&str> = pod
+        .spec
+        .iter()
+        .flat_map(|s| s.volumes.iter().flatten())
+        .filter_map(|v| {
+            v.persistent_volume_claim
+                .as_ref()
+                .map(|c| c.claim_name.as_str())
+        })
+        .collect();
+    let claims = (!claims.is_empty()).then(|| claims.join(","));
     pod.metadata.annotations = pod.metadata.annotations.take().and_then(|mut kept| {
         kept.retain(|key, _| key == crate::resources::MIRROR_POD_ANNOTATION);
         (!kept.is_empty()).then_some(kept)
     });
+    if let Some(claims) = claims {
+        pod.metadata
+            .annotations
+            .get_or_insert_with(Default::default)
+            .insert(KEPT_CLAIMS.to_string(), claims);
+    }
     if let Some(spec) = pod.spec.as_mut() {
         spec.volumes = None;
         spec.affinity = None;
@@ -790,6 +814,47 @@ pub fn strip_event(event: &mut Event) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The store keeps the names of a pod's claims and nothing else of its
+    /// volumes: the cost page bills a claim's bytes to the workload mounting
+    /// it, and every other volume (the token projection every pod has) is
+    /// still dropped, so a pod with no claim costs the store nothing more.
+    #[test]
+    fn a_stored_pod_keeps_its_claims_by_name_and_no_other_volume() {
+        let mut pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "db-0", "namespace": "shop"},
+            "spec": {"containers": [], "volumes": [
+                {"name": "data", "persistentVolumeClaim": {"claimName": "data-db-0"}},
+                {"name": "logs", "persistentVolumeClaim": {"claimName": "logs-db-0"}},
+                {"name": "kube-api-access", "projected": {"sources": [{"serviceAccountToken": {"path": "token"}}]}},
+            ]},
+        }))
+        .unwrap();
+        strip_pod(&mut pod);
+        assert!(pod.spec.as_ref().unwrap().volumes.is_none());
+        assert_eq!(
+            pod.metadata
+                .annotations
+                .as_ref()
+                .and_then(|a| a.get(KEPT_CLAIMS))
+                .map(String::as_str),
+            Some("data-db-0,logs-db-0")
+        );
+
+        let mut tokens_only: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {"name": "p-00001", "namespace": "perf-1"},
+            "spec": {"containers": [], "volumes": [
+                {"name": "kube-api-access", "projected": {"sources": []}},
+            ]},
+        }))
+        .unwrap();
+        strip_pod(&mut tokens_only);
+        assert!(tokens_only.spec.unwrap().volumes.is_none());
+        assert!(
+            tokens_only.metadata.annotations.is_none(),
+            "a pod with no claim keeps nothing"
+        );
+    }
 
     fn in_namespace(namespace: Option<&str>) -> Pod {
         let mut pod = Pod::default();

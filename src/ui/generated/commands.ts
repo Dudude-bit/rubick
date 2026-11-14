@@ -35,6 +35,7 @@ import type {
   ContextInfo,
   ControllerRevisionInfo,
   CopyWith,
+  CostBasis,
   CrdDetailInfo,
   CrdGroup,
   CronJobDetailInfo,
@@ -146,6 +147,8 @@ import type {
   TlsCertificate,
   UpdaterConfig,
   Via,
+  WorkloadFold,
+  WorkloadKey,
   YamlHistoryEntryDto,
 } from "./types";
 
@@ -2182,4 +2185,20 @@ export async function listDependentsBeside(
   scope: string[] | null
 ): Promise<Beside> {
   return invoke<Beside>("list_dependents_beside", { owner, uid, scope });
+}
+
+export async function prometheusByWorkload(
+  queries: string[],
+  scope: string[] | null,
+  keys: WorkloadKey[]
+): Promise<WorkloadFold> {
+  return invoke<WorkloadFold>("prometheus_by_workload", {
+    queries,
+    scope,
+    keys,
+  });
+}
+
+export async function costBasis(scope: string[] | null): Promise<CostBasis> {
+  return invoke<CostBasis>("cost_basis", { scope });
 }

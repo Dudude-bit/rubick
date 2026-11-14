@@ -27,6 +27,7 @@ pub mod checks;
 pub mod cluster;
 pub mod config_resources;
 pub mod connections;
+pub mod cost;
 pub mod crds;
 pub mod debug;
 pub mod deployments;
