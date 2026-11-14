@@ -70,6 +70,20 @@ pub(super) fn audited() -> Vec<(ApiResource, bool)> {
     ]
 }
 
+/// Every kind Audit follows through the shared feeds, for as long as its
+/// page touches them.
+#[must_use]
+pub fn feed_ask(scope: Option<Vec<String>>) -> Ask {
+    Ask {
+        kinds: audited()
+            .iter()
+            .map(|(resource, _)| key_of(resource))
+            .collect(),
+        scope,
+        binding: Binding::Page,
+    }
+}
+
 pub(super) fn key_of(resource: &ApiResource) -> KindKey {
     KindKey {
         group: resource.group.clone(),
@@ -671,20 +685,7 @@ impl AuditIndexes {
             scope.clone(),
             minor,
         ));
-        let subscription = state
-            .feeds
-            .subscribe(
-                here,
-                Ask {
-                    kinds: audited()
-                        .iter()
-                        .map(|(resource, _)| key_of(resource))
-                        .collect(),
-                    scope,
-                    binding: Binding::Page,
-                },
-            )
-            .await?;
+        let subscription = state.feeds.subscribe(here, feed_ask(scope)).await?;
         let index = self
             .clusters
             .entry(context.clone())
