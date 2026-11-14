@@ -49,6 +49,7 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { Composition, ConditionRows } from "@/components/object/detail-blocks";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
+import { WorkloadFlows } from "../../-components/workload-traffic";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { PinAction } from "../../-components/PinAction";
@@ -322,6 +323,13 @@ export function DaemonSetDetail() {
                 />
               }
               traffic={<TrafficChain query={connections} />}
+              flows={
+                <WorkloadFlows
+                  kind={ResourceType.DaemonSet}
+                  namespace={namespace}
+                  name={name}
+                />
+              }
               declared={
                 <FactBlock
                   title={t("action", "howDeclared")}

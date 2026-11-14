@@ -1,0 +1,186 @@
+/**
+ * Who calls a workload and whom it calls, from the same reading the Traffic
+ * page draws. Not drawn where no supplier is connected or none of its
+ * sources has series: one line of advice per page would be a nag.
+ */
+import { Link } from "@tanstack/react-router";
+
+import { useShareSection } from "@/components/share/screen-share";
+import { Section, SectionHeader } from "@/components/ui/section";
+import type { WorkloadKey } from "@/generated/types";
+import { useTraffic, type TrafficState } from "@/hooks/useTraffic";
+import { useT } from "@/i18n/useT";
+import { crdInGroup, objectLink } from "@/lib/links";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
+import { isEnd, type FlowRow } from "@/lib/traffic";
+import { WINDOW_WORD } from "../../-traffic/traffic-words";
+import {
+  rowWords,
+  subjectNotes,
+  subjectOf,
+  trafficSection,
+} from "./workload-traffic-words";
+
+function Peer({ row, peer }: { row: FlowRow; peer: "from" | "to" }) {
+  const t = useT();
+  const { crdFor } = useCrdIndex();
+  const end = row[peer];
+  const link =
+    end.is === "workload"
+      ? objectLink({
+          kind: end.key.kind,
+          name: end.key.name,
+          namespace: end.key.namespace,
+          crd: crdInGroup(end.key, crdFor) ?? undefined,
+        })
+      : null;
+  const [name, ...rest] = rowWords(row, peer, t);
+  return (
+    <li className="flex items-baseline gap-3 text-[12px]">
+      {link ? (
+        <Link
+          {...link}
+          className="min-w-0 truncate font-mono text-info hover:underline"
+        >
+          {name}
+        </Link>
+      ) : (
+        <span className="min-w-0 truncate font-mono">{name}</span>
+      )}
+      <span className="ml-auto shrink-0 font-mono tabular-nums text-fg-mut">
+        {rest.filter(Boolean).join(" · ")}
+      </span>
+    </li>
+  );
+}
+
+/** The block for a workload page, nothing until the page knows which workload. */
+export function WorkloadFlows(props: {
+  kind: string;
+  namespace: string | null | undefined;
+  name: string | null | undefined;
+}) {
+  const subject = subjectOf(props.kind, props.namespace, props.name);
+  return subject ? <WorkloadTraffic subject={subject} /> : null;
+}
+
+export function WorkloadTraffic({ subject }: { subject: WorkloadKey }) {
+  const state = useTraffic({
+    scope: [subject.namespace],
+    window: "5m",
+    subject,
+    refresh: "steady",
+  });
+  return <Block state={state} subject={subject} />;
+}
+
+export function Block({
+  state,
+  subject,
+}: {
+  state: TrafficState;
+  subject: WorkloadKey;
+}) {
+  const t = useT();
+  const window = t("traffic", WINDOW_WORD["5m"]);
+  const read = state.says === "read" ? state : null;
+  const callers = read ? read.rows.filter((row) => isEnd(row.to, subject)) : [];
+  const callees = read
+    ? read.rows.filter((row) => isEnd(row.from, subject))
+    : [];
+  const notes = read
+    ? subjectNotes(
+        read.reading,
+        callers.length + callees.length === 0,
+        window,
+        t
+      )
+    : [];
+  useShareSection(read ? "traffic" : null, () =>
+    trafficSection(callers, callees, notes, t)
+  );
+
+  switch (state.says) {
+    case "absent":
+    case "checking":
+    case "looking":
+    case "noSource":
+      return null;
+    case "unreachable":
+    case "failed":
+      return (
+        <Section>
+          <SectionHeader title={t("traffic", "title")} />
+          <p className="px-1.5 text-[11.5px] text-err">
+            {state.says === "unreachable"
+              ? t("traffic", "unreachable", {
+                  endpoint: state.endpoint,
+                  reason: state.reason,
+                })
+              : t("traffic", "failed", {
+                  endpoint: state.endpoint,
+                  said: state.said,
+                })}
+          </p>
+        </Section>
+      );
+    case "reading":
+      return (
+        <Section>
+          <SectionHeader
+            title={t("traffic", "title")}
+            count={t("traffic", "reading", { endpoint: state.endpoint })}
+          />
+        </Section>
+      );
+    case "read":
+      return (
+        <Section>
+          <SectionHeader
+            title={t("traffic", "title")}
+            count={t("traffic", "blockCaption", {
+              sources: state.reading.sources
+                .map((source) => source.name)
+                .join(", "),
+              endpoint: state.endpoint,
+              window,
+            })}
+          />
+          {state.lastFailed !== null && (
+            <p className="px-1.5 text-[11.5px] text-err">
+              {t("traffic", "lastFailed", { said: state.lastFailed })}
+            </p>
+          )}
+          {notes.map((note) => (
+            <p key={note} className="px-1.5 text-[11.5px] text-fg-mut">
+              {note}
+            </p>
+          ))}
+          {callers.length > 0 && (
+            <div className="px-1.5 pt-1">
+              <p className="text-[11px] font-medium text-fg-fnt">
+                {t("traffic", "callers")}
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {callers.map((row) => (
+                  <Peer key={row.id} row={row} peer="from" />
+                ))}
+              </ul>
+            </div>
+          )}
+          {callees.length > 0 && (
+            <div className="px-1.5 pt-1">
+              <p className="text-[11px] font-medium text-fg-fnt">
+                {t("traffic", "callees")}
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {callees.map((row) => (
+                  <Peer key={row.id} row={row} peer="to" />
+                ))}
+              </ul>
+            </div>
+          )}
+        </Section>
+      );
+  }
+}

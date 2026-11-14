@@ -49,6 +49,7 @@ import { ScaleDialog } from "../../../-object/ScaleDialog";
 import { scaleWarnings } from "@/lib/governance";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
+import { WorkloadFlows } from "../../-components/workload-traffic";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
@@ -339,6 +340,13 @@ export function StatefulSetDetail() {
                 />
               }
               traffic={<TrafficChain query={connections} />}
+              flows={
+                <WorkloadFlows
+                  kind={ResourceType.StatefulSet}
+                  namespace={namespace}
+                  name={name}
+                />
+              }
               declared={
                 <FactBlock
                   title={t("columns", "howDeclared")}
