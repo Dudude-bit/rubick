@@ -287,10 +287,12 @@ impl Object {
         })
     }
 
-    /// A pod as the overview keeps it: labels, owners and status.
+    /// A pod as the watch layer cut it: what a pod with no workload above it
+    /// uses is read off its own spec, so its volumes and the references its
+    /// containers name are kept.
     #[must_use]
     pub fn pod(mut pod: Pod) -> Self {
-        crate::overview::strip_pod(&mut pod);
+        stripped_meta(&mut pod.metadata);
         Object::Pod(Box::new(pod))
     }
 

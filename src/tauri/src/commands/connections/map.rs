@@ -339,7 +339,7 @@ pub fn slice_of(held: Held, now: chrono::DateTime<chrono::Utc>) -> Slice {
         );
     }
 
-    folded_owners(&held, &snapshot, &claimed, &mut nodes);
+    folded_owners(&held, &snapshot, &claimed, &mut nodes, &mut out);
     resolve_named(&mut out.edges, &held);
     let edges = edges_of(&out.edges);
     named_nodes(&edges, &out.edges, &held, &mut nodes);
@@ -715,6 +715,7 @@ fn folded_owners(
     snapshot: &Snapshot,
     claimed: &HashMap<String, String>,
     nodes: &mut BTreeMap<String, TopologyNode>,
+    out: &mut Neighbourhood,
 ) {
     if snapshot.pods.is_err() {
         return;
@@ -745,6 +746,10 @@ fn folded_owners(
         if let Some(node) = nodes.get_mut(&id) {
             node.pods = Some(tally(&pods));
             continue;
+        }
+        // No template states what these pods use; each pod's own spec does.
+        for spec in pods.iter().filter_map(|pod| pod.spec.as_ref()) {
+            uses_from_spec(ns, &owner, spec, &snapshot.claims, out);
         }
         nodes.insert(
             id.clone(),

@@ -337,3 +337,62 @@ async fn a_map_ends_when_the_layer_closes_its_channel() {
         Ok(0)
     );
 }
+
+/// A pod no workload owns states what it uses only in its own spec. Read
+/// from a pod as the watch layer delivers it, a Secret it takes its whole
+/// environment from must still be drawn: without the reference the edge is
+/// silently absent, which reads as "uses nothing".
+#[test]
+fn a_pod_level_use_through_env_from_survives_the_layer_s_cut() {
+    let mut pod: kube::api::DynamicObject = serde_json::from_value(json!({
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+            "name": "db-1", "namespace": "shop", "uid": "db-1",
+            "ownerReferences": [{ "apiVersion": "postgresql.cnpg.io/v1", "kind": "Cluster",
+                                  "name": "db", "uid": "db", "controller": true }],
+        },
+        "spec": {
+            "volumes": [{ "name": "conf", "configMap": { "name": "db-conf" } }],
+            "containers": [{
+                "name": "postgres",
+                "envFrom": [{ "secretRef": { "name": "db-env" } }],
+                "volumeMounts": [{ "name": "conf", "mountPath": "/etc/db" }],
+            }],
+        },
+        "status": { "phase": "Running" },
+    }))
+    .expect("a pod");
+    crate::feeds::trim_pod(&mut pod);
+    let mut stores = Stores::default();
+    for kind in [Kind::Pod, Kind::Secret] {
+        stores.apply(read(kind, None, Reading::Synced));
+    }
+    for feed in feed::feeds_of(
+        crate::feeds::Update::Applied {
+            slot: slot(Kind::Pod, None),
+            object: Arc::new(pod),
+        },
+        &std::collections::BTreeMap::new(),
+    ) {
+        stores.apply(feed);
+    }
+    let slice = crate::commands::connections::map::slice_of(
+        stores.held("shop", OtherPolicies::none(), now()),
+        now(),
+    );
+    assert!(
+        slice
+            .edges
+            .contains_key("postgresql.cnpg.io/Cluster/shop/db>uses>/Secret/shop/db-env"),
+        "{:?}",
+        slice.edges.keys()
+    );
+    // The mount survives too: without it the volume reads "not mounted".
+    let conf = &slice.edges["postgresql.cnpg.io/Cluster/shop/db>uses>/ConfigMap/shop/db-conf"];
+    assert!(conf.relations.iter().any(|relation| matches!(
+        relation,
+        crate::resources::Relation::Uses { usages }
+            if usages.iter().any(|use_| matches!(use_, crate::resources::Usage::Mount { path, .. } if path == "/etc/db"))
+    )));
+}
