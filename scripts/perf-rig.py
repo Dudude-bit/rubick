@@ -7,6 +7,7 @@ annotations at a chosen rate so the watch stream carries real events while
 Diagnostics records. Numbers from anything smaller are not numbers.
 
     scripts/perf-rig.py up            # create the cluster and 10 000 pods
+    scripts/perf-rig.py up --shape map  # 60 namespaces, 500 Deployments of 20 pods, what they use
     scripts/perf-rig.py churn -r 100  # 100 updates per second, until Ctrl-C
     scripts/perf-rig.py logs          # five pods writing 50 lines per second
     scripts/perf-rig.py status
@@ -91,20 +92,101 @@ def pod(i):
     }
 
 
+MAP_NAMESPACES = 60
+MAP_DEPLOYMENTS = 500
+MAP_REPLICAS = 20
+UNSCHEDULABLE = {"perf.rubick/unschedulable": "true"}
+
+
+def map_objects(n):
+    """One app of the map shape: a Deployment of Pending pods, the Service in
+    front of it, the ConfigMap and Secret it reads, and on some of them an
+    Ingress, an autoscaler, a budget and a NetworkPolicy."""
+    ns = f"perf-map-{n % MAP_NAMESPACES}"
+    name = f"d-{n:03}"
+    labels = {"app": name, "perf.rubick/rig": "true", "app.kubernetes.io/part-of": f"suite-{n % 25}"}
+    meta = lambda kind_name: {"name": kind_name, "namespace": ns, "labels": labels}
+    items = [
+        {"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta(f"{name}-config"), "data": {"mode": "perf"}},
+        {"apiVersion": "v1", "kind": "Secret", "metadata": meta(f"{name}-env"), "stringData": {"MODE": "perf"}},
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": meta(name),
+            "spec": {
+                "replicas": MAP_REPLICAS,
+                "selector": {"matchLabels": {"app": name}},
+                "template": {
+                    "metadata": {"labels": labels},
+                    "spec": {
+                        "nodeSelector": UNSCHEDULABLE,
+                        "volumes": [{"name": "config", "configMap": {"name": f"{name}-config"}}],
+                        "containers": [
+                            {
+                                "name": "pause",
+                                "image": "registry.k8s.io/pause:3.10",
+                                "envFrom": [{"secretRef": {"name": f"{name}-env"}}],
+                                "volumeMounts": [{"name": "config", "mountPath": "/etc/app"}],
+                            }
+                        ],
+                    },
+                },
+            },
+        },
+        {"apiVersion": "v1", "kind": "Service", "metadata": meta(name), "spec": {"selector": {"app": name}, "ports": [{"port": 80}]}},
+    ]
+    if n % 10 == 0:
+        items += [
+            {
+                "apiVersion": "networking.k8s.io/v1",
+                "kind": "Ingress",
+                "metadata": meta(name),
+                "spec": {"rules": [{"host": f"{name}.perf.local", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": name, "port": {"number": 80}}}}]}}]},
+            },
+            {
+                "apiVersion": "autoscaling/v2",
+                "kind": "HorizontalPodAutoscaler",
+                "metadata": meta(name),
+                "spec": {"scaleTargetRef": {"apiVersion": "apps/v1", "kind": "Deployment", "name": name}, "minReplicas": MAP_REPLICAS, "maxReplicas": MAP_REPLICAS + 10, "metrics": [{"type": "Resource", "resource": {"name": "cpu", "target": {"type": "Utilization", "averageUtilization": 80}}}]},
+            },
+            {"apiVersion": "policy/v1", "kind": "PodDisruptionBudget", "metadata": meta(name), "spec": {"minAvailable": 1, "selector": {"matchLabels": {"app": name}}}},
+        ]
+    if n % 50 == 0:
+        items.append(
+            {"apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy", "metadata": meta(name), "spec": {"podSelector": {"matchLabels": {"app": name}}, "policyTypes": ["Ingress"]}}
+        )
+    return items
+
+
+def up_map(context):
+    namespaces = [f"perf-map-{n}" for n in range(MAP_NAMESPACES)]
+    apply_list(
+        context,
+        [{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": ns, "labels": {"perf.rubick/rig": "true"}}} for ns in namespaces],
+    )
+    wait_for_service_accounts(context, namespaces)
+    batch = 25
+    for start in range(0, MAP_DEPLOYMENTS, batch):
+        apply_list(context, [item for n in range(start, min(start + batch, MAP_DEPLOYMENTS)) for item in map_objects(n)])
+        print(f"\r{min(start + batch, MAP_DEPLOYMENTS)} / {MAP_DEPLOYMENTS} apps", end="", flush=True)
+    print()
+    print(f"context {context}: {MAP_DEPLOYMENTS} Deployments of {MAP_REPLICAS} Pending pods in {MAP_NAMESPACES} namespaces")
+
+
 def apply_list(context, items):
     body = json.dumps({"apiVersion": "v1", "kind": "List", "items": items})
     kubectl(context, "apply", "-f", "-", stdin=body)
 
 
-def wait_for_service_accounts(context):
+def wait_for_service_accounts(context, namespaces=None):
     """A pod submitted before its namespace's default ServiceAccount exists is refused."""
-    for n in range(NAMESPACES):
+    for ns in namespaces or [f"perf-{n}" for n in range(NAMESPACES)]:
         for _ in range(60):
-            if kubectl(context, "get", "serviceaccount", "default", "-n", f"perf-{n}", check=False).returncode == 0:
+            if kubectl(context, "get", "serviceaccount", "default", "-n", ns, check=False).returncode == 0:
                 break
             time.sleep(0.5)
         else:
-            sys.exit(f"perf-{n}: the default ServiceAccount never appeared")
+            sys.exit(f"{ns}: the default ServiceAccount never appeared")
 
 
 def rig_pods(context):
@@ -125,6 +207,9 @@ def up(args):
     if not context:
         context = next((c for c in (f"kind-{CLUSTER}", f"k3d-{CLUSTER}") if context_exists(c)), None)
         context = context or create_cluster()
+    if args.shape == "map":
+        up_map(context)
+        return
     apply_list(
         context,
         [
@@ -276,6 +361,7 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("up")
     s.add_argument("--pods", type=int, default=10_000)
+    s.add_argument("--shape", choices=["pods", "map"], default="pods", help="map: apps the cluster map draws")
     s.set_defaults(fn=up)
     s = sub.add_parser("churn")
     s.add_argument("-r", "--rate", type=float, default=100, help="updates per second")
