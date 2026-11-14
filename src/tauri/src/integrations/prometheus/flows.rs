@@ -1352,6 +1352,51 @@ mod tests {
         );
     }
 
+    /// A pod in Istio's ambient mesh runs no sidecar: the annotation istio-cni
+    /// writes is all that says the mesh sees it, and it must reach the count
+    /// through the overview store, which strips a pod, as through a list.
+    #[test]
+    fn an_ambient_pod_is_meshed_through_the_store_and_through_a_list() {
+        let ambient = pod(
+            "shop",
+            "a-0",
+            Some(("StatefulSet", "a")),
+            json!({"metadata": {"annotations": {"ambient.istio.io/redirection": "enabled"}}}),
+        );
+        let mut stored = (*ambient).clone();
+        crate::overview::strip_pod(&mut stored);
+        let marker = PodMarker {
+            source: 0,
+            containers: vec!["istio-proxy".into()],
+            annotated: vec!["ambient.istio.io/redirection".into()],
+        };
+        let asked = [by_name(0, Measure::Requests)];
+        for (path, read) in [
+            ("listed", read_of(vec![ambient.clone()])),
+            ("stored", read_of(vec![Arc::new(stored.clone())])),
+        ] {
+            let observed = fold(
+                &asked,
+                vec![Ok(vec![])],
+                Some(&read),
+                None,
+                None,
+                Some(&key("StatefulSet", "a")),
+                std::slice::from_ref(&marker),
+            )
+            .observed;
+            assert_eq!(
+                observed,
+                Some(vec![Observed {
+                    source: 0,
+                    pods: 1,
+                    marked: 1
+                }]),
+                "{path}"
+            );
+        }
+    }
+
     /// The busiest flows are kept and the rest counted; on a mesh of 500
     /// workloads with long names and 2000 pairs the answer stays under one IPC
     /// message.
