@@ -124,6 +124,28 @@ export function formatAmount(
   return format.format(value);
 }
 
+const rateFormats = new Map<string, Intl.NumberFormat>();
+
+/** A rate to three significant digits, whole from a hundred up: 0.0042, 9.81, 1234. */
+export function formatRate(
+  value: number,
+  locale: string = currentLocale()
+): string {
+  const whole = Math.abs(value) >= 100;
+  const key = `${locale}|${whole}`;
+  let format = rateFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(
+      locale,
+      whole
+        ? { maximumFractionDigits: 0, useGrouping: false }
+        : { maximumSignificantDigits: 3 }
+    );
+    rateFormats.set(key, format);
+  }
+  return format.format(value);
+}
+
 const percentFormats = new Map<string, Intl.NumberFormat>();
 
 /** A ratio as a per cent, with `fractionDigits` decimals at most. */

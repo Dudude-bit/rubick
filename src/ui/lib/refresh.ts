@@ -61,6 +61,12 @@ export const REFRESH_INTERVALS = {
    */
   steady: 30_000,
   /**
+   * A rate Prometheus works out over minutes of samples, which moves only
+   * when a scrape lands. Asking faster repeats the same arithmetic on
+   * somebody else's server for an answer that has not changed.
+   */
+  scraped: 15_000,
+  /**
    * A count the shell keeps beside a page about something else: the sidebar
    * badge and the status bar's "Needs attention" on every screen. The page
    * that is about it asks at its own rate and the shell shares that answer,

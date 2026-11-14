@@ -31,6 +31,7 @@ import {
 } from "./monitors/data";
 import { RANGE_SPECS } from "./queries";
 import { reportOf } from "./report";
+import { flowSources, readFlows } from "./traffic";
 import { readSavedConnection } from "./saved-connection";
 import { formatSince } from "@/lib/utils";
 
@@ -66,6 +67,9 @@ import { formatSince } from "@/lib/utils";
  *   prices the reader entered, or says how to get either.
  * - `usage.workloads` — a day of every workload's use, for efficiency.
  *   Absent, efficiency is "not measured".
+ * - `traffic.flows` — who talks to whom, where Istio's, Hubble's, Beyla's
+ *   or Caretta's series are here. Absent, the Traffic page says what would
+ *   supply it.
  */
 export default defineVendor({
   id: "prometheus",
@@ -224,6 +228,7 @@ export default defineVendor({
     "cost.now": costNow,
     "cost.history": costHistory,
     "usage.workloads": workloadUsage,
+    "traffic.flows": { sources: flowSources, read: readFlows },
     "object.report": reportOf,
   },
 });
