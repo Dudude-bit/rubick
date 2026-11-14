@@ -251,8 +251,6 @@ pub fn params(kind: &KindKey) -> Params {
 
 /// What a container carries that no feed reader reads.
 const CONTAINER_DROPPED: &[&str] = &[
-    "env",
-    "envFrom",
     "command",
     "args",
     "workingDir",
@@ -260,7 +258,6 @@ const CONTAINER_DROPPED: &[&str] = &[
     "readinessProbe",
     "startupProbe",
     "lifecycle",
-    "volumeMounts",
     "volumeDevices",
     "securityContext",
     "terminationMessagePath",
@@ -294,8 +291,47 @@ const STATUS_DROPPED: &[&str] = &[
     "user",
 ];
 
+/// What a container reads from `ConfigMap`s, `Secret`s and volumes, kept as
+/// references: an env entry only where it names a key of a `ConfigMap` or a
+/// `Secret`, and never its literal value; `envFrom` whole, which names no
+/// value; each mount's volume, path, subPath and readOnly.
+fn keep_references(container: &mut serde_json::Map<String, serde_json::Value>) {
+    if let Some(serde_json::Value::Array(env)) = container.get_mut("env") {
+        env.retain_mut(|entry| {
+            let name = entry.get("name").cloned();
+            let reference = ["configMapKeyRef", "secretKeyRef"].iter().find_map(|key| {
+                let held = entry.pointer(&format!("/valueFrom/{key}"))?;
+                Some(serde_json::json!({ *key: held }))
+            });
+            match (name, reference) {
+                (Some(name), Some(reference)) => {
+                    *entry = serde_json::json!({ "name": name, "valueFrom": reference });
+                    true
+                }
+                _ => false,
+            }
+        });
+        if env.is_empty() {
+            container.remove("env");
+        }
+    }
+    if let Some(serde_json::Value::Array(mounts)) = container.get_mut("volumeMounts") {
+        for mount in mounts.iter_mut() {
+            if let serde_json::Value::Object(mount) = mount {
+                mount.retain(|field, _| {
+                    matches!(
+                        field.as_str(),
+                        "name" | "mountPath" | "subPath" | "readOnly"
+                    )
+                });
+            }
+        }
+    }
+}
+
 /// A pod cut to its identity, owners, placement, containers' names, images,
-/// ports and resources, volumes, and status without the runtime's ids.
+/// ports, resources and the references they read, volumes, and status
+/// without the runtime's ids.
 pub fn trim_pod(pod: &mut DynamicObject) {
     if let Some(annotations) = pod.metadata.annotations.as_mut() {
         annotations.remove("kubectl.kubernetes.io/last-applied-configuration");
@@ -323,6 +359,19 @@ pub fn trim_pod(pod: &mut DynamicObject) {
         for list in ["containers", "initContainers", "ephemeralContainers"] {
             each(spec.get_mut(list), CONTAINER_DROPPED);
         }
+        for list in ["containers", "initContainers"] {
+            if let Some(serde_json::Value::Array(containers)) = spec.get_mut(list) {
+                for container in containers.iter_mut() {
+                    if let serde_json::Value::Object(container) = container {
+                        keep_references(container);
+                    }
+                }
+            }
+        }
+        each(
+            spec.get_mut("ephemeralContainers"),
+            &["env", "envFrom", "volumeMounts"],
+        );
         drop_all(Some(spec), SPEC_DROPPED);
     }
     if let Some(status) = pod.data.get_mut("status") {
@@ -2093,18 +2142,24 @@ mod tests {
     /// containers with env, probes and mounts, the projected token volume,
     /// five conditions and two container statuses.
     pub(crate) fn realistic_pod(n: usize) -> serde_json::Value {
-        let env: Vec<serde_json::Value> = (0..8)
+        let mut env: Vec<serde_json::Value> = (0..8)
             .map(|e| json!({ "name": format!("SETTING_{e}"), "value": format!("value-for-setting-{e}-of-the-web-app") }))
             .collect();
+        env.extend([
+            json!({ "name": "DB_PASSWORD", "valueFrom": { "secretKeyRef": { "name": "web-db", "key": "password" } } }),
+            json!({ "name": "FEATURE", "valueFrom": { "configMapKeyRef": { "name": "web-flags", "key": "feature", "optional": true } } }),
+            json!({ "name": "POD_IP", "valueFrom": { "fieldRef": { "apiVersion": "v1", "fieldPath": "status.podIP" } } }),
+        ]);
         let probe = json!({ "httpGet": { "path": "/healthz", "port": 8080, "scheme": "HTTP" },
             "timeoutSeconds": 1, "periodSeconds": 10, "successThreshold": 1, "failureThreshold": 3 });
         let container = |name: &str| {
             json!({
                 "name": name, "image": format!("registry.example.com/team/{name}:1.4.2"),
                 "ports": [{ "name": "http", "containerPort": 8080, "protocol": "TCP" }],
-                "env": env, "args": ["--config=/etc/web/config.yaml", "--log-level=info"],
+                "env": env, "envFrom": [{ "configMapRef": { "name": "web-env" } }],
+                "args": ["--config=/etc/web/config.yaml", "--log-level=info"],
                 "resources": { "requests": { "cpu": "100m", "memory": "128Mi" }, "limits": { "memory": "256Mi" } },
-                "volumeMounts": [{ "name": "config", "mountPath": "/etc/web" },
+                "volumeMounts": [{ "name": "config", "mountPath": "/etc/web", "mountPropagation": "None" },
                     { "name": "kube-api-access-x2k9p", "readOnly": true, "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount" }],
                 "livenessProbe": probe, "readinessProbe": probe,
                 "terminationMessagePath": "/dev/termination-log", "terminationMessagePolicy": "File",
@@ -2265,16 +2320,21 @@ mod tests {
             list_values(&generation, &slot, (0..10_000).map(build));
             let (heap, json) = resident(&context, &slot);
             report.push(format!(
-                "{}: {} MiB whole, {} MiB kept ({} MiB as JSON)",
+                "{}: {} MiB whole ({} MiB as JSON), {} MiB kept ({} MiB as JSON)",
                 slot.kind.plural,
                 whole >> 20,
+                whole_json >> 20,
                 heap >> 20,
                 json >> 20
             ));
+            eprintln!("{}", report.last().unwrap());
             match slot.kind.plural.as_str() {
                 "pods" => {
                     assert!(heap * 4 < whole, "pods kept as trees");
-                    assert!(json * 2 < whole_json, "a pod kept with what nobody reads");
+                    assert!(
+                        json * 5 < whole_json * 3,
+                        "a pod kept with what nobody reads"
+                    );
                 }
                 _ => assert_eq!(heap, 0, "{} kept between changes", slot.kind.plural),
             }
@@ -2309,8 +2369,22 @@ mod tests {
             })
             .expect("the pod is handed over");
         let container = &handed.data["spec"]["containers"][0];
-        assert!(container.get("env").is_none() && container.get("livenessProbe").is_none());
-        assert!(container.get("volumeMounts").is_none());
+        assert!(container.get("livenessProbe").is_none() && container.get("args").is_none());
+        assert_eq!(
+            container["env"],
+            json!([
+                { "name": "DB_PASSWORD", "valueFrom": { "secretKeyRef": { "name": "web-db", "key": "password" } } },
+                { "name": "FEATURE", "valueFrom": { "configMapKeyRef": { "name": "web-flags", "key": "feature", "optional": true } } },
+            ])
+        );
+        assert_eq!(
+            container["envFrom"],
+            json!([{ "configMapRef": { "name": "web-env" } }])
+        );
+        assert_eq!(
+            container["volumeMounts"][0],
+            json!({ "name": "config", "mountPath": "/etc/web" })
+        );
         assert_eq!(container["image"], "registry.example.com/team/web:1.4.2");
         assert_eq!(container["ports"][0]["containerPort"], 8080);
         assert_eq!(handed.data["spec"]["nodeName"], "node-7");
@@ -2327,6 +2401,53 @@ mod tests {
             Some("web")
         );
         context.end();
+    }
+
+    /// What a pod reads from a `ConfigMap` or a `Secret` survives the trim as a
+    /// reference, on containers and init containers alike, and no literal
+    /// value does; an ephemeral container keeps none of it. Would break if a
+    /// pod owned by a custom resource lost the edges the map draws from its
+    /// environment, or a literal came back with them.
+    #[test]
+    fn a_trimmed_pod_keeps_the_references_its_containers_read_and_no_literal() {
+        let literal = format!("lit-{}", "eral");
+        let mut pod: DynamicObject = serde_json::from_value(json!({
+            "apiVersion": "v1", "kind": "Pod", "metadata": { "name": "cart-0", "namespace": "shop" },
+            "spec": {
+                "initContainers": [{ "name": "migrate", "image": "cart:1",
+                    "envFrom": [{ "secretRef": { "name": "cart-env" }, "prefix": "DB_" }],
+                    "env": [{ "name": "MODE", "value": literal }] }],
+                "containers": [{ "name": "cart", "image": "cart:1",
+                    "env": [{ "name": "TOKEN", "valueFrom": { "secretKeyRef": { "name": "cart-api", "key": "token" } } },
+                            { "name": "LIMIT", "valueFrom": { "resourceFieldRef": { "resource": "limits.memory" } } }],
+                    "volumeMounts": [{ "name": "data", "mountPath": "/data", "subPath": "cart", "readOnly": true,
+                                       "subPathExpr": "$(POD)" }] }],
+                "ephemeralContainers": [{ "name": "debug", "image": "busybox",
+                    "envFrom": [{ "secretRef": { "name": "cart-env" } }],
+                    "volumeMounts": [{ "name": "data", "mountPath": "/data" }] }]
+            }
+        }))
+        .unwrap();
+
+        trim_pod(&mut pod);
+
+        let spec = &pod.data["spec"];
+        assert_eq!(
+            spec["initContainers"][0]["envFrom"],
+            json!([{ "secretRef": { "name": "cart-env" }, "prefix": "DB_" }])
+        );
+        assert!(spec["initContainers"][0].get("env").is_none());
+        assert_eq!(
+            spec["containers"][0]["env"],
+            json!([{ "name": "TOKEN", "valueFrom": { "secretKeyRef": { "name": "cart-api", "key": "token" } } }])
+        );
+        assert_eq!(
+            spec["containers"][0]["volumeMounts"],
+            json!([{ "name": "data", "mountPath": "/data", "subPath": "cart", "readOnly": true }])
+        );
+        let debug = &spec["ephemeralContainers"][0];
+        assert!(debug.get("envFrom").is_none() && debug.get("volumeMounts").is_none());
+        assert!(!pod.data.to_string().contains(&literal));
     }
 
     fn config_map_list(at: &str, names: &[&str]) -> String {
