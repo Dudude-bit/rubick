@@ -134,38 +134,56 @@ fn elsewhere(subject: Subject, on: Subject) -> ObjectAudit {
     }
 }
 
-/// One object's findings, for its page and its peek.
+/// One object's findings, for its page and its peek, or for a row the
+/// Audit page opens. `namespace` is `None` for a cluster-scoped object and
+/// for a namespace's own findings.
 pub async fn object_audit(
     state: &AppState,
     kind: &str,
-    namespace: &str,
+    namespace: Option<&str>,
     name: &str,
 ) -> Result<ObjectAudit> {
-    crate::validation::validate_namespace(namespace)?;
-    crate::validation::validate_dns_subdomain(name)?;
+    if let Some(namespace) = namespace {
+        crate::validation::validate_namespace(namespace)?;
+    }
+    if kind == "Namespace" {
+        crate::validation::validate_namespace(name)?;
+    } else {
+        // A role's name may hold a colon, which no DNS name does.
+        crate::validation::validate_path_segment(name)?;
+    }
     let here = state.here()?;
     let minor = super::minor_of(state, &here.context);
     let subject = Subject {
         kind: kind.to_string(),
-        namespace: Some(namespace.to_string()),
+        namespace: namespace.map(str::to_string),
         name: name.to_string(),
     };
 
     let resource = audited()
         .into_iter()
         .map(|(resource, _)| resource)
-        .find(|resource| resource.kind == kind && kind != "Pod");
-    if let (Some(resource), Some(index)) = (&resource, state.audit.running(&here.context)) {
-        if why_unread(&index.slot_states(), &key_of(resource), Some(namespace)).is_none() {
+        .find(|resource| resource.kind == kind);
+    if let Some(index) = state.audit.running(&here.context) {
+        let read = resource.as_ref().is_none_or(|resource| {
+            why_unread(&index.slot_states(), &key_of(resource), namespace).is_none()
+        });
+        if read {
             let owners = state.ownership.running(&here.context);
             let missing = Why::Reading;
             let owners = owners.as_deref().ok_or(&missing);
-            let seen = world(&index, owners, Some(&[namespace.to_string()]));
+            let scope = namespace.map(|namespace| [namespace.to_string()]);
+            let seen = world(&index, owners, scope.as_ref().map(<[String; 1]>::as_slice));
             if let Some(found) = object_in(&seen, &subject) {
                 return Ok(found);
             }
         }
     }
+    let Some(namespace) = namespace else {
+        return Err(Error::InvalidInput(format!(
+            "{kind} {name} is judged only while the Audit page is open"
+        )));
+    };
 
     let client = (*here.client).clone();
     let (own, facts, replicas, system) = if kind == "Pod" {

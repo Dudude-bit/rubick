@@ -305,7 +305,7 @@ export async function getAudit(
 
 export async function getAuditOf(
   kind: string,
-  namespace: string,
+  namespace: string | null,
   name: string
 ): Promise<ObjectAudit> {
   return invoke<ObjectAudit>("get_audit_of", { kind, namespace, name });

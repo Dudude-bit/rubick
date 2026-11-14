@@ -23,18 +23,24 @@ pub async fn get_audit(
     .await
 }
 
-/// One workload's or pod's findings. Never starts Audit's watches.
+/// One object's findings: a workload's or pod's for its page and peek, any
+/// object's while the Audit page is open. Never starts Audit's watches.
 #[tauri::command]
 pub async fn get_audit_of(
     kind: String,
-    namespace: String,
+    namespace: Option<String>,
     name: String,
     state: State<'_, AppState>,
 ) -> Result<ObjectAudit> {
     crate::client::clock::timed(
         &state.perf,
         "getAuditOf",
-        Box::pin(crate::audit::object_audit(&state, &kind, &namespace, &name)),
+        Box::pin(crate::audit::object_audit(
+            &state,
+            &kind,
+            namespace.as_deref(),
+            &name,
+        )),
     )
     .await
 }
