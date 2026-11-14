@@ -951,23 +951,10 @@ fn what_a_followed_object_costs() {
     }
 }
 
-/// What is read by name only is held open for a timeline on screen and no
-/// longer. Fails if a word from the window holds it for good, or not at all.
-#[test]
-fn a_surface_on_screen_holds_its_cluster_for_a_while_and_no_longer() {
-    let (timelines, _rx) = holder(None, false);
-    let now = std::time::Instant::now();
-    assert!(!timelines.held("kind", now));
-    timelines.hold("kind");
-    assert!(timelines.held("kind", std::time::Instant::now()));
-    assert!(!timelines.held("other", std::time::Instant::now()));
-    assert!(!timelines.held("kind", std::time::Instant::now() + HELD_FOR));
-}
-
 mod recording {
     use super::*;
     use crate::timeline::project::FOLLOWED;
-    use crate::timeline::recorder::{Named, Recorder, Slot, SlotState};
+    use crate::timeline::recorder::{Named, Recorder, Sight, Slot, SlotState};
 
     fn followed_kind(kind: &str) -> &'static project::Followed {
         FOLLOWED.iter().find(|f| f.kind == kind).expect("followed")
@@ -1007,9 +994,9 @@ mod recording {
     fn a_first_list_is_a_baseline_and_the_change_after_it_is_a_row() {
         let (_t, cluster, mut recorder) = recorder();
         let kind = followed_kind("Deployment");
-        recorder.listed(kind, [&deployment("nginx:1", 2, "v")], false);
+        recorder.listed(kind, None, [&deployment("nginx:1", 2, "v")], true);
         assert!(rows(&cluster).is_empty());
-        recorder.applied(kind, &deployment("nginx:2", 2, "v"));
+        recorder.applied(kind, None, &deployment("nginx:2", 2, "v"));
         let found = rows(&cluster);
         assert_eq!(found.len(), 1);
         assert_eq!(says(&found[0]), "changed");
@@ -1027,8 +1014,8 @@ mod recording {
             json!({"metadata": {"name": name, "namespace": "shop",
                 "creationTimestamp": "2026-11-01T00:00:00Z"}, "data": {"k": value}})
         };
-        recorder.listed(kind, [&cm("a", "1"), &cm("gone", "1")], false);
-        recorder.listed(kind, [&cm("a", "2"), &cm("new", "1")], true);
+        recorder.listed(kind, None, [&cm("a", "1"), &cm("gone", "1")], true);
+        recorder.listed(kind, None, [&cm("a", "2"), &cm("new", "1")], false);
         let mut found: Vec<(&str, String, bool)> = rows(&cluster)
             .iter()
             .map(|row| (says(row), row.name.clone(), row.at_relist))
@@ -1051,12 +1038,12 @@ mod recording {
         let (_t, cluster, mut recorder) = recorder();
         let kind = followed_kind("Deployment");
         let old = deployment("nginx:1", 2, "v");
-        recorder.listed(kind, [&old], false);
-        recorder.deleted(kind, &old);
-        recorder.applied(kind, &old);
+        recorder.listed(kind, None, [&old], true);
+        recorder.deleted(kind, None, &old);
+        recorder.applied(kind, None, &old);
         let mut anew = deployment("nginx:1", 2, "v");
         anew["metadata"]["creationTimestamp"] = json!("2026-11-02T00:00:00Z");
-        recorder.applied(kind, &anew);
+        recorder.applied(kind, None, &anew);
         let found: Vec<&str> = rows(&cluster).iter().map(says).collect();
         assert_eq!(found.len(), 2, "{found:?}");
         assert!(found.contains(&"deleted") && found.contains(&"created"));
@@ -1074,21 +1061,36 @@ mod recording {
     fn the_span_opens_on_every_watch_and_names_what_was_refused() {
         let (_t, cluster, mut recorder) = recorder();
         for kind in ["Deployment", "Secret", "Event"] {
-            recorder.state(Source::Followed, slot(kind, None), SlotState::Listing);
+            recorder.state(Source::Followed, slot(kind, None), SlotState::Listing, None);
         }
-        recorder.state(Source::Followed, slot("Deployment", None), SlotState::Live);
-        recorder.state(Source::Followed, slot("Event", None), SlotState::Live);
+        recorder.state(
+            Source::Followed,
+            slot("Deployment", None),
+            SlotState::Live,
+            None,
+        );
+        recorder.state(Source::Followed, slot("Event", None), SlotState::Live, None);
         assert!(
             followed_spans(&cluster).is_empty(),
             "opened while Secret listed"
         );
-        recorder.state(Source::Followed, slot("Secret", None), SlotState::Refused);
+        recorder.state(
+            Source::Followed,
+            slot("Secret", None),
+            SlotState::Refused,
+            None,
+        );
         let open = followed_spans(&cluster);
         assert_eq!(open.len(), 1);
         assert_eq!(open[0].unwatched, ["Secret"]);
         assert_eq!(open[0].kinds, ["Deployment", "Secret"]);
         assert_eq!(open[0].to, None);
-        recorder.state(Source::Followed, slot("Deployment", None), SlotState::Blind);
+        recorder.state(
+            Source::Followed,
+            slot("Deployment", None),
+            SlotState::Blind,
+            None,
+        );
         assert!(followed_spans(&cluster)[0].to.is_some());
     }
 
@@ -1098,17 +1100,29 @@ mod recording {
     #[test]
     fn a_kind_read_in_some_namespaces_narrows_the_span_and_names_the_rest() {
         let (_t, cluster, mut recorder) = recorder();
-        recorder.state(Source::Followed, slot("Deployment", None), SlotState::Live);
-        recorder.state(Source::Followed, slot("Secret", None), SlotState::Refused);
+        recorder.state(
+            Source::Followed,
+            slot("Deployment", None),
+            SlotState::Live,
+            None,
+        );
+        recorder.state(
+            Source::Followed,
+            slot("Secret", None),
+            SlotState::Refused,
+            None,
+        );
         recorder.state(
             Source::Followed,
             slot("Secret", Some("shop")),
             SlotState::Live,
+            None,
         );
         recorder.state(
             Source::Followed,
             slot("Secret", Some("ops")),
             SlotState::Refused,
+            None,
         );
         let span = followed_spans(&cluster).pop().expect("a span");
         assert_eq!(span.scope, ["shop"]);
@@ -1121,10 +1135,30 @@ mod recording {
     #[test]
     fn a_refusal_while_watching_starts_a_span_that_says_it() {
         let (_t, cluster, mut recorder) = recorder();
-        recorder.state(Source::Followed, slot("Secret", None), SlotState::Listing);
-        recorder.state(Source::Followed, slot("Deployment", None), SlotState::Live);
-        recorder.state(Source::Followed, slot("Secret", None), SlotState::Live);
-        recorder.state(Source::Followed, slot("Secret", None), SlotState::Refused);
+        recorder.state(
+            Source::Followed,
+            slot("Secret", None),
+            SlotState::Listing,
+            None,
+        );
+        recorder.state(
+            Source::Followed,
+            slot("Deployment", None),
+            SlotState::Live,
+            None,
+        );
+        recorder.state(
+            Source::Followed,
+            slot("Secret", None),
+            SlotState::Live,
+            None,
+        );
+        recorder.state(
+            Source::Followed,
+            slot("Secret", None),
+            SlotState::Refused,
+            None,
+        );
         let spans = followed_spans(&cluster);
         assert_eq!(spans.len(), 2);
         assert!(spans[0].to.is_some() && spans[0].unwatched.is_empty());
@@ -1150,15 +1184,15 @@ mod recording {
     #[test]
     fn a_kind_seen_by_name_says_its_generation_and_leaves_owned_births_to_their_owner() {
         let (_t, cluster, mut recorder) = recorder();
-        recorder.named_applied(&named("a", Some(1), false), false);
-        recorder.named_applied(&named("b", None, false), false);
+        recorder.named_seen(&named("a", Some(1), false), Sight::First);
+        recorder.named_seen(&named("b", None, false), Sight::First);
         assert!(rows(&cluster).is_empty(), "a first sight is a baseline");
-        recorder.named_applied(&named("a", Some(2), false), true);
-        recorder.named_applied(&named("b", None, false), true);
-        recorder.named_applied(&named("c", Some(1), true), true);
-        recorder.named_applied(&named("d", Some(1), false), true);
-        recorder.named_deleted("c");
-        recorder.named_deleted("d");
+        recorder.named_seen(&named("a", Some(2), false), Sight::Watched);
+        recorder.named_seen(&named("b", None, false), Sight::Watched);
+        recorder.named_seen(&named("c", Some(1), true), Sight::Watched);
+        recorder.named_seen(&named("d", Some(1), false), Sight::Watched);
+        recorder.named_gone("c", false);
+        recorder.named_gone("d", false);
         let found: Vec<(&str, String)> = rows(&cluster)
             .iter()
             .map(|row| (says(row), row.name.clone()))
@@ -1167,5 +1201,259 @@ mod recording {
         assert!(found.contains(&("generation", "job-a".to_string())));
         assert!(found.contains(&("created", "job-d".to_string())));
         assert!(found.contains(&("deleted", "job-d".to_string())));
+    }
+}
+
+mod following {
+    use super::*;
+    use crate::feeds::{FeedState, Update, Whole};
+    use crate::ownership::{KindKey, News, SlotKey};
+    use crate::timeline::follow::{feed, hear};
+    use crate::timeline::recorder::Recorder;
+    use kube::api::DynamicObject;
+
+    fn kind(group: &str, plural: &str) -> KindKey {
+        KindKey {
+            group: group.into(),
+            plural: plural.into(),
+        }
+    }
+
+    fn slot(group: &str, plural: &str) -> SlotKey {
+        SlotKey {
+            kind: kind(group, plural),
+            namespace: None,
+        }
+    }
+
+    fn object(value: Value) -> Arc<DynamicObject> {
+        Arc::new(serde_json::from_value(value).expect("an object"))
+    }
+
+    fn api(image: &str) -> Arc<DynamicObject> {
+        let mut value = deployment(image, 2, "v");
+        value["apiVersion"] = json!("apps/v1");
+        value["kind"] = json!("Deployment");
+        object(value)
+    }
+
+    fn state(group: &str, plural: &str, state: FeedState) -> Update {
+        Update::State {
+            slot: slot(group, plural),
+            state,
+        }
+    }
+
+    fn whole(why: Whole, objects: Vec<Arc<DynamicObject>>) -> Update {
+        Update::Whole {
+            slot: slot("apps", "deployments"),
+            why,
+            objects,
+        }
+    }
+
+    fn setup() -> (Arc<Timelines>, Arc<ClusterTimeline>, Recorder) {
+        let (timelines, _rx) = holder(None, false);
+        let cluster = timelines.cluster("kind");
+        let recorder = Recorder::new(cluster.clone(), Vec::new());
+        (timelines, cluster, recorder)
+    }
+
+    /// A watch that broke and listed again: the span ends where the layer
+    /// says it last saw, the next opens on the list, and what moved in
+    /// between is said to have been noticed. Fails if the blind stretch is
+    /// drawn as watched, or the change is lost or passed off as seen.
+    #[test]
+    fn a_break_ends_the_span_where_the_watch_went_blind_and_the_relist_says_what_moved() {
+        let (_t, cluster, mut recorder) = setup();
+        feed(
+            &mut recorder,
+            state("apps", "deployments", FeedState::Synced),
+        );
+        feed(&mut recorder, whole(Whole::Fresh, vec![api("nginx:1")]));
+        let blind = "2026-11-14T10:00:00Z";
+        feed(
+            &mut recorder,
+            state(
+                "apps",
+                "deployments",
+                FeedState::Blind {
+                    since: blind.into(),
+                },
+            ),
+        );
+        feed(
+            &mut recorder,
+            state("apps", "deployments", FeedState::Synced),
+        );
+        feed(&mut recorder, whole(Whole::Relist, vec![api("nginx:2")]));
+        let page = cluster.page(&query(Show::All));
+        let spans = page.spans.followed;
+        assert_eq!(spans.len(), 2);
+        assert_eq!(
+            spans[0].to,
+            Some(
+                chrono::DateTime::parse_from_rfc3339(blind)
+                    .unwrap()
+                    .timestamp_millis()
+            )
+        );
+        assert_eq!(spans[1].to, None);
+        assert_eq!(page.rows.len(), 1);
+        assert!(page.rows[0].at_relist);
+    }
+
+    /// A queue that overflowed is handed the whole set again with no break
+    /// in the watch: the app was watching all along. Fails if that draws a
+    /// gap, or loses what moved while the updates were dropped.
+    #[test]
+    fn a_queue_that_overflowed_is_a_relist_and_not_a_gap() {
+        let (_t, cluster, mut recorder) = setup();
+        feed(
+            &mut recorder,
+            state("apps", "deployments", FeedState::Synced),
+        );
+        feed(&mut recorder, whole(Whole::Fresh, vec![api("nginx:1")]));
+        feed(&mut recorder, whole(Whole::Relist, vec![api("nginx:2")]));
+        let page = cluster.page(&query(Show::All));
+        assert_eq!(page.spans.followed.len(), 1);
+        assert_eq!(page.spans.followed[0].to, None);
+        assert_eq!(page.rows.len(), 1);
+        assert!(page.rows[0].at_relist);
+    }
+
+    /// A Gateway route kind the cluster does not serve is not one of the
+    /// kinds. Fails if it keeps the span shut, or is named as refused.
+    #[test]
+    fn a_kind_the_cluster_does_not_serve_holds_nothing_shut() {
+        let (_t, cluster, mut recorder) = setup();
+        feed(
+            &mut recorder,
+            state(
+                "gateway.networking.k8s.io",
+                "httproutes",
+                FeedState::Syncing,
+            ),
+        );
+        feed(
+            &mut recorder,
+            state("apps", "deployments", FeedState::Synced),
+        );
+        assert!(cluster.page(&query(Show::All)).spans.followed.is_empty());
+        feed(
+            &mut recorder,
+            state(
+                "gateway.networking.k8s.io",
+                "httproutes",
+                FeedState::Unserved,
+            ),
+        );
+        let spans = cluster.page(&query(Show::All)).spans.followed;
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].kinds, ["Deployment"]);
+        assert!(spans[0].unwatched.is_empty());
+    }
+
+    fn core_event(uid: &str, count: i32) -> Arc<DynamicObject> {
+        object(json!({
+            "apiVersion": "v1", "kind": "Event",
+            "metadata": {"name": format!("api.{uid}"), "namespace": "shop", "uid": uid},
+            "type": "Warning", "reason": "BackOff", "message": "Back-off restarting",
+            "involvedObject": {"kind": "Pod", "name": "api-1", "namespace": "shop"},
+            "count": count, "lastTimestamp": "2026-11-14T10:00:00Z",
+        }))
+    }
+
+    /// Each series is one row, its repeats replace it, and the cluster
+    /// letting it expire takes nothing back. Fails if any of the three is
+    /// said otherwise.
+    #[test]
+    fn events_are_one_row_a_series_and_their_expiry_is_not_news() {
+        let (_t, cluster, mut recorder) = setup();
+        feed(
+            &mut recorder,
+            Update::Whole {
+                slot: slot("", "events"),
+                why: Whole::Fresh,
+                objects: vec![core_event("e1", 1), core_event("e2", 1)],
+            },
+        );
+        feed(
+            &mut recorder,
+            Update::Applied {
+                slot: slot("", "events"),
+                object: core_event("e1", 5),
+            },
+        );
+        feed(
+            &mut recorder,
+            Update::Deleted {
+                slot: slot("", "events"),
+                object: core_event("e2", 1),
+            },
+        );
+        let rows = cluster.page(&query(Show::Warnings)).rows;
+        assert_eq!(rows.len(), 2);
+        let counts: Vec<Option<i32>> = rows
+            .iter()
+            .map(|row| match &row.what {
+                RowSays::Event { event } => event.count,
+                _ => None,
+            })
+            .collect();
+        assert!(counts.contains(&Some(5)) && counts.contains(&Some(1)));
+    }
+
+    fn news_of(uid: &str, generation: i64, sight: crate::ownership::Sight) -> News {
+        News::Seen {
+            uid: uid.into(),
+            node: crate::ownership::Node {
+                key: kind("batch", "jobs"),
+                kind: "Job".into(),
+                version: "v1".into(),
+                name: format!("job-{uid}"),
+                namespace: Some("shop".into()),
+                owners: Vec::new(),
+                generation: Some(generation),
+            },
+            sight,
+        }
+    }
+
+    /// What the index reads by name only has a span of its own and leaves
+    /// the followed kinds to their watches. Fails if a followed kind's index
+    /// slot holds the name-only span shut, or a moved generation is not a row.
+    #[test]
+    fn the_index_speaks_for_the_kinds_only_it_reads() {
+        let (_t, cluster, mut recorder) = setup();
+        hear(
+            &mut recorder,
+            News::State {
+                slot: slot("apps", "deployments"),
+                state: crate::ownership::SlotState::Syncing,
+            },
+        );
+        hear(
+            &mut recorder,
+            News::State {
+                slot: slot("batch", "jobs"),
+                state: crate::ownership::SlotState::Live,
+            },
+        );
+        hear(
+            &mut recorder,
+            news_of("a", 1, crate::ownership::Sight::First),
+        );
+        hear(
+            &mut recorder,
+            news_of("a", 2, crate::ownership::Sight::Watched),
+        );
+        let page = cluster.page(&query(Show::All));
+        assert_eq!(page.spans.meta.len(), 1);
+        assert_eq!(page.spans.meta[0].to, None);
+        assert_eq!(page.rows.len(), 1);
+        assert!(matches!(page.rows[0].what, RowSays::Generation { .. }));
+        recorder.meta_ended();
+        assert!(cluster.page(&query(Show::All)).spans.meta[0].to.is_some());
     }
 }

@@ -1902,7 +1902,7 @@ export const en = {
     objectCreated: "created; nothing before this belongs to it",
     journalDeleted: "{kind} gone",
     journalSeenAtRelist:
-      "Seen at a relist after a break: it changed sometime in the gap before this.",
+      "Noticed when the list was read again: it changed some time before this moment, not at it.",
     sinceMarker: "since the link was made",
     sinceNothing: "Nothing on this clock since {when}.",
     nothingRecordedSince:

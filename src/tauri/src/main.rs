@@ -380,6 +380,7 @@ fn main() {
             commands::timeline::timeline_read,
             commands::timeline::timeline_kept,
             commands::timeline::timeline_hold,
+            commands::timeline::timeline_follow,
             commands::timeline::timeline_set_keep,
             commands::timeline::timeline_clear,
             commands::watch::subscribe_configmap_watch,

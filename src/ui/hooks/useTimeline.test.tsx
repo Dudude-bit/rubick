@@ -15,9 +15,11 @@ import { useClusterStore } from "@/stores/clusterStore";
 import {
   forgetOldJournal,
   useTimeline,
+  useTimelineFollow,
   useTimelineHold,
   withNewer,
 } from "./useTimeline";
+import { persistedByName } from "@/lib/kept-by-name";
 
 const row = (id: string, at: number, seq = at): TimelineRow => ({
   id,
@@ -186,6 +188,34 @@ describe("a timeline on screen", () => {
         </QueryClientProvider>
       ),
     });
-    await waitFor(() => expect(held).toEqual([{ context: "prod" }]));
+    await waitFor(() => expect(held).toEqual([{ scope: null }]));
+  });
+});
+
+describe("the cluster on screen", () => {
+  /**
+   * The timeline records the cluster on screen, in the window's namespaces
+   * where the cluster refuses a kind across it. Fails if a connect is not
+   * followed, the namespaces are not passed, or another cluster found under
+   * the name keeps what was persisted for the old one.
+   */
+  it("is followed on connect and in the window's namespaces, and another cluster under the name is let go of", async () => {
+    useClusterStore.setState({
+      currentContext: "prod",
+      isConnected: true,
+      namespaceScope: ["shop"],
+    });
+    const asked: unknown[] = [];
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command !== "timeline_follow") return undefined;
+      asked.push(args);
+      return { anotherCluster: true };
+    });
+    const forgotten: string[] = [];
+    const off = persistedByName((context) => forgotten.push(context));
+    renderHook(() => useTimelineFollow());
+    await waitFor(() => expect(forgotten).toEqual(["prod"]));
+    expect(asked).toEqual([{ scope: ["shop"] }]);
+    off();
   });
 });

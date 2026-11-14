@@ -14,6 +14,8 @@ import { commands } from "@/lib/commands";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { listenEvent } from "@/lib/events";
 import { queryKeys } from "@/lib/query-keys";
+import { nameIsAnotherCluster } from "@/lib/kept-by-name";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /** The key the 5.0 journal kept itself under in the window's own storage. */
@@ -211,16 +213,42 @@ export function useTimeline(ask: TimelineAsk): TimelineRead {
 const NO_SCOPE: readonly string[] = [];
 
 /**
- * While a timeline is on screen the backend holds open what it reads by name
- * only, and lets it go once no screen says so: said again at the steady rate,
- * which stops when the surface is out of sight.
+ * While a timeline is on screen the backend keeps the ownership index
+ * reading, and records what it reads by name only; said again at the steady
+ * rate, which stops when the surface is out of sight.
  */
 export function useTimelineHold(enabled = true): void {
   const context = useClusterStore((s) => s.currentContext);
+  const scope = useNamespaceScope();
   useLiveQuery({
     refresh: "steady",
     queryKey: queryKeys.timelineHold(context),
-    queryFn: () => commands.timelineHold(context ?? ""),
+    queryFn: () => commands.timelineHold(scope.wire),
     enabled: enabled && context !== null,
   });
+}
+
+/**
+ * Records the cluster on screen, for the window's whole life: once per
+ * connect and context, and its namespaces again when they change. Another
+ * cluster found under the name lets go of what is kept under it everywhere.
+ */
+export function useTimelineFollow(): void {
+  const context = useClusterStore((s) => s.currentContext);
+  const connected = useClusterStore((s) => s.isConnected);
+  // By its names: the scope's array is a new one on many renders.
+  const key = useNamespaceScope().wire?.join(",") ?? null;
+  useEffect(() => {
+    if (!connected || !context) return;
+    let active = true;
+    commands
+      .timelineFollow(key === null ? null : key.split(","))
+      .then((answer) => {
+        if (active && answer.anotherCluster) nameIsAnotherCluster(context);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [connected, context, key]);
 }

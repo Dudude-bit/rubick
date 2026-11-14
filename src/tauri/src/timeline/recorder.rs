@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use super::project::{changed, snapshot, Followed, Snapshot};
+use super::project::{changed, followed, snapshot, Followed, Snapshot};
 use super::spans::{Cover, Source};
 use super::{ClusterTimeline, RowSays, TimelineRow};
 use crate::resources::EventInfo;
@@ -33,10 +33,22 @@ pub enum SlotState {
     Blind,
 }
 
+/// How an object of a kind read by name only came to be seen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sight {
+    /// What was there when reading began.
+    First,
+    /// In a list after a break or a list turn: what differs moved unseen.
+    Relist,
+    Watched,
+}
+
 /// The kinds the followed spans speak for are these, not Event.
 const EVENT: &str = "Event";
 
-fn key_of(object: &Value) -> Option<(Option<String>, String)> {
+type Key = (Option<String>, String);
+
+fn key_of(object: &Value) -> Option<Key> {
     let meta = object.get("metadata")?;
     let name = meta.get("name")?.as_str()?.to_string();
     let namespace = meta
@@ -46,12 +58,13 @@ fn key_of(object: &Value) -> Option<(Option<String>, String)> {
     Some((namespace, name))
 }
 
+/// What one slot of a followed kind holds.
 #[derive(Default)]
 struct Objects {
-    seen: HashMap<(Option<String>, String), Snapshot>,
+    seen: HashMap<Key, Snapshot>,
     /// The creation time of what was deleted under each key, so a late
-    /// event about it does not bring it back.
-    gone: HashMap<(Option<String>, String), Option<String>>,
+    /// report of it does not bring it back.
+    gone: HashMap<Key, Option<String>>,
 }
 
 /// One object of a kind read by name only.
@@ -69,12 +82,16 @@ pub struct Named {
 
 pub struct Recorder {
     timeline: Arc<ClusterTimeline>,
-    objects: HashMap<(&'static str, &'static str), Objects>,
+    objects: HashMap<(&'static str, &'static str, Option<String>), Objects>,
     named: HashMap<String, Named>,
     slots: BTreeMap<(Source, Slot), SlotState>,
     /// The window's namespaces, where a kind refused across the cluster is
     /// read instead.
     scope: Vec<String>,
+}
+
+fn now() -> i64 {
+    chrono::Utc::now().timestamp_millis()
 }
 
 impl Recorder {
@@ -89,7 +106,12 @@ impl Recorder {
         }
     }
 
-    fn row(followed: &Followed, key: &(Option<String>, String), what: RowSays) -> TimelineRow {
+    /// The window's namespaces changed.
+    pub fn rescope(&mut self, scope: Vec<String>) {
+        self.scope = scope;
+    }
+
+    fn row(followed: &Followed, key: &Key, what: RowSays) -> TimelineRow {
         TimelineRow {
             id: String::new(),
             seq: 0,
@@ -104,19 +126,26 @@ impl Recorder {
     }
 
     fn record(&self, mut row: TimelineRow, at_relist: bool) {
-        row.at = chrono::Utc::now().timestamp_millis();
+        row.at = now();
         row.at_relist = at_relist;
         self.timeline.change(row);
     }
 
-    /// A whole list of a kind. The first is a baseline and says nothing;
-    /// one after a break is compared with it, and what moved is said to
-    /// have been noticed now, in the gap before.
+    fn slot_objects(&mut self, followed: &'static Followed, slot: Option<&str>) -> &mut Objects {
+        self.objects
+            .entry((followed.kind, followed.group, slot.map(str::to_string)))
+            .or_default()
+    }
+
+    /// A slot's whole list. The first is a baseline and says nothing; one
+    /// after a break, a list turn or a lost update is compared with what
+    /// was held, and what moved is said to have been noticed now.
     pub fn listed<'a>(
         &mut self,
         followed: &'static Followed,
+        slot: Option<&str>,
         items: impl IntoIterator<Item = &'a Value>,
-        after_break: bool,
+        first: bool,
     ) {
         let mut fresh = HashMap::new();
         for object in items {
@@ -124,11 +153,8 @@ impl Recorder {
                 fresh.insert(key, snapshot(followed, object));
             }
         }
-        let objects = self
-            .objects
-            .entry((followed.kind, followed.group))
-            .or_default();
-        if !after_break {
+        let objects = self.slot_objects(followed, slot);
+        if first {
             objects.seen = fresh;
             return;
         }
@@ -155,15 +181,12 @@ impl Recorder {
     }
 
     /// One object of a followed kind as it is now.
-    pub fn applied(&mut self, followed: &'static Followed, object: &Value) {
+    pub fn applied(&mut self, followed: &'static Followed, slot: Option<&str>, object: &Value) {
         let Some(key) = key_of(object) else {
             return;
         };
         let next = snapshot(followed, object);
-        let objects = self
-            .objects
-            .entry((followed.kind, followed.group))
-            .or_default();
+        let objects = self.slot_objects(followed, slot);
         let what = match objects.seen.get(&key) {
             Some(prev) if prev.born == next.born => changed(prev, &next),
             None if objects.gone.get(&key) == Some(&next.born) => None,
@@ -177,19 +200,21 @@ impl Recorder {
     }
 
     /// One object of a followed kind deleted.
-    pub fn deleted(&mut self, followed: &'static Followed, object: &Value) {
+    pub fn deleted(&mut self, followed: &'static Followed, slot: Option<&str>, object: &Value) {
         let Some(key) = key_of(object) else {
             return;
         };
-        let objects = self
-            .objects
-            .entry((followed.kind, followed.group))
-            .or_default();
+        let objects = self.slot_objects(followed, slot);
         let Some(prev) = objects.seen.remove(&key) else {
             return;
         };
         objects.gone.insert(key.clone(), prev.born);
         self.record(Self::row(followed, &key, RowSays::Deleted), false);
+    }
+
+    /// One of the cluster's events, new or repeated.
+    pub fn event(&self, event: &k8s_openapi::api::core::v1::Event) {
+        self.timeline.event(EventInfo::from(event), now());
     }
 
     fn named_row(item: &Named, what: RowSays) -> TimelineRow {
@@ -207,29 +232,34 @@ impl Recorder {
     }
 
     /// One object of a kind read by name only, as it is now: its generation
-    /// moved, or it is new. A controller's object's birth is its owner's.
-    pub fn named_applied(&mut self, item: &Named, settled: bool) {
+    /// moved, or it is new. A followed kind is said whole by its own watch,
+    /// and a controller's object's birth is its owner's story.
+    pub fn named_seen(&mut self, item: &Named, sight: Sight) {
+        if item.kind == EVENT || followed(&item.kind, &item.group).is_some() {
+            return;
+        }
         let before = self.named.insert(item.uid.clone(), item.clone());
         let what = match before {
             Some(prev) if prev.generation != item.generation && item.generation.is_some() => {
-                Some(RowSays::Generation {
-                    from: prev.generation,
+                prev.generation.map(|from| RowSays::Generation {
+                    from: Some(from),
                     to: item.generation,
                 })
             }
-            None if settled && !item.controlled => Some(RowSays::Created),
+            None if sight != Sight::First && !item.controlled => Some(RowSays::Created),
             _ => None,
         };
         if let Some(what) = what {
-            self.record(Self::named_row(item, what), false);
+            self.record(Self::named_row(item, what), sight == Sight::Relist);
         }
     }
 
-    /// One object of a kind read by name only, deleted.
-    pub fn named_deleted(&mut self, uid: &str) {
+    /// One object of a kind read by name only, deleted, or absent from a
+    /// list after a break.
+    pub fn named_gone(&mut self, uid: &str, relisted: bool) {
         if let Some(item) = self.named.remove(uid) {
             if !item.controlled {
-                self.record(Self::named_row(&item, RowSays::Deleted), false);
+                self.record(Self::named_row(&item, RowSays::Deleted), relisted);
             }
         }
     }
@@ -237,15 +267,29 @@ impl Recorder {
     /// How one watch stands now. A source's span is open while every one
     /// of its watches is live or refused and one is live; a change in what
     /// was refused ends it and starts the next, which says the new refusal.
-    pub fn state(&mut self, source: Source, slot: Slot, state: SlotState) {
+    /// A watch gone blind ends it where it was last known to see, `since`.
+    pub fn state(&mut self, source: Source, slot: Slot, state: SlotState, since: Option<i64>) {
         let was = self.cover(source);
         self.slots.insert((source, slot), state);
+        self.settle(source, was, since);
+    }
+
+    /// A kind the cluster does not serve holds nothing shut and is not
+    /// named as refused: it is not one of the kinds.
+    pub fn forget(&mut self, source: Source, kind: &str) {
+        let was = self.cover(source);
+        self.slots
+            .retain(|(of, slot), _| !(*of == source && slot.kind == kind));
+        self.settle(source, was, None);
+    }
+
+    fn settle(&mut self, source: Source, was: Option<Cover>, since: Option<i64>) {
         let now = self.cover(source);
         if was == now {
             return;
         }
         self.timeline.spans(|spans, at| match now {
-            None => spans.end(source, at),
+            None => spans.end(source, since.map_or(at, |since| since.min(at))),
             Some(cover) => spans.begin(source, at, cover),
         });
     }
@@ -307,17 +351,18 @@ impl Recorder {
         Some(cover)
     }
 
-    /// One of the cluster's events, new or repeated.
-    pub fn event(&self, event: &k8s_openapi::api::core::v1::Event) {
-        self.timeline.event(
-            EventInfo::from(event),
-            chrono::Utc::now().timestamp_millis(),
-        );
-    }
-
     /// Still watching: the open spans are stamped alive.
     pub fn heartbeat(&self) {
         self.timeline.spans(super::spans::SpanSets::heartbeat);
+    }
+
+    /// The name-only reading ended: its span ends now, and what it held is
+    /// a first sight when it is read again.
+    pub fn meta_ended(&mut self) {
+        self.slots.retain(|(source, _), _| *source != Source::Meta);
+        self.named.clear();
+        self.timeline
+            .spans(|spans, now| spans.end(Source::Meta, now));
     }
 
     /// The watches stopped: every span ends now.

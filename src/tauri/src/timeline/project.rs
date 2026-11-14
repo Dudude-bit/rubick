@@ -65,14 +65,16 @@ enum Runs {
 pub struct Followed {
     pub kind: &'static str,
     pub group: &'static str,
+    pub plural: &'static str,
     parts: &'static [Part],
     runs: Runs,
 }
 
-const fn spec(kind: &'static str, group: &'static str) -> Followed {
+const fn spec(kind: &'static str, group: &'static str, plural: &'static str) -> Followed {
     Followed {
         kind,
         group,
+        plural,
         parts: &[Part::Spec],
         runs: Runs::Nothing,
     }
@@ -85,26 +87,29 @@ pub const FOLLOWED: &[Followed] = &[
     Followed {
         kind: "Deployment",
         group: "apps",
+        plural: "deployments",
         parts: &[Part::Spec],
         runs: Runs::Annotation("deployment.kubernetes.io/revision"),
     },
     Followed {
         kind: "StatefulSet",
         group: "apps",
+        plural: "statefulsets",
         parts: &[Part::Spec],
         runs: Runs::Status("updateRevision"),
     },
-    spec("DaemonSet", "apps"),
-    spec("Service", ""),
-    spec("Ingress", "networking.k8s.io"),
-    spec("HTTPRoute", GATEWAY),
-    spec("GRPCRoute", GATEWAY),
-    spec("TCPRoute", GATEWAY),
-    spec("TLSRoute", GATEWAY),
-    spec("UDPRoute", GATEWAY),
+    spec("DaemonSet", "apps", "daemonsets"),
+    spec("Service", "", "services"),
+    spec("Ingress", "networking.k8s.io", "ingresses"),
+    spec("HTTPRoute", GATEWAY, "httproutes"),
+    spec("GRPCRoute", GATEWAY, "grpcroutes"),
+    spec("TCPRoute", GATEWAY, "tcproutes"),
+    spec("TLSRoute", GATEWAY, "tlsroutes"),
+    spec("UDPRoute", GATEWAY, "udproutes"),
     Followed {
         kind: "ConfigMap",
         group: "",
+        plural: "configmaps",
         parts: &[
             Part::Values("data"),
             Part::Values("binaryData"),
@@ -115,6 +120,7 @@ pub const FOLLOWED: &[Followed] = &[
     Followed {
         kind: "Secret",
         group: "",
+        plural: "secrets",
         parts: &[
             Part::Values("data"),
             Part::Field(&["type"]),
@@ -122,11 +128,16 @@ pub const FOLLOWED: &[Followed] = &[
         ],
         runs: Runs::Nothing,
     },
-    spec("HorizontalPodAutoscaler", "autoscaling"),
-    spec("PodDisruptionBudget", "policy"),
+    spec(
+        "HorizontalPodAutoscaler",
+        "autoscaling",
+        "horizontalpodautoscalers",
+    ),
+    spec("PodDisruptionBudget", "policy", "poddisruptionbudgets"),
     Followed {
         kind: "PersistentVolumeClaim",
         group: "",
+        plural: "persistentvolumeclaims",
         parts: &[
             Part::Spec,
             Part::Field(&["status", "phase"]),
@@ -134,20 +145,30 @@ pub const FOLLOWED: &[Followed] = &[
         ],
         runs: Runs::Nothing,
     },
-    spec("NetworkPolicy", "networking.k8s.io"),
+    spec("NetworkPolicy", "networking.k8s.io", "networkpolicies"),
     Followed {
         kind: "Node",
         group: "",
+        plural: "nodes",
         parts: &[Part::Spec, Part::Conditions],
         runs: Runs::Nothing,
     },
     Followed {
         kind: "Namespace",
         group: "",
+        plural: "namespaces",
         parts: &[Part::Spec, Part::Field(&["status", "phase"])],
         runs: Runs::Nothing,
     },
 ];
+
+/// The followed kind by the group and plural discovery names it by.
+#[must_use]
+pub fn followed_by(group: &str, plural: &str) -> Option<&'static Followed> {
+    FOLLOWED
+        .iter()
+        .find(|followed| followed.group == group && followed.plural == plural)
+}
 
 /// The followed kind by its name and group.
 #[must_use]

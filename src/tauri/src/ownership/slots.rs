@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::Level;
 
 use super::graph::{Node, OwnerLink, SlotKey};
-use super::{ClusterIndex, SlotState, RELIST_EVERY, TURN_PAUSE};
+use super::{ClusterIndex, News, Sight, SlotState, RELIST_EVERY, TURN_PAUSE};
 use crate::error::watch_failure;
 use crate::watch::backoff_for;
 
@@ -319,6 +319,7 @@ fn node_of(meta: &Meta, resource: &ApiResource) -> Option<(String, Node)> {
             name: metadata.name.clone().unwrap_or_default(),
             namespace: metadata.namespace.clone(),
             owners,
+            generation: metadata.generation,
         },
     ))
 }
@@ -404,6 +405,7 @@ impl ClusterIndex {
             return;
         }
         let mut graph = self.graph.write();
+        let listing = matches!(event, Event::InitApply(_));
         match event {
             // The marker comes before a list that may still fail: what a
             // broken watch held stays stale until the list has answered.
@@ -414,19 +416,48 @@ impl ClusterIndex {
                     Some(SlotState::Stale { .. } | SlotState::Listed { .. })
                 ) {
                     slots.insert(slot.clone(), SlotState::Syncing);
+                    self.tell(News::State {
+                        slot: slot.clone(),
+                        state: SlotState::Syncing,
+                    });
                 }
             }
             Event::InitApply(meta) | Event::Apply(meta) => {
+                let sight = match (listing, slots.get(slot)) {
+                    (false, _) => Sight::Watched,
+                    (true, Some(SlotState::Stale { .. } | SlotState::Listed { .. })) => {
+                        Sight::Relist
+                    }
+                    (true, _) => Sight::First,
+                };
                 if let Some((uid, node)) = node_of(&meta, resource) {
+                    self.tell(News::Seen {
+                        uid: uid.clone(),
+                        node: node.clone(),
+                        sight,
+                    });
                     graph.apply(slot, uid, node);
                 }
             }
             Event::InitDone => {
-                graph.listed(slot);
+                for uid in graph.listed(slot) {
+                    self.tell(News::Gone {
+                        uid,
+                        relisted: true,
+                    });
+                }
                 slots.insert(slot.clone(), SlotState::Live);
+                self.tell(News::State {
+                    slot: slot.clone(),
+                    state: SlotState::Live,
+                });
             }
             Event::Delete(meta) => {
                 if let Some(uid) = meta.metadata.uid.as_deref() {
+                    self.tell(News::Gone {
+                        uid: uid.to_string(),
+                        relisted: false,
+                    });
                     graph.delete(slot, uid);
                 }
             }
@@ -440,12 +471,17 @@ impl ClusterIndex {
         if !stop.is_cancelled() {
             let at = chrono::Utc::now();
             slots.insert(slot.clone(), SlotState::Listed { at });
+            self.tell(News::State {
+                slot: slot.clone(),
+                state: SlotState::Listed { at },
+            });
         }
     }
 
     /// A kind the cluster stopped serving holds nothing and is no longer one
     /// of the kinds: it is neither read nor named as not read.
     fn retire(&self, kind: &super::KindKey) {
+        self.tell(News::Retired { kind: kind.clone() });
         self.watched.lock().remove(kind);
         let mut slots = self.slots.lock();
         let mut stops = self.stops.lock();
@@ -479,6 +515,10 @@ impl ClusterIndex {
             Some(stale @ SlotState::Stale { .. }) => stale.clone(),
             _ => SlotState::Failed { message },
         };
+        self.tell(News::State {
+            slot: slot.clone(),
+            state: next.clone(),
+        });
         slots.insert(slot.clone(), next);
     }
 
@@ -498,6 +538,12 @@ impl ClusterIndex {
             }
             self.stops.lock().remove(slot);
             self.graph.write().drop_slot(slot);
+            self.tell(News::State {
+                slot: slot.clone(),
+                state: SlotState::Refused {
+                    message: message.clone(),
+                },
+            });
             slots.insert(slot.clone(), SlotState::Refused { message });
         }
         if slot.namespace.is_none() {
@@ -1024,6 +1070,93 @@ mod tests {
         assert_eq!(index.not_read().kinds, []);
         assert_eq!(hits.lock().unwrap().get("/api/v1/pods"), Some(&1));
         index.stop.cancel();
+    }
+
+    fn meta(uid: &str, generation: i64, controller: Option<&str>) -> Meta {
+        serde_json::from_value(serde_json::json!({
+            "apiVersion": "meta.k8s.io/v1",
+            "kind": "PartialObjectMetadata",
+            "metadata": {
+                "name": uid, "namespace": "shop", "uid": uid, "generation": generation,
+                "ownerReferences": controller.map_or_else(Vec::new, |owner| vec![serde_json::json!({
+                    "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": owner,
+                    "uid": owner, "controller": true,
+                })]),
+            },
+        }))
+        .expect("metadata")
+    }
+
+    /// The timeline hears what the index sees: what it held when it began
+    /// to listen, each object as it moves, each state, and what a list
+    /// after a break no longer found. Fails if any of them goes untold, or
+    /// a relist's objects are told as watched.
+    #[tokio::test]
+    async fn the_index_tells_its_listener_what_it_holds_and_each_change_after() {
+        use super::super::News;
+        let client = kube::Client::try_from(kube::Config::new(
+            "http://127.0.0.1:9".parse().expect("url"),
+        ))
+        .expect("client");
+        let (slot, resource) = pods();
+        let index = ClusterIndex::holding(client, &[("Pod", slot.kind.clone())]);
+        let stop = CancellationToken::new();
+        index.saw(&slot, &resource, Event::Init, &stop);
+        index.saw(
+            &slot,
+            &resource,
+            Event::InitApply(meta("a", 1, None)),
+            &stop,
+        );
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        index.listen(tx);
+        index.saw(
+            &slot,
+            &resource,
+            Event::InitApply(meta("b", 1, Some("rs"))),
+            &stop,
+        );
+        index.saw(&slot, &resource, Event::InitDone, &stop);
+        index.saw(&slot, &resource, Event::Apply(meta("a", 2, None)), &stop);
+        index.failed(&slot, "broke".to_string(), &stop);
+        index.saw(&slot, &resource, Event::Init, &stop);
+        index.saw(
+            &slot,
+            &resource,
+            Event::InitApply(meta("a", 3, None)),
+            &stop,
+        );
+        index.saw(&slot, &resource, Event::InitDone, &stop);
+        let mut told = Vec::new();
+        while let Ok(news) = rx.try_recv() {
+            told.push(match news {
+                News::Seen { uid, node, sight } => {
+                    format!("seen {uid} {:?} {sight:?}", node.generation)
+                }
+                News::Gone { uid, relisted } => format!("gone {uid} {relisted}"),
+                News::State { state, .. } => format!("state {state:?}")
+                    .split_whitespace()
+                    .take(2)
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                News::Retired { .. } => "retired".to_string(),
+            });
+        }
+        assert_eq!(
+            told,
+            [
+                "state Syncing",
+                "seen a Some(1) First",
+                "seen b Some(1) First",
+                "state Live",
+                "seen a Some(2) Watched",
+                "state Stale",
+                "seen a Some(3) Relist",
+                "gone b true",
+                "state Live",
+            ]
+        );
+        assert!(index.listened());
     }
 
     fn list(resource_version: &str) -> (u16, String) {

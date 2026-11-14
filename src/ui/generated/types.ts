@@ -3472,3 +3472,7 @@ export type FieldMove =
   | { says: "notKept"; path: string; was: boolean; is: boolean };
 
 export type Show = "all" | "changes" | "warnings";
+
+export interface Following {
+  anotherCluster: boolean;
+}

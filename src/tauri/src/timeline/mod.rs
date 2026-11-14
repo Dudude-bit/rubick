@@ -11,6 +11,7 @@
 //! that never leaves this process (`project`).
 
 mod disk;
+pub(crate) mod follow;
 pub mod project;
 pub mod recorder;
 mod spans;
@@ -38,10 +39,6 @@ pub const KEEP_FOR_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 
 /// How often what was recorded is written and the window told of it.
 const FLUSH_EVERY: Duration = Duration::from_secs(1);
-
-/// How long a timeline surface's word that it is on screen lasts: the window
-/// says it again every 30 s while one is, and stops when none is.
-pub const HELD_FOR: Duration = Duration::from_secs(75);
 
 /// One row of the timeline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -328,9 +325,8 @@ pub struct Timelines {
     clusters: DashMap<String, Arc<ClusterTimeline>>,
     events: broadcast::Sender<AppEvent>,
     writer: OnceLock<()>,
-    /// When a timeline surface last said it was on screen, per context: what
-    /// is read by name only is held open for it, and only for it.
-    holds: DashMap<String, std::time::Instant>,
+    /// The one context being recorded: the cluster on screen.
+    following: Mutex<Option<follow::Follower>>,
 }
 
 impl Timelines {
@@ -343,23 +339,30 @@ impl Timelines {
             clusters: DashMap::new(),
             events,
             writer: OnceLock::new(),
-            holds: DashMap::new(),
+            following: Mutex::new(None),
         }
     }
 
-    /// A timeline surface for `context` is on screen now.
-    pub fn hold(&self, context: &str) {
-        self.holds
-            .insert(context.to_string(), std::time::Instant::now());
+    /// Records `context` from what `subscription` hands over, in place of
+    /// whatever was recorded before.
+    pub(crate) fn follow(
+        &self,
+        context: String,
+        subscription: crate::feeds::Subscription,
+        scope: Option<Vec<String>>,
+    ) {
+        let cluster = self.cluster(&context);
+        *self.following.lock() = Some(follow::spawn(context, cluster, subscription, scope));
     }
 
-    /// Whether a timeline surface for `context` was on screen within
-    /// [`HELD_FOR`] of `now`.
-    #[must_use]
-    pub fn held(&self, context: &str, now: std::time::Instant) -> bool {
-        self.holds
-            .get(context)
-            .is_some_and(|at| now.saturating_duration_since(*at) < HELD_FOR)
+    /// Tells the follower of `context`, where it is the one recording.
+    /// `false` where none is.
+    pub(crate) fn tell(&self, context: &str, control: follow::Control) -> bool {
+        let following = self.following.lock();
+        following
+            .as_ref()
+            .filter(|follower| follower.context == context)
+            .is_some_and(|follower| follower.control.send(control).is_ok())
     }
 
     /// Where this machine keeps timelines, beside nothing else.

@@ -58,6 +58,7 @@ import type {
   EventFilters,
   EventInfo,
   FileRead,
+  Following,
   FrontendLogEntry,
   GatewayApiDetection,
   GatewayClassInfo,
@@ -2205,6 +2206,12 @@ export async function timelineClear(): Promise<void> {
   return invoke<void>("timeline_clear");
 }
 
-export async function timelineHold(context: string): Promise<boolean> {
-  return invoke<boolean>("timeline_hold", { context });
+export async function timelineHold(scope: string[] | null): Promise<boolean> {
+  return invoke<boolean>("timeline_hold", { scope });
+}
+
+export async function timelineFollow(
+  scope: string[] | null
+): Promise<Following> {
+  return invoke<Following>("timeline_follow", { scope });
 }
