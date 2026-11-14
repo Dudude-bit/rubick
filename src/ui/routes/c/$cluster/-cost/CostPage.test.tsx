@@ -205,6 +205,22 @@ describe("the Cost page", () => {
     );
   });
 
+  /**
+   * Series there by name and without the labels the page joins on would
+   * otherwise read as "no series": the page names the labels instead.
+   */
+  it("names the labels OpenCost's series lack rather than calling them absent", async () => {
+    cost.mockReturnValue({
+      state: "picture",
+      picture: { ...opencost, missingLabels: ["node"] },
+      trouble: null,
+    });
+    await open();
+    expect(screen.getByTestId("cost-notes")).toHaveTextContent(
+      "lack the labels this page joins them on: node"
+    );
+  });
+
   /** An estimate beside a failed supplier says both: what failed, and what is shown. */
   it("says why it is an estimate when the supplier failed", async () => {
     cost.mockReturnValue({

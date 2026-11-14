@@ -2007,13 +2007,13 @@ export const en = {
       other: "{n} readings, {gaps} gaps, peak {peak} per hour",
     },
     nothing:
-      "Two ways to see what this cluster costs. Connect the Prometheus that holds OpenCost's or Kubecost's series, and this page reads their prices: {integrations}. Or {prices}, what a vCPU, a GiB of memory and a GiB of storage cost you, and this page estimates from node capacity and what each workload requests.",
+      "Two ways to see what this cluster costs. Connect the Prometheus that holds OpenCost's series, and this page reads their prices: {integrations}. Kubecost writes series of the same names. Or {prices}, what a vCPU, a GiB of memory and a GiB of storage cost you, and this page estimates from node capacity and what each workload requests.",
     integrationsLink: "Integrations › Prometheus",
     enterPrices: "enter prices",
     pricesOffer:
       "Or {prices}, and this page estimates from node capacity and what each workload requests.",
     noSeries:
-      "Prometheus at {endpoint} answered and holds no OpenCost series (node_total_hourly_cost). OpenCost or Kubecost writes them when its /metrics is scraped into this Prometheus.",
+      "Prometheus at {endpoint} answered and holds no OpenCost series (node_total_hourly_cost). OpenCost writes them when its /metrics is scraped into this Prometheus; Kubecost writes series of the same names.",
     unreachable: "Prometheus at {endpoint} did not answer: {said}",
     failed: "Could not read cost from Prometheus at {endpoint}: {said}",
     estimateMeanwhile:

@@ -3,7 +3,7 @@
  * connected Prometheus, or estimated from prices the reader entered. Every
  * number here is one the namespace and workload pages read too.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Coins } from "lucide-react";
 
 import { PricesDialog } from "@/components/cost/PricesDialog";
@@ -261,7 +261,7 @@ const WAITING: Record<
     cost: Exclude<CostState, { state: "picture" }>;
     onPrices: () => void;
     retry: () => void;
-  }) => React.ReactNode
+  }) => ReactNode
 > = {
   loading: () => <Reading />,
   nothing: ({ onPrices }) => <NothingYet onPrices={onPrices} />,

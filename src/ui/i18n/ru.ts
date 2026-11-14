@@ -2083,13 +2083,13 @@ export const ru: Catalogue = {
       other: "{n} замера, разрывов: {gaps}, пик {peak} в час",
     },
     nothing:
-      "Узнать, во что обходится кластер, можно двумя способами. Подключите Prometheus, в котором есть ряды OpenCost или Kubecost, и страница прочитает их цены: {integrations}. Или {prices}: сколько вам стоят vCPU, ГиБ памяти и ГиБ хранилища, и страница оценит стоимость по ёмкости узлов и запросам нагрузок.",
+      "Узнать, во что обходится кластер, можно двумя способами. Подключите Prometheus, в котором есть ряды OpenCost, и страница прочитает их цены: {integrations}. Kubecost пишет ряды с теми же именами. Или {prices}: сколько вам стоят vCPU, ГиБ памяти и ГиБ хранилища, и страница оценит стоимость по ёмкости узлов и запросам нагрузок.",
     integrationsLink: "Интеграции › Prometheus",
     enterPrices: "введите цены",
     pricesOffer:
       "Или {prices}, и страница оценит стоимость по ёмкости узлов и запросам нагрузок.",
     noSeries:
-      "Prometheus по адресу {endpoint} ответил, но рядов OpenCost (node_total_hourly_cost) в нём нет. OpenCost или Kubecost пишет их, когда его /metrics собирается в этот Prometheus.",
+      "Prometheus по адресу {endpoint} ответил, но рядов OpenCost (node_total_hourly_cost) в нём нет. OpenCost пишет их, когда его /metrics собирается в этот Prometheus; Kubecost пишет ряды с теми же именами.",
     unreachable: "Prometheus по адресу {endpoint} не ответил: {said}",
     failed:
       "Не удалось прочитать стоимость из Prometheus по адресу {endpoint}: {said}",
