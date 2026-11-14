@@ -79,6 +79,8 @@ import type {
   Connect,
   Gate,
   ConnectionDraft,
+  CostRange,
+  CostTrend,
   CrdView,
   EdgeConfig,
   Extension,
@@ -109,7 +111,12 @@ import type {
   VolumeFullness,
 } from "./registry";
 
-export { RANGE_WINDOW_MS, RelatedShort, USAGE_RANGES } from "./registry";
+export {
+  COST_RANGES,
+  RANGE_WINDOW_MS,
+  RelatedShort,
+  USAGE_RANGES,
+} from "./registry";
 export type {
   CapabilityKey,
   CapabilityState,
@@ -117,6 +124,8 @@ export type {
   ClusterProvider,
   Connect,
   ConnectionDraft,
+  CostRange,
+  CostTrend,
   CrdView,
   EdgeConfig,
   Extension,

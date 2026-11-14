@@ -20,6 +20,7 @@ import {
   volumeFullness,
 } from "./client";
 import { alertsAboutObject } from "./alerts/client";
+import { costHistory, costNow, workloadUsage } from "./cost";
 import { crd } from "./monitors/crd";
 import {
   MONITORS_KEY,
@@ -60,6 +61,11 @@ import { formatSince } from "@/lib/utils";
  * - `network.traffic` — a third band. Absent, the band is not drawn, because
  *   there is no core answer to fall back to and a placeholder would be a
  *   nag repeated on every page.
+ * - `cost.now`, `cost.history` — what the cluster costs, where OpenCost's
+ *   series are in this Prometheus. Absent, the Cost page estimates from
+ *   prices the reader entered, or says how to get either.
+ * - `usage.workloads` — a day of every workload's use, for efficiency.
+ *   Absent, efficiency is "not measured".
  */
 export default defineVendor({
   id: "prometheus",
@@ -215,6 +221,9 @@ export default defineVendor({
     "usage.nodes": nodeUsage,
     "volume.fullness": volumeFullness,
     "network.traffic": networkTraffic,
+    "cost.now": costNow,
+    "cost.history": costHistory,
+    "usage.workloads": workloadUsage,
     "object.report": reportOf,
   },
 });
