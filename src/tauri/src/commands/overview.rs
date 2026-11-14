@@ -5943,6 +5943,7 @@ mod tests {
     #[test]
     fn a_projection_keeps_the_namespace_and_the_whole_clusters_nodes() {
         let snapshot = Snapshot {
+            claims: Arc::default(),
             pods: arcs([
                 in_namespace::<Pod>("app"),
                 in_namespace::<Pod>("app"),
@@ -5973,6 +5974,7 @@ mod tests {
     #[test]
     fn a_projection_of_several_namespaces_keeps_each_and_nothing_else() {
         let snapshot = Snapshot {
+            claims: Arc::default(),
             pods: arcs([
                 in_namespace::<Pod>("app"),
                 in_namespace::<Pod>("data"),
@@ -6007,6 +6009,7 @@ mod tests {
     #[test]
     fn the_capacity_view_stays_the_whole_clusters_however_the_scope_narrows() {
         let snapshot = Snapshot {
+            claims: Arc::default(),
             pods: arcs([
                 in_namespace::<Pod>("app"),
                 in_namespace::<Pod>("app"),
@@ -6114,6 +6117,7 @@ mod tests {
     #[test]
     fn an_overview_built_from_the_stores_says_it_came_from_the_watch() {
         let snapshot = Snapshot {
+            claims: Arc::default(),
             pods: arcs([in_namespace::<Pod>("app"), in_namespace("data")]),
             nodes: arcs([Node::default()]),
             deployments: arcs([]),
@@ -7752,6 +7756,7 @@ mod across_namespaces {
             ..Default::default()
         };
         let snapshot = Snapshot {
+            claims: Arc::default(),
             pods: arcs([pod(PROD), pod(PROD), pod(STAGING)]),
             nodes: arcs([Node::default()]),
             deployments: arcs([]),
@@ -8758,6 +8763,7 @@ mod across_namespaces {
     #[test]
     fn metrics_are_one_reading_for_the_whole_scope() {
         let snapshot = Snapshot {
+            claims: Arc::default(),
             pods: Vec::new(),
             nodes: arcs([serde_json::from_value::<Node>(node("n1", true)).expect("a node")]),
             deployments: Vec::new(),

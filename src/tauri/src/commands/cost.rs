@@ -3,7 +3,7 @@
 //!
 //! No price is here. The arithmetic is `src/ui/lib/cost.ts`; this reads the
 //! quantities once, keyed by the workload the app already names a pod's
-//! owner by, so OpenCost's numbers (folded onto the same keys by
+//! owner by, so the numbers a supplier prices (folded onto the same keys by
 //! `integrations::prometheus::by_workload`) and an estimate land on one row.
 //!
 //! Nothing here starts a watch of its own: pods, jobs and nodes come from the
@@ -27,6 +27,7 @@ use tauri::State;
 use crate::commands::helpers::{api_in, reaches, scope_of, UnreadNamespace};
 use crate::commands::overview::OverviewSource;
 use crate::error::{Error, Result};
+use crate::overview::KeptClaims;
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::reservation::pod_reservation;
 use crate::resources::workload_of;
@@ -205,8 +206,15 @@ pub(crate) struct ScopedPods {
     pub unread: Vec<UnreadNamespace>,
     pub served_from: OverviewSource,
     /// Nodes and every pod of the cluster, where the stores served.
-    pub(crate) stored: Option<(Vec<Arc<Node>>, Vec<Arc<Pod>>)>,
+    pub(crate) stored: Option<Stored>,
+    /// The claims the store's pods mount, by uid: a stored pod has no volumes.
+    pub(crate) kept: Option<Arc<KeptClaims>>,
 }
+
+/// The overview's nodes and every pod it holds.
+type Stored = (Vec<Arc<Node>>, Vec<Arc<Pod>>);
+/// The cluster's nodes, and its pods where they were counted.
+type Cluster = (Vec<Arc<Node>>, Option<Vec<Arc<Pod>>>);
 
 fn in_scope<K>(
     items: &[Arc<K>],
@@ -258,6 +266,7 @@ pub(crate) async fn scoped_pods(state: &AppState, scope: Option<&[String]>) -> R
             unread: Vec::new(),
             served_from: OverviewSource::Watch,
             stored: Some((snapshot.nodes, snapshot.pods)),
+            kept: Some(snapshot.claims),
         });
     }
     let params = ListParams::default();
@@ -304,6 +313,7 @@ pub(crate) async fn scoped_pods(state: &AppState, scope: Option<&[String]>) -> R
         unread,
         served_from: OverviewSource::List,
         stored: None,
+        kept: None,
     })
 }
 
@@ -312,7 +322,7 @@ async fn cluster_read(
     scope: Option<&[String]>,
     read: &ScopedPods,
     held_on_nodes: bool,
-) -> Result<(Vec<Arc<Node>>, Option<Vec<Arc<Pod>>>)> {
+) -> Result<Cluster> {
     let params = ListParams::default();
     let nodes: Api<Node> = Api::all(client.clone());
     let nodes = nodes.list(&params).await?.items;
@@ -404,9 +414,9 @@ fn held(pod: &Pod) -> (f64, f64, f64) {
     )
 }
 
-/// The claims a pod mounts: from its volumes where it was listed whole, from
-/// the one annotation the overview's store keeps them in otherwise.
-fn claims_of(pod: &Pod) -> Vec<&str> {
+/// The claims a pod mounts: from its volumes where it was listed whole, and
+/// from beside the overview's store, by its uid, where it was stripped.
+fn claims_of<'a>(pod: &'a Pod, kept: Option<&KeptClaims>) -> Vec<String> {
     let mounted = pod
         .spec
         .iter()
@@ -414,16 +424,14 @@ fn claims_of(pod: &Pod) -> Vec<&str> {
         .filter_map(|v| {
             v.persistent_volume_claim
                 .as_ref()
-                .map(|c| c.claim_name.as_str())
+                .map(|c| c.claim_name.clone())
         });
-    let kept = pod
-        .metadata
-        .annotations
-        .as_ref()
-        .and_then(|a| a.get(crate::overview::KEPT_CLAIMS))
+    let stored = kept
+        .zip(pod.metadata.uid.as_deref())
+        .and_then(|(kept, uid): (&KeptClaims, &'a str)| kept.get(uid).map(|names| names.to_vec()))
         .into_iter()
-        .flat_map(|names| names.split(','));
-    mounted.chain(kept).collect()
+        .flatten();
+    mounted.chain(stored).collect()
 }
 
 /// Volumes as the cluster's PVs state them, or its claims where PVs are refused.
@@ -640,7 +648,7 @@ fn keep(mut rows: Vec<WorkloadBasis>, max: usize) -> (Vec<WorkloadBasis>, Option
 
 fn assemble(
     read: &ScopedPods,
-    cluster: Result<(Vec<Arc<Node>>, Option<Vec<Arc<Pod>>>)>,
+    cluster: Result<Cluster>,
     volumes: &Volumes,
     scope: Option<&[String]>,
 ) -> CostBasis {
@@ -668,9 +676,9 @@ fn assemble(
         row.cpu += cpu;
         row.memory += memory;
         row.gpus += gpus;
-        for claim in claims_of(pod) {
+        for claim in claims_of(pod, read.kept.as_deref()) {
             claimants
-                .entry((key.namespace.clone(), claim.to_string()))
+                .entry((key.namespace.clone(), claim))
                 .or_default()
                 .insert(key.clone());
         }
@@ -800,7 +808,7 @@ pub(crate) mod tests {
             .collect();
         Arc::new(
             serde_json::from_value(json!({
-                "metadata": {"namespace": spec.namespace, "name": spec.name, "ownerReferences": owners},
+                "metadata": {"namespace": spec.namespace, "name": spec.name, "uid": spec.name, "ownerReferences": owners},
                 "spec": {
                     "nodeName": spec.node,
                     "containers": [{"name": "app", "resources": {"requests": {"cpu": spec.cpu, "memory": spec.memory}}}],
@@ -819,6 +827,7 @@ pub(crate) mod tests {
             unread: Vec::new(),
             served_from: OverviewSource::Watch,
             stored: None,
+            kept: None,
         }
     }
 
@@ -915,8 +924,8 @@ pub(crate) mod tests {
         assert_eq!(row(&basis, "StatefulSet", "web").unwrap().cpu, 150.0);
     }
 
-    /// A schedule's runs are one thing to pay for; each Job a row would
-    /// scatter the CronJob's cost over names that change every run.
+    /// A schedule's runs are one thing to pay for; each `Job` a row would
+    /// scatter the `CronJob`'s cost over names that change every run.
     #[test]
     fn a_job_a_cronjob_made_is_billed_to_the_cronjob() {
         let mut read = read_of(vec![pod(&running(
@@ -944,8 +953,8 @@ pub(crate) mod tests {
     }
 
     /// A custom kind may share a built-in's name: the key carries the
-    /// owner's group, so an Argo Rollout's pods are not a Deployment's and
-    /// a CronJob's runs are batch's own.
+    /// owner's group, so an Argo `Rollout`'s pods are not a `Deployment`'s
+    /// and a `CronJob`'s runs are batch's own.
     #[test]
     fn a_workload_is_keyed_by_its_group_as_well_as_its_kind() {
         let rollout: Pod = serde_json::from_value(json!({
@@ -996,10 +1005,15 @@ pub(crate) mod tests {
             by_namespace: BTreeMap::from([("shop".to_string(), 10.0)]),
             ..Volumes::default()
         };
-        // One listed whole, one as the overview's store keeps it.
-        let mut stored = (*pod(&b)).clone();
+        // One listed whole, one as the overview's store keeps it: stripped,
+        // its claims beside it by uid.
+        let kept = crate::overview::KeptClaims::default();
+        let listed = pod(&b);
+        crate::overview::keep_claims(&kept, &listed);
+        let mut stored = (*listed).clone();
         crate::overview::strip_pod(&mut stored);
-        let read = read_of(vec![pod(&a), Arc::new(stored)]);
+        let mut read = read_of(vec![pod(&a), Arc::new(stored)]);
+        read.kept = Some(Arc::new(kept));
         let basis = assemble(&read, Ok((vec![], Some(vec![]))), &volumes, None);
         assert_eq!(row(&basis, "StatefulSet", "a").unwrap().claim_bytes, 5.0);
         assert_eq!(row(&basis, "StatefulSet", "b").unwrap().claim_bytes, 5.0);
@@ -1168,5 +1182,74 @@ pub(crate) mod tests {
         };
         let bytes = serde_json::to_vec(&basis).unwrap().len();
         assert!(bytes < 262_144, "a full answer is {bytes} bytes");
+    }
+
+    /// The perf rig is 10 000 pods Pending in ten namespaces on a node
+    /// selector nothing matches. None of them is on a node, so none is
+    /// billed: the answer is the count of pods waiting, not a row each.
+    #[test]
+    fn the_perf_rig_s_shape_answers_with_a_count_and_no_rows() {
+        let names: Vec<(String, String)> = (0..10_000)
+            .map(|i| (format!("perf-{}", i % 10), format!("p-{i:05}")))
+            .collect();
+        let pods = names
+            .iter()
+            .map(|(namespace, name)| {
+                pod(&Spec {
+                    node: None,
+                    phase: "Pending",
+                    owner: None,
+                    ..running(namespace, name, ("", ""))
+                })
+            })
+            .collect();
+        let started = std::time::Instant::now();
+        let basis = assemble(
+            &read_of(pods),
+            Ok((vec![], Some(vec![]))),
+            &Volumes::default(),
+            None,
+        );
+        let took = started.elapsed();
+        let bytes = serde_json::to_vec(&basis).unwrap().len();
+        eprintln!("rig shape: {bytes} bytes, assembled in {took:?}");
+        assert_eq!(basis.waiting, 10_000);
+        assert!(basis.workloads.is_empty());
+        assert!(bytes < 1024, "{bytes} bytes");
+    }
+
+    /// Ten thousand pods on nodes, in a thousand workloads: the work is a
+    /// pass over the pods, and the answer is the capped rows.
+    #[test]
+    fn ten_thousand_running_pods_fold_into_the_capped_rows() {
+        let names: Vec<(String, String, String)> = (0..10_000)
+            .map(|i| {
+                (
+                    format!("perf-{}", i % 10),
+                    format!("w-{:04}-{i:05}", i % 1000),
+                    format!("w-{:04}", i % 1000),
+                )
+            })
+            .collect();
+        let pods = names
+            .iter()
+            .map(|(namespace, name, owner)| pod(&running(namespace, name, ("StatefulSet", owner))))
+            .collect();
+        let started = std::time::Instant::now();
+        let basis = assemble(
+            &read_of(pods),
+            Ok((vec![], Some(vec![]))),
+            &Volumes::default(),
+            None,
+        );
+        let took = started.elapsed();
+        let bytes = serde_json::to_vec(&basis).unwrap().len();
+        eprintln!("10 000 running pods: {bytes} bytes, assembled in {took:?}");
+        assert_eq!(basis.workloads.len(), MAX_COST_ROWS);
+        assert_eq!(
+            basis.rest.as_ref().unwrap().workloads as usize,
+            1000 - MAX_COST_ROWS
+        );
+        assert!(bytes < 262_144, "{bytes} bytes");
     }
 }

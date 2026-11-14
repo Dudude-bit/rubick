@@ -345,4 +345,40 @@ mod tests {
         let answers = vec![vec![series("", "x", 1.0), series("shop", "", 1.0)]];
         assert_eq!(fold(&answers, &read, &[], None).unlabelled, 2);
     }
+
+    /// Four queries over ten thousand pods stay on this side of IPC: what
+    /// crosses is one value per query for each kept workload.
+    #[test]
+    fn ten_thousand_pods_of_series_cross_as_values_per_kept_workload() {
+        let names: Vec<(String, String)> = (0..10_000)
+            .map(|i| {
+                (
+                    format!("w-{:03}", i % 600),
+                    format!("w-{:03}-{i:05}", i % 600),
+                )
+            })
+            .collect();
+        let pods = names
+            .iter()
+            .map(|(owner, name)| pod(&running("shop", name, ("StatefulSet", owner))))
+            .collect();
+        let read = read_of(pods);
+        let answers: Vec<Vec<PromSeries>> = (0..4)
+            .map(|q| {
+                names
+                    .iter()
+                    .map(|(_, name)| series("shop", name, f64::from(q) + 0.5))
+                    .collect()
+            })
+            .collect();
+        let keys: Vec<WorkloadKey> = (0..600).map(|i| key(&format!("w-{i:03}"))).collect();
+        let started = std::time::Instant::now();
+        let fold = fold(&answers, &read, &keys, None);
+        let took = started.elapsed();
+        let bytes = serde_json::to_vec(&fold).unwrap().len();
+        eprintln!("fold of 4 x 10 000 series: {bytes} bytes, in {took:?}");
+        assert_eq!(fold.values.len(), 600);
+        assert!(fold.values.iter().all(|v| v.iter().all(Option::is_some)));
+        assert!(bytes < 262_144, "{bytes} bytes");
+    }
 }
