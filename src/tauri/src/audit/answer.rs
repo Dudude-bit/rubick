@@ -741,7 +741,10 @@ fn judges(rule: RuleId, kind: &str) -> bool {
         R::ClusterAdminBinding => matches!(kind, "RoleBinding" | "ClusterRoleBinding"),
         R::AutoscalerPinned | R::AutoscalerTargetMissing => kind == AUTOSCALER,
         R::BudgetBlocksDisruption => kind == BUDGET,
-        R::NamespaceWithoutNetworkPolicy => false,
+        // Read by their own pass, not through the kind's feed.
+        R::NamespaceWithoutNetworkPolicy | R::RemovedApiInHelmRelease | R::DeprecatedApiWriter => {
+            false
+        }
         _ => template,
     }
 }
@@ -1101,6 +1104,25 @@ mod tests {
             .iter()
             .any(|f| f.rule == RuleId::NoDisruptionBudget));
         assert!(answer.summary.not_checked.iter().any(|n| n.kind == "Pod"));
+    }
+
+    /// A refused feed blinds the rules judged through it, and not the upgrade
+    /// rules, which read their kinds in a pass of their own. Would break if a
+    /// refused Deployment watch said a Helm release went unchecked.
+    #[tokio::test]
+    async fn a_refused_feed_leaves_the_upgrade_rules_to_their_own_pass() {
+        let index = crate::audit::index::AuditIndex::holding(client().await, None);
+        index.set(&deployments(), None, refused());
+        let missing = Why::Reading;
+        let seen = world(&index, Err(&missing), None);
+        let refusal = seen
+            .not_checked
+            .iter()
+            .find(|n| n.kind == "Deployment")
+            .expect("the refusal is named");
+        assert!(refusal.rules.contains(&RuleId::PssPrivileged));
+        assert!(!refusal.rules.contains(&RuleId::RemovedApiInHelmRelease));
+        assert!(!refusal.rules.contains(&RuleId::DeprecatedApiWriter));
     }
 
     /// The system's own objects are shown in their own part and kept out of
